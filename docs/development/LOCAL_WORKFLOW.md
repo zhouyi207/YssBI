@@ -42,8 +42,8 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 | 测试 Frontend production architecture | `pnpm test:architecture` |
 | 格式检查 Rust | `pnpm rust:fmt:check` |
 | 检查 Rust 编译 | `pnpm rust:check` |
-| 测试 Tauri/Rust library | `pnpm rust:test:lib` |
-| 测试 Rust production architecture | `pnpm rust:test:architecture` |
+| 测试 Tauri/Rust library | `pnpm rust:test:lib`（仅最终批量门禁） |
+| 测试 Rust production architecture | `pnpm rust:test:architecture`（仅最终批量门禁） |
 | 测试 Tauri/Rust 主 crate（完整） | `pnpm rust:test` |
 | 测试科学计算 crate | `pnpm rust:test:sci` |
 | 运行宽表统计基准 | `pnpm rust:bench:column-analytics` |
@@ -60,15 +60,21 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 `--jobs 1` 序列化 Rust 测试链接，以避免 Windows 链接器内存峰值。
 `pnpm rust:check` 和开发构建仍保留 Cargo 的正常并行度。
 
+Rust 测试链接和 architecture audit 在 Windows 上成本很高。架构解耦的增量循环只运行
+`pnpm rust:fmt:check` 与 `pnpm rust:check`；不要为每个小改动重复运行 Rust tests。
+所有 owner/cutover 修改完成后，再以一次最终批次运行 architecture、主 crate、SCI 和
+跨栈 release gates，并记录任何失败后集中修复。
+
 `pnpm verify:frontend` 精确执行 `pnpm typecheck && pnpm test`。完整 Vitest 已收集
 Frontend architecture tests；`pnpm test:architecture` 只作为快速 focused 入口，不在
 `verify:frontend` 中重复运行。
 
 `pnpm verify:rust` 精确执行 Rust format check、compile check 与
-`pnpm rust:test:architecture`。`pnpm verify` 依次组合 `verify:frontend`、
+`pnpm rust:test:architecture`，因此它属于最终批量门禁而非日常增量命令。日常 Rust
+静态验证使用 `pnpm rust:fmt:check && pnpm rust:check`。`pnpm verify` 依次组合 `verify:frontend`、
 `verify:rust` 与 `git diff --check`，因此日常跨栈交付会执行两端 architecture gates，
 但不会隐式运行完整 Rust runtime、integration 或 SCI suite。Rust 行为改动仍必须先
-运行受影响的 focused tests。
+完成静态检查；Rust focused/full tests 统一留到最终批次。
 
 `pnpm verify:full` 组合 `verify:frontend`、Rust format/compile checks、完整主 Rust crate、
 SCI tests 与 `git diff --check`；它不另行重复调用 focused Rust architecture script，
@@ -101,7 +107,8 @@ julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 pnpm rust:test:architecture
 ```
 
-真实审计会遍历所有 production targets 并解析 canonical origins，通常比普通 unit test 慢。
+真实审计会遍历所有 production targets 并解析 canonical origins，通常比普通 unit test 慢；
+不要在增量编辑期间重复触发它。
 它要求实际违规与 `src-tauri/src/architecture_tests/debt/` 的 literal 清单双向完全一致。
 新增依赖不能通过增加 broad allow rule 处理；只有目标架构确实允许的 exact capability 才进入
 policy，其余项必须绑定维护在 `docs/architecture/` 的边界文档并保留准确 occurrence count。
@@ -118,9 +125,9 @@ julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
   `pnpm typecheck`，再运行受影响的 Vitest 测试；提交前运行
   `pnpm verify:frontend`。
 - **Rust、Tauri command、项目状态或执行引擎改动：**
-  先添加或更新聚焦回归测试，运行 `pnpm rust:check`、受影响的测试，
-  涉及 architecture policy 时先运行 `pnpm rust:test:architecture`，提交前运行
-  `pnpm verify:rust`。执行引擎跨切面改动或发布前再运行 `pnpm verify:full`。
+  先运行 `pnpm rust:check` 与 `pnpm rust:fmt:check`；按本仓库约定不在增量阶段运行
+  Rust 测试。全部 owner/cutover 修改完成后，再运行一次 `pnpm verify:rust`；执行引擎
+  跨切面改动或发布前再运行 `pnpm verify:full`。
 - **`yss-sci` 数值计算改动：**
   运行 `pnpm rust:test:sci`；性能敏感的列统计或分布改动还应运行
   `pnpm rust:bench:column-analytics`，并记录与基线相比的结果。

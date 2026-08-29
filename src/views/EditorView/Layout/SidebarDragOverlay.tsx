@@ -1,9 +1,10 @@
-import { getSidebarDragOverlayLabel, useSidebarDragStore } from "@/features/application/viewCapabilities";
+import { getSidebarDragOverlayLabel } from "@/features/core/dnd";
+import { useSidebarDragUi } from "@/features/core/sidebarDrag/ui";
 import { editorDragChipClass } from "@/views/EditorView/Layout/editorDropPreviewStyles";
 
 /** Floating chip while dragging from sidebar (node template or graph resource). */
 export function SidebarDragOverlay() {
-  const activeDrag = useSidebarDragStore((s) => s.activeDrag);
+  const activeDrag = useSidebarDragUi((s) => s.activeDrag);
   if (!activeDrag) return null;
 
   return (

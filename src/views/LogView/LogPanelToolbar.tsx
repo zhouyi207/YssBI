@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
-import { DIAGNOSTIC_LEVELS, type DiagnosticLevel } from '@/shared/types/dto/diagnostics';
+import { DIAGNOSTIC_LEVELS, type DiagnosticLevel } from '@/shared/types/domain/diagnostics';
 import {
   getLogLevelBackground,
   getLogLevelColor,

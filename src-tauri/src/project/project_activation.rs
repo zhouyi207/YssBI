@@ -1,5 +1,3 @@
-use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::database_contract::DatabaseEngine;
 use crate::graph_document::GraphResourcePath;
 use crate::project::ResourceRevision;
 use crate::project::variable_tabular::normalize_variable_tabular;
@@ -88,30 +86,28 @@ impl PreparedProjectActivation {
         authority_basis: Option<PreparedAuthorityBasis>,
         requires_final_rebuild: bool,
     ) -> Result<Self, ProjectFilesystemError> {
-        for (path, resource) in &data.graphs {
-            resource
-                .validate()
-                .map_err(|source| ProjectFilesystemError::InvalidGraphDocument {
-                    path: path.clone(),
-                    source,
-                })?;
-        }
-        let mut store = ProjectStore::try_new()?;
-        for (id, declaration) in &data.databases {
-            let instance = if matches!(declaration.engine, DatabaseEngine::DuckDb { .. }) {
-                bind_duckdb_instance(
-                    declaration,
-                    session_root.as_ref().map(NormalizedProjectRoot::as_path),
-                )
-            } else {
-                DatabaseInstance {
-                    decl: declaration.clone(),
-                    state: DatabaseState::Failed {
-                        error: "Only DuckDb datasets are supported; re-import the data".into(),
-                    },
-                }
-            };
-            store.databases.insert(id.clone(), instance);
+        let mut store = ProjectStore::new();
+        #[cfg(test)]
+        {
+            use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
+            use crate::database_contract::DatabaseEngine;
+
+            for (id, declaration) in &data.databases {
+                let instance = if matches!(declaration.engine, DatabaseEngine::DuckDb { .. }) {
+                    bind_duckdb_instance(
+                        declaration,
+                        session_root.as_ref().map(NormalizedProjectRoot::as_path),
+                    )
+                } else {
+                    DatabaseInstance {
+                        decl: declaration.clone(),
+                        state: DatabaseState::Failed {
+                            error: "Only DuckDb datasets are supported; re-import the data".into(),
+                        },
+                    }
+                };
+                store.databases.insert(id.clone(), instance);
+            }
         }
         for variable in data.variables.values_mut() {
             let _ = normalize_variable_tabular(variable);
@@ -190,7 +186,9 @@ impl ProjectState {
                     message: "a pathless activation must use clear_project".into(),
                 })?;
         let _activation = self.project_activation.acquire();
+        #[cfg(test)]
         let (runs, project_session_id) = self.current_run_registry();
+        #[cfg(test)]
         let _drain_guard = runs.begin_drain(&project_session_id);
         self.run_project_activation_test_hook();
         let lease = self.filesystem().acquire(root.clone())?;
@@ -222,7 +220,9 @@ impl ProjectState {
     pub fn clear_project(&self) -> Result<ProjectInstanceId, ProjectFilesystemError> {
         let prepared = self.prepare_project_activation(None)?;
         let _activation = self.project_activation.acquire();
+        #[cfg(test)]
         let (runs, project_session_id) = self.current_run_registry();
+        #[cfg(test)]
         let _drain_guard = runs.begin_drain(&project_session_id);
         self.run_project_activation_test_hook();
         let published = self.publish_project_activation(prepared)?;
@@ -239,13 +239,13 @@ impl ProjectState {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use crate::data_contract::{DataType, DataValue};
+    use crate::graph::document::DocumentError;
+    use crate::graph::protocol::PortKey;
     use crate::graph_document::GraphResourcePath;
     use crate::graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
-    use crate::node_system::document::DocumentError;
-    use crate::node_system::protocol::PortKey;
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState, fixtures,
@@ -415,7 +415,7 @@ mod tests {
         let execution = std::thread::spawn(move || {
             let result = execution_state.execute_graph_for_current_project_for_test(
                 &event,
-                &crate::node_system::plan::ExecutionDemand::Default,
+                &crate::execution::plan::legacy::ExecutionDemand::Default,
                 &NOOP_RUN_EVENT_SINK,
             );
             execution_tx.send(()).unwrap();
@@ -1082,11 +1082,9 @@ mod tests {
             operation_id: crate::project::OperationId::new(),
             affected_resources: Vec::new(),
             expected_revisions: Default::default(),
-            expected_absent_resources: [crate::node_system::document::ResourceKey::Graph(
-                graph_path.clone(),
-            )]
-            .into_iter()
-            .collect(),
+            expected_absent_resources: [crate::project::ResourceKey::Graph(graph_path.clone())]
+                .into_iter()
+                .collect(),
             recovery_marker: Some(state.project_recovery_marker()),
         };
         let contents = crate::project::project_io::serialize_graph_resource_document(

@@ -3,12 +3,12 @@ import { useCallback, type RefObject } from 'react';
 import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import type { Pin } from '@/shared/types/domain/pin';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import { useEditorStore } from '@/features/core/editor';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { clientToWorldInCanvas } from './canvasDrop';
 import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 
@@ -41,7 +41,7 @@ function interactionStillMatches(
   menu: { x: number; y: number },
   sourceAddress: PortAddressDto | null,
 ): boolean {
-  const panel = workbenchDockviewPort.getPanel(panelInstanceId);
+  const panel = workbenchDockviewRead.getPanel(panelInstanceId);
   if (!panel?.active
     || panel.groupId !== groupId
     || panel.metadata.role !== 'editor'

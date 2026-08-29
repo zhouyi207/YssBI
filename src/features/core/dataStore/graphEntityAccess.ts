@@ -11,7 +11,7 @@ import type {
   CompilationOutcomeDto,
   DiagnosticDto,
   ProjectionBasisDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 
 /** Per-graph normalized entity bucket — sole authority for graph topology in the store. */
 export interface GraphEntityBucket {

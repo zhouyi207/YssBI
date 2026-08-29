@@ -1,19 +1,18 @@
 use std::sync::Arc;
 
-use serde::Serialize;
 use thiserror::Error;
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::application::database_schema::project_databases_variables;
-use crate::event::ProjectActivationResultDto;
+use crate::database::schema_snapshot::DatabaseSchemaFact;
+use crate::database_contract::DatabaseDecl;
 use crate::project::{
     ProjectError, ProjectFilesystemError, ProjectIndex, ProjectInstanceId,
     RevealProjectResourceRequest, format_path_for_user_path, normalize_existing_path,
     resolve_reveal_path,
 };
-use crate::schema::DatabasesVariablesDTO;
+use crate::variable::VariableInstance;
 
 #[derive(Debug, Error)]
 pub enum ProjectQueryApplicationError {
@@ -25,6 +24,8 @@ pub enum ProjectQueryApplicationError {
     Project(#[from] ProjectFilesystemError),
     #[error(transparent)]
     ProjectRead(#[from] ProjectError),
+    #[error("database catalog could not be read")]
+    Database(#[from] crate::database::error::DatabaseError),
     #[error("project resource reference is invalid")]
     InvalidResourceReference,
     #[error("project resource was not found")]
@@ -33,38 +34,76 @@ pub enum ProjectQueryApplicationError {
     SessionChanged(#[source] SessionRevalidationError),
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct ProjectActivation {
     pub path: String,
-    pub project_instance_id: String,
+    pub project_instance_id: ProjectInstanceId,
     pub activation_revision: u64,
 }
 
-impl From<ProjectActivation> for ProjectActivationResultDto {
-    fn from(value: ProjectActivation) -> Self {
-        Self {
-            path: value.path,
-            project_instance_id: value.project_instance_id,
-            activation_revision: value.activation_revision,
-        }
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectDatabaseQueryFact {
+    pub(crate) declaration: DatabaseDecl,
+    pub(crate) schema: DatabaseSchemaFact,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectDatabasesVariablesSnapshot {
+    databases: Box<[ProjectDatabaseQueryFact]>,
+    variables: Box<[VariableInstance]>,
+}
+
+impl ProjectDatabasesVariablesSnapshot {
+    pub(crate) fn databases(&self) -> &[ProjectDatabaseQueryFact] {
+        &self.databases
+    }
+
+    pub(crate) fn variables(&self) -> &[VariableInstance] {
+        &self.variables
     }
 }
 
 impl ApplicationState {
     pub fn query_project_databases_variables(
         &self,
-    ) -> Result<DatabasesVariablesDTO, ProjectQueryApplicationError> {
+    ) -> Result<ProjectDatabasesVariablesSnapshot, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
-        let result = project_databases_variables(captured.project())?;
+        let data = captured.project().get_data()?;
+        let catalog = crate::database::session_api::catalog_snapshot(captured.database())?;
+        let databases = data
+            .databases
+            .iter()
+            .map(|(id, declaration)| {
+                let schema = catalog
+                    .schemas()
+                    .iter()
+                    .find(|schema| schema.database().as_str() == id)
+                    .cloned()
+                    .unwrap_or_else(|| DatabaseSchemaFact::empty(declaration.id.clone(), 0, 0));
+                ProjectDatabaseQueryFact {
+                    declaration: declaration.clone(),
+                    schema,
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let variables = data
+            .variables
+            .into_values()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        crate::database::session_api::revalidate_catalog_snapshot(captured.database(), &catalog)?;
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(result)
+        Ok(ProjectDatabasesVariablesSnapshot {
+            databases,
+            variables,
+        })
     }
 
     pub fn query_current_project_activation(
         &self,
-    ) -> Result<ProjectActivationResultDto, ProjectQueryApplicationError> {
+    ) -> Result<ProjectActivation, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
         let activation_revision = captured.project().activation_revision();
         let path = captured.project().get_path().ok_or(
@@ -80,10 +119,9 @@ impl ApplicationState {
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
         Ok(ProjectActivation {
             path: normalize_existing_path(&path).unwrap_or(path),
-            project_instance_id: captured.project_instance_id().to_string(),
+            project_instance_id: captured.project_instance_id().clone(),
             activation_revision,
-        }
-        .into())
+        })
     }
 
     pub fn query_project_path(&self) -> Result<Option<String>, ProjectQueryApplicationError> {

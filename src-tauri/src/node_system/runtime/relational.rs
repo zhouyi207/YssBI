@@ -2,7 +2,9 @@ use super::{
     CancellationToken, RunDeadline, RunError, RunId, RunPhase, RunResourceOwner, RunResourceSet,
     RuntimeValue,
 };
-use crate::node_system::plan::{CompiledRelationalPlan, RelationalBackendId, RelationalSubplan};
+use crate::execution::plan::legacy::{
+    CompiledRelationalPlan, RelationalBackendId, RelationalSubplan,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -286,7 +288,7 @@ impl RunRelationalBackends {
 #[cfg(test)]
 mod error_tests {
     use super::{RelationalError, RelationalErrorCode};
-    use crate::node_system::plan::OperationIndex;
+    use crate::execution::plan::legacy::OperationIndex;
     use crate::node_system::runtime::{RunError, RunErrorCode};
 
     #[test]
@@ -357,7 +359,7 @@ mod error_tests {
         impl super::RelationalBackendProvider for CancellingProvider {
             fn acquire(
                 &self,
-                _: &crate::node_system::plan::RelationalBackendId,
+                _: &crate::execution::plan::legacy::RelationalBackendId,
                 _: &crate::node_system::runtime::RunResourceSet,
                 _: &crate::node_system::runtime::CancellationToken,
             ) -> Result<Box<dyn super::RelationalBackendLease>, RelationalError> {
@@ -368,10 +370,10 @@ mod error_tests {
         }
 
         let backend =
-            crate::node_system::plan::RelationalBackendId::new("relational.test").unwrap();
-        let subplan = crate::node_system::plan::RelationalSubplan {
+            crate::execution::plan::legacy::RelationalBackendId::new("relational.test").unwrap();
+        let subplan = crate::execution::plan::legacy::RelationalSubplan {
             backend,
-            compiled_plan: crate::node_system::plan::CompiledRelationalPlan {
+            compiled_plan: crate::execution::plan::legacy::CompiledRelationalPlan {
                 fragment_order: Box::new([]),
                 operators: Box::new([]),
                 fragment_roots: Box::new([]),

@@ -2,6 +2,7 @@ import {
   isNodeCreationDescriptor,
   type NodeCreationDescriptor,
 } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 
 export const DRAG_TYPES = {
   NODE_TEMPLATE: "node-template",
@@ -146,7 +147,7 @@ export function getSidebarResourceFromDragState(
   return state.sidebarResource;
 }
 
-export function getSidebarDragOverlayLabel(state: SidebarDragState): string {
+export function getSidebarDragOverlayLabel(state: DeepReadonly<SidebarDragState>): string {
   if (state.type === DRAG_TYPES.GRAPH_RESOURCE) return state.sidebarResource.name;
   return state.template.title ?? state.template.descriptor.nodeTypeId;
 }

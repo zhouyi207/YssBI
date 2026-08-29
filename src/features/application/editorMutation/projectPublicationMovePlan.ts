@@ -1,4 +1,4 @@
-import type { ResourceMoveDto } from '@/shared/types/dto/editorMutation';
+import type { ResourceMoveDto } from '@/shared/types/domain/editorMutation';
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
 import { useGraphSessionStore, type FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';

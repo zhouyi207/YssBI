@@ -1,12 +1,8 @@
 import { create } from 'zustand';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
-import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { worksheetApplicationPort } from './worksheetApplicationPort';
 
 import {
   clearResourceDocumentState,
-  isResourceDocumentDirty,
   markResourceDirty,
   markResourceLoaded,
 } from '@/features/core/resource';
@@ -23,7 +19,6 @@ interface WorksheetStore {
     patch: Partial<WorksheetDocument>,
   ): WorksheetDocument | null;
   markDirty(worksheetPath: string): void;
-  saveDocument(worksheetPath: string): Promise<boolean>;
 }
 
 export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
@@ -68,60 +63,4 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
     markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
   },
 
-  saveDocument: async (worksheetPath) => {
-    const document = get().documents[worksheetPath];
-    if (!document) return false;
-    const context = worksheetApplicationPort().captureCommandContext();
-    const result = await WorksheetService.saveWorksheet(
-      context.projectInstanceId,
-      context.operationId,
-      worksheetPath,
-      document.revision,
-      document,
-    );
-    if (!context.isCurrent()) return false;
-
-    const expected = savedDocumentFromResult(
-      result,
-      worksheetPath,
-      context.operationId,
-      document,
-    );
-    await worksheetApplicationPort().submitPublication(result);
-    if (!context.isCurrent() || !expected) return false;
-    const settled = get().documents[worksheetPath];
-    return settled !== undefined
-      && sameWorksheetDocument(settled, expected)
-      && !isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' });
-  },
 }));
-
-function savedDocumentFromResult(
-  result: ResourceMutationResultDto,
-  worksheetPath: string,
-  operationId: string,
-  before: WorksheetDocument,
-): WorksheetDocument | null {
-  const delta = result.deltas.find((candidate) =>
-    candidate.resource.kind === 'worksheet'
-      && candidate.resource.key === worksheetPath
-      && candidate.causedBy === operationId
-      && candidate.fromRevision === before.revision
-      && candidate.payload.kind === 'worksheet');
-  if (!delta || delta.payload.kind !== 'worksheet') return null;
-  return {
-    ...before,
-    ...delta.payload.patch.after,
-    encodings: { ...delta.payload.patch.after.encodings },
-    revision: delta.toRevision,
-  };
-}
-
-function sameWorksheetDocument(left: WorksheetDocument, right: WorksheetDocument): boolean {
-  return left.schemaVersion === right.schemaVersion
-    && left.revision === right.revision
-    && left.databaseId === right.databaseId
-    && left.chartType === right.chartType
-    && left.encodings.x === right.encodings.x
-    && left.encodings.y === right.encodings.y;
-}

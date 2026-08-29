@@ -4,7 +4,7 @@
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { DEFAULT_VIEWPORT } from '@/shared/config-default';
 import {
   commitViewport,
   editorViewportScope,

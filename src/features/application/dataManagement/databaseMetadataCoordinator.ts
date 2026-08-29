@@ -1,8 +1,8 @@
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 import type { DatabaseId } from '@/shared/types/domain/ids';
 import type { ProjectIdentitySnapshot } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { DatabasePublicationCapability } from '@/features/core/database/publication';
+import type { DatabasePublicationCapability } from '@/features/application/dataManagement/databasePublication';
 
 export interface DatabaseMetadataReader {
   readonly read: (

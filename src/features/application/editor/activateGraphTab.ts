@@ -7,7 +7,7 @@ import { ensureEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { unloadGraphDocument } from './graphDocumentUnload';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   enforceGraphDocumentCacheLimit,
   touchGraphDocument,

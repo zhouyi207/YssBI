@@ -1,9 +1,9 @@
 use thiserror::Error;
 
+use super::events::{CommittedResourceMutation, committed_resource_mutation_from_project};
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::event::ResourceMutationResultDto;
 use crate::project::{
     OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceName, ResourceRevision,
     WorksheetDocument, WorksheetResourcePath,
@@ -28,17 +28,17 @@ impl ApplicationState {
         operation_id: OperationId,
         name: String,
         database_id: Option<String>,
-    ) -> Result<ResourceMutationResultDto, WorksheetApplicationError> {
+    ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
         let name = ResourceName::parse(&name).map_err(ProjectFilesystemError::from)?;
-        let result = captured.project().create_worksheet_resource_transaction(
+        let result = captured.project().create_worksheet_resource_facts(
             &project_instance_id,
             &name,
             database_id,
             operation_id,
         )?;
         self.refresh_worksheet_session()?;
-        Ok(result)
+        Ok(committed_resource_mutation_from_project(result))
     }
 
     pub fn duplicate_worksheet_resource(
@@ -47,18 +47,16 @@ impl ApplicationState {
         operation_id: OperationId,
         worksheet_path: WorksheetResourcePath,
         expected_revision: ResourceRevision,
-    ) -> Result<ResourceMutationResultDto, WorksheetApplicationError> {
+    ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .duplicate_worksheet_resource_transaction(
-                &project_instance_id,
-                &worksheet_path,
-                expected_revision,
-                operation_id,
-            )?;
+        let result = captured.project().duplicate_worksheet_resource_facts(
+            &project_instance_id,
+            &worksheet_path,
+            expected_revision,
+            operation_id,
+        )?;
         self.refresh_worksheet_session()?;
-        Ok(result)
+        Ok(committed_resource_mutation_from_project(result))
     }
 
     pub fn load_worksheet_resource(
@@ -82,9 +80,9 @@ impl ApplicationState {
         worksheet_path: WorksheetResourcePath,
         expected_revision: ResourceRevision,
         document: WorksheetDocument,
-    ) -> Result<ResourceMutationResultDto, WorksheetApplicationError> {
+    ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured.project().save_worksheet_document(
+        let result = captured.project().save_worksheet_document_facts(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
@@ -92,7 +90,7 @@ impl ApplicationState {
             document,
         )?;
         self.refresh_worksheet_session()?;
-        Ok(result)
+        Ok(committed_resource_mutation_from_project(result))
     }
 
     pub fn rename_worksheet_resource(
@@ -103,10 +101,10 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
         new_name: String,
         lifecycle_token: u64,
-    ) -> Result<ResourceMutationResultDto, WorksheetApplicationError> {
+    ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
         let new_name = ResourceName::parse(&new_name).map_err(ProjectFilesystemError::from)?;
-        let result = captured.project().rename_worksheet_resource_transaction(
+        let result = captured.project().rename_worksheet_resource_facts(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
@@ -115,7 +113,7 @@ impl ApplicationState {
             operation_id,
         )?;
         self.refresh_worksheet_session()?;
-        Ok(result)
+        Ok(committed_resource_mutation_from_project(result))
     }
 
     pub fn remove_worksheet_resource(
@@ -124,16 +122,16 @@ impl ApplicationState {
         operation_id: OperationId,
         worksheet_path: WorksheetResourcePath,
         expected_revision: ResourceRevision,
-    ) -> Result<ResourceMutationResultDto, WorksheetApplicationError> {
+    ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured.project().remove_worksheet_resource_transaction(
+        let result = captured.project().remove_worksheet_resource_facts(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
             operation_id,
         )?;
         self.refresh_worksheet_session()?;
-        Ok(result)
+        Ok(committed_resource_mutation_from_project(result))
     }
 
     fn capture_worksheet_session(

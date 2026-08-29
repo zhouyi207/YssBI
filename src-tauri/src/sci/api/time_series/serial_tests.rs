@@ -5,7 +5,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sci::backends::rust;
-use crate::sci::engine::SciContext;
 use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -47,10 +46,7 @@ pub struct SerialTestsOutput {
     pub dw: DurbinWatsonResult,
 }
 
-pub fn compute_serial_tests(
-    _context: &SciContext,
-    input: SerialTestsInput,
-) -> Result<SerialTestsOutput, SciError> {
+pub fn compute_serial_tests(input: SerialTestsInput) -> Result<SerialTestsOutput, SciError> {
     let lags = normalized_lags(&input)?;
     Ok(rust::time_series::serial_tests::compute(
         &input.residuals,

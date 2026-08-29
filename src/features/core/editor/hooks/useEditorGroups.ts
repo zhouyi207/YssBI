@@ -5,20 +5,20 @@
 
 import { useMemo } from 'react';
 import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import type { EditorGroupSnapshot } from '@/shared/types';
 
 export function useEditorGroups(): EditorGroupSnapshot[] {
-  const { revision } = useDockviewPortSnapshot(workbenchDockviewPort);
+  const { revision } = useDockviewPortSnapshot(workbenchDockviewRead);
 
   return useMemo(() => {
     const editorGroupIds = new Set(
-      workbenchDockviewPort
+      workbenchDockviewRead
         .listPanels()
         .filter((panel) => panel.metadata.role === 'editor')
         .map((panel) => panel.groupId),
     );
-    return workbenchDockviewPort
+    return workbenchDockviewRead
       .listGroups()
       .filter((group) => editorGroupIds.has(group.groupId))
       .map(({ groupId }): EditorGroupSnapshot => ({ id: groupId }));

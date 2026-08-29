@@ -1,11 +1,15 @@
 import { useRef, useEffect, useLayoutEffect } from "react";
-import { subscribeToViewport, getViewport, useTheme, getPinTypeColor, type ViewportScope } from '@/features/application/viewCapabilities';
+import { subscribeToViewport, getViewport } from '@/features/core/viewport/viewportSession';
+import { useTheme } from '@/features/core/theme/useTheme';
+import { getPinTypeColor } from '@/features/core/theme/pinTypeTheme';
+import type { ViewportScope } from '@/features/core/viewport';
 import { drawEdge } from "./Edge";
 
 
 import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import { getConnectPreview, subscribeConnectPreview, type ConnectionFeedback } from '@/features/application/viewCapabilities';
+import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
+import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
 import type { ThemeStatusPalette } from '@/shared/theme/themeTokens';
 
 export function connectionFeedbackAttributes(feedback: ConnectionFeedback | null) {

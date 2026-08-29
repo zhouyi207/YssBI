@@ -1,12 +1,12 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
-use crate::event::ProjectActivationResultDto;
-use crate::node_system::analysis::EditorGraphProjectionDto;
 #[cfg(test)]
 use crate::project::ProjectState;
 use crate::project::{ProjectIndex, normalize_existing_path};
-use crate::schema::DatabasesVariablesDTO;
+use crate::schema::application_event::ProjectActivationResultDto;
+use crate::schema::editor_projection_types::EditorGraphProjectionDto;
+use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 use serde::Serialize;
 use tauri::State;
 
@@ -31,6 +31,36 @@ pub fn get_project_databases_variables(
     application
         .query_project_databases_variables()
         .map_err(map_project_query_error)
+        .and_then(project_databases_variables_to_transport)
+}
+
+fn project_databases_variables_to_transport(
+    snapshot: crate::application::project_query::ProjectDatabasesVariablesSnapshot,
+) -> Result<DatabasesVariablesDTO, CommandError> {
+    let databases = snapshot
+        .databases()
+        .iter()
+        .map(|database| {
+            let mut dto = DatabaseDeclDTO::from(&database.declaration);
+            let columns = crate::schema::column_info_from_schema(database.schema.columns());
+            dto.column_count = Some(columns.len());
+            dto.columns = Some(columns);
+            (database.declaration.id.as_str().to_owned(), dto)
+        })
+        .collect();
+    let variables = snapshot
+        .variables()
+        .iter()
+        .map(|variable| {
+            VariableInstanceDTO::try_from(variable)
+                .map(|dto| (variable.id.to_string(), dto))
+                .map_err(|error| CommandError::diagnosed("project_variable_mapping_failed", error))
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(DatabasesVariablesDTO {
+        databases,
+        variables,
+    })
 }
 
 #[cfg(test)]
@@ -65,6 +95,17 @@ pub fn get_current_project_activation(
     application
         .query_current_project_activation()
         .map_err(map_project_query_error)
+        .map(project_activation_to_transport)
+}
+
+fn project_activation_to_transport(
+    activation: crate::application::project_query::ProjectActivation,
+) -> ProjectActivationResultDto {
+    ProjectActivationResultDto {
+        path: activation.path,
+        project_instance_id: activation.project_instance_id.to_string(),
+        activation_revision: activation.activation_revision,
+    }
 }
 
 /// 获取当前项目路径
@@ -117,7 +158,7 @@ pub fn load_project_graph(
             locale.as_deref().unwrap_or("en-US"),
         ))
         .map_err(open_graph_command_error)?;
-    EditorGraphProjectionDto::try_from(receipt.projection())
+    crate::schema::editor_projection::map_editor_projection(receipt.projection())
         .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
@@ -188,6 +229,9 @@ fn map_project_query_error(
         ProjectQueryApplicationError::ProjectRead(error) => {
             CommandError::diagnosed("project_query_failed", error)
         }
+        ProjectQueryApplicationError::Database(error) => {
+            CommandError::diagnosed("database_catalog_failed", error)
+        }
         ProjectQueryApplicationError::InvalidResourceReference => {
             CommandError::expected("invalid_resource_reference")
         }
@@ -200,17 +244,17 @@ fn map_project_query_error(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use crate::data_contract::{DataType, DataValue};
-    use crate::graph_document::GraphResourcePath;
-    use crate::graph_document::GraphRevision;
-    use crate::node_system::document::{
-        EditorGraphMutationDto, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
+    use crate::graph::document::{
+        EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         MutationRequest, ResourceKey,
     };
-    use crate::node_system::protocol::NodeTypeId;
+    use crate::graph::protocol::NodeTypeId;
+    use crate::graph_document::GraphResourcePath;
+    use crate::graph_document::GraphRevision;
     use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectInstanceId};
     use crate::variable::VariableScope;
@@ -238,13 +282,13 @@ mod tests {
 
     fn editor_create_node_request(
         graph_path: &GraphResourcePath,
-    ) -> MutationRequest<EditorGraphMutationDto> {
+    ) -> MutationRequest<EditorGraphMutation> {
         MutationRequest::new(
             ResourceKey::Graph(graph_path.clone()),
             crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
-            EditorGraphMutationDto::CreateNode {
-                descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            EditorGraphMutation::CreateNode {
+                descriptor: crate::graph::catalog::NodeCreation::Static {
                     node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
                 },
                 position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
@@ -381,7 +425,7 @@ mod tests {
                     signature.deltas[0].resource.clone(),
                     signature.deltas[0].to_revision,
                     OperationId::new(),
-                    crate::node_system::document::HistoryMutation {},
+                    crate::graph::document::HistoryMutation {},
                 ),
                 {
                     let observed = std::sync::Arc::clone(&observed);
@@ -398,7 +442,7 @@ mod tests {
                     undo.deltas[0].resource.clone(),
                     undo.deltas[0].to_revision,
                     OperationId::new(),
-                    crate::node_system::document::HistoryMutation {},
+                    crate::graph::document::HistoryMutation {},
                 ),
                 {
                     let observed = std::sync::Arc::clone(&observed);

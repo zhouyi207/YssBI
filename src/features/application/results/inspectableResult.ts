@@ -1,19 +1,18 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type {
-  PinResultEntry,
-  ResultDescriptor,
-} from '@/shared/types/dto/result';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import {
+  outputPinRef,
+  resultRef,
+  type InspectableResultRef,
+} from '@/features/domain/result/inspectableResultRef';
+export { outputPinRef, resultRef };
+export type { InspectableResultRef };
+import type { PinResultEntry, ResultDescriptor } from './types';
 import type { PinHistoryProjection } from '@/shared/types/ui/execution';
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,
   ResultQueryOutcome,
 } from './resultQueryCoordinator';
-
-export type InspectableResultRef =
-  | { readonly kind: 'result'; readonly resultId: string }
-  | { readonly kind: 'outputPin'; readonly graphPath: string; readonly output: PortAddressDto };
 
 export interface InspectableResultQueryDependencies {
   readonly coordinator: ResultQueryCoordinator;
@@ -24,17 +23,6 @@ export interface ResolvedInspectableResultRef {
   readonly ref: Extract<InspectableResultRef, { kind: 'result' }> | null;
   readonly history: DeepReadonly<PinHistoryProjection> | null;
   readonly status: ResultQueryOutcome['status'];
-}
-
-export function resultRef(resultId: string): InspectableResultRef {
-  return { kind: 'result', resultId };
-}
-
-export function outputPinRef(
-  graphPath: string,
-  output: PortAddressDto,
-): InspectableResultRef {
-  return { kind: 'outputPin', graphPath, output };
 }
 
 export async function resolveInspectableResultRef(

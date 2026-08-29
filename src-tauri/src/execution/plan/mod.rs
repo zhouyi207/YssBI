@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[doc(hidden)]
+pub(crate) mod legacy;
+
 pub(crate) mod basis;
 pub mod identity;
 pub(crate) mod model;
@@ -6,7 +10,6 @@ pub(crate) mod package;
 pub(crate) mod parameter;
 pub(crate) mod validation;
 
-#[cfg(test)]
 pub(crate) mod result_category;
 
 pub use basis::{
@@ -28,6 +31,7 @@ pub use parameter::{
     InvalidPlanParameterId, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
     PlanParameterSchemaId, PlanParameterValue,
 };
+pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
 pub use validation::{PlanValidationError, PlanValidationErrors};
 
 #[cfg(test)]

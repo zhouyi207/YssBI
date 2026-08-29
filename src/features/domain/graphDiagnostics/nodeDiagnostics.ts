@@ -1,10 +1,11 @@
-import type { DiagnosticDto } from '@/shared/types/dto/editorProjection';
+import type { DiagnosticDto } from '@/shared/types/domain/editorProjection';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import type { NodeData } from '@/shared/types/store/graph';
 
 export interface GraphNodeDiagnosticsBucket {
   readonly graphNodes: readonly string[];
   readonly nodes: Readonly<
-    Record<string, Pick<NodeData, 'title' | 'display' | 'diagnostics'>>
+    Record<string, Pick<DeepReadonly<NodeData>, 'title' | 'display' | 'diagnostics'>>
   >;
 }
 
@@ -12,7 +13,7 @@ export interface GraphNodeDiagnostic {
   readonly graphPath: string;
   readonly nodeId: string;
   readonly nodeTitle: string;
-  readonly diagnostic: DiagnosticDto;
+  readonly diagnostic: DeepReadonly<DiagnosticDto>;
 }
 
 export function collectNodeDiagnostics(

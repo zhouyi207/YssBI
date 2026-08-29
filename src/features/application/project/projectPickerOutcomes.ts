@@ -1,10 +1,12 @@
 import {
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
-  IpcError,
-  isIpcErrorCode,
-} from '@/services/ipc';
-import type { LifecycleMutationResultDto } from '@/shared/types/dto/project';
+} from '@/shared/constants/ipcError';
+import {
+  isApplicationIpcError,
+  isApplicationIpcErrorCode,
+} from '@/features/application/errorReference';
+import type { LifecycleMutationResultDto } from '@/shared/types/domain/project';
 import { ProjectLifecycleProtocolError } from '@/features/application/projectLifecycleReceipt';
 
 export type ProjectPickerPageOperation =
@@ -183,7 +185,7 @@ export function projectPickerErrorPresentation(
   let code = 'unknown_error';
   let incidentId: string | null = null;
 
-  if (error instanceof IpcError) {
+  if (isApplicationIpcError(error)) {
     code = error.code;
     incidentId = error.incidentId;
   } else if (error instanceof ProjectLifecycleProtocolError) {
@@ -209,5 +211,5 @@ export function projectPickerRecoveryPresentation(
 }
 
 export function isProjectPickerStaleError(error: unknown): boolean {
-  return isIpcErrorCode(error, 'stale_project_lifecycle');
+  return isApplicationIpcErrorCode(error, 'stale_project_lifecycle');
 }

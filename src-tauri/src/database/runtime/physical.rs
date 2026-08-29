@@ -2,11 +2,13 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use polars::prelude::{AnyValue, DataFrame};
+use std::path::Path;
 
 use crate::database::database_instance::DatabaseInstance;
 use crate::database::database_state::DatabaseState;
 use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
 use crate::database::schema_snapshot::{DatabaseColumnFact, DatabaseSchemaFact};
+use crate::database::session_api::DatabaseMutationOperation;
 use crate::database_contract::{DatabaseDecl, DatabaseId};
 use crate::tabular::contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot,
@@ -15,6 +17,11 @@ use crate::tabular::contract::{
 pub(crate) struct DatabaseRuntimeDataSnapshot {
     pub(crate) columns: Box<[DatabaseColumnFact]>,
     pub(crate) rows: TabularSnapshot,
+}
+
+pub(crate) struct DatabaseRuntimePageSnapshot {
+    pub(crate) rows: TabularSnapshot,
+    pub(crate) row_ids: Vec<i64>,
 }
 
 pub(crate) struct DatabaseRuntimePhysicalState {
@@ -106,6 +113,200 @@ impl DatabaseRuntimePhysicalState {
         schema_for_instance(&instance, database).map(Some)
     }
 
+    pub(crate) fn read_metadata(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<DatabaseRuntimeMetadata, DatabaseError> {
+        let instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        let row_count = match &instance.state {
+            DatabaseState::Loaded { dataframe, .. } => dataframe.height(),
+            DatabaseState::DuckDb { row_count, .. } => *row_count,
+            DatabaseState::Failed { .. } => {
+                return Err(DatabaseError::unsupported(
+                    DatabaseOperation::Query,
+                    Some(database.clone()),
+                ));
+            }
+        };
+        let schema = schema_for_instance(&instance, database).map_err(|error| {
+            DatabaseError::schema(DatabaseOperation::Query, error.resource().cloned())
+        })?;
+        Ok(DatabaseRuntimeMetadata {
+            name: instance.decl.name,
+            schema,
+            row_count,
+        })
+    }
+
+    pub(crate) fn read_page(
+        &self,
+        database: &DatabaseId,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DatabaseRuntimePageSnapshot, DatabaseError> {
+        let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        let page = instance
+            .query_page_with_rowids(offset, limit)
+            .map_err(|error| {
+                DatabaseError::driver(
+                    DatabaseOperation::Query,
+                    Some(database.clone()),
+                    DatabaseDriverError::Polars(error),
+                )
+            })?;
+        let rows = dataframe_to_snapshot(&page.dataframe, database)?;
+        Ok(DatabaseRuntimePageSnapshot {
+            rows,
+            row_ids: page.row_ids,
+        })
+    }
+
+    pub(crate) fn read_column_stats(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+        let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        instance.compute_column_stats().map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+                DatabaseDriverError::Polars(error),
+            )
+        })
+    }
+
+    pub(crate) fn read_column_distributions(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+        let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        instance.compute_column_distributions().map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+                DatabaseDriverError::Polars(error),
+            )
+        })
+    }
+
+    pub(crate) fn read_dataset_overview(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<crate::database::DatasetOverview, DatabaseError> {
+        let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        instance.compute_dataset_overview().map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+                DatabaseDriverError::Polars(error),
+            )
+        })
+    }
+
+    pub(crate) fn read_edit_state(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<crate::database::EditState, DatabaseError> {
+        let instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        Ok(instance.edit_state())
+    }
+
+    pub(crate) fn export_to_path(
+        &self,
+        database: &DatabaseId,
+        path: &Path,
+        format: crate::database::DatabaseExportFormat,
+    ) -> Result<(), DatabaseError> {
+        let instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        instance.export_to_path(path, format).map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+                DatabaseDriverError::Operation(error.into_boxed_str()),
+            )
+        })
+    }
+
+    pub(crate) fn remove_database(
+        &self,
+        database: &DatabaseId,
+        project_root: &Path,
+    ) -> Result<(), DatabaseError> {
+        let instance = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::CommitMutation, Some(database.clone()))
+        })?;
+        crate::database::remove_duckdb_table_if_needed(&instance.decl.engine, Some(project_root))
+            .map_err(|error| {
+                DatabaseError::driver(
+                    DatabaseOperation::CommitMutation,
+                    Some(database.clone()),
+                    DatabaseDriverError::Operation(error.into_boxed_str()),
+                )
+            })
+    }
+
+    pub(crate) fn prepare_mutation(
+        self: &Arc<Self>,
+        database: &DatabaseId,
+        operation: &DatabaseMutationOperation,
+    ) -> Result<PreparedDatabasePhysicalMutation, DatabaseError> {
+        let before = self.instance_snapshot(database)?.ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::PrepareMutation, Some(database.clone()))
+        })?;
+        let mut after = before.clone();
+        apply_mutation(&mut after, operation).map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::PrepareMutation,
+                Some(database.clone()),
+                DatabaseDriverError::Operation(error.into_boxed_str()),
+            )
+        })?;
+        Ok(PreparedDatabasePhysicalMutation {
+            physical: Arc::clone(self),
+            database: database.clone(),
+            before,
+            after,
+            operation: operation.clone(),
+        })
+    }
+
+    pub(crate) fn install_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
+        self.instances
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(mutation.database.clone(), mutation.after.clone());
+    }
+
+    pub(crate) fn restore_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
+        self.instances
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(mutation.database.clone(), mutation.before.clone());
+    }
+
+    pub(crate) fn instances_for_replacement(&self) -> Vec<DatabaseInstance> {
+        self.instances
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .values()
+            .cloned()
+            .collect()
+    }
+
     fn instance_snapshot(
         &self,
         database: &DatabaseId,
@@ -115,6 +316,98 @@ impl DatabaseRuntimePhysicalState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         Ok(instances.get(database).cloned())
+    }
+}
+
+pub(crate) struct DatabaseRuntimeMetadata {
+    pub(crate) name: Box<str>,
+    pub(crate) schema: DatabaseSchemaFact,
+    pub(crate) row_count: usize,
+}
+
+pub(crate) struct PreparedDatabasePhysicalMutation {
+    physical: Arc<DatabaseRuntimePhysicalState>,
+    database: DatabaseId,
+    before: DatabaseInstance,
+    after: DatabaseInstance,
+    operation: DatabaseMutationOperation,
+}
+
+impl PreparedDatabasePhysicalMutation {
+    pub(crate) fn edit_state(&self) -> crate::database::EditState {
+        self.after.edit_state()
+    }
+
+    pub(crate) fn rollback(&self) -> Result<(), DatabaseError> {
+        if !matches!(self.before.state, DatabaseState::DuckDb { .. }) {
+            self.physical.restore_mutation(self);
+            return Ok(());
+        }
+
+        let mut current = self.after.clone();
+        let result = match &self.operation {
+            DatabaseMutationOperation::Undo => current.redo_edit(),
+            DatabaseMutationOperation::RenameDatabase { .. } => {
+                current.rename_display_name(&self.before.decl.name)
+            }
+            _ => current.undo_edit(),
+        };
+        result.map_err(|error| {
+            DatabaseError::driver(
+                DatabaseOperation::CommitMutation,
+                Some(self.database.clone()),
+                DatabaseDriverError::Operation(error.into_boxed_str()),
+            )
+        })?;
+        self.physical.restore_mutation(self);
+        Ok(())
+    }
+}
+
+fn apply_mutation(
+    instance: &mut DatabaseInstance,
+    operation: &DatabaseMutationOperation,
+) -> Result<crate::database::EditState, String> {
+    match operation {
+        DatabaseMutationOperation::EditCell {
+            row,
+            column,
+            value,
+            row_id,
+        } => instance.edit_cell(*row, column, tabular_scalar_to_json(value), *row_id),
+        DatabaseMutationOperation::AddRow { index } => instance.add_row(Some(*index)),
+        DatabaseMutationOperation::DeleteRows { indices, row_ids } => {
+            instance.delete_rows(indices, row_ids.as_deref())
+        }
+        DatabaseMutationOperation::AddColumn { name, data_type } => {
+            instance.add_column(name, &data_type.to_string())
+        }
+        DatabaseMutationOperation::DeleteColumn { name } => instance.delete_column(name),
+        DatabaseMutationOperation::CastColumn {
+            name,
+            data_type,
+            force,
+        } => instance.cast_column(name, &data_type.to_string(), *force),
+        DatabaseMutationOperation::RenameColumn { old_name, new_name } => {
+            instance.rename_column(old_name, new_name)
+        }
+        DatabaseMutationOperation::RenameDatabase { name } => instance.rename_display_name(name),
+        DatabaseMutationOperation::Undo => instance.undo_edit(),
+        DatabaseMutationOperation::Redo => instance.redo_edit(),
+        DatabaseMutationOperation::Save => instance.save_changes(None),
+    }
+}
+
+fn tabular_scalar_to_json(value: &TabularScalar) -> serde_json::Value {
+    match value {
+        TabularScalar::Null => serde_json::Value::Null,
+        TabularScalar::Bool(value) => serde_json::Value::Bool(*value),
+        TabularScalar::Integer(value) => serde_json::Value::Number((*value).into()),
+        TabularScalar::Unsigned(value) => serde_json::Value::Number((*value).into()),
+        TabularScalar::Decimal(value) => serde_json::Number::from_f64(value.as_f64())
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        TabularScalar::String(value) => serde_json::Value::String(value.to_string()),
     }
 }
 

@@ -14,7 +14,7 @@ import {
   type ComputationSettingsSnapshotDto,
   type ProjectComputationSettingsDto,
   type StatisticalMissingValuePolicy,
-} from '@/shared/types/dto/projectComputationSettings';
+} from '@/shared/types/domain/projectComputationSettings';
 
 export interface ProjectComputationSettingsDraft {
   absolute: string;

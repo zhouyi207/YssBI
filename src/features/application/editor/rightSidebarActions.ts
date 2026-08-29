@@ -1,6 +1,7 @@
-import type { DetailFocus } from '@/features/core/editor';
+import type { DetailFocus } from '@/shared/types/ui/detail';
 import { useEditorStore } from '@/features/core/editor';
 import { setVariablesGraphScopeFromResource } from '@/features/core/editor/detail/variablesGraphScope';
+import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
 import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 import type { LayoutTabType } from '@/shared/types/ui';
 
@@ -52,6 +53,15 @@ export function setInspectionContext(
 
 export async function revealDetails(focus: DetailFocus): Promise<void> {
   setDetailContext(focus);
+}
+
+export async function revealDiagnosticNode(
+  graphPath: string,
+  nodeId: string,
+  groupId: string,
+): Promise<void> {
+  updateEditorGroupSelectedNodeIds([nodeId], groupId);
+  await revealDetails({ kind: 'node', id: nodeId, graphPath });
 }
 
 export async function revealInspect(

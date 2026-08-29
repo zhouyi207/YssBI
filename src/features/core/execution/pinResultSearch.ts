@@ -1,4 +1,4 @@
-import { resultRef, type InspectableResultRef } from '@/features/core/resultSource/inspectableResult';
+import { resultRef, type InspectableResultRef } from '@/features/domain/result/inspectableResultRef';
 import type { PinHistoryProjection } from '@/shared/types/ui';
 import { pinHistoryCacheKey } from './pinResultIndex';
 

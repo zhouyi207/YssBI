@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { DockviewApi } from 'dockview-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 
 const mocks = vi.hoisted(() => ({
   dockviews: [] as unknown[],
@@ -340,13 +340,11 @@ import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
 } from '@/features/core/dockview/logsDockviewLayout';
-import {
-  createLogsDockviewLayoutController,
-  logsDockviewLayoutController,
-} from '@/features/core/dockview/logsDockviewLayoutController';
-import { logDomainPanelId } from '@/features/core/log/logDomains';
-import { logBuffer } from '@/features/core/log/logBuffer';
-import { useLogStore } from '@/features/core/log/logStore';
+import { logsDockviewRuntime } from '@/features/core/dockview/logsRuntime';
+import { logsDockviewRootBinding } from '@/features/core/dockview/logsRootBinding';
+import { logDomainPanelId } from '@/features/domain/log/logDomains';
+import { logBuffer } from '@/features/application/log/logBuffer';
+import { useLogStore } from '@/features/application/log/logStore';
 import {
   LogWorkspaceDockview,
   type LogWorkspaceLayoutLifecycle,
@@ -541,11 +539,10 @@ describe('LogWorkspaceDockview', () => {
     expect(contentDrop.preventDefault).toHaveBeenCalledOnce();
   });
 
-  it('binds the main controller and unbinds the exact API with the final snapshot', () => {
-    const controller = createLogsDockviewLayoutController();
-    const bind = vi.spyOn(controller, 'bind');
-    const unbind = vi.spyOn(controller, 'unbind');
-    renderWorkspace({ kind: 'main', controller });
+  it('binds the main root and unbinds its exact binding token', () => {
+    const bind = vi.spyOn(logsDockviewRootBinding, 'bind');
+    const unbind = vi.spyOn(logsDockviewRootBinding, 'unbind');
+    renderWorkspace({ kind: 'main' });
     const dockview = latestDockview();
 
     expect(bind).toHaveBeenCalledOnce();
@@ -554,14 +551,15 @@ describe('LogWorkspaceDockview', () => {
     root = null;
 
     expect(unbind).toHaveBeenCalledOnce();
-    expect(unbind).toHaveBeenCalledWith(dockview.api);
-    expect(controller.getLatestSnapshot().panels).toHaveProperty(logDomainPanelId('ui'));
+    expect(unbind).toHaveBeenCalledWith(bind.mock.results[0]?.value);
+    expect(logsDockviewRuntime.getLatestSnapshot().panels)
+      .toHaveProperty(logDomainPanelId('ui'));
   });
 
   it('restores a fresh ephemeral default without controller or storage persistence', async () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    const bind = vi.spyOn(logsDockviewLayoutController, 'bind');
-    const unbind = vi.spyOn(logsDockviewLayoutController, 'unbind');
+    const bind = vi.spyOn(logsDockviewRootBinding, 'bind');
+    const unbind = vi.spyOn(logsDockviewRootBinding, 'unbind');
 
     renderWorkspace({ kind: 'ephemeral' });
     await flushSubscription();

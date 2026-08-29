@@ -3,11 +3,12 @@ import { useSyncExternalStore } from 'react';
 import {
   freezeProjectionSnapshot,
   type DeepReadonly,
-} from '@/features/core/projection/deepReadonly';
+} from '@/shared/types/deepReadonly';
 import { useExecutionStore } from './useExecutionStore';
 import type {
   ExecutionStatus,
   GraphExecutionState,
+  NodeExecutionState,
   PinHistoryProjection,
   PinPreviewState,
   RunOutputProjection,
@@ -16,6 +17,11 @@ import type {
 export interface GraphExecutionProjection {
   readonly status: ExecutionStatus;
   readonly runId: string | null;
+  readonly nodeStates: ReadonlyMap<string, NodeExecutionState>;
+  readonly completedConnections: ReadonlySet<string>;
+  readonly flowingConnections: ReadonlySet<string>;
+  readonly recording: readonly import('@/shared/types/ui/execution').RecordedEvent[];
+  readonly graphDirty: boolean;
   readonly runOutput: DeepReadonly<RunOutputProjection>;
   readonly pinHistories: ReadonlyMap<string, DeepReadonly<PinHistoryProjection>>;
   readonly pinPreviews: ReadonlyMap<string, DeepReadonly<PinPreviewState>>;
@@ -23,6 +29,8 @@ export interface GraphExecutionProjection {
 
 export interface ExecutionReadSnapshot {
   readonly graphs: DeepReadonly<Record<string, GraphExecutionProjection>>;
+  readonly isPlaying: boolean;
+  readonly playbackGraphPath: string | null;
 }
 
 export interface ExecutionReadCapability {
@@ -34,6 +42,11 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
   return {
     status: graph.status,
     runId: graph.runId,
+    nodeStates: graph.nodeStates,
+    completedConnections: graph.completedConnections,
+    flowingConnections: graph.flowingConnections,
+    recording: graph.recording,
+    graphDirty: graph.graphDirty,
     runOutput: graph.runOutput,
     pinHistories: graph.pinHistories,
     pinPreviews: graph.pinPreviews,
@@ -41,11 +54,13 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
 }
 
 function buildSnapshot(): DeepReadonly<ExecutionReadSnapshot> {
-  const { graphs } = useExecutionStore.getState();
+  const { graphs, isPlaying, playbackGraphPath } = useExecutionStore.getState();
   return freezeProjectionSnapshot({
     graphs: Object.fromEntries(
       Object.entries(graphs).map(([graphPath, graph]) => [graphPath, projectGraph(graph)]),
     ),
+    isPlaying,
+    playbackGraphPath,
   });
 }
 

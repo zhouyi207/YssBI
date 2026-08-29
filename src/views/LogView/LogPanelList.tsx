@@ -7,7 +7,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import { LogPanelVirtualList } from './LogPanelVirtualList';
 import type { LogPanelPresentation } from './useLogPanelVirtualList';
 

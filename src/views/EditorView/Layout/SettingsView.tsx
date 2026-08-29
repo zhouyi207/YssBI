@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { VscError } from 'react-icons/vsc';
 import { useTranslation } from "react-i18next";
-import { useSettingsStore, uiStore } from "@/features/application/viewCapabilities";
+import { useSettingsRead } from '@/features/core/settings/read';
+import { settingsUi } from '@/features/core/settings/ui';
+import { ui } from "@/features/core/ui/ui";
 import { Select } from "@/shared/ui";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,19 +21,19 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDirtyChange }) => {
     const { t } = useTranslation();
-    const theme = useSettingsStore((s) => s.theme);
-    const editor = useSettingsStore((s) => s.editor);
-    const appearance = useSettingsStore((s) => s.appearance);
-    const project = useSettingsStore((s) => s.project);
-    const isLoading = useSettingsStore((s) => s.isLoading);
-    const updateTheme = useSettingsStore((s) => s.updateTheme);
-    const updateEditor = useSettingsStore((s) => s.updateEditor);
-    const updateAppearance = useSettingsStore((s) => s.updateAppearance);
-    const updateProject = useSettingsStore((s) => s.updateProject);
-    const resetAllToDefaults = useSettingsStore((s) => s.resetAllToDefaults);
-    const resetThemeToDefaults = useSettingsStore((s) => s.resetThemeToDefaults);
-    const resetEditorToDefaults = useSettingsStore((s) => s.resetEditorToDefaults);
-    const resetAppearanceToDefaults = useSettingsStore((s) => s.resetAppearanceToDefaults);
+    const theme = useSettingsRead((s) => s.theme);
+    const editor = useSettingsRead((s) => s.editor);
+    const appearance = useSettingsRead((s) => s.appearance);
+    const project = useSettingsRead((s) => s.project);
+    const isLoading = useSettingsRead((s) => s.isLoading);
+    const updateTheme = settingsUi.updateTheme;
+    const updateEditor = settingsUi.updateEditor;
+    const updateAppearance = settingsUi.updateAppearance;
+    const updateProject = settingsUi.updateProject;
+    const resetAllToDefaults = settingsUi.resetAllToDefaults;
+    const resetThemeToDefaults = settingsUi.resetThemeToDefaults;
+    const resetEditorToDefaults = settingsUi.resetEditorToDefaults;
+    const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
 
     const computation = useProjectComputationSettings();
     const [activeSection, setActiveSection] = useState("editor");
@@ -67,7 +69,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
 
     const confirmDiscardComputation = async (): Promise<boolean> => {
         if (!computation.isDirty) return true;
-        return uiStore.confirm({
+        return ui.confirm({
             title: "Discard computation changes?",
             message: "Your unapplied project computation settings will be lost.",
             confirmText: "Discard",
@@ -116,7 +118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     ];
 
     const handleResetAll = async () => {
-        const confirmed = await uiStore.confirm({
+        const confirmed = await ui.confirm({
             title: t("settings.confirmResetAllTitle"),
             message: t("settings.confirmResetAllMessage"),
             type: "danger",
@@ -146,7 +148,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         };
 
         const sectionName = sectionNames[section] || section;
-        const confirmed = await uiStore.confirm({
+        const confirmed = await ui.confirm({
             title: t("settings.confirmResetTitle"),
             message: t("settings.confirmResetMessage", { section: sectionName }),
             type: "danger",

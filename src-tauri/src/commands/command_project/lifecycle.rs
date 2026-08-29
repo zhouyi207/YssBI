@@ -6,14 +6,16 @@ use crate::application::project_watcher::{
 };
 use crate::error::CommandError;
 use crate::event::{
-    Event, EventProject, EventResource, LifecycleMutationOutcomeDto, LifecycleMutationResultDto,
-    ProjectActivationResultDto, emit_project_event, emit_project_event_result,
+    Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
 use crate::project::OperationId;
 #[cfg(test)]
 use crate::project::ProjectState;
-use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{ProjectDomainEvent, ProjectInstanceId, ProjectRegistry, ProjectWatchError};
+use crate::schema::ProjectSaveResultDto;
+use crate::schema::application_event::{
+    LifecycleMutationOutcomeDto, LifecycleMutationResultDto, ProjectActivationResultDto,
+};
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
@@ -211,7 +213,7 @@ pub fn load_project(
         "Project loaded"
     );
 
-    let project_instance_id = ProjectInstanceId::from_existing(result.project_instance_id.clone());
+    let project_instance_id = result.project_instance_id.clone();
     start_project_watcher(
         &app,
         application.inner(),
@@ -219,6 +221,7 @@ pub fn load_project(
         &result.path,
         &project_instance_id,
     );
+    let result = crate::schema::application_event::project_activation_to_transport(&result);
     emit_project_loaded(&app, result.clone());
     Ok(result)
 }
@@ -251,23 +254,23 @@ pub async fn save_project_as(
         )
         .await
         .map_err(map_application_project_lifecycle_error)?;
-    publish_lifecycle_result(&app, &result);
-    if result.outcome == LifecycleMutationOutcomeDto::Committed {
+    let transport = crate::schema::application_event::project_lifecycle_to_transport(&result);
+    publish_lifecycle_result(&app, &transport);
+    if result.outcome == crate::application::events::ProjectLifecycleOutcome::Committed {
         if let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
-            result.new_project_instance_id.as_deref(),
+            result.new_project_instance_id.as_ref(),
         ) {
-            let project_instance_id = ProjectInstanceId::from_existing(project_instance_id.into());
             start_project_watcher(
                 &app,
                 application.inner(),
                 &watcher,
                 metadata_path,
-                &project_instance_id,
+                project_instance_id,
             );
         }
     }
-    Ok(result)
+    Ok(transport)
 }
 
 #[tauri::command]
@@ -283,6 +286,7 @@ pub async fn create_project(
         .create_project_for_application(registry.inner(), &name, Path::new(&path), operation_id)
         .await
         .map_err(map_application_project_lifecycle_error)?;
+    let result = crate::schema::application_event::project_lifecycle_to_transport(&result);
     publish_lifecycle_result(&app, &result);
     Ok(result)
 }
@@ -321,6 +325,7 @@ pub(crate) fn flush_project_with_emitter(
     let result = state
         .flush_project_documents(&project_instance_id, operation_id)
         .map_err(CommandError::from)?;
+    let result = ProjectSaveResultDto::from(result);
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
     }));
@@ -343,6 +348,7 @@ pub fn flush_project(
     let result = application
         .flush_project_for_application(project_instance_id, operation_id)
         .map_err(map_application_project_lifecycle_error)?;
+    let result = ProjectSaveResultDto::from(result);
     emit_project_event(
         &app,
         Event::Project(EventProject::ProjectSaved {
@@ -377,12 +383,12 @@ pub fn new_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{
+    use crate::project::OperationId;
+    use crate::project::{ProjectData, ProjectFilesystemError};
+    use crate::schema::application_event::{
         LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
         LifecycleRecoveryDto,
     };
-    use crate::project::OperationId;
-    use crate::project::{ProjectData, ProjectFilesystemError};
 
     fn lifecycle_result(
         outcome: LifecycleMutationOutcomeDto,

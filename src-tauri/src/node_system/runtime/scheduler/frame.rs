@@ -148,7 +148,7 @@ pub(super) fn collect_region_operations(
 #[cfg(test)]
 mod result_id_frame_tests {
     use super::*;
-    use crate::node_system::plan::GraphOutputRef;
+    use crate::execution::plan::legacy::GraphOutputRef;
 
     #[test]
     fn runtime_id_exhaustion_is_not_classified_as_an_invalid_plan() {
@@ -173,7 +173,7 @@ mod result_id_frame_tests {
             graph_path: graph_path.clone(),
             port: crate::graph_document::PortAddress::declared(
                 node_id,
-                crate::node_system::protocol::PortKey::new("result").unwrap(),
+                crate::graph::protocol::PortKey::new("result").unwrap(),
             ),
         };
         let descriptor = PendingOutputDescriptor {

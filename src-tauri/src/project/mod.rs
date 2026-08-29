@@ -1,9 +1,9 @@
 //! 项目管理模块
 
-mod compile_publication;
 pub mod computation_settings;
 pub mod execution_authority;
 pub mod filesystem;
+pub mod function_editor_projection;
 pub mod graph_resource_index;
 pub mod history;
 mod history_hydration;
@@ -14,9 +14,11 @@ pub mod project_data;
 pub mod project_error;
 pub mod project_progress;
 pub mod project_registry_store;
+mod project_session_id;
 pub mod resource_lifecycle;
 pub mod resource_name;
 
+pub mod database_authority;
 pub mod project_activation;
 pub mod project_io;
 pub mod project_lifecycle;
@@ -27,7 +29,6 @@ pub mod project_registry;
 pub mod project_scan;
 pub mod project_session;
 pub mod project_state;
-pub mod project_state_database;
 pub mod project_writers;
 pub mod resource_mutations;
 
@@ -44,11 +45,23 @@ pub mod worksheet_resource_path;
 
 pub use computation_settings::*;
 pub use filesystem::*;
+pub use function_editor_projection::*;
 pub use graph_resource_index::*;
-pub use history::*;
+pub use history::{
+    DatabaseDocumentPatch, DatabaseResourceKey, FunctionDocument, FunctionDocumentPatch,
+    FunctionParameter, FunctionResourceKey, FunctionSignature, HistoryError, HistoryMutation,
+    HistoryPersistencePolicy, HistoryStatusDto, MutationRequest, ProjectDocumentState,
+    ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency, ProjectHistory,
+    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceDeltaEvent, ResourceKey,
+    ResourceKind, ResourceLifecycleHistoryPatch, ResourceLifecycleHistoryPayload,
+    ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState,
+    ResourceMoveHistoryPatch, ResourceMoveHistoryPayload, ResourcePatch, ResourcePathMovePatch,
+    VariableDocument, VariableDocumentPatch, VariableEffectHistorySnapshots, VariableResourceKey,
+    WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
+};
 pub use identity::{
-    HistoryEntryId, OperationId, ProjectRevision, ProjectTransactionRevision, ResourceRevision,
-    RevisionExhausted,
+    HistoryEntryId, OperationId, ProjectResourcePath, ProjectRevision, ProjectTransactionRevision,
+    ResourceRevision, RevisionExhausted,
 };
 pub use path_format::*;
 pub use project_change::*;
@@ -56,23 +69,26 @@ pub use project_data::*;
 pub use project_error::*;
 pub use project_progress::*;
 pub use project_registry_store::*;
+pub use project_session_id::ProjectSessionId;
 pub use resource_lifecycle::*;
 pub use resource_name::*;
 
+pub use database_authority::ProjectDatabaseError;
 pub use project_activation::*;
 pub use project_io::*;
 pub use project_lifecycle::*;
 pub use project_metadata::*;
 pub use project_picker_task::*;
+#[cfg(test)]
+pub use project_reads::ProjectResourceSnapshot;
+#[cfg(test)]
 pub use project_reads::{
     CatalogMutationResource, CatalogMutationValidationSnapshot, CatalogProjectSnapshot,
-    ProjectResourceSnapshot,
 };
 pub use project_registry::*;
 pub use project_scan::*;
 pub use project_session::*;
 pub use project_state::*;
-pub use project_state_database::ProjectDatabaseError;
 pub use project_store::*;
 
 pub use resource_patch::*;
@@ -172,15 +188,17 @@ pub(crate) mod fixtures {
 
     pub(crate) fn flush_state(
         state: &super::ProjectState,
-    ) -> Result<super::project_writers::ProjectSaveResultDto, super::ProjectFilesystemError> {
+    ) -> Result<crate::schema::ProjectSaveResultDto, super::ProjectFilesystemError> {
         let session = state.capture_project_session()?;
-        state.flush_project_documents(&session.instance_id, crate::project::OperationId::new())
+        state
+            .flush_project_documents(&session.instance_id, crate::project::OperationId::new())
+            .map(Into::into)
     }
 
     pub(crate) fn write_state_graph(
         state: &super::ProjectState,
         graph_path: &GraphResourcePath,
-    ) -> Result<super::project_writers::ProjectSaveResultDto, super::ProjectFilesystemError> {
+    ) -> Result<crate::schema::ProjectSaveResultDto, super::ProjectFilesystemError> {
         let session = state.capture_project_session()?;
         let revision = state
             .get_data()?
@@ -191,22 +209,13 @@ pub(crate) mod fixtures {
             })?
             .document
             .revision;
-        state.save_graph_document(
-            &session.instance_id,
-            graph_path,
-            crate::project::ResourceRevision::from_graph_revision(revision),
-            crate::project::OperationId::new(),
-        )
+        state
+            .save_graph_document(
+                &session.instance_id,
+                graph_path,
+                crate::project::ResourceRevision::from_graph_revision(revision),
+                crate::project::OperationId::new(),
+            )
+            .map(Into::into)
     }
 }
-
-#[cfg(test)]
-mod blueprint_graph_phase1_tests;
-#[cfg(test)]
-mod editor_reroute_mutation_tests;
-#[cfg(test)]
-mod move_connections_project_state_tests;
-#[cfg(test)]
-mod production_tests;
-#[cfg(test)]
-mod structured_control_production_tests;

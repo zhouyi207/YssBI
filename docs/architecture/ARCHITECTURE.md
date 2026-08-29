@@ -34,19 +34,20 @@ flowchart TD
   FE --> CMD[Tauri commands]
   CMD --> APP[Application use-case modules]
   APP --> PROJECT[Project authority]
-  APP --> NODE[Node system]
+  APP --> GRAPH[Graph semantics]
+  APP --> EXEC[Execution runtime]
   APP --> DB[Database module]
-  APP --> SCI[SCI application facade]
-  PROJECT --> NODE
-  PROJECT --> DB
-  NODE --> SCI
+  APP --> SCI[Execution scientific port]
+  PROJECT --> PURE[Pure persisted contracts]
+  GRAPH --> PURE
+  EXEC --> PORTS[typed backend ports]
   SCI --> RUSTSCI[yss-sci Rust algorithms]
   SCI --> JULIA[Julia Bayes adapter]
   CMD --> CHANNEL[Events and ordered channels]
   CHANNEL --> UI
 ```
 
-`commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、node_system、database 或 sci module，以提高 depth、leverage 和 locality。
+`commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、graph、execution、database 或 sci module，以提高 depth、leverage 和 locality。
 
 `application/` 拥有跨 module 的 database use-case orchestration；`project/` 拥有 project/session authority、resource revision、commit 与 coherent snapshot，并直接依赖 `database/` 提供的存储和 runtime primitives。生产代码中的 `project/` 不依赖 `application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
 
@@ -109,13 +110,14 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/src/application/` | 跨 module 用例编排 |
-| `src-tauri/src/backend_adapters/` | final consumer-owned ports 到 concrete backend API 的 exact adapters；staged adapter 在 composition 切换前保持 production-unreachable |
+| `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
-| `src-tauri/src/node_system/` | graph document、catalog/registry、analysis、compiler、plan 与 runtime |
+| `src-tauri/src/graph/` | graph behavior、catalog/registry、analysis、neutral compiler 与 graph diagnostics |
+| `src-tauri/src/execution/` | immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports |
 | `src-tauri/src/database_contract/` | persisted database declaration、engine identity 与 DuckDB table identity contract |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
-| `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface、models 与当前 direct-SCI backend orchestration |
+| `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
@@ -176,12 +178,13 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 | Module | Interface 提供的 leverage | Implementation 所在 locality |
 |---|---|---|
 | `project_lifecycle` | load/clear/create/save-as/delete 的用例结果 | ProjectState、registry 与恢复状态编排 |
-| `catalog_compatibility` | 基于 graph revision 的兼容 catalog | coherent catalog snapshot、projection 与 currentness validation |
-| `graph_execution` | typed request、RunEvent/RunOutput delivery bridge、delivery report | 调用 ProjectState execution 并保留 terminal delivery 事实 |
+| `catalog_query` / `graph_open` | coherent localized/compatible catalog 与 graph projection | Application session capture、Project/Graph/Database snapshot 与 schema mapper |
+| `graph_mutation` / `resource_mutation` | capture/plan/commit 的 Graph 与 Project resource mutation | Application coordination、Project authority commit 与 neutral result facts |
+| `execution` | session capture、prepared plan、run/result/finalization | ApplicationSessionSlot 与 Execution-owned runtime |
 | `database` | typed import/read/mutate/save/export 用例 | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit |
-| `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesBackend`、project data materialization 与 owned artifacts |
+| `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesWorkerPort`、Database snapshot、SCI inputs 与 injected artifact reader |
 
-`database_schema` 从 coherent project resource snapshot 组合 database/variable query DTO；DuckDB runtime binding 与 storage metadata 属于 `database/`，`ColumnInfoDTO` conversion 属于 `schema/`。
+Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata 属于 `database/`，`ColumnInfoDTO` conversion 属于 `schema/`。
 
 `hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
 
@@ -193,9 +196,8 @@ command_project/lifecycle
   → project
 
 command_node_system
-  → application/catalog_compatibility or application/graph_execution
-  → project
-  → node_system
+  → application/catalog_query | graph_open | graph_mutation | execution
+  → Project / Graph / Execution
 
 command_dataframe
   → application/database
@@ -203,8 +205,9 @@ command_dataframe
 
 command_bayes
   → application/bayes
-  → sci::api::bayes::BayesBackend
-  → JuliaBayesBackend
+  → SCI-facing StatisticalInput
+  → BayesWorkerPort
+  → JuliaBayesWorkerAdapter
 ```
 
 ## 5. Project authority 与资源生命周期
@@ -213,23 +216,27 @@ command_bayes
 
 `ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、worksheet、database declaration 和 computation settings 的 authoritative state。
 
-`ProjectStore` 是随 project session 重建的 runtime state：
+`ProjectStore` 只保留 Project session identity；随 project session 重建的运行时对象由
+`ApplicationSessionSlot` 持有：
 
 ```text
-ProjectStore
-├─ runtime databases
-├─ NodeRegistry and BuiltinCatalog
-├─ KernelRegistry
-├─ compiled parameters and FunctionPlanStore
-├─ ResultStore
-├─ SessionMemoization
-├─ ProjectRunRegistry
-└─ ProjectSessionId
+ApplicationSessionSlot
+├─ ProjectState / ProjectSession
+├─ DatabaseRuntimeSession
+├─ Graph catalog/runtime facts
+├─ ExecutionRuntimeState
+├─ ResultStore and RunRegistry
+└─ session epoch / generation
 ```
 
-`ProjectStore` 不替代 `ProjectData`。它提供不能或不应直接序列化的 runtime implementation。切换 project session 会替换这组 runtime objects，从而隔离旧 result、memo 和 run state。
+`ProjectStore` 不替代 `ProjectData`；它只记录 Project-owned session identity。切换 project session
+通过 ApplicationSessionSlot 关闭旧 Execution admission、drain 活动 work，再原子替换
+Project/Database/Execution session，隔离旧 result、run 与 database handles。
 
-`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 database resource identity/declaration 的 authoritative index；`ProjectStore.databases` 保存 session-bound `DatabaseInstance`、metadata snapshot 与 edit history。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
+`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。
+活动 session 中，`ProjectData.databases` 是 declaration authority；DatabaseRuntimeSession 保存
+session-bound runtime state。ProjectState 拥有 project identity、resource revision、commit/currentness
+validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
 
 Graph resource 文件位于 `events/...` 与 `functions/...`。对未驻留 graph，磁盘文件和 graph revision ledger/index 仍声明资源存在；`ProjectData.graphs` 中缺失表示 unloaded，而不是资源不存在。
 
@@ -274,49 +281,42 @@ Duplicate 对 loaded source 使用 coherent `ProjectData` snapshot，对 unloade
 
 ### 5.4 Load 与 coherent snapshots
 
-Graph load 先注册 resource lifecycle owner，在锁外读取/解析磁盘，再在 commit gate：
+Graph load 由 Application graph-open use case 注册 resource lifecycle owner，在锁外读取/解析磁盘，再在 commit gate：
 
-1. 验证 project session、lifecycle token 与 projection environment。
+1. 验证 project session、lifecycle token 与 Database catalog basis。
 2. 验证 graph resource 并规范 function revision。
 3. 通过 canonical resident installer 写入 `ProjectData`。
 4. 合并合法 local variables 并提交 lifecycle guard。
-5. 推进 authority generation、使 compile products 失效，并从同一 generation 生成 projection source。
+5. 推进 authority generation，并由 Application 从同一 session basis 生成 Graph projection/result facts。
 
-`ProjectState::project_resource_snapshot` 在 `mutation_publication` guard 下组合：
-
-- `project_instance_id`；
-- `authority_generation`；
-- `ProjectData` 中的 database declarations 与 variables；
-- `ProjectStore` 中对应的 runtime database instances。
-
-因此 graph compile/run 不会把旧 project declarations 与新 runtime store 混成一个 snapshot。Catalog、projection、history 和 execution 也使用带 project identity/revision/generation 的专用 coherent snapshots。
+ProjectState 只发布 Project-owned durable facts；Application 将 Project session、Database catalog
+snapshot、Graph document/catalog facts 与 Execution generation 组合为各 use case 的 coherent
+input，禁止把旧 Project runtime handle 混入新 session。
 
 ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database schema metadata。Database 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
 
-## 6. Node system 与 graph execution
+## 6. Graph 与 Execution
 
 ### 6.1 Module 分层
 
-`src-tauri/src/node_system/` 的依赖方向是：
+Graph 与 Execution 的依赖方向是：
 
 ```text
-document + protocol
-  → registry + catalog
-  → semantic analysis + compiler
-  → immutable plan
-  → runtime
+graph_document + protocol
+  → graph registry + catalog
+  → graph analysis + neutral compiler
+  → Application graph package mapping
+  → Execution immutable plan/runtime
 ```
 
-- `document/`：authoritative graph document、mutation、history 和 resource revision。
-- `protocol/`：node type、port、value 与 dataframe protocol。
-- `registry/`：trusted node implementation registry。
-- `catalog/`：builtin descriptors、localized catalog 与 resource-bound creation metadata。
-- `compiler/`：deterministic analysis、dynamic interface/schema resolution、specialization 和 lowering。
-- `plan/`：immutable execution plan、demand selection 与 presentation contract。
-- `runtime/`：plan-only synchronous executor、kernels、resources、memoization、results、streams 和 cancellation。
-- `analysis/`：pure compilation basis/provenance、semantic snapshots、diagnostics 与 editor projections。
+- `graph/document`、`graph/protocol`：Graph 行为、mutation、validation 与稳定 node/port contract。
+- `graph/catalog`、`graph/registry`：built-in descriptors、localized catalog 与 registry。
+- `graph/analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
+- `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
+- `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。
+- `application/graph_contracts`：唯一 Project/Graph → Execution typed mapping seam。
 
-Runtime interface 明确要求只消费 immutable plan 和 plan-local handles；它不会在运行中查询 graph document 或 node registry。这一 seam 让 compiler 负责解释 mutable document，runtime 只负责执行已验证 plan。
+Execution runtime 只消费 immutable plan、prepared resource grants 与 typed backend ports；它不会在运行中查询 Graph document、Project authority 或 concrete backend。
 
 ### 6.2 当前执行链
 
@@ -325,21 +325,18 @@ Runtime interface 明确要求只消费 immutable plan 和 plan-local handles；
 ```mermaid
 flowchart TD
   FE[ProjectService.executeGraphDocument] --> CMD[execute_graph_document command]
-  CMD --> APP[application::graph_execution::execute_graph]
-  APP --> PS[ProjectState::execute_graph]
-  PS --> LOAD[Load required function resources]
-  LOAD --> COMPILE[Compile or reuse current products]
-  COMPILE --> SELECT[Select plan for demand]
-  SELECT --> SNAP[Capture coherent execution/resource snapshot]
-  SNAP --> FP[Publish function plans and parameters]
-  FP --> RUN[RunExecutor]
-  RUN --> RESULTS[ResultStore]
+  CMD --> APP[application execution coordinator]
+  APP --> CAP[Capture ApplicationSession + Project basis]
+  CAP --> LOAD[Graph open / neutral package]
+  LOAD --> PREP[Prepare generation-pinned Execution plan/resources]
+  PREP --> RUN[ExecutionRuntimeState]
+  RUN --> RESULTS[Execution ResultStore]
   RUN --> OUTPUT[Run Output channel]
 ```
 
-`ProjectState::execute_graph` 负责 project identity、authority token、resource version basis、function plan generation、runtime resource leases 和 final commit gate。`ProjectRunRegistry` 管理 preparing/active/finalizing run，支持指定 run cancel，并在 project replacement 时关闭 admission、cancel 和 drain。
+Application execution coordinates project identity, Graph package mapping, resource preparation and finalization. `ApplicationSessionSlot` owns the session generation; replacement closes admission and drains old work before publishing the next candidate.
 
-成功 run 的 variable effects 在 `RunExecutor` terminal success transaction 中 prepare/finalize；只有 authority 与 deadline/cancellation 仍有效才提交。Command 不实现这些规则，只负责 channel adapter、DTO/error 映射和 committed resource event。
+Execution publishes a sealed finalization handoff; Project commits variable/resource effects only after its final authority gate. Commands only adapt the ordered channel and map the typed error/result wire.
 
 ## 7. Results、Run Output 与 diagnostics
 
@@ -347,7 +344,7 @@ flowchart TD
 
 ### 7.1 Results
 
-`ProjectStore.results` 中的 `ResultStore` 是 project-session logical execution result 与 Pin history 的 authority。它提供：
+`ExecutionRuntimeState` 中的 `ResultStore` 是 session-scoped logical execution result 与 Pin history 的 authority。它提供：
 
 - activation group 的原子 `Pending → Ready/Failed/Cancelled` transition；
 - opaque、单调分配的 `ResultId`；
@@ -357,7 +354,7 @@ flowchart TD
 
 Frontend 通过 `ResultService` 调用 typed `get_result_descriptor`、`get_result_value`、`get_result_page` 和 `get_pin_result_history` queries。Project replacement 会替换 session `ResultStore`，使旧 result 与 Pin history 失效；旧 `ResultId` 不会 alias 新 project 的 result。
 
-Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段是 `projectSessionId`、opaque `graphPath` 和 positive decimal-string `runId`。最小 lifecycle `kind.type` 是 `runStarted`、`runCompleted`、`runErrored` 和 `runCancelled`；`pinPreviewResultReady` 只公告 `output`、`generation` 与 `resultId`，`openResultWindow` 只公告 `resultId`。这些 event 是交付通知，不是 result authority；ordinary result publication 不发送 `resultGroupChanged` 或 `outputResultChanged` public stream event。
+Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段是 `projectSessionId`、opaque `graphPath` 和 positive decimal-string `runId`。最小 lifecycle `kind.type` 是 `runStarted`、`runCompleted`、`runErrored` 和 `runCancelled`；`pinPreviewResultReady` 只公告 `output`、`generation` 与 `resultId`，结果检查请求使用 `resultInspectionRequested`。这些 event 是交付通知，不是 result authority；ordinary result publication 不发送 `resultGroupChanged` 或 `outputResultChanged` public stream event。
 
 ### 7.2 Run Output
 
@@ -381,7 +378,7 @@ Rust `tracing` 是唯一 diagnostics pipeline。Recent storage、ingress、subsc
 
 IPC 只接受 `DatabaseImportSourceDTO`：`Csv`、`Parquet`、`Excel` 或 typed `Sql` engine。它不接受 runtime-only `InMemory` 或项目内部 `DuckDb` source。Command 将 import source 转换为内部 engine，再交给 `application::database`。
 
-`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 database resource identity/declaration 的 authoritative index；`ProjectStore.databases` 保存 session-bound `DatabaseInstance`、metadata snapshot 与 edit history。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
+`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 declaration authority；`DatabaseRuntimeSession` 保存 session-bound physical/query state。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
 
 ### 8.2 Query 与编辑
 
@@ -413,14 +410,17 @@ Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-
 科学计算分为两层：
 
 1. `src-tauri/sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-2. `src-tauri/src/sci/`：主应用 SCI-facing interface，包含 typed request/result、application-facing models、当前 direct-SCI orchestration 与 stable error mapping。
+2. `src-tauri/src/sci/`：主应用 SCI-facing interface 与 models；跨层调用通过
+   `execution::ports::scientific`，不由 SCI 反向编排 Project 或 Execution。
 
 Final Execution-facing scientific request/result/error/control 由 `execution/ports/scientific.rs`
-拥有；`backend_adapters/execution/scientific.rs` 负责与 SCI public API 穷尽映射。该 adapter
-在 Execution Task 8 composition 切换前保持 production-unreachable，当前 direct-SCI route
-仍唯一 active。
+拥有；`backend_adapters/execution/scientific.rs` 负责与 SCI public API 穷尽映射，并由
+`lib.rs` 注入到每个 Application execution session。Application statistics、Execution
+runtime 与 commands 不再直接调用 concrete SCI implementation。
 
-Graph kernels 和 commands 依赖 `crate::sci::api`，不直接依赖 Julia worker internals。这个 seam 将输入规范化、错误类型和 backend choice 集中起来。
+Application statistics 通过 Execution scientific port 调用 typed backend，commands 只负责
+schema parse/map；Application Bayes 通过 `BayesWorkerPort` 调用 Julia worker，不直接依赖
+Julia worker internals。两个 seam 分别集中输入规范化、错误类型和 backend choice。
 
 `yss-sci` 不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；这些职责属于主 crate 的 database/project modules。
 
@@ -431,8 +431,8 @@ Graph kernels 和 commands 依赖 `crate::sci::api`，不直接依赖 Julia work
 | ACF/PACF | Rust：`backends::rust::time_series::acf_pacf` |
 | Durbin-Watson/Ljung-Box/Breusch-Godfrey | Rust：`backends::rust::time_series::serial_tests` |
 | t/Wald hypothesis tests | Rust：`backends::rust::stats::hypothesis` |
-| Node regression/time-series statistics | Rust facade over `yss-sci` |
-| Bayesian inference | Julia：`JuliaBayesBackend` 实现 `BayesBackend` |
+| Node regression/time-series statistics | Application/Execution scientific port → `yss-sci` adapter |
+| Bayesian inference | Julia：`JuliaBayesWorkerAdapter` 实现 `BayesWorkerPort` |
 
 Time-series application interface 直接调度 Rust production implementation，没有 Julia time-series adapter。Julia 是 Bayes seam 上唯一真实 production adapter。
 
@@ -442,9 +442,9 @@ Regression fit 不再把统计量仅当作松散 JSON。`RegressionFit.statistic
 
 Rust host 管理单个可重启 worker process、序列化 task request、progress/cancel 和 app-owned task directories。当前 Julia operation registry 只包含 `bayes_fit`。
 
-`JuliaBayesBackend`：
+`JuliaBayesWorkerAdapter`：
 
-- 从 project database snapshot materialize 必需列；
+- 接收 Application 从 Project/Database snapshot 生成的 typed `StatisticalInput`；
 - 在 owned task directory 写 Arrow input、model/config、generated kernels 与 exchange manifest；
 - 读取 typed inference metadata/artifact manifest；
 - 将保留 artifact 的 task-directory owner 转交给 result；

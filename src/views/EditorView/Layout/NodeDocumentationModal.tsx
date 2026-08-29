@@ -20,10 +20,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import {
-  catalogItemKey,
-  type LocalizedCatalogItem,
-} from '@/features/application/viewCapabilities';
+import { catalogItemKey } from '@/features/domain/nodeCatalog/catalogItem';
+import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailProseClass } from './Detail/shared/detailStyles';

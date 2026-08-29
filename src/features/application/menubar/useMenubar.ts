@@ -14,7 +14,7 @@ import {
   openLogsWindow,
 } from '@/features/application/window';
 
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import type { WorkbenchViewId } from '@/features/core/dockview/workbenchPanelModel';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useWorkbenchStore } from '@/features/core/workbench/workbenchStore';
@@ -22,7 +22,7 @@ import type { MenubarViewState } from './menubarViewItems';
 
 function openViewIds(): ReadonlySet<WorkbenchViewId> {
   const viewIds = new Set<WorkbenchViewId>();
-  for (const panel of workbenchDockviewPort.listPanels()) {
+  for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role === 'view') viewIds.add(panel.metadata.viewId);
   }
   return viewIds;
@@ -33,16 +33,16 @@ export function useMenubar() {
   const openSettings = useWorkbenchStore((state) => state.openSettings);
   const inspectContextValid = useEditorStore((state) => state.detailFocus?.kind === 'node');
   const dockviewSnapshot = useSyncExternalStore(
-    workbenchDockviewPort.subscribe,
-    workbenchDockviewPort.getSnapshot,
-    workbenchDockviewPort.getSnapshot,
+    workbenchDockviewRead.subscribe,
+    workbenchDockviewRead.getSnapshot,
+    workbenchDockviewRead.getSnapshot,
   );
 
   const viewState = useMemo<MenubarViewState>(() => {
     const views = openViewIds();
     return {
       activityGroupOpen: (() => {
-        const edge = workbenchDockviewPort.getEdgeState('left');
+        const edge = workbenchDockviewRead.getEdgeState('left');
         return edge.exists && edge.visible && !edge.collapsed
           && edge.groupId === 'workbench-edge-left';
       })(),
@@ -50,7 +50,7 @@ export function useMenubar() {
       inspectContextValid,
       logsOpen: views.has('logs'),
       outputOpen: views.has('output'),
-      bottomCollapsed: workbenchDockviewPort.getEdgeState('bottom').collapsed,
+      bottomCollapsed: workbenchDockviewRead.getEdgeState('bottom').collapsed,
     };
   }, [dockviewSnapshot.revision, inspectContextValid]);
 

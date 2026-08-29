@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import type { ResultDescriptor } from '@/shared/types/domain/result';
 import { loadPresentationWindow } from './loadPresentationWindow';
 
 vi.mock('@/services/result/resultService', () => ({
@@ -10,7 +10,7 @@ vi.mock('@/services/result/resultService', () => ({
   },
 }));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: { app: { error: vi.fn() } },
 }));
 

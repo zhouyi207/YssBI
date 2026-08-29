@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { useHistoryStore } from '@/features/core/history';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { useWorksheetStore } from './worksheetStore';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
+import { saveWorksheetDocument } from '@/features/application/worksheet/saveWorksheetDocument';
 import {
   isResourceDocumentDirty,
   markResourceDirty,
@@ -14,8 +13,6 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
-
-registerCoreApplicationPorts();
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const worksheetPath = 'worksheets/Report.yssbi-worksheet';
@@ -114,7 +111,7 @@ describe('worksheet authoritative mutation results', () => {
     const request = deferred<Awaited<ReturnType<typeof WorksheetService.saveWorksheet>>>();
     vi.spyOn(WorksheetService, 'saveWorksheet').mockReturnValue(request.promise);
 
-    const completion = useWorksheetStore.getState().saveDocument(worksheetPath);
+    const completion = saveWorksheetDocument(worksheetPath);
     await vi.waitFor(() => expect(WorksheetService.saveWorksheet).toHaveBeenCalled());
     useProjectIOStore.setState({ projectInstanceId: 'project-b' });
     projectPublicationCoordinator.startProject('project-b', 0);
@@ -142,7 +139,7 @@ describe('worksheet authoritative mutation results', () => {
     const request = deferred<Awaited<ReturnType<typeof WorksheetService.saveWorksheet>>>();
     vi.spyOn(WorksheetService, 'saveWorksheet').mockReturnValue(request.promise);
 
-    const completion = useWorksheetStore.getState().saveDocument(worksheetPath);
+    const completion = saveWorksheetDocument(worksheetPath);
     await vi.waitFor(() => expect(WorksheetService.saveWorksheet).toHaveBeenCalled());
     useWorksheetStore.getState().updateDocument(worksheetPath, { chartType: 'line' });
     request.resolve(worksheetResult(
@@ -180,7 +177,7 @@ describe('worksheet authoritative mutation results', () => {
     vi.spyOn(WorksheetService, 'saveWorksheet').mockImplementation(
       async (_projectInstanceId, operationId) => {
         const result = worksheetResult(operationId, before, authoritative);
-        new ResourceMutationCommittedHandler().handle({ result });
+        void projectPublicationCoordinator.submit({ result });
         await vi.waitFor(() => {
           expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
         });
@@ -189,7 +186,7 @@ describe('worksheet authoritative mutation results', () => {
       },
     );
 
-    await expect(useWorksheetStore.getState().saveDocument(worksheetPath)).resolves.toBe(true);
+    await expect(saveWorksheetDocument(worksheetPath)).resolves.toBe(true);
 
     expect(useWorksheetStore.getState().documents[worksheetPath]).toEqual(authoritative);
     expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(false);
@@ -211,7 +208,7 @@ describe('worksheet authoritative mutation results', () => {
       ),
     );
 
-    await expect(useWorksheetStore.getState().saveDocument(worksheetPath)).resolves.toBe(true);
+    await expect(saveWorksheetDocument(worksheetPath)).resolves.toBe(true);
 
     expect(WorksheetService.saveWorksheet).toHaveBeenCalledWith(
       projectInstanceId,

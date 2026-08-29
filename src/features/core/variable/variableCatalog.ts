@@ -1,6 +1,6 @@
-import type { ProjectVariableIndexRow } from '@/services/project/projectService';
+import type { ProjectVariableIndexRow } from '@/shared/types/domain/project';
 import type { Variable } from '@/shared/types';
-import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
+import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
 import type { ProjectResourceMeta } from '@/features/core/resource';
 
 export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {

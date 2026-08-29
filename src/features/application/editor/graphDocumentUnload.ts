@@ -6,7 +6,7 @@ import { markResourceLoaded } from '@/features/core/resource';
 import { releaseGraphViewport } from '@/features/core/viewport';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { shouldRetainGraphDocument } from './graphDocumentRetention';
 import {
   captureProjectIdentity,

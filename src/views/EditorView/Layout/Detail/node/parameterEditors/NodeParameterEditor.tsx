@@ -8,7 +8,7 @@ import type { DataType } from '@/shared/types/domain/dataType';
 import type {
   DiagnosticDto,
   ParameterEditorDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import { DetailReadonlyField } from '../../shared/DetailForm';
 import { DetailFieldRow } from '../../shared/DetailFieldRow';

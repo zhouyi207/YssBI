@@ -7,7 +7,11 @@ use crate::database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
     DatabaseSessionOpenRequest,
 };
-use physical::{DatabaseRuntimeDataSnapshot, DatabaseRuntimePhysicalState};
+pub(crate) use physical::PreparedDatabasePhysicalMutation;
+use physical::{
+    DatabaseRuntimeDataSnapshot, DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot,
+    DatabaseRuntimePhysicalState,
+};
 use registry::DatabaseSessionRuntime;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -309,6 +313,90 @@ impl DatabaseRuntimeSession {
         database: &DatabaseId,
     ) -> Result<Option<DatabaseSchemaFact>, DatabaseError> {
         self.physical.read_schema(database)
+    }
+
+    pub(crate) fn read_physical_metadata(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<DatabaseRuntimeMetadata, DatabaseError> {
+        self.physical.read_metadata(database)
+    }
+
+    pub(crate) fn read_physical_page(
+        &self,
+        database: &DatabaseId,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DatabaseRuntimePageSnapshot, DatabaseError> {
+        self.physical.read_page(database, offset, limit)
+    }
+
+    pub(crate) fn read_physical_column_stats(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+        self.physical.read_column_stats(database)
+    }
+
+    pub(crate) fn read_physical_column_distributions(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+        self.physical.read_column_distributions(database)
+    }
+
+    pub(crate) fn read_physical_dataset_overview(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<crate::database::DatasetOverview, DatabaseError> {
+        self.physical.read_dataset_overview(database)
+    }
+
+    pub(crate) fn read_physical_edit_state(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<crate::database::EditState, DatabaseError> {
+        self.physical.read_edit_state(database)
+    }
+
+    pub(crate) fn export_physical_to_path(
+        &self,
+        database: &DatabaseId,
+        path: &std::path::Path,
+        format: crate::database::DatabaseExportFormat,
+    ) -> Result<(), DatabaseError> {
+        self.physical.export_to_path(database, path, format)
+    }
+
+    pub(crate) fn remove_physical_database(
+        &self,
+        database: &DatabaseId,
+        project_root: &std::path::Path,
+    ) -> Result<(), DatabaseError> {
+        self.physical.remove_database(database, project_root)
+    }
+
+    pub(crate) fn prepare_physical_mutation(
+        &self,
+        database: &DatabaseId,
+        operation: &crate::database::session_api::DatabaseMutationOperation,
+    ) -> Result<PreparedDatabasePhysicalMutation, DatabaseError> {
+        self.physical.prepare_mutation(database, operation)
+    }
+
+    pub(crate) fn install_physical_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
+        self.physical.install_mutation(mutation);
+    }
+
+    pub(crate) fn instances_for_replacement(&self) -> Vec<crate::database::DatabaseInstance> {
+        self.physical.instances_for_replacement()
+    }
+
+    pub(crate) fn restore_physical_mutation(
+        &self,
+        mutation: &PreparedDatabasePhysicalMutation,
+    ) -> Result<(), DatabaseError> {
+        mutation.rollback()
     }
 
     #[cfg(test)]

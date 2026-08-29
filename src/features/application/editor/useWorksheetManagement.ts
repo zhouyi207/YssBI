@@ -47,7 +47,7 @@ function rollbackStagedWorksheetDocument(stage: StagedWorksheetDocument | undefi
 }
 
 function createdWorksheetState(
-  result: import('@/shared/types/dto/editorMutation').ResourceMutationResultDto,
+  result: import('@/shared/types/domain/editorMutation').ResourceMutationResultDto,
   operationId: string,
 ) {
   const lifecycle = result.deltas.find((delta) =>

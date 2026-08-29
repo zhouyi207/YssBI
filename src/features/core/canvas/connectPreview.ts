@@ -34,7 +34,9 @@ export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewStat
     worldY: end.y,
     groupId: interaction.session.groupId,
     feedback,
-    highlightedConnectionIds: feedback?.kind === 'replace' ? feedback.displacedConnectionIds : [],
+    highlightedConnectionIds: feedback?.kind === 'replace'
+      ? [...feedback.displacedConnectionIds]
+      : [],
   };
   cache.set(key, { interactions, preview });
   return preview;

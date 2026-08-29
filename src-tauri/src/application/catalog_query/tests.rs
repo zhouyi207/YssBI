@@ -11,6 +11,8 @@ use crate::database_contract::{
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
+use crate::graph::catalog::build_builtin_node_system;
+use crate::graph::protocol::{NodeTypeId, PortKey};
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
@@ -19,10 +21,7 @@ use crate::graph::runtime_state::{
 use crate::graph_document::{
     DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
 };
-use crate::node_system::ProjectSessionId;
-use crate::node_system::catalog::build_builtin_node_system;
-use crate::node_system::compiler::ProjectCompileCoordinator;
-use crate::node_system::protocol::{NodeTypeId, PortKey};
+use crate::project::ProjectSessionId;
 use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState};
 use std::collections::BTreeMap;
 use std::num::NonZeroU64;
@@ -82,7 +81,6 @@ fn staged_session(
         GraphRuntimeComponents {
             registry: builtin.registry,
             catalog: builtin.catalog,
-            compiler: Arc::new(ProjectCompileCoordinator::new()),
             resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -213,12 +211,12 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         resource
             .resource_path
             .as_ref()
-            .map(crate::node_system::catalog::CatalogResourcePath::as_str),
+            .map(crate::graph::catalog::CatalogResourcePath::as_str),
         Some(function_path.as_str())
     );
     assert!(matches!(
         resource.creation,
-        crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. }
+        crate::graph::catalog::NodeCreation::ResourceBound { .. }
     ));
 }
 

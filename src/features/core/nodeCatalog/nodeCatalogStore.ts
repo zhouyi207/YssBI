@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/shared/types/domain/diagnostics';
 import type {
   LocalizedCatalogCategory,
   LocalizedCatalogItem,

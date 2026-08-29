@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
 import { initializeProjectForCurrentWindow } from '@/features/application/project';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
 export function useAppInitialization(): InitializationState {

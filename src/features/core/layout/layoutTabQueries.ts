@@ -1,9 +1,9 @@
 import { getPaneSelection, useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
 import {
-  workbenchDockviewPort,
+  workbenchDockviewRead,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchRead';
 import type { LayoutTab } from '@/shared/types';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
@@ -16,12 +16,12 @@ function panelTab(panel: WorkbenchPanelInfo | undefined): LayoutTab | null {
 }
 
 function activeEditorPanelInGroup(groupId: string): WorkbenchPanelInfo | undefined {
-  const activePanelInstanceId = workbenchDockviewPort
+  const activePanelInstanceId = workbenchDockviewRead
     .listGroups()
     .find((group) => group.groupId === groupId)
     ?.activePanelInstanceId;
   if (!activePanelInstanceId) return undefined;
-  return workbenchDockviewPort
+  return workbenchDockviewRead
     .listGroupPanels(groupId)
     .find((panel) => panel.panelInstanceId === activePanelInstanceId
       && panel.metadata.role === 'editor');
@@ -29,17 +29,17 @@ function activeEditorPanelInGroup(groupId: string): WorkbenchPanelInfo | undefin
 
 export function resolveEditorTargetGroupId(explicitGroupId?: string | null): string {
   const groupIds = new Set(
-    workbenchDockviewPort.listGroups().map((group) => group.groupId),
+    workbenchDockviewRead.listGroups().map((group) => group.groupId),
   );
   if (explicitGroupId && groupIds.has(explicitGroupId)) return explicitGroupId;
-  const activeEditorGroupId = workbenchDockviewPort.getActiveEditorPanel()?.groupId;
+  const activeEditorGroupId = workbenchDockviewRead.getActiveEditorPanel()?.groupId;
   return activeEditorGroupId && groupIds.has(activeEditorGroupId)
     ? activeEditorGroupId
     : '';
 }
 
 export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
-  const panel = workbenchDockviewPort
+  const panel = workbenchDockviewRead
     .findEditorPanelsByResource(tabId)
     .find((candidate) => nodeId === undefined || candidate.groupId === nodeId);
   const tab = panelTab(panel);
@@ -55,7 +55,7 @@ export function getActiveLayoutTab(groupId: string): { activeTabId: string; tab:
 export function resolveEditorGroupId(groupId?: string | null, context?: LayoutGroupContext): string | null {
   return groupId
     ?? context?.activeEditorGroupId
-    ?? workbenchDockviewPort.getActiveEditorPanel()?.groupId
+    ?? workbenchDockviewRead.getActiveEditorPanel()?.groupId
     ?? null;
 }
 

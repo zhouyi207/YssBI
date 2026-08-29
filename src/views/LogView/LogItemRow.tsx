@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react';
-import { LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import { LOG_ITEM_HEIGHT } from '@/shared/config-default';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import {
   formatDiagnosticTime,
   getLogDomainColor,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FrontendDiagnosticEntryDto } from '@/shared/types/dto/diagnostics';
+import type { FrontendDiagnosticEntryDto } from '@/shared/types/domain/diagnostics';
 import { createFrontendDiagnosticBatcher } from './frontendDiagnosticBatcher';
 
 function entry(message: string): FrontendDiagnosticEntryDto {

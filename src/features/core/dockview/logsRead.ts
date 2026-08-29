@@ -1,13 +1,12 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
 import type { SerializedDockview } from 'dockview-react';
-import { logsDockviewLayoutController } from './logsDockviewLayoutController';
+import { logsDockviewRuntime } from './logsRuntime';
 
 export interface LogsDockviewRead {
   subscribe(listener: () => void): () => void;
-  getLatestSnapshot(): DeepReadonly<SerializedDockview>;
+  getLatestSnapshot(): SerializedDockview;
 }
 
 export const logsDockviewRead: LogsDockviewRead = {
-  subscribe: logsDockviewLayoutController.subscribe,
-  getLatestSnapshot: logsDockviewLayoutController.getLatestSnapshot,
+  subscribe: logsDockviewRuntime.subscribe,
+  getLatestSnapshot: logsDockviewRuntime.getLatestSnapshot,
 };

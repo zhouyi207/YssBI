@@ -5,13 +5,9 @@ import {
 } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 
-import {
-  type WorkbenchComponentId,
-  type WorkbenchPanelParams,
-} from '@/features/application/viewCapabilities';
-import { logsDockviewLayoutController } from '@/features/application/viewCapabilities';
+import type { WorkbenchComponentId, WorkbenchPanelParams } from '@/features/core/dockview';
 import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
-import { GroupContext } from '@/features/application/viewCapabilities';
+import { GroupContext } from '@/features/application/editor/editorGroupContext';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
 import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';
@@ -106,7 +102,7 @@ function GraphEditorPanel({
 function MainLogsPanel() {
   return (
     <LogWorkspaceDockview
-      layout={{ kind: 'main', controller: logsDockviewLayoutController }}
+      layout={{ kind: 'main' }}
     />
   );
 }

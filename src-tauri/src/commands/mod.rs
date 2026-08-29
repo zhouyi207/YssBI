@@ -7,16 +7,13 @@ pub mod command_node_system;
 pub mod command_panel_did;
 pub mod command_parse_at;
 pub mod command_project;
-pub(crate) mod node_system_execution_dto;
+pub(crate) mod execution_dto;
 
 pub mod command_sci;
 pub mod command_serial_tests;
 pub mod command_variable;
 pub mod command_window;
 pub mod command_worksheet;
-
-#[cfg(test)]
-mod command_blueprint_graph_phase1_tests;
 
 pub use command_bayes::*;
 pub use command_dataframe::*;

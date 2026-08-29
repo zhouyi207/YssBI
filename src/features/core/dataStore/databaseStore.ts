@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
-import { logger } from '@/utils/appLogger';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import { logger } from '@/features/core/observability/logger';
 
 export type { DatabaseRecord };
 

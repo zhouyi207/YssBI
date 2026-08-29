@@ -1,42 +1,25 @@
 import { useSyncExternalStore } from 'react';
 
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import { freezeProjectionSnapshot } from '@/features/core/projection/deepReadonly';
-import {
-  useColumnDistributionStore,
-  type DistributionMap,
-} from '@/features/core/dataStore/columnDistributionStore';
-import {
-  useColumnStatsStore,
-  type ColumnStatsMap,
-} from '@/features/core/dataStore/columnStatsStore';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
-import type { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatasetOverview } from '@/shared/types/domain/dataframe';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 
 export interface DatabaseReadSnapshot {
-  readonly databases: DeepReadonly<Record<DatabaseId, DatabaseRecord>>;
-  readonly revisions: DeepReadonly<Record<DatabaseId, number>>;
-  readonly statsByDatabase: DeepReadonly<Record<DatabaseId, ColumnStatsMap>>;
-  readonly distByDatabase: DeepReadonly<Record<DatabaseId, DistributionMap>>;
-  readonly overviewByDatabase: DeepReadonly<Record<DatabaseId, DatasetOverview>>;
+  readonly databases: DeepReadonly<Record<string, DatabaseRecord>>;
+  readonly revisions: DeepReadonly<Record<string, number>>;
 }
 
 export interface DatabaseReadCapability {
-  readonly getSnapshot: () => DatabaseReadSnapshot;
+  readonly getSnapshot: () => DeepReadonly<DatabaseReadSnapshot>;
   readonly subscribe: (listener: () => void) => () => void;
 }
 
-function buildSnapshot(): DatabaseReadSnapshot {
-  const databaseState = useDatabaseStore.getState();
+function buildSnapshot(): DeepReadonly<DatabaseReadSnapshot> {
+  const state = useDatabaseStore.getState();
   return freezeProjectionSnapshot({
-    databases: databaseState.databases,
-    revisions: databaseState.revisions,
-    statsByDatabase: useColumnStatsStore.getState().statsByDatabase,
-    distByDatabase: useColumnDistributionStore.getState().distByDatabase,
-    overviewByDatabase: useDatasetOverviewStore.getState().overviewByDatabase,
+    databases: state.databases,
+    revisions: state.revisions,
   });
 }
 
@@ -49,11 +32,8 @@ function refreshSnapshot(): void {
 }
 
 useDatabaseStore.subscribe(refreshSnapshot);
-useColumnStatsStore.subscribe(refreshSnapshot);
-useColumnDistributionStore.subscribe(refreshSnapshot);
-useDatasetOverviewStore.subscribe(refreshSnapshot);
 
-export function getDatabaseSnapshot(): DatabaseReadSnapshot {
+export function getDatabaseSnapshot(): DeepReadonly<DatabaseReadSnapshot> {
   return currentSnapshot;
 }
 
@@ -63,7 +43,7 @@ export function subscribeDatabaseRead(listener: () => void): () => void {
 }
 
 export function useDatabaseRead<T>(
-  selector: (snapshot: DatabaseReadSnapshot) => T,
+  selector: (snapshot: DeepReadonly<DatabaseReadSnapshot>) => T,
 ): T {
   const snapshot = useSyncExternalStore(
     subscribeDatabaseRead,

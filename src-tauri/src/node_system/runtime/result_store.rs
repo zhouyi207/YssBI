@@ -14,7 +14,7 @@ use std::sync::{Arc, Condvar, Mutex};
 struct ResultStoreRegistry {
     results: BTreeMap<ResultId, Arc<StoredResult>>,
     groups: BTreeMap<ActivationId, ActivationResultGroup>,
-    pin_history: BTreeMap<crate::node_system::plan::GraphOutputRef, Arc<PinHistoryNode>>,
+    pin_history: BTreeMap<crate::execution::plan::legacy::GraphOutputRef, Arc<PinHistoryNode>>,
 }
 
 struct PinHistoryNode {
@@ -268,7 +268,7 @@ impl ResultStore {
 
     pub fn pin_history(
         &self,
-        output: &crate::node_system::plan::GraphOutputRef,
+        output: &crate::execution::plan::legacy::GraphOutputRef,
     ) -> Box<[PinResultEntry]> {
         let tail = self.registry().pin_history.get(output).cloned();
         collect_pin_history(tail)
@@ -439,8 +439,8 @@ impl ResultStore {
 }
 
 fn append_pin_history(
-    histories: &mut BTreeMap<crate::node_system::plan::GraphOutputRef, Arc<PinHistoryNode>>,
-    output: &crate::node_system::plan::GraphOutputRef,
+    histories: &mut BTreeMap<crate::execution::plan::legacy::GraphOutputRef, Arc<PinHistoryNode>>,
+    output: &crate::execution::plan::legacy::GraphOutputRef,
     entry: PinResultEntry,
 ) {
     let previous = histories.get(output).cloned();
@@ -476,10 +476,10 @@ pub enum ResultStoreError {
     InvalidProducedUsage,
     InvalidReusedUsage,
     DuplicateActivation(ActivationId),
-    DuplicateOutputValue(crate::node_system::plan::ValueRef),
-    DuplicatePublicOutput(crate::node_system::plan::GraphOutputRef),
-    OutputGraphMismatch(crate::node_system::plan::GraphOutputRef),
-    OutputNodeMismatch(crate::node_system::plan::GraphOutputRef),
+    DuplicateOutputValue(crate::execution::plan::legacy::ValueRef),
+    DuplicatePublicOutput(crate::execution::plan::legacy::GraphOutputRef),
+    OutputGraphMismatch(crate::execution::plan::legacy::GraphOutputRef),
+    OutputNodeMismatch(crate::execution::plan::legacy::GraphOutputRef),
     UnknownActivation(ActivationId),
     UnknownResult(ResultId),
     GroupMismatch(ActivationId),
@@ -578,11 +578,11 @@ impl std::error::Error for ResultStoreError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
-    use crate::node_system::plan::{
+    use crate::execution::plan::legacy::{
         GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
     };
-    use crate::node_system::protocol::{PortKey, Value};
+    use crate::graph::protocol::{PortKey, Value};
+    use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::runtime::{ArtifactValueKind, ResultUsage, StoredValueKind};
 
     fn test_output(port_key: &str, value: u32) -> PendingOutputDescriptor {

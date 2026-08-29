@@ -1,4 +1,4 @@
-import { useDatabaseRead, type DatabaseReadSnapshot } from '@/features/core/database/read';
+import { useDatabaseRead, type DatabaseReadSnapshot } from '@/features/application/dataManagement/databaseRead';
 import { useDatabaseUi } from '@/features/core/database/ui';
 import type { DatabaseId } from '@/shared/types/domain/ids';
 

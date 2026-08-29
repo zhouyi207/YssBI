@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GraphOutputRefDto } from '@/shared/types/dto/result';
+import type { GraphOutputRefDto } from '@/shared/types/domain/result';
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,

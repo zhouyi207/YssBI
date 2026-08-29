@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::resource_catalog::GraphResourceId;
 use crate::graph_document::GraphResourcePath;
 use thiserror::Error;

@@ -50,6 +50,7 @@ pub(crate) fn remap_graph_document_references(
 }
 
 impl ProjectState {
+    #[cfg(all(test, any()))]
     pub fn rename_graph_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -58,7 +59,8 @@ impl ProjectState {
         new_name: &str,
         lifecycle_token: u64,
         operation_id: OperationId,
-    ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
+    ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
+    {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
             return Err(ProjectFilesystemError::StaleProjectLifecycle {

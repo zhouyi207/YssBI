@@ -10,7 +10,7 @@ vi.mock('./edgeOperations', () => ({ insertRerouteAtConnection }));
 vi.mock('@/features/application/editorMutation/registerGraphMutationPort', () => ({
   ensureGraphMutationPortRegistered: vi.fn(),
 }));
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     graph: { warn: graphWarn },
   },

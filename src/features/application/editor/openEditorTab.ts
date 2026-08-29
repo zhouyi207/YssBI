@@ -1,11 +1,9 @@
 import { showWorkbenchLayoutError } from '@/features/application/layout/workbenchLayoutErrorFeedback';
-import type { DetailFocus } from '@/features/core/editor/detail/types';
+import type { DetailFocus } from '@/shared/types/ui/detail';
 import type { EditorResourceKind } from '@/features/core/dockview/workbenchPanelModel';
-import {
-  WorkbenchLayoutError,
-  workbenchDockviewPort,
-  type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import { workbenchDockviewRead, type WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
+import { WorkbenchLayoutError } from '@/features/core/dockview/workbenchTypes';
 import type { LayoutTab } from '@/shared/types';
 
 import { resolveEditorOpenTargetGroupId } from './editorOpenTarget';
@@ -58,7 +56,7 @@ async function replacePreviewPanel(
   tab: LayoutTab,
   targetGroupId: string,
 ): Promise<string> {
-  const groupPanels = workbenchDockviewPort.listGroupPanels(targetGroupId);
+  const groupPanels = workbenchDockviewRead.listGroupPanels(targetGroupId);
   const preview = groupPanels.find((panel) =>
     panel.metadata.role === 'editor'
       && panel.metadata.resourceRef !== tab.id
@@ -84,7 +82,7 @@ export async function openEditorTab(
 
   try {
     let targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
-    const existing = workbenchDockviewPort.findEditorPanelsByResource(tab.id)[0];
+    const existing = workbenchDockviewRead.findEditorPanelsByResource(tab.id)[0];
     if (!requestedPinned && !existing) {
       targetGroupId = await replacePreviewPanel(tab, targetGroupId);
     }
@@ -98,7 +96,7 @@ export async function openEditorTab(
       ? existing.metadata.sticky
       : tab.sticky;
     const resourceKind = editorResourceKind(tab);
-    panel = await workbenchDockviewPort.openEditor({
+    panel = await workbenchDockviewControl.openEditor({
       resourceRef: tab.id,
       resourceKind,
       title: resolveTabDisplayName({ id: tab.id, kind: resourceKind }, tab.id),

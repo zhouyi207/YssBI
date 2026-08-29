@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { VscGithub } from "react-icons/vsc";
-import { APP_DISPLAY_NAME, APP_LINKS, APP_VERSION } from "@/app/appConfig/appLinks";
+import { APP_DISPLAY_NAME, APP_LINKS, APP_VERSION } from "@/shared/appLinks";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

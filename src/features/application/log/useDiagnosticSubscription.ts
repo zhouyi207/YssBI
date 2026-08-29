@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { logBuffer } from '@/features/core/log/logBuffer';
+import { logBuffer } from '@/features/application/log/logBuffer';
 import { LogService, type DiagnosticSubscription } from '@/services/log';
 
 export type DiagnosticSubscriptionStatus = 'connecting' | 'live' | 'error';

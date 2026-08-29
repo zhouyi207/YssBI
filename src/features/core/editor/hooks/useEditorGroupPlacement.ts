@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
 import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import type { LayoutTab } from '@/shared/types';
 
 export interface EditorGroupPlacementSlice {
@@ -17,12 +17,12 @@ export interface EditorGroupPlacementSlice {
 export function useEditorGroupPlacement(
   groupId: string | null | undefined,
 ): EditorGroupPlacementSlice {
-  useDockviewPortSnapshot(workbenchDockviewPort);
+  useDockviewPortSnapshot(workbenchDockviewRead);
   const group = groupId
-    ? workbenchDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId)
+    ? workbenchDockviewRead.listGroups().find((candidate) => candidate.groupId === groupId)
     : undefined;
   const panels = groupId
-    ? workbenchDockviewPort
+    ? workbenchDockviewRead
       .listGroupPanels(groupId)
       .filter((panel) => panel.metadata.role === 'editor')
     : [];

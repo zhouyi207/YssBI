@@ -27,7 +27,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
         operation_id: OperationId,
-    ) -> Result<ProjectSaveResultDto, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let authoritative = snapshot
             .data
@@ -136,10 +136,10 @@ impl ProjectState {
                     tags,
                 };
                 let variable = Self::stage_variable(variable)?;
-                let history_patch = crate::node_system::document::ResourcePatch::variable(
+                let history_patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         None,
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -195,10 +195,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let history_patch = crate::node_system::document::ResourcePatch::variable(
+                let history_patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&before).map_err(prepare_error)?),
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -231,10 +231,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let history_patch = crate::node_system::document::ResourcePatch::variable(
+                let history_patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                         None,
                     ),
@@ -313,7 +313,9 @@ impl ProjectState {
         committed.finalize();
         Ok(GlobalVariableMutationResult {
             variable: staged.into_variable(),
-            result: save,
+            #[cfg(test)]
+            result: save.clone().into_transport(),
+            mutation: save,
         })
     }
 
@@ -322,7 +324,7 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         authority_generation: u64,
         staged: &StagedGlobalVariableMutation,
-    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let mut publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != context.session.instance_id.as_str()
             || publication.authority_generation() != authority_generation
@@ -390,7 +392,7 @@ impl ProjectState {
         }
         let patch = staged.history_patch().clone();
         {
-            let crate::node_system::document::ResourceDocumentPatch::Variable(document_patch) =
+            let crate::project::history::ResourceDocumentPatch::Variable(document_patch) =
                 &patch.forward
             else {
                 unreachable!("global variable mutation records a variable patch")
@@ -402,10 +404,10 @@ impl ProjectState {
             let before = document_patch.before.clone();
             let after = document_patch.after.clone();
             history.record_committed_transaction(
-                crate::node_system::document::ProjectHistoryTransaction::durable_variable_effects(
+                crate::project::ProjectHistoryTransaction::durable_variable_effects(
                     context.operation_id,
                     vec![patch],
-                    crate::node_system::document::VariableEffectHistorySnapshots {
+                    crate::project::VariableEffectHistorySnapshots {
                         before: BTreeMap::from([(variable_key.clone(), before)]),
                         after: BTreeMap::from([(variable_key, after)]),
                     },
@@ -415,23 +417,28 @@ impl ProjectState {
         let history = history.status();
         let publication_revision = publication.commit_prepared(publication_advance);
         let history_patch = staged.history_patch();
-        Ok(ResourceMutationResultDto {
+        Ok(ProjectResourceMutationFacts {
             operation_id: context.operation_id,
-            project_instance_id: publication.project_instance_id.clone(),
+            project_instance_id: ProjectInstanceId::from_existing(
+                publication.project_instance_id.clone(),
+            ),
             publication_revision,
-            moves: Vec::new(),
-            deltas: vec![crate::node_system::document::ResourceDeltaEvent {
+            moves: Box::new([]),
+            deltas: vec![crate::project::ResourceDeltaEvent {
                 resource: history_patch.resource.clone(),
                 from_revision: history_patch.before_revision,
                 to_revision: history_patch.after_revision,
                 caused_by: Some(context.operation_id),
                 payload: history_patch.forward.clone(),
-            }],
-            projection_replacements: Vec::new(),
-            projection_status: crate::event::ProjectionStatusDto::Complete {
-                expected_graph_paths: Vec::new(),
+            }]
+            .into(),
+            projection_status: ProjectProjectionStatus::Complete {
+                expected_graph_paths: Vec::new().into(),
             },
-            history,
+            history: ProjectHistoryStatus {
+                can_undo: history.can_undo,
+                can_redo: history.can_redo,
+            },
         })
     }
 
@@ -506,10 +513,10 @@ impl ProjectState {
                     tags,
                 };
                 let variable = Self::stage_variable(variable)?;
-                let patch = crate::node_system::document::ResourcePatch::variable(
+                let patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         None,
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -566,10 +573,10 @@ impl ProjectState {
                 if let Some(tags) = tags {
                     variable.tags = tags;
                 }
-                let patch = crate::node_system::document::ResourcePatch::variable(
+                let patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&before).map_err(prepare_error)?),
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -603,10 +610,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let patch = crate::node_system::document::ResourcePatch::variable(
+                let patch = crate::project::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::node_system::document::VariableDocumentPatch::new(
+                    crate::project::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                         None,
                     ),
@@ -638,7 +645,9 @@ impl ProjectState {
         reservation.complete();
         Ok(GlobalVariableMutationResult {
             variable: staged.into_variable(),
-            result,
+            #[cfg(test)]
+            result: result.clone().into_transport(),
+            mutation: result,
         })
     }
 

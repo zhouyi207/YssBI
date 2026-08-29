@@ -1,5 +1,5 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::node_system::protocol::{CanonicalDecimal, Value};
+use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     RuntimeValue, require_data_series,

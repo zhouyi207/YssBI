@@ -1,6 +1,6 @@
-import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
+import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/shared/config-default';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import { LogItemRow } from './LogItemRow';
 import {
   useLogPanelVirtualList,

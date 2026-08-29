@@ -7,12 +7,15 @@ import {
   startProjectLifecycle,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useExecutionStore } from '@/features/core/execution';
-import { ResultService } from '@/services/result/resultService';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import type { PinResultEntry, ResultDescriptor } from '@/shared/types/domain/result';
 
 const mocks = vi.hoisted(() => ({
   upsertResult: vi.fn(),
   showWorkbenchLayoutError: vi.fn(),
+  loadPinHistory: vi.fn(),
+  loadDescriptor: vi.fn(),
+  getPinHistory: vi.fn(),
+  getDescriptor: vi.fn(),
 }));
 
 vi.mock('@/features/application/window', () => ({
@@ -20,12 +23,23 @@ vi.mock('@/features/application/window', () => ({
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({ route: '/plot', windowTitle: 'Plot' })),
 }));
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: { upsertResult: mocks.upsertResult },
+vi.mock('@/features/core/dockview/workbenchControl', () => ({
+  workbenchDockviewControl: { upsertResult: mocks.upsertResult },
 }));
 
 vi.mock('@/features/application/layout/workbenchLayoutErrorFeedback', () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
+}));
+
+vi.mock('@/features/application/results/runtime', () => ({
+  resultQueryCoordinator: {
+    loadPinHistory: mocks.loadPinHistory,
+    loadDescriptor: mocks.loadDescriptor,
+  },
+  resultQueryRead: {
+    getPinHistory: mocks.getPinHistory,
+    getDescriptor: mocks.getDescriptor,
+  },
 }));
 
 import { openInspectableResult } from './openInspectableResult';
@@ -66,10 +80,18 @@ beforeEach(() => {
   mocks.upsertResult.mockReset();
   mocks.upsertResult.mockResolvedValue({ panelInstanceId: 'result-panel' });
   mocks.showWorkbenchLayoutError.mockReset();
+  mocks.loadPinHistory.mockReset();
+  mocks.loadPinHistory.mockResolvedValue({ status: 'published' });
+  mocks.loadDescriptor.mockReset();
+  mocks.loadDescriptor.mockResolvedValue({ status: 'published' });
+  mocks.getPinHistory.mockReset();
+  mocks.getPinHistory.mockReturnValue([]);
+  mocks.getDescriptor.mockReset();
+  mocks.getDescriptor.mockImplementation((resultId: string) => (
+    resultId === plotDescriptor.resultId ? plotDescriptor : descriptor
+  ));
   clearProjectLifecycle();
   startProjectLifecycle('project-1');
-
-  vi.spyOn(ResultService, 'getDescriptor').mockResolvedValue(descriptor);
 });
 
 describe('openInspectableResult', () => {
@@ -89,7 +111,7 @@ describe('openInspectableResult', () => {
   });
 
   it('routes plot descriptors through the same root Result upsert without opening a window', async () => {
-    vi.mocked(ResultService.getDescriptor).mockResolvedValueOnce(plotDescriptor);
+    mocks.getDescriptor.mockReturnValueOnce(plotDescriptor);
 
     await expect(openInspectableResult({ kind: 'result', resultId: '18' }, t))
       .resolves.toBe(true);
@@ -105,15 +127,18 @@ describe('openInspectableResult', () => {
   });
 
   it('drops Pin history that settles after the project identity changes', async () => {
-    let settleHistory!: (value: Awaited<ReturnType<typeof ResultService.getPinHistory>>) => void;
+    let settleHistory!: (value: PinResultEntry[]) => void;
     let markHistoryStarted!: () => void;
     const historyStarted = new Promise<void>((resolve) => {
       markHistoryStarted = resolve;
     });
-    vi.spyOn(ResultService, 'getPinHistory').mockImplementationOnce(() => {
+    mocks.loadPinHistory.mockImplementationOnce(() => {
       markHistoryStarted();
-      return new Promise((resolve) => {
-        settleHistory = resolve;
+      return new Promise<{ status: 'published' }>((resolve) => {
+        settleHistory = (value) => {
+          mocks.getPinHistory.mockReturnValue(value);
+          resolve({ status: 'published' });
+        };
       });
     });
     const recordPinHistory = vi.spyOn(useExecutionStore.getState(), 'recordPinHistory');
@@ -138,19 +163,19 @@ describe('openInspectableResult', () => {
 
     await expect(pending).resolves.toBe(false);
     expect(recordPinHistory).not.toHaveBeenCalled();
-    expect(ResultService.getDescriptor).not.toHaveBeenCalled();
+    expect(mocks.loadDescriptor).not.toHaveBeenCalled();
     expect(mocks.upsertResult).not.toHaveBeenCalled();
   });
 
   it('drops a descriptor that settles after the project identity changes', async () => {
-    let settleDescriptor!: (value: ResultDescriptor | null) => void;
+    let settleDescriptor!: (value: { status: 'published' }) => void;
     let markDescriptorStarted!: () => void;
     const descriptorStarted = new Promise<void>((resolve) => {
       markDescriptorStarted = resolve;
     });
-    vi.mocked(ResultService.getDescriptor).mockImplementationOnce(() => {
+    mocks.loadDescriptor.mockImplementationOnce(() => {
       markDescriptorStarted();
-      return new Promise<ResultDescriptor | null>((resolve) => {
+      return new Promise<{ status: 'published' }>((resolve) => {
         settleDescriptor = resolve;
       });
     });
@@ -159,7 +184,8 @@ describe('openInspectableResult', () => {
     await descriptorStarted;
     clearProjectLifecycle();
     startProjectLifecycle('project-2');
-    settleDescriptor(descriptor);
+    mocks.getDescriptor.mockReturnValue(descriptor);
+    settleDescriptor({ status: 'published' });
 
     await expect(pending).resolves.toBe(false);
     expect(mocks.upsertResult).not.toHaveBeenCalled();

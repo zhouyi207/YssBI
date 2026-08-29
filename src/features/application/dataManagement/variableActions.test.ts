@@ -1,17 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Variable } from '@/shared/types/domain';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
 import { VariableService } from '@/services/variable/variableService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import { createVariableAction, deleteVariableAction, updateVariableAction } from './variableActions';
-import {
-  installCoreApplicationTestPorts,
-  resetCoreApplicationTestPorts,
-} from '@/features/application/testHelpers/coreApplicationPorts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -88,16 +83,9 @@ describe('variable command lifecycle guards', () => {
       resourcePath: variableResourcePath,
     });
     useVariableStore.getState().setVariableRevision(original.id, 1);
-    installCoreApplicationTestPorts({
-      syncEvents: {
-        resourceMutationCommitted: (result) =>
-          projectPublicationCoordinator.submit({ result: result as ResourceMutationResultDto }),
-      },
-    });
     startProject('project-a');
   });
 
-  afterEach(resetCoreApplicationTestPorts);
 
   it('does not invoke or publish when the project is replaced inside revision authority read', async () => {
     const authority = useVariableStore.getState();
@@ -177,7 +165,7 @@ describe('variable command lifecycle guards', () => {
     const result = mutation({ revision: 1, operationId, before: original, after: updated });
     vi.spyOn(VariableService, 'updateVariable').mockImplementation(async (...args) => {
       expect(args[2]).toBe(1);
-      new ResourceMutationCommittedHandler().handle({ result });
+      void projectPublicationCoordinator.submit({ result });
       return { variableId: original.id, variable: updated, result };
     });
     const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
@@ -208,7 +196,7 @@ describe('variable command lifecycle guards', () => {
       ...updated,
       resourcePath: variableResourcePath,
     });
-    new ResourceMutationCommittedHandler().handle({ result });
+    void projectPublicationCoordinator.submit({ result });
     await vi.waitFor(() => expect(
       projectPublicationCoordinator.captureCommandLifecycle().publicationRevision,
     ).toBe(1));
@@ -230,7 +218,7 @@ describe('variable command lifecycle guards', () => {
     const getVariable = vi.spyOn(VariableService, 'getVariable');
 
     await expect(createVariableAction({ activeGraphPath: null, isGlobal: true })).resolves.toBe(created.id);
-    new ResourceMutationCommittedHandler().handle({ result });
+    void projectPublicationCoordinator.submit({ result });
     await vi.waitFor(() => expect(
       projectPublicationCoordinator.captureCommandLifecycle().publicationRevision,
     ).toBe(1));
@@ -267,7 +255,11 @@ describe('variable command lifecycle guards', () => {
       toRevision: 3,
       history: { canUndo: true, canRedo: false },
     });
-    const handler = new ResourceMutationCommittedHandler();
+    const handler = {
+      handle: (payload: { result: ResourceMutationResultDto }) => {
+        void projectPublicationCoordinator.submit(payload);
+      },
+    };
 
     handler.handle({ result: createResult });
     await projectPublicationCoordinator.submit({ result: createResult });

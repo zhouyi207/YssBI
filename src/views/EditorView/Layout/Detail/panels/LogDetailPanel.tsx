@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { DiagnosticLevel, DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DiagnosticLevel, DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';

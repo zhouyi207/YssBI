@@ -1,43 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { DatabaseService } from '@/features/application/viewCapabilities';
 import { useProjectSync } from '@/features/application/initialization';
+import { initializeProjectForCurrentWindow } from '@/features/application/project';
+import { hydrateDatabaseEditorMetadata } from '@/features/application/dataManagement/databaseRecords';
 import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
-import { useDatabaseStore, initProjectSync } from '@/features/application/viewCapabilities';
+import { useDatabaseRead } from '@/features/core/database/read';
 import { useDataLoader, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText, useDatabaseExport } from '@/features/application/databaseEditor';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
-import { logger } from '@/utils/appLogger';
-import {
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from '@/features/application/viewCapabilities';
-
-type DatabaseMetadataUpdater = (
-  id: string,
-  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
-) => void;
-
-export async function hydrateDatabaseEditorMetadata(
-  id: string,
-  updateDatabase: DatabaseMetadataUpdater,
-  isCancelled: () => boolean = () => false,
-): Promise<void> {
-  const identity = captureProjectIdentity();
-  try {
-    const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, id);
-    if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
-    updateDatabase(id, {
-      name: meta.name,
-      columns: meta.columns,
-      rowCount: meta.rowCount,
-      columnCount: meta.columnCount,
-    });
-  } catch (error) {
-    if (!isCancelled() && isCurrentProjectIdentity(identity)) {
-      logger.data.warn('getDatabaseMeta failed: ' + String(error), 'DatabaseEditorWindow');
-    }
-  }
-}
+import { reportViewIssue } from '@/features/application/observability/reportViewIssue';
 
 function getDatabaseIdFromUrl(): string | null {
   const searchValue = new URLSearchParams(window.location.search).get('database');
@@ -49,7 +19,7 @@ function getDatabaseIdFromUrl(): string | null {
 }
 
 export const DatabaseEditorWindow: React.FC = () => {
-  const dataframes = useDatabaseStore(s => s.databases);
+  const dataframes = useDatabaseRead((snapshot) => snapshot.databases);
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const hasInitializedDfRef = useRef(false);
@@ -127,7 +97,6 @@ export const DatabaseEditorWindow: React.FC = () => {
     let cancelled = false;
     void hydrateDatabaseEditorMetadata(
       selectedDfId,
-      useDatabaseStore.getState().updateDatabase,
       () => cancelled,
     );
     return () => { cancelled = true; };
@@ -138,11 +107,11 @@ export const DatabaseEditorWindow: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        await initProjectSync();
+        await initializeProjectForCurrentWindow();
         if (cancelled) return;
         await windowActions.show();
       } catch (e) {
-        logger.app.error(String(e), 'DatabaseEditorWindow');
+        reportViewIssue('app', e, 'DatabaseEditorWindow');
       }
     })();
     return () => { cancelled = true; };

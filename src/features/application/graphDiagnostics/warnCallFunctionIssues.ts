@@ -1,4 +1,4 @@
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useResourceStore } from '@/features/core/resource';
 import { collectCallFunctionIssuesForBucket } from '@/features/domain/graphDiagnostics';

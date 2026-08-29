@@ -24,6 +24,28 @@ export type DataType =
   | { kind: 'Struct'; inner: string }
   | { kind: 'OneOf'; inner: DataType[] };
 
+export function isBackendDataType(value: unknown): value is DataType {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.kind !== 'string') return false;
+  const leaves = new Set([
+    'Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time',
+    'Categorical', 'Object', 'Any', 'DataFrame',
+  ]);
+  if (leaves.has(record.kind)) return Object.keys(record).length === 1;
+  if (Object.keys(record).length !== 2 || !Object.prototype.hasOwnProperty.call(record, 'inner')) {
+    return false;
+  }
+  if (record.kind === 'Struct') return typeof record.inner === 'string' && record.inner.trim() !== '';
+  if (record.kind === 'Array' || record.kind === 'DataSeries') {
+    return isBackendDataType(record.inner);
+  }
+  return record.kind === 'OneOf'
+    && Array.isArray(record.inner)
+    && record.inner.length > 0
+    && record.inner.every(isBackendDataType);
+}
+
 /**
  * 变量详情面板「标量类型」可选集（收敛后：仅运行时规范标量）。
  * Int32/Float32/UInt* 属 DB/DataView 保真层，不作为变量标量类型；

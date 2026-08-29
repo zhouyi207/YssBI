@@ -13,7 +13,18 @@ export function clearedRunProjectionsPatch(
 
 /** Whether the graph still shows artifacts from a previous run (Clear button). */
 export function graphHasClearableArtifacts(
-  graph: GraphExecutionState | undefined,
+  graph: {
+    status: GraphExecutionState['status'];
+    pinHistories: { readonly size: number };
+    recording: { readonly length: number };
+    runOutput: {
+      readonly entries: { readonly length: number };
+      readonly projectionDropped: boolean;
+    };
+    nodeStates: { readonly size: number };
+    completedConnections: { readonly size: number };
+    flowingConnections: { readonly size: number };
+  } | undefined,
 ): boolean {
   if (!graph) return false;
   if (graph.status === 'running') return false;

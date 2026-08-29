@@ -5,7 +5,7 @@ import { workbenchLayoutController } from '@/features/application/layout/workben
 import { showWorkbenchLayoutError } from '@/features/application/layout/workbenchLayoutErrorFeedback';
 import { collectDirtyGraphTabs } from '@/features/core/layout/tabDirty';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 
 /** Flushes layout and protects dirty documents before the editor window closes. */

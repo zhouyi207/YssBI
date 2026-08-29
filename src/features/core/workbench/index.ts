@@ -7,3 +7,10 @@ export type {
   WorkbenchUICommands,
   WorkbenchUIState,
 } from './workbenchTypes';
+export {
+  getWorkbenchUiSnapshot,
+  subscribeWorkbenchUi,
+  useWorkbenchUi,
+  workbenchUi,
+} from './ui';
+export type { WorkbenchUiCapability } from './ui';

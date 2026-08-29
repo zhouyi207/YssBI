@@ -1,13 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
-import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
+import { ProjectService } from '@/services/project/projectService';
+import type { ProjectIndexRow } from '@/shared/types/domain/project';
 import { normalizeIpcError } from '@/services/ipc';
 
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
@@ -18,10 +18,6 @@ import {
   type HistoryCoordinatorDependencies,
 } from './historyCoordinator';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
-import {
-  installCoreApplicationTestPorts,
-  resetCoreApplicationTestPorts,
-} from '@/features/application/testHelpers/coreApplicationPorts';
 import {
   buildGraphResourceMeta,
   markResourceLoaded,
@@ -187,12 +183,6 @@ describe('executeHistoryMutation', () => {
     vi.clearAllMocks();
     resetPendingMutations();
     resetHistoryCoordinator();
-    installCoreApplicationTestPorts({
-      syncEvents: {
-        resourceMutationCommitted: (committed) =>
-          projectPublicationCoordinator.submit({ result: committed as ResourceMutationResultDto }),
-      },
-    });
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useGraphDataStore.setState({ graphEntities: {} });
     useGraphMetaStore.setState({
@@ -219,7 +209,6 @@ describe('executeHistoryMutation', () => {
     markResourceLoaded({ id: functionPath, kind: 'function' });
   });
 
-  afterEach(resetCoreApplicationTestPorts);
 
   it.each(['undo', 'redo'] as const)(
     'installs the authoritative destination name for a history %s rename',
@@ -353,7 +342,11 @@ describe('executeHistoryMutation', () => {
     };
     const hydrateGraph = vi.fn(async () => true);
     vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue(recoveryIndex([functionPath]));
-    const eventHandler = new ResourceMutationCommittedHandler();
+    const eventHandler = {
+      handle: (payload: { result: ResourceMutationResultDto }) => {
+        void projectPublicationCoordinator.submit(payload);
+      },
+    };
     let statusAfterEvent: ReturnType<typeof useHistoryStore.getState> | undefined;
     const invoke = vi.fn(async () => {
       eventHandler.handle({ result });

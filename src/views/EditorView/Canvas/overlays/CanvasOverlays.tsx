@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { NodeCreationDescriptor } from '@/features/application/viewCapabilities';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
 import { ActionMenu } from '@/shared/ui/actionMenu';
 import { NodePalette } from '../../Layout/NodePalette';

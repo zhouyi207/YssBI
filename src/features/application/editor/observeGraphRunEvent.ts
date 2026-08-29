@@ -3,8 +3,8 @@ import {
   useExecutionStore,
   type PinPreviewLease,
 } from '@/features/core/execution';
-import type { GraphOutputRefDto } from '@/shared/types/dto/executionDemand';
-import type { RunEvent, RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
+import type { GraphOutputRefDto } from '@/shared/types/domain/executionDemand';
+import type { RunEvent, RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
 
 export type GraphRunOutcomeState = {
   outcome: 'success' | 'cancelled' | 'error';

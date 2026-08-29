@@ -3,12 +3,21 @@
 
 use polars::prelude::*;
 use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
+use std::future::Future;
 
 use crate::database_contract::DatabaseEngineSql;
 
+fn block_on<F: Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("database SQL runtime should be constructible")
+        .block_on(future)
+}
+
 /// 列出 PostgreSQL 数据库中的用户表（public schema）
 pub fn list_postgres_tables(connection_string: &str) -> Result<Vec<String>, String> {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: sqlx::postgres::PgConnectOptions = connection_string
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid PostgreSQL URL: {}", e))?;
@@ -34,7 +43,7 @@ pub fn list_postgres_tables(connection_string: &str) -> Result<Vec<String>, Stri
 
 /// 列出 MySQL/MariaDB 数据库中的用户表
 pub fn list_mysql_tables(connection_string: &str) -> Result<Vec<String>, String> {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: sqlx::mysql::MySqlConnectOptions = connection_string
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid MySQL URL: {}", e))?;
@@ -137,7 +146,7 @@ pub fn read_postgres_table_to_dataframe(
     connection_string: &str,
     table: &str,
 ) -> Result<DataFrame, String> {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: sqlx::postgres::PgConnectOptions = connection_string
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid PostgreSQL URL: {}", e))?;
@@ -163,7 +172,7 @@ pub fn read_mysql_table_to_dataframe(
     connection_string: &str,
     table: &str,
 ) -> Result<DataFrame, String> {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: sqlx::mysql::MySqlConnectOptions = connection_string
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid MySQL URL: {}", e))?;

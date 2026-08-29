@@ -8,8 +8,8 @@ vi.mock('@/services/log', () => ({
   LogService: { submitFrontendDiagnostics: mocks.submit },
 }));
 
-import { FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS } from '@/app/appConfig/default';
-import { logger } from './appLogger';
+import { FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS } from '@/shared/config-default';
+import { logger } from '@/features/application/observability/appLogger';
 
 describe('appLogger', () => {
   beforeEach(() => {

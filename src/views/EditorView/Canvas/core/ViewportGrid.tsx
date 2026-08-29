@@ -1,12 +1,8 @@
 import { useRef, useEffect } from 'react';
-import {
-  applyViewportGrid,
-  getViewport,
-  subscribeToViewport,
-  viewportGridStyle,
-  type ViewportScope,
-} from '@/features/application/viewCapabilities';
-import { GRID } from '@/app/appConfig/default';
+import { applyViewportGrid, viewportGridStyle } from '@/features/core/viewport/viewportTransform';
+import { getViewport, subscribeToViewport } from '@/features/core/viewport/viewportSession';
+import type { ViewportScope } from '@/features/core/viewport';
+import { GRID } from '@/shared/config-default';
 
 export const ViewportGrid = ({ viewportScope }: { viewportScope: ViewportScope | null }) => {
   const gridRef = useRef<HTMLDivElement>(null);

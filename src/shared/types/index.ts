@@ -25,10 +25,6 @@ export * from './bayes';
 // 领域模型 - 与后端数据结构一致
 export * from './domain';
 
-// ==================== DTO ====================
-// 数据传输对象和转换器
-export * from './dto';
-
 // ==================== UI Types ====================
 // UI 状态类型 - 前端专用
 export type { LayoutTab, LayoutTabType, LayoutTabComponent, EditorGroupSnapshot, LoadStatus, ExecutionStatus } from './ui';

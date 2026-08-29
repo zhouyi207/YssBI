@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   canCopyNode,
   canCutNode,

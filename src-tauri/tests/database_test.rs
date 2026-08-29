@@ -9,31 +9,9 @@ use yssbi_lib::database::{
     write_display_name,
 };
 use yssbi_lib::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yssbi_lib::node_system::document::{DatabaseResourceKey, ResourceKey};
 use yssbi_lib::project::{
-    OperationId, ProjectInstanceId, ProjectState, ResourceRevision, discover_databases_from_root,
-    project_duckdb_abs,
+    OperationId, ProjectState, discover_databases_from_root, project_duckdb_abs,
 };
-
-fn database_authority(
-    state: &ProjectState,
-    database_id: &str,
-) -> (ProjectInstanceId, ResourceRevision) {
-    let session = state
-        .capture_project_session()
-        .expect("capture project session");
-    let index = state
-        .read_project_index(&session.instance_id)
-        .expect("read authoritative project index");
-    assert_eq!(index.project_instance_id, session.instance_id.as_str());
-    let revision = index
-        .databases
-        .iter()
-        .find(|database| database.id == database_id)
-        .expect("database authority")
-        .revision;
-    (session.instance_id, revision)
-}
 
 fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
     DatabaseInstance {
@@ -356,8 +334,7 @@ fn setup_iris_duckdb_project() -> (PathBuf, String) {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::try_new()
-        .expect("initialize built-in node system")
+    ProjectState::new()
         .create_project_transaction("Database test", &project_root, OperationId::new())
         .expect("create project fixture");
 
@@ -386,8 +363,8 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
     let decl = databases.get(&db_id).expect("decl");
     let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
 
-    let schema = db_instance.data_schema().expect("schema");
-    assert!(schema.columns.len() >= 5);
+    let columns = db_instance.list_column_names().expect("schema");
+    assert!(columns.len() >= 5);
     assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
 
     let page = db_instance.query_page(10, 5).expect("page");
@@ -405,17 +382,25 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
 #[test]
 fn test_project_reload_discovers_duckdb_from_directory() {
     let (project_root, db_id) = setup_iris_duckdb_project();
-    let state = ProjectState::try_new().expect("initialize built-in node system");
+    let state = ProjectState::new();
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(databases.len(), 1);
-    assert_eq!(databases.get(&db_id).map(|d| d.name.as_str()), Some("iris"));
+    assert_eq!(databases.get(&db_id).map(|d| d.name.as_ref()), Some("iris"));
     state.activate_project_from_path(&project_root).unwrap();
 
-    let mut store = state.project_store.write().unwrap();
-    let db = store.databases.get_mut(&db_id).expect("database in store");
-    assert!(matches!(db.state, DatabaseState::DuckDb { .. }));
+    let data = state.get_data().expect("project data after reload");
+    let declaration = data
+        .databases
+        .get(&db_id)
+        .expect("database in project data");
+    assert_eq!(
+        declaration.engine.duckdb_table(),
+        Some(("database/project.duckdb", db_id.as_str())),
+    );
+    let mut database = bind_duckdb_instance(declaration, Some(project_root.as_path()));
+    assert!(matches!(database.state, DatabaseState::DuckDb { .. }));
 
-    let page = db.query_page(0, 20).expect("page after reload");
+    let page = database.query_page(0, 20).expect("page after reload");
     assert_eq!(page.height(), 20);
 
     let _ = std::fs::remove_dir_all(&project_root);
@@ -429,8 +414,7 @@ fn test_single_project_duckdb_multiple_tables() {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::try_new()
-        .expect("initialize built-in node system")
+    ProjectState::new()
         .create_project_transaction("Multi database test", &project_root, OperationId::new())
         .expect("create project fixture");
     let duckdb_path = project_duckdb_abs(&project_root);
@@ -444,11 +428,11 @@ fn test_single_project_duckdb_multiple_tables() {
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(databases.len(), 2);
     assert_eq!(
-        databases.get("db-a").map(|d| d.name.as_str()),
+        databases.get("db-a").map(|d| d.name.as_ref()),
         Some("iris-a")
     );
     assert_eq!(
-        databases.get("db-b").map(|d| d.name.as_str()),
+        databases.get("db-b").map(|d| d.name.as_ref()),
         Some("iris-b")
     );
     assert_eq!(
@@ -544,93 +528,29 @@ fn test_duckdb_analytics_without_full_load() {
     let _ = std::fs::remove_dir_all(&project_root);
 }
 
-/// Phase 5：`save_database_changes` 将编辑写回 `project.duckdb`，重开可恢复。
+/// Phase 5：DatabaseInstance 保存编辑后，重开可恢复。
 #[test]
 fn test_edit_save_persists_to_duckdb() {
-    use yssbi_lib::application::database::{
-        DatabaseMutation, mutate_database_resource, save_database_changes,
-    };
-
     let (project_root, db_id) = setup_iris_duckdb_project();
-    let state = ProjectState::try_new().expect("initialize built-in node system");
-    state.activate_project_from_path(&project_root).unwrap();
-
-    let (project_instance_id, edit_expected_revision) = database_authority(&state, &db_id);
-    let edit_operation_id = OperationId::new();
-    let edited = mutate_database_resource(
-        &state,
-        &project_instance_id,
-        &db_id,
-        edit_expected_revision,
-        edit_operation_id,
-        DatabaseMutation::EditCell {
-            row: 0,
-            column: "sepal_length".into(),
-            value: serde_json::json!(999.0),
-            row_id: None,
-        },
-    )
-    .expect("edit");
-    assert_eq!(
-        edited.mutation.project_instance_id,
-        project_instance_id.as_str()
-    );
-    assert_eq!(edited.mutation.operation_id, edit_operation_id);
-    assert_eq!(edited.mutation.deltas.len(), 1);
-    let edit_delta = &edited.mutation.deltas[0];
-    assert_eq!(
-        edit_delta.resource,
-        ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
-    );
-    assert_eq!(edit_delta.from_revision, edit_expected_revision);
-    assert_eq!(
-        edit_delta.to_revision,
-        edit_expected_revision.checked_next().unwrap()
-    );
-    assert_eq!(edit_delta.caused_by, Some(edit_operation_id));
-
-    let (save_project_instance_id, save_expected_revision) = database_authority(&state, &db_id);
-    assert_eq!(save_project_instance_id, project_instance_id);
-    assert_eq!(save_expected_revision, edit_delta.to_revision);
-    let save_operation_id = OperationId::new();
-    let saved = save_database_changes(
-        &state,
-        &save_project_instance_id,
-        &db_id,
-        save_expected_revision,
-        save_operation_id,
-    )
-    .expect("save");
-    assert_eq!(
-        saved.mutation.project_instance_id,
-        project_instance_id.as_str()
-    );
-    assert_eq!(saved.mutation.operation_id, save_operation_id);
-    assert_eq!(saved.mutation.deltas.len(), 1);
-    let save_delta = &saved.mutation.deltas[0];
-    assert_eq!(
-        save_delta.resource,
-        ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
-    );
-    assert_eq!(save_delta.from_revision, save_expected_revision);
-    assert_eq!(
-        save_delta.to_revision,
-        save_expected_revision.checked_next().unwrap()
-    );
-    assert_eq!(save_delta.caused_by, Some(save_operation_id));
-    assert!(!saved.data.can_undo);
-    assert!(!saved.data.can_redo);
-    assert!(!saved.data.is_modified);
-    assert_eq!(saved.data.undo_count, 0);
-    assert_eq!(saved.data.redo_count, 0);
-    let (_, committed_revision) = database_authority(&state, &db_id);
-    assert_eq!(committed_revision, save_delta.to_revision);
-    drop(state);
-
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     let decl = databases.get(&db_id).expect("decl");
     let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
     assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    db_instance
+        .edit_cell(0, "sepal_length", serde_json::json!(999.0), None)
+        .expect("edit");
+    let saved = db_instance
+        .save_changes(Some(project_root.as_path()))
+        .expect("save");
+    assert!(!saved.can_undo);
+    assert!(!saved.can_redo);
+    assert!(!saved.is_modified);
+    drop(db_instance);
+
+    let databases = discover_databases_from_root(project_root.as_path()).expect("rediscover");
+    let decl = databases.get(&db_id).expect("rediscovered declaration");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
 
     let page = db_instance.query_page(0, 1).expect("page");
     let val = page

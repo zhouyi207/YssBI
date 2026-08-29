@@ -1,4 +1,4 @@
-use crate::node_system::plan::CompiledParameterHandle;
+use crate::execution::plan::legacy::CompiledParameterHandle;
 use std::any::{Any, type_name};
 use std::collections::BTreeMap;
 use std::fmt;

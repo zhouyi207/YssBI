@@ -1,6 +1,9 @@
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useEditorSessionCommandsContext } from '@/features/application/editor';
+import {
+  useEditorSessionCommandsContext,
+  useEditorSessionResources,
+} from '@/features/application/editor';
 import { resolveActiveProjectGraph } from '@/features/application/sidebar';
 import { updateVariableAction } from '@/features/application/dataManagement/variableActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
@@ -10,7 +13,11 @@ import {
 } from '@/features/application/sidebar/sidebarResourceActions';
 import { deleteWorksheetWithConfirm } from '@/features/application/editor/worksheetDelete';
 import { openDatabaseEditorWindow } from '@/features/application/window';
-import { uiStore, useVariableStore, useDatabaseStore, useFunctionCatalog, useGraphSessionStore, getActiveLayoutTab, useGraphResourcesByKind } from '@/features/application/viewCapabilities';
+import { ui } from '@/features/core/ui/ui';
+import { useGraphSessionUi } from '@/features/core/graphSession/ui';
+import { useVariableRead } from '@/features/core/variable/read';
+import { useDatabaseRead } from '@/features/core/database/read';
+import { getActiveLayoutTab } from '@/features/core/layout';
 import type { GraphResourceType } from '../sidebarContextMenu/sidebarContextMenuTypes';
 
 type OpenInputDialog = (
@@ -22,9 +29,10 @@ type OpenInputDialog = (
 
 export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
-  const events = useGraphResourcesByKind('event');
-  const functions = useFunctionCatalog();
-  const focusedSession = useGraphSessionStore((state) => state.focusedSession);
+  const { events, functions } = useEditorSessionResources();
+  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
+  const variables = useVariableRead((snapshot) => snapshot.variables);
+  const databases = useDatabaseRead((snapshot) => snapshot.databases);
   const activeTab = focusedSession
     ? getActiveLayoutTab(focusedSession.groupId)?.tab ?? null
     : null;
@@ -75,7 +83,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   }, [openInputDialog, t]);
 
   const deleteVariableItem = useCallback(async (id: string, name: string) => {
-    const confirmed = await uiStore.confirm({
+    const confirmed = await ui.confirm({
       title: t('sidebar.deleteVariableTitle'),
       message: t('sidebar.deleteVariableMessage', { name }),
       confirmText: t('contextMenu.sidebar.delete'),
@@ -127,7 +135,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   }, [openInputDialog, t]);
 
   const deleteDatabaseItem = useCallback(async (id: string, name: string) => {
-    const confirmed = await uiStore.confirm({
+    const confirmed = await ui.confirm({
       title: t('sidebar.deleteDataTitle'),
       message: t('sidebar.deleteDataMessage', { name }),
       confirmText: t('contextMenu.sidebar.delete'),
@@ -153,14 +161,14 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   }, []);
 
   const openVariableContextMenuTarget = useCallback((id: string, name: string) => {
-    const variable = useVariableStore.getState().variables[id];
+    const variable = variables[id];
     const isGlobal = variable?.scope.type === 'global';
     return { type: 'variable' as const, id, name, isGlobal };
-  }, []);
+  }, [variables]);
 
   const resolveDatabaseName = useCallback((id: string, fallback: string) => {
-    return useDatabaseStore.getState().databases[id]?.name ?? fallback;
-  }, []);
+    return databases[id]?.name ?? fallback;
+  }, [databases]);
 
   return {
     renameGraphItem,

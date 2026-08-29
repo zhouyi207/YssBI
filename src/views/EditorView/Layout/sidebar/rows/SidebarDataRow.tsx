@@ -9,7 +9,7 @@ import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useL
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { revealDetails } from '@/features/application/editor/rightSidebarActions';
-import { TYPE_ICON_COLORS } from '@/features/application/viewCapabilities';
+import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 

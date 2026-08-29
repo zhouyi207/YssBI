@@ -10,7 +10,7 @@ import type {
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchTypes';
 import type {
   WorkbenchPanelMetadata,
   WorkbenchViewId,
@@ -48,14 +48,19 @@ vi.mock('i18next', () => ({
   default: { t: (key: string) => key },
 }));
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
     listPanels: () => mocks.panels,
     listGroupPanels: (groupId: string) =>
       mocks.panels.filter((panel) => panel.groupId === groupId),
     getEdgeState: (position: WorkbenchEdgePosition) => (
       position === 'left' ? { ...mocks.leftEdge } : { ...mocks.bottomEdge }
     ),
+  },
+}));
+
+vi.mock('@/features/core/dockview/workbenchControl', () => ({
+  workbenchDockviewControl: {
     ensureView: mocks.ensureView,
     reveal: mocks.reveal,
     setEdgeCollapsed: mocks.setEdgeCollapsed,
@@ -68,8 +73,8 @@ vi.mock('@/features/core/dockview/workbenchDockviewInternal', () => ({
   },
 }));
 
-vi.mock('@/features/core/dockview/logsDockviewLayoutController', () => ({
-  logsDockviewLayoutController: {
+vi.mock('@/features/core/dockview/logsControl', () => ({
+  logsDockviewControl: {
     resetToDefault: mocks.resetLogs,
   },
 }));

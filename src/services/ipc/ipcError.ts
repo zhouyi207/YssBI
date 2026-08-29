@@ -1,7 +1,17 @@
 import { isIpcErrorDto, type IpcErrorDto } from '@/shared/types/dto/ipcError';
+import type { ErrorReference } from '@/shared/types/domain/diagnostics';
+import {
+  IPC_ERROR_BRAND,
+  IPC_MALFORMED_ERROR_CODE,
+  IPC_TRANSPORT_FAILURE_CODE,
+} from '@/shared/constants/ipcError';
 
-export const IPC_TRANSPORT_FAILURE_CODE = 'ipc_transport_failure';
-export const IPC_MALFORMED_ERROR_CODE = 'ipc_malformed_error';
+export type { ErrorReference } from '@/shared/types/domain/diagnostics';
+export {
+  IPC_ERROR_BRAND,
+  IPC_MALFORMED_ERROR_CODE,
+  IPC_TRANSPORT_FAILURE_CODE,
+} from '@/shared/constants/ipcError';
 
 export type IpcErrorKind = 'backend' | 'transport' | 'malformed';
 
@@ -12,11 +22,6 @@ export interface IpcErrorInit {
   details: IpcErrorDto['details'];
   incidentId: string | null;
   cause: unknown;
-}
-
-export interface ErrorReference {
-  code: string;
-  incidentId: string | null;
 }
 
 function errorMessage(init: IpcErrorInit): string {
@@ -31,6 +36,7 @@ function errorMessage(init: IpcErrorInit): string {
 }
 
 export class IpcError extends Error {
+  readonly [IPC_ERROR_BRAND] = true;
   readonly kind: IpcErrorKind;
   readonly command: string;
   readonly code: string;

@@ -36,6 +36,14 @@ vi.mock('@/features/core/dataStore', () => ({
   resolveActiveProjectPath: mocks.resolveActiveProjectPath,
 }));
 
+vi.mock('@/features/application/project/projectSession', () => ({
+  resolveActiveProjectPath: mocks.resolveActiveProjectPath,
+}));
+
+vi.mock('@/features/application/worksheet/saveWorksheetDocument', () => ({
+  saveWorksheetDocument: mocks.saveWorksheet,
+}));
+
 vi.mock('@/features/core/layout/layoutTabQueries', () => ({
   resolveEditorGroupId: () => 'group-later',
   getActiveLayoutTab: () => ({
@@ -94,7 +102,7 @@ vi.mock('@/features/core/execution', () => ({
   graphHasClearableArtifacts: vi.fn(),
 }));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     app: { error: vi.fn() },
     exec: { info: vi.fn(), error: vi.fn() },

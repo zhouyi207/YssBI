@@ -1,6 +1,10 @@
 import React, { useState, useCallback } from "react";
 import type { UINode } from "@/shared/types/ui";
-import { uiNodeHasNoHeader, uiNodeIsReroute, useNodeExecution, useExecutionStore, useGraphDataStore, getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/application/viewCapabilities";
+import { uiNodeHasNoHeader, uiNodeIsReroute } from "@/features/core/dataStore/nodeView";
+import { useNodeExecution } from "@/features/core/node";
+import { useExecutionRead } from '@/features/core/execution/read';
+import { useGraphRead } from '@/features/core/graph/read';
+import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
 import { useCallFunctionIssue } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
 import { NodeContextMenu } from "../ContextMenu";
@@ -29,22 +33,24 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   const { t } = useTranslation();
   const posX = node.position.x;
   const posY = node.position.y;
-  const graphStatus = useExecutionStore((s) => (_graphPath ? s.graphs[_graphPath]?.status ?? 'idle' : 'idle'));
-  const isReplay = useExecutionStore((s) => !!_graphPath && s.isPlaying && s.playbackGraphPath === _graphPath);
+  const graphStatus = useExecutionRead((snapshot) =>
+    _graphPath ? snapshot.graphs[_graphPath]?.status ?? 'idle' : 'idle',
+  );
+  const isReplay = useExecutionRead((snapshot) =>
+    Boolean(_graphPath && snapshot.isPlaying && snapshot.playbackGraphPath === _graphPath),
+  );
   const useStoreExecVisual = graphStatus !== 'running' && !isReplay;
 
   const { isCompleted, hasError } = useNodeExecution(node.id, _graphPath, useStoreExecVisual);
   const callIssue = useCallFunctionIssue(_graphPath, node.id);
   const menuActions = useCanvasContextMenuActionsOptional();
 
-  const projectedCapabilities = useGraphDataStore((state) =>
-    _graphPath ? state.getGraphNode(_graphPath, node.id)?.capabilities : undefined,
+  const graphBucket = useGraphRead((snapshot) =>
+    _graphPath ? snapshot.graphEntities[_graphPath] : undefined,
   );
-  const hasLinks = useGraphDataStore((s) => {
-    if (!_graphPath) return false;
-    const pinIds = s.getGraphNodePins(_graphPath, node.id);
-    return pinIds.some((pid) => s.getGraphPinConnections(_graphPath, pid).length > 0);
-  });
+  const projectedCapabilities = graphBucket?.nodes[node.id]?.capabilities;
+  const hasLinks = graphBucket?.nodePins[node.id]
+    ?.some((pinId) => (graphBucket.pinConnections[pinId]?.length ?? 0) > 0) ?? false;
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 

@@ -6,7 +6,7 @@
 
 import type { DataValue } from '../domain/dataValue';
 import type { DataTypeBackendFormat } from './dataType';
-import { dataTypeFromBackend, dataTypeToBackend } from './dataType';
+import { dataTypeToBackend } from './dataType';
 
 /** 后端 DataSeries 值（id 或带元数据的 struct） */
 export type DataSeriesValueBackend =
@@ -100,48 +100,6 @@ export function isRustDataValueWire(value: unknown): value is DataValueBackend {
       && typeof value.Struct.handleId === 'string';
   }
   return false;
-}
-
-/** 从后端格式解析为 DataValue */
-export function dataValueFromBackend(
-  v: DataValueBackend | DataValue | null | undefined
-): DataValue {
-  if (v == null || v === 'Null') return { kind: 'Null' };
-  if (typeof v !== 'object') return { kind: 'Null' };
-
-  if ('kind' in v && 'value' in v) return v as DataValue;
-  if ('kind' in v && v.kind === 'Null') return { kind: 'Null' };
-
-  if ('Boolean' in v) return { kind: 'Boolean', value: v.Boolean };
-  if ('Int64' in v) return { kind: 'Int64', value: v.Int64 };
-  if ('Float64' in v) return { kind: 'Float64', value: v.Float64 };
-  if ('String' in v) return { kind: 'String', value: v.String };
-  if ('Array' in v)
-    return {
-      kind: 'Array',
-      value: (v.Array as DataValueBackend[]).map(dataValueFromBackend),
-    };
-  if ('Object' in v) return { kind: 'Object', value: v.Object ?? {} };
-  if ('DataFrame' in v) return { kind: 'DataFrame', value: v.DataFrame };
-  if ('DataSeries' in v) {
-    const payload = v.DataSeries;
-    if (typeof payload === 'string') {
-      return { kind: 'DataSeries', value: payload };
-    }
-    return {
-      kind: 'DataSeries',
-      value: {
-        id: payload.id,
-        ...(payload.elementType
-          ? { elementType: dataTypeFromBackend(payload.elementType) }
-          : {}),
-      },
-    };
-  }
-  if ('Struct' in v) return { kind: 'Struct', value: v.Struct };
-  if ('Null' in v) return { kind: 'Null' };
-
-  return { kind: 'Null' };
 }
 
 /** 转为后端期望的格式 */

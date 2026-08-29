@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
 import { currentAppWindow } from '@/services/platform/appWindow';
 import type { PlatformFailure, PlatformOutcome } from '@/services/platform/platformTypes';
 

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { currentAppWindow } from '@/services/platform/appWindow';
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { logger } from "@/utils/appLogger";
+import { logger } from '@/features/application/observability/appLogger';
 import { resolveWindowDecorations, usesCustomTitleBar } from "./windowDecorationPolicy";
 
 /** Sync OS window decorations with appearance.titleBarStyle for the current webview. */

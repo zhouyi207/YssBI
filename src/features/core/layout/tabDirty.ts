@@ -1,10 +1,11 @@
 import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { isGraphResourceDirty, markResourceDirty, useResourceStore } from '@/features/core/resource';
 import { layoutTabResourceRef } from './layoutTabModel';
 
 export function markGraphTabDirty(graphPath: string): void {
-  const panel = workbenchDockviewPort.findEditorPanelsByResource(graphPath)[0];
+  const panel = workbenchDockviewRead.findEditorPanelsByResource(graphPath)[0];
   if (!panel || panel.metadata.role !== 'editor') return;
 
   const tab = layoutTabFromEditorMetadata(panel.metadata);
@@ -13,7 +14,7 @@ export function markGraphTabDirty(graphPath: string): void {
     kind: panel.metadata.resourceKind,
   }, true);
   if (tab.pinned === false) {
-    void workbenchDockviewPort.setEditorPinned(panel.panelInstanceId, true);
+    void workbenchDockviewControl.setEditorPinned(panel.panelInstanceId, true);
   }
 }
 
@@ -42,7 +43,7 @@ export interface DirtyTabSnapshot {
 export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
   const seen = new Set<string>();
   const out: DirtyTabSnapshot[] = [];
-  for (const panel of workbenchDockviewPort.listPanels()) {
+  for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role !== 'editor') continue;
     const tab = layoutTabFromEditorMetadata(panel.metadata);
     if (seen.has(tab.id)) continue;

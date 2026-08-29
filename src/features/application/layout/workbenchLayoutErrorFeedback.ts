@@ -3,7 +3,7 @@ import i18n from 'i18next';
 import {
   WorkbenchLayoutError,
   type WorkbenchLayoutErrorCode,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchTypes';
 import { uiStore } from '@/features/core/ui/UIStore';
 
 const MESSAGE_KEYS = {

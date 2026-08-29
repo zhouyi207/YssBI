@@ -1,4 +1,4 @@
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/features/application/errorReference';
 import type {
   ProjectEvent,
   ProjectEventReconciler,

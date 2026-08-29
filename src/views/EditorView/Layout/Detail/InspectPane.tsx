@@ -7,7 +7,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { useActiveEditorGroup } from '@/features/application/viewCapabilities';
+import { useActiveEditorGroup } from '@/features/application/editor/editorGroupContext';
 import { NodeInspectPanel } from './panels/NodeInspectPanel';
 import { resolveNodeInspectionTarget } from './resolveNodeInspectionTarget';
 

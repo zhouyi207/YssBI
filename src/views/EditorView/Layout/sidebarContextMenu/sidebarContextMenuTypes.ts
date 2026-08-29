@@ -1,4 +1,4 @@
-import type { RevealProjectResourceRequest } from "@/features/application/viewCapabilities";
+import type { RevealProjectResourceRequest } from "@/features/application/sidebar";
 import type { PositionedActionMenuState } from "@/shared/ui/actionMenu";
 
 export type GraphResourceType = "event" | "function";

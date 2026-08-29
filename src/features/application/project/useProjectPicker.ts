@@ -16,7 +16,7 @@ import {
 } from "@/services/project/projectService";
 import { revealPath } from '@/services/platform/opener';
 import { openPathDialog } from '@/services/platform/pathDialog';
-import type { ProjectRecordRow } from "@/shared/types/dto/project";
+import type { ProjectRecordRow } from "@/shared/types/domain/project";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerOperationError,

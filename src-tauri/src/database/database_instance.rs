@@ -5,7 +5,7 @@ use crate::database_contract::{DatabaseDecl, DatabaseEngine};
 use super::{
     EditHistory, EditOperation, EditState, anyvalue_to_json, apply_operation, capture_column_data,
     capture_row_data, cast_column as sci_cast_column, dtype_from_string, dtype_to_string,
-    export_dataframe, export_duckdb_table, reverse_operation,
+    export_dataframe, export_duckdb_table, reverse_operation, write_display_name,
 };
 use super::{
     PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, duckdb_table_sql,
@@ -19,7 +19,6 @@ use super::{
     compute_dataset_overview_duckdb,
 };
 use crate::database::schema_snapshot::DatabaseSchemaFact;
-use crate::graph::schema::{ColumnSchema, DataSchema};
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,7 +30,7 @@ pub struct DatabaseInstance {
 }
 
 impl DatabaseInstance {
-    pub fn data_schema(&mut self) -> PolarsResult<DataSchema> {
+    pub fn data_schema(&mut self) -> PolarsResult<DatabaseSchemaFact> {
         let fact = match &self.state {
             DatabaseState::DuckDb { columns, .. } => {
                 DatabaseSchemaFact::from_duckdb(&self.decl.id, columns)
@@ -45,16 +44,7 @@ impl DatabaseInstance {
         }
         .map_err(|error| PolarsError::ComputeError(error.to_string().into()))?;
 
-        Ok(DataSchema {
-            columns: fact
-                .columns()
-                .iter()
-                .map(|column| ColumnSchema {
-                    name: column.name().as_str().to_string(),
-                    data_type: column.data_type().clone(),
-                })
-                .collect(),
-        })
+        Ok(fact)
     }
 
     /// 分页读取行数据。DuckDB 走 `LIMIT/OFFSET`，不触发整表物化。
@@ -113,9 +103,9 @@ impl DatabaseInstance {
     pub fn list_column_names(&mut self) -> PolarsResult<Vec<String>> {
         Ok(self
             .data_schema()?
-            .columns
+            .columns()
             .iter()
-            .map(|c| c.name.clone())
+            .map(|c| c.name().as_str().to_string())
             .collect())
     }
 
@@ -130,6 +120,17 @@ impl DatabaseInstance {
             }
             DatabaseState::Failed { error } => Err(error.clone()),
         }
+    }
+
+    pub fn rename_display_name(&mut self, name: &str) -> Result<EditState, String> {
+        if let DatabaseState::DuckDb {
+            duckdb_path, table, ..
+        } = &self.state
+        {
+            write_display_name(Path::new(duckdb_path), table, name)?;
+        }
+        self.decl.name = name.to_owned().into_boxed_str();
+        Ok(self.edit_state())
     }
 
     /// 列统计：DuckDB 走 SQL 聚合，其它状态 fallback 到 Polars 整表。
@@ -707,8 +708,15 @@ impl DatabaseInstance {
 
     pub fn save_changes(&mut self, project_root: Option<&Path>) -> Result<EditState, String> {
         if let DatabaseEngine::DuckDb { path, table } = &self.decl.engine {
-            let root = project_root.ok_or_else(|| "请先打开或创建项目后再保存数据".to_string())?;
-            let duckdb_abs = root.join(path);
+            let duckdb_abs = project_root
+                .map(|root| root.join(path))
+                .or_else(|| {
+                    matches!(&self.state, DatabaseState::DuckDb { .. }).then(|| match &self.state {
+                        DatabaseState::DuckDb { duckdb_path, .. } => PathBuf::from(duckdb_path),
+                        _ => unreachable!("state was checked as DuckDb"),
+                    })
+                })
+                .ok_or_else(|| "请先打开或创建项目后再保存数据".to_string())?;
             let table_id = table.clone();
 
             if let DatabaseState::DuckDb {

@@ -6,22 +6,183 @@
 
 // ==================== 数据库声明 ====================
 
-export type {
-  ColumnInfo,
-  DatabaseDeclDTO,
-  DatabaseDeclDTO as DatabaseDecl,
-  DatabaseEngineDTO,
-  DatabaseImportSourceDTO,
-  DatabaseRecord,
-} from '../dto/database';
+export interface ColumnInfo {
+  name: string;
+  type: string;
+}
 
-export {
-  databaseRecordFromLoad,
-  databaseSourcePath,
-  displayNameFromEngine,
-  normalizeDatabaseRecord,
-  normalizeDatabases,
-} from '../dto/database';
+export type DatabaseCellValue = string | number | boolean | null;
+export type DatabaseRow = DatabaseCellValue[];
+
+export interface LoadDatabaseResult {
+  id: string;
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  columns: ColumnInfo[];
+}
+
+export type DatabaseEngineSqlDTO =
+  | { sqlite: { autoCreate?: boolean } }
+  | { postgres: { ssl?: boolean } }
+  | { mysql: { charset?: string } };
+
+export type DatabaseImportSqlEngineDTO = 'sqlite' | 'postgres' | 'mysql';
+
+export type SqlEngineConfig = {
+  engine: DatabaseEngineSqlDTO;
+  connectionString: string;
+  table: string;
+};
+export type CsvEngineConfig = {
+  path: string;
+  delimiter?: string;
+  hasHeader?: boolean;
+  inferSchemaLength?: number;
+};
+export type ParquetEngineConfig = { path: string; columns?: string[] };
+export type ExcelEngineConfig = { path: string; sheet: string };
+export type DuckDbEngineConfig = { path: string; table: string };
+export type InMemoryEngineConfig = { name: string };
+
+export type DatabaseEngineDTO =
+  | { sql: SqlEngineConfig }
+  | { csv: CsvEngineConfig }
+  | { parquet: ParquetEngineConfig }
+  | { excel: ExcelEngineConfig }
+  | { duckDb: DuckDbEngineConfig }
+  | { inMemory: InMemoryEngineConfig };
+
+export type DatabaseImportSourceDTO =
+  | { sql: { engine: DatabaseImportSqlEngineDTO; connectionString: string; table: string } }
+  | { csv: CsvEngineConfig }
+  | { parquet: ParquetEngineConfig }
+  | { excel: ExcelEngineConfig };
+
+export interface DatabaseDeclDTO {
+  id: string;
+  resourcePath?: string;
+  name?: string;
+  engine?: DatabaseEngineDTO;
+  schemaVersion?: number;
+  required?: boolean;
+  columns?: ColumnInfo[];
+  rowCount?: number;
+  columnCount?: number;
+  loadFailed?: boolean;
+}
+
+export type DatabaseDecl = DatabaseDeclDTO;
+
+export interface DatabaseDocumentDto {
+  id: string;
+  engine: DatabaseEngineDTO;
+  schemaVersion: number;
+  required: boolean;
+  name: string | null;
+}
+
+export type DatabaseRecord = DatabaseDeclDTO & { name: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function normalizeColumns(raw: unknown): ColumnInfo[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const columns: ColumnInfo[] = [];
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    if (typeof item.name === 'string' && typeof item.type === 'string') {
+      columns.push({ name: item.name, type: item.type });
+    }
+  }
+  return columns.length > 0 ? columns : undefined;
+}
+
+function pathStem(path: string): string | undefined {
+  const parts = path.replace(/\\/g, '/').split('/');
+  const file = parts[parts.length - 1] || '';
+  const stem = file.replace(/\.[^.]+$/, '');
+  return stem || file || undefined;
+}
+
+export function displayNameFromEngine(
+  engine: DatabaseEngineDTO | undefined,
+): string | undefined {
+  if (!engine) return undefined;
+  if ('csv' in engine) return pathStem(engine.csv.path);
+  if ('parquet' in engine) return pathStem(engine.parquet.path);
+  if ('excel' in engine) return engine.excel.sheet || pathStem(engine.excel.path);
+  if ('duckDb' in engine) return engine.duckDb.table || pathStem(engine.duckDb.path);
+  if ('sql' in engine) return engine.sql.table;
+  if ('inMemory' in engine) return engine.inMemory.name;
+  return undefined;
+}
+
+export function databaseSourcePath(
+  engine: DatabaseEngineDTO | undefined,
+): string | undefined {
+  if (!engine) return undefined;
+  if ('csv' in engine) return engine.csv.path;
+  if ('parquet' in engine) return engine.parquet.path;
+  if ('excel' in engine) return engine.excel.path;
+  if ('duckDb' in engine) return engine.duckDb.path;
+  if ('sql' in engine) return engine.sql.connectionString;
+  return undefined;
+}
+
+export function normalizeDatabaseRecord(
+  id: string,
+  raw: unknown,
+  existing?: DatabaseRecord,
+): DatabaseRecord {
+  const input = isRecord(raw) ? raw : {};
+  const engine = (input.engine as DatabaseEngineDTO | undefined) ?? existing?.engine;
+  const name = typeof input.name === 'string' && input.name.trim()
+    ? input.name.trim()
+    : displayNameFromEngine(engine) ?? existing?.name ?? id;
+  const columns = normalizeColumns(input.columns) ?? existing?.columns;
+  const columnCount = typeof input.columnCount === 'number'
+    ? input.columnCount
+    : columns?.length ?? existing?.columnCount;
+  return {
+    id: typeof input.id === 'string' ? input.id : id,
+    name,
+    engine,
+    schemaVersion: typeof input.schemaVersion === 'number'
+      ? input.schemaVersion
+      : existing?.schemaVersion ?? 0,
+    required: typeof input.required === 'boolean'
+      ? input.required
+      : existing?.required ?? false,
+    columns,
+    rowCount: typeof input.rowCount === 'number' ? input.rowCount : existing?.rowCount,
+    columnCount,
+    loadFailed: typeof input.loadFailed === 'boolean'
+      ? input.loadFailed
+      : existing?.loadFailed ?? false,
+  };
+}
+
+export function normalizeDatabases(
+  databases: Record<string, unknown>,
+  existing: Record<string, DatabaseRecord> = {},
+): Record<string, DatabaseRecord> {
+  return Object.fromEntries(
+    Object.entries(databases).map(([id, database]) => [
+      id,
+      normalizeDatabaseRecord(id, database, existing[id]),
+    ]),
+  );
+}
+
+export function databaseRecordFromLoad(
+  meta: Pick<DatabaseDeclDTO, 'id' | 'name' | 'rowCount' | 'columnCount' | 'columns'>,
+  existing?: DatabaseRecord,
+): DatabaseRecord {
+  return normalizeDatabaseRecord(meta.id, meta, existing);
+}
 
 // ==================== 数据来源配置 ====================
 

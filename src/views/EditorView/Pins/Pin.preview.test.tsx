@@ -17,6 +17,10 @@ import { ResultService } from '@/services/result/resultService';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
+  resetResultQueryProject,
+} from '@/features/application/results';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import {
   Pin,
   pinConnectionFeedbackAttributes,
 } from './Pin';
@@ -64,6 +68,8 @@ describe('Pin preview production path', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    resetResultQueryProject();
+    useProjectIOStore.setState({ projectInstanceId: 'project-session-1' });
     clearProjectLifecycle();
     startProjectLifecycle('project-session-1');
     useGraphDataStore.setState({ graphEntities: {} });
@@ -86,6 +92,8 @@ describe('Pin preview production path', () => {
     act(() => root.unmount());
     container.remove();
     document.querySelector('[data-yssbi-overlay-root]')?.remove();
+    resetResultQueryProject();
+    useProjectIOStore.setState({ projectInstanceId: null });
     vi.restoreAllMocks();
   });
 

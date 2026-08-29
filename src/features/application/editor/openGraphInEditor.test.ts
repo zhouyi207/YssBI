@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import { ensureEditorViewport } from '@/features/core/viewport';
 import { openEditorTab } from './openEditorTab';
 import { switchEditorTab } from './switchEditorTab';
@@ -35,7 +35,7 @@ vi.mock('./switchEditorTab', () => ({
   switchEditorTab: vi.fn(async () => true),
 }));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: { graph: { trace: vi.fn() } },
 }));
 

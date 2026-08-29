@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useShallow } from 'zustand/react/shallow';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import type { GraphEntitiesState } from '@/features/application/viewCapabilities';
-import { useGraphDataStore, derivePinConnectionView } from '@/features/application/viewCapabilities';
+import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
+import { useGraphRead } from '@/features/core/graph/read';
+import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
 
 import type { PinData, PinView } from '@/shared/types/store/graph';
 
@@ -38,24 +38,23 @@ interface NodeDetailPanelProps {
 
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const { t } = useTranslation();
-  const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
+  const node = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
   const { catalog } = useLocalizedNodeCatalog(Boolean(node));
-  const pinObjs = useGraphDataStore(
-    useShallow((state) => {
-      const bucket = state.graphEntities[graphPath];
-      const pinIds = bucket?.nodePins[nodeId];
-      if (!bucket || !pinIds?.length) return EMPTY_PINS;
-      return pinIds.map((pinId) => bucket.pins[pinId]).filter(isPresent);
-    }),
-  );
-  const pinConns = useGraphDataStore(
-    useShallow((state) => {
-      const bucket = state.graphEntities[graphPath];
-      const pinIds = bucket?.nodePins[nodeId];
-      if (!bucket || !pinIds?.length) return EMPTY_PIN_CONNECTIONS;
-      return pinIds.map((pinId) => bucket.pinConnections[pinId]);
-    }),
-  );
+  const pinObjs = useGraphRead((snapshot) => {
+    const bucket = snapshot.graphEntities[graphPath];
+    const pinIds = bucket?.nodePins[nodeId];
+    if (!bucket || !pinIds?.length) return EMPTY_PINS;
+    return pinIds
+      .map((pinId) => bucket.pins[pinId])
+      .filter(isPresent)
+      .map((pin) => structuredClone(pin) as PinData);
+  });
+  const pinConns = useGraphRead((snapshot) => {
+    const bucket = snapshot.graphEntities[graphPath];
+    const pinIds = bucket?.nodePins[nodeId];
+    if (!bucket || !pinIds?.length) return EMPTY_PIN_CONNECTIONS;
+    return pinIds.map((pinId) => [...(bucket.pinConnections[pinId] ?? [])]);
+  });
 
   const pins = useMemo<PinView[]>(
     () =>

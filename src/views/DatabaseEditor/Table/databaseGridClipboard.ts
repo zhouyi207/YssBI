@@ -1,5 +1,5 @@
 import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import type { DatabaseRow } from '@/shared/types/dto/database';
+import type { DatabaseRow } from '@/shared/types/domain/database';
 import type { DatabaseGridCellRange } from './databaseGridModel';
 
 function clipboardCell(value: unknown): string {

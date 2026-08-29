@@ -1,5 +1,5 @@
 use super::KernelFragment;
-use crate::node_system::protocol::{CanonicalDecimal, Value};
+use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     RuntimeValue,
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn kernel_fragment_matches_current_distribution_catalog_inventory() {
-        let node_system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+        let node_system = crate::graph::catalog::build_builtin_node_system().unwrap();
         let catalog_handles = node_system
             .registry
             .iter()

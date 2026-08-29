@@ -175,6 +175,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yssbi",
+        mode: RustDependencyMode::Runtime,
         package_name: "tracing",
         target_condition: None,
     },
@@ -806,6 +812,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "thiserror",
     },
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
@@ -924,6 +935,101 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::Diagnostics,
         mode: RustDependencyMode::Runtime,
         package_name: "tracing",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "ndarray",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Commands,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Commands,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Diagnostics,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Diagnostics,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Diagnostics,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Diagnostics,
+        mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::CompositionRoot,
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Project,
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Project,
+        mode: RustDependencyMode::Runtime,
+        package_name: "trash",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "mathlex",
     },
 ];
 

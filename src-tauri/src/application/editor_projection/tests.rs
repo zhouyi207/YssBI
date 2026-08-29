@@ -1,21 +1,19 @@
 use super::*;
-use crate::execution::plan::{
-    PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
-};
+use crate::graph::analysis::contracts::{CompilationBasis, ResourceKey, ResourceVersion};
 use crate::graph::analysis::{
     GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
+use crate::graph::protocol::{
+    NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
+    PortKind, TypeExpr, TypeId,
+};
+use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::settings::GraphCompileSettings;
 use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
-};
-use crate::node_system::analysis::{ResourceKey, ResourceVersion};
-use crate::node_system::protocol::{
-    NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
-    PortKind, TypeExpr, TypeId,
 };
 use std::collections::BTreeMap;
 
@@ -97,18 +95,15 @@ fn analysis_with_facts(
     path: &GraphResourcePath,
     facts: GraphProjectionFacts,
 ) -> crate::graph::analysis::GraphAnalysis {
-    let basis = PlanCompilationBasis::new(
-        PlanProjectSessionId::from_existing("project".into()),
-        PlanGraphRevision::from_existing(document.revision.get()),
-        PlanRegistryFingerprint::from_bytes([6; 32]),
-        std::collections::BTreeMap::from([(
-            crate::execution::plan::PlanResourceId::new("resource/source".into())
-                .expect("test resource id is valid"),
-            crate::execution::plan::PlanResourceVersion::new("7".into())
-                .expect("test resource version is valid"),
+    let basis = CompilationBasis {
+        graph_revision: GraphRevision::new(document.revision.get()),
+        registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
+        resource_versions: BTreeMap::from([(
+            ResourceKey::new("resource/source"),
+            ResourceVersion::new("7"),
         )]),
-        BTreeMap::new(),
-    );
+        resource_observations: BTreeMap::new(),
+    };
     let catalog = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
         BTreeMap::new(),
@@ -263,13 +258,12 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
     );
     let path = GraphResourcePath::new("events/missing-facts.yssbi-event")
         .expect("test graph path is valid");
-    let basis = PlanCompilationBasis::new(
-        PlanProjectSessionId::from_existing("project".into()),
-        PlanGraphRevision::from_existing(0),
-        PlanRegistryFingerprint::from_bytes([9; 32]),
-        BTreeMap::new(),
-        BTreeMap::new(),
-    );
+    let basis = CompilationBasis {
+        graph_revision: GraphRevision::new(0),
+        registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
+        resource_versions: BTreeMap::new(),
+        resource_observations: BTreeMap::new(),
+    };
     let catalog = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
         BTreeMap::new(),
@@ -294,6 +288,6 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
             analysis: &analysis,
             registry_fingerprint: [9; 32],
         }),
-        Err(EditorProjectionError::MissingProjectionFacts)
+        Err(EditorProjectionError::ProjectionFactsMismatch)
     ));
 }

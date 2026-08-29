@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/features/application/errorReference';
 
 export function nodeCatalogErrorText(
   error: ErrorReference | null,

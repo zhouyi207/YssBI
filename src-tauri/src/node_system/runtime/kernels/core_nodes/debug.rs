@@ -1,5 +1,5 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::node_system::protocol::Value;
+use crate::graph::protocol::Value;
 use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
 
 pub(super) fn register(fragment: &mut KernelFragment) {

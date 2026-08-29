@@ -1,0 +1,236 @@
+use std::collections::BTreeMap;
+
+use crate::graph::analysis::contracts::{CompilationBasis, CompileId};
+use crate::graph::analysis::result_category::GraphResultCategory;
+use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+
+/// Graph-owned value reference used while lowering a document.  Application
+/// maps it to the execution package only after the Graph compilation result
+/// has crossed the owner boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GraphValueRef(u32);
+
+impl GraphValueRef {
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    pub const fn index(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GraphInputSource {
+    Value(GraphValueRef),
+    Parameter(GraphParameterHandle),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphInputBinding {
+    port: Box<str>,
+    source: GraphInputSource,
+}
+
+impl GraphInputBinding {
+    pub fn new(port: impl Into<Box<str>>, source: GraphInputSource) -> Self {
+        Self {
+            port: port.into(),
+            source,
+        }
+    }
+
+    pub fn port(&self) -> &str {
+        &self.port
+    }
+
+    pub fn source(&self) -> &GraphInputSource {
+        &self.source
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct GraphParameterHandle(Box<str>);
+
+impl GraphParameterHandle {
+    pub fn new(value: impl Into<Box<str>>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GraphParameterValue {
+    Scalar(GraphParameterScalar),
+    Resource(Box<str>),
+    List(Box<[GraphParameterValue]>),
+    Record(BTreeMap<Box<str>, GraphParameterValue>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GraphParameterScalar {
+    Null,
+    Bool(bool),
+    Integer(i64),
+    Unsigned(u64),
+    Decimal(f64),
+    String(Box<str>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphParameterPayload {
+    schema: Box<str>,
+    value: GraphParameterValue,
+}
+
+impl GraphParameterPayload {
+    pub fn new(schema: impl Into<Box<str>>, value: GraphParameterValue) -> Self {
+        Self {
+            schema: schema.into(),
+            value,
+        }
+    }
+
+    pub fn schema(&self) -> &str {
+        &self.schema
+    }
+
+    pub fn value(&self) -> &GraphParameterValue {
+        &self.value
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphSourceIdentity {
+    graph: GraphResourcePath,
+    node: Option<NodeId>,
+    port: Option<PortAddress>,
+}
+
+impl GraphSourceIdentity {
+    pub fn new(graph: GraphResourcePath, node: Option<NodeId>, port: Option<PortAddress>) -> Self {
+        Self { graph, node, port }
+    }
+
+    pub fn graph(&self) -> &GraphResourcePath {
+        &self.graph
+    }
+
+    pub const fn node(&self) -> Option<NodeId> {
+        self.node
+    }
+
+    pub fn port(&self) -> Option<&PortAddress> {
+        self.port.as_ref()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GraphObservationIntent {
+    InspectInput { input: GraphValueRef },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphOperation {
+    source: GraphSourceIdentity,
+    kind: Box<str>,
+    result_category: GraphResultCategory,
+    parameter_handles: Box<[GraphParameterHandle]>,
+    inputs: Box<[GraphInputBinding]>,
+    observation_intents: Box<[GraphObservationIntent]>,
+    output: Option<GraphValueRef>,
+}
+
+impl GraphOperation {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        source: GraphSourceIdentity,
+        kind: impl Into<Box<str>>,
+        result_category: GraphResultCategory,
+        parameter_handles: Box<[GraphParameterHandle]>,
+        inputs: Box<[GraphInputBinding]>,
+        observation_intents: Box<[GraphObservationIntent]>,
+        output: Option<GraphValueRef>,
+    ) -> Self {
+        Self {
+            source,
+            kind: kind.into(),
+            result_category,
+            parameter_handles,
+            inputs,
+            observation_intents,
+            output,
+        }
+    }
+
+    pub fn source(&self) -> &GraphSourceIdentity {
+        &self.source
+    }
+
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    pub const fn result_category(&self) -> GraphResultCategory {
+        self.result_category
+    }
+
+    pub fn parameter_handles(&self) -> &[GraphParameterHandle] {
+        &self.parameter_handles
+    }
+
+    pub fn inputs(&self) -> &[GraphInputBinding] {
+        &self.inputs
+    }
+
+    pub fn observation_intents(&self) -> &[GraphObservationIntent] {
+        &self.observation_intents
+    }
+
+    pub const fn output(&self) -> Option<GraphValueRef> {
+        self.output
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphCompiledPackage {
+    basis: CompilationBasis<GraphRevision>,
+    compile_id: CompileId,
+    operations: Box<[GraphOperation]>,
+    parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
+}
+
+impl GraphCompiledPackage {
+    pub fn new(
+        basis: CompilationBasis<GraphRevision>,
+        compile_id: CompileId,
+        operations: Box<[GraphOperation]>,
+        parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
+    ) -> Self {
+        Self {
+            basis,
+            compile_id,
+            operations,
+            parameters,
+        }
+    }
+
+    pub fn basis(&self) -> &CompilationBasis<GraphRevision> {
+        &self.basis
+    }
+
+    pub const fn compile_id(&self) -> CompileId {
+        self.compile_id
+    }
+
+    pub fn operations(&self) -> &[GraphOperation] {
+        &self.operations
+    }
+
+    pub fn parameters(&self) -> &BTreeMap<GraphParameterHandle, GraphParameterPayload> {
+        &self.parameters
+    }
+}

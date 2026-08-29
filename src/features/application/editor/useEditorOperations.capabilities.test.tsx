@@ -100,7 +100,7 @@ vi.mock('./rightSidebarActions', () => ({
   setInspectionContext: mocks.setInspectionContext,
   revealInspect: mocks.revealInspect,
 }));
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     graph: { error: mocks.graphError },
   },

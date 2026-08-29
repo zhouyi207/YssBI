@@ -1,8 +1,3 @@
-#![allow(
-    dead_code,
-    reason = "staged until Application session composition is installed"
-)]
-
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,7 +12,7 @@ use crate::database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
     DatabaseSessionOpenRequestError,
 };
-use crate::node_system::ProjectSessionId;
+use crate::project::ProjectSessionId;
 use crate::project::{NormalizedProjectRoot, ProjectInstanceId};
 
 /// Owned Project facts used to open one Database runtime session. The Database

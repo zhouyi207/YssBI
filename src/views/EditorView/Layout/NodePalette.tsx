@@ -7,8 +7,8 @@ import { buildLocalizedCatalogBrowser } from '@/features/application/nodeCatalog
 import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useCompatibleNodeCatalog } from '@/features/application/nodeCatalog/useCompatibleNodeCatalog';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import type { NodeCreationDescriptor } from '@/features/application/viewCapabilities';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import { useDismissableOverlay } from '@/shared/ui/positionedOverlay';
 import {
   LocalizedCatalogTreeRow,

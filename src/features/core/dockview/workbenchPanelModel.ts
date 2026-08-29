@@ -1,7 +1,7 @@
 import type {
   GraphOutputRefDto,
   ResultPresentation,
-} from '@/shared/types/dto/result';
+} from '@/shared/types/domain/result';
 import type { LayoutTab } from '@/shared/types/layout/layout';
 
 export const WORKBENCH_ACTIVITY_VIEW_IDS = [

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import {
   freezeProjectionSnapshot,
   type DeepReadonly,
-} from '@/features/core/projection/deepReadonly';
+} from '@/shared/types/deepReadonly';
 import type { DatabaseId } from '@/shared/types/domain/ids';
 
 export interface DatabaseCopyFocus {

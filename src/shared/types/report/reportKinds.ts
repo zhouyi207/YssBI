@@ -1,5 +1,5 @@
 /**
- * Info 报告种类（与 `features/core/resultSource` 的 `ReportKind` 对齐）
+ * Info 报告种类（与 `features/application/results` 的 `ReportKind` 对齐）
  */
 
 export const REPORT_PAYLOAD_KINDS = [

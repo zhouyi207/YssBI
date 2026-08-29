@@ -1,7 +1,7 @@
 use super::{
     Artifact, ArtifactKind, ArtifactValueKind, DataSeriesMetadata, RunError, RuntimeValue,
 };
-use crate::node_system::protocol::Value;
+use crate::graph::protocol::Value;
 use std::fmt;
 use std::sync::Arc;
 
@@ -282,7 +282,7 @@ pub(crate) fn logical_digest_seed(
     kind: ArtifactValueKind,
     metadata: Option<&DataSeriesMetadata>,
 ) -> [u8; 32] {
-    crate::node_system::registry::hash_canonical(
+    crate::graph::registry::hash_canonical(
         "yssbi.stored-value.logical.seed.v1",
         &(kind_name(kind), metadata),
     )
@@ -290,15 +290,12 @@ pub(crate) fn logical_digest_seed(
 }
 
 pub(crate) fn extend_logical_digest(current: [u8; 32], value: &Value) -> [u8; 32] {
-    crate::node_system::registry::hash_canonical(
-        "yssbi.stored-value.logical.value.v1",
-        &(current, value),
-    )
-    .expect("stored values are canonical")
+    crate::graph::registry::hash_canonical("yssbi.stored-value.logical.value.v1", &(current, value))
+        .expect("stored values are canonical")
 }
 
 pub(crate) fn finish_logical_digest(current: [u8; 32], count: u64) -> [u8; 32] {
-    crate::node_system::registry::hash_canonical(
+    crate::graph::registry::hash_canonical(
         "yssbi.stored-value.logical.finish.v1",
         &(current, count),
     )
@@ -306,7 +303,7 @@ pub(crate) fn finish_logical_digest(current: [u8; 32], count: u64) -> [u8; 32] {
 }
 
 fn scalar_logical_digest(value: &Value) -> [u8; 32] {
-    crate::node_system::registry::hash_canonical("yssbi.stored-value.logical.scalar.v1", value)
+    crate::graph::registry::hash_canonical("yssbi.stored-value.logical.scalar.v1", value)
         .expect("stored scalar is canonical")
 }
 

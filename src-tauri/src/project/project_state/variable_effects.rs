@@ -1,8 +1,10 @@
 //! Durable persistence and authoritative publication of runtime variable effects.
 
 use super::*;
+#[cfg(test)]
 use crate::project::variable_tabular::normalize_variable_tabular;
 
+#[cfg(test)]
 type PreparedVariableEffectAuthority<'a> = Box<
     dyn FnMut(
             Option<(
@@ -13,6 +15,7 @@ type PreparedVariableEffectAuthority<'a> = Box<
         + 'a,
 >;
 
+#[cfg(all(test, any()))]
 struct VariableAuthorityPriorState {
     data: ProjectData,
     revisions: std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
@@ -21,6 +24,7 @@ struct VariableAuthorityPriorState {
     authority_generation: u64,
 }
 
+#[cfg(all(test, any()))]
 struct VariableAuthorityInstallGuard<'a> {
     data: &'a mut ProjectData,
     revisions:
@@ -31,6 +35,7 @@ struct VariableAuthorityInstallGuard<'a> {
     armed: bool,
 }
 
+#[cfg(all(test, any()))]
 impl<'a> VariableAuthorityInstallGuard<'a> {
     fn new(
         data: &'a mut ProjectData,
@@ -95,6 +100,7 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
     }
 }
 
+#[cfg(all(test, any()))]
 impl Drop for VariableAuthorityInstallGuard<'_> {
     fn drop(&mut self) {
         if !self.armed {
@@ -112,11 +118,12 @@ impl Drop for VariableAuthorityInstallGuard<'_> {
     }
 }
 
+#[cfg(all(test, any()))]
 impl ProjectState {
     #[cfg(test)]
     pub(in crate::project) fn commit_variable_effects(
         &self,
-        expected_session_id: &crate::node_system::ProjectSessionId,
+        expected_session_id: &crate::project::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
     ) -> Result<VariableEffectCommitResult, VariableEffectCommitError> {
         let mut prepared =
@@ -127,7 +134,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(in crate::project) fn commit_variable_effects_for_run(
         &self,
-        expected_session_id: &crate::node_system::ProjectSessionId,
+        expected_session_id: &crate::project::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
         cancellation: &crate::node_system::runtime::CancellationToken,
         deadline: Option<crate::node_system::runtime::RunDeadline>,
@@ -139,9 +146,10 @@ impl ProjectState {
         prepared(terminal).map_err(variable_effect_run_error)
     }
 
+    #[cfg(test)]
     pub(super) fn prepare_variable_effects_receipt<'a>(
         &'a self,
-        expected_session_id: &crate::node_system::ProjectSessionId,
+        expected_session_id: &crate::project::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
         terminal: Option<(
             &crate::node_system::runtime::CancellationToken,
@@ -246,9 +254,9 @@ impl ProjectState {
         let mut writes_globals = false;
         for effect in &effects {
             let id = variable_effect_id(effect)?;
-            let resource_key = ResourceKey::Variable(
-                crate::node_system::document::VariableResourceKey(effect.resource.as_str().into()),
-            );
+            let resource_key = ResourceKey::Variable(crate::project::VariableResourceKey(
+                effect.resource.as_str().into(),
+            ));
             let current = data_snapshot.variables.get(&id).ok_or_else(|| {
                 VariableEffectCommitError::Conflict {
                     resource: resource_key.clone(),
@@ -294,16 +302,15 @@ impl ProjectState {
                     local_graph_paths.insert(graph_path);
                 }
             }
-            let variable_key =
-                crate::node_system::document::VariableResourceKey(effect.resource.as_str().into());
+            let variable_key = crate::project::VariableResourceKey(effect.resource.as_str().into());
             let mut canonical_after = current.clone();
             canonical_after.data_value = effect.after.clone();
             normalize_variable_tabular(&mut canonical_after)
                 .map_err(variable_effect_invalid_error)?;
-            changes.push(crate::node_system::document::ResourcePatch::variable(
+            changes.push(crate::project::ResourcePatch::variable(
                 variable_key.clone(),
                 revision,
-                crate::node_system::document::VariableDocumentPatch::new(
+                crate::project::VariableDocumentPatch::new(
                     Some(serde_json::to_value(current).map_err(variable_effect_invalid_error)?),
                     Some(
                         serde_json::to_value(&canonical_after)
@@ -325,7 +332,7 @@ impl ProjectState {
         let transaction = ProjectHistoryTransaction::durable_variable_effects(
             crate::project::OperationId::new(),
             changes,
-            crate::node_system::document::VariableEffectHistorySnapshots {
+            crate::project::VariableEffectHistorySnapshots {
                 before: history_before,
                 after: history_after,
             },
@@ -333,7 +340,7 @@ impl ProjectState {
         let deltas = transaction
             .changes
             .iter()
-            .map(|change| crate::node_system::document::ResourceDeltaEvent {
+            .map(|change| crate::project::ResourceDeltaEvent {
                 resource: change.resource.clone(),
                 from_revision: change.before_revision,
                 to_revision: change.after_revision,
@@ -495,7 +502,10 @@ impl ProjectState {
                 publication_revision,
                 moves: Vec::new(),
                 deltas,
-                history: history_status,
+                history: crate::project::project_writers::ProjectHistoryStatus {
+                    can_undo: history_status.can_undo,
+                    can_redo: history_status.can_redo,
+                },
                 projection_source,
                 expected_graph_paths,
                 #[cfg(test)]
@@ -621,6 +631,7 @@ impl ProjectState {
     }
 }
 
+#[cfg(test)]
 pub(in crate::project) fn variable_effect_run_error(
     error: VariableEffectCommitError,
 ) -> crate::node_system::runtime::RunError {
@@ -635,6 +646,7 @@ pub(in crate::project) fn variable_effect_run_error(
     }
 }
 
+#[cfg(test)]
 fn check_variable_effect_terminal(
     terminal: Option<(
         &crate::node_system::runtime::CancellationToken,
@@ -709,6 +721,7 @@ pub(in crate::project) fn install_variable_effect_snapshots(
     Ok(ids)
 }
 
+#[cfg(test)]
 fn variable_effect_id(
     effect: &crate::node_system::runtime::VariableWriteEffect,
 ) -> Result<crate::variable::VariableId, VariableEffectCommitError> {
@@ -727,12 +740,14 @@ fn variable_effect_id(
         .map(crate::variable::VariableId::from)
 }
 
+#[cfg(test)]
 fn variable_effect_invalid_error(error: impl ToString) -> VariableEffectCommitError {
     VariableEffectCommitError::InvalidEffect {
         message: error.to_string().into(),
     }
 }
 
+#[cfg(test)]
 fn variable_effect_persistence_error(error: impl ToString) -> VariableEffectCommitError {
     VariableEffectCommitError::Persistence {
         message: error.to_string().into(),
@@ -771,7 +786,7 @@ pub(in crate::project) fn variable_history_scope(
     } else {
         &snapshots.before
     };
-    let key = crate::node_system::document::VariableResourceKey(format!("variables/{id}").into());
+    let key = crate::project::VariableResourceKey(format!("variables/{id}").into());
     let snapshot = opposite
         .get(&key)
         .and_then(Option::as_ref)
@@ -876,12 +891,14 @@ fn variable_scope_matches_graph(
     }
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 pub(in crate::project) struct VariableEffectCommitResult {
     pub variable_ids: Box<[crate::variable::VariableId]>,
-    pub resource_mutation: Option<crate::event::ResourceMutationResultDto>,
+    pub resource_mutation: Option<crate::schema::application_event::ResourceMutationResultDto>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub(in crate::project) enum VariableEffectCommitError {
     Cancelled,
@@ -889,11 +906,11 @@ pub(in crate::project) enum VariableEffectCommitError {
         phase: crate::node_system::runtime::RunPhase,
     },
     SessionChanged {
-        expected: crate::node_system::ProjectSessionId,
-        current: crate::node_system::ProjectSessionId,
+        expected: crate::project::ProjectSessionId,
+        current: crate::project::ProjectSessionId,
     },
     Conflict {
-        resource: crate::node_system::document::ResourceKey,
+        resource: crate::project::ResourceKey,
         expected_revision: crate::project::ResourceRevision,
         current_revision: Option<crate::project::ResourceRevision>,
     },
@@ -908,6 +925,7 @@ pub(in crate::project) enum VariableEffectCommitError {
     },
 }
 
+#[cfg(test)]
 impl std::fmt::Display for VariableEffectCommitError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

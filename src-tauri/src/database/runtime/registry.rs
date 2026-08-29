@@ -350,7 +350,7 @@ impl DatabaseSessionRuntime {
                 Some(database),
             ));
         };
-        if next_observation.fingerprint() != declaration_fingerprint
+        if expected_observation.fingerprint() != declaration_fingerprint
             || next_observation.revision().get() < current_observation.revision().get()
         {
             return Err(DatabaseError::conflict(
@@ -385,6 +385,9 @@ impl DatabaseSessionRuntime {
         state.next_recovery_id = recovery_id;
         state.revisions.insert(database.clone(), after);
         state.observations = next_observations;
+        state
+            .declarations
+            .insert(database.clone(), next_observation.fingerprint().clone());
         let record = DatabaseRuntimeChangeRecord {
             recovery_id,
             database,
@@ -606,6 +609,10 @@ impl DatabaseSessionRuntime {
             .revisions
             .insert(record.database.clone(), record.before);
         state.observations = restored_observations;
+        state.declarations.insert(
+            record.database.clone(),
+            record.expected_observation.fingerprint().clone(),
+        );
         state.changes.remove(&recovery_id);
         match expected_state {
             DatabaseCommittedRecordState::Committed => state.outstanding.release_committed(),

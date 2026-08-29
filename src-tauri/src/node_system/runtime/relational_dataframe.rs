@@ -1,8 +1,8 @@
 use super::{Artifact, RelationalError, RelationalErrorCode, RuntimeValue};
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     RelationalExpression, RelationalLiteral, RelationalProjection, RelationalRename,
 };
-use crate::node_system::protocol::Value;
+use crate::graph::protocol::Value;
 use polars::prelude::{BooleanChunked, Column, DataFrame, DataType, NamedFrom};
 use std::collections::BTreeSet;
 
@@ -536,10 +536,10 @@ fn column_missing(name: &str) -> RelationalError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::plan::{
+    use crate::execution::plan::legacy::{
         RelationalExpression, RelationalLiteral, RelationalProjection, RelationalRename,
     };
-    use crate::node_system::protocol::{CanonicalDecimal, Value};
+    use crate::graph::protocol::{CanonicalDecimal, Value};
     use crate::node_system::runtime::{Artifact, ArtifactKind, RelationalErrorCode, RuntimeValue};
     use polars::prelude::DataType;
     use std::collections::BTreeMap;

@@ -14,7 +14,7 @@ pub use statistics::StatisticsKernelParameters;
 use super::{
     Kernel, KernelContext, KernelError, KernelRegistrationError, KernelRegistry, RuntimeValue,
 };
-use crate::node_system::plan::KernelHandle;
+use crate::execution::plan::legacy::KernelHandle;
 
 struct KernelRegistration {
     handle: KernelHandle,

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { DEFAULT_VIEWPORT } from '@/shared/config-default';
 
 import type { EditorViewport } from './editorViewport';
 import { resolveInitialGraphViewport } from './resolveInitialGraphViewport';

@@ -18,8 +18,8 @@ commands / application / node_system kernels
 - application-facing scientific request/result types；
 - ACF/PACF、serial tests、hypothesis 和 node statistics interface；
 - typed regression models/statistics；
-- Bayes model/draft/validation/result 与 `BayesBackend` interface；
-- Rust/Julia adapters；
+- Bayes model/draft/validation/result 与 `BayesWorkerPort` interface；
+- Rust/Julia adapters；Julia worker adapter 位于 `julia/bayes_worker_adapter`；
 - stable `SciError` mapping。
 
 本 module 不拥有：
@@ -43,12 +43,15 @@ sci/
 │  ├─ stats/hypothesis.rs
 │  └─ time_series/{acf_pacf,serial_tests}.rs
 ├─ backends/
-│  ├─ rust/
-│  └─ julia/bayes/
+│  └─ rust/
 ├─ models/{regression,panel_did}.rs
 ├─ engine.rs
 └─ error.rs
 ```
+
+The concrete Julia worker adapter is composition-side at
+`src-tauri/src/julia/bayes_worker_adapter/`; it implements the SCI-owned
+`BayesWorkerPort` and is not a SCI backend module.
 
 ## Production execution
 
@@ -58,11 +61,11 @@ sci/
 | Durbin-Watson, Ljung-Box, Breusch-Godfrey | Rust |
 | t/Wald hypothesis tests | Rust |
 | Node regression/time-series statistics | Rust over `yss-sci` |
-| Bayesian inference | `JuliaBayesBackend` |
+| Bayesian inference | `JuliaBayesWorkerAdapter` through `BayesWorkerPort` |
 
 ACF/PACF 与 context-free KDE 直接位于 SCI API；`SciContext::rust()` 仍为 serial/hypothesis
-显式选择当前 Rust path。不存在 Julia time-series adapter；Julia 只在 `BayesBackend` seam
-作为真实 adapter。参见 [backends](./backends/README.md) 与
+显式选择当前 Rust path。不存在 Julia time-series adapter；Julia 只在
+`BayesWorkerPort` seam 作为真实 adapter。参见 [backends](./backends/README.md) 与
 [Julia worker protocol](../../julia/README.md)。
 
 ## Typed regression statistics
@@ -79,5 +82,5 @@ Each variant combines `RegressionCoefficientStatistics`—including the authorit
 
 - Rust adapters map algorithm validation failures to `SciError` stable codes.
 - Julia worker errors are classified by typed `JuliaWorkerErrorCode`, not by parsing diagnostic prose.
-- `JuliaBayesBackend` maps worker categories to stable Bayes codes and copies only safe structured details.
+- `JuliaBayesWorkerAdapter` maps worker categories to stable Bayes codes and copies only safe structured details.
 - Commands convert these errors to the project-wide `{ code, details, incidentId }` wire; backend prose stays diagnostic-only.

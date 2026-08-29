@@ -1,18 +1,18 @@
 import {
   toErrorReference,
   type ErrorReference,
-} from '@/services/ipc';
+} from '@/features/application/errorReference';
 import {
   freezeProjectionSnapshot,
   type DeepReadonly,
-} from '@/features/core/projection/deepReadonly';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/deepReadonly';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import type {
   PinResultEntry,
   ResultDescriptor,
   ResultPage,
   ResultValue,
-} from '@/shared/types/dto/result';
+} from './types';
 import { portAddressKey } from '@/features/domain/editorProjection';
 
 export interface ResultIdentityRequest {

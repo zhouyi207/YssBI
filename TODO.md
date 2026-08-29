@@ -1713,6 +1713,7 @@ Execution 不知道具体 UI
 - [ ] 收紧 Application session candidate 的 composition 可见性：保留 fields-private identity 校验与线性 install seam，等待最终唯一 composition root 接入。
 - [ ] 将 Presentation 的 application-event、catalog、editor projection typed schema owners 提升为正常编译模块，保留旧生产 callers 未切换的单一路由约束。
 - [ ] 继续在 Execution Task 8 原子切换中接入这些 schema owners，并删除对应 Graph/旧 DTO mapper 与 exact debt。
+- [ ] 让 graph-open 与 project graph-load command 显式调用唯一 `schema::editor_projection` wire mapper，Application 只返回 transport-neutral projection model。
 - [ ] 将 Application Worksheet plot policy owner 提升为正常编译模块，继续保持旧 Project/Polars command route 未切换至 Execution Task 8。
 - [ ] 将 Application ProjectSync 切换到 Services-owned typed project event stream、bounded ingress 与 reconciler，保持旧 Core listener tree 待验证后删除。
 - [ ] 保证 ProjectLoaded/cleared、resource mutation、GraphDelta、index invalidation 的 session/identity 过滤与 recovery 请求仍由 Application 协调。
@@ -1725,10 +1726,67 @@ Execution 不知道具体 UI
 - [ ] 由同一 ProjectState 句柄构造并注册唯一 ApplicationSession，绑定 Graph、Database、Execution 与 session-bound resource factory；后续继续接通生命周期 replacement 与生产 caller 原子切换。
 - [ ] 将 neutral Graph package 接入 Execution 的 prepared-plan coordinator，绑定 run identity、cancellation control、sealed finalization handoff 与 commit 后结果发布。
 - [ ] 将 execution command 的生产入口切换到 Application session 与 ordered run channel，保留旧 DTO 测试夹具待最终 result/event wire cutover 清理。
+- [ ] 将 `ProjectState::execute_graph`/`cancel_graph_run` 工作流降为 test-only，production execution 仅从 ApplicationSession 的 final coordinator 进入。
+- [ ] 将 Project 的旧 result/catalog DTO helper 限定为 test-only，production 查询继续使用 Application/Execution owner。
+- [ ] 将 `get_project_databases_variables` 的 production 读取改为同一 Application session 的 Project durable facts + Database catalog snapshot，移除对 Project runtime database snapshot 的依赖。
 - [ ] 将项目加载、清空、另存为与活动项目删除后的 session 刷新接入 ApplicationSessionSlot，旧 session 在关闭 admission/drain 后才发布新 candidate。
 - [ ] 将 Catalog 两个 production command 切换为单次 Application session capture、Database catalog snapshot 与 schema/catalog mapper。
 - [ ] 将四个 result command 切换到 Execution-owned ResultStore 查询；保留旧 Project 查询 helper 仅供待迁移测试，禁止生产 fallback。
 - [ ] 让 GraphRuntimeState 从同一 registry/document 生成完整 neutral projection facts，使 Application graph-open 可通过 Presentation mapper 返回非空图 projection。
+- [ ] 将 Graph `ResultCategory` 通过 neutral PlanOperation/ReadyResult/StoredResult 传递，并由唯一 execution DTO mapper 映射 Plot/Report/Inspector presentation。
 - [ ] 将 graph-open/load-project-graph 与 editor hydrate caller 接入 Application session，继续迁移 graph mutation 的旧 Project workflow。
 - [ ] 将 Bayes submit 切换到 Application session 的单次 Database snapshot 与三阶段 coherence gate，保留 worker status/cancel/result/artifact commands 的既有接口。
+- [ ] 将 lib.rs 的 Bayes production composition 切换到 `JuliaBayesWorkerAdapter`/SCI `BayesWorkerPort`，Application 从 Database snapshot 生成 `StatisticalInput` 并物化受控 artifact 结果。
+- [ ] 暂保留旧 BayesBackend 仅供现有 test-only service harness，下一批迁移旧测试后删除旧 trait/request/Julia backend route。
 - [ ] 将 resultInspectionRequested 取代旧 openResultWindow：Rust wire、严格 TypeScript parser、Application window action 与 Core visual feed 已统一新事件名，待移除 staged fixture/旧 DTO owner。
+- [ ] 将 Workbench Dockview 的混合 port 拆为独立 read/control/root-binding contracts，主根与嵌套 Logs 根分别管理绑定生命周期。
+- [ ] 删除旧 `workbenchDockviewPort`、`logsDockviewLayoutController` 与 Core sync listener/handler/registry/parser 生产 owner，迁移对应测试到 Application reconciler/coordinator。
+- [ ] 完成 Dockview/Core sync 删除后的 TypeScript typecheck 与 diff 校验；前端完整 architecture debt 基线和旧 DTO/fixture 清理仍待最终 cutover。
+- [ ] 删除 Frontend Core→Application 的 ProjectIO/Worksheet/PendingMutation reverse ports，改由 Application project reset、presentation reconcile 与 worksheet save use case 直接编排。
+- [ ] 迁移 graph unload/project IO/worksheet lifecycle focused fixtures 到直接 Application seams，验证无初始化注册式兼容入口。
+- [ ] 将 ProgressOverlay 改为只接收进度与取消回调，移除 shared UI 对 Application capability facade 的反向依赖。
+- [ ] 将数据库只读快照与执行投影发布契约分别归入 Application owner，删除 Core 的对应 reverse-boundary 文件。
+- [ ] 将 CatalogQueryResult 通过唯一 `schema::catalog` mapper 转换为独立 Transport DTO，并让 production catalog commands 使用该 mapper。
+- [ ] 保持本轮 Rust 仅执行 fmt/check，不运行昂贵 Rust 测试；待 Execution/Presentation 原子 cutover 后统一执行一次 Rust 测试门禁。
+- [ ] 将前端项目加载与数据库元数据规范化的生产调用迁入 Application-owned `databaseRecords` 与 `authoritativeProjectLoadPlan`。
+- [ ] 保留 wire DTO 解析职责在 shared schema，后续继续收口剩余 Application→wire 的直接 normalization/origin debt。
+- [ ] 将 Database session 的 metadata/page/analytics/edit-state 只读 API 接入 Application 查询，移除 production 查询对 Project runtime database snapshot 的依赖。
+- [ ] 保持数据库只读查询使用单一 session query basis 的前后复核，并保留行 ID、列信息与既有错误码语义。
+- [ ] 将 Database 编辑 mutation 通过 session-owned physical candidate 与 Project declaration finalization handoff，成功确认或失败显式补偿，移除 production `with_database_writer` 调用。
+- [ ] 迁移剩余 load/rename/delete/save/export 的 Database session writer，并在同一切换中移除 ProjectStore 的 `DatabaseInstance` production owner。
+- [ ] 将 built-in catalog/localization/documentation 的生产 domain owner 迁入 `graph/catalog`，使 Graph/Schema 不再从 `node_system::catalog::localization` 取 catalog 类型。
+- [ ] 清理 catalog domain 中残留的旧 `*Dto`/Project revision 表达，保持 Graph contract 与 Transport mapper 分离后再删除旧 test-only 夹具。
+- [ ] 将 built-in catalog assembly 从 `node_system/catalog` 迁入 `graph/catalog`，同步 registry 归属并删除旧 catalog module declaration。
+- [ ] 将 catalog resource revision 改为 Graph-owned opaque numeric fact，由 Schema/Application 负责 Project revision 与 wire 映射。
+- [ ] 将 Graph protocol、registry、catalog assembly 与 document behavior 迁入最终 `graph/*` owner，删除 `node_system` 对应 module declarations 与生产路径。
+- [ ] 后续继续拆除 Graph owner 对旧 NodeSystem analysis/compiler/runtime 的残留依赖，完成最终 compiler package 与 presentation cutover 后再更新 exact debt。
+- [ ] 将 Execution run admission 后的 `RunStarted` 与后续取消/失败终态事件保持单一有序发布，并覆盖 finalization 阶段失败。
+- [ ] 将 Database load/delete/save/export 的生产调用切换到 Application session 与 Database physical/session owner，移除 ProjectStore 的生产 `DatabaseInstance`。
+- [ ] 将旧 node-system analysis、plan、compiler 与 compatibility source 迁入最终 Graph/Execution owner，更新其生产引用与 source membership。
+- [ ] 保持本轮 Rust 只执行 `fmt`/`check`；Rust architecture/test gate 继续等全部 cutover 后一次性执行。
+- [ ] 将编辑兼容性快照归入 Graph owner，并由 Application 从单一 session 的 Project index 构造，移除 ProjectStore registry/catalog 生产字段。
+- [ ] 将 Graph editor mutation/subgraph 生产入口切换为 Application capture/plan/commit，保持 GraphDelta、revision、projection 与历史回执语义。
+- [ ] 保持 Rust 本轮只执行 `fmt`/`check`，不运行昂贵 Rust 测试；最终所有 cutover 完成后再批量执行测试门禁。
+
+## 2026.08.29
+
+- [ ] 完成 architecture decoupling 的最终 Rust production composition：ApplicationSessionSlot
+  注入 scientific/resource/Bayes/artifact adapters，Graph neutral package 进入 Execution，
+  旧 Project/node-system compiler、projection、command route 与重复测试 owner 已删除。
+- [ ] 完成 Backend Task 5b、Database session/query ownership、Project–Graph Tasks 2–10、
+  Execution Tasks 8–9 与 Presentation/Command Tasks 4–8 的生产 caller cutover；Rust debt
+  manifest 已清空并由 exact architecture policy 维护。
+- [ ] 完成 Frontend Application atomic cutover：ProjectSync、Database/Variable/Worksheet/
+  Result/Bayes/Window actions、Dockview read/control/root binding 与 UI/settings capability
+  已收归 Application/Core 合约，Frontend architecture debt 已清空。
+- [ ] 维护 architecture、backend-adapter、Project–Graph、Execution、Presentation/Command、
+  Frontend Application 与 Workbench 文档，使实现地图不再描述 staged/旧 production route。
+- [ ] Rust 测试链接成本高；增量阶段只执行 fmt/check，待全部 cutover 完成后统一执行一次
+  Rust architecture/runtime/SCI 验证批次，并记录最终命令输出。
+- [ ] 最终批次记录：`pnpm verify:full` 已在 architecture-final 通过；Frontend 311 files / 1755
+  tests、yssbi library 509 tests、database integration 19 tests、yss-sci 全部 suites 与
+  `git diff --check` 均通过。该条仅作为 append-only 完成记录，后续 Rust 验证继续按昂贵批次
+  约定执行。
+- [ ] Project→Application boundary cleanup 完成记录：Project production reachability audit
+  保持无 Application/Commands 依赖，Database project storage 与 schema wire conversion 使用
+  最终 owner；相关计划 checklist 与维护文档已同步。

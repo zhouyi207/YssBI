@@ -4,7 +4,7 @@ use super::{
 };
 use crate::database_contract::DatabaseDecl;
 use crate::graph_document::GraphDocument;
-use crate::node_system::document::{DocumentError, FunctionDocument, FunctionSignature};
+use crate::project::{FunctionDocument, FunctionSignature};
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -28,10 +28,6 @@ impl GraphResourceDocument {
             function: matches!(kind, GraphDocumentKind::Function)
                 .then(|| FunctionDocument::new(FunctionSignature::default())),
         }
-    }
-
-    pub fn validate(&self) -> Result<(), DocumentError> {
-        self.document.validate()
     }
 }
 

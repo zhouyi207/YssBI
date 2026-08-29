@@ -4,7 +4,8 @@ import type { IDockviewHeaderActionsProps } from 'dockview-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { WORKBENCH_ACTIVITY_GROUP_ID, useWorkbenchStore } from '@/features/application/viewCapabilities';
+import { WORKBENCH_ACTIVITY_GROUP_ID } from '@/features/core/dockview/workbenchDockviewDefaults';
+import { workbenchUi } from '@/features/core/workbench/ui';
 import { PluginActivityActions } from './PluginActivityActions';
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
@@ -13,7 +14,7 @@ function stopHeaderControlPropagation(event: { stopPropagation(): void }): void 
 
 export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
   const { t } = useTranslation();
-  const openSettings = useWorkbenchStore((state) => state.openSettings);
+  const openSettings = workbenchUi.openSettings;
 
   if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== 'left') {
     return null;

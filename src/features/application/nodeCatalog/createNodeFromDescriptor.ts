@@ -2,7 +2,7 @@ import {
   isNodeCreationDescriptor,
   type NodeCreationDescriptor,
 } from '@/features/domain/nodeCatalog/creationDescriptor';
-import type { NodePositionDto, PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { NodePositionDto, PortAddressDto } from '@/shared/types/domain/editorProjection';
 import {
   executeEditorMutation,
   type ExecuteEditorMutationOutcome,

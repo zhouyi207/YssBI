@@ -1,13 +1,11 @@
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
-import {
-  isProjectDatabaseIndexRow,
-  type ProjectDatabaseIndexRow,
-  type ProjectIndexRow,
-} from '@/services/project/projectService';
-import {
-  displayNameFromEngine,
-  type DatabaseRecord,
-} from '@/shared/types/dto/database';
+import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
+import type {
+  ProjectDatabaseIndexRow,
+  ProjectIndexRow,
+} from '@/shared/types/domain/project';
+import { isProjectDatabaseIndexRow } from '@/services/project/projectService';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import { displayNameFromEngine } from '@/features/application/dataManagement/databaseRecords';
 import type {
   PreparedProjectRecovery,
   ProjectRecoveryPreparation,

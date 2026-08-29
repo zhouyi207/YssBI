@@ -3,7 +3,7 @@
 └───────────┬──────────────┘
             │ hydrate / reset
 ┌───────────▼──────────────┐
-│ projectSnapshotBridge    │  ← 图快照跨 store 读取（显式 import）
+│ Application project      │  ← 图快照组装与项目切换协调
 │ projectClientReset       │  ← 切换项目时清缓存（显式 import）
 ├──────────────────────────┤
 │ VariableStore             │  ← 低频

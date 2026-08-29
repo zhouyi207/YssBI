@@ -2,7 +2,7 @@ import { invokeCommand } from '@/services/ipc';
 import type { Variable } from '@/shared/types/domain';
 import { dataTypeToBackend } from '@/shared/types/dto/dataType';
 import { dataValueToBackend } from '@/shared/types/dto/dataValue';
-import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
+import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 
 export interface VariableMutationCommandResult {

@@ -1,11 +1,11 @@
 import { ProjectLifecycleProtocolError } from '@/features/application/projectLifecycleReceipt';
 import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
-import { resetProjectScopedRightSidebarState } from '@/features/core/dataStore/projectClientReset';
+import { resetProjectScopedRightSidebarState } from '@/features/application/project/projectReset';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import {
   isProjectLifecycleStateCurrent,
@@ -37,7 +37,7 @@ export async function removeProjectScopedWorkbenchPanels(
   workbenchLayoutController.invalidateForProjectReplacement();
   if (!ownsPreviousProject(previousProjectInstanceId, owner)) return;
 
-  if (workbenchDockviewPort.isReady) {
+  if (workbenchDockviewRead.isReady) {
     if (!ownsPreviousProject(previousProjectInstanceId, owner)) return;
     await workbenchDockviewInternal.runLayoutTransaction((transaction) => {
       if (!ownsPreviousProject(previousProjectInstanceId, owner)) return;

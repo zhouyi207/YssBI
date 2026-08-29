@@ -2,17 +2,20 @@ import React, { useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
-import { useTheme, getPinTypeColor } from "@/features/application/viewCapabilities";
+import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { isExecPin, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
-import { useRepeatablePinRemovable } from "@/features/application/viewCapabilities";
+import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
+import { dataValueFromBackend } from "@/shared/types/domain/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
-import { useGraphDataStore, getCanvasInteraction, useGraphInteractionStore, type ConnectionFeedback } from '@/features/application/viewCapabilities';
+import { useGraphRead } from '@/features/core/graph/read';
+import { useGraphInteractionUi } from '@/features/core/graphInteraction/ui';
+import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
 
 export function pinConnectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
   if (!feedback) return {};
@@ -31,13 +34,9 @@ export function pinConnectionFeedbackClass(feedback: ConnectionFeedback | null):
     ? 'ring-2 ring-amber-500/90'
     : 'ring-2 ring-emerald-500/90';
 }
-import {
-  buildPinViewParams,
-  evaluatePinViewState,
-  pinHistoryCacheKey,
-  pinViewDisabledTitle,
-  useExecutionStore,
-} from "@/features/application/viewCapabilities";
+import { buildPinViewParams, evaluatePinViewState, pinViewDisabledTitle } from "@/features/core/execution/pinViewTarget";
+import { executionResultUi } from '@/features/core/execution';
+import { useExecutionRead } from '@/features/core/execution/read';
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
 import {
   isPinPreviewActionAvailable,
@@ -48,7 +47,7 @@ import type {
   PortAddressDto,
   PortKindDto,
   ResolvedPortStatusDto,
-} from "@/shared/types/dto/editorProjection";
+} from "@/shared/types/domain/editorProjection";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -137,21 +136,30 @@ export const Pin: React.FC<PinProps> = (props) => {
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
 
-  const connectionFeedback = useGraphInteractionStore((state) => {
+  const connectionFeedback = useGraphInteractionUi((state) => {
     if (!graphPath || !groupId) return null;
-    const interaction = getCanvasInteraction(state, graphPath, groupId);
+    const interaction = state.interactions[graphPath];
+    if (!interaction || interaction.type === 'idle' || interaction.session.groupId !== groupId) {
+      return null;
+    }
     if (interaction?.type !== 'drawingConnection' && interaction?.type !== 'movingConnections') return null;
     const session = interaction.session;
     return session.snappedTarget?.id === id || session.hoveredTarget?.id === id
       ? session.feedback
       : null;
   });
-  const connectionIds = useGraphDataStore((state) =>
-    graphPath ? state.getGraphPinConnections(graphPath, id) : EMPTY_CONNECTION_IDS,
+  const connectionIds = useGraphRead((snapshot) =>
+    graphPath
+      ? snapshot.graphEntities[graphPath]?.pinConnections[id] ?? EMPTY_CONNECTION_IDS
+      : EMPTY_CONNECTION_IDS,
   );
-  const graphConnections = useGraphDataStore((state) =>
-    graphPath ? state.graphEntities[graphPath]?.connections : undefined,
+  const graphConnections = useGraphRead((snapshot) =>
+    graphPath ? snapshot.graphEntities[graphPath]?.connections : undefined,
   );
+  const pinHistories = useExecutionRead((snapshot) =>
+    graphPath ? snapshot.graphs[graphPath]?.pinHistories : undefined,
+  );
+  const recordPinHistory = executionResultUi.recordPinHistory;
   const connections = useMemo(
     () => connectionIds.flatMap((connectionId) => {
       const connection = graphConnections?.[connectionId];
@@ -219,16 +227,26 @@ export const Pin: React.FC<PinProps> = (props) => {
     if (viewState?.enabled) {
       void openPinInspectableView(viewParams, t).then(() => {
         if (!firstHistoryOutput) return;
-        setHistoryProjection(useExecutionStore.getState().graphs[graphPath]?.pinHistories.get(
-          pinHistoryCacheKey(graphPath, firstHistoryOutput),
-        ));
+        const history = executionResultUi.getPinHistory(graphPath, firstHistoryOutput);
+        setHistoryProjection(history
+          ? structuredClone(history) as unknown as PinHistoryProjection
+          : undefined);
       });
       return;
     }
     if (previewActionAvailable) {
       void requestAndOpenPinPreview(graphPath, id, t);
     }
-  }, [firstHistoryOutput, graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
+  }, [
+    firstHistoryOutput,
+    graphPath,
+    id,
+    pinHistories,
+    previewActionAvailable,
+    t,
+    viewParams,
+    viewState?.enabled,
+  ]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
   const scalarInputKey = scalarPinInputKey(dataType);
@@ -469,7 +487,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           historyEntries={historyProjection?.entries}
           onViewHistory={(resultId) => {
             if (!historyProjection) return;
-            useExecutionStore.getState().recordPinHistory({
+            recordPinHistory({
               ...historyProjection,
               selectedResultId: resultId,
             });

@@ -1,4 +1,5 @@
 use super::*;
+use crate::project::resource_patch::ResourceDocumentPatch;
 
 impl ProjectState {
     pub(super) fn commit_variable_effect_history_direction(
@@ -7,20 +8,24 @@ impl ProjectState {
         undo: bool,
         request: MutationRequest<HistoryMutation>,
         transaction: ProjectHistoryTransaction,
-    ) -> Result<CommittedResourceMutation, MutationConflict> {
+    ) -> Result<CommittedResourceMutation, ProjectHistoryMutationError> {
         let history_id = transaction.history_id.clone();
         let session = self
             .capture_project_session()
             .map_err(history_project_error)?;
         if session.instance_id != *project_instance_id {
-            return Err(MutationConflict::StaleProjectLifecycle(
+            return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                 "caller project changed before durable variable History preparation".into(),
             ));
         }
         let expected_project_path = self.get_path().ok_or_else(|| {
-            MutationConflict::History("no project is active for variable persistence".into())
+            ProjectHistoryMutationError::History(
+                "no project is active for variable persistence".into(),
+            )
         })?;
-        let projection_environment = self.capture_history_projection_environment(&session)?;
+        let authority = self
+            .capture_project_authority_for_session(&session)
+            .map_err(history_project_error)?;
         let filesystem_lease = self
             .filesystem()
             .acquire(session.root.clone())
@@ -34,7 +39,7 @@ impl ProjectState {
             if publication.project_instance_id != session.instance_id.as_str()
                 || path.as_deref() != Some(expected_project_path.as_str())
             {
-                return Err(MutationConflict::StaleProjectLifecycle(
+                return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                     "project changed before durable History snapshot".into(),
                 ));
             }
@@ -48,7 +53,7 @@ impl ProjectState {
         let mut documents = project_documents(&data_snapshot, &variable_revisions);
         let current_revision = try_project_document_revision(&documents, &request.resource)
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!(
                         "history anchor resource {:?} was not found",
                         request.resource
@@ -57,9 +62,9 @@ impl ProjectState {
                 )
             })?;
         if current_revision != request.base_revision {
-            return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision,
-                current_revision,
+            return Err(ProjectHistoryMutationError::StaleRevision {
+                base_revision: request.base_revision.get(),
+                current_revision: current_revision.get(),
             });
         }
         let before = documents.clone();
@@ -69,10 +74,10 @@ impl ProjectState {
         } else {
             proposed_history.redo(&mut documents)
         }
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         if applied.history_id != history_id {
-            return Err(MutationConflict::History(
-                crate::node_system::document::HistoryError::HistoryHeadChanged
+            return Err(ProjectHistoryMutationError::History(
+                crate::project::HistoryError::HistoryHeadChanged
                     .to_string()
                     .into(),
             ));
@@ -85,7 +90,7 @@ impl ProjectState {
             documents.clone(),
         );
         let ids = install_variable_effect_snapshots(&mut proposed_data, &transaction, undo)
-            .map_err(|error| MutationConflict::History(error.into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
 
         let mut expected_revisions = BTreeMap::new();
         for change in &transaction.changes {
@@ -96,12 +101,12 @@ impl ProjectState {
         }
         for id in &ids {
             let scope = variable_history_scope(&proposed_data, &transaction, *id, undo)
-                .map_err(|error| MutationConflict::History(error.into()))?;
+                .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
             if let Some(graph_path) = variable_scope_graph_path(&scope)
-                .map_err(|error| MutationConflict::History(error.into()))?
+                .map_err(|error| ProjectHistoryMutationError::History(error.into()))?
             {
                 let revision = graph_revisions.get(&graph_path).copied().ok_or_else(|| {
-                    MutationConflict::History(
+                    ProjectHistoryMutationError::History(
                         format!("local variable graph '{graph_path}' is not loaded").into(),
                     )
                 })?;
@@ -113,7 +118,7 @@ impl ProjectState {
         }
         let mutations =
             variable_effect_filesystem_mutations(&proposed_data, &ids, &transaction, undo)
-                .map_err(|error| MutationConflict::History(error.into()))?;
+                .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
         let context = ProjectTransactionContext {
             session,
             operation_id: request.operation_id,
@@ -138,12 +143,12 @@ impl ProjectState {
             if publication.project_instance_id != context.session.instance_id.as_str()
                 || path.as_deref() != Some(expected_project_path.as_str())
             {
-                return Err(MutationConflict::StaleProjectLifecycle(
+                return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                     "project changed before durable History authority commit".into(),
                 ));
             }
-            if !projection_environment.matches_publication(&publication) {
-                return Err(MutationConflict::StaleProjectLifecycle(
+            if !authority.matches_publication(&publication) {
+                return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                     "projection environment changed before durable History authority commit".into(),
                 ));
             }
@@ -157,7 +162,7 @@ impl ProjectState {
                 &revisions,
                 &self.worksheet_revisions.read().unwrap(),
             )
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
             self.run_mutation_publication_test_hook();
             let current_history = self.history.read().unwrap();
             let current_head = if undo {
@@ -166,8 +171,8 @@ impl ProjectState {
                 current_history.next_redo()
             };
             if current_head.map(|entry| &entry.history_id) != Some(&history_id) {
-                return Err(MutationConflict::History(
-                    crate::node_system::document::HistoryError::HistoryHeadChanged
+                return Err(ProjectHistoryMutationError::History(
+                    crate::project::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -181,10 +186,10 @@ impl ProjectState {
             } else {
                 next_history.redo(&mut current_documents)
             }
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
             if applied.history_id != history_id {
-                return Err(MutationConflict::History(
-                    crate::node_system::document::HistoryError::HistoryHeadChanged
+                return Err(ProjectHistoryMutationError::History(
+                    crate::project::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -197,11 +202,11 @@ impl ProjectState {
                 current_documents.clone(),
             );
             install_variable_effect_snapshots(&mut next_data, &transaction, undo)
-                .map_err(|error| MutationConflict::History(error.into()))?;
+                .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
             let deltas = transaction
                 .changes
                 .iter()
-                .map(|change| crate::node_system::document::ResourceDeltaEvent {
+                .map(|change| crate::project::ResourceDeltaEvent {
                     resource: change.resource.clone(),
                     from_revision: project_document_revision(&before, &change.resource),
                     to_revision: project_document_revision(&current_documents, &change.resource),
@@ -222,15 +227,6 @@ impl ProjectState {
             let history_status = next_history.status();
             *self.history.write().unwrap() = next_history;
             let publication_revision = publication.commit_prepared(publication_advance);
-            let projection_source = self.projection_source_snapshot(
-                &data,
-                projection_environment,
-                publication.project_instance_id.clone(),
-                publication.authority_generation(),
-                graph_revisions.clone(),
-                revisions.clone(),
-                self.database_authority_revisions.read().unwrap().clone(),
-            );
             #[cfg(test)]
             let completion_test_hook = self
                 .test_hooks
@@ -244,8 +240,10 @@ impl ProjectState {
                 publication_revision,
                 moves: Vec::new(),
                 deltas,
-                history: history_status,
-                projection_source,
+                history: crate::project::project_writers::ProjectHistoryStatus {
+                    can_undo: history_status.can_undo,
+                    can_redo: history_status.can_redo,
+                },
                 expected_graph_paths,
                 #[cfg(test)]
                 completion_test_hook,
@@ -270,20 +268,19 @@ impl ProjectState {
         undo: bool,
         request: MutationRequest<HistoryMutation>,
         transaction: ProjectHistoryTransaction,
-    ) -> Result<CommittedResourceMutation, MutationConflict> {
+    ) -> Result<CommittedResourceMutation, ProjectHistoryMutationError> {
         let history_id = transaction.history_id;
         let move_patch = transaction.resource_move.ok_or_else(|| {
-            MutationConflict::History("resource move history patch is missing".into())
+            ProjectHistoryMutationError::History("resource move history patch is missing".into())
         })?;
-        if move_patch.kind != crate::node_system::document::ResourceLifecycleKind::Worksheet {
-            return Err(MutationConflict::History(
+        if move_patch.kind != crate::project::ResourceLifecycleKind::Worksheet {
+            return Err(ProjectHistoryMutationError::History(
                 "worksheet move history has a non-worksheet kind".into(),
             ));
         }
-        let crate::node_system::document::ResourceMoveHistoryPayload::Worksheet { document } =
-            move_patch.payload
+        let crate::project::ResourceMoveHistoryPayload::Worksheet { document } = move_patch.payload
         else {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 "worksheet move history has a non-worksheet payload".into(),
             ));
         };
@@ -292,22 +289,21 @@ impl ProjectState {
         } else {
             move_patch.from.as_ref()
         })
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let target = WorksheetResourcePath::parse(if undo {
             move_patch.from.as_ref()
         } else {
             move_patch.to.as_ref()
         })
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let session = self
             .capture_project_session()
             .map_err(history_project_error)?;
         if session.instance_id != *project_instance_id {
-            return Err(MutationConflict::StaleProjectLifecycle(
+            return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                 "caller project changed before worksheet move History preparation".into(),
             ));
         }
-        let projection_environment = self.capture_history_projection_environment(&session)?;
         let lease = self
             .filesystem()
             .acquire(session.root.clone())
@@ -322,7 +318,7 @@ impl ProjectState {
             .get(&source)
             .cloned()
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!("worksheet '{}' is absent", source.as_str()).into(),
                 )
             })?;
@@ -333,23 +329,22 @@ impl ProjectState {
             .get(&source)
             .copied()
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!("worksheet '{}' has no revision authority", source.as_str()).into(),
                 )
             })?;
-        let expected_resource = ResourceKey::Worksheet(
-            crate::node_system::document::WorksheetResourceKey(source.as_str().into()),
-        );
+        let expected_resource =
+            ResourceKey::Worksheet(crate::project::WorksheetResourceKey(source.as_str().into()));
         if request.resource != expected_resource {
-            return Err(MutationConflict::ResourceMismatch {
-                requested: request.resource,
-                store: expected_resource,
+            return Err(ProjectHistoryMutationError::ResourceMismatch {
+                requested: format!("{:?}", request.resource).into(),
+                store: format!("{:?}", expected_resource).into(),
             });
         }
         if request.base_revision != current_revision {
-            return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision,
-                current_revision,
+            return Err(ProjectHistoryMutationError::StaleRevision {
+                base_revision: request.base_revision.get(),
+                current_revision: current_revision.get(),
             });
         }
         let mut moved = document;
@@ -359,10 +354,10 @@ impl ProjectState {
             session,
             operation_id: request.operation_id,
             affected_resources: vec![ResourceKey::Worksheet(
-                crate::node_system::document::WorksheetResourceKey(source.as_str().into()),
+                crate::project::WorksheetResourceKey(source.as_str().into()),
             )],
             expected_revisions: [(
-                ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+                ResourceKey::Worksheet(crate::project::WorksheetResourceKey(
                     source.as_str().into(),
                 )),
                 current_revision,
@@ -370,7 +365,7 @@ impl ProjectState {
             .into_iter()
             .collect(),
             expected_absent_resources: [ResourceKey::Worksheet(
-                crate::node_system::document::WorksheetResourceKey(target.as_str().into()),
+                crate::project::WorksheetResourceKey(target.as_str().into()),
             )]
             .into_iter()
             .collect(),
@@ -398,7 +393,6 @@ impl ProjectState {
                 },
             },
             Some((undo, history_id)),
-            Some(projection_environment),
             None,
         );
         match publication {
@@ -419,33 +413,33 @@ impl ProjectState {
         undo: bool,
         request: MutationRequest<HistoryMutation>,
         transaction: ProjectHistoryTransaction,
-    ) -> Result<CommittedResourceMutation, MutationConflict> {
+    ) -> Result<CommittedResourceMutation, ProjectHistoryMutationError> {
         let history_id = transaction.history_id.clone();
         let move_patch = transaction.resource_move.ok_or_else(|| {
-            MutationConflict::History("resource move history patch is missing".into())
+            ProjectHistoryMutationError::History("resource move history patch is missing".into())
         })?;
-        let crate::node_system::document::ResourceMoveHistoryPayload::Graph {
+        let crate::project::ResourceMoveHistoryPayload::Graph {
             persisted_move_payload,
         } = move_patch.payload
         else {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 "graph move history has a non-graph payload".into(),
             ));
         };
         let payload: GraphMoveHistoryPayload = serde_json::from_value(persisted_move_payload)
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let source = GraphResourcePath::new(if undo {
             move_patch.to.as_ref()
         } else {
             move_patch.from.as_ref()
         })
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let target = GraphResourcePath::new(if undo {
             move_patch.from.as_ref()
         } else {
             move_patch.to.as_ref()
         })
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let mut desired_moved = if undo {
             payload.moved_before.clone()
         } else {
@@ -466,11 +460,10 @@ impl ProjectState {
             .capture_project_session()
             .map_err(history_project_error)?;
         if session.instance_id != *project_instance_id {
-            return Err(MutationConflict::StaleProjectLifecycle(
+            return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
                 "caller project changed before graph move History preparation".into(),
             ));
         }
-        let projection_environment = self.capture_history_projection_environment(&session)?;
         let filesystem_lease = self
             .filesystem()
             .acquire(session.root.clone())
@@ -495,11 +488,11 @@ impl ProjectState {
                 },
                 Ok,
             )
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         if request.resource != ResourceKey::Graph(source.clone()) {
-            return Err(MutationConflict::ResourceMismatch {
-                requested: request.resource,
-                store: ResourceKey::Graph(source.clone()),
+            return Err(ProjectHistoryMutationError::ResourceMismatch {
+                requested: format!("{:?}", request.resource).into(),
+                store: source.as_str().into(),
             });
         }
         let current_revision = loaded_source
@@ -508,9 +501,9 @@ impl ProjectState {
             .or_else(|| self.graph_revisions.read().unwrap().get(&source).copied())
             .unwrap_or(current_moved.document.revision);
         if ResourceRevision::from_graph_revision(current_revision) != request.base_revision {
-            return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision,
-                current_revision: ResourceRevision::from_graph_revision(current_revision),
+            return Err(ProjectHistoryMutationError::StaleRevision {
+                base_revision: request.base_revision.get(),
+                current_revision: current_revision.get(),
             });
         }
         desired_moved.document.revision = checked_graph_revision(source.as_str(), current_revision)
@@ -554,7 +547,7 @@ impl ProjectState {
                 let Some(current) = data.variables.get(&id) else {
                     continue;
                 };
-                let key = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+                let key = ResourceKey::Variable(crate::project::VariableResourceKey(
                     format!("variables/{id}").into(),
                 ));
                 affected_resources.push(key.clone());
@@ -584,7 +577,7 @@ impl ProjectState {
             &loaded_referenced_graphs,
             &known_graph_revisions,
         )
-        .map_err(|error| MutationConflict::History(error.into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
         for (path, before) in disk_plan.referenced_graphs_before {
             let key = ResourceKey::Graph(path.clone());
             affected_resources.push(key.clone());
@@ -639,7 +632,6 @@ impl ProjectState {
                 referenced_variables,
             },
             Some((undo, history_id)),
-            Some(projection_environment),
             None,
         );
         match publication {

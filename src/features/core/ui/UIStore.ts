@@ -11,21 +11,10 @@ import {
     ProgressState,
 } from "@/shared/types/ui";
 
-type UIModal =
-    | { id: string; type: "message"; options: MessageDialogOptions }
-    | { id: string; type: "confirm"; options: DialogOptions }
-    | { id: string; type: "input"; options: InputDialogOptions }
-    | { id: string; type: "import"; options: ImportDialogOptions }
-    | { id: string; type: "sqliteTableSelect"; options: SqliteTableSelectDialogOptions }
-    | { id: string; type: "excelSheetSelect"; options: ExcelSheetSelectDialogOptions }
-    | { id: string; type: "sqlConnection"; options: SqlConnectionDialogOptions }
-    | { id: string; type: "sqlRemoteTableSelect"; options: SqlRemoteTableSelectDialogOptions };
+import type { ApplicationUiModal, ApplicationUiState } from "@/shared/types/ui";
 
-type UIState = {
-  modals: UIModal[];
-  /** 全局进度蒙层；为 null 时不显示。 */
-  progress: ProgressState | null;
-};
+type UIModal = ApplicationUiModal;
+type UIState = ApplicationUiState;
 
 type Listener = () => void;
 

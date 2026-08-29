@@ -1,9 +1,11 @@
+#[cfg(test)]
 mod backend;
 pub mod contract;
 mod convert;
 mod draft;
 mod exchange;
 mod expression;
+#[cfg(test)]
 mod input_validation;
 mod model;
 mod result;
@@ -11,11 +13,13 @@ mod validation;
 mod validators;
 pub mod worker;
 
+#[cfg(test)]
 pub use backend::*;
 pub use convert::draft_to_model_spec;
 pub use draft::*;
 pub use exchange::*;
 pub use expression::*;
+#[cfg(test)]
 pub use input_validation::*;
 pub use model::*;
 pub use result::*;

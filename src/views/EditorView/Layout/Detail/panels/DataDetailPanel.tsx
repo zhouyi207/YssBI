@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
-import { databaseSourcePath } from '@/shared/types/dto/database';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import { databaseSourcePath } from '@/shared/types/domain/database';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { DetailColumnList } from '../shared/DetailColumnList';

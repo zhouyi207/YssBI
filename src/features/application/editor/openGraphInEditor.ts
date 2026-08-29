@@ -1,7 +1,7 @@
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { ensureEditorViewport, editorViewportScope } from '@/features/core/viewport';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 import {
   isEditorOpenRejectionHandled,

@@ -36,10 +36,6 @@ export {
   WORKBENCH_RESET_BUCKET_ORDER,
 } from './workbenchDockviewDefaults';
 export {
-  WorkbenchLayoutError,
-  workbenchDockviewPort,
-} from './workbenchDockviewPort';
-export {
   workbenchDockviewRead,
   type WorkbenchDockviewRead,
 } from './workbenchRead';
@@ -65,6 +61,7 @@ export {
   type LogsDockviewBindingToken,
   type LogsDockviewRootBinding,
 } from './logsRootBinding';
+export { WorkbenchLayoutError } from './workbenchTypes';
 export type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,
@@ -73,10 +70,9 @@ export type {
   OpenEditorRequest,
   SplitWorkbenchPanelRequest,
   UpsertResultRequest,
-  WorkbenchDockviewPort,
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchLayoutErrorCode,
   WorkbenchPanelInfo,
-} from './workbenchDockviewPort';
+} from './workbenchTypes';

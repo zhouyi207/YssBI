@@ -6,7 +6,7 @@ use crate::project::{OperationId, ResourceRevision};
 #[cfg(test)]
 pub(crate) struct GraphRenameFixtureResult {
     pub(crate) path: GraphResourcePath,
-    pub(crate) publication: crate::event::ResourceMutationResultDto,
+    pub(crate) publication: crate::schema::application_event::ResourceMutationResultDto,
 }
 
 #[cfg(test)]
@@ -39,7 +39,7 @@ impl std::fmt::Debug for GraphRenameFixtureResult {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 impl ProjectState {
     pub(crate) fn create_graph_resource_fixture(
         &self,

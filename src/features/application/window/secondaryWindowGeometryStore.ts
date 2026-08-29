@@ -1,5 +1,5 @@
 import type { WindowState } from '@/shared/types/settings';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 const SECONDARY_WINDOW_PREFIX = 'yssbi-secondary-window-';
 

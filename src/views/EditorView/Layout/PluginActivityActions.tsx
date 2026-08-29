@@ -26,7 +26,7 @@ import {
   type JuliaWorkerStatusViewModel,
 } from '@/features/application/statusBar/useJuliaWorkerStatus';
 import { openBayesWindow } from '@/features/application/window';
-import { usePluginStore } from '@/features/application/viewCapabilities';
+import { pluginUi, usePluginUi } from '@/features/core/plugins/ui';
 import { cn } from '@/lib/utils';
 
 function stopControlPropagation(event: { stopPropagation(): void }): void {
@@ -156,8 +156,8 @@ function JuliaPluginActivitySlot() {
 
 function PluginManagerPanel() {
   const { t } = useTranslation();
-  const installedPluginIds = usePluginStore((state) => state.installedPluginIds);
-  const uninstallPlugin = usePluginStore((state) => state.uninstallPlugin);
+  const installedPluginIds = usePluginUi((state) => state.installedPluginIds);
+  const uninstallPlugin = pluginUi.uninstallPlugin;
   const [installingPluginId, setInstallingPluginId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
@@ -268,7 +268,7 @@ function PluginManagerActivitySlot() {
 }
 
 export function PluginActivityActions() {
-  const installedPluginIds = usePluginStore((state) => state.installedPluginIds);
+  const installedPluginIds = usePluginUi((state) => state.installedPluginIds);
   const installedManifests = getInstalledPluginManifests(installedPluginIds);
 
   return (

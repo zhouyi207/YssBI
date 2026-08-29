@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEye, VscLink, VscRefresh, VscTrash } from "react-icons/vsc";
 import { ActionMenu, type ActionMenuPosition, type ActionMenuSection, type ActionMenuItem } from "@/shared/ui/actionMenu";
-import type { PinResultEntry } from '@/shared/types/dto/result';
+import type { PinResultEntry } from '@/shared/types/domain/result';
 
 export interface PinContextMenuProps {
   position: ActionMenuPosition;

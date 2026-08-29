@@ -4,7 +4,7 @@ import type {
     DiagnosticDto,
     NodeDisplayDto,
     ParameterEditorDto,
-} from '../dto/editorProjection';
+} from '../domain/editorProjection';
 
 /**
  * UI Types - Editor

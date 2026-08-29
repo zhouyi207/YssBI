@@ -15,11 +15,11 @@ import {
 } from '@/features/core/execution';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
-import { normalizeIpcError } from '@/services/ipc';
+import { normalizeApplicationIpcError } from '@/features/application/errorReference';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
-import { resultRef } from '@/features/core/resultSource';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { GraphOutputRefDto } from '@/shared/types/dto/executionDemand';
+import { resultRef } from '@/features/application/results';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
+import type { GraphOutputRefDto } from '@/shared/types/domain/executionDemand';
 import type { PinData } from '@/shared/types/store/graph';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 
@@ -212,7 +212,7 @@ export async function requestPinPreview(
       captured.output.port,
     );
     if (current?.generation !== generation) return staleSettlement();
-    const ipcError = normalizeIpcError('execute_graph_document', error);
+    const ipcError = normalizeApplicationIpcError('execute_graph_document', error);
     const failure = { code: ipcError.code, incidentId: ipcError.incidentId };
     lease.fail(failure.code);
     return { status: 'failed', generation, error: failure };

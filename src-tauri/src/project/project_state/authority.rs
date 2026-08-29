@@ -1,5 +1,25 @@
 use super::*;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::project) struct ProjectAuthorityExpectation {
+    pub(in crate::project) project_instance_id: ProjectInstanceId,
+    pub(in crate::project) project_root: Option<NormalizedProjectRoot>,
+    pub(in crate::project) project_session_id: crate::project::ProjectSessionId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::project) struct ProjectAuthoritySnapshot {
+    pub(in crate::project) project_instance_id: ProjectInstanceId,
+    pub(in crate::project) authority_generation: u64,
+}
+
+impl ProjectAuthoritySnapshot {
+    pub(in crate::project) fn matches_publication(self, publication: &MutationPublication) -> bool {
+        self.project_instance_id.as_str() == publication.project_instance_id
+            && self.authority_generation == publication.authority_generation()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum VariablePresence {
     Present,
@@ -137,6 +157,66 @@ impl MutationPublication {
         self.authority_generation = 0;
         self.computation_settings_revision = 0;
         previous
+    }
+}
+
+impl ProjectState {
+    pub(in crate::project) fn current_projection_environment_expectation(
+        &self,
+    ) -> ProjectAuthorityExpectation {
+        self.activation_identity
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub(in crate::project) fn projection_environment_expectation_for_identity(
+        &self,
+        project_instance_id: &str,
+        project_root: &NormalizedProjectRoot,
+    ) -> Result<ProjectAuthorityExpectation, String> {
+        let expected = self.current_projection_environment_expectation();
+        if expected.project_instance_id.as_str() != project_instance_id
+            || expected.project_root.as_ref() != Some(project_root)
+        {
+            return Err("stale_project_lifecycle: project changed before authority capture".into());
+        }
+        Ok(expected)
+    }
+
+    pub(in crate::project) fn capture_project_authority_for_session(
+        &self,
+        session: &ProjectSession,
+    ) -> Result<ProjectAuthoritySnapshot, ProjectFilesystemError> {
+        let expected = self
+            .projection_environment_expectation_for_identity(
+                session.instance_id.as_str(),
+                &session.root,
+            )
+            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        let generation = self
+            .activation_generation
+            .load(std::sync::atomic::Ordering::Acquire);
+        if generation % 2 != 0 {
+            return Err(ProjectFilesystemError::FilesystemTransactionBusy {
+                message: "project authority publication is in progress".into(),
+            });
+        }
+        let publication = self
+            .mutation_publication
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if publication.project_instance_id != expected.project_instance_id.as_str()
+            || publication.authority_generation != generation
+        {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "project authority changed during capture".into(),
+            });
+        }
+        Ok(ProjectAuthoritySnapshot {
+            project_instance_id: expected.project_instance_id,
+            authority_generation: publication.authority_generation(),
+        })
     }
 }
 pub(in crate::project) struct ActivationGenerationTransition {

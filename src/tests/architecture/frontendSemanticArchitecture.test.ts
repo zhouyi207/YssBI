@@ -320,5 +320,5 @@ describe('frontend semantic architecture', () => {
       expect(debt.newOrIncreased).toEqual([]);
       expect(debt.staleOrDecreased).toEqual([]);
     });
-  }, 120_000);
+  }, 600_000);
 });

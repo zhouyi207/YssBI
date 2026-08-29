@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunOutputChannelEvent, RunOutputEvent } from '@/shared/types/dto/runEvent';
+import type { RunOutputChannelEvent, RunOutputEvent } from '@/shared/types/domain/runEvent';
 import {
   RUN_OUTPUT_PROJECTION_MAX_ENTRIES,
   appendRunOutput,

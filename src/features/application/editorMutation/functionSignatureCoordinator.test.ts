@@ -1,14 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
 import { buildGraphResourceMeta, resourceKey, useResourceStore } from '@/features/core/resource';
-import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import type {
   FunctionSignatureDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { ProjectService } from '@/services/project/projectService';
@@ -20,10 +19,6 @@ import {
   type FunctionSignatureCoordinatorDependencies,
 } from './functionSignatureCoordinator';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
-import {
-  installCoreApplicationTestPorts,
-  resetCoreApplicationTestPorts,
-} from '@/features/application/testHelpers/coreApplicationPorts';
 
 const functionPath = 'functions/Compute.yssbi-function';
 const operationId = '00000000-0000-0000-0000-000000000501';
@@ -147,19 +142,12 @@ describe('executeFunctionSignatureMutation', () => {
       makeEditorProjectionFixture({ graphPath, sourceRevision: 7 }).projection);
     resetPendingMutations();
     resetFunctionSignatureCoordinator();
-    installCoreApplicationTestPorts({
-      syncEvents: {
-        resourceMutationCommitted: (committed) =>
-          projectPublicationCoordinator.submit({ result: committed as ResourceMutationResultDto }),
-      },
-    });
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
     useVariableStore.setState({ variables: {} });
     installState();
   });
 
-  afterEach(resetCoreApplicationTestPorts);
 
   it('does not invoke, publish, or mutate when project replacement occurs inside authority read', async () => {
     const authority = useGraphMetaStore.getState();
@@ -235,7 +223,11 @@ describe('executeFunctionSignatureMutation', () => {
 
   it('registers before invoke and atomically applies a complete authoritative result', async () => {
     const committed = result({ status: 'complete', expectedGraphPaths: [functionPath] }, true);
-    const eventHandler = new ResourceMutationCommittedHandler();
+    const eventHandler = {
+      handle: (payload: { result: ResourceMutationResultDto }) => {
+        void projectPublicationCoordinator.submit(payload);
+      },
+    };
     let pendingDuringInvoke = false;
     let graphTitleDuringInvoke: string | undefined;
     let signatureRevisionDuringInvoke: number | undefined;
@@ -302,7 +294,11 @@ describe('executeFunctionSignatureMutation', () => {
       status: 'incomplete',
       invalidatedGraphPaths: [functionPath, callerPath],
     }, false);
-    const eventHandler = new ResourceMutationCommittedHandler();
+    const eventHandler = {
+      handle: (payload: { result: ResourceMutationResultDto }) => {
+        void projectPublicationCoordinator.submit(payload);
+      },
+    };
     const hydrateGraph = vi.fn(async () => true);
     const beforeMeta = structuredClone(useGraphMetaStore.getState().graphs[functionPath]);
     vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
@@ -446,7 +442,8 @@ describe('executeFunctionSignatureMutation', () => {
     const beforeGraph = useGraphDataStore.getState().graphEntities[functionPath];
     const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
 
-    new ResourceMutationCommittedHandler().handle({ result: oldResult });
+    await expect(projectPublicationCoordinator.submit({ result: oldResult }))
+      .rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     resolve(oldResult);
 
     await expect(request).resolves.toEqual({ status: 'stale', result: oldResult });

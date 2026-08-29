@@ -4,7 +4,7 @@ import { getGraphSourceRevision } from '@/features/core/dataStore/graphEntityAcc
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { EMPTY_HISTORY_STATE, useHistoryStore } from '@/features/core/history/historyStore';
 import { HistoryService } from '@/services/nodeSystem/historyService';
-import { isIpcErrorCode } from '@/services/ipc';
+import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -18,7 +18,7 @@ import type {
 
   ResourceKeyDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import {
   ProjectPublicationError,
   projectPublicationCoordinator,
@@ -78,7 +78,7 @@ function invalidHistoryResult(message: string): never {
 }
 
 function isHistoryConflict(error: unknown): boolean {
-  return isIpcErrorCode(error, 'history_revision_conflict');
+  return isApplicationIpcErrorCode(error, 'history_revision_conflict');
 }
 
 function anchorResource(graphPath: string): ResourceKeyDto {
@@ -193,7 +193,7 @@ export async function executeHistoryMutation(
       );
     } catch (error) {
       if (!isCurrentProjectIdentity(identity)
-        || isIpcErrorCode(error, 'stale_project_lifecycle')) {
+        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) {
         return { status: 'stale' };
       }
       if (!isHistoryConflict(error)) throw error;

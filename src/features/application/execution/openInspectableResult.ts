@@ -19,7 +19,7 @@ import {
   resolveInspectableResultRef,
   type InspectableResultRef,
 } from '@/features/application/results';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import type { ResultDescriptor } from '@/shared/types/domain/result';
 import type { PinHistoryProjection } from '@/shared/types/ui/execution';
 import { resultQueryCoordinator, resultQueryRead } from '@/features/application/results';
 import { resultPanelKey } from '@/features/domain/result';

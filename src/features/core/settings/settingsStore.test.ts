@@ -6,11 +6,11 @@ import {
   DEFAULT_EDITOR,
   DEFAULT_PROJECT,
   DEFAULT_THEME,
-} from '@/app/appConfig/default';
+} from '@/shared/config-default';
 import { COLOR_THEME_PRESETS } from '@/features/application/settings/colorThemePresets';
 import { setClientSettingsPublisher, useSettingsStore } from './settingsStore';
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     app: {
       warn: vi.fn(),

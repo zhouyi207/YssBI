@@ -1,8 +1,8 @@
 //! DataFrame kernels over run-scoped project resources and protocol values.
 
 use super::KernelFragment;
-use crate::node_system::plan::ResourceId;
-use crate::node_system::protocol::{CanonicalDecimal, Value};
+use crate::execution::plan::legacy::ResourceId;
+use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, ArtifactKind, ArtifactValueKind, DataSeriesBuilder, DataSeriesElementType, Kernel,
     KernelContext, KernelError, NumericValue, ProjectResourceLease, RuntimeValue, numeric_equal,
@@ -880,8 +880,8 @@ const fn registration(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::plan::legacy::{CompiledParameterHandle, CompiledResourceRequirement};
     use crate::graph_document::{GraphResourcePath, NodeId};
-    use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
     use crate::node_system::runtime::RunId;
     use crate::node_system::runtime::{
         ActivationId, CancellationToken, EffectiveComputationSettings, FrameId, KernelErrorKind,

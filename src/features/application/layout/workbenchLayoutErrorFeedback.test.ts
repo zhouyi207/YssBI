@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   WorkbenchLayoutError,
   type WorkbenchLayoutErrorCode,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchTypes';
 
 const alert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 

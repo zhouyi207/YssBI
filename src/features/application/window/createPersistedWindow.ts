@@ -2,7 +2,7 @@ import { WindowStateService } from "@/services/window/windowStateService";
 import { createWebviewWindow } from "@/services/platform/webviewWindow";
 import type { WindowKind, WindowState } from "@/shared/types/settings";
 import { readWindowDecorationsFromSettings } from "@/features/application/window/windowDecorationPolicy";
-import { logger } from "@/utils/appLogger";
+import { logger } from '@/features/application/observability/appLogger';
 
 export type WindowGeometryPolicy =
     | {

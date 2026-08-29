@@ -1,10 +1,12 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { toErrorReference, type ErrorReference } from '@/services/ipc';
 import {
   parseProjectEvent,
   type ProjectEvent,
   type ProjectEventParseCode,
 } from './projectEventParser';
+
+type UnlistenFn = () => void;
 
 export type ProjectEventStreamItem =
   | { readonly kind: 'event'; readonly event: ProjectEvent }

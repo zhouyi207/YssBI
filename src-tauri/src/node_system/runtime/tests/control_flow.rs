@@ -152,7 +152,7 @@ fn truly_missing_operation_input_still_reports_missing_value() {
 fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
     let series_contract = PlannedValueContract {
         kind: PlannedValueKind::DataSeries,
-        type_expr: crate::node_system::protocol::data_series_type(TypeExpr::Concrete(
+        type_expr: crate::graph::protocol::data_series_type(TypeExpr::Concrete(
             TypeId::new("core.int64").unwrap(),
         )),
     };
@@ -239,7 +239,7 @@ fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
 fn runtime_admission_rejects_data_series_element_metadata_mismatch() {
     let int_series_contract = PlannedValueContract {
         kind: PlannedValueKind::DataSeries,
-        type_expr: crate::node_system::protocol::data_series_type(TypeExpr::Concrete(
+        type_expr: crate::graph::protocol::data_series_type(TypeExpr::Concrete(
             TypeId::new("core.int64").unwrap(),
         )),
     };

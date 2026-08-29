@@ -9,7 +9,7 @@ import type {
   LifecycleMutationKind,
   LifecycleMutationResultDto,
   ProjectRecordRow,
-} from '@/shared/types/dto/project';
+} from '@/shared/types/domain/project';
 
 export interface PreparedProjectLifecycleTransition {
   readonly projectInstanceId: string;

@@ -1,9 +1,11 @@
-import type { DetailTarget, FunctionResourceView, GraphResourceRecord } from '@/features/application/viewCapabilities';
+import type { DetailTarget } from '@/shared/types/ui/detail';
+import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
+import type { GraphResourceRecord } from '@/features/core/resource/resourceSelectors';
 import type { FunctionPinSpec } from '@/shared/types/domain/graph';
 import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 
 export interface DetailCatalogSnapshot {
   variables: Record<string, Variable>;

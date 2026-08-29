@@ -17,4 +17,3 @@ export type {
   ResourceKind,
   ResourceRef,
 } from './resourceTypes';
-export * from './resourceIndexCoordinator';

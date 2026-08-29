@@ -359,8 +359,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &runtime_root,
-                "src-tauri/src/node_system/catalog/builtin.rs",
-                "fixture_lib::node_system::catalog::builtin",
+                "src-tauri/src/graph/catalog/builtin.rs",
+                "fixture_lib::graph::catalog::builtin",
             ),
             module(
                 &runtime_root,
@@ -401,7 +401,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Application
     );
     assert_eq!(
-        classified["src-tauri/src/node_system/catalog/builtin.rs"],
+        classified["src-tauri/src/graph/catalog/builtin.rs"],
         RustLayer::BuiltinComposition
     );
     assert_eq!(
@@ -711,8 +711,6 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         "src-tauri/src/graph_document/identity.rs",
         "src-tauri/src/graph_document/model.rs",
         "src-tauri/src/graph_document/resource_path.rs",
-        "src-tauri/src/node_system/protocol/identity.rs",
-        "src-tauri/src/node_system/protocol/types.rs",
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
@@ -1614,8 +1612,8 @@ fn rust_debt_references_maintained_architecture_documents() {
         .collect::<std::collections::BTreeSet<_>>();
 
     assert!(
-        !specs.is_empty(),
-        "the current debt manifest must be explicit"
+        specs.is_empty(),
+        "the architecture cutover must have no debt"
     );
     for spec in specs {
         assert!(

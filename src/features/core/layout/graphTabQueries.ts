@@ -1,5 +1,5 @@
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 
 export function isGraphOpenInAnyTab(graphPath: string): boolean {
-  return workbenchDockviewPort.findEditorPanelsByResource(graphPath).length > 0;
+  return workbenchDockviewRead.findEditorPanelsByResource(graphPath).length > 0;
 }

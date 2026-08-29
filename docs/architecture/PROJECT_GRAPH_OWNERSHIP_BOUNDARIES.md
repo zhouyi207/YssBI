@@ -57,14 +57,14 @@ resource lookup 或 resident-install implementation。
 Application orchestration 和中立 contract 形成，相关 focused tests 与 production
 architecture audit 全部通过。
 
-## Task 1 checkpoint（2026-08-27）
+## Final cutover checkpoint（2026-08-29）
 
-Task 1 已原子迁移 graph-document data owner、opaque graph path 与 document identities，旧
-`node_system::document::{ids,model}` 和 Project graph-path declaration 不再存在，也没有旧路径
-re-export。Graph 同时建立 transport-neutral schema/settings、immutable resource catalog 与
-closed typed mutation/compile error contract。
+Project–Graph Tasks 1–10 已完成：graph-document data、opaque path、Graph catalog/registry/
+analysis/compiler、Graph mutation/compatibility/subgraph 与 Project history/lifecycle 均已
+收归最终 owner。Project 只保留 durable authority 与 pure persisted contracts；Application
+负责捕获 session、调用 Graph、重验 Project authority 并提交线性 mutation facts。
 
-当前 production route 仍由旧 `node_system` Graph behavior 与 Project runtime/compiler workflow
-承担；跨资源 history、catalog/runtime 与 Execution cutover 是后续任务的精确债务。Database
-当前消费 Graph schema 的两条边也保留在 debt ratchet 中，等待 neutral database snapshot mapper
-切换，而不是在本 checkpoint 建立第二条 production route。
+Graph production source 不导入 ProjectState、ProjectStore、filesystem、Tauri 或 transport
+DTO；Graph compiler 只输出 neutral package，Application 在 Graph 与 Execution 之间完成
+typed mapping。`rust_architecture_debt()` 对 Project–Graph group 为空，并由 production
+architecture audit 双向核对。

@@ -5,8 +5,8 @@ import {
   type UIEvent,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/shared/config-default';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import { isLogViewportPinnedToBottom } from './logPanelScroll';
 import { snapLogViewportToBottom } from './logPanelViewport';
 

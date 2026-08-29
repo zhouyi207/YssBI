@@ -1,12 +1,12 @@
 import { createPersistedWindow } from './createPersistedWindow';
 import { windowKindForRoute } from './windowRoute';
-import { logger } from '@/utils/appLogger';
-import { normalizeIpcError } from '@/services/ipc';
+import { logger } from '@/features/application/observability/appLogger';
+import { normalizeApplicationIpcError } from '@/features/application/errorReference';
 import {
   plotTypeFromPresentation,
   presentationRoute,
   type Presentation,
-} from '@/features/core/resultSource';
+} from '@/features/application/results';
 
 export interface PresentationWindowPayload {
   route: string;
@@ -54,7 +54,7 @@ export async function openPresentationWindow(
       title: presentation.windowTitle.trim() || 'Source Inspector',
     });
   } catch (error) {
-    const ipcError = normalizeIpcError('open_presentation_window', error);
+    const ipcError = normalizeApplicationIpcError('open_presentation_window', error);
     logger.exec.error(
       `Failed to open presentation window code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
       'Window',

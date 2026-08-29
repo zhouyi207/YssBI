@@ -1,12 +1,8 @@
 import type React from 'react';
 import type { Pin as PinModel } from '@/shared/types/domain';
-import type { PortKindDto } from '@/shared/types/dto/editorProjection';
+import type { PortKindDto } from '@/shared/types/domain/editorProjection';
 import type { UINode } from '@/shared/types/ui';
-import {
-  REROUTE_GRIP_SIZE_PX,
-  REROUTE_NODE_HEIGHT_PX,
-  REROUTE_NODE_WIDTH_PX,
-} from '@/features/application/viewCapabilities';
+import { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX } from '@/features/domain/node/utils/nodeClassNames';
 import { Pin } from '../Pins/Pin';
 
 export {

@@ -16,8 +16,8 @@ import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import { normalizeIpcError } from '@/services/ipc';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { ExecutionDemandDto } from '@/shared/types/dto/executionDemand';
-import type { RunEvent } from '@/shared/types/dto/runEvent';
+import type { ExecutionDemandDto } from '@/shared/types/domain/executionDemand';
+import type { RunEvent } from '@/shared/types/domain/runEvent';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { requestPinPreview } from './requestPinPreview';
 

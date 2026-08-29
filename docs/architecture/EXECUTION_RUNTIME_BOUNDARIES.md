@@ -35,17 +35,18 @@ Concrete engine 只由 composition root 注入的 backend adapter 调用。Kerne
 plan-local parameter、grant-scoped resource 和 typed backend result。取消、deadline、output
 sequence 与 terminal result 必须属于同一 run identity。
 
-Staged synchronous scientific port 的 `BackendExecutionControl` 语义仅为 method admission
-preflight；没有 backend checkpoint 时不声称计算中途可 cooperative interrupt。Execution Task 8
-负责在 production activation 时保留这一区分，并只在真实 backend 支持点引入 checkpoints。
+当前同步 scientific port 的 `BackendExecutionControl` 语义仅为 method admission preflight；没有
+backend checkpoint 时不声称计算中途可 cooperative interrupt。production composition 保留这一区分，
+并只在真实 backend 支持点引入 checkpoints。
 
 ## 迁移规则
 
-抽取 port 或 runtime owner 时，先通过 public seam 的 focused test 固定 observable contract，
-再在同一 compiling slice 切换唯一 production composition，删除旧 registry/provider/kernel
-route、旧 constructor 和对应精确债务。不得设置全局 registry、隐式 default backend 或第二条
+抽取 port 或 runtime owner 时，在同一 compiling slice 切换唯一 production composition，
+删除旧 registry/provider/kernel route、旧 constructor 和对应精确债务。当前唯一 composition
+由 `lib.rs` 构造 `ApplicationSessionSlot`，将 scientific backend、resource factory、Bayes
+worker 与 artifact reader 注入 session；不得设置全局 registry、隐式 default backend 或第二条
 执行链。
 
 完成条件：`debt/execution_runtime.rs` 为空，Execution production source 只依赖自己的模块与
-Pure Leaf contract，所有 concrete engine origin 均位于批准的 adapter owner，production
-architecture audit 与 execution focused tests 全部通过。
+Pure Leaf contract，所有 concrete engine origin 均位于批准的 adapter owner；当前 production
+architecture audit 与静态 compile gate 已通过，Rust 行为测试按最终批次执行。

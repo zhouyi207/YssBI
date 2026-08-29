@@ -1,6 +1,7 @@
 use super::identity::{PlanOperationKind, PlanPortAddress, PlanSourceIdentity};
 use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::CompiledParameterHandle;
+use super::result_category::ResultCategory;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanInputSource {
@@ -32,6 +33,7 @@ impl PlanInputBinding {
 pub struct PlanOperation {
     source: PlanSourceIdentity,
     kind: PlanOperationKind,
+    result_category: ResultCategory,
     parameter_handles: Box<[CompiledParameterHandle]>,
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
@@ -42,6 +44,7 @@ impl PlanOperation {
     pub fn new(
         source: PlanSourceIdentity,
         kind: PlanOperationKind,
+        result_category: ResultCategory,
         parameter_handles: Box<[CompiledParameterHandle]>,
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
@@ -50,6 +53,7 @@ impl PlanOperation {
         Self {
             source,
             kind,
+            result_category,
             parameter_handles,
             inputs,
             observation_intents,
@@ -63,6 +67,10 @@ impl PlanOperation {
 
     pub fn kind(&self) -> &PlanOperationKind {
         &self.kind
+    }
+
+    pub const fn result_category(&self) -> ResultCategory {
+        self.result_category
     }
 
     pub fn parameter_handles(&self) -> &[CompiledParameterHandle] {

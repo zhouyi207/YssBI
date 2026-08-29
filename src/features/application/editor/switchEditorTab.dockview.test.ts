@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchRead';
 
 const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
@@ -14,16 +14,21 @@ const mocks = vi.hoisted(() => ({
   setDetailContext: vi.fn(),
 }));
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
-    activate: mocks.activate,
-    listGroups: () => mocks.groups,
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
+      listGroups: () => mocks.groups,
     listGroupPanels: (groupId: string) =>
       mocks.panels.filter((panel) => panel.groupId === groupId),
     findEditorPanelsByResource: (resourceRef: string) =>
       mocks.panels.filter((panel) =>
         panel.metadata.role === 'editor' && panel.metadata.resourceRef === resourceRef),
-    getActiveEditorPanel: () => mocks.panels.find((panel) => panel.active),
+      getActiveEditorPanel: () => mocks.panels.find((panel) => panel.active),
+  },
+}));
+
+vi.mock('@/features/core/dockview/workbenchControl', () => ({
+  workbenchDockviewControl: {
+    activate: mocks.activate,
   },
 }));
 vi.mock('@/features/core/graphSession/graphSessionStore', () => ({

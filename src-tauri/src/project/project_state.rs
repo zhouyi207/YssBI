@@ -1,73 +1,46 @@
 //! Authoritative project state for normalized node-system graph documents.
 
-use crate::database::DatabaseState;
-use crate::event::GraphMutationResultDto;
-#[cfg(test)]
-use crate::graph_document::ConnectionId;
 use crate::graph_document::GraphResourcePath;
 use crate::graph_document::NodeId;
-use crate::node_system::analysis::EditorGraphProjectionDto;
-use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
-use crate::node_system::document::{
-    ClipboardSubgraphDto, EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch,
-    HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, ProjectDocumentState,
-    ProjectHistory, ProjectHistoryTransaction, ResourceKey, export_subgraph,
-};
-#[cfg(test)]
-use crate::node_system::document::{GraphMutation, RevisionedGraphStore};
+use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
     GraphResourceDocument, NormalizedProjectRoot, PreparedProjectActivation, ProjectData,
     ProjectFilesystemCoordinator, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectInstanceId, ProjectSession, ProjectStore, ProjectTransactionContext,
-    ResourceDocumentPatch, ResourceLifecycleIntent, ResourceLifecycleOperation,
-    ResourceLifecycleRegistry, ResourceRenameOwnershipLease, StagedFilesystemMutation,
-    WorksheetResourcePath, load_project_graph_from_file,
+    ResourceLifecycleIntent, ResourceLifecycleOperation, ResourceLifecycleRegistry,
+    ResourceRenameOwnershipLease, StagedFilesystemMutation, WorksheetResourcePath,
+    load_project_graph_from_file,
 };
 use crate::project::{HistoryEntryId, OperationId, ResourceRevision};
+use crate::project::{
+    HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
+    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
+};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 mod activation;
 mod authority;
-mod compile_resources;
-mod editor_mutation;
-mod errors;
-mod execution;
-#[cfg(test)]
-pub(super) use compile_resources::snapshot_project_resources;
-pub(super) use compile_resources::{
-    CompileResourceSnapshot, ProductionPlotSink, ProductionResourceSnapshots,
-    compile_resources_from_data, compile_resources_from_projection_snapshot,
-};
-
+#[path = "project_state/graph_lifecycle_application.rs"]
 mod graph_lifecycle;
 pub(crate) mod graph_operation;
 mod history;
 mod lifecycle;
-mod projection;
 mod resource_history;
 mod resource_patch;
-mod run_parameters;
 mod variable_effects;
 #[allow(unused_imports)]
 pub(super) use activation::PublishedProjectActivation;
 pub(super) use authority::{
     ActivationGenerationTransition, MutationPublication, PreparedPublicationAdvance,
-    VariableStagingBasis,
+    ProjectAuthorityExpectation, ProjectAuthoritySnapshot, VariableStagingBasis,
 };
 pub(crate) use authority::{VariablePresence, VariableRevisionEntry};
-pub use errors::{ProjectExecutionError, ProjectExecutionErrorKind};
-
 use history::GraphMoveHistoryPayload;
 pub(super) use history::{project_documents, replace_project_documents};
-pub(super) use projection::{
-    ProjectionEnvironmentExpectation, ProjectionEnvironmentSnapshot, ProjectionSourceSnapshot,
-    candidate_projection_replacement,
-};
 use resource_history::{
     affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, checked_graph_revision,
-    compile_product_invalidation_for_resource_patch, graph_document_references_path,
+    canonical_resource_lifecycle_events, checked_graph_revision, graph_document_references_path,
     normalize_function_patch_revisions, normalize_loaded_function_resource_revision,
     patch_projection_paths, preflight_resource_patch_graphs, validate_graph_resource,
     validate_worksheet_path_insertion, variable_scope_references_path,
@@ -76,16 +49,14 @@ use resource_history::{
 pub(super) use resource_history::{
     checked_resource_revision, normalize_function_resource_revision, validate_context_revisions,
 };
-use resource_patch::{CommittedResourceMutation, CompileProductInvalidation};
+use resource_patch::CommittedResourceMutation;
 #[cfg(test)]
-pub(super) use run_parameters::json_to_protocol_value;
-pub(super) use run_parameters::{build_run_parameters, publish_function_plans};
+pub(super) use variable_effects::variable_effect_run_error;
 #[cfg(test)]
 pub(super) use variable_effects::{VariableEffectCommitError, VariableEffectCommitResult};
 pub(super) use variable_effects::{
     install_variable_effect_snapshots, validate_variable_effect_document,
-    variable_effect_filesystem_mutations, variable_effect_run_error, variable_history_scope,
-    variable_scope_graph_path,
+    variable_effect_filesystem_mutations, variable_history_scope, variable_scope_graph_path,
 };
 
 mod state;
@@ -105,12 +76,27 @@ use test_support::{
     ProjectionEnvironmentCaptureTestHook, ProjectionTestHook,
     VariableAuthorityAssignmentPanicTestHook, VariableStagingTestHook,
 };
-#[cfg(test)]
-mod tests;
 
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 impl ProjectState {
+    #[cfg(test)]
+    pub(crate) fn current_run_registry(
+        &self,
+    ) -> (
+        std::sync::Arc<crate::node_system::runtime::ProjectRunRegistry>,
+        crate::project::ProjectSessionId,
+    ) {
+        let store = self
+            .project_store
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            std::sync::Arc::clone(&store.runs),
+            store.project_session_id.clone(),
+        )
+    }
+
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
@@ -987,8 +973,8 @@ impl ProjectState {
     pub(crate) fn runtime_identity_sessions_for_test(
         &self,
     ) -> (
-        crate::node_system::ProjectSessionId,
-        crate::node_system::ProjectSessionId,
+        crate::project::ProjectSessionId,
+        crate::project::ProjectSessionId,
     ) {
         let _publication = self.mutation_publication.lock().unwrap();
         let runtime = self
@@ -1067,6 +1053,7 @@ impl ProjectState {
         );
     }
 
+    #[cfg(test)]
     pub(crate) fn validate_catalog_snapshot_current(
         &self,
         snapshot: &crate::project::CatalogProjectSnapshot,
@@ -1083,11 +1070,12 @@ impl ProjectState {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn localized_catalog_snapshot(
         &self,
         project_instance_id: &ProjectInstanceId,
         locale: &str,
-    ) -> Result<crate::node_system::catalog::LocalizedCatalogDto, ProjectFilesystemError> {
+    ) -> Result<crate::schema::catalog::LocalizedCatalogDto, ProjectFilesystemError> {
         let snapshot = self.catalog_snapshot(project_instance_id)?;
         let registry_fingerprint = snapshot.registry.fingerprint().to_string();
         let localized = snapshot.catalog.localize_with_resources(
@@ -1096,11 +1084,11 @@ impl ProjectState {
             &snapshot.resources,
         );
 
-        Ok(localized.into_dto(
-            snapshot.project_instance_id.as_str(),
-            registry_fingerprint,
-            snapshot.resource_publication_revision,
-        ))
+        let mut result = crate::schema::catalog::LocalizedCatalogDto::from(localized);
+        result.project_instance_id = snapshot.project_instance_id.as_str().into();
+        result.registry_fingerprint = registry_fingerprint.into();
+        result.resource_publication_revision = snapshot.resource_publication_revision;
+        Ok(result)
     }
 
     pub fn worksheet_creation_snapshot(
@@ -1125,6 +1113,7 @@ impl ProjectState {
         *self.test_hooks.function_load_checkpoint.write().unwrap() = Some(checkpoint);
     }
 
+    #[cfg(test)]
     pub fn result(
         &self,
         result_id: crate::node_system::runtime::ResultId,
@@ -1135,9 +1124,10 @@ impl ProjectState {
         Ok(results.result(result_id))
     }
 
+    #[cfg(test)]
     pub fn pin_result_history(
         &self,
-        output: &crate::node_system::plan::GraphOutputRef,
+        output: &crate::execution::plan::legacy::GraphOutputRef,
     ) -> Result<
         Box<
             [(

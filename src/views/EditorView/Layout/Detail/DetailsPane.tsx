@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { useEditorSessionDetailActions } from '@/features/application/editor';
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
-import { useWorksheetStore, WorksheetService } from '@/features/application/viewCapabilities';
+import { loadWorksheetDocumentForView } from '@/features/application/worksheet/worksheetViewActions';
 import { DetailEmptyState } from './DetailEmptyState';
 import { DataDetailPanel } from './panels/DataDetailPanel';
 import { EventDetailPanel } from './panels/EventDetailPanel';
@@ -20,14 +19,7 @@ export function DetailsPane() {
 
   useEffect(() => {
     if (!worksheetPath || worksheetDocument) return;
-    const context = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(context.projectInstanceId, worksheetPath)
-      .then((loaded) => {
-        if (context.isCurrent()) {
-          useWorksheetStore.getState().upsertDocument(worksheetPath, loaded);
-        }
-      })
-      .catch(() => undefined);
+    void loadWorksheetDocumentForView(worksheetPath);
   }, [worksheetPath, worksheetDocument]);
 
   switch (model.kind) {

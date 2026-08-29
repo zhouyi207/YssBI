@@ -92,10 +92,15 @@ vi.mock('@/features/core/history', () => ({
     { getState: () => mocks.history },
   ),
 }));
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
-    getActivePanel: () => mocks.activePanel ?? undefined,
-    listGroupPanels: (groupId: string) => mocks.groupPanels.filter((panel) => panel.groupId === groupId),
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
+      getActivePanel: () => mocks.activePanel ?? undefined,
+      listGroupPanels: (groupId: string) => mocks.groupPanels.filter((panel) => panel.groupId === groupId),
+    },
+}));
+
+vi.mock('@/features/core/dockview/workbenchControl', () => ({
+  workbenchDockviewControl: {
     activate: mocks.activate,
   },
 }));

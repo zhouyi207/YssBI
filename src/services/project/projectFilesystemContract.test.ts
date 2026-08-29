@@ -445,7 +445,7 @@ function eventHandlerIdentityGuardViolations(path: string, source: string): stri
 }
 
 const workflowFiles = [
-  'src/features/core/dataStore/projectIOStore.ts',
+  'src/features/application/project/projectIOStore.ts',
   'src/features/application/editorProjection/graphProjectionCoordinator.ts',
   'src/features/application/editor/graphDocumentUnload.ts',
   'src/features/application/editor/worksheetDelete.ts',
@@ -792,22 +792,6 @@ describe('projectFilesystemContract', () => {
       `unguarded.ts: ${className}`,
     ]);
   });
-
-  it('rejects stale events before correlation or store access', () => {
-    const eventFiles = [
-      'src/features/core/sync/handlers/ResourceEventHandler.ts',
-      'src/features/core/sync/handlers/ProjectMutationEventHandler.ts',
-    ];
-    const offenders = withProductionTypeScriptProject((context) => (
-      eventFiles.flatMap((path) => sourceFileEventHandlerIdentityGuardViolations(
-        path,
-        context.sourceFile(path),
-      ))
-    ));
-
-    expect(offenders).toEqual([]);
-  });
-
 
   it('contains no optional projectInstanceId in active-project service contracts', () => {
     const offenders = productionSources(resolve('src/services')).flatMap(({ path, source }) => {

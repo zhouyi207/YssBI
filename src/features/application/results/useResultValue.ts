@@ -1,8 +1,8 @@
 import { useEffect, useSyncExternalStore, useState } from 'react';
 
-import type { ErrorReference } from '@/services/ipc';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import type { ResultValue } from '@/shared/types/dto/result';
+import type { ErrorReference } from '@/features/application/errorReference';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { ResultValue } from './types';
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,

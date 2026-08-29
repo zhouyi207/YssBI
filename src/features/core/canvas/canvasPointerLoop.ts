@@ -10,9 +10,9 @@ import {
 import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { executeCommand } from '@/features/core/history';
 import type { EditorViewport } from '@/features/core/viewport';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/core/observability/logger';
 import type { CanvasInteractionHandlers } from './canvasMutationContracts';
-import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
+import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/shared/config-default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
 import { unionSelectionIds } from './selectionSession';

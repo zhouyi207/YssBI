@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { DEFAULT_VIEWPORT } from '@/shared/config-default';
 import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,

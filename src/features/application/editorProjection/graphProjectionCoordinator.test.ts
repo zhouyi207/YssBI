@@ -13,7 +13,7 @@ import { useDocumentStateStore } from '@/features/core/resource/documentStateSto
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import * as coordinator from './graphProjectionCoordinator';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
   GraphProjectionService: {
@@ -22,7 +22,7 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
   },
 }));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     graph: {
       error: vi.fn(),

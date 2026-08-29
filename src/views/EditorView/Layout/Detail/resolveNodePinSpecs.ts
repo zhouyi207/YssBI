@@ -1,5 +1,5 @@
 import type { PinView } from '@/shared/types/store/graph';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import type { NodeDefinition, PinDefinitionDTO, PinSlot } from '@/shared/types/domain/node';
 import { pinFlowKind, pinTypeLabel } from '@/shared/types/domain/pinSemantics';
 

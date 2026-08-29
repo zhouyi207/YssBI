@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import { buildGraphResourceMeta } from '@/features/core/resource';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
 import { prepareSynchronousPublicationCommit } from './resourceMutationResult';
 import { commitEditorDockviewPublication } from './editorDockviewPublicationCommit';
 
@@ -47,13 +47,14 @@ const dockviewMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
     get isReady() { return dockviewMocks.ready; },
   },
 }));
 
 vi.mock('@/features/core/dockview/workbenchDockviewInternal', () => ({
+  workbenchDockviewRuntime: { control: {} },
   workbenchDockviewInternal: {
     runPublicationTransaction: dockviewMocks.runPublicationTransaction,
   },

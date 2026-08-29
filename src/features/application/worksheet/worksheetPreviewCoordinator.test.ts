@@ -8,7 +8,7 @@ import type {
   WorksheetDocument,
   WorksheetPreviewPayload,
 } from '@/shared/types/domain/worksheet';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 
 const WORKSHEET_PATH = 'worksheets/Report.yssbi-worksheet';
 

@@ -3,7 +3,7 @@
  */
 
 import type { GraphResourceRecord } from '@/features/core/resource/resourceSelectors';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 import type { Variable } from '@/shared/types/domain/variable';
 import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
 

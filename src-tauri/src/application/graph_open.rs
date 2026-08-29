@@ -20,7 +20,8 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use super::graph_contracts::{
-    GraphContractMappingError, build_resource_catalog, graph_compile_settings,
+    GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
+    graph_compile_settings,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -246,11 +247,10 @@ pub(crate) fn open_graph_in_session(
     if !already_resident {
         captured
             .project()
-            .load_graph_projection(
+            .load_graph_document_for_application(
                 captured.project_instance_id(),
                 request.graph_path(),
                 request.lifecycle_token(),
-                request.locale(),
             )
             .map_err(|error| {
                 map_project_open_error(request.graph_path(), request.operation_id(), error)
@@ -293,9 +293,11 @@ pub(crate) fn open_graph_in_session(
         Default::default(),
         Default::default(),
     );
-    let analysis = captured
-        .graph()
-        .analyze(&candidate_document, &graph_catalog, &settings, &basis);
+    let graph_basis = graph_compilation_basis(&basis);
+    let analysis =
+        captured
+            .graph()
+            .analyze(&candidate_document, &graph_catalog, &settings, &graph_basis);
 
     // This is the final staged commit gate. A replacement that wins before
     // it suppresses the candidate; once it passes, the old Project load has

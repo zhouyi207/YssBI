@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { VscPreview } from 'react-icons/vsc';
 import { usePresentationWindow } from '@/features/application/presentation';
-import { UnifiedResultView } from '@/features/application/viewCapabilities';
+import { UnifiedResultView } from '@/features/application/results';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
 import { ReportView } from '@/views/InfoView/ReportView';
 

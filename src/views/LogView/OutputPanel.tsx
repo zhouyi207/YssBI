@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { FiTrash2 } from 'react-icons/fi';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useExecutionStore, useGraphSessionStore } from '@/features/application/viewCapabilities';
+import { executionResultUi } from '@/features/core/execution';
+import { useExecutionRead } from '@/features/core/execution/read';
+import { useGraphSessionUi } from '@/features/core/graphSession/ui';
 import type { RunOutputProjection } from '@/shared/types/ui';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 
@@ -13,13 +15,11 @@ const EMPTY_RUN_OUTPUT: RunOutputProjection = {
 
 export function OutputPanel() {
   const { t } = useTranslation();
-  const graphPath = useGraphSessionStore(
-    (state) => state.focusedSession?.graphPath ?? null,
-  );
-  const output = useExecutionStore((state) => (
-    graphPath ? state.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT : EMPTY_RUN_OUTPUT
+  const graphPath = useGraphSessionUi((snapshot) => snapshot.focusedSession?.graphPath ?? null);
+  const output = useExecutionRead((snapshot) => (
+    graphPath ? snapshot.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT : EMPTY_RUN_OUTPUT
   ));
-  const clearRunOutput = useExecutionStore((state) => state.clearRunOutput);
+  const clearRunOutput = executionResultUi.clearRunOutput;
   const hasOutput = output.entries.length > 0 || output.projectionDropped;
 
   return (

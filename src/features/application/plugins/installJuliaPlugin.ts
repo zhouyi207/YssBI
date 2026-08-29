@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 
 import { summarizeUserError } from '@/features/application/userErrorSummary';
-import { usePluginStore } from '@/features/core/plugins/pluginStore';
+import { pluginUi } from '@/features/core/plugins/ui';
 import { uiStore } from '@/features/core/ui/UIStore';
 import {
   JuliaRuntimeService,
@@ -54,6 +54,6 @@ export async function installJuliaPlugin(t: TFunction): Promise<boolean> {
     return false;
   }
 
-  usePluginStore.getState().installPlugin(JULIA_PLUGIN_ID);
+  pluginUi.installPlugin(JULIA_PLUGIN_ID);
   return true;
 }

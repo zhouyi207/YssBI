@@ -1,5 +1,5 @@
-use crate::node_system::document::ResourceKey;
 use crate::project::NormalizedProjectRoot;
+use crate::project::ResourceKey;
 use crate::project::{OperationId, ResourceRevision};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

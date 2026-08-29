@@ -30,8 +30,39 @@ export * from './typeSystem';
 export * from './dataValue';
 export * from './variable';
 export * from './project';
+export * from './projectComputationSettings';
 export * from './database';
 export * from './dataframe';
 
 
 export * from './worksheet';
+export type * from './editorProjection';
+export type * from './editorMutation';
+export * from './nodeCreationDescriptor';
+export type * from './localizedCatalog';
+export {
+  isLocalizedCatalogDto,
+  isLocalizedCatalogItemDto,
+} from './localizedCatalog';
+export type * from './result';
+export type * from './executionDemand';
+export type { ExecutionDemandDto, GraphOutputRefDto } from './executionDemand';
+export { EXECUTION_DEMAND_TYPES } from './executionDemand';
+export type * from './runEvent';
+export {
+  RUN_ERROR_CODES,
+  RUN_EVENT_KIND_TYPES,
+  RUN_OUTPUT_STATUSES,
+  RUN_OUTPUT_STREAMS,
+  RUN_PHASES,
+} from './runEvent';
+export * from './diagnostics';
+export type * from './clipboardSubgraph';
+export type * from './plotPayload';
+export {
+  parseCorrelationPlot,
+  parseCorrelogramPlot,
+  parseHistogramPlot,
+  parsePlotPayload,
+  parseXySeriesPlot,
+} from './plotPayload';

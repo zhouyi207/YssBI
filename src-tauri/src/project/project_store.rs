@@ -1,25 +1,44 @@
+#[cfg(test)]
 use crate::database::DatabaseInstance;
-use crate::node_system::ProjectSessionId;
-use crate::node_system::catalog::{
-    BuiltinCatalog, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
+#[cfg(test)]
+use crate::graph::catalog::BuiltinCatalog;
+#[cfg(test)]
+use crate::graph::catalog::{
+    BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
-use crate::node_system::registry::NodeRegistry;
+#[cfg(test)]
+use crate::graph::registry::NodeRegistry;
+#[cfg(test)]
 use crate::node_system::runtime::{
     CompiledParameterStore, FunctionPlanStore, KernelRegistry, ProjectRunRegistry, ResultStore,
     SessionMemoization, build_builtin_kernel_registry,
 };
+use crate::project::ProjectSessionId;
+#[cfg(test)]
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+#[cfg(test)]
+use std::sync::Arc;
+#[cfg(test)]
+use std::sync::RwLock;
 
 pub struct ProjectStore {
+    #[cfg(test)]
     pub databases: HashMap<String, DatabaseInstance>,
+    #[cfg(test)]
     pub node_registry: Arc<NodeRegistry>,
+    #[cfg(test)]
     pub catalog: Arc<BuiltinCatalog>,
+    #[cfg(test)]
     pub kernels: Arc<KernelRegistry>,
+    #[cfg(test)]
     pub compiled_parameters: Arc<RwLock<CompiledParameterStore>>,
+    #[cfg(test)]
     pub function_plans: Arc<FunctionPlanStore>,
+    #[cfg(test)]
     pub results: ResultStore,
+    #[cfg(test)]
     pub memoization: Arc<SessionMemoization>,
+    #[cfg(test)]
     pub runs: Arc<ProjectRunRegistry>,
     pub project_session_id: ProjectSessionId,
     #[cfg(test)]
@@ -27,6 +46,14 @@ pub struct ProjectStore {
 }
 
 impl ProjectStore {
+    #[cfg(not(test))]
+    pub fn new() -> Self {
+        Self {
+            project_session_id: ProjectSessionId::new(uuid::Uuid::new_v4().to_string()),
+        }
+    }
+
+    #[cfg(test)]
     pub fn try_new() -> Result<Self, BuiltinInitializationError> {
         build_builtin_node_system().map(Self::from_builtin)
     }
@@ -45,18 +72,27 @@ impl ProjectStore {
         Ok(constructor(bundle))
     }
 
+    #[cfg(test)]
     fn from_builtin(bundle: BuiltinNodeSystem) -> Self {
         let project_session_id = ProjectSessionId::new(uuid::Uuid::new_v4().to_string());
+        #[cfg(test)]
         let function_plans = Arc::new(FunctionPlanStore::new(project_session_id.clone(), 64));
         Self {
+            #[cfg(test)]
             databases: HashMap::new(),
             node_registry: bundle.registry,
             catalog: bundle.catalog,
+            #[cfg(test)]
             kernels: Arc::new(build_builtin_kernel_registry()),
+            #[cfg(test)]
             compiled_parameters: Arc::new(RwLock::new(CompiledParameterStore::new())),
+            #[cfg(test)]
             function_plans,
+            #[cfg(test)]
             results: ResultStore::new(),
+            #[cfg(test)]
             memoization: Arc::new(SessionMemoization::new()),
+            #[cfg(test)]
             runs: Arc::new(ProjectRunRegistry::new()),
             project_session_id,
             #[cfg(test)]
@@ -64,6 +100,7 @@ impl ProjectStore {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn finalize_session(&self) {
         self.memoization.finalize();
     }
@@ -80,13 +117,13 @@ mod tests {
 
     #[test]
     fn replacing_project_session_invalidates_all_memo_entries() {
-        use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
-        use crate::node_system::analysis::ResourceVersionSet;
-        use crate::node_system::plan::{
+        use crate::execution::plan::legacy::{
             ExecutionSemanticsVersion, OperationStableId, PlannedValueContract, ResultPresentation,
             ValueRef,
         };
-        use crate::node_system::protocol::Value;
+        use crate::graph::analysis::contracts::ResourceVersionSet;
+        use crate::graph::protocol::Value;
+        use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
             ActivationId, ActivationProvenance, CancellationToken, DemandFingerprint,
@@ -163,8 +200,8 @@ mod tests {
 
     #[test]
     fn project_replacement_drains_memo_producer_and_waiter() {
-        use crate::node_system::analysis::ResourceVersionSet;
-        use crate::node_system::plan::{ExecutionSemanticsVersion, OperationStableId};
+        use crate::execution::plan::legacy::{ExecutionSemanticsVersion, OperationStableId};
+        use crate::graph::analysis::contracts::ResourceVersionSet;
         use crate::node_system::runtime::{
             CancellationToken, ComputationSettingsFingerprint, DemandFingerprint,
             MemoCommitCheckpoint, OperationMemoKey, ResultId, RunError,
@@ -236,12 +273,12 @@ mod tests {
 
         let later_constructions = AtomicUsize::new(0);
         let (mut provider, catalog, alias_keys) =
-            crate::node_system::catalog::builtin_bundle_parts_for_test().unwrap();
+            crate::graph::catalog::builtin_bundle_parts_for_test().unwrap();
         provider.types[0].title_key = "missing.type.title".parse().unwrap();
 
         let result = ProjectStore::try_with_builtin_factory_and_constructor(
             || {
-                crate::node_system::catalog::validate_builtin_bundle_for_test(
+                crate::graph::catalog::validate_builtin_bundle_for_test(
                     provider, catalog, alias_keys,
                 )
             },
@@ -254,7 +291,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(BuiltinInitializationError::Assembly(
-                crate::node_system::catalog::BuiltinAssemblyError::Registration(_)
+                crate::graph::catalog::BuiltinAssemblyError::Registration(_)
             ))
         ));
         assert_eq!(later_constructions.load(Ordering::SeqCst), 0);

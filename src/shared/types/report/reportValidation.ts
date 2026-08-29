@@ -1,4 +1,4 @@
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import type { ResultDescriptor } from '@/shared/types/domain/result';
 import { isFiniteNumber, isRecord, isString } from './guards';
 import { parseReportPayload } from './parseReportPayload';
 import type { ReportPayloadKind } from './reportKinds';

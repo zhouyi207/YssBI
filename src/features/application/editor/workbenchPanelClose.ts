@@ -9,11 +9,11 @@ import {
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
 import {
-  workbenchDockviewPort,
-  type WorkbenchPanelCommitToken,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
-import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
+  workbenchDockviewRead,
+} from '@/features/core/dockview/workbenchRead';
+import type { WorkbenchPanelCommitToken } from '@/features/core/dockview/workbenchTypes';
+import { clearDetailFocusForClosedTab } from '@/features/application/editor/clearDetailFocusForClosedTab';
 import {
   clearResourceDocumentState,
   isResourceDocumentDirty,
@@ -30,7 +30,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { editorViewportScope, releaseEditorViewport } from '@/features/core/viewport';
 import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 import {
   captureSettledGraphSaveCommandContext,
@@ -38,6 +38,7 @@ import {
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
+import { saveWorksheetDocument as saveWorksheetDraft } from '@/features/application/worksheet/saveWorksheetDocument';
 import { deactivateGraphTab } from './activateGraphTab';
 import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 import { unloadGraphDocument } from './graphDocumentUnload';
@@ -95,7 +96,7 @@ function captureCloseSnapshot(
     return null;
   }
 
-  const allPanels = [...workbenchDockviewPort.listPanels()];
+  const allPanels = [...workbenchDockviewRead.listPanels()];
   const panelsById = new Map<string, WorkbenchPanelInfo>();
   const duplicateIds = new Set<string>();
   for (const panel of allPanels) {
@@ -172,7 +173,7 @@ async function saveWorksheetDocument(
 ): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return false;
   try {
-    const saved = await useWorksheetStore.getState().saveDocument(document.resourceRef);
+    const saved = await saveWorksheetDraft(document.resourceRef);
     if (!isCurrentProjectIdentity(identity)) return false;
     if (saved) return true;
     showBlockingMessage(i18n.t('notifications.editor.documentSaveFailed', {
@@ -250,7 +251,7 @@ function finalizeClosedPanels(
   snapshot: CloseSnapshot,
   closedPanels: readonly WorkbenchPanelInfo[] = snapshot.panels,
 ): void {
-  const remainingEditors = workbenchDockviewPort.listPanels().filter(
+  const remainingEditors = workbenchDockviewRead.listPanels().filter(
     (panel: WorkbenchPanelInfo): panel is EditorPanelInfo => panel.metadata.role === 'editor',
   );
   const releasedViewportScopes = new Set<string>();
@@ -301,7 +302,7 @@ function finalizeClosedPanels(
 function physicallyAbsentPanels(snapshot: CloseSnapshot): readonly WorkbenchPanelInfo[] {
   try {
     const liveIds = new Set(
-      workbenchDockviewPort.listPanels().map(
+      workbenchDockviewRead.listPanels().map(
         (panel: WorkbenchPanelInfo) => panel.panelInstanceId,
       ),
     );

@@ -1,12 +1,12 @@
 use crate::data_contract::DataType;
 use crate::graph::analysis::GraphDiagnosticLocation;
-use crate::graph_document::{
-    ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
-};
-use crate::node_system::analysis::{DiagnosticArguments, ResourceVersionSet};
-use crate::node_system::protocol::{
+use crate::graph::analysis::contracts::{DiagnosticArguments, ResourceVersionSet};
+use crate::graph::protocol::{
     ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind, RelationalScalarType,
     TypeExpr,
+};
+use crate::graph_document::{
+    ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -20,7 +20,7 @@ pub struct EditorProjectionBasis {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorNodeModel {
     pub node_id: NodeId,
-    pub node_type: crate::node_system::protocol::NodeTypeId,
+    pub node_type: crate::graph::protocol::NodeTypeId,
     pub position: NodePosition,
     pub display: EditorNodeDisplay,
     pub ports: Box<[EditorPortModel]>,
@@ -202,7 +202,7 @@ pub struct EditorColumnOption {
 pub struct EditorFilterColumnOption {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[crate::node_system::protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[crate::graph::protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[EditorFilterLiteralType]>,
 }
 
@@ -294,12 +294,12 @@ pub struct EditorProjectionInput<'a> {
     pub registry_fingerprint: [u8; 32],
 }
 
-impl From<crate::node_system::analysis::DiagnosticSeverity> for EditorDiagnosticSeverity {
-    fn from(value: crate::node_system::analysis::DiagnosticSeverity) -> Self {
+impl From<crate::graph::analysis::contracts::DiagnosticSeverity> for EditorDiagnosticSeverity {
+    fn from(value: crate::graph::analysis::contracts::DiagnosticSeverity) -> Self {
         match value {
-            crate::node_system::analysis::DiagnosticSeverity::Error => Self::Error,
-            crate::node_system::analysis::DiagnosticSeverity::Warning => Self::Warning,
-            crate::node_system::analysis::DiagnosticSeverity::Information => Self::Information,
+            crate::graph::analysis::contracts::DiagnosticSeverity::Error => Self::Error,
+            crate::graph::analysis::contracts::DiagnosticSeverity::Warning => Self::Warning,
+            crate::graph::analysis::contracts::DiagnosticSeverity::Information => Self::Information,
         }
     }
 }

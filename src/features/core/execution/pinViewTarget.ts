@@ -1,10 +1,10 @@
 import type { TFunction } from 'i18next';
 import { portAddressKey } from '@/features/domain/editorProjection';
-import { outputPinRef, type InspectableResultRef } from '@/features/core/resultSource/inspectableResult';
+import { outputPinRef, type InspectableResultRef } from '@/features/domain/result/inspectableResultRef';
 import type {
   EditorConnectionProjectionDto,
   PortAddressDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 
 export type PinViewDisabledReason =
   | 'exec_pin'

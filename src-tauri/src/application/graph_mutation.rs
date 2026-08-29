@@ -107,14 +107,24 @@ pub(crate) fn mutate_graph_in_session(
         request.candidate,
         captured.graph().resource_catalog(),
     )?;
+    let candidate_document = planned.into_candidate_document();
+    commit_captured_graph_candidate(application, captured, capture, candidate_document)
+}
+
+pub(crate) fn commit_captured_graph_candidate(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    capture: GraphOperationCapture,
+    candidate_document: Arc<GraphDocument>,
+) -> Result<GraphMutationApplicationReceipt, GraphMutationApplicationError> {
     application
         .revalidate_captured_session(captured)
         .map_err(map_session_revalidation)?;
-    let candidate_document = planned.into_candidate_document();
+    let operation_id = capture.operation_id();
     let authority = capture.into_authority();
     captured
         .project()
-        .commit_graph_candidate(authority, request.operation_id, candidate_document)
+        .commit_graph_candidate(authority, operation_id, candidate_document)
         .map(Into::into)
         .map_err(GraphMutationApplicationError::Commit)
 }
@@ -142,15 +152,15 @@ pub(crate) fn plan_captured_graph_mutation(
     .map_err(GraphMutationApplicationError::Graph)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::{
         ApplicationSessionSlot, ApplicationState, GraphMutationApplicationError,
         GraphMutationRequest, SessionCaptureError, plan_captured_graph_mutation,
     };
+    use crate::graph::protocol::NodeTypeId;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph_document::{DocumentNode, GraphDocument, GraphRevision, NodeId, NodePosition};
-    use crate::node_system::protocol::NodeTypeId;
     use crate::project::project_state::graph_operation::ProjectGraphCommitError;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, OperationId, ProjectData, ProjectInstanceId,

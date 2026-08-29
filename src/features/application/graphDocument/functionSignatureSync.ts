@@ -1,8 +1,8 @@
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import type { FunctionSignaturePin, GraphType } from '@/shared/types';
-import type { FunctionSignatureDto } from '@/shared/types/dto/editorMutation';
-import type { FunctionEditorProjectionDto } from '@/shared/types/dto/editorProjection';
-import type { ProjectGraphIndexRow } from '@/services/project/projectService';
+import type { FunctionSignatureDto } from '@/shared/types/domain/editorMutation';
+import type { FunctionEditorProjectionDto } from '@/shared/types/domain/editorProjection';
+import type { ProjectGraphIndexRow } from '@/shared/types/domain/project';
 import type { PreparedFunctionDeltaInstall } from '@/features/application/editorMutation/projectPublicationCoordinator';
 
 /** 从后端图 DTO / 领域图读取签名并写入 graphMetaStore（UI 签名唯一来源，见 functionResourceView）。 */

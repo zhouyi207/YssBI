@@ -1,4 +1,4 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import { EMPTY_HISTORY_STATE, useHistoryStore, type HistoryStoreState } from './historyStore';
 import type { HistoryProjectionSnapshot } from './read';
 

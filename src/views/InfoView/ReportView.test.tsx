@@ -3,14 +3,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ResultViewPresentationProvider } from '@/features/core/resultSource/resultViewPresentation';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import { ResultViewPresentationProvider } from '@/features/application/results/resultViewPresentation';
+import type { ResultDescriptor } from '@/shared/types/domain/result';
 import { ReportView } from './ReportView';
 import { ReportLayout } from './shared/ReportLayout';
 
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: { data: { error: logError } },
 }));
 

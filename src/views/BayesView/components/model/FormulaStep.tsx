@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatExpression, formatRawExpressionLatex } from '@/features/application/viewCapabilities';
+import { formatExpression, formatRawExpressionLatex } from '@/features/domain/bayes';
 import { bayesErrorMessage } from '../../bayesIssuePresentation';
 import { PanelTitle, replaceAt } from './BayesFields';
 import { LatexFormulaPreview, RecognizedSymbols, latexSymbol } from './LatexPresentation';

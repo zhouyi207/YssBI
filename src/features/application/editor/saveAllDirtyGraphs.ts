@@ -1,20 +1,20 @@
 import i18n from 'i18next';
 
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
+import { saveWorksheetDocument } from '@/features/application/worksheet/saveWorksheetDocument';
 import {
   captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import {
   isResourceDocumentDirty,
   markResourceDirty,
   resourceKey,
 } from '@/features/core/resource';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
@@ -28,7 +28,7 @@ interface DirtyEditorDocument {
 function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
   const seen = new Set<string>();
   const dirty: DirtyEditorDocument[] = [];
-  for (const panel of workbenchDockviewPort.listPanels()) {
+  for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role !== 'editor') continue;
     const { resourceRef, resourceKind } = panel.metadata;
     const key = resourceKey({ id: resourceRef, kind: resourceKind });
@@ -57,7 +57,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
     let context: GraphSaveCommandContext | undefined;
     try {
       if (document.resourceKind === 'worksheet') {
-        const saved = await useWorksheetStore.getState().saveDocument(document.resourceRef);
+        const saved = await saveWorksheetDocument(document.resourceRef);
         if (!saved) {
           showBlockingMessage(i18n.t('notifications.editor.documentSaveFailed', {
             title: document.title,

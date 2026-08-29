@@ -6,16 +6,19 @@ use thiserror::Error;
 
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
+use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use crate::database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::plan::PlanProjectSessionId;
+use crate::execution::ports::scientific::ScientificBackend;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
+use crate::graph::catalog::build_builtin_node_system;
 use crate::graph::runtime_state::GraphRuntimeState;
-use crate::node_system::ProjectSessionId;
+use crate::project::ProjectSessionId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 
 /// Composition-root supplied construction for one session-bound resource factory.
@@ -25,22 +28,21 @@ use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 /// the owner is consumed by the eventual composition root rather than stored in
 /// an `ApplicationSession`.
 pub(crate) struct SessionResourceFactoryBuilder(
-    fn(Arc<DatabaseRuntimeSession>, PlanProjectSessionId) -> ResourceProviderFactory,
+    fn(PlanProjectSessionId) -> ResourceProviderFactory,
 );
 
 impl SessionResourceFactoryBuilder {
     pub(crate) fn from_composition(
-        build: fn(Arc<DatabaseRuntimeSession>, PlanProjectSessionId) -> ResourceProviderFactory,
+        build: fn(PlanProjectSessionId) -> ResourceProviderFactory,
     ) -> Self {
         Self(build)
     }
 
     pub(super) fn build(
         &self,
-        session: Arc<DatabaseRuntimeSession>,
         bound_project_session: PlanProjectSessionId,
     ) -> ResourceProviderFactory {
-        (self.0)(session, bound_project_session)
+        (self.0)(bound_project_session)
     }
 }
 
@@ -152,6 +154,8 @@ pub(crate) enum ProjectSessionCandidateError {
     DatabaseSession(#[source] super::super::database_session::DatabaseSessionApplicationError),
     #[error("application session generation is exhausted")]
     GenerationExhausted,
+    #[error("graph runtime built-ins could not be constructed")]
+    GraphRuntime(#[source] crate::graph::catalog::BuiltinInitializationError),
     #[error(transparent)]
     Candidate(#[from] SessionCandidateBuildError),
 }
@@ -179,8 +183,7 @@ pub(crate) fn build_replacement_candidate(
         execution,
         database,
     } = input;
-    let resource_provider_factory =
-        Arc::new(builder.build(Arc::clone(&database), bound_project_session));
+    let resource_provider_factory = Arc::new(builder.build(bound_project_session));
     Ok(UnpublishedApplicationSession {
         session: ApplicationSession::from_candidate(
             epoch,
@@ -201,23 +204,22 @@ pub(crate) fn build_current_project_candidate(
     builder: &SessionResourceFactoryBuilder,
     epoch: ApplicationSessionEpoch,
     project: Arc<ProjectState>,
+    reusable_instances: impl IntoIterator<Item = DatabaseInstance>,
+    scientific_backend: Arc<dyn ScientificBackend>,
 ) -> Result<UnpublishedApplicationSession, ProjectSessionCandidateError> {
     let data = project
         .get_data()
         .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
     let project_instance_id = ProjectInstanceId::from_existing(project.project_instance_id());
-    let (project_session_id, registry, catalog, database_instances) = {
+    let project_session_id = {
         let store = project
             .project_store
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        (
-            store.project_session_id.clone(),
-            Arc::clone(&store.node_registry),
-            Arc::clone(&store.catalog),
-            store.databases.values().cloned().collect::<Vec<_>>(),
-        )
+        store.project_session_id.clone()
     };
+    let builtin =
+        build_builtin_node_system().map_err(ProjectSessionCandidateError::GraphRuntime)?;
     let (root, database_revisions) = match project.get_path() {
         Some(_) => {
             let session = project
@@ -235,6 +237,31 @@ pub(crate) fn build_current_project_candidate(
         }
         None => (None, BTreeMap::new()),
     };
+    let reusable_instances = reusable_instances
+        .into_iter()
+        .map(|instance| (instance.decl.id.clone(), instance))
+        .collect::<BTreeMap<_, _>>();
+    let database_instances = data
+        .databases
+        .values()
+        .map(|declaration| {
+            reusable_instances
+                .get(&declaration.id)
+                .filter(|instance| instance.decl == *declaration)
+                .cloned()
+                .unwrap_or_else(|| match &declaration.engine {
+                    crate::database_contract::DatabaseEngine::DuckDb { .. } => {
+                        bind_duckdb_instance(declaration, root.as_ref().map(|root| root.as_path()))
+                    }
+                    _ => DatabaseInstance {
+                        decl: declaration.clone(),
+                        state: DatabaseState::Failed {
+                            error: "Only DuckDb datasets are supported; re-import the data".into(),
+                        },
+                    },
+                })
+        })
+        .collect::<Vec<_>>();
     let declarations = data
         .databases
         .values()
@@ -275,9 +302,8 @@ pub(crate) fn build_current_project_candidate(
     let graph = Arc::new(GraphRuntimeState::from_components(
         crate::graph::runtime_state::GraphRuntimeEpoch::from_existing(epoch.get()),
         crate::graph::runtime_state::GraphRuntimeComponents {
-            registry,
-            catalog,
-            compiler: Arc::new(crate::node_system::compiler::ProjectCompileCoordinator::new()),
+            registry: builtin.registry,
+            catalog: builtin.catalog,
             resource_catalog: Arc::new(
                 crate::graph::resource_catalog::ResourceCatalogSnapshot::new(
                     BTreeMap::new(),
@@ -290,9 +316,10 @@ pub(crate) fn build_current_project_candidate(
     ));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
     let runtime_generation = RuntimeGeneration::from_existing(epoch.get().saturating_add(1));
-    let execution = Arc::new(ExecutionRuntimeState::new(
+    let execution = Arc::new(ExecutionRuntimeState::from_composition(
         execution_session_id,
         runtime_generation,
+        scientific_backend,
     ));
     let bound_project_session =
         PlanProjectSessionId::from_existing(project_session_id.as_str().into());
@@ -326,22 +353,18 @@ mod tests {
     use crate::execution::plan::PlanProjectSessionId;
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
+    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     };
-    use crate::node_system::ProjectSessionId;
-    use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::compiler::ProjectCompileCoordinator;
+    use crate::project::ProjectSessionId;
     use crate::project::{ProjectInstanceId, ProjectState};
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
-    fn test_factory(
-        _database: Arc<crate::database::runtime::DatabaseRuntimeSession>,
-        project_session: PlanProjectSessionId,
-    ) -> ResourceProviderFactory {
+    fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())
     }
 
@@ -353,7 +376,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: graph_components.registry,
                 catalog: graph_components.catalog,
-                compiler: Arc::new(ProjectCompileCoordinator::new()),
                 resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
                     BTreeMap::new(),
                     BTreeMap::new(),

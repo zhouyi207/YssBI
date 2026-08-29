@@ -241,16 +241,6 @@ export function discoverFrontendStateAuthorityMembers(
 
 export const FRONTEND_STATE_AUTHORITY: readonly FrontendStateAuthorityEntry[] = [
   {
-    storeModule: 'src/features/core/dataStore/projectIOStore.ts',
-    member: 'projectInstanceId',
-    memberKind: 'field',
-    authority: 'backend-base',
-    writes: ['projectInstanceId'],
-    writerModule: '@/features/core/project/publication',
-    writerLayer: 'Application',
-    readerLayers: ['Views', 'Application'],
-  },
-  {
     storeModule: 'src/features/core/resource/documentStateStore.ts',
     member: 'documents.*.dirty',
     memberKind: 'field',
@@ -354,7 +344,20 @@ export function auditFrontendStateAuthority(
     }
     const visited = new Set<string>();
     let current: string | undefined = memberKey(member);
+    let hops = 0;
     while (current) {
+      if (++hops > actionMembers.size) {
+        findings.push({
+          ruleId: 'frontend-state-authority-action-cycle',
+          storeModule: member.storeModule,
+          member: member.member,
+          memberKind: member.memberKind,
+          canonicalWritePath: member.writes[0] ? canonicalPath(member.writes[0]) : null,
+          line: member.line,
+          column: member.column,
+        });
+        break;
+      }
       if (!visited.add(current)) {
         findings.push({
           ruleId: 'frontend-state-authority-action-cycle',

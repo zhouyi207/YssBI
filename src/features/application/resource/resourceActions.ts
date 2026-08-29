@@ -1,8 +1,8 @@
 import {
-  commitAfterCommand,
   useResourceStore,
   type ResourceRef,
 } from '@/features/core/resource';
+import { commitAfterCommand } from './resourceIndexCoordinator';
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { DatabaseService } from '@/services/database/databaseService';
@@ -16,7 +16,7 @@ import {
   beginWorksheetRenameLifecycle,
   isWorksheetLifecycleCurrent,
 } from '@/features/application/editor/worksheetLifecycleCoordinator';
-import type { ResourceMutationResultDto } from '@/shared/types/dto';
+import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
 
 import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';

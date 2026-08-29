@@ -1,18 +1,18 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
+import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
 import type {
   FunctionSignatureDto,
   GraphProjectionReplacementDto,
   HistoryStatusDto,
   ResourceMoveDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import type {
-  DatabaseRecord,
   FunctionSignaturePin,
   Variable,
   WorksheetDocument,
   WorksheetIndexEntry,
 } from '@/shared/types';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 import type { PreparedGraphProjectionReplacements } from '@/features/core/dataStore/graphDataStore';
 import {
   acceptProjectLifecycleActivation,
@@ -28,7 +28,8 @@ import type { FocusedGraphSession } from '@/features/core/graphSession/graphSess
 import type { EditorViewport } from '@/features/core/viewport/editorViewport';
 import type { DocumentState, ProjectResourceMeta, ResourceKey } from '@/features/core/resource';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
-import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
+import { ProjectService } from '@/services/project/projectService';
+import type { ProjectIndexRow } from '@/shared/types/domain/project';
 import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { clearWorksheetLifecycleProjects } from '@/features/application/editor/worksheetLifecycleCoordinator';
@@ -40,8 +41,8 @@ import {
   commitPreparedPublication,
   fingerprintResourceMutationResult,
   prepareSynchronousPublicationCommit,
-  validateResourceMutationWireResult,
 } from './resourceMutationResult';
+import { validateResourceMutationResult } from '@/features/domain/resource/resourceMutationValidation';
 import {
   prepareResourceMove,
   type PreparedResourceMove,
@@ -367,8 +368,8 @@ export class ProjectPublicationCoordinator {
     const lifecycle = captureProjectLifecycleState();
     if (!lifecycle.projectInstanceId) return staleLifecycleError();
     if (input.result.projectInstanceId !== lifecycle.projectInstanceId) return staleLifecycleError();
-    const wireError = validateResourceMutationWireResult(input.result);
-    if (wireError) return protocolError(wireError);
+    const validationError = validateResourceMutationResult(input.result);
+    if (validationError) return protocolError(validationError);
     const callerError = input.validate?.(input.result);
     if (callerError) return protocolError(callerError);
     return undefined;

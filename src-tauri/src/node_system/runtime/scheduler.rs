@@ -13,19 +13,19 @@ use super::{
     SessionMemoization, StoredValue, check_terminal, execute_planned_adapter,
     validate_data_series_type_expr,
 };
-use crate::node_system::analysis::ResourceVersionSet;
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, OperationIndex, PlannedKernel, PlannedPublication, PlannedValueContract,
     PlannedValueKind, ResultPresentation, StructuredControlRegion, ValueRef, WorkloadClass,
 };
-use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
+use crate::graph::analysis::contracts::ResourceVersionSet;
+use crate::graph::protocol::{CachePolicy, RetryPolicy, Value};
 use crate::node_system::runtime::RunId;
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 use std::num::NonZeroU64;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
@@ -53,7 +53,12 @@ const DEFAULT_RECURSION_LIMIT: usize = 64;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 fn allocate_runtime_id(allocator: &AtomicU64) -> Result<NonZeroU64, RunError> {
-    crate::node_system::allocate_nonzero_id(allocator).map_err(|_| RunError::RuntimeIdExhausted)
+    allocator
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            NonZeroU64::new(current)?.get().checked_add(1)
+        })
+        .map(|id| NonZeroU64::new(id).expect("runtime IDs are non-zero"))
+        .map_err(|_| RunError::RuntimeIdExhausted)
 }
 
 #[cfg(test)]
@@ -603,7 +608,9 @@ impl<'a> RunExecutor<'a> {
     ) -> Result<RunResult, RunError> {
         let run_id = allocate_runtime_id(&NEXT_RUN_ID).map(|id| RunId::new(id.get()))?;
         let run = GraphRunIdentity {
-            project_session_id: plan.provenance.project_session_id.clone(),
+            project_session_id: crate::project::ProjectSessionId::new(
+                plan.provenance.project_session_id.as_str(),
+            ),
             graph_path: plan.provenance.graph_path.clone(),
             run_id,
         };
@@ -611,7 +618,7 @@ impl<'a> RunExecutor<'a> {
             .run_registry
             .map(|registry| {
                 registry.track(
-                    run.project_session_id.clone(),
+                    crate::project::ProjectSessionId::new(run.project_session_id.as_str()),
                     run.run_id,
                     cancellation.clone(),
                 )

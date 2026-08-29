@@ -15,7 +15,7 @@ import {
   type LocalizedCatalogResponse,
 } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { CatalogService } from '@/services/nodeSystem/catalogService';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,

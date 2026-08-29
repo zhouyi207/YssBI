@@ -2,7 +2,6 @@ use serde::Deserialize;
 use yssbi_lib::sci::api::time_series::serial_tests::{
     SerialTestsInput, SerialTestsOutput, compute_serial_tests,
 };
-use yssbi_lib::sci::engine::SciContext;
 
 const SIMPLE_RESIDUALS: &str =
     include_str!("sci/fixtures/time_series/serial_tests/simple_residuals.json");
@@ -25,7 +24,7 @@ struct Tolerance {
 #[test]
 fn rust_serial_tests_match_golden_fixtures() {
     for fixture in fixtures() {
-        let result = compute_serial_tests(&SciContext::rust(), fixture.input.clone())
+        let result = compute_serial_tests(fixture.input.clone())
             .unwrap_or_else(|error| panic!("{} rust serial tests failed: {error}", fixture.name));
 
         assert_output_close(

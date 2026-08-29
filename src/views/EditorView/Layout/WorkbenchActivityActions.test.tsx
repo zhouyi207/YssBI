@@ -15,9 +15,10 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/features/core/workbench', () => ({
-  useWorkbenchStore: (selector: (state: { openSettings: () => void }) => unknown) =>
-    selector({ openSettings: mocks.openSettings }),
+vi.mock('@/features/core/workbench/ui', () => ({
+  workbenchUi: {
+    openSettings: mocks.openSettings,
+  },
 }));
 
 vi.mock('./PluginActivityActions', () => ({

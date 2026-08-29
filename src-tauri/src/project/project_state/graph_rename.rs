@@ -1,4 +1,5 @@
 use super::*;
+use crate::project::resource_patch::ResourceDocumentPatch;
 
 impl ProjectState {
     pub(in crate::project) fn rename_graph_resource_transaction_impl(
@@ -9,7 +10,8 @@ impl ProjectState {
         new_name: &str,
         lifecycle_token: u64,
         operation_id: crate::project::OperationId,
-    ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
+    ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
+    {
         self.ensure_project_operational()?;
         let mut ownership_lease = self.acquire_graph_rename_ownership(
             expected_project_instance_id,
@@ -178,7 +180,7 @@ impl ProjectState {
                     graph_path.as_str(),
                     target.as_str(),
                 );
-                let key = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+                let key = ResourceKey::Variable(crate::project::VariableResourceKey(
                     format!("variables/{id}").into(),
                 ));
                 affected_resources.push(key.clone());

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  workbenchDockviewPort,
   type WorkbenchGroupInfo,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchRead';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
@@ -86,23 +87,23 @@ describe('openEditorTab', () => {
     mocks.requestCloseWorkbenchPanels.mockResolvedValue(true);
     mocks.showWorkbenchLayoutError.mockReset();
 
-    vi.spyOn(workbenchDockviewPort, 'listGroups').mockImplementation(() => mocks.groups);
-    vi.spyOn(workbenchDockviewPort, 'listGroupPanels').mockImplementation(
+    vi.spyOn(workbenchDockviewRead, 'listGroups').mockImplementation(() => mocks.groups);
+    vi.spyOn(workbenchDockviewRead, 'listGroupPanels').mockImplementation(
       (groupId) => mocks.panels.filter((panel) => panel.groupId === groupId),
     );
-    vi.spyOn(workbenchDockviewPort, 'findEditorPanelsByResource').mockImplementation(
+    vi.spyOn(workbenchDockviewRead, 'findEditorPanelsByResource').mockImplementation(
       (resourceRef) => mocks.panels.filter(
         (panel) => panel.metadata.role === 'editor'
           && panel.metadata.resourceRef === resourceRef,
       ),
     );
-    vi.spyOn(workbenchDockviewPort, 'getActiveEditorPanel').mockImplementation(() => {
+    vi.spyOn(workbenchDockviewRead, 'getActiveEditorPanel').mockImplementation(() => {
       const active = mocks.panels.find((panel) => panel.active);
       return active?.metadata.role === 'editor' ? active : undefined;
     });
-    vi.spyOn(workbenchDockviewPort, 'ensureCentralGroup')
+    vi.spyOn(workbenchDockviewControl, 'ensureCentralGroup')
       .mockImplementation(mocks.ensureCentralGroup);
-    vi.spyOn(workbenchDockviewPort, 'openEditor').mockImplementation(mocks.openEditor);
+    vi.spyOn(workbenchDockviewControl, 'openEditor').mockImplementation(mocks.openEditor);
   });
 
   it('preserves an existing pinned and sticky editor during a preview open', async () => {

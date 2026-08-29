@@ -4,7 +4,7 @@ import {
   type LocalizedCategoryDto,
   type LocalizedParameterDto,
   type LocalizedPortDto,
-} from '@/shared/types/dto/localizedCatalog';
+} from '@/shared/types/domain/localizedCatalog';
 
 export type LocalizedCatalogCategory = LocalizedCategoryDto;
 export type LocalizedCatalogPort = LocalizedPortDto;

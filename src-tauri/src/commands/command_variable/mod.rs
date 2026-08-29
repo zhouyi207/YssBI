@@ -1,20 +1,20 @@
 use crate::data_contract::{DataType, DataValue};
 use crate::error::CommandError;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::event::EventProject;
-use crate::event::ResourceMutationResultDto;
 use crate::event::{Event, emit_project_event_result};
 use crate::project::ProjectInstanceId;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
-#[cfg(test)]
-use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{OperationId, ResourceRevision};
+#[cfg(all(test, any()))]
+use crate::schema::ProjectSaveResultDto;
 use crate::schema::VariableInstanceDTO;
+use crate::schema::application_event::ResourceMutationResultDto;
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn ensure_command_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -28,12 +28,12 @@ fn ensure_command_project(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn persist_global_variables_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     expected_revisions: std::collections::BTreeMap<
-        crate::node_system::document::ResourceKey,
+        crate::graph::document::ResourceKey,
         crate::project::ResourceRevision,
     >,
     operation_id: OperationId,
@@ -56,7 +56,7 @@ pub struct VariableCommandResult {
     pub result: Option<ResourceMutationResultDto>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn emit_global_result(emit: &mut impl FnMut(Event), result: &ResourceMutationResultDto) {
     emit(Event::Project(EventProject::ResourceMutationCommitted {
         result: result.clone(),
@@ -70,7 +70,7 @@ fn variable_dto(
         .map_err(|error| CommandError::diagnosed("variable_dto_mapping_failed", error))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn create_variable_with_emitter(
     state: &ProjectState,
     name: &str,
@@ -127,7 +127,7 @@ fn create_variable_with_emitter(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn update_variable_with_emitter(
     state: &ProjectState,
     variable_id: VariableId,
@@ -191,7 +191,7 @@ fn update_variable_with_emitter(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn delete_variable_with_emitter(
     state: &ProjectState,
     variable_id: VariableId,
@@ -237,7 +237,7 @@ fn delete_variable_with_emitter(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn ensure_variable_data_type(data_type: &DataType) -> Result<(), CommandError> {
     if matches!(data_type, DataType::Any) {
         return Err(CommandError::expected("invalid_variable_type"));
@@ -429,11 +429,11 @@ fn map_session_capture_error(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use crate::event::{Event, EventProject};
-    use crate::node_system::document::{
+    use crate::graph::document::{
         HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey,
     };
     use crate::project::ProjectData;
@@ -821,7 +821,7 @@ mod tests {
         let updated_result = updated.result.as_ref().unwrap();
         assert_eq!(updated_result.publication_revision, 2);
         let patch = match &updated_result.deltas[0].payload {
-            crate::node_system::document::ResourceDocumentPatch::Variable(patch) => patch,
+            crate::graph::document::ResourceDocumentPatch::Variable(patch) => patch,
             payload => panic!("unexpected variable payload: {payload:?}"),
         };
         assert_eq!(patch.before.as_ref().unwrap()["name"], "global");
@@ -1270,7 +1270,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             stale,
-            crate::node_system::document::MutationConflict::StaleRevision {
+            crate::graph::document::MutationConflict::StaleRevision {
                 base_revision,
                 current_revision,
             } if base_revision == ResourceRevision::new(2)

@@ -212,7 +212,7 @@ view renders Alert, Dialog, inline state, or no message
 
 ### 5.1 Authority、identity 与 atomic state
 
-`ProjectStore.results` 中的 Rust `ResultStore` 是 project-session logical execution result 与 Pin history 的 authority。它在同一 registry transaction 中创建 activation group 的 `Pending` outputs，并在完整校验后把 group 原子 transition 为 `Ready`、`Failed` 或 `Cancelled`；调用方不能观察同一 activation group 的部分 terminal state。
+`ExecutionRuntimeState` 中的 Rust `ResultStore` 是 session-scoped logical execution result 与 Pin history 的 authority。它在同一 registry transaction 中创建 activation group 的 `Pending` outputs，并在完整校验后把 group 原子 transition 为 `Ready`、`Failed` 或 `Cancelled`；调用方不能观察同一 activation group 的部分 terminal state。
 
 每个 logical result 使用 opaque、单调分配的 `ResultId`。`StoredResult` 保留：
 
@@ -232,7 +232,7 @@ Frontend 经 `ResultService` 使用四个 typed command query：
 - `get_result_page`：分页读取 ready stored value，并返回 value kind、metadata 与 count；
 - `get_pin_result_history`：读取 graph output 的 ordered Pin history 与当前 result state。
 
-Public run stream 中，只有 `{ type: 'pinPreviewResultReady', output, generation, resultId }` 和 `{ type: 'openResultWindow', resultId }` 公告 result ID。它们不携带 authoritative state、payload、history、provenance 或 presentation；ordinary result publication 也不发送 `resultGroupChanged` 或 `outputResultChanged` public event。消费者收到 Preview/Open 通知后仍从 typed queries 读取 `ResultStore`。
+Public run stream 中，只有 `{ type: 'pinPreviewResultReady', output, generation, resultId }` 和 `{ type: 'resultInspectionRequested', resultId }` 公告 result ID。它们不携带 authoritative state、payload、history、provenance 或 presentation；ordinary result publication 也不发送 `resultGroupChanged` 或 `outputResultChanged` public event。消费者收到 Preview/Inspection 通知后仍从 typed queries 读取 `ResultStore`。
 
 Project replacement 会构造新的 project-session `ProjectStore` 与 `ResultStore`。旧 result 和 Pin history 随旧 store 失效，旧 `ResultId` 查询不会返回或 alias replacement project 的 result。
 

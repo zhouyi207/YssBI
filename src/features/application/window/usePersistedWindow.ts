@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { currentAppWindow } from '@/services/platform/appWindow';
 import { WindowStateService } from "@/services/window/windowStateService";
 import type { WindowKind } from "@/shared/types/settings";
-import { logger } from "@/utils/appLogger";
+import { logger } from '@/features/application/observability/appLogger';
 import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCapture";
 
 /**

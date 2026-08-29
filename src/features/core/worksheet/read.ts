@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import {
   getWorksheetSnapshot as getSnapshot,

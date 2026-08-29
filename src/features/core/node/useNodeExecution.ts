@@ -1,4 +1,4 @@
-import { useExecutionStore } from '@/features/core/execution';
+import { useExecutionRead } from '@/features/core/execution/read';
 
 const IDLE = {
   nodeState: null,
@@ -11,7 +11,7 @@ const IDLE = {
  * During live run / replay, visuals are imperative via executionVisualSession + CSS.
  */
 export function useNodeExecution(nodeId: string, graphPath?: string, enabled = true) {
-  const nodeState = useExecutionStore((state) => {
+  const nodeState = useExecutionRead((state) => {
     if (!enabled || !graphPath) return null;
     return state.graphs[graphPath]?.nodeStates.get(nodeId) ?? null;
   });

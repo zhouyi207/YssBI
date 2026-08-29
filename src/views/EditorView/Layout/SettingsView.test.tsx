@@ -87,7 +87,14 @@ vi.mock('@/features/core/settings/settingsStore', () => {
     resetEditorToDefaults: settings.resetEditorToDefaults,
     resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
   };
-  return { useSettingsStore: (selector: (value: typeof state) => unknown) => selector(state) };
+  const useSettingsStore = Object.assign(
+    (selector: (value: typeof state) => unknown) => selector(state),
+    {
+      getState: () => state,
+      subscribe: () => () => {},
+    },
+  );
+  return { useSettingsStore };
 });
 
 function click(element: Element): void {

@@ -1,22 +1,33 @@
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/features/application/errorReference';
 import type {
   GraphDeltaDto,
   ResourceKeyDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import type {
   ComputationSettingsMutationReceiptDto,
-} from '@/shared/types/dto/projectComputationSettings';
+} from '@/shared/types/domain/projectComputationSettings';
 import type {
   LifecycleMutationResultDto,
-  ProjectSaveResultDto,
-} from '@/shared/types/dto/project';
+} from '@/shared/types/domain/project';
 import type {
   ProjectHydrationCoordinator,
   ProjectHydrationOutcome,
 } from './projectHydrationCoordinator';
 
 type Awaitable<T> = T | PromiseLike<T>;
+
+export interface ProjectSaveReceipt {
+  readonly projectInstanceId: string;
+  readonly operationId: string;
+  readonly publicationRevision: number;
+  readonly affectedResources: readonly ResourceKeyDto[];
+  readonly indexInvalidated: boolean;
+  readonly history: {
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+  };
+}
 
 export interface ProjectLoadedPayload {
   readonly result: {
@@ -31,7 +42,7 @@ export interface ProjectLifecycleCommittedPayload {
 }
 
 export interface ProjectSavedPayload {
-  readonly result: ProjectSaveResultDto;
+  readonly result: ProjectSaveReceipt;
 }
 
 export interface ComputationSettingsChangedPayload {
@@ -106,7 +117,7 @@ export interface ProjectEventReconcilerDependencies {
   readonly publishLifecycleCommitted?: (
     result: LifecycleMutationResultDto,
   ) => Awaitable<void>;
-  readonly publishProjectSaved?: (result: ProjectSaveResultDto) => Awaitable<void>;
+  readonly publishProjectSaved?: (result: ProjectSaveReceipt) => Awaitable<void>;
   readonly publishComputationSettingsChanged?: (
     result: ComputationSettingsMutationReceiptDto,
   ) => Awaitable<void>;

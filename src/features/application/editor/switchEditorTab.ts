@@ -1,4 +1,5 @@
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
@@ -25,14 +26,14 @@ function scheduleSuspendPreviousGroup(prevGroupId: string): void {
 }
 
 function groupContainsEditor(groupId: string): boolean {
-  return workbenchDockviewPort
+  return workbenchDockviewRead
     .listGroupPanels(groupId)
     .some((panel) => panel.metadata.role === 'editor');
 }
 
 /** Synchronize application session focus without writing layout focus back to Dockview. */
 export function focusEditorGroupSync(groupId: string): boolean {
-  const groupExists = workbenchDockviewPort
+  const groupExists = workbenchDockviewRead
     .listGroups()
     .some((group) => group.groupId === groupId);
   if (!groupExists || !groupContainsEditor(groupId)) return false;
@@ -96,14 +97,14 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
   await editorGroupSessionChain;
   if (request !== latestTabSwitchRequest) return false;
 
-  const panel = workbenchDockviewPort
+  const panel = workbenchDockviewRead
     .findEditorPanelsByResource(tab.id)
     .find((candidate) =>
       candidate.groupId === groupId
         && candidate.metadata.role === 'editor'
         && candidate.metadata.resourceKind === tab.type);
   if (!panel) return false;
-  if (!panel.active && !await workbenchDockviewPort.activate(panel.panelInstanceId)) return false;
+  if (!panel.active && !await workbenchDockviewControl.activate(panel.panelInstanceId)) return false;
   if (request !== latestTabSwitchRequest) return false;
   return synchronizeTabSession(request, groupId, tab);
 }

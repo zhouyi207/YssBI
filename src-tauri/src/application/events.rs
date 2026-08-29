@@ -1,6 +1,8 @@
+use crate::application::editor_projection::EditorProjectionModel;
 use crate::graph_document::GraphResourcePath;
-use crate::node_system::document::{ResourceDeltaEvent, ResourceLifecycleKind};
+use crate::project::FunctionEditorProjection;
 use crate::project::{OperationId, ProjectInstanceId, ProjectRecord};
+use crate::project::{ResourceDeltaEvent, ResourceLifecycleKind};
 
 /// Low-rate cross-owner facts owned by Application.
 ///
@@ -11,6 +13,15 @@ use crate::project::{OperationId, ProjectInstanceId, ProjectRecord};
 pub enum ApplicationEvent {
     ProjectLifecycle(ProjectLifecycleApplicationEvent),
     ResourceCommitted(CommittedResourceMutation),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphDeltaEvent<T> {
+    pub graph_path: GraphResourcePath,
+    pub from_revision: crate::project::ResourceRevision,
+    pub to_revision: crate::project::ResourceRevision,
+    pub caused_by: Option<OperationId>,
+    pub payload: T,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +75,7 @@ pub struct LifecycleRecovery {
 pub enum LifecycleRecoveryAction {
     RemoveRegistryRecord,
     CleanupRegistry,
+    ActivateDestination,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,4 +123,65 @@ pub enum ResourceProjectionStatus {
 pub struct HistoryStatus {
     pub can_undo: bool,
     pub can_redo: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphProjectionReplacement {
+    pub graph_path: Box<str>,
+    pub projection: EditorProjectionModel,
+    pub function_editor_projection: Option<FunctionEditorProjection>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphMutationResult {
+    pub project_instance_id: ProjectInstanceId,
+    pub delta: GraphDeltaEvent<crate::graph::document::GraphDocumentPatch>,
+    pub projection_replacement: GraphProjectionReplacement,
+    pub history: HistoryStatus,
+}
+
+pub(crate) fn committed_resource_mutation_from_project(
+    facts: crate::project::project_writers::ProjectResourceMutationFacts,
+) -> CommittedResourceMutation {
+    let (
+        operation_id,
+        project_instance_id,
+        publication_revision,
+        moves,
+        deltas,
+        projection_status,
+        history,
+    ) = facts.into_parts();
+    CommittedResourceMutation {
+        operation_id,
+        project_instance_id,
+        publication_revision,
+        moves: moves
+            .into_vec()
+            .into_iter()
+            .map(|value| ResourceMove {
+                from: value.from,
+                to: value.to,
+                kind: value.kind,
+                name: value.name,
+            })
+            .collect(),
+        deltas: deltas.into_vec(),
+        projection_status: match projection_status {
+            crate::project::project_writers::ProjectProjectionStatus::Complete {
+                expected_graph_paths,
+            } => ResourceProjectionStatus::Complete {
+                expected_graph_paths: expected_graph_paths.into_vec(),
+            },
+            crate::project::project_writers::ProjectProjectionStatus::Incomplete {
+                invalidated_graph_paths,
+            } => ResourceProjectionStatus::Incomplete {
+                invalidated_graph_paths: invalidated_graph_paths.into_vec(),
+            },
+        },
+        history: HistoryStatus {
+            can_undo: history.can_undo,
+            can_redo: history.can_redo,
+        },
+    }
 }

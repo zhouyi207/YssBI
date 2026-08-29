@@ -1,6 +1,8 @@
 import { VscSymbolMethod, VscSymbolProperty } from 'react-icons/vsc';
 import { Button } from '@/components/ui/button';
-import type { SidebarDragPayload, NodeCreationDescriptor, LocalizedCatalogBrowserRow } from '@/features/application/viewCapabilities';
+import type { SidebarDragPayload } from '@/features/core/dnd';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { LocalizedCatalogBrowserRow } from '@/features/domain/nodeCatalog/localizedCatalogTree';
 import { cn } from '@/lib/utils';
 import { SidebarDraggableItem } from './SidebarDraggableItem';
 import { SidebarTreeCategoryRow } from './SidebarTreeCategoryRow';

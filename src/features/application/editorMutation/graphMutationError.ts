@@ -1,4 +1,4 @@
-import { IpcError } from '@/services/ipc';
+import { isApplicationIpcError } from '@/features/application/errorReference';
 
 export const GRAPH_MUTATION_ERROR_CODES = [
   'graph_port_not_found',
@@ -38,7 +38,7 @@ const ERROR_MESSAGE_KEYS: Record<GraphMutationErrorCode, GraphMutationErrorMessa
   ])) as Record<GraphMutationErrorCode, GraphMutationErrorMessageKey>;
 
 export function graphMutationErrorCode(error: unknown): GraphMutationErrorCode | null {
-  if (!(error instanceof IpcError)) return null;
+  if (!isApplicationIpcError(error)) return null;
   return error.code in ERROR_MESSAGE_KEYS
     ? error.code as GraphMutationErrorCode
     : null;

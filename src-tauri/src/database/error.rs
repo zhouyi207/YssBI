@@ -151,6 +151,8 @@ impl DatabaseError {
     reason = "driver variants are staged until adapters move into Database"
 )]
 pub(crate) enum DatabaseDriverError {
+    #[error("database operation failed")]
+    Operation(Box<str>),
     #[error("SQLx driver failure")]
     Sqlx(#[source] sqlx::Error),
     #[error("DuckDB driver failure")]

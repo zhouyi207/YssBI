@@ -128,6 +128,12 @@ impl JuliaWorkerTaskDirectory {
     }
 }
 
+impl crate::sci::api::bayes::ResultArtifactOwner for JuliaWorkerTaskDirectory {
+    fn cleanup(&self) -> Result<(), Box<str>> {
+        JuliaWorkerTaskDirectory::cleanup(self).map_err(|error| error.to_string().into_boxed_str())
+    }
+}
+
 impl Drop for JuliaWorkerTaskDirectory {
     fn drop(&mut self) {
         if let Err(error) = self.cleanup() {

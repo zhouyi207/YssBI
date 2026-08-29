@@ -1,8 +1,8 @@
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { useEditorStore } from '../stores/useEditorStore';
 
 function readActiveGraphTab(): { id: string; type: 'event' | 'function' } | null {
-  const panel = workbenchDockviewPort.getActiveEditorPanel();
+  const panel = workbenchDockviewRead.getActiveEditorPanel();
   if (
     panel?.metadata.role === 'editor'
     && (panel.metadata.resourceKind === 'event' || panel.metadata.resourceKind === 'function')

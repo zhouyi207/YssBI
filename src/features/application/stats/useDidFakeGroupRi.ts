@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { PanelDidService } from '@/features/application/stats/statsActions';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
 import {
   parseDidPlaceboFakeGroupBlock,
   type DidPlaceboFakeGroupBlock,

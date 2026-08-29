@@ -1,5 +1,5 @@
 import type { EditorViewport } from './editorViewport';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { DEFAULT_VIEWPORT } from '@/shared/config-default';
 import { useViewportStore } from './useViewportStore';
 import type { ViewportScope } from './viewportScope';
 import { viewportScopeKey } from './viewportScope';

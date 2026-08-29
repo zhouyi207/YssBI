@@ -1,21 +1,21 @@
 use super::common::parse_graph_path;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use super::common::{EmitOutcome, emit_resource_result, mutation_conflict_to_command_error};
 use crate::error::CommandError;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::event::emit_project_event;
-use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event_result};
-#[cfg(test)]
+use crate::event::{Event, EventProject, emit_project_event_result};
+#[cfg(all(test, any()))]
 use crate::graph_document::GraphResourcePath;
-use crate::node_system::document::MutationRequest;
 use crate::project::ProjectInstanceId;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
-use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{OperationId, ResourceRevision};
+use crate::project::{MutationRequest, OperationId, ResourceRevision};
+use crate::schema::ProjectSaveResultDto;
+use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -50,6 +50,7 @@ pub fn create_event(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
@@ -70,6 +71,7 @@ pub fn create_function(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
@@ -92,7 +94,7 @@ pub fn unload_project_graph(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn save_project_graph_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -109,6 +111,7 @@ pub(super) fn save_project_graph_with_emitter(
             operation_id,
         )
         .map_err(CommandError::from)?;
+    let result = ProjectSaveResultDto::from(result);
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
     }));
@@ -132,6 +135,7 @@ pub fn save_project_graph(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = ProjectSaveResultDto::from(result);
     emit_project_event_result(
         &app,
         &Event::Project(EventProject::ProjectSaved {
@@ -142,7 +146,7 @@ pub fn save_project_graph(
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -178,11 +182,12 @@ pub fn duplicate_graph(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn remove_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -218,11 +223,12 @@ pub fn remove_graph(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn rename_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -266,17 +272,18 @@ pub fn rename_graph_resource(
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn update_function_signature_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: &str,
-    request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
+    request: MutationRequest<crate::project::FunctionDocumentPatch>,
     mut emit: impl FnMut(Event) -> R,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let path = parse_graph_path(function_path)?;
@@ -298,7 +305,7 @@ pub fn update_function_signature(
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: String,
-    request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
+    request: MutationRequest<crate::project::FunctionDocumentPatch>,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
         .update_function_signature(
@@ -308,6 +315,7 @@ pub fn update_function_signature(
             request,
         )
         .map_err(map_resource_mutation_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
@@ -328,29 +336,5 @@ fn emit_application_resource_result(
 fn map_resource_mutation_error(
     error: crate::application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
-    use crate::application::resource_mutation::ResourceMutationApplicationError;
-    match error {
-        ResourceMutationApplicationError::SessionCapture(error) => match error {
-            crate::application::execution::SessionCaptureError::Inactive => {
-                CommandError::expected("stale_project_lifecycle")
-            }
-            crate::application::execution::SessionCaptureError::Replacing => {
-                CommandError::expected("project_lifecycle_admission_closed")
-            }
-            crate::application::execution::SessionCaptureError::Recovering => {
-                CommandError::expected("project_recovery_required")
-                    .with_details(serde_json::json!({ "recoveryRequired": true }))
-            }
-        },
-        ResourceMutationApplicationError::Project(error) => CommandError::from(error),
-        ResourceMutationApplicationError::Mutation(error) => {
-            super::common::mutation_conflict_to_command_error(error, "graph_revision_conflict")
-        }
-        ResourceMutationApplicationError::SessionChanged(error) => {
-            CommandError::diagnosed("resource_session_changed", error)
-        }
-        ResourceMutationApplicationError::SessionRefresh(error) => {
-            CommandError::diagnosed("resource_session_refresh_failed", error)
-        }
-    }
+    super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
 }

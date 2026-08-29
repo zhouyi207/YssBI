@@ -1,4 +1,4 @@
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/features/application/errorReference';
 
 type Awaitable<T> = T | PromiseLike<T>;
 

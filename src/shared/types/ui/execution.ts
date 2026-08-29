@@ -4,9 +4,9 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { PinResultEntry } from '@/shared/types/dto/result';
-import type { RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
+import type { PinResultEntry } from '@/shared/types/domain/result';
+import type { RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 

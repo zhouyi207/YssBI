@@ -5,9 +5,9 @@ import type {
   GraphMutationResultDto,
   HistoryStatusDto,
   MutationRequestDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import { GraphMutationService } from '@/services/nodeSystem/graphMutationService';
-import { isIpcErrorCode } from '@/services/ipc';
+import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
 import { hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
@@ -71,7 +71,7 @@ const defaultDependencies: EditorMutationCoordinatorDependencies = {
 };
 
 function isRevisionConflict(error: unknown): boolean {
-  return isIpcErrorCode(error, 'graph_revision_conflict');
+  return isApplicationIpcErrorCode(error, 'graph_revision_conflict');
 }
 
 async function requestAuthoritativeHydrate(
@@ -119,7 +119,7 @@ export async function executeEditorMutation(
       );
     } catch (error) {
       if (!isCurrentProjectIdentity(identity)
-        || isIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
+        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
       if (isRevisionConflict(error)) {
         await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
         return { status: 'conflict' };

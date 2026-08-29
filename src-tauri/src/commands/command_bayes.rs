@@ -39,6 +39,7 @@ fn bayes_command_error(error: BayesApplicationError) -> CommandError {
         BayesApplicationError::ValidationFailed => {
             CommandError::expected("bayes_validation_failed")
         }
+        #[cfg(test)]
         BayesApplicationError::InputValidation(source) => CommandError::expected(source.code)
             .with_details(BayesInputValidationDetails {
                 column: source.column,

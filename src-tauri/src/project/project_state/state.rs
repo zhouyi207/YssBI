@@ -8,15 +8,13 @@ pub struct ProjectState {
     pub(in crate::project) history: Arc<RwLock<ProjectHistory>>,
     pub(in crate::project) project_activation: crate::project::ProjectActivationCoordinator,
     pub(in crate::project) mutation_publication: Arc<Mutex<MutationPublication>>,
-    pub(in crate::project) compile_coordinator:
-        Arc<RwLock<Arc<crate::node_system::compiler::ProjectCompileCoordinator>>>,
     pub(in crate::project) filesystem: ProjectFilesystemCoordinator,
     pub(in crate::project) resource_lifecycle: ResourceLifecycleRegistry,
     pub(in crate::project) resource_operations:
         Arc<Mutex<crate::project::resource_mutations::ResourceOperationLedger>>,
     pub(in crate::project) recovery_marker: crate::project::ProjectRecoveryMarker,
     pub(in crate::project) activation_generation: Arc<std::sync::atomic::AtomicU64>,
-    pub(in crate::project) activation_identity: Arc<RwLock<ProjectionEnvironmentExpectation>>,
+    pub(in crate::project) activation_identity: Arc<RwLock<ProjectAuthorityExpectation>>,
     pub(in crate::project) graph_revisions: Arc<
         RwLock<std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>>,
     >,
@@ -40,7 +38,16 @@ impl Default for ProjectState {
 }
 
 impl ProjectState {
-    pub fn try_new() -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+    #[cfg(not(test))]
+    pub fn new() -> Self {
+        Self::from_store_and_filesystem(
+            ProjectStore::new(),
+            ProjectFilesystemCoordinator::default(),
+        )
+    }
+
+    #[cfg(test)]
+    pub fn try_new() -> Result<Self, crate::graph::catalog::BuiltinInitializationError> {
         Self::try_with_filesystem(ProjectFilesystemCoordinator::default())
     }
 
@@ -49,9 +56,10 @@ impl ProjectState {
         Self::try_new().expect("test built-ins are valid")
     }
 
+    #[cfg(test)]
     fn try_with_filesystem(
         filesystem: ProjectFilesystemCoordinator,
-    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+    ) -> Result<Self, crate::graph::catalog::BuiltinInitializationError> {
         let store = ProjectStore::try_new()?;
         Ok(Self::from_store_and_filesystem(store, filesystem))
     }
@@ -61,7 +69,7 @@ impl ProjectState {
         filesystem: ProjectFilesystemCoordinator,
     ) -> Self {
         let publication = MutationPublication::default();
-        let activation_identity = ProjectionEnvironmentExpectation {
+        let activation_identity = ProjectAuthorityExpectation {
             project_instance_id: ProjectInstanceId::from_existing(
                 publication.project_instance_id.clone(),
             ),
@@ -75,9 +83,6 @@ impl ProjectState {
             history: Arc::new(RwLock::new(ProjectHistory::default())),
             project_activation: crate::project::ProjectActivationCoordinator::default(),
             mutation_publication: Arc::new(Mutex::new(publication)),
-            compile_coordinator: Arc::new(RwLock::new(Arc::new(
-                crate::node_system::compiler::ProjectCompileCoordinator::new(),
-            ))),
             filesystem,
             resource_lifecycle: ResourceLifecycleRegistry::default(),
             resource_operations: Arc::new(Mutex::new(

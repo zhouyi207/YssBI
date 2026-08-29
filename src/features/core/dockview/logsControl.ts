@@ -1,5 +1,5 @@
 import type { SerializedDockview } from 'dockview-react';
-import { logsDockviewLayoutController } from './logsDockviewLayoutController';
+import { logsDockviewRuntime } from './logsRuntime';
 
 export interface LogsDockviewControl {
   beginRestore(): number;
@@ -9,8 +9,8 @@ export interface LogsDockviewControl {
 }
 
 export const logsDockviewControl: LogsDockviewControl = {
-  beginRestore: logsDockviewLayoutController.beginRestore,
-  stageRestore: logsDockviewLayoutController.stageRestore,
-  captureBoundSnapshot: logsDockviewLayoutController.captureBoundSnapshot,
-  resetToDefault: logsDockviewLayoutController.resetToDefault,
+  beginRestore: logsDockviewRuntime.beginRestore,
+  stageRestore: logsDockviewRuntime.stageRestore,
+  captureBoundSnapshot: logsDockviewRuntime.captureBoundSnapshot,
+  resetToDefault: logsDockviewRuntime.resetToDefault,
 };

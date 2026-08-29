@@ -1,6 +1,6 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { AtomicProjectionApplyResult } from '@/features/core/dataStore/graphDataStore';
-import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { GraphMutationResultDto } from '@/shared/types/domain/editorMutation';
 import type { PendingMutationRecord } from './pendingMutationRegistry';
 import { useResourceStore } from '@/features/core/resource';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';

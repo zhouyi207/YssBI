@@ -6,19 +6,19 @@ mod scalar;
 mod statistics;
 
 use super::*;
+use crate::execution::plan::legacy::*;
+use crate::graph::analysis::contracts::{CompilationBasis, CompileId, CompileProvenance};
+use crate::graph::compiler::engine::{GraphCompiler, ResourceSnapshot};
+use crate::graph::protocol::{
+    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
+    TypeExpr, TypeId, Value,
+};
+use crate::graph::registry::RegistryFingerprint;
 use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
 };
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
-use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
-use crate::node_system::plan::*;
-use crate::node_system::protocol::{
-    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
-    TypeExpr, TypeId, Value,
-};
-use crate::node_system::registry::RegistryFingerprint;
+use crate::project::ProjectSessionId;
 use crate::project::StatisticalMissingValuePolicy;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
@@ -85,15 +85,15 @@ fn decimal(value: &str) -> Value {
 fn compile_builtin_flow(
     nodes: &[(u128, &str)],
     connections: &[(u128, u128, &str, u128, &str)],
-) -> crate::node_system::compiler::CompileResult {
+) -> crate::graph::compiler::engine::CompileResult {
     struct EmptyResources;
     impl ResourceSnapshot for EmptyResources {
-        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+        fn versions(&self) -> crate::graph::analysis::contracts::ResourceVersionSet {
             BTreeMap::new()
         }
     }
 
-    let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let builtin = crate::graph::catalog::build_builtin_node_system().unwrap();
     let mut graph = GraphDocument {
         revision: GraphRevision::INITIAL,
         nodes: BTreeMap::new(),
@@ -152,7 +152,7 @@ fn compile_builtin_flow(
                 ),
                 crate::graph_document::InputState {
                     literal_override: Some(
-                        serde_json::to_value(crate::node_system::protocol::TypedValue {
+                        serde_json::to_value(crate::graph::protocol::TypedValue {
                             value_type: TypeExpr::Concrete(TypeId::new(value_type).unwrap()),
                             value,
                         })
@@ -244,8 +244,8 @@ fn execute_variable_kernel(
     let snapshot = ProjectResourceSnapshot::new(
         ProjectSessionId::new("variable-series-test"),
         BTreeMap::from([(
-            crate::node_system::analysis::ResourceKey::new(resource.as_str()),
-            crate::node_system::analysis::ResourceVersion::new("1"),
+            crate::graph::analysis::contracts::ResourceKey::new(resource.as_str()),
+            crate::graph::analysis::contracts::ResourceVersion::new("1"),
         )]),
     )
     .with_variable(resource.clone(), Arc::new(variable));
@@ -323,7 +323,7 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             .iter()
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
-                contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
                 consumption: InputConsumption::FullyMaterialized,
                 bound_value: None,
             })
@@ -331,10 +331,10 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             .into_boxed_slice(),
         outputs: Box::new([PlannedOutput {
             value: ValueRef::new(output),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         }]),
         params: handle(params, CompiledParameterHandle::new),
         resource_dependencies: Box::new([]),

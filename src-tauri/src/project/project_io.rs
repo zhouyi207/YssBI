@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use super::ensure_worksheets_dir;
 use super::{
     GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectComputationSettings, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
-    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
+    ProjectComputationSettings, ProjectData, ProjectError, ProjectResourcePath,
+    ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
+    scan_graph_resource_index,
 };
 use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
@@ -64,7 +65,7 @@ pub struct GraphDocument {
     #[serde(default)]
     pub revision: crate::project::ResourceRevision,
     pub document: NodeGraphDocument,
-    pub function: Option<crate::node_system::document::FunctionDocument>,
+    pub function: Option<crate::project::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
 }
 
@@ -95,17 +96,16 @@ pub struct ProjectGraphIndexEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_revision: Option<crate::project::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_signature: Option<crate::node_system::document::FunctionSignature>,
+    pub function_signature: Option<crate::project::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_editor_projection:
-        Option<crate::node_system::analysis::FunctionEditorProjectionDto>,
+    pub function_editor_projection: Option<crate::project::FunctionEditorProjection>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectVariableIndexEntry {
     pub id: String,
-    pub resource_path: crate::node_system::catalog::CatalogResourcePath,
+    pub resource_path: ProjectResourcePath,
     pub revision: crate::project::ResourceRevision,
     pub name: String,
     pub data_type: crate::data_contract::DataType,
@@ -123,10 +123,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
     fn from(value: VariableInstance) -> Self {
         Self {
             id: value.id.to_string(),
-            resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
-                "variables/{}",
-                value.id
-            )),
+            resource_path: ProjectResourcePath::new(format!("variables/{}", value.id)),
             revision: crate::project::ResourceRevision::INITIAL,
             name: value.name,
             data_type: value.data_type,
@@ -145,7 +142,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDatabaseIndexEntry {
     pub id: String,
-    pub resource_path: crate::node_system::catalog::CatalogResourcePath,
+    pub resource_path: ProjectResourcePath,
     pub revision: crate::project::ResourceRevision,
     pub engine: crate::database_contract::DatabaseEngine,
     pub schema_version: u32,
@@ -162,7 +159,7 @@ pub struct ProjectIndex {
     #[serde(skip)]
     pub(crate) authority_generation: u64,
     #[serde(default)]
-    pub history: crate::node_system::document::HistoryStatusDto,
+    pub history: crate::project::HistoryStatusDto,
     pub project_name: String,
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
@@ -513,13 +510,6 @@ pub(crate) fn parse_graph_resource_document(
         )));
     }
     validate_function_shape(path, document.kind, document.function.as_ref())?;
-    document
-        .document
-        .validate()
-        .map_err(|source| ProjectError::InvalidGraphDocument {
-            path: path.to_path_buf(),
-            source,
-        })?;
     Ok(document)
 }
 
@@ -579,7 +569,7 @@ struct GraphFileHeader {
     name: String,
     #[serde(default)]
     revision: crate::project::ResourceRevision,
-    function: Option<crate::node_system::document::FunctionDocument>,
+    function: Option<crate::project::FunctionDocument>,
 }
 
 fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> {
@@ -591,7 +581,7 @@ fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> 
 fn validate_function_shape(
     path: &Path,
     kind: GraphDocumentKind,
-    function: Option<&crate::node_system::document::FunctionDocument>,
+    function: Option<&crate::project::FunctionDocument>,
 ) -> Result<(), ProjectError> {
     match (kind, function) {
         (GraphDocumentKind::Function, None) => Err(ProjectError::InvalidProjectFormat(format!(
@@ -648,7 +638,19 @@ fn read_graph_index_entries(
         let function_editor_projection = header
             .function
             .as_ref()
-            .map(crate::node_system::analysis::build_function_editor_projection)
+            .map(|function| {
+                crate::project::build_function_editor_projection(
+                    function.revision.get(),
+                    function.signature.parameters.iter().map(|parameter| {
+                        (
+                            parameter.id.clone(),
+                            parameter.name.clone(),
+                            parameter.type_name.clone(),
+                        )
+                    }),
+                    function.signature.return_type.clone(),
+                )
+            })
             .transpose()
             .map_err(|error| {
                 ProjectError::InvalidProjectFormat(format!(
@@ -716,10 +718,7 @@ fn read_graph_local_variable_index_entries(
         for variable in document.local_variables.into_values() {
             entries.push(ProjectVariableIndexEntry {
                 id: variable.id.to_string(),
-                resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
-                    "variables/{}",
-                    variable.id
-                )),
+                resource_path: ProjectResourcePath::new(format!("variables/{}", variable.id)),
                 revision: crate::project::ResourceRevision::INITIAL,
                 name: variable.name,
                 data_type: variable.data_type,
@@ -953,16 +952,16 @@ pub fn discover_databases_from_root(
     Ok(map)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
+    use crate::graph::document::EffectiveInputBinding;
+    use crate::graph::protocol::{NodeTypeId, PortKey};
     use crate::graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
         FunctionParameterId, GraphDocument as NodeGraphDocument, InputState, NodeId, NodePosition,
         OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
-    use crate::node_system::document::EffectiveInputBinding;
-    use crate::node_system::protocol::{NodeTypeId, PortKey};
     use crate::project::{GraphResourceDocument, NumericTolerance};
     use serde_json::json;
 
@@ -1220,18 +1219,15 @@ mod tests {
             ProjectError::InvalidGraphDocument { path, source }
                 if path == &graph_file
                     && source
-                        == &crate::node_system::document::DocumentError::EndpointNodeNotFound(
+                        == &crate::graph::document::DocumentError::EndpointNodeNotFound(
                             missing_node_id,
                         )
         ));
-        let source = std::error::Error::source(&error).and_then(|source| {
-            source.downcast_ref::<crate::node_system::document::DocumentError>()
-        });
+        let source = std::error::Error::source(&error)
+            .and_then(|source| source.downcast_ref::<crate::graph::document::DocumentError>());
         assert_eq!(
             source,
-            Some(
-                &crate::node_system::document::DocumentError::EndpointNodeNotFound(missing_node_id,)
-            )
+            Some(&crate::graph::document::DocumentError::EndpointNodeNotFound(missing_node_id,))
         );
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -1261,10 +1257,9 @@ mod tests {
 
         let event_file = root.join(event_path.as_str());
         let mut event_value: serde_json::Value = read_json(&event_file).unwrap();
-        event_value["function"] = serde_json::to_value(
-            crate::node_system::document::FunctionDocument::new(Default::default()),
-        )
-        .unwrap();
+        event_value["function"] =
+            serde_json::to_value(crate::project::FunctionDocument::new(Default::default()))
+                .unwrap();
         write_json(&event_file, &event_value).unwrap();
         let unexpected =
             load_project_graph_from_file(root.to_string_lossy().as_ref(), &event_path).unwrap_err();

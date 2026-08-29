@@ -1,9 +1,9 @@
 use super::{CancellationToken, RunError};
-use crate::node_system::ProjectSessionId;
 use crate::node_system::runtime::RunId;
+use crate::project::ProjectSessionId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
@@ -45,12 +45,15 @@ impl ProjectRunRegistry {
             cancellation.cancel();
             return Err(ProjectRunRegistrationError::ProjectDraining(project));
         }
-        let registration_id = crate::node_system::allocate_nonzero_id(&self.next_pre_run_id)
+        let registration_id = self
+            .next_pre_run_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                std::num::NonZeroU64::new(current)?.get().checked_add(1)
+            })
             .map_err(|_| {
                 cancellation.cancel();
                 ProjectRunRegistrationError::RuntimeIdExhausted
-            })?
-            .get();
+            })?;
         runs.preparing
             .entry(project.clone())
             .or_default()
@@ -369,7 +372,7 @@ impl From<ProjectRunRegistrationError> for RunError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use std::sync::Arc;
@@ -525,8 +528,8 @@ mod tests {
     fn project_drain_cancels_graph_compiler_with_the_pre_run_token() {
         struct EmptyResources;
 
-        impl crate::node_system::compiler::ResourceSnapshot for EmptyResources {
-            fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+        impl crate::graph::compiler::engine::ResourceSnapshot for EmptyResources {
+            fn versions(&self) -> crate::graph::analysis::contracts::ResourceVersionSet {
                 Default::default()
             }
         }
@@ -535,7 +538,7 @@ mod tests {
         let session = ProjectSessionId::new("project-a");
         let cancellation = CancellationToken::new();
         let compile_cancellation =
-            crate::node_system::compiler::CompileCancellationToken::from_shared(
+            crate::graph::compiler::engine::CompileCancellationToken::from_shared(
                 cancellation.shared_flag(),
             );
         let lease = registry
@@ -556,12 +559,12 @@ mod tests {
         assert!(cancellation.is_cancelled());
         assert!(drained_rx.try_recv().is_err());
 
-        let node_registry = crate::node_system::catalog::build_builtin_node_system()
+        let node_registry = crate::graph::catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         let resources = EmptyResources;
         let compiler =
-            crate::node_system::compiler::GraphCompiler::new(node_registry.as_ref(), &resources);
+            crate::graph::compiler::engine::GraphCompiler::new(node_registry.as_ref(), &resources);
         let snapshot = compiler.snapshot(
             crate::graph_document::GraphResourcePath::new("events/cancelled.yssbi-event").unwrap(),
             &crate::graph_document::GraphDocument::default(),

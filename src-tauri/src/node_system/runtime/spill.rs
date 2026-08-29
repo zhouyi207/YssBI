@@ -2,7 +2,7 @@ use super::{
     ArtifactValueKind, CancellationToken, DataSeriesMetadata, RunDeadline, RunError, RunPhase,
     check_terminal,
 };
-use crate::node_system::protocol::Value;
+use crate::graph::protocol::Value;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};

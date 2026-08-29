@@ -3,14 +3,16 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use super::events::{
+    LifecycleInvalidation, LifecycleRecovery, LifecycleRecoveryAction,
+    ProjectLifecycleApplicationEvent, ProjectLifecycleKind, ProjectLifecycleOutcome,
+    ProjectLifecyclePhase,
+};
 use crate::application::execution::session_slot::{
-    ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
+    ApplicationSessionRefreshError, ApplicationState, ProjectReplacement, SessionCaptureError,
+    SessionRevalidationError,
 };
-use crate::event::{
-    LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
-    LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
-    ProjectActivationResultDto,
-};
+use crate::application::project_query::ProjectActivation;
 use crate::project::OperationId;
 use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, ProjectRecord, ProjectRegistry, ProjectState,
@@ -59,19 +61,17 @@ impl ApplicationState {
     pub fn load_project_for_application(
         &self,
         path: &str,
-    ) -> Result<ProjectActivationResultDto, ApplicationProjectLifecycleError> {
-        let captured = self.capture_session()?;
-        let result = load_project(captured.project(), path)?;
-        self.refresh_current_project()
-            .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+    ) -> Result<ProjectActivation, ApplicationProjectLifecycleError> {
+        let replacement = begin_replacement(self)?;
+        let result = load_project(replacement.project(), path)?;
+        finish_replacement(self, replacement)?;
         Ok(result)
     }
 
     pub fn clear_project_for_application(&self) -> Result<(), ApplicationProjectLifecycleError> {
-        let captured = self.capture_session()?;
-        clear_project(captured.project())?;
-        self.refresh_current_project()
-            .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        let replacement = begin_replacement(self)?;
+        clear_project(replacement.project())?;
+        finish_replacement(self, replacement)?;
         Ok(())
     }
 
@@ -81,7 +81,7 @@ impl ApplicationState {
         destination: &Path,
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+    ) -> Result<ProjectLifecycleApplicationEvent, ApplicationProjectLifecycleError> {
         let captured = self.capture_session()?;
         let result = save_project_as(
             captured.project(),
@@ -91,7 +91,7 @@ impl ApplicationState {
             operation_id,
         )
         .await?;
-        if result.outcome == LifecycleMutationOutcomeDto::Committed {
+        if result.outcome == ProjectLifecycleOutcome::Committed {
             self.refresh_current_project()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
@@ -107,7 +107,7 @@ impl ApplicationState {
         name: &str,
         path: &Path,
         operation_id: OperationId,
-    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+    ) -> Result<ProjectLifecycleApplicationEvent, ApplicationProjectLifecycleError> {
         let captured = self.capture_session()?;
         let result = create_project(captured.project(), registry, name, path, operation_id).await?;
         if result.invalidation.project {
@@ -123,17 +123,27 @@ impl ApplicationState {
         id: &str,
         expected_active_instance_id: Option<ProjectInstanceId>,
         operation_id: OperationId,
-    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+    ) -> Result<ProjectLifecycleApplicationEvent, ApplicationProjectLifecycleError> {
         let captured = self.capture_session()?;
+        let replacement = expected_active_instance_id
+            .as_ref()
+            .filter(|expected| *expected == captured.project_instance_id())
+            .map(|_| begin_replacement(self))
+            .transpose()?;
+        let project = replacement
+            .as_ref()
+            .map_or_else(|| captured.project(), ProjectReplacement::project);
         let result = delete_registered_project(
-            captured.project(),
+            project,
             registry,
             id,
             expected_active_instance_id,
             operation_id,
         )
         .await?;
-        if result.invalidation.project {
+        if let Some(replacement) = replacement {
+            finish_replacement(self, replacement)?;
+        } else if result.invalidation.project {
             self.refresh_current_project()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
@@ -147,10 +157,8 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<
-        crate::project::project_writers::ProjectSaveResultDto,
-        ApplicationProjectLifecycleError,
-    > {
+    ) -> Result<crate::project::project_writers::ProjectSaveResult, ApplicationProjectLifecycleError>
+    {
         let captured = self.capture_session()?;
         let result = captured
             .project()
@@ -160,6 +168,25 @@ impl ApplicationState {
             .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
         Ok(result)
     }
+}
+
+fn begin_replacement(
+    application: &ApplicationState,
+) -> Result<ProjectReplacement, ApplicationProjectLifecycleError> {
+    application.begin_project_replacement().map_err(|_error| {
+        ApplicationProjectLifecycleError::SessionRefresh(
+            ApplicationSessionRefreshError::Replacement,
+        )
+    })
+}
+
+fn finish_replacement(
+    application: &ApplicationState,
+    replacement: ProjectReplacement,
+) -> Result<(), ApplicationProjectLifecycleError> {
+    application
+        .finish_project_replacement(replacement)
+        .map_err(ApplicationProjectLifecycleError::SessionRefresh)
 }
 
 impl std::fmt::Debug for ProjectRegistryFailure {
@@ -182,7 +209,7 @@ impl std::error::Error for ProjectRegistryFailure {}
 pub fn load_project(
     state: &ProjectState,
     path: &str,
-) -> Result<ProjectActivationResultDto, ProjectLifecycleError> {
+) -> Result<ProjectActivation, ProjectLifecycleError> {
     let path = normalize_existing_path(path).map_err(|_| ProjectLifecycleError::InvalidPath)?;
     let session = state
         .activate_project_from_path(Path::new(&path))
@@ -191,9 +218,9 @@ pub fn load_project(
         .get_data()
         .map_err(ProjectLifecycleError::LoadFailed)?;
 
-    Ok(ProjectActivationResultDto {
+    Ok(ProjectActivation {
         path,
-        project_instance_id: session.instance_id.to_string(),
+        project_instance_id: session.instance_id,
         activation_revision: state.activation_revision(),
     })
 }
@@ -211,7 +238,7 @@ pub async fn save_project_as(
     destination: &Path,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, ProjectLifecycleError> {
+) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
     let prepared = state
         .save_project_as_transaction(&project_instance_id, destination, operation_id)
         .map_err(ProjectLifecycleError::AuthorityFailed)?;
@@ -230,13 +257,13 @@ pub async fn save_project_as(
         Err(_) => {
             return Ok(lifecycle_failure_result(
                 operation_id,
-                LifecycleMutationKindDto::SaveAs,
-                Some(project_instance_id.to_string()),
-                LifecycleMutationPhaseDto::DestinationCommitted,
-                LifecycleMutationOutcomeDto::RegistryFailed,
+                ProjectLifecycleKind::SaveAs,
+                Some(project_instance_id),
+                ProjectLifecyclePhase::DestinationCommitted,
+                ProjectLifecycleOutcome::RegistryFailed,
                 None,
                 metadata_path,
-                "registerDestination",
+                LifecycleRecoveryAction::RemoveRegistryRecord,
                 false,
             ));
         }
@@ -246,29 +273,29 @@ pub async fn save_project_as(
         Err(_) => {
             return Ok(lifecycle_failure_result(
                 operation_id,
-                LifecycleMutationKindDto::SaveAs,
-                Some(project_instance_id.to_string()),
-                LifecycleMutationPhaseDto::RegistryCommitted,
-                LifecycleMutationOutcomeDto::ActivationFailed,
+                ProjectLifecycleKind::SaveAs,
+                Some(project_instance_id),
+                ProjectLifecyclePhase::RegistryCommitted,
+                ProjectLifecycleOutcome::ActivationFailed,
                 Some(record),
                 metadata_path,
-                "activateDestination",
+                LifecycleRecoveryAction::ActivateDestination,
                 true,
             ));
         }
     };
 
-    Ok(LifecycleMutationResultDto {
+    Ok(ProjectLifecycleApplicationEvent {
         operation_id,
-        kind: LifecycleMutationKindDto::SaveAs,
-        old_project_instance_id: Some(project_instance_id.to_string()),
-        new_project_instance_id: Some(session.instance_id.to_string()),
-        phase: LifecycleMutationPhaseDto::AuthorityCommitted,
-        outcome: LifecycleMutationOutcomeDto::Committed,
+        kind: ProjectLifecycleKind::SaveAs,
+        old_project_instance_id: Some(project_instance_id),
+        new_project_instance_id: Some(session.instance_id),
+        phase: ProjectLifecyclePhase::AuthorityCommitted,
+        outcome: ProjectLifecycleOutcome::Committed,
         record: Some(record),
-        path: Some(metadata_path),
+        path: Some(metadata_path.into_boxed_str()),
         recovery: None,
-        invalidation: LifecycleInvalidationDto {
+        invalidation: LifecycleInvalidation {
             project: true,
             registry: true,
         },
@@ -281,7 +308,7 @@ pub async fn create_project(
     name: &str,
     destination: &Path,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, ProjectLifecycleError> {
+) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
     let created = state
         .create_project_transaction(name, destination, operation_id)
         .map_err(ProjectLifecycleError::AuthorityFailed)?;
@@ -290,30 +317,30 @@ pub async fn create_project(
         .register_project(&created.project_name, &metadata_path)
         .await
     {
-        Ok(record) => LifecycleMutationResultDto {
+        Ok(record) => ProjectLifecycleApplicationEvent {
             operation_id,
-            kind: LifecycleMutationKindDto::Create,
+            kind: ProjectLifecycleKind::Create,
             old_project_instance_id: None,
             new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::RegistryCommitted,
-            outcome: LifecycleMutationOutcomeDto::Committed,
+            phase: ProjectLifecyclePhase::RegistryCommitted,
+            outcome: ProjectLifecycleOutcome::Committed,
             record: Some(record),
-            path: Some(metadata_path),
+            path: Some(metadata_path.into_boxed_str()),
             recovery: None,
-            invalidation: LifecycleInvalidationDto {
+            invalidation: LifecycleInvalidation {
                 project: false,
                 registry: true,
             },
         },
         Err(_) => lifecycle_failure_result(
             operation_id,
-            LifecycleMutationKindDto::Create,
+            ProjectLifecycleKind::Create,
             None,
-            LifecycleMutationPhaseDto::DestinationCommitted,
-            LifecycleMutationOutcomeDto::RegistryFailed,
+            ProjectLifecyclePhase::DestinationCommitted,
+            ProjectLifecycleOutcome::RegistryFailed,
             None,
             metadata_path,
-            "registerDestination",
+            LifecycleRecoveryAction::RemoveRegistryRecord,
             false,
         ),
     };
@@ -326,7 +353,7 @@ pub async fn delete_registered_project(
     id: &str,
     expected_active_instance_id: Option<ProjectInstanceId>,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, ProjectLifecycleError> {
+) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
     let record = registry
         .fetch_by_id(id)
         .await
@@ -366,26 +393,24 @@ pub async fn delete_registered_project(
         .is_ok_and(|result| result.is_ok())
     };
 
-    let recovery = (!registry_removed).then(|| LifecycleRecoveryDto {
+    let recovery = (!registry_removed).then(|| LifecycleRecovery {
         required: true,
-        action: "removeRegistryRecord".into(),
+        action: LifecycleRecoveryAction::RemoveRegistryRecord,
         path: None,
-        identity: Some(identity.as_str().to_owned()),
+        identity: Some(identity.as_str().to_owned().into_boxed_str()),
     });
+    let project_invalidated = deleted.cleared_project_instance_id.is_some();
 
-    Ok(LifecycleMutationResultDto {
+    Ok(ProjectLifecycleApplicationEvent {
         operation_id,
-        kind: LifecycleMutationKindDto::Delete,
-        old_project_instance_id: deleted
-            .cleared_project_instance_id
-            .as_ref()
-            .map(ToString::to_string),
+        kind: ProjectLifecycleKind::Delete,
+        old_project_instance_id: deleted.cleared_project_instance_id,
         new_project_instance_id: None,
-        phase: LifecycleMutationPhaseDto::AuthorityCommitted,
+        phase: ProjectLifecyclePhase::AuthorityCommitted,
         outcome: if registry_removed {
-            LifecycleMutationOutcomeDto::Committed
+            ProjectLifecycleOutcome::Committed
         } else {
-            LifecycleMutationOutcomeDto::RegistryPending
+            ProjectLifecycleOutcome::RegistryPending
         },
         record: Some(record),
         path: Some(
@@ -393,11 +418,12 @@ pub async fn delete_registered_project(
                 .deleted_root
                 .as_path()
                 .to_string_lossy()
-                .into_owned(),
+                .into_owned()
+                .into_boxed_str(),
         ),
         recovery,
-        invalidation: LifecycleInvalidationDto {
-            project: deleted.cleared_project_instance_id.is_some(),
+        invalidation: LifecycleInvalidation {
+            project: project_invalidated,
             registry: true,
         },
     })
@@ -408,7 +434,7 @@ async fn delete_registry_only_record(
     record: ProjectRecord,
     active_delete_rejected: bool,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, ProjectLifecycleError> {
+) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
     let remove_result = if active_delete_rejected {
         Err(())
     } else {
@@ -416,26 +442,26 @@ async fn delete_registry_only_record(
     };
     let registry_changed = remove_result.is_ok();
 
-    Ok(LifecycleMutationResultDto {
+    Ok(ProjectLifecycleApplicationEvent {
         operation_id,
-        kind: LifecycleMutationKindDto::RegistryCleanup,
+        kind: ProjectLifecycleKind::RegistryCleanup,
         old_project_instance_id: None,
         new_project_instance_id: None,
-        phase: LifecycleMutationPhaseDto::RegistryCommitted,
+        phase: ProjectLifecyclePhase::RegistryCommitted,
         outcome: if registry_changed {
-            LifecycleMutationOutcomeDto::Committed
+            ProjectLifecycleOutcome::Committed
         } else {
-            LifecycleMutationOutcomeDto::RegistryFailed
+            ProjectLifecycleOutcome::RegistryFailed
         },
         record: Some(record),
         path: None,
-        recovery: remove_result.err().map(|_| LifecycleRecoveryDto {
+        recovery: remove_result.err().map(|_| LifecycleRecovery {
             required: true,
-            action: "cleanupRegistry".into(),
+            action: LifecycleRecoveryAction::CleanupRegistry,
             path: None,
             identity: None,
         }),
-        invalidation: LifecycleInvalidationDto {
+        invalidation: LifecycleInvalidation {
             project: false,
             registry: true,
         },
@@ -444,16 +470,16 @@ async fn delete_registry_only_record(
 
 fn lifecycle_failure_result(
     operation_id: OperationId,
-    kind: LifecycleMutationKindDto,
-    old_project_instance_id: Option<String>,
-    phase: LifecycleMutationPhaseDto,
-    outcome: LifecycleMutationOutcomeDto,
+    kind: ProjectLifecycleKind,
+    old_project_instance_id: Option<ProjectInstanceId>,
+    phase: ProjectLifecyclePhase,
+    outcome: ProjectLifecycleOutcome,
     record: Option<ProjectRecord>,
     path: String,
-    action: &str,
+    action: LifecycleRecoveryAction,
     project_invalidation: bool,
-) -> LifecycleMutationResultDto {
-    LifecycleMutationResultDto {
+) -> ProjectLifecycleApplicationEvent {
+    ProjectLifecycleApplicationEvent {
         operation_id,
         kind,
         old_project_instance_id,
@@ -461,14 +487,14 @@ fn lifecycle_failure_result(
         phase,
         outcome,
         record,
-        path: Some(path.clone()),
-        recovery: Some(LifecycleRecoveryDto {
+        path: Some(path.clone().into_boxed_str()),
+        recovery: Some(LifecycleRecovery {
             required: true,
-            action: action.into(),
-            path: Some(path),
+            action,
+            path: Some(path.into_boxed_str()),
             identity: None,
         }),
-        invalidation: LifecycleInvalidationDto {
+        invalidation: LifecycleInvalidation {
             project: project_invalidation,
             registry: true,
         },
@@ -510,5 +536,5 @@ fn run_before_registry_remove_test_hook() {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests;

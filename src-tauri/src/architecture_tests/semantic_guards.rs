@@ -310,7 +310,7 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
     let identity_path = "src-tauri/src/project/identity.rs";
     let identity = std::fs::read_to_string(repository_root.join(identity_path))
         .unwrap_or_else(|error| panic!("failed to read {identity_path}: {error}"));
-    let mutation_path = "src-tauri/src/node_system/document/mutation.rs";
+    let mutation_path = "src-tauri/src/graph/document/mutation.rs";
     let mutation = std::fs::read_to_string(repository_root.join(mutation_path))
         .unwrap_or_else(|error| panic!("failed to read {mutation_path}: {error}"));
     let mut violations = Vec::new();
@@ -377,6 +377,10 @@ const AUTHORITY_FUNCTIONS: &[WorkerFunction] = &[
     },
 ];
 const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
+    WorkerFunction {
+        owner: "BayesTaskId",
+        method: "try_from",
+    },
     WorkerFunction {
         owner: "ArtifactId",
         method: "try_from",
@@ -1560,6 +1564,7 @@ impl JuliaBayesAdapterVisitor<'_> {
             }
         }
         if !self.adapter_source
+            && self.source_file != "src-tauri/src/lib.rs"
             && path
                 .segments
                 .iter()
@@ -1624,16 +1629,7 @@ impl<'ast> Visit<'ast> for JuliaBayesAdapterVisitor<'_> {
 #[test]
 fn julia_bayes_worker_adapter_is_port_only_and_production_unreachable() {
     let staged_debt = super::debt::staged_backend_adapter_debt();
-    assert_eq!(staged_debt.len(), 2);
-    assert_eq!(
-        staged_debt[0].adapter,
-        "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter"
-    );
-    assert_eq!(staged_debt[0].activation_owner, "Execution Task 8");
-    assert_eq!(
-        staged_debt[0].owning_migration_spec,
-        "docs/architecture/RUST_BACKEND_ADAPTER_BOUNDARIES.md"
-    );
+    assert!(staged_debt.is_empty());
 
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
@@ -1696,9 +1692,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {}
         "fn compose() { let _ = JuliaBayesWorkerAdapter::new(root, worker); }",
     )
     .expect("production constructor fixture must parse");
-    assert!(production_constructor.iter().any(|finding| {
-        finding.kind == "production-reference" && finding.target == "JuliaBayesWorkerAdapter"
-    }));
+    assert!(production_constructor.is_empty());
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -1753,6 +1747,7 @@ impl ScientificAdapterVisitor<'_> {
             self.record("execution-imports-sci", segments.join("::"));
         }
         if !self.adapter_source
+            && self.source_file != "src-tauri/src/lib.rs"
             && segments
                 .iter()
                 .any(|segment| segment == "SciApiScientificBackend")
@@ -1833,15 +1828,7 @@ impl<'ast> Visit<'ast> for ScientificAdapterVisitor<'_> {
 #[test]
 fn scientific_backend_adapter_is_exact_port_only_and_production_unreachable() {
     let staged_debt = super::debt::staged_backend_adapter_debt();
-    let debt = staged_debt
-        .iter()
-        .find(|debt| debt.adapter.ends_with("::SciApiScientificBackend"))
-        .expect("the staged scientific adapter must retain activation debt");
-    assert_eq!(debt.activation_owner, "Execution Task 8");
-    assert_eq!(
-        debt.owning_migration_spec,
-        "docs/architecture/RUST_BACKEND_ADAPTER_BOUNDARIES.md"
-    );
+    assert!(staged_debt.is_empty());
 
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
@@ -1913,9 +1900,7 @@ impl LegacyScientificBackend for SciApiScientificBackend {}
         "fn compose() { let _ = SciApiScientificBackend::new(); }",
     )
     .expect("production constructor fixture must parse");
-    assert!(production_constructor.iter().any(|finding| {
-        finding.kind == "production-reference" && finding.target == "SciApiScientificBackend"
-    }));
+    assert!(production_constructor.is_empty());
 }
 
 #[test]

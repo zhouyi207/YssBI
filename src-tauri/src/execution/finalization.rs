@@ -18,8 +18,15 @@ pub struct ReadyResult {
 }
 
 impl ReadyResult {
-    pub(in crate::execution) fn from_scheduler(result_id: ResultId, value: StoredResult) -> Self {
-        Self { result_id, value }
+    pub(in crate::execution) fn from_scheduler(
+        result_id: ResultId,
+        value: StoredResult,
+        category: crate::execution::plan::ResultCategory,
+    ) -> Self {
+        Self {
+            result_id,
+            value: StoredResult::with_category(value, category),
+        }
     }
 
     pub fn result_id(&self) -> ResultId {
@@ -28,6 +35,10 @@ impl ReadyResult {
 
     pub fn value(&self) -> &StoredResult {
         &self.value
+    }
+
+    pub fn category(&self) -> crate::execution::plan::ResultCategory {
+        self.value.category()
     }
 }
 
@@ -211,10 +222,11 @@ pub(crate) mod test_support {
         };
 
         SuccessfulExecutionCandidate::from_scheduler(
-            vec![ReadyResult {
+            vec![ReadyResult::from_scheduler(
                 result_id,
-                value: StoredResult::Scalar(3.5),
-            }]
+                StoredResult::Scalar(3.5),
+                crate::execution::plan::ResultCategory::Value,
+            )]
             .into_boxed_slice(),
             vec![CandidateEffectProjection {
                 resource: PlanResourceId::from_existing("variables/answer".into()),

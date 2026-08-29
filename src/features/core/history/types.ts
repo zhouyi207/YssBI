@@ -1,4 +1,4 @@
-import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { GraphMutationResultDto } from '@/shared/types/domain/editorMutation';
 
 export type GraphMutationCommandResult =
   | { status: 'applied'; result: GraphMutationResultDto }

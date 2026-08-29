@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { VscGithub, VscSettingsGear } from 'react-icons/vsc';
 import { i18n, type AppLanguage } from '@/app/i18n';
-import { APP_LINKS } from '@/app/appConfig/default';
+import { APP_LINKS } from '@/shared/config-default';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,8 +14,14 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
-import { useProjectProjection, useSettingsStore } from '@/features/application/viewCapabilities';
+import {
+  openExternalUrlWithDialog,
+  useCurrentWindowActions,
+  useCustomTitleBar,
+} from '@/features/application/window';
+import { useProjectProjection } from '@/features/application/project/projectProjection';
+import { useSettingsRead } from '@/features/core/settings/read';
+import { settingsUi } from '@/features/core/settings/ui';
 import { BrandLockup } from '@/shared/ui/BrandMark';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -30,11 +36,12 @@ export function ProjectPickerTitleBar({
 }) {
   const { t } = useTranslation();
   const currentPath = useProjectProjection().currentPath;
-  const themeMode = useSettingsStore((state) => state.theme.mode ?? 'dark');
-  const appearance = useSettingsStore((state) => state.appearance);
-  const updateAppearance = useSettingsStore((state) => state.updateAppearance);
+  const themeMode = useSettingsRead((state) => state.theme.mode ?? 'dark');
+  const appearance = useSettingsRead((state) => state.appearance);
+  const updateAppearance = settingsUi.updateAppearance;
   const isLightTheme = themeMode === 'light';
   const windowActions = useCurrentWindowActions();
+  const customChrome = useCustomTitleBar();
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
     updateAppearance({
@@ -44,6 +51,7 @@ export function ProjectPickerTitleBar({
 
   return (
     <WindowMenuBar
+      customChrome={customChrome}
       toolbar={
         <>
           {currentPath ? (
@@ -126,8 +134,8 @@ export function ProjectSettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const language = useSettingsStore((state) => state.appearance.language);
-  const updateAppearance = useSettingsStore((state) => state.updateAppearance);
+  const language = useSettingsRead((state) => state.appearance.language);
+  const updateAppearance = settingsUi.updateAppearance;
   const languageOptions = [
     { label: t('language.zhCN'), value: 'zh-CN' },
     { label: t('language.enUS'), value: 'en-US' },

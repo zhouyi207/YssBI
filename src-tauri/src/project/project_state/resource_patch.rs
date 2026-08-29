@@ -1,19 +1,15 @@
 use super::*;
-
-pub(super) enum CompileProductInvalidation {
-    None,
-    Graphs(Vec<GraphResourcePath>),
-}
+use crate::project::resource_patch::ResourceDocumentPatch;
 
 pub(super) struct CommittedResourceMutation {
     pub(in crate::project::project_state) operation_id: crate::project::OperationId,
     pub(in crate::project::project_state) project_instance_id: String,
     pub(in crate::project::project_state) publication_revision: u64,
-    pub(in crate::project::project_state) moves: Vec<crate::event::ResourceMoveDto>,
-    pub(in crate::project::project_state) deltas:
-        Vec<crate::node_system::document::ResourceDeltaEvent>,
-    pub(in crate::project::project_state) history: HistoryStatusDto,
-    pub(in crate::project::project_state) projection_source: ProjectionSourceSnapshot,
+    pub(in crate::project::project_state) moves:
+        Vec<crate::project::project_writers::ProjectResourceMove>,
+    pub(in crate::project::project_state) deltas: Vec<crate::project::ResourceDeltaEvent>,
+    pub(in crate::project::project_state) history:
+        crate::project::project_writers::ProjectHistoryStatus,
     pub(in crate::project::project_state) expected_graph_paths: Vec<String>,
     #[cfg(test)]
     pub(in crate::project::project_state) completion_test_hook:
@@ -21,10 +17,47 @@ pub(super) struct CommittedResourceMutation {
 }
 
 impl CommittedResourceMutation {
+    pub(in crate::project) fn into_project_facts(
+        self,
+    ) -> crate::project::project_writers::ProjectResourceMutationFacts {
+        let Self {
+            operation_id,
+            project_instance_id,
+            publication_revision,
+            moves,
+            deltas,
+            history,
+            expected_graph_paths,
+            #[cfg(test)]
+                completion_test_hook: _,
+        } = self;
+        crate::project::project_writers::ProjectResourceMutationFacts::new(
+            operation_id,
+            crate::project::ProjectInstanceId::from_existing(project_instance_id.into()),
+            publication_revision,
+            moves.into_iter().collect::<Vec<_>>().into_boxed_slice(),
+            deltas,
+            crate::project::project_writers::ProjectProjectionStatus::Incomplete {
+                invalidated_graph_paths: expected_graph_paths
+                    .into_iter()
+                    .filter_map(|path| crate::graph_document::GraphResourcePath::new(path).ok())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            },
+            crate::project::project_writers::ProjectHistoryStatus {
+                can_undo: history.can_undo,
+                can_redo: history.can_redo,
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+impl CommittedResourceMutation {
     pub(in crate::project::project_state) fn complete(
         self,
         locale: &str,
-    ) -> crate::event::ResourceMutationResultDto {
+    ) -> crate::schema::application_event::ResourceMutationResultDto {
         let CommittedResourceMutation {
             operation_id,
             project_instance_id,
@@ -32,7 +65,6 @@ impl CommittedResourceMutation {
             moves,
             deltas,
             history,
-            projection_source,
             expected_graph_paths,
             #[cfg(test)]
             completion_test_hook,
@@ -42,93 +74,76 @@ impl CommittedResourceMutation {
             hook();
         }
 
-        let projection_replacements = projection_source.replacements(&expected_graph_paths, locale);
-
-        match projection_replacements {
-            Ok(projection_replacements) => crate::event::ResourceMutationResultDto {
-                operation_id,
-                project_instance_id,
-                publication_revision,
-                moves,
-                deltas,
-                projection_replacements,
-                projection_status: crate::event::ProjectionStatusDto::Complete {
-                    expected_graph_paths,
-                },
-                history,
+        let _ = locale;
+        let moves = moves
+            .into_iter()
+            .map(|value| crate::schema::application_event::ResourceMoveDto {
+                from: value.from.to_string(),
+                to: value.to.to_string(),
+                kind: value.kind,
+                name: value.name.to_string(),
+            })
+            .collect();
+        let history = crate::project::HistoryStatusDto {
+            can_undo: history.can_undo,
+            can_redo: history.can_redo,
+        };
+        crate::schema::application_event::ResourceMutationResultDto {
+            operation_id,
+            project_instance_id,
+            publication_revision,
+            moves,
+            deltas,
+            projection_replacements: Vec::new(),
+            projection_status: crate::schema::application_event::ProjectionStatusDto::Incomplete {
+                invalidated_graph_paths: expected_graph_paths,
             },
-            Err(error) => {
-                tracing::error!(
-                    target: "yssbi::project::projection",
-                    diagnostic_domain = "graph",
-                    diagnostic_event = "projectionCompletionFailed",
-                    error = %error,
-                    "Committed resource mutation projection completion failed"
-                );
-                crate::event::ResourceMutationResultDto {
-                    operation_id,
-                    project_instance_id,
-                    publication_revision,
-                    moves,
-                    deltas,
-                    projection_replacements: Vec::new(),
-                    projection_status: crate::event::ProjectionStatusDto::Incomplete {
-                        invalidated_graph_paths: expected_graph_paths,
-                    },
-                    history,
-                }
-            }
+            history,
         }
     }
 }
 
 impl ProjectState {
-    pub(in crate::project::project_state) fn invalidate_graph_compile_products(
-        &self,
-        graph_path: &GraphResourcePath,
-    ) {
-        let coordinator = self.compile_coordinator.read().unwrap().clone();
-        coordinator.invalidate(&graph_path.clone());
-    }
-
-    pub(in crate::project::project_state) fn apply_compile_product_invalidation(
-        &self,
-        invalidation: CompileProductInvalidation,
-    ) {
-        match invalidation {
-            CompileProductInvalidation::None => {}
-            CompileProductInvalidation::Graphs(paths) => {
-                for path in paths {
-                    self.invalidate_graph_compile_products(&path);
-                }
-            }
-        }
-    }
-
+    #[cfg(all(test, any()))]
     pub fn apply_resource_document_patch(
         &self,
         context: &ProjectTransactionContext,
         patch: ResourceDocumentPatch,
-    ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
-        self.apply_resource_document_patch_internal(context, patch, None, None, None)
+    ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
+    {
+        self.apply_resource_document_patch_internal(context, patch, None, None)
             .map(|receipt| receipt.complete("en-US"))
     }
 
+    #[cfg(all(test, any()))]
     pub(in crate::project) fn apply_resource_document_patch_with_environment(
         &self,
         context: &ProjectTransactionContext,
         patch: ResourceDocumentPatch,
         projection_environment: ProjectionEnvironmentSnapshot,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
-    ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
-        self.apply_resource_document_patch_internal(
-            context,
-            patch,
-            None,
-            Some(projection_environment),
-            rename_ownership,
-        )
-        .map(|receipt| receipt.complete("en-US"))
+    ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
+    {
+        let publication = self.mutation_publication.lock().unwrap();
+        if !projection_environment.matches_publication(&publication) {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "projection environment changed before patch publication".into(),
+            });
+        }
+        drop(publication);
+        self.apply_resource_document_patch_internal(context, patch, None, rename_ownership)
+            .map(|receipt| receipt.complete("en-US"))
+    }
+
+    pub(in crate::project) fn apply_project_resource_document_patch(
+        &self,
+        context: &ProjectTransactionContext,
+        patch: ResourceDocumentPatch,
+        rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
+    ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectFilesystemError>
+    {
+        self.apply_resource_document_patch_internal(context, patch, None, rename_ownership)
+            .map(CommittedResourceMutation::into_project_facts)
     }
 
     pub(in crate::project::project_state) fn apply_resource_document_patch_internal(
@@ -136,16 +151,12 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         mut patch: ResourceDocumentPatch,
         history_head: Option<(bool, HistoryEntryId)>,
-        projection_environment: Option<ProjectionEnvironmentSnapshot>,
         mut rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
         preflight_resource_patch_graphs(&patch)?;
-        let projection_environment = projection_environment
-            .map(Ok)
-            .unwrap_or_else(|| self.capture_projection_environment_for_session(&context.session))
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        let authority = self.capture_project_authority_for_session(&context.session)?;
 
         let receipt = {
             let mut publication = self.mutation_publication.lock().unwrap();
@@ -154,7 +165,7 @@ impl ProjectState {
                     message: "project instance changed before patch publication".into(),
                 });
             }
-            if !projection_environment.matches_publication(&publication) {
+            if !authority.matches_publication(&publication) {
                 return Err(ProjectFilesystemError::StaleProjectLifecycle {
                     message: "projection environment changed before patch publication".into(),
                 });
@@ -187,25 +198,25 @@ impl ProjectState {
             let moves = match &patch {
                 ResourceDocumentPatch::MoveGraph {
                     from, to, moved, ..
-                } => vec![crate::event::ResourceMoveDto {
-                    from: from.as_str().to_string(),
-                    to: to.as_str().to_string(),
+                } => vec![crate::project::project_writers::ProjectResourceMove {
+                    from: from.as_str().into(),
+                    to: to.as_str().into(),
                     kind: match moved.kind {
                         crate::project::GraphDocumentKind::Event => {
-                            crate::node_system::document::ResourceLifecycleKind::Event
+                            crate::project::ResourceLifecycleKind::Event
                         }
                         crate::project::GraphDocumentKind::Function => {
-                            crate::node_system::document::ResourceLifecycleKind::Function
+                            crate::project::ResourceLifecycleKind::Function
                         }
                     },
-                    name: moved.name.clone(),
+                    name: moved.name.clone().into_boxed_str(),
                 }],
                 ResourceDocumentPatch::MoveWorksheet { from, to, .. } => {
-                    vec![crate::event::ResourceMoveDto {
-                        from: from.as_str().to_string(),
-                        to: to.as_str().to_string(),
-                        kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
-                        name: to.display_name().as_str().to_string(),
+                    vec![crate::project::project_writers::ProjectResourceMove {
+                        from: from.as_str().into(),
+                        to: to.as_str().into(),
+                        kind: crate::project::ResourceLifecycleKind::Worksheet,
+                        name: to.display_name().as_str().into(),
                     }]
                 }
                 _ => Vec::new(),
@@ -221,30 +232,27 @@ impl ProjectState {
                     referenced_variables_before,
                     referenced_variables,
                     ..
-                } => Some(
-                    crate::node_system::document::ProjectHistoryTransaction::graph_move(
-                        context.operation_id,
-                        from.clone(),
-                        to.clone(),
-                        serde_json::to_value(GraphMoveHistoryPayload {
-                            moved_before: moved_before.clone(),
-                            moved_after: moved.clone(),
-                            referenced_graphs_before: referenced_graphs_before.clone(),
-                            referenced_graphs_after: referenced_graphs.clone(),
-                            referenced_variables_before: referenced_variables_before.clone(),
-                            referenced_variables_after: referenced_variables.clone(),
-                        })
-                        .map_err(|error| {
-                            ProjectFilesystemError::TransactionPrepareFailed {
-                                message: error.to_string(),
-                            }
-                        })?,
-                    ),
-                ),
+                } => Some(crate::project::ProjectHistoryTransaction::graph_move(
+                    context.operation_id,
+                    from.clone(),
+                    to.clone(),
+                    serde_json::to_value(GraphMoveHistoryPayload {
+                        moved_before: moved_before.clone(),
+                        moved_after: moved.clone(),
+                        referenced_graphs_before: referenced_graphs_before.clone(),
+                        referenced_graphs_after: referenced_graphs.clone(),
+                        referenced_variables_before: referenced_variables_before.clone(),
+                        referenced_variables_after: referenced_variables.clone(),
+                    })
+                    .map_err(|error| {
+                        ProjectFilesystemError::TransactionPrepareFailed {
+                            message: error.to_string(),
+                        }
+                    })?,
+                )),
                 _ => worksheet_history,
             };
             let projection_paths = patch_projection_paths(&patch, &data);
-            let compile_invalidation = compile_product_invalidation_for_resource_patch(&patch);
             if let Some((undo, expected_history_id)) = &history_head {
                 let current = if *undo {
                     history.next_undo()
@@ -463,7 +471,7 @@ impl ProjectState {
             } else if deltas.iter().any(|delta| {
                 !matches!(
                     &delta.payload,
-                    crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(_)
+                    crate::project::history::ResourceDocumentPatch::ResourceLifecycle(_)
                 )
             }) {
                 let changes = deltas
@@ -471,12 +479,10 @@ impl ProjectState {
                     .filter(|delta| {
                         !matches!(
                             &delta.payload,
-                            crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
-                                _
-                            )
+                            crate::project::history::ResourceDocumentPatch::ResourceLifecycle(_)
                         )
                     })
-                    .map(|delta| crate::node_system::document::ResourcePatch {
+                    .map(|delta| crate::project::ResourcePatch {
                         resource: delta.resource.clone(),
                         before_revision: delta.from_revision,
                         after_revision: delta.to_revision,
@@ -485,24 +491,11 @@ impl ProjectState {
                     })
                     .collect::<Vec<_>>();
                 history.record_committed_transaction(
-                    crate::node_system::document::ProjectHistoryTransaction::new(
-                        context.operation_id,
-                        changes,
-                    ),
+                    crate::project::ProjectHistoryTransaction::new(context.operation_id, changes),
                 );
             }
             let history = history.status();
             let publication_revision = publication.commit_prepared(publication_advance);
-            self.apply_compile_product_invalidation(compile_invalidation);
-            let projection_source = self.projection_source_snapshot(
-                &data,
-                projection_environment,
-                publication.project_instance_id.clone(),
-                publication.authority_generation(),
-                graph_revisions.clone(),
-                variable_revisions.clone(),
-                self.database_authority_revisions.read().unwrap().clone(),
-            );
             #[cfg(test)]
             let completion_test_hook = self
                 .test_hooks
@@ -516,8 +509,10 @@ impl ProjectState {
                 publication_revision,
                 moves,
                 deltas,
-                history,
-                projection_source,
+                history: crate::project::project_writers::ProjectHistoryStatus {
+                    can_undo: history.can_undo,
+                    can_redo: history.can_redo,
+                },
                 expected_graph_paths: projection_paths,
                 #[cfg(test)]
                 completion_test_hook,

@@ -55,14 +55,17 @@ vi.mock('@/features/core/dockview', () => ({
     ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
     ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
   }),
-  workbenchDockviewPort: {
+  workbenchDockviewRead: {
     listGroupPanels: mocks.listGroupPanels,
   },
 }));
 
 vi.mock('@/features/core/resource', () => ({
   resourceKey: ({ id, kind }: { id: string; kind: string }) => `${kind}:${id}`,
-  useDocumentStateStore: (selector: (state: {
+}));
+
+vi.mock('@/features/core/resource/read', () => ({
+  useResourceRead: (selector: (state: {
     documents: Record<string, { dirty: boolean }>;
   }) => unknown) => selector({
     documents: {

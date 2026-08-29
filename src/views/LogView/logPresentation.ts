@@ -1,5 +1,5 @@
-import type { LogDomainId } from '@/features/application/viewCapabilities';
-import type { DiagnosticLevel } from '@/shared/types/dto/diagnostics';
+import type { LogDomainId } from '@/features/application/log';
+import type { DiagnosticLevel } from '@/shared/types/domain/diagnostics';
 
 export const LOG_DOMAIN_TITLE_KEYS = {
   all: 'log.domains.all',

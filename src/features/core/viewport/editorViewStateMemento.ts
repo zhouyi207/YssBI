@@ -1,5 +1,5 @@
 import type { EditorViewport } from './editorViewport';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/core/observability/logger';
 import { normalizeEditorViewport } from './useViewportStore';
 
 const STORAGE_PREFIX = 'yssbi-editor-view-state';

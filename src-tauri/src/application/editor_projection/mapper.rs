@@ -1,13 +1,13 @@
 use super::model::*;
 use crate::data_contract::DataType;
+use crate::graph::analysis::contracts::DiagnosticLocation;
 use crate::graph::analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
     GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
+use crate::graph::protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 use crate::graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
-use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 use std::collections::BTreeMap;
 
 pub fn build_editor_projection(
@@ -368,20 +368,16 @@ fn project_type_summary(value: &TypeExpr) -> EditorTypeSummary {
 }
 
 fn project_schema_summary(
-    expression: &crate::node_system::protocol::SchemaExpr,
-    resolved: Option<&crate::node_system::protocol::ResolvedSchemaFact>,
+    expression: &crate::graph::protocol::SchemaExpr,
+    resolved: Option<&crate::graph::protocol::ResolvedSchemaFact>,
 ) -> EditorSchemaSummary {
     let kind = match expression {
-        crate::node_system::protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
-        crate::node_system::protocol::SchemaExpr::Project { .. } => {
-            EditorSchemaSummaryKind::Project
-        }
-        crate::node_system::protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
-        crate::node_system::protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
-        crate::node_system::protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
-        crate::node_system::protocol::SchemaExpr::Derived { .. } => {
-            EditorSchemaSummaryKind::Derived
-        }
+        crate::graph::protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
+        crate::graph::protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
+        crate::graph::protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
+        crate::graph::protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
+        crate::graph::protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
+        crate::graph::protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
     };
     let fields = resolved
         .into_iter()

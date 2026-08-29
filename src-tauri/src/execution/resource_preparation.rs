@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-
 use thiserror::Error;
 
 use crate::execution::finalization::{
@@ -219,7 +218,15 @@ pub struct ResourceProviderFactory {
 }
 
 impl ResourceProviderFactory {
+    /// Test-only constructor for an empty factory. Production composition must
+    /// use the composition-injected session identity; concrete database
+    /// handles stay outside the Execution package.
+    #[cfg(test)]
     pub(crate) fn new(session_identity: Box<str>) -> Self {
+        Self { session_identity }
+    }
+
+    pub(crate) fn from_project_session(session_identity: Box<str>) -> Self {
         Self { session_identity }
     }
 

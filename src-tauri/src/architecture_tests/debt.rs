@@ -21,47 +21,12 @@ pub(super) struct StagedAdapterDebt {
     pub(super) owning_migration_spec: &'static str,
 }
 
-macro_rules! debt_group {
-    (
-        $entries:ident,
-        $migration_spec:expr,
-        $rule_id:literal,
-        $source_file:literal,
-        $owner:literal,
-        [$(($kind:ident, $count:literal, $target:literal)),* $(,)?]
-        $(,)?
-    ) => {
-        $(
-            $entries.push(RustDebtEntry {
-                key: $crate::architecture_tests::model::DebtKey {
-                    rule_id: $rule_id.to_owned(),
-                    repository_relative_source_file: $source_file.to_owned(),
-                    fully_qualified_owner: $owner.to_owned(),
-                    dependency_kind: $crate::architecture_tests::model::RustDependencyKind::$kind,
-                    canonical_origin_target: $target.to_owned(),
-                },
-                expected_occurrences: $count,
-                owning_migration_spec: $migration_spec,
-            });
-        )*
-    };
-}
-
-mod backend_adapter;
-mod execution_runtime;
-mod presentation_command;
-mod project_graph;
 pub(super) fn rust_architecture_debt() -> Vec<RustDebtEntry> {
-    let mut entries = Vec::new();
-    backend_adapter::extend(&mut entries);
-    execution_runtime::extend(&mut entries);
-    presentation_command::extend(&mut entries);
-    project_graph::extend(&mut entries);
-    entries
+    Vec::new()
 }
 
 pub(super) fn staged_backend_adapter_debt() -> &'static [StagedAdapterDebt] {
-    backend_adapter::STAGED_ADAPTER_DEBT
+    &[]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

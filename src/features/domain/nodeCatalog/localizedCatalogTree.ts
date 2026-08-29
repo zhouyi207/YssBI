@@ -1,7 +1,7 @@
 import type {
   LocalizedCatalogItemDto,
   LocalizedCategoryDto,
-} from '@/shared/types/dto/localizedCatalog';
+} from '@/shared/types/domain/localizedCatalog';
 import { catalogItemKey } from './catalogItem';
 
 export interface LocalizedCatalogTreeNode {

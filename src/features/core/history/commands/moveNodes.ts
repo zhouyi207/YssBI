@@ -1,4 +1,4 @@
-import type { NodePositionDto } from '@/shared/types/dto/editorProjection';
+import type { NodePositionDto } from '@/shared/types/domain/editorProjection';
 import type { CommandHandler, GraphMutationCommandResult } from '../types';
 import { executeGraphIntent } from './executeGraphIntent';
 

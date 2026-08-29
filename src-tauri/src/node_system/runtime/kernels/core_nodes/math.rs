@@ -1,6 +1,6 @@
 use super::support::{KernelFragment, expect_arity, expect_min_arity};
 use super::value::canonical_float;
-use crate::node_system::protocol::{CanonicalDecimal, Value};
+use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, ArtifactKind, DataSeriesBuilder, DataSeriesElementType, DataSeriesMetadata, Kernel,
     KernelContext, KernelError, NullPolicy, NumericSeriesView, RuntimeValue, checked_int64_to_f64,

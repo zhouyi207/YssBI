@@ -1,15 +1,23 @@
-import type { FrontendDiagnosticEntryDto } from '@/shared/types/dto/diagnostics';
+export interface FrontendDiagnosticEntry {
+  readonly level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  readonly domain: 'application' | 'execution' | 'system' | 'graph' | 'data' | 'ui';
+  readonly target: string;
+  readonly event?: string;
+  readonly message: string;
+  readonly source?: string;
+  readonly fields: Record<string, unknown>;
+}
 
 export interface FrontendDiagnosticBatcherOptions {
   maxBatchEntries: number;
   maxPendingEntries: number;
   maxDelayMs: number;
   maxMessageBytes: number;
-  submit: (entries: FrontendDiagnosticEntryDto[]) => Promise<void>;
+  submit: (entries: FrontendDiagnosticEntry[]) => Promise<void>;
 }
 
 export interface FrontendDiagnosticBatcher {
-  enqueue: (entry: FrontendDiagnosticEntryDto) => void;
+  enqueue: (entry: FrontendDiagnosticEntry) => void;
   flush: () => Promise<void>;
   dispose: () => void;
   pendingCount: () => number;
@@ -47,7 +55,7 @@ export function createFrontendDiagnosticBatcher(
   const maxDelayMs = positiveInteger(options.maxDelayMs, 'maxDelayMs');
   const maxMessageBytes = positiveInteger(options.maxMessageBytes, 'maxMessageBytes');
 
-  let pending: FrontendDiagnosticEntryDto[] = [];
+  let pending: FrontendDiagnosticEntry[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let drain: Promise<void> | null = null;
   let disposed = false;
@@ -67,7 +75,7 @@ export function createFrontendDiagnosticBatcher(
         try {
           await options.submit(batch);
         } catch {
-          // Diagnostics transport failures must not enter the logger again or retry forever.
+          // Diagnostics transport failures must not enter the logger again.
         }
       }
     })().finally(() => {
@@ -90,10 +98,7 @@ export function createFrontendDiagnosticBatcher(
   return {
     enqueue: (entry) => {
       if (disposed) return;
-      pending.push({
-        ...entry,
-        message: truncateUtf8(entry.message, maxMessageBytes),
-      });
+      pending.push({ ...entry, message: truncateUtf8(entry.message, maxMessageBytes) });
       if (pending.length > maxPendingEntries) {
         pending.splice(0, pending.length - maxPendingEntries);
       }

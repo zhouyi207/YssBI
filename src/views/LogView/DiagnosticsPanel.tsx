@@ -2,12 +2,12 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscError, VscInfo, VscWarning } from 'react-icons/vsc';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { revealDetails } from '@/features/application/editor/rightSidebarActions';
-import { useGraphDataStore, useGraphSessionStore, updateEditorGroupSelectedNodeIds } from '@/features/application/viewCapabilities';
-import {
-  collectNodeDiagnostics,
-  type GraphNodeDiagnostic,
-} from '@/features/application/viewCapabilities';
+import { revealDiagnosticNode } from '@/features/application/editor/rightSidebarActions';
+import { useGraphRead } from '@/features/core/graph/read';
+import { useGraphSessionUi } from '@/features/core/graphSession/ui';
+import type { FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
+import { collectNodeDiagnostics } from '@/features/domain/graphDiagnostics/nodeDiagnostics';
+import type { GraphNodeDiagnostic } from '@/features/domain/graphDiagnostics/nodeDiagnostics';
 
 function severityIcon(severity: GraphNodeDiagnostic['diagnostic']['severity']) {
   if (severity === 'error') return VscError;
@@ -21,21 +21,21 @@ function severityClass(severity: GraphNodeDiagnostic['diagnostic']['severity']):
   return 'text-muted-foreground';
 }
 
-function activateDiagnostic(row: GraphNodeDiagnostic): void {
-  const focused = useGraphSessionStore.getState().focusedSession;
+function activateDiagnostic(
+  row: GraphNodeDiagnostic,
+  focused: FocusedGraphSession | null,
+): void {
   if (!focused || focused.graphPath !== row.graphPath) return;
 
-  updateEditorGroupSelectedNodeIds([row.nodeId], focused.groupId);
-  void revealDetails({ kind: 'node', id: row.nodeId, graphPath: row.graphPath });
+  void revealDiagnosticNode(row.graphPath, row.nodeId, focused.groupId);
 }
 
 export function DiagnosticsPanel() {
   const { t } = useTranslation();
-  const graphPath = useGraphSessionStore(
-    (state) => state.focusedSession?.graphPath ?? null,
-  );
-  const bucket = useGraphDataStore((state) => (
-    graphPath ? state.graphEntities[graphPath] : undefined
+  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
+  const graphPath = focusedSession?.graphPath ?? null;
+  const bucket = useGraphRead((snapshot) => (
+    graphPath ? snapshot.graphEntities[graphPath] : undefined
   ));
   const rows = useMemo(
     () => collectNodeDiagnostics(graphPath ?? '', bucket),
@@ -79,7 +79,7 @@ export function DiagnosticsPanel() {
                   type="button"
                   data-diagnostics-row
                   className="flex w-full items-start gap-2 border-b border-border/10 px-3 py-2 text-left transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
-                  onClick={() => activateDiagnostic(row)}
+                  onClick={() => activateDiagnostic(row, focusedSession)}
                   title={t('panel.diagnosticsLocateNode')}
                 >
                   <Icon className={`mt-0.5 size-3.5 shrink-0 ${iconClass}`} aria-hidden />

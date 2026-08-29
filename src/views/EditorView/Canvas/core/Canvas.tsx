@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import {
   useCanvasDrop,
   useCanvasOverlayHandlers,
@@ -10,13 +9,14 @@ import {
 import type { EditorCanvasScope } from '@/features/application/editor';
 import { CanvasContextMenuProvider } from '@/features/application/editor/CanvasContextMenuContext';
 import type { CanvasContextMenuActions } from '@/features/application/editor/CanvasContextMenuContext';
-import { useNodeDragPreview, useSelectionBoxPreview, useGraphDataStore, useExecutionVisualBinder, editorViewportScope } from '@/features/application/viewCapabilities';
-import {
-  getCanvasInteraction,
-  useGraphInteractionStore,
-} from '@/features/application/viewCapabilities';
-import type { NodeCreationDescriptor } from '@/features/application/viewCapabilities';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import { useNodeDragPreview, useSelectionBoxPreview } from '@/features/core/canvas';
+import { useGraphRead } from '@/features/core/graph/read';
+import { useExecutionVisualBinder } from '@/features/core/execution';
+import { editorViewportScope } from '@/features/core/viewport/viewportScope';
+import { useGraphInteractionUi } from '@/features/core/graphInteraction/ui';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { Pin } from '@/shared/types/domain';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import { CanvasNode } from '../../Nodes/CanvasNode';
 import CanvasOverlays, { type CanvasOverlaysModel } from '../overlays/CanvasOverlays';
 import { ConnectionLine } from './ConnectionLine';
@@ -83,9 +83,12 @@ export default function Canvas({
   } = useEditorCanvas({ mode, scope });
   const activeTabId = activeGraph?.graphPath ?? null;
 
-  const gesturePinData = useGraphInteractionStore((state) => {
+  const gesturePinData = useGraphInteractionUi((state) => {
     if (!interactive || !activeTabId) return null;
-    const interaction = getCanvasInteraction(state, activeTabId, groupId);
+    const interaction = state.interactions[activeTabId];
+    if (!interaction || interaction.type === 'idle' || interaction.session.groupId !== groupId) {
+      return null;
+    }
     return interaction.type === 'drawingConnection' || interaction.type === 'movingConnections'
       ? interaction.session.source
       : null;
@@ -113,12 +116,12 @@ export default function Canvas({
     [selectedNodeIds],
   );
 
-  const graphNodeIds = useGraphDataStore(
-    useShallow((state) => (activeTabId ? state.getGraphNodeIds(activeTabId) : EMPTY_NODE_IDS)),
-  );
-  const graphRevision = useGraphDataStore((state) => (
+  const graphNodeIds = useGraphRead((snapshot) => (
+    activeTabId ? snapshot.graphEntities[activeTabId]?.graphNodes ?? EMPTY_NODE_IDS : EMPTY_NODE_IDS
+  ));
+  const graphRevision = useGraphRead((snapshot) => (
     interactive && activeTabId
-      ? state.graphEntities[activeTabId]?.sourceRevision ?? null
+      ? snapshot.graphEntities[activeTabId]?.sourceRevision ?? null
       : null
   ));
 
@@ -159,9 +162,9 @@ export default function Canvas({
     setPendingConnection,
   });
 
-  const activePin = useMemo(() => {
+  const activePin = useMemo<Pin | null>(() => {
     if (!interactive) return null;
-    if (gesturePinData) return gesturePinData;
+    if (gesturePinData) return structuredClone(gesturePinData) as unknown as Pin;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
     return null;
   }, [contextMenu, gesturePinData, interactive, pendingConnection]);

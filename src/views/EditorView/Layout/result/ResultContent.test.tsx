@@ -3,8 +3,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ResultViewShell } from '@/features/core/resultSource/components/ResultViewShell';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+import { ResultViewShell } from '@/features/application/results/components/ResultViewShell';
+import type { ResultDescriptor } from '@/shared/types/domain/result';
 import { ResultContent } from './ResultContent';
 
 const mocks = vi.hoisted(() => ({
@@ -15,12 +15,16 @@ const mocks = vi.hoisted(() => ({
   reportView: vi.fn(),
 }));
 
-vi.mock('@/features/core/resultSource', async () => {
+vi.mock('@/features/application/results', async () => {
   const { ResultViewShell } = await vi.importActual<
-    typeof import('@/features/core/resultSource/components/ResultViewShell')
-  >('@/features/core/resultSource/components/ResultViewShell');
+    typeof import('@/features/application/results/components/ResultViewShell')
+  >('@/features/application/results/components/ResultViewShell');
+  const { ResultViewPresentationProvider } = await vi.importActual<
+    typeof import('@/features/application/results/resultViewPresentation')
+  >('@/features/application/results/resultViewPresentation');
 
   return {
+    ResultViewPresentationProvider,
     UnifiedResultView: ({ payload }: { payload: ResultDescriptor }) => (
       <ResultViewShell
         title={payload.title}

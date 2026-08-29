@@ -1,10 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  useExecutionPlayback,
-  useExecutionStore,
-  graphHasClearableArtifacts,
-} from "@/features/application/viewCapabilities";
+import { useExecutionPlayback } from "@/features/core/execution/useExecutionPlayback";
+import { useExecutionRead } from '@/features/core/execution/read';
+import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
 import {
   VscClearAll,
   VscDebugPause,
@@ -44,7 +42,7 @@ export function CanvasExecutionToolbar({
   const { t } = useTranslation();
   const { stop: stopReplay, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } =
     useExecutionPlayback(graphPath);
-  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
+  const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 
   const playbackActive = isPlaying || isPaused;

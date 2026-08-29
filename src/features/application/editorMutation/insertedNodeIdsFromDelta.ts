@@ -1,4 +1,4 @@
-import type { GraphDeltaDto } from '@/shared/types/dto/editorMutation';
+import type { GraphDeltaDto } from '@/shared/types/domain/editorMutation';
 
 export function insertedNodeIdsFromDelta(delta: GraphDeltaDto): string[] {
   return delta.payload.operations.flatMap((operation) => (

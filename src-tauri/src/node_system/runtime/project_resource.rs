@@ -1,12 +1,12 @@
 use super::{PlotSink, ResourceError, ResourceLease, ResourceProvider};
 use crate::data_contract::DataValue;
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{
-    CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
-};
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     CompiledResourceRequirement, ResourceAccess, ResourceId, ResourceKind,
 };
+use crate::graph::analysis::contracts::{
+    CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
+};
+use crate::project::ProjectSessionId;
 use crate::variable::VariableInstance;
 use polars::prelude::DataFrame;
 use std::any::Any;
@@ -267,7 +267,7 @@ impl ResourceProvider for ProjectResourceProvider {
         if let Some(observer) = &self.lease_observer {
             observer.observe_validation(requirements);
         }
-        if provenance.project_session_id != self.snapshot.project_session_id {
+        if provenance.project_session_id.as_str() != self.snapshot.project_session_id.as_str() {
             return Err(ResourceError::snapshot_mismatch(format!(
                 "plan belongs to project session '{}', but resources belong to '{}'",
                 provenance.project_session_id.as_str(),

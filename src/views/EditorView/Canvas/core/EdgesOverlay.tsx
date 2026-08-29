@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
-import { useExecutionStore, useGraphDataStore, connectionKey, getExecutionVisual, subscribeExecutionVisual, useTheme, getPinTypeColor, useEdgeDragPreview, getConnectPreview, subscribeConnectPreview } from "@/features/application/viewCapabilities";
+import { connectionKey, getExecutionVisual, subscribeExecutionVisual } from "@/features/core/execution";
+import { useExecutionRead } from '@/features/core/execution/read';
+import { useGraphRead } from '@/features/core/graph/read';
+import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import { useEdgeDragPreview } from "@/features/core/canvas";
+import { getConnectPreview, subscribeConnectPreview } from "@/features/core/canvas/connectPreview";
 import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
-import type { EdgeData } from '@/features/application/viewCapabilities';
+import type { EdgeData } from '@/features/domain/canvas/edgeData';
 import { ConnectionContextMenu } from '@/views/EditorView/ContextMenu';
 
 export function replacementEdgeAttributes(
@@ -190,8 +195,10 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
       connectionIds,
     });
   }, [graphPath, groupId, interaction, selectedConnectionIdSet, selectedConnectionIds]);
-  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
-  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphPath === graphPath);
+  const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
+  const isReplay = useExecutionRead((snapshot) =>
+    snapshot.isPlaying && snapshot.playbackGraphPath === graphPath,
+  );
 
   const useVisual = (visual.active && visual.graphPath === graphPath) || isReplay;
   const status = useVisual ? visual.status : (graphState?.status ?? "idle");
@@ -200,18 +207,19 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
   const nodeStates = useVisual ? undefined : graphState?.nodeStates;
   const isRunning = status === "running";
 
-  const graphNodeIds = useGraphDataStore(
-    useShallow((s) => s.getGraphNodeIds(graphPath)),
-  );
-  const connections = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphPath)),
-  );
-  const sourcePins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.from))),
-  );
-  const targetPins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.to))),
-  );
+  const graphBucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
+  const graphNodeIds = graphBucket ? [...graphBucket.graphNodes] : [];
+  const connections = graphBucket
+    ? Object.values(graphBucket.connections).map((connection) => structuredClone(connection) as ConnectionData)
+    : [];
+  const sourcePins = connections.map((connection) => {
+    const pin = graphBucket?.pins[connection.from];
+    return pin ? structuredClone(pin) as PinData : undefined;
+  });
+  const targetPins = connections.map((connection) => {
+    const pin = graphBucket?.pins[connection.to];
+    return pin ? structuredClone(pin) as PinData : undefined;
+  });
 
   const edges = useMemo<EdgeData[]>(() => {
     const pinsById = new Map<string, PinData>();

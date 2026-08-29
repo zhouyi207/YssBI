@@ -1,5 +1,5 @@
 import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import type { DatabaseRow } from '@/shared/types/dto/database';
+import type { DatabaseRow } from '@/shared/types/domain/database';
 
 export interface DatabaseGridRow {
   values: DatabaseRow;

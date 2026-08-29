@@ -209,6 +209,7 @@ function importedDependencyForExpression(
     return importedDependencyForExpression(expression.expression, context, bindings);
   }
   if (ts.isCallExpression(expression)) {
+    if (ts.isPropertyAccessExpression(expression.expression)) return null;
     return importedDependencyForExpression(expression.expression, context, bindings);
   }
   if (ts.isParenthesizedExpression(expression)) {

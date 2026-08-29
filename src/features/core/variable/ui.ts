@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import {
   freezeProjectionSnapshot,
   type DeepReadonly,
-} from '@/features/core/projection/deepReadonly';
+} from '@/shared/types/deepReadonly';
 import type { DataValue } from '@/shared/types/domain/dataValue';
 import type { VariableId, VariableScope } from '@/shared/types/domain';
 

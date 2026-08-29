@@ -1,6 +1,9 @@
 use super::*;
+#[cfg(test)]
+use crate::schema::application_event::ResourceMutationResultDto;
 
 impl ProjectState {
+    #[cfg(test)]
     pub fn create_worksheet_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -8,6 +11,22 @@ impl ProjectState {
         database_id: Option<String>,
         operation_id: OperationId,
     ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.create_worksheet_resource_facts(
+            expected_project_instance_id,
+            name,
+            database_id,
+            operation_id,
+        )
+        .map(ProjectResourceMutationFacts::into_transport)
+    }
+
+    pub(crate) fn create_worksheet_resource_facts(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        name: &ResourceName,
+        database_id: Option<String>,
+        operation_id: OperationId,
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -67,6 +86,7 @@ impl ProjectState {
         result
     }
 
+    #[cfg(test)]
     pub fn duplicate_worksheet_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -74,6 +94,22 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: OperationId,
     ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.duplicate_worksheet_resource_facts(
+            expected_project_instance_id,
+            source,
+            expected_revision,
+            operation_id,
+        )
+        .map(ProjectResourceMutationFacts::into_transport)
+    }
+
+    pub(crate) fn duplicate_worksheet_resource_facts(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        source: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -127,7 +163,7 @@ impl ProjectState {
         worksheet_path: WorksheetResourcePath,
         before: Option<WorksheetDocument>,
         document: WorksheetDocument,
-    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         self.validate_writer_context(&context, snapshot.authority_generation)?;
         let retained_revision = self
             .worksheet_revisions
@@ -147,17 +183,13 @@ impl ProjectState {
             validate_document,
         )?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&snapshot.session)
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_resource_document_patch_with_environment(
+        let mut result = match self.apply_project_resource_document_patch(
             &context,
             ResourceDocumentPatch::UpsertWorksheet {
                 path: worksheet_path.clone(),
                 document: document.clone(),
             },
-            projection_environment,
             None,
         ) {
             Ok(result) => result,
@@ -175,18 +207,38 @@ impl ProjectState {
             retained_revision,
             before.as_ref(),
             Some(&document),
-        )?];
+        )?]
+        .into_boxed_slice();
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn save_worksheet_document(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         worksheet_path: &WorksheetResourcePath,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
-        mut document: WorksheetDocument,
+        document: WorksheetDocument,
     ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.save_worksheet_document_facts(
+            expected_project_instance_id,
+            worksheet_path,
+            expected_revision,
+            operation_id,
+            document,
+        )
+        .map(ProjectResourceMutationFacts::into_transport)
+    }
+
+    pub(crate) fn save_worksheet_document_facts(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+        mut document: WorksheetDocument,
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -226,6 +278,7 @@ impl ProjectState {
         result
     }
 
+    #[cfg(test)]
     pub fn rename_worksheet_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -235,6 +288,26 @@ impl ProjectState {
         lifecycle_token: u64,
         operation_id: OperationId,
     ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.rename_worksheet_resource_facts(
+            expected_project_instance_id,
+            worksheet_path,
+            expected_revision,
+            new_name,
+            lifecycle_token,
+            operation_id,
+        )
+        .map(ProjectResourceMutationFacts::into_transport)
+    }
+
+    pub(crate) fn rename_worksheet_resource_facts(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        new_name: &ResourceName,
+        lifecycle_token: u64,
+        operation_id: OperationId,
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -295,18 +368,14 @@ impl ProjectState {
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&snapshot.session)
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_resource_document_patch_with_environment(
+        let mut result = match self.apply_project_resource_document_patch(
             &mutation_context,
             ResourceDocumentPatch::MoveWorksheet {
                 from: worksheet_path.clone(),
                 to: target.clone(),
                 moved: moved.clone(),
             },
-            projection_environment,
             Some(&mut ownership),
         ) {
             Ok(result) => result,
@@ -324,11 +393,13 @@ impl ProjectState {
             operation_id,
             expected_revision,
             moved.revision,
-        )];
+        )]
+        .into_boxed_slice();
         reservation.complete();
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn remove_worksheet_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -336,6 +407,22 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: OperationId,
     ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.remove_worksheet_resource_facts(
+            expected_project_instance_id,
+            worksheet_path,
+            expected_revision,
+            operation_id,
+        )
+        .map(ProjectResourceMutationFacts::into_transport)
+    }
+
+    pub(crate) fn remove_worksheet_resource_facts(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -373,17 +460,13 @@ impl ProjectState {
             }],
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&snapshot.session)
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_resource_document_patch_with_environment(
+        let mut result = match self.apply_project_resource_document_patch(
             &mutation_context,
             ResourceDocumentPatch::RemoveWorksheet {
                 path: worksheet_path.clone(),
                 revision: expected_revision,
             },
-            projection_environment,
             None,
         ) {
             Ok(result) => result,
@@ -395,7 +478,7 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.deltas = vec![delta];
+        result.deltas = vec![delta].into_boxed_slice();
         reservation.complete();
         Ok(result)
     }

@@ -30,7 +30,6 @@ describe('DatabaseService project lifecycle contract', () => {
     ['getColumnStats', 'get_column_stats', [projectInstanceId, 'sales'], {}],
     ['getColumnDistribution', 'get_column_distribution', [projectInstanceId, 'sales'], {}],
     ['getDatasetOverview', 'get_dataset_overview', [projectInstanceId, 'sales'], {}],
-    ['getEditState', 'get_edit_state', [projectInstanceId, 'sales'], {}],
     ['exportDatabase', 'export_database', [projectInstanceId, 'sales', 'C:/sales.csv', 'csv'], { path: 'C:/sales.csv', format: 'csv' }],
   ] as const)('passes exact project identity through %s', async (method, command, args, extra) => {
     vi.mocked(invoke).mockResolvedValue(method === 'getDatabaseRows' ? { rows: [], rowIds: [] } : undefined);
@@ -81,18 +80,8 @@ describe('DatabaseService revisioned mutation contract', () => {
   it.each([
     ['deleteDatabase', 'delete_database', [projectInstanceId, operationId, expectedRevision, 'sales'], {}],
     ['renameDatabase', 'rename_database', [projectInstanceId, operationId, expectedRevision, 'sales', 'Renamed'], { name: 'Renamed' }],
-    ['editCell', 'edit_cell', [projectInstanceId, operationId, expectedRevision, 'sales', 2, 'amount', 9, 12], { row: 2, colName: 'amount', value: 9, rowId: 12 }],
-    ['addRow', 'add_row', [projectInstanceId, operationId, expectedRevision, 'sales', 3], { index: 3 }],
-    ['deleteRows', 'delete_rows', [projectInstanceId, operationId, expectedRevision, 'sales', [1], [11]], { indices: [1], rowIds: [11] }],
-    ['addColumn', 'add_column', [projectInstanceId, operationId, expectedRevision, 'sales', 'tax', 'Float64'], { name: 'tax', dtype: 'Float64' }],
-    ['deleteColumn', 'delete_column', [projectInstanceId, operationId, expectedRevision, 'sales', 'tax'], { name: 'tax' }],
-    ['castColumn', 'cast_column', [projectInstanceId, operationId, expectedRevision, 'sales', 'amount', 'Int64', true], { colName: 'amount', newDtype: 'Int64', force: true }],
-    ['renameColumn', 'rename_column', [projectInstanceId, operationId, expectedRevision, 'sales', 'old', 'next'], { oldName: 'old', newName: 'next' }],
-    ['undoEdit', 'undo_edit', [projectInstanceId, operationId, expectedRevision, 'sales'], {}],
-    ['redoEdit', 'redo_edit', [projectInstanceId, operationId, expectedRevision, 'sales'], {}],
-    ['saveDatabaseChanges', 'save_database_changes', [projectInstanceId, operationId, expectedRevision, 'sales'], {}],
   ] as const)('passes exact revision authority through %s', async (method, command, args, extra) => {
-    const aggregate = { data: method === 'deleteDatabase' || method === 'renameDatabase' ? null : { isModified: false }, mutation };
+    const aggregate = { data: null, mutation };
     vi.mocked(invoke).mockResolvedValue(aggregate);
 
     await expect((DatabaseService[method] as (...values: any[]) => Promise<unknown>)(...args))

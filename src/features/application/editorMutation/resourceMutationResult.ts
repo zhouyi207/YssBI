@@ -8,24 +8,20 @@ import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 
-import { validateResourceMutationWireResult } from '@/shared/types/dto/resourceMutationResultValidator';
-export { validateResourceMutationWireResult } from '@/shared/types/dto/resourceMutationResultValidator';
+import { validateResourceMutationResult } from '@/features/domain/resource/resourceMutationValidation';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
-import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
+import { isGraphResourcePath } from '@/shared/types/domain/editorProjectionGuards';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import {
-  normalizeDatabaseRecord,
-  type DatabaseDocumentDto,
-  type DatabaseRecord,
-} from '@/shared/types/dto/database';
-import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
+import type { DatabaseDocumentDto, DatabaseRecord } from '@/shared/types/domain/database';
+import { normalizeDatabaseRecord } from '@/features/application/dataManagement/databaseRecords';
+import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
 import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
 import type {
   GraphProjectionReplacementDto,
   ResourceDeltaDto,
   ResourceMutationResultDto,
   VariableDocumentPatchDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import {
@@ -648,8 +644,8 @@ export function prepareSynchronousPublicationCommit(
   result: ResourceMutationResultDto,
   context: PreparePublicationContext,
 ): PreparedProjectPublication {
-  const wireError = validateResourceMutationWireResult(result);
-  if (wireError) throw new Error(wireError);
+  const validationError = validateResourceMutationResult(result);
+  if (validationError) throw new Error(validationError);
   if (result.projectionStatus.status === 'incomplete') {
     throw new Error('incomplete projection status requires recovery');
   }

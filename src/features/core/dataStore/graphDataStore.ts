@@ -11,7 +11,7 @@ import type {
 import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 import { portAddressKey, toProjectionEntities } from '@/features/domain/editorProjection';
 import type { EditorProjectionEntities } from '@/features/domain/editorProjection';
 import {

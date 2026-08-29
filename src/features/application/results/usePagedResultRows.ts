@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
-import type { ErrorReference } from '@/services/ipc';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import type { ResultPage } from '@/shared/types/dto/result';
+import type { ErrorReference } from '@/features/application/errorReference';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { ResultPage } from '@/shared/types/domain/result';
 import type {
   ResultPageRequest,
   ResultQueryCoordinator,

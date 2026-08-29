@@ -1,4 +1,3 @@
-use crate::node_system::document::DocumentError;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -8,15 +7,12 @@ pub enum ProjectFilesystemError {
     InvalidResourceName(#[from] super::ResourceNameError),
     #[error("invalid worksheet resource path: {0}")]
     InvalidWorksheetResourcePath(#[from] super::WorksheetResourcePathError),
-    #[error("built-in node system initialization failed: {0}")]
-    BuiltinInitialization(#[from] crate::node_system::catalog::BuiltinInitializationError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
     #[error("graph resource '{path}' is structurally invalid")]
     InvalidGraphDocument {
         path: super::GraphResourcePath,
-        #[source]
-        source: DocumentError,
+        message: String,
     },
     #[error("stale project lifecycle: {message}")]
     StaleProjectLifecycle { message: String },
@@ -72,7 +68,6 @@ impl ProjectFilesystemError {
                 }
                 _ => "invalid_resource_name",
             },
-            Self::BuiltinInitialization(_) => "builtin_initialization_failed",
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
@@ -139,11 +134,7 @@ pub enum ProjectError {
     InvalidProjectFormat(String),
 
     #[error("graph file '{}' is structurally invalid", path.display())]
-    InvalidGraphDocument {
-        path: PathBuf,
-        #[source]
-        source: DocumentError,
-    },
+    InvalidGraphDocument { path: PathBuf, message: String },
 }
 
 impl From<crate::graph_document::GraphResourcePathError> for ProjectError {

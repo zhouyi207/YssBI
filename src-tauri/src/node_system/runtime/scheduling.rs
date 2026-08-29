@@ -1,5 +1,5 @@
 use super::{ActivationId, ActivationResultGroup, RunError, StoredValue};
-use crate::node_system::plan::{AttemptId, OperationIndex, WorkloadClass};
+use crate::execution::plan::legacy::{AttemptId, OperationIndex, WorkloadClass};
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 

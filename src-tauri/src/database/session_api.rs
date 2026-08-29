@@ -40,6 +40,51 @@ pub struct DatabaseDataSnapshot {
     rows: TabularSnapshot,
 }
 
+pub(crate) struct DatabaseMetaSnapshot {
+    database: DatabaseId,
+    name: Box<str>,
+    schema: DatabaseSchemaFact,
+    row_count: usize,
+}
+
+impl DatabaseMetaSnapshot {
+    pub(crate) fn database(&self) -> &DatabaseId {
+        &self.database
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn schema(&self) -> &DatabaseSchemaFact {
+        &self.schema
+    }
+
+    pub(crate) const fn row_count(&self) -> usize {
+        self.row_count
+    }
+}
+
+pub(crate) struct DatabasePageSnapshot {
+    database: DatabaseId,
+    rows: TabularSnapshot,
+    row_ids: Vec<i64>,
+}
+
+impl DatabasePageSnapshot {
+    pub(crate) fn database(&self) -> &DatabaseId {
+        &self.database
+    }
+
+    pub(crate) fn rows(&self) -> &TabularSnapshot {
+        &self.rows
+    }
+
+    pub(crate) fn row_ids(&self) -> &[i64] {
+        &self.row_ids
+    }
+}
+
 impl DatabaseDataSnapshot {
     pub fn database(&self) -> &DatabaseId {
         &self.database
@@ -106,12 +151,14 @@ pub enum DatabaseMutationOperation {
         row: usize,
         column: Box<str>,
         value: TabularScalar,
+        row_id: Option<i64>,
     },
     AddRow {
         index: usize,
     },
     DeleteRows {
         indices: Box<[usize]>,
+        row_ids: Option<Box<[i64]>>,
     },
     AddColumn {
         name: Box<str>,
@@ -125,12 +172,16 @@ pub enum DatabaseMutationOperation {
         data_type: DataType,
         force: bool,
     },
+    RenameDatabase {
+        name: Box<str>,
+    },
     RenameColumn {
         old_name: Box<str>,
         new_name: Box<str>,
     },
     Undo,
     Redo,
+    Save,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -395,8 +446,10 @@ fn schema_effect(operation: &DatabaseMutationOperation) -> DatabaseMutationSchem
         DatabaseMutationOperation::EditCell { .. }
         | DatabaseMutationOperation::AddRow { .. }
         | DatabaseMutationOperation::DeleteRows { .. }
+        | DatabaseMutationOperation::RenameDatabase { .. }
         | DatabaseMutationOperation::Undo
-        | DatabaseMutationOperation::Redo => DatabaseMutationSchemaEffect::DataOnly,
+        | DatabaseMutationOperation::Redo
+        | DatabaseMutationOperation::Save => DatabaseMutationSchemaEffect::DataOnly,
     }
 }
 
@@ -543,6 +596,110 @@ pub fn data_snapshot(
         columns: physical.columns,
         rows: physical.rows,
     })
+}
+
+pub(crate) fn metadata_snapshot(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+) -> Result<DatabaseMetaSnapshot, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    let _declaration = session
+        .declarations()
+        .iter()
+        .find(|declaration| declaration.id == database)
+        .ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+    let physical = session.read_physical_metadata(&database)?;
+    Ok(DatabaseMetaSnapshot {
+        database,
+        name: physical.name,
+        schema: physical.schema,
+        row_count: physical.row_count,
+    })
+}
+
+pub(crate) fn page_snapshot(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+    offset: usize,
+    limit: usize,
+) -> Result<DatabasePageSnapshot, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    let page = session.read_physical_page(&database, offset, limit)?;
+    Ok(DatabasePageSnapshot {
+        database,
+        rows: page.rows,
+        row_ids: page.row_ids,
+    })
+}
+
+pub(crate) fn column_statistics(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_column_stats(&database)
+}
+
+pub(crate) fn column_distributions(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_column_distributions(&database)
+}
+
+pub(crate) fn dataset_overview(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+) -> Result<crate::database::DatasetOverview, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_dataset_overview(&database)
+}
+
+pub(crate) fn edit_state(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+) -> Result<crate::database::EditState, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_edit_state(&database)
 }
 
 pub fn prepare_database_runtime_change(
@@ -779,6 +936,7 @@ pub(crate) fn database_catalog_snapshot_fixture(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
+    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
     use crate::database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionOpenRequest,
@@ -820,6 +978,39 @@ mod tests {
             .unwrap()
     }
 
+    fn session_with_loaded_instance(identity: &str) -> DatabaseRuntimeSession {
+        let declaration = declaration("sales");
+        let observations = DatabaseDeclarationObservationSet::try_from_iter([(
+            declaration.id.clone(),
+            DatabaseDeclarationObservation::new(
+                DatabaseDeclarationRevision::from_existing(1),
+                DatabaseDeclarationFingerprint::from_decl(&declaration),
+            ),
+        )])
+        .unwrap();
+        let dataframe = polars::df!("value" => &[1_i64]).expect("test dataframe is valid");
+        let instance = DatabaseInstance {
+            decl: declaration.clone(),
+            state: DatabaseState::Loaded {
+                dataframe: std::sync::Arc::new(dataframe.clone()),
+                original: std::sync::Arc::new(dataframe),
+                history: EditHistory::new(),
+            },
+        };
+        DatabaseRuntimeRegistry::new()
+            .open_session_with_instances(
+                DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing(identity.into()),
+                    NonZeroU64::new(1).unwrap(),
+                    None,
+                    vec![declaration].into(),
+                    observations,
+                ),
+                [instance],
+            )
+            .unwrap()
+    }
+
     #[test]
     fn catalog_snapshot_revalidation_is_session_and_revision_exact() {
         let first_session = session();
@@ -856,6 +1047,7 @@ mod tests {
                 row: 0,
                 column: "value".into(),
                 value: TabularScalar::Null,
+                row_id: None,
             },
         };
         let prepared = prepare_database_runtime_change(&first_session, request).unwrap();
@@ -904,7 +1096,7 @@ mod tests {
 
     #[test]
     fn selected_columns_reject_empty_and_duplicate_requests_before_access() {
-        let session = session();
+        let session = session_with_loaded_instance("session");
         let empty = data_snapshot(
             &session,
             DatabaseDataSnapshotRequest {
@@ -938,6 +1130,7 @@ mod tests {
                     row: 0,
                     column: "value".into(),
                     value: TabularScalar::Null,
+                    row_id: None,
                 },
             },
         )
@@ -1020,6 +1213,7 @@ mod tests {
                         row: 0,
                         column: "value".into(),
                         value: TabularScalar::Null,
+                        row_id: None,
                     },
                 },
             )
@@ -1047,6 +1241,7 @@ mod tests {
                         row: 1,
                         column: "value".into(),
                         value: TabularScalar::Null,
+                        row_id: None,
                     },
                 },
             )

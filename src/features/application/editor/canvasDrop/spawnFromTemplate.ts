@@ -1,5 +1,5 @@
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
-import type { ResourceBoundCreateArgsDto } from '@/shared/types/dto/nodeCreationDescriptor';
+import type { ResourceBoundCreateArgsDto } from '@/shared/types/domain/nodeCreationDescriptor';
 import type { NodeSpawnTemplate } from '@/features/core/dnd';
 import type { CreateNodeFn } from './createNodeFn';
 

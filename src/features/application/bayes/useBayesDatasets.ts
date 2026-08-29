@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { databaseRead, useDatabaseRead } from '@/features/core/database/read';
-import { createDatabasePublication } from '@/features/core/database/publication';
+import { databaseRead, useDatabaseRead } from '@/features/application/dataManagement/databaseRead';
+import { createDatabasePublication } from '@/features/application/dataManagement/databasePublication';
+import { databaseRecordFromLoad } from '@/features/application/dataManagement/databaseRecords';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   captureProjectIdentity,
@@ -8,14 +9,14 @@ import {
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { DatabaseService } from '@/services/database/databaseService';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
-import { databaseRecordFromLoad, type DatabaseRecord } from '@/shared/types/dto/database';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 import type {
   BayesColumnDTypeDTO,
   BayesColumnMetaDTO,
   BayesDatasetSelectionDTO,
 } from '@/shared/types/bayes';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 
 export interface BayesDatasetOption {
   readonly sourceType: BayesDatasetSelectionDTO['sourceType'];

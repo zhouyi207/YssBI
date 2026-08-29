@@ -2,8 +2,8 @@ use super::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     KernelRegistry, RuntimeValue,
 };
-use crate::node_system::plan::{KernelHandle, ResourceId};
-use crate::node_system::protocol::{CanonicalDecimal, Value};
+use crate::execution::plan::legacy::{KernelHandle, ResourceId};
+use crate::graph::protocol::{CanonicalDecimal, Value};
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

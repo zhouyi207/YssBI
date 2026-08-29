@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import type { Pin as PinModel } from "@/shared/types/domain";
-import { useNodeView } from "@/features/application/viewCapabilities";
+import { useNodeView } from "@/features/core/dataStore/useNodeView";
 import { Node } from "./Node";
 
 export interface CanvasNodeProps {

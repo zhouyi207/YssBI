@@ -323,8 +323,8 @@ describe('frontend architecture model', () => {
       expect(productionReport.classification.size).toBe(productionTypeScriptSources(context).length);
     });
     expect(FRONTEND_ARCHITECTURE_POLICY.capabilities).toContainEqual(expect.objectContaining({
-      canonicalModule: 'src/features/core/dockview/workbenchDockviewPort.ts',
-      exportedSymbols: ['WorkbenchDockviewPort'],
+      canonicalModule: 'src/features/core/dockview/workbenchRead.ts',
+      exportedSymbols: ['WorkbenchDockviewRead'],
       memberCapabilities: {
         WorkbenchDockviewRead: [
           'isReady',
@@ -344,8 +344,10 @@ describe('frontend architecture model', () => {
       },
     }));
     expect(FRONTEND_ARCHITECTURE_POLICY.capabilities.filter((capability) => (
-      capability.canonicalModule === 'src/features/core/dockview/workbenchDockviewPort.ts'
-      && capability.exportedSymbols.includes('WorkbenchDockviewPort')
+      capability.canonicalModule === 'src/features/core/dockview/workbenchRead.ts'
+      && capability.exportedSymbols.some((symbol) => (
+        symbol === 'WorkbenchDockviewRead' || symbol === 'workbenchDockviewRead'
+      ))
     )).map(({ sourceLayer }) => sourceLayer)).toEqual(['app-composition', 'views']);
   });
 

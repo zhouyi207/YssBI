@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunEvent, RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
+import type { RunEvent, RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
 import type { RecordedEvent } from '@/shared/types/ui/execution';
 import {
   ExecutionProjectionCoordinator,

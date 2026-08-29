@@ -15,11 +15,15 @@ import type {
   BayesDatasetOption,
 } from '@/features/application/bayes';
 import type { BayesInferenceError } from '@/features/application/bayes';
-import { issueTargetStep } from '@/features/application/viewCapabilities';
+import { issueTargetStep } from '@/features/domain/bayes';
 import { useProjectSync } from '@/features/application/initialization';
-import { initProjectSync } from '@/features/application/viewCapabilities';
-import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
-import { logger } from '@/utils/appLogger';
+import { initializeProjectForCurrentWindow } from '@/features/application/project';
+import {
+  useCurrentWindowActions,
+  useCustomTitleBar,
+  usePersistedWindow,
+} from '@/features/application/window';
+import { reportViewIssue } from '@/features/application/observability/reportViewIssue';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
 
@@ -37,6 +41,7 @@ import { bayesErrorReferenceMessage } from './bayesIssuePresentation';
 export function BayesView() {
   const { t } = useTranslation();
   const windowActions = useCurrentWindowActions();
+  const customChrome = useCustomTitleBar();
 
   usePersistedWindow('bayes');
   useProjectSync();
@@ -45,11 +50,11 @@ export function BayesView() {
     let cancelled = false;
     (async () => {
       try {
-        await initProjectSync();
+        await initializeProjectForCurrentWindow();
         if (cancelled) return;
         await windowActions.show();
       } catch (error) {
-        logger.app.error(String(error), 'BayesView');
+        reportViewIssue('app', error, 'BayesView');
       }
     })();
     return () => { cancelled = true; };
@@ -92,6 +97,7 @@ export function BayesView() {
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground" data-yssbi-workbench>
       <WindowMenuBar
+        customChrome={customChrome}
         windowActions={(
           <WindowChromeControls
             maximized={windowActions.maximized}

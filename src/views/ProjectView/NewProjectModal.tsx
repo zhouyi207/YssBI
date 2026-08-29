@@ -14,13 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
+  getDefaultProjectParentDirectory,
+  openProjectPathDialog,
   projectPickerErrorPresentation,
   type ProjectPickerErrorPresentation,
   type ProjectPickerLifecycleActionOutcome,
   type ProjectPickerRecoveryPresentation,
 } from "@/features/application/project";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
-import { ProjectService, openPathDialog } from "@/features/application/viewCapabilities";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerErrorDetails,
@@ -161,7 +162,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
 
     (async () => {
       try {
-        const parent = formatDisplayPath(await ProjectService.defaultProjectParentDirectory());
+        const parent = formatDisplayPath(await getDefaultProjectParentDirectory());
         if (cancelled) return;
         const defaultName = DEFAULT_PROJECT_NAME;
         setParentBase(parent);
@@ -195,7 +196,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
     clearFieldErrors();
     setIssue(null);
     try {
-      const result = await openPathDialog({
+      const result = await openProjectPathDialog({
         directory: true,
         multiple: false,
         title: t("projectPicker.newProjectModal.browseTitle"),

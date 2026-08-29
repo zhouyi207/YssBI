@@ -4,7 +4,7 @@ import {
   useExecutionStore,
   type PinPreviewLease,
 } from '@/features/core/execution';
-import type { RunEvent } from '@/shared/types/dto/runEvent';
+import type { RunEvent } from '@/shared/types/domain/runEvent';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { pinPreviewCacheKey } from '@/features/core/execution/pinResultIndex';
 import { cancelActiveGraphRun } from './cancelActiveGraphRun';

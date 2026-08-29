@@ -1,26 +1,27 @@
-use crate::execution::plan::PlanCompilationBasis;
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
-use crate::graph::settings::GraphCompileSettings;
-use crate::graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
-use crate::graph_document::{DynamicPortBinding, PortRef};
-use crate::node_system::analysis::{
-    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, ResourceKey,
-    ResourceVersion, ResourceVersionSet,
+pub mod contracts;
+
+use crate::graph::analysis::contracts::{
+    CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
+    ResourceVersionSet,
 };
-use crate::node_system::protocol::{
+use crate::graph::protocol::{
     ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
     PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
     SchemaExpr, TypeExpr,
 };
-use crate::node_system::registry::NodeRegistry;
+use crate::graph::registry::NodeRegistry;
+use crate::graph::resource_catalog::ResourceCatalogSnapshot;
+use crate::graph::settings::GraphCompileSettings;
+use crate::graph_document::GraphRevision;
+use crate::graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
+use crate::graph_document::{DynamicPortBinding, PortRef};
 
-#[cfg(test)]
 pub(crate) mod result_category;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeFact {
     pub node_id: NodeId,
-    pub node_type: crate::node_system::protocol::NodeTypeId,
+    pub node_type: crate::graph::protocol::NodeTypeId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,7 +60,7 @@ impl GraphProjectionFacts {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeProjectionFacts {
     pub node_id: NodeId,
-    pub node_type: crate::node_system::protocol::NodeTypeId,
+    pub node_type: crate::graph::protocol::NodeTypeId,
     pub instance_title: Option<Box<str>>,
     pub title: Box<str>,
     pub icon_id: Option<Box<str>>,
@@ -115,7 +116,7 @@ pub struct GraphColumnFact {
 pub struct GraphFilterColumnFact {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[crate::node_system::protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[crate::graph::protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[GraphFilterLiteralType]>,
 }
 
@@ -238,7 +239,7 @@ pub struct GraphAnalysisInput<'a> {
     pub document: &'a GraphDocument,
     pub catalog: &'a ResourceCatalogSnapshot,
     pub settings: &'a GraphCompileSettings,
-    pub basis: &'a PlanCompilationBasis,
+    pub basis: &'a CompilationBasis<GraphRevision>,
 }
 
 pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
@@ -258,19 +259,9 @@ pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
         .into_boxed_slice();
     GraphAnalysis {
         nodes,
-        registry_fingerprint: input.basis.registry_fingerprint().as_bytes(),
-        graph_revision: input.basis.graph_revision().get(),
-        resource_versions: input
-            .basis
-            .resource_versions()
-            .iter()
-            .map(|(key, version)| {
-                (
-                    ResourceKey::new(key.as_str()),
-                    ResourceVersion::new(version.as_str()),
-                )
-            })
-            .collect(),
+        registry_fingerprint: *input.basis.registry_fingerprint.as_bytes(),
+        graph_revision: input.basis.graph_revision.get(),
+        resource_versions: input.basis.resource_versions.clone(),
         projection_facts: None,
     }
 }
@@ -379,8 +370,8 @@ pub(crate) fn projection_facts(
 fn projection_port(
     document: &GraphDocument,
     node_id: NodeId,
-    protocol: &crate::node_system::protocol::NodeProtocol,
-    spec: &crate::node_system::protocol::PortSpec,
+    protocol: &crate::graph::protocol::NodeProtocol,
+    spec: &crate::graph::protocol::PortSpec,
     dynamic: Option<(&PortAddress, &DynamicPortBinding)>,
 ) -> GraphPortFact {
     let address = dynamic
@@ -470,7 +461,7 @@ fn projection_port(
             binding
                 .default_value
                 .as_ref()
-                .map(|value| crate::node_system::protocol::protocol_value_to_json(&value.value))
+                .map(|value| crate::graph::protocol::protocol_value_to_json(&value.value))
         }),
         value_type,
         schema: spec.schema.clone(),
@@ -500,9 +491,8 @@ fn graph_port_editor_fact(editor: &PortEditorSpec) -> GraphPortEditorFact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::plan::{
-        PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
-    };
+    use crate::graph::analysis::contracts::CompilationBasis;
+    use crate::graph::registry::RegistryFingerprint;
     use std::collections::BTreeMap;
 
     #[test]
@@ -518,13 +508,12 @@ mod tests {
             absolute_tolerance: 1e-12,
             relative_tolerance: 1e-9,
         };
-        let basis = PlanCompilationBasis::new(
-            PlanProjectSessionId::from_existing("project".into()),
-            PlanGraphRevision::from_existing(1),
-            PlanRegistryFingerprint::from_bytes([4; 32]),
-            BTreeMap::new(),
-            BTreeMap::new(),
-        );
+        let basis = CompilationBasis {
+            graph_revision: GraphRevision::new(1),
+            registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        };
         let analysis = analyze(GraphAnalysisInput {
             document: &document,
             catalog: &catalog,

@@ -5,13 +5,22 @@ import { clearChannelMessageHandler } from '@/shared/platform/tauriWebview';
 import type {
   DiagnosticBatchDto,
   DiagnosticSubscriptionDto,
-  FrontendDiagnosticEntryDto,
 } from '@/shared/types/dto/diagnostics';
 import { parseDiagnosticSubscriptionDto } from '@/shared/types/dto/diagnosticsParser';
 import {
   createDiagnosticBatchReceiver,
   DiagnosticStreamDiscontinuityError,
 } from './diagnosticBatchReceiver';
+
+export interface FrontendDiagnosticEntry {
+  readonly level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  readonly domain: 'application' | 'execution' | 'system' | 'graph' | 'data' | 'ui';
+  readonly target: string;
+  readonly event?: string;
+  readonly message: string;
+  readonly source?: string;
+  readonly fields: Record<string, unknown>;
+}
 
 const MAX_SUBSCRIPTION_ATTEMPTS = 2;
 
@@ -24,7 +33,7 @@ export interface DiagnosticSubscription {
 
 export class LogService {
   static async submitFrontendDiagnostics(
-    entries: readonly FrontendDiagnosticEntryDto[],
+    entries: readonly FrontendDiagnosticEntry[],
   ): Promise<void> {
     if (entries.length === 0) return;
     await invokeCommand('submit_frontend_diagnostics', { entries: [...entries] });

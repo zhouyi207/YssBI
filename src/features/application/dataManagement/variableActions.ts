@@ -8,8 +8,8 @@ import { useResourceStore } from '@/features/core/resource';
 import { ProjectLifecycleError } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
 import { VariableService } from '@/services/variable/variableService';
-import { isIpcErrorCode } from '@/services/ipc';
-import { logger } from '@/utils/appLogger';
+import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   captureRevisionedProjectCommandSnapshot,
   type ProjectCommandContext,
@@ -18,7 +18,7 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 
 function isStaleProjectLifecycleError(error: unknown): boolean {
   return error instanceof ProjectLifecycleError
-    || isIpcErrorCode(error, 'stale_project_lifecycle');
+    || isApplicationIpcErrorCode(error, 'stale_project_lifecycle');
 }
 
 function buildScope(

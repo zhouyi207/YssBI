@@ -1,13 +1,18 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LogWorkspaceDockview } from './LogWorkspaceDockview';
-import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
+import {
+  useCurrentWindowActions,
+  useCustomTitleBar,
+  usePersistedWindow,
+} from '@/features/application/window';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
 
 export const LogWindow = () => {
   const { t } = useTranslation();
   const windowActions = useCurrentWindowActions();
+  const customChrome = useCustomTitleBar();
 
   usePersistedWindow('logs');
 
@@ -19,6 +24,7 @@ export const LogWindow = () => {
     <div className="flex flex-col h-screen bg-[var(--workbench-bg)] text-foreground overflow-hidden" data-yssbi-workbench>
       {/* 自定义标题栏 - 与主窗口一致 */}
       <WindowChrome
+        customChrome={customChrome}
         childWindow
         actions={
           <WindowChromeControls

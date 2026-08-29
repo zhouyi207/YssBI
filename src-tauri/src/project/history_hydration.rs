@@ -1,12 +1,9 @@
 use crate::graph_document::GraphResourcePath;
-use crate::node_system::document::{
-    HistoryMutation, MutationConflict, MutationRequest, ProjectDocumentState, ProjectHistory,
-    ProjectHistoryTransaction, ResourceDocumentPatch, ResourceKey, VariableDocument,
-    VariableResourceKey, WorksheetResourceKey,
-};
 use crate::project::{
-    GraphDocumentKind, ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet,
-    ProjectSession, WorksheetResourcePath,
+    GraphDocumentKind, HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectData,
+    ProjectDocumentState, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectHistory,
+    ProjectHistoryMutationError, ProjectHistoryTransaction, ProjectSession, ResourceKey,
+    VariableDocument, VariableResourceKey, WorksheetResourceKey, WorksheetResourcePath,
 };
 use crate::project::{HistoryEntryId, ResourceRevision};
 use crate::variable::{VariableInstance, VariableScope};
@@ -24,7 +21,7 @@ pub(super) struct HistoryPreparationBasis {
     pub session: ProjectSession,
     pub authority_generation: u64,
     pub history_id: HistoryEntryId,
-    pub persistence: crate::node_system::document::HistoryPersistencePolicy,
+    pub persistence: HistoryPersistencePolicy,
     pub undo: bool,
     pub expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
     pub expected_graph_revisions: BTreeMap<GraphResourcePath, crate::graph_document::GraphRevision>,
@@ -149,9 +146,9 @@ pub(super) fn discover_touched_resources(
             .before
             .as_ref()
             .or(lifecycle.forward.after.as_ref());
-        if let Some(state) = state.filter(|state| {
-            state.kind == crate::node_system::document::ResourceLifecycleKind::Worksheet
-        }) {
+        if let Some(state) =
+            state.filter(|state| state.kind == crate::project::ResourceLifecycleKind::Worksheet)
+        {
             touched
                 .worksheets
                 .insert(WorksheetResourceKey(state.path.clone()));
@@ -270,7 +267,7 @@ pub(super) fn hydrate_history_preparation(
     mut snapshot: HistoryPreparationSnapshot,
     filesystem: &ProjectFilesystemCoordinator,
     request: &MutationRequest<HistoryMutation>,
-) -> Result<PreparedHistoryDocuments, MutationConflict> {
+) -> Result<PreparedHistoryDocuments, ProjectHistoryMutationError> {
     let lease = filesystem
         .acquire(snapshot.session.root.clone())
         .map_err(history_conflict)?;
@@ -292,7 +289,7 @@ pub(super) fn hydrate_history_preparation(
     let expected_revisions = expected_revisions(&snapshot)?;
     let current_revision =
         document_revision(&snapshot.documents, &request.resource).ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!(
                     "history anchor resource {:?} was not found",
                     request.resource
@@ -301,9 +298,9 @@ pub(super) fn hydrate_history_preparation(
             )
         })?;
     if current_revision != request.base_revision {
-        return Err(MutationConflict::StaleRevision {
-            base_revision: request.base_revision,
-            current_revision,
+        return Err(ProjectHistoryMutationError::StaleRevision {
+            base_revision: request.base_revision.get(),
+            current_revision: current_revision.get(),
         });
     }
 
@@ -315,28 +312,28 @@ pub(super) fn hydrate_history_preparation(
     } else {
         proposed_history.redo(&mut after)
     }
-    .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+    .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
     if transaction.history_id != snapshot.transaction.history_id {
-        return Err(MutationConflict::History(
+        return Err(ProjectHistoryMutationError::History(
             "history head changed during preparation".into(),
         ));
     }
     let mut after_worksheet_revisions = snapshot.worksheet_revisions.clone();
     for key in &snapshot.touched.worksheets {
         let path = WorksheetResourcePath::parse(key.0.as_ref())
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let revision = snapshot
             .worksheet_revisions
             .get(&path)
             .copied()
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!("Worksheet '{}' has no revision authority", key.0).into(),
                 )
             })?
             .checked_next()
             .map_err(|error| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!(
                         "Worksheet '{}' revision is exhausted at {}",
                         key.0, error.retained
@@ -424,7 +421,7 @@ pub(super) fn synchronize_function_owner_revisions(
 fn hydrate_graph_document(
     snapshot: &mut HistoryPreparationSnapshot,
     graph_path: &GraphResourcePath,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     let root = snapshot.session.root.as_path().to_string_lossy();
     let disk = super::project_io::load_project_graph_document_from_file(&root, graph_path)
         .map_err(history_conflict)?;
@@ -433,12 +430,12 @@ fn hydrate_graph_document(
         .get(graph_path)
         .copied()
         .ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!("hydrated graph '{}' has no revision authority", graph_path).into(),
             )
         })?;
     if disk.revision.to_graph_revision() != expected_graph_revision {
-        return Err(MutationConflict::History(
+        return Err(ProjectHistoryMutationError::History(
             format!(
                 "hydrated graph '{}' revision mismatch: expected {}, found {}",
                 graph_path,
@@ -467,7 +464,7 @@ fn hydrate_graph_document(
     );
     if let Some(function) = disk.function {
         snapshot.documents.functions.insert(
-            crate::node_system::document::FunctionResourceKey(graph_path.as_str().into()),
+            crate::project::FunctionResourceKey(graph_path.as_str().into()),
             function,
         );
     }
@@ -480,7 +477,7 @@ fn hydrate_graph_document(
             .filter(|entry| entry.is_present())
             .map(|entry| entry.revision)
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!(
                         "hydrated local Variable '{}' has no present revision authority",
                         id
@@ -504,9 +501,9 @@ fn hydrate_graph_document(
         if owner != graph_path {
             continue;
         }
-        let id = variable_id_from_key(key).map_err(MutationConflict::History)?;
+        let id = variable_id_from_key(key).map_err(ProjectHistoryMutationError::History)?;
         let entry = snapshot.variable_revisions.get(&id).ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!("Variable '{}' has no revision authority", key.0).into(),
             )
         })?;
@@ -516,7 +513,7 @@ fn hydrate_graph_document(
                 .and_then(|document| document.value.as_ref())
                 .is_none()
         {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 format!(
                     "Variable '{}' is present in authority but absent from hydrated graph '{}'",
                     key.0, graph_path
@@ -529,7 +526,7 @@ fn hydrate_graph_document(
                 .and_then(|document| document.value.as_ref())
                 .is_some()
         {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 format!(
                     "Variable '{}' is deleted in authority but present in hydrated graph '{}'",
                     key.0, graph_path
@@ -543,13 +540,13 @@ fn hydrate_graph_document(
 
 fn validate_loaded_graph_revisions(
     snapshot: &HistoryPreparationSnapshot,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     for (path, residency) in &snapshot.touched.graphs {
         if *residency != HistoryGraphResidency::Loaded {
             continue;
         }
         let expected = snapshot.graph_revisions.get(path).copied().ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!("loaded graph '{}' has no revision authority", path).into(),
             )
         })?;
@@ -560,10 +557,12 @@ fn validate_loaded_graph_revisions(
             .get(&key)
             .map(|graph| graph.revision)
             .ok_or_else(|| {
-                MutationConflict::History(format!("loaded graph '{}' is absent", path).into())
+                ProjectHistoryMutationError::History(
+                    format!("loaded graph '{}' is absent", path).into(),
+                )
             })?;
         if actual != expected {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 format!("loaded graph '{}' revision authority mismatch", path).into(),
             ));
         }
@@ -573,7 +572,7 @@ fn validate_loaded_graph_revisions(
 
 fn install_touched_variable_tombstones(
     snapshot: &mut HistoryPreparationSnapshot,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     for change in &snapshot.transaction.changes {
         let ResourceKey::Variable(key) = &change.resource else {
             continue;
@@ -581,14 +580,14 @@ fn install_touched_variable_tombstones(
         if snapshot.documents.variables.contains_key(key) {
             continue;
         }
-        let id = variable_id_from_key(key).map_err(MutationConflict::History)?;
+        let id = variable_id_from_key(key).map_err(ProjectHistoryMutationError::History)?;
         let entry = snapshot.variable_revisions.get(&id).ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!("Variable '{}' has no revision authority", key.0).into(),
             )
         })?;
         if entry.is_present() {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 format!("present Variable '{}' has no document", key.0).into(),
             ));
         }
@@ -605,11 +604,11 @@ fn install_touched_variable_tombstones(
 
 fn install_touched_worksheet_tombstone(
     snapshot: &mut HistoryPreparationSnapshot,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     let Some(lifecycle) = &snapshot.transaction.resource_lifecycle else {
         return Ok(());
     };
-    let crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet { document } =
+    let crate::project::ResourceLifecycleHistoryPayload::Worksheet { document } =
         &lifecycle.payload
     else {
         return Ok(());
@@ -619,9 +618,11 @@ fn install_touched_worksheet_tombstone(
         .before
         .as_ref()
         .or(lifecycle.forward.after.as_ref())
-        .ok_or_else(|| MutationConflict::History("resource lifecycle patch is empty".into()))?;
-    if state.kind != crate::node_system::document::ResourceLifecycleKind::Worksheet {
-        return Err(MutationConflict::History(
+        .ok_or_else(|| {
+            ProjectHistoryMutationError::History("resource lifecycle patch is empty".into())
+        })?;
+    if state.kind != crate::project::ResourceLifecycleKind::Worksheet {
+        return Err(ProjectHistoryMutationError::History(
             "worksheet lifecycle payload has a non-worksheet kind".into(),
         ));
     }
@@ -630,13 +631,13 @@ fn install_touched_worksheet_tombstone(
         return Ok(());
     }
     let path = WorksheetResourcePath::parse(state.path.as_ref())
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
     let revision = snapshot
         .worksheet_revisions
         .get(&path)
         .copied()
         .ok_or_else(|| {
-            MutationConflict::History(
+            ProjectHistoryMutationError::History(
                 format!("Worksheet '{}' has no tombstone revision", state.path).into(),
             )
         })?;
@@ -648,12 +649,12 @@ fn install_touched_worksheet_tombstone(
 
 fn expected_revisions(
     snapshot: &HistoryPreparationSnapshot,
-) -> Result<BTreeMap<ResourceKey, ResourceRevision>, MutationConflict> {
+) -> Result<BTreeMap<ResourceKey, ResourceRevision>, ProjectHistoryMutationError> {
     let mut revisions = BTreeMap::new();
     for change in &snapshot.transaction.changes {
         let revision =
             document_revision(&snapshot.documents, &change.resource).ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!("touched resource {:?} was not hydrated", change.resource).into(),
                 )
             })?;
@@ -661,13 +662,13 @@ fn expected_revisions(
     }
     for key in &snapshot.touched.worksheets {
         let path = WorksheetResourcePath::parse(key.0.as_ref())
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let revision = snapshot
             .worksheet_revisions
             .get(&path)
             .copied()
             .ok_or_else(|| {
-                MutationConflict::History(
+                ProjectHistoryMutationError::History(
                     format!("Worksheet '{}' has no revision authority", key.0).into(),
                 )
             })?;
@@ -703,7 +704,7 @@ fn document_revision(
 
 pub(super) fn durable_filesystem_mutations(
     prepared: &PreparedHistoryDocuments,
-) -> Result<Vec<crate::project::StagedFilesystemMutation>, MutationConflict> {
+) -> Result<Vec<crate::project::StagedFilesystemMutation>, ProjectHistoryMutationError> {
     let mut mutations = Vec::new();
     for graph_path in &prepared.touched_graphs {
         let (relative_path, contents) =
@@ -729,8 +730,7 @@ pub(super) fn durable_filesystem_mutations(
         push_worksheet_filesystem_mutation(&mut mutations, &prepared.after, key)?;
     }
     if let Some(lifecycle) = &prepared.transaction.resource_lifecycle {
-        if let crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet { .. } =
-            lifecycle.payload
+        if let crate::project::ResourceLifecycleHistoryPayload::Worksheet { .. } = lifecycle.payload
         {
             let state = lifecycle
                 .forward
@@ -772,7 +772,7 @@ fn push_worksheet_filesystem_mutation(
     mutations: &mut Vec<crate::project::StagedFilesystemMutation>,
     documents: &ProjectDocumentState,
     key: &WorksheetResourceKey,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     let path = WorksheetResourcePath::parse(key.0.as_ref())
         .map_err(|error| history_conflict(error.to_string()))?;
     if let Some(document) = documents.worksheets.get(key) {
@@ -819,12 +819,12 @@ pub(super) fn validate_durable_history_document(
 fn verify_variable_owner(
     variable: &VariableInstance,
     expected: &GraphResourcePath,
-) -> Result<(), MutationConflict> {
+) -> Result<(), ProjectHistoryMutationError> {
     let owner = match &variable.scope {
         VariableScope::Event { event_path } => event_path,
         VariableScope::Function { function_path } => function_path,
         VariableScope::Global => {
-            return Err(MutationConflict::History(
+            return Err(ProjectHistoryMutationError::History(
                 format!(
                     "hydrated graph '{}' contains project-scoped Variable '{}'",
                     expected, variable.id
@@ -834,9 +834,9 @@ fn verify_variable_owner(
         }
     };
     let owner = GraphResourcePath::new(owner.clone())
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
     if &owner != expected {
-        return Err(MutationConflict::History(
+        return Err(ProjectHistoryMutationError::History(
             format!(
                 "hydrated Variable '{}' owner '{}' does not match graph '{}'",
                 variable.id, owner, expected
@@ -861,8 +861,8 @@ fn variable_id_from_key(
         })
 }
 
-fn history_conflict(error: impl std::fmt::Display) -> MutationConflict {
-    MutationConflict::History(error.to_string().into())
+fn history_conflict(error: impl std::fmt::Display) -> ProjectHistoryMutationError {
+    ProjectHistoryMutationError::History(error.to_string().into())
 }
 
 fn insert_graph_residency(
@@ -881,7 +881,7 @@ fn insert_graph_residency(
 fn authoritative_or_patched_variable(
     data: &ProjectData,
     key: &VariableResourceKey,
-    change: &crate::node_system::document::ResourcePatch,
+    change: &crate::project::ResourcePatch,
     undo: bool,
 ) -> Result<VariableInstance, String> {
     let id_text = key
@@ -895,7 +895,7 @@ fn authoritative_or_patched_variable(
         return Ok(variable.clone());
     }
 
-    let ResourceDocumentPatch::Variable(patch) = &change.forward else {
+    let crate::project::history::ResourceDocumentPatch::Variable(patch) = &change.forward else {
         return Err(format!("Variable '{}' has no scoped document patch", key.0));
     };
     let present_side = if undo {
@@ -942,14 +942,14 @@ fn insert_local_variable_owner(
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
     use crate::data_contract::{DataType, DataValue};
+    use crate::graph::document::{GraphDocumentOperation, GraphDocumentPatch};
     use crate::graph_document::GraphResourcePath as DocumentGraphResourcePath;
     use crate::graph_document::GraphResourcePath;
-    use crate::node_system::document::{
-        FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentOperation,
-        GraphDocumentPatch, ProjectHistoryTransaction, ResourcePatch, VariableDocumentPatch,
-        VariableResourceKey,
+    use crate::project::{
+        FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentKind,
+        GraphResourceDocument, ProjectData, ProjectHistoryTransaction, ResourcePatch,
+        VariableDocumentPatch, VariableResourceKey,
     };
-    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
     use crate::project::{OperationId, ResourceRevision};
     use crate::variable::{VariableId, VariableInstance, VariableScope};
     use std::collections::{BTreeMap, BTreeSet};

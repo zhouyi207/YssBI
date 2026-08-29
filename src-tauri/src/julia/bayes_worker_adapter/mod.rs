@@ -86,10 +86,6 @@ enum AdapterTaskState {
 }
 
 impl JuliaBayesWorkerAdapter {
-    #[allow(
-        dead_code,
-        reason = "the final adapter remains production-unreachable until Execution Task 8"
-    )]
     pub fn new(app_data_dir: impl Into<PathBuf>, worker: JuliaWorkerManager) -> Self {
         Self::from_runtime(
             app_data_dir.into(),

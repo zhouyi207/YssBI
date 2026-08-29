@@ -3,12 +3,12 @@ use super::progress::{
     bounded_project_progress_adapter, reap_project_progress_worker,
 };
 use crate::error::CommandError;
-use crate::event::LifecycleMutationResultDto;
 use crate::project::OperationId;
 use crate::project::{
     CleanupInvalidProjectsResult, ProjectInstanceId, ProjectPickerTaskCancelRegistry,
     ProjectRecord, ProjectRegistry, ScanProjectsResult,
 };
+use crate::schema::application_event::LifecycleMutationResultDto;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
 
@@ -131,6 +131,7 @@ pub async fn delete_registered_project_files(
         )
         .await
         .map_err(super::lifecycle::map_application_project_lifecycle_error)?;
+    let result = crate::schema::application_event::project_lifecycle_to_transport(&result);
     super::lifecycle::publish_lifecycle_result(&app, &result);
     Ok(result)
 }

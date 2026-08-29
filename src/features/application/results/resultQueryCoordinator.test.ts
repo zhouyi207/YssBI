@@ -5,7 +5,7 @@ import type {
   ResultPage,
   ResultValue,
   PinResultEntry,
-} from '@/shared/types/dto/result';
+} from '@/shared/types/domain/result';
 import {
   createResultQueryCoordinator,
   type ResultQueryDependencies,

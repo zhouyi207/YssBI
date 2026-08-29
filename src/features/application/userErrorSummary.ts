@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { IpcError } from '@/services/ipc';
+import { isApplicationIpcError } from '@/features/application/errorReference';
 
 export interface UserErrorSummary {
   message: string;
@@ -7,7 +7,7 @@ export interface UserErrorSummary {
 }
 
 export function summarizeUserError(error: unknown, t: TFunction): UserErrorSummary {
-  if (error instanceof IpcError) {
+  if (isApplicationIpcError(error)) {
     return {
       message: `${t('common.error')} [${error.code}]`,
       incidentId: error.incidentId,

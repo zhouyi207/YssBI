@@ -1,6 +1,9 @@
 import i18n from 'i18next';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { normalizeIpcError, toErrorReference } from '@/services/ipc';
+import {
+  normalizeApplicationIpcError,
+  toErrorReference,
+} from '@/features/application/errorReference';
 
 export function showBlockingMessage(message: string): void {
   void uiStore.alert({
@@ -16,7 +19,10 @@ export function showBlockingIpcError(
   command: string,
   messageForCode: (code: string) => string,
 ): void {
-  const reference = toErrorReference(normalizeIpcError(command, error), 'ipc_transport_failure');
+  const reference = toErrorReference(
+    normalizeApplicationIpcError(command, error),
+    'ipc_transport_failure',
+  );
   void uiStore.alert({
     title: i18n.t('common.error'),
     message: messageForCode(reference.code),

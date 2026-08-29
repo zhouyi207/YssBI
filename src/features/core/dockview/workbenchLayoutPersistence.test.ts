@@ -6,7 +6,7 @@ import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
 } from './logsDockviewLayout';
-import { logDomainPanelId } from '@/features/core/log/logDomains';
+import { logDomainPanelId } from '@/features/domain/log/logDomains';
 import {
   createPersistedWorkbenchLayout,
   parsePersistedWorkbenchLayout,

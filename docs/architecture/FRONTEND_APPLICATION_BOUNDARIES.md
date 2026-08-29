@@ -21,10 +21,10 @@ and raw store access do not grant a capability.
 
 View access to Core is limited to reviewed readonly projection/query surfaces,
 frontend-authoritative UI state, exact DnD constants/types/guards/modifiers,
-and the two exact Dockview root-binding consumers. The existing
-`WorkbenchDockviewPort` declaration is represented in policy only by its
-approved read-member manifest; this document does not introduce an alias or a
-second production interface.
+and the exact Dockview read/control/root-binding consumers. Dockview is exposed
+as separate read, control, and root-binding contracts; the policy records the
+approved members directly and does not introduce an alias or a second
+production interface.
 
 Application may coordinate Core publication and control capabilities. App
 composition may bind reviewed root/UI capabilities but may not publish
@@ -49,3 +49,17 @@ count. A boundary correction is complete only when all affected callers use
 the final owner in one compiling change and the corresponding debt entries are
 deleted. No adapter, dual route, fallback, compatibility facade, wildcard
 allowance, or directory exemption is part of this boundary.
+
+## Final cutover status
+
+The Application layer now owns project hydration/reset, Services event ingress
+and reconciliation, graph/resource/history mutation coordination, database and
+variable workflows, worksheet save/plot coordination, execution/result
+queries, Bayes artifacts, settings synchronization, and window actions. Views
+and shared chrome receive explicit read/control callbacks; they do not import
+Tauri or Services directly. Dockview root binding/control/read contracts are
+split, and the Logs nested root remains the only nested topology owner.
+
+`FRONTEND_ARCHITECTURE_DEBT` is empty. The semantic audit reports no unresolved
+production finding; the final frontend gate is `pnpm typecheck` plus the
+architecture Vitest batch.

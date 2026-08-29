@@ -1,5 +1,9 @@
 use uuid::Uuid;
 
+/// Largest integer that can round-trip through JavaScript's safe integer
+/// representation for generation values crossing the Application boundary.
+pub const MAX_SAFE_PREVIEW_GENERATION: u64 = 9_007_199_254_740_991;
+
 /// Identity of one execution session. It is intentionally unrelated to the
 /// Project and Graph session identifiers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

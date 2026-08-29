@@ -1,6 +1,5 @@
 export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
-export { resolveExecutionGraphPath, getExecutionEventGraph } from './resolveExecutionGraphPath';
 export {
   clearedRunProjectionsPatch,
   graphHasClearableArtifacts,
@@ -59,7 +58,4 @@ export {
   type ExecutionReadSnapshot,
   type GraphExecutionProjection,
 } from './read';
-export {
-  type ExecutionProjectionPublication,
-} from './publication';
-export { type ExecutionUi } from './ui';
+export { executionResultUi, executionUi, type ExecutionResultUi, type ExecutionUi } from './ui';

@@ -6,7 +6,7 @@ import {
   logDomainPanelId,
   logDomainTitle,
   type LogDomainId,
-} from '@/features/core/log/logDomains';
+} from '@/features/domain/log/logDomains';
 
 export const LOGS_DOCKVIEW_COMPONENT_ID = 'LogDomainPanel' as const;
 export const LOGS_DOCKVIEW_DEFAULT_GROUP_ID = 'logs-domain-group';

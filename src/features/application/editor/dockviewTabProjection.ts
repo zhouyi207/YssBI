@@ -1,8 +1,8 @@
 import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
 import {
-  workbenchDockviewPort,
+  workbenchDockviewRead,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchRead';
 import type { LayoutTab } from '@/shared/types/ui';
 
 export function layoutTabFromDockviewPanel(
@@ -14,7 +14,7 @@ export function layoutTabFromDockviewPanel(
 }
 
 export function listDockviewGroupPanels(groupId: string): WorkbenchPanelInfo[] {
-  return workbenchDockviewPort
+  return workbenchDockviewRead
     .listGroupPanels(groupId)
     .filter((panel) => panel.metadata.role === 'editor');
 }
@@ -29,7 +29,7 @@ export function findDockviewPanel(
   resourceId: string,
   groupId?: string,
 ): WorkbenchPanelInfo | undefined {
-  return workbenchDockviewPort
+  return workbenchDockviewRead
     .findEditorPanelsByResource(resourceId)
     .find((panel) => groupId === undefined || panel.groupId === groupId);
 }

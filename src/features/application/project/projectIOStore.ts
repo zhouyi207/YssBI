@@ -1,21 +1,20 @@
-import { create } from 'zustand';
+import { createBoundApplicationStore } from '@/features/core/state/applicationStore';
 import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
 import {
   ProjectService,
   type ProjectActivationResult,
 } from '@/services/project/projectService';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
-import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
-import { logger } from '@/utils/appLogger';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
+import { logger } from '@/features/application/observability/appLogger';
 
-import type { DatabaseRecord } from '@/shared/types/dto/database';
-import { normalizeDatabases } from '@/shared/types/dto/database';
+import { normalizeDatabases } from '@/features/application/dataManagement/databaseRecords';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 
-import { projectIOApplicationPort } from '@/features/core/dataStore/projectIOApplicationPort';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
@@ -28,14 +27,24 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
-import { resetClientProjectState } from '@/features/core/dataStore/projectClientReset';
+import { resetClientProjectState } from '@/features/application/project/projectReset';
+import { reconcileProjectPresentation } from '@/features/application/project/projectPresentationReconciler';
+import { removeProjectScopedWorkbenchPanels } from '@/features/application/project/projectWorkbenchLifecycle';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { resetFunctionSignatureCoordinator } from '@/features/application/editorMutation/functionSignatureCoordinator';
+import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
+import {
+  beginGraphLoadLifecycle,
+  loadGraphProjection,
+  resetGraphProjectionCoordinator,
+} from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useEditStateStore } from '@/features/core/dataStore/editStateStore';
 import { useColumnStatsStore } from '@/features/core/dataStore/columnStatsStore';
 import { useColumnDistributionStore } from '@/features/core/dataStore/columnDistributionStore';
 import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
@@ -44,7 +53,7 @@ import {
   defaultAuthoritativeProjectLoadPlanDependencies,
   type AuthoritativeProjectLoadPlanDependencies,
   type PreparedAuthoritativeProjectLoad as BasePreparedAuthoritativeProjectLoad,
-} from '@/features/core/dataStore/authoritativeProjectLoadPlan';
+} from '@/features/application/project/authoritativeProjectLoadPlan';
 import {
   ProjectLifecycleError,
   assertCurrentProjectIdentity,
@@ -56,8 +65,9 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useHistoryStore } from '@/features/core/history';
 import { isGraphCachedInMemory } from '@/features/core/dataStore/graphDocumentLoadPolicy';
+import { setProjectPathForViewport } from '@/features/core/viewport/projectPath';
 
-export type { AuthoritativeProjectLoadPlanDependencies } from '@/features/core/dataStore/authoritativeProjectLoadPlan';
+export type { AuthoritativeProjectLoadPlanDependencies } from '@/features/application/project/authoritativeProjectLoadPlan';
 export type PreparedAuthoritativeProjectLoad = BasePreparedAuthoritativeProjectLoad & {
   readonly identity: ProjectIdentitySnapshot;
 };
@@ -241,8 +251,8 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       resources,
       graphOrder,
     });
-    projectIOApplicationPort().hydrateFunctionSignatures(index.graphs);
-    projectIOApplicationPort().reconcileOpenTabs();
+    hydrateFunctionSignaturesFromProjectIndex(index.graphs);
+    reconcileProjectPresentation();
     return true;
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;
@@ -282,7 +292,7 @@ export async function prepareAuthoritativeProjectLoad(
     {
       ...defaultAuthoritativeProjectLoadPlanDependencies,
       validateCoordinatorStart: (projectInstanceId, publicationRevision) => {
-        projectIOApplicationPort().validatePublicationStart(projectInstanceId, publicationRevision);
+        projectPublicationCoordinator.validateProjectStart(projectInstanceId, publicationRevision);
       },
       ...dependencyOverrides,
     },
@@ -310,7 +320,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
   const isProjectReplacement = previousProjectInstanceId !== null
     && previousProjectInstanceId !== nextProjectInstanceId;
   if (isProjectReplacement) {
-    await projectIOApplicationPort().removeProjectScopedWorkbenchPanels(
+    await removeProjectScopedWorkbenchPanels(
       previousProjectInstanceId,
       prepared.identity,
     );
@@ -320,17 +330,17 @@ export async function commitPreparedAuthoritativeProjectLoad(
     throw new ProjectLifecycleError();
   }
 
-  projectIOApplicationPort().startPublication(
+  projectPublicationCoordinator.startProject(
     nextProjectInstanceId,
     prepared.index.publicationRevision,
   );
-  commitProjectLoadStep('graph projection coordinator', () => projectIOApplicationPort().resetGraphProjection());
+  commitProjectLoadStep('graph projection coordinator', resetGraphProjectionCoordinator);
   loadGraphInFlight.clear();
   commitProjectLoadStep('graph load status', () => useProjectIOStore.setState({
     graphLoadStatus: {},
   }));
-  commitProjectLoadStep('function signature coordinator', () => projectIOApplicationPort().resetFunctionSignatures());
-  commitProjectLoadStep('history coordinator', () => projectIOApplicationPort().resetHistory());
+  commitProjectLoadStep('function signature coordinator', resetFunctionSignatureCoordinator);
+  commitProjectLoadStep('history coordinator', resetHistoryCoordinator);
 
   commitProjectLoadStep('detail focus', () => useEditorStore.setState({
     detailFocus: isProjectReplacement ? null : prepared.storeState.detailFocus,
@@ -339,7 +349,6 @@ export async function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep('graph interaction', () => useGraphInteractionStore.setState({
     positionOverrides: {},
   }));
-  commitProjectLoadStep('edit state', () => useEditStateStore.setState({ editStateByDatabase: {} }));
   commitProjectLoadStep('column stats', () => useColumnStatsStore.setState({ statsByDatabase: {} }));
   commitProjectLoadStep('column distribution', () => useColumnDistributionStore.setState({
     distByDatabase: {},
@@ -371,7 +380,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep('graph data', () => useGraphDataStore.setState({ graphEntities: {} }));
   commitProjectLoadStep('history', () => useHistoryStore.setState(prepared.storeState.history));
   commitProjectLoadStep('project IO', () => useProjectIOStore.setState(prepared.storeState.projectIO));
-  commitProjectLoadStep('open tab reconcile', () => projectIOApplicationPort().reconcileOpenTabs());
+  commitProjectLoadStep('open tab reconcile', reconcileProjectPresentation);
   commitProjectLoadStep('completion log', () => {
     logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
   });
@@ -421,7 +430,7 @@ async function loadProjectForIdentity(
 export function loadActivatedProject(
   activation: ProjectActivationResult,
 ): Promise<ProjectData | null> {
-  if (!projectIOApplicationPort().acceptProjectActivation(
+  if (!projectPublicationCoordinator.acceptProjectActivation(
     activation.projectInstanceId,
     activation.activationRevision,
   )) {
@@ -441,7 +450,7 @@ export function invalidateGraphLoadOwnership(graphPath: string): void {
   loadGraphInFlight.delete(graphPath);
 }
 
-export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
+export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((set, get) => ({
   status: LoadStatus.Idle,
   error: null,
   graphLoadStatus: {},
@@ -458,7 +467,9 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   loadProjectFromData: async (project, path, owner) => {
     if (!isProjectLifecycleStateCurrent(owner)) return;
     const previousProjectInstanceId = get().projectInstanceId;
-    await resetClientProjectState(previousProjectInstanceId, owner);
+    await resetClientProjectState(previousProjectInstanceId, owner, {
+      removeProjectScopedWorkbenchPanels,
+    });
 
     let expectedProjectInstanceId = previousProjectInstanceId;
     const commitOwnedClear = (assignment: () => void): boolean => {
@@ -468,7 +479,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
       return true;
     };
 
-    if (!commitOwnedClear(() => projectIOApplicationPort().resetGraphProjection())) return;
+    if (!commitOwnedClear(resetGraphProjectionCoordinator)) return;
     if (!commitOwnedClear(() => loadGraphInFlight.clear())) return;
     if (!commitOwnedClear(() => set({ graphLoadStatus: {} }))) return;
     if (!commitOwnedClear(() => set({ projectInstanceId: null }))) return;
@@ -502,7 +513,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         graphOrder: Object.values(project.graphs).map((graph) => graph.path),
       });
     })) return;
-    if (!commitOwnedClear(() => projectIOApplicationPort().reconcileOpenTabs())) return;
+    if (!commitOwnedClear(reconcileProjectPresentation)) return;
     commitOwnedClear(() => {
       set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
     });
@@ -522,8 +533,8 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     set((state) => ({
       graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'loading' },
     }));
-    const lifecycleToken = projectIOApplicationPort().beginGraphLoad(graphPath);
-    const pending = projectIOApplicationPort().loadGraphProjection(graphPath, lifecycleToken)
+    const lifecycleToken = beginGraphLoadLifecycle(graphPath);
+    const pending = loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
         const error = toErrorReference(err, GRAPH_PROJECTION_CONTRACT_ERROR_CODE);
         set({ error });
@@ -554,3 +565,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   },
 
 }));
+
+setProjectPathForViewport(useProjectIOStore.getState().currentPath);
+useProjectIOStore.subscribe((state) => setProjectPathForViewport(state.currentPath));

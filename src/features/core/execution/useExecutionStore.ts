@@ -5,8 +5,8 @@ import type {
   RecordedEvent,
   PinHistoryProjection,
 } from '@/shared/types/ui';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
+import type { RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
 import { flushLiveExecutionEventsNow } from './executionLiveFeed';
 import {
   clearExecutionVisual,

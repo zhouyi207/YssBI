@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscCopy, VscLink, VscTrash } from "react-icons/vsc";
 import { ActionMenu, type ActionMenuPosition, type ActionMenuSection } from "@/shared/ui/actionMenu";
-import type { NodeCapabilitiesDto } from '@/shared/types/dto/editorProjection';
+import type { NodeCapabilitiesDto } from '@/shared/types/domain/editorProjection';
 
 export interface NodeContextMenuProps {
   position: ActionMenuPosition;

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useNodeCatalogBrowser } from '@/features/application/nodeCatalog/useNodeCatalogBrowser';
 import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
-import type { LocalizedCatalogBrowserRow } from '@/features/application/viewCapabilities';
+import type { LocalizedCatalogBrowserRow } from '@/features/domain/nodeCatalog/localizedCatalogTree';
 import {
   SidebarTreeSearchInput,
   SidebarVirtualTree,

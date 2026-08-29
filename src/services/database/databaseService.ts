@@ -274,4 +274,5 @@ export class DatabaseService {
     static async getEditState(projectInstanceId: string, id: string): Promise<EditState> {
         return await invokeCommand("get_edit_state", { projectInstanceId, id });
     }
+
 }

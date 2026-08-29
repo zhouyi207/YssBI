@@ -1,4 +1,4 @@
-import type { RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
+import type { RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
 import type { RunOutputProjection } from '@/shared/types/ui';
 
 /** Backend emits at most 256 text events plus one status for each limit. */

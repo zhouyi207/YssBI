@@ -6,7 +6,7 @@ use super::{
     RelationalError, RelationalErrorCode, RelationalExecution, RuntimeValue,
     dataframe_to_protocol_value_with_checkpoint,
 };
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     CompiledRelationalPlan, RelationalOperator, RelationalOperatorIndex,
     infer_relational_pushdown_hints,
 };
@@ -30,9 +30,11 @@ pub(crate) struct ProductionRelationalObservation {
     pub relational_islands: Option<usize>,
     pub backend_invocations: usize,
     pub scan_limits: Vec<Option<usize>>,
-    pub relational_subplans: Vec<crate::node_system::plan::RelationalSubplan>,
-    pub relational_result_bindings:
-        Vec<(Box<str>, crate::node_system::plan::RelationalOperatorIndex)>,
+    pub relational_subplans: Vec<crate::execution::plan::legacy::RelationalSubplan>,
+    pub relational_result_bindings: Vec<(
+        Box<str>,
+        crate::execution::plan::legacy::RelationalOperatorIndex,
+    )>,
 }
 
 #[cfg(test)]
@@ -45,13 +47,13 @@ pub(crate) struct ProductionRelationalObserver {
 
 #[cfg(test)]
 impl ProductionRelationalObserver {
-    pub(crate) fn observe_plan(&self, plan: &crate::node_system::plan::ExecutionPlan) {
+    pub(crate) fn observe_plan(&self, plan: &crate::execution::plan::legacy::ExecutionPlan) {
         let mut observation = self.observation.lock().unwrap();
         observation.relational_islands = Some(plan.relational_subplans.len());
         observation.relational_subplans = plan.relational_subplans.to_vec();
         observation.relational_result_bindings.clear();
         for operation in &plan.operations {
-            let crate::node_system::plan::PlannedKernel::Relational(subplan_index) =
+            let crate::execution::plan::legacy::PlannedKernel::Relational(subplan_index) =
                 &operation.kernel
             else {
                 continue;
@@ -446,7 +448,7 @@ fn collect_source_requirements(
             let hinted = plan.pushdown_hints.iter().any(|hint| {
                 matches!(
                     hint,
-                    crate::node_system::plan::RelationalPushdownHint::Limit {
+                    crate::execution::plan::legacy::RelationalPushdownHint::Limit {
                         source,
                         rows: hinted_rows,
                     } if source == input && hinted_rows == rows
@@ -476,19 +478,19 @@ fn collect_source_requirements(
 #[cfg(test)]
 mod tests {
     use super::{Evaluator, ProductionRelationalBackend, ProductionRelationalCheckpoint};
-    use crate::node_system::ProjectSessionId;
-    use crate::node_system::plan::{
+    use crate::execution::plan::legacy::{
         CompiledRelationalPlan, CompiledResourceRequirement, RelationalExpression,
         RelationalFragmentId, RelationalFragmentRoot, RelationalLiteral, RelationalOperator,
         RelationalOperatorIndex, RelationalProjection, RelationalPushdownHint, RelationalRename,
         ResourceAccess, ResourceId, ResourceKind, infer_relational_pushdown_hints,
     };
-    use crate::node_system::protocol::Value;
+    use crate::graph::protocol::Value;
     use crate::node_system::runtime::{
         CancellationToken, ProjectResourceProvider, ProjectResourceSnapshot, RelationalBackend,
         RelationalContext, RelationalError, RelationalErrorCode, RunDeadline, RunId,
         RunResourceBudgets, RunResourceOwner, RunResourceSet, RuntimeValue,
     };
+    use crate::project::ProjectSessionId;
     use polars::prelude::{Column, DataFrame};
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
@@ -815,9 +817,11 @@ mod tests {
             roots: Box::new([RelationalOperatorIndex::new(3)]),
             pushdown_hints: Box::new([]),
         };
-        plan.pushdown_hints =
-            crate::node_system::plan::infer_relational_pushdown_hints(&plan.operators, &plan.roots)
-                .into_boxed_slice();
+        plan.pushdown_hints = crate::execution::plan::legacy::infer_relational_pushdown_hints(
+            &plan.operators,
+            &plan.roots,
+        )
+        .into_boxed_slice();
         let input = dataframe_value(&[
             ("amount", vec![Value::Integer(1), Value::Integer(2)]),
             ("city", vec![string("Paris"), string("Tokyo")]),
@@ -868,9 +872,11 @@ mod tests {
             roots: Box::new([RelationalOperatorIndex::new(1)]),
             pushdown_hints: Box::new([]),
         };
-        plan.pushdown_hints =
-            crate::node_system::plan::infer_relational_pushdown_hints(&plan.operators, &plan.roots)
-                .into_boxed_slice();
+        plan.pushdown_hints = crate::execution::plan::legacy::infer_relational_pushdown_hints(
+            &plan.operators,
+            &plan.roots,
+        )
+        .into_boxed_slice();
         let observer = Arc::new(super::ProductionRelationalObserver::default());
         let backend = ProductionRelationalBackend::with_observer(Arc::clone(&observer));
 

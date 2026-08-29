@@ -38,6 +38,10 @@ export {
   createProjectEventReconciler,
 } from './projectEventReconciler';
 export { initializeProjectForCurrentWindow } from './projectRuntime';
+export {
+  getDefaultProjectParentDirectory,
+  openProjectPathDialog,
+} from './projectPlatformActions';
 export { getProjectProjection, useProjectProjection } from './projectProjection';
 export type { ProjectProjection } from './projectProjection';
 export type {

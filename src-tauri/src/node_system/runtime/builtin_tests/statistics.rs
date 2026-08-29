@@ -169,7 +169,7 @@ fn statistics_prediction_flows_into_plot() {
     assert_eq!(metadata.name.as_deref(), Some("prediction"));
     validate_data_series_type_expr(
         metadata,
-        &crate::node_system::protocol::numeric_data_series_type(),
+        &crate::graph::protocol::numeric_data_series_type(),
     )
     .unwrap();
 
@@ -205,24 +205,24 @@ fn ols_fit_produces_a_model_and_fitted_values() {
     fit.outputs = Box::new([
         PlannedOutput {
             value: ValueRef::new(5),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(6),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(7),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
     ]);
     let execution_plan = plan(
@@ -273,24 +273,24 @@ fn logit_fit_rejects_non_binary_response_values() {
     fit.outputs = Box::new([
         PlannedOutput {
             value: ValueRef::new(5),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(6),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(7),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         },
     ]);
     let execution_plan = plan(

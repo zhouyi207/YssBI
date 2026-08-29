@@ -13,7 +13,7 @@ struct ActivationGarbage {
     _worksheet_revisions:
         std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
-    _identity: ProjectionEnvironmentExpectation,
+    _identity: ProjectAuthorityExpectation,
     _recovery_message: Option<String>,
     _history: ProjectHistory,
 }
@@ -31,6 +31,7 @@ impl PublishedProjectActivation {
             garbage,
             postcommit_panic,
         } = self;
+        #[cfg(test)]
         garbage._store.finalize_session();
         drop(garbage);
         if let Some(payload) = postcommit_panic {
@@ -104,7 +105,7 @@ impl ProjectState {
             .map(|root| root.as_path().to_string_lossy().into_owned());
         let next_instance_id = ProjectInstanceId::new();
         let next_publication_id = next_instance_id.to_string();
-        let next_identity = ProjectionEnvironmentExpectation {
+        let next_identity = ProjectAuthorityExpectation {
             project_instance_id: next_instance_id.clone(),
             project_root: project_root.clone(),
             project_session_id: store.project_session_id.clone(),
@@ -216,8 +217,6 @@ impl ProjectState {
                     _recovery_message: std::mem::take(&mut *recovery),
                     _history: std::mem::take(&mut *history),
                 });
-                self.replace_compile_coordinator_generation();
-
                 postcommit_panic = run_test_hooks
                     .then(|| self.run_activation_store_replaced_test_hook())
                     .flatten();
@@ -278,16 +277,5 @@ impl ProjectState {
             garbage,
             postcommit_panic,
         })
-    }
-
-    fn replace_compile_coordinator_generation(&self) {
-        let detached = {
-            let mut current = self.compile_coordinator.write().unwrap();
-            std::mem::replace(
-                &mut *current,
-                Arc::new(crate::node_system::compiler::ProjectCompileCoordinator::new()),
-            )
-        };
-        detached.invalidate_all();
     }
 }

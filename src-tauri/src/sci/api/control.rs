@@ -29,6 +29,10 @@ impl SciCancellationSource {
     pub fn cancel(&self) {
         self.token.cancelled.store(true, Ordering::Release);
     }
+
+    pub fn token(&self) -> SciCancellationToken {
+        self.token.clone()
+    }
 }
 
 impl SciCancellationToken {

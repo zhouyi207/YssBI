@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { VariableId, Variable } from '@/shared/types';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/core/observability/logger';
 
 interface VariableStore {
   variables: Record<VariableId, Variable>;

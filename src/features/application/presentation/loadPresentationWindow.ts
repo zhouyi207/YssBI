@@ -6,8 +6,8 @@ import type {
   ResultPlotKind,
   ResultProgress,
   ResultReportKind,
-} from '@/shared/types/dto/result';
-import { logger } from '@/utils/appLogger';
+} from '@/shared/types/domain/result';
+import { logger } from '@/features/application/observability/appLogger';
 import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
 
 export type PresentationWindowState =

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { ReportKind } from '@/features/application/viewCapabilities';
+import type { ReportKind } from '@/features/application/results/types';
 import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';

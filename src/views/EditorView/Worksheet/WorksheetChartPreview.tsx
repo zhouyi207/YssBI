@@ -1,17 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { toErrorReference, fetchWorksheetPreview, getCachedWorksheetPreview, getWorksheetPreview } from '@/features/application/viewCapabilities';
+import { useWorksheetChartPreview } from '@/features/application/worksheet/useWorksheetChartPreview';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
 import Scatter from '@/views/PlotView/Scatter';
 import Line from '@/views/PlotView/Line';
 import Histogram from '@/views/PlotView/Histogram';
 import { WorksheetEmptyState } from './WorksheetEmptyState';
-import {
-  assertCurrentProjectIdentity,
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from '@/features/application/viewCapabilities';
 
 interface WorksheetChartPreviewProps {
   worksheetPath: string;
@@ -46,65 +40,7 @@ function WorksheetPreviewError({ error }: { error: WorksheetPreviewErrorPayload 
 }
 
 export function WorksheetChartPreview({ worksheetPath, document }: WorksheetChartPreviewProps) {
-  const [preview, setPreview] = useState<WorksheetPreviewPayload>({ kind: 'empty' });
-  const [loading, setLoading] = useState(false);
-
-  const specKey = useMemo(() => {
-    if (!document) return '';
-    return JSON.stringify({
-      worksheetPath,
-      databaseId: document.databaseId,
-      chartType: document.chartType,
-      encodings: document.encodings,
-    });
-  }, [document, worksheetPath]);
-
-  useEffect(() => {
-    if (!specKey || !document) {
-      setPreview({ kind: 'empty' });
-      return;
-    }
-
-    const identity = captureProjectIdentity();
-    const cached = getCachedWorksheetPreview(identity.projectInstanceId, worksheetPath, document);
-    if (cached) {
-      if (!isCurrentProjectIdentity(identity)) return;
-      setPreview(cached);
-      setLoading(false);
-      return;
-    }
-
-    const previewIdentity = {
-      projectInstanceId: identity.projectInstanceId,
-      isCurrent: () => isCurrentProjectIdentity(identity),
-      assertCurrent: () => assertCurrentProjectIdentity(identity),
-    };
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        if (!isCurrentProjectIdentity(identity)) return;
-        setLoading(true);
-        try {
-          const result = await getWorksheetPreview(
-            identity.projectInstanceId,
-            worksheetPath,
-            document,
-            () => fetchWorksheetPreview(document, previewIdentity),
-          );
-          if (!isCurrentProjectIdentity(identity)) return;
-          setPreview(result);
-        } catch (error) {
-          if (!isCurrentProjectIdentity(identity)) return;
-          setPreview({
-            kind: 'error',
-            ...toErrorReference(error, 'worksheet_preview_read_failed'),
-          });
-        } finally {
-          if (isCurrentProjectIdentity(identity)) setLoading(false);
-        }
-      })();
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [specKey, document]);
+  const { preview, loading } = useWorksheetChartPreview(worksheetPath, document);
 
   if (!document) {
     return <WorksheetEmptyState messageKey="worksheet.noActiveWorksheet" />;

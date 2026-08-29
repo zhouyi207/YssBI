@@ -1,5 +1,5 @@
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { DEFAULT_VIEWPORT } from '@/shared/config-default';
 
 export interface VariableDropMenu {
   x: number;

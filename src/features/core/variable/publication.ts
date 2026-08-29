@@ -1,4 +1,4 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import type { VariableId, Variable } from '@/shared/types/domain';
 import type { VariableReadSnapshot } from './read';

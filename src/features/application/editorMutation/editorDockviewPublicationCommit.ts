@@ -1,6 +1,6 @@
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import {
   resourceKey,
   type ProjectResourceMeta,
@@ -17,7 +17,7 @@ export function commitEditorDockviewPublication(
   authoritativeResources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   commitBusinessStores: () => void,
 ): void | Promise<void> {
-  if (!workbenchDockviewPort.isReady) {
+  if (!workbenchDockviewRead.isReady) {
     commitBusinessStores();
     return;
   }

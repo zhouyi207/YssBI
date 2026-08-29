@@ -1,6 +1,6 @@
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { editorViewportScope, ensureEditorViewport } from '@/features/core/viewport';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 
 export interface VisibleGraphPanelScope {
   readonly groupId: string;
@@ -19,7 +19,7 @@ export async function synchronizeVisibleGraphPanel(
 export async function synchronizeVisibleGraphPanels(): Promise<void> {
   const scopesByGraph = new Map<string, Set<string>>();
 
-  for (const panel of workbenchDockviewPort.listPanels()) {
+  for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.visible !== true || panel.metadata.role !== 'editor') continue;
     if (panel.metadata.resourceKind === 'worksheet') continue;
 

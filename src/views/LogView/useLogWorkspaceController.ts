@@ -4,15 +4,15 @@ import {
   useDiagnosticSubscription,
   type DiagnosticSubscriptionStatus,
 } from '@/features/application/log';
-import { useEditorStore, logBuffer, useLiveLogs } from '@/features/application/viewCapabilities';
-import {
-  useLogStore,
-  type DiagnosticLogFilter,
-} from '@/features/application/viewCapabilities';
+import { useEditorUi } from '@/features/core/editor/ui';
+import { editorUi } from '@/features/core/editor/ui';
+import { logBuffer, useLiveLogs } from '@/features/application/log';
+import { useLogStore } from '@/features/application/log';
+import type { DiagnosticLogFilter } from '@/features/application/log';
 import type {
   DiagnosticLevel,
   DiagnosticRecordDto,
-} from '@/shared/types/dto/diagnostics';
+} from '@/shared/types/domain/diagnostics';
 
 export interface LogWorkspaceController {
   readonly logs: readonly DiagnosticRecordDto[];
@@ -41,6 +41,8 @@ export function useLogWorkspaceController(): LogWorkspaceController {
   const setSearchText = useLogStore((state) => state.setSearchText);
   const setAutoScroll = useLogStore((state) => state.setAutoScroll);
   const setSelectedLog = useLogStore((state) => state.setSelectedLog);
+  const detailFocus = useEditorUi((state) => state.detailFocus);
+  const clearDetailFocus = editorUi.clearDetailFocus;
   const [refreshScrollToken, setRefreshScrollToken] = useState(0);
 
   const selectLog = useCallback((log: DiagnosticRecordDto | null) => {
@@ -50,11 +52,10 @@ export function useLogWorkspaceController(): LogWorkspaceController {
       return;
     }
 
-    const editorStore = useEditorStore.getState();
-    if (editorStore.detailFocus?.kind === 'log') {
-      editorStore.clearDetailFocus();
+    if (detailFocus?.kind === 'log') {
+      clearDetailFocus();
     }
-  }, [setSelectedLog]);
+  }, [clearDetailFocus, detailFocus, setSelectedLog]);
 
   const clearLogs = useCallback(() => {
     logBuffer.clear();
@@ -63,10 +64,10 @@ export function useLogWorkspaceController(): LogWorkspaceController {
 
   const refreshLogs = useCallback(() => {
     reconnect();
-    if (useLogStore.getState().autoScroll) {
+    if (autoScroll) {
       setRefreshScrollToken((token) => token + 1);
     }
-  }, [reconnect]);
+  }, [autoScroll, reconnect]);
 
   const loading = subscriptionStatus === 'connecting';
   const isInitialLoad = loading && streamId === null && logs.length === 0;

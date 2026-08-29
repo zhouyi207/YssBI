@@ -1,4 +1,4 @@
-use crate::node_system::plan::MAX_SAFE_PREVIEW_GENERATION;
+use crate::execution::identity::MAX_SAFE_PREVIEW_GENERATION;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]

@@ -15,7 +15,7 @@ export type ConnectionInvalidReason =
 
 export type ConnectionFeedback =
   | { kind: 'append' }
-  | { kind: 'replace'; displacedConnectionIds: string[] }
+  | { kind: 'replace'; displacedConnectionIds: readonly string[] }
   | { kind: 'invalid'; reason: ConnectionInvalidReason };
 
 export interface ConnectionCandidate {

@@ -2,7 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useEditorSessionResources } from '@/features/application/editor';
-import { useWorksheetStore, DatabaseService, useDatabaseStore } from '@/features/application/viewCapabilities';
+import { hydrateDatabaseEditorMetadata } from '@/features/application/dataManagement/databaseRecords';
+import { worksheetUi } from '@/features/core/worksheet/ui';
 import { Select } from '@/shared/ui';
 import type { WorksheetChartType, WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
@@ -10,33 +11,8 @@ import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailColumnList } from '../shared/DetailColumnList';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailSectionHeader } from '../shared/DetailText';
-import {
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from '@/features/application/viewCapabilities';
 
 const CHART_TYPES: WorksheetChartType[] = ['histogram', 'scatter', 'line'];
-
-type DatabaseMetadataUpdater = (
-  id: string,
-  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
-) => void;
-
-export async function hydrateWorksheetDatabaseMetadata(
-  databaseId: string,
-  updateDatabase: DatabaseMetadataUpdater,
-  isCancelled: () => boolean = () => false,
-): Promise<void> {
-  const identity = captureProjectIdentity();
-  const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, databaseId);
-  if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
-  updateDatabase(databaseId, {
-    name: meta.name,
-    columns: meta.columns,
-    rowCount: meta.rowCount,
-    columnCount: meta.columnCount,
-  });
-}
 
 function isNumericType(type: string): boolean {
   const t = type.toLowerCase();
@@ -63,8 +39,6 @@ export function WorksheetDetailPanel({
 }: WorksheetDetailPanelProps) {
   const { t } = useTranslation();
   const { dataframes } = useEditorSessionResources();
-  const updateDocument = useWorksheetStore((s) => s.updateDocument);
-  const updateDatabase = useDatabaseStore((s) => s.updateDatabase);
   const databases = dataframes ?? {};
 
   const databaseOptions = useMemo(
@@ -89,16 +63,16 @@ export function WorksheetDetailPanel({
     const existing = databases[databaseId] as { columns?: unknown[] } | undefined;
     if (existing?.columns && existing.columns.length > 0) return;
     let cancelled = false;
-    void hydrateWorksheetDatabaseMetadata(databaseId, updateDatabase, () => cancelled);
+    void hydrateDatabaseEditorMetadata(databaseId, () => cancelled);
     return () => { cancelled = true; };
-  }, [document.databaseId, databases, updateDatabase]);
+  }, [document.databaseId, databases]);
 
   const numericColumns = columns.filter((c) => isNumericType(c.type));
   const allColumnOptions = columns.map((c) => ({ label: c.name, value: c.name }));
   const numericColumnOptions = numericColumns.map((c) => ({ label: c.name, value: c.name }));
 
-  const patch = (changes: Parameters<typeof updateDocument>[1]) => {
-    updateDocument(worksheetPath, changes);
+  const patch = (changes: Parameters<typeof worksheetUi.updateDraft>[1]) => {
+    worksheetUi.updateDraft(worksheetPath, changes);
   };
 
   const encodingLabelClass = 'align-top pt-2';

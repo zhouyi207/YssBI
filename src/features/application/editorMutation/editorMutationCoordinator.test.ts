@@ -3,7 +3,7 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { buildGraphResourceMeta, resourceKey, useResourceStore } from '@/features/core/resource';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { GraphMutationResultDto } from '@/shared/types/domain/editorMutation';
 import { normalizeIpcError } from '@/services/ipc';
 import {
   executeEditorMutation,

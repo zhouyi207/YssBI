@@ -1,8 +1,7 @@
 import type { DockviewApi } from 'dockview-react';
 import { workbenchDockviewInternal } from './workbenchDockviewInternal';
-import { notifyWorkbenchRootBound, notifyWorkbenchRootUnbound } from './workbenchRead';
 
-declare const workbenchBindingTokenBrand: unique symbol;
+const workbenchBindingTokenBrand: unique symbol = Symbol('workbench-dockview-binding');
 
 export type WorkbenchDockviewBindingToken = Readonly<{
   [workbenchBindingTokenBrand]: number;
@@ -21,8 +20,10 @@ export const workbenchDockviewRootBinding: WorkbenchDockviewRootBinding = {
     const generation = ++nextToken;
     current = { generation, api };
     workbenchDockviewInternal.bind(api);
-    notifyWorkbenchRootBound();
-    return { [workbenchBindingTokenBrand]: generation } as WorkbenchDockviewBindingToken;
+    const token: WorkbenchDockviewBindingToken = {
+      [workbenchBindingTokenBrand]: generation,
+    };
+    return token;
   },
   unbind(token) {
     const generation = token[workbenchBindingTokenBrand];
@@ -30,6 +31,5 @@ export const workbenchDockviewRootBinding: WorkbenchDockviewRootBinding = {
     const bound = current;
     current = undefined;
     workbenchDockviewInternal.unbind(bound.api);
-    notifyWorkbenchRootUnbound(generation);
   },
 };

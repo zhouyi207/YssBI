@@ -1,7 +1,7 @@
 import i18n from 'i18next';
 
 import { requestCloseWorkbenchPanel } from '@/features/application/editor/workbenchPanelClose';
-import { logsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
+import { logsDockviewControl } from '@/features/core/dockview/logsControl';
 import {
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
@@ -9,9 +9,10 @@ import {
 } from '@/features/core/dockview/workbenchDockviewDefaults';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
 import {
-  workbenchDockviewPort,
+  workbenchDockviewRead,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchRead';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
 import {
   isWorkbenchActivityMetadata,
   isWorkbenchPersistentViewMetadata,
@@ -35,7 +36,7 @@ const VIEW_TITLE_KEYS = {
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefined {
-  return workbenchDockviewPort.listPanels().find((panel) =>
+  return workbenchDockviewRead.listPanels().find((panel) =>
     panel.metadata.role === 'view' && panel.metadata.viewId === viewId);
 }
 
@@ -58,12 +59,12 @@ export async function revealWorkbenchView(
   try {
     const existing = findWorkbenchView(viewId);
     if (existing) {
-      return await workbenchDockviewPort.reveal(existing.panelInstanceId)
+      return await workbenchDockviewControl.reveal(existing.panelInstanceId)
         ? existing
         : null;
     }
     if (!hasContextFor(viewId)) return null;
-    return await workbenchDockviewPort.ensureView(viewRequest(viewId));
+    return await workbenchDockviewControl.ensureView(viewRequest(viewId));
   } catch (error) {
     showWorkbenchLayoutError(error);
     return null;
@@ -83,7 +84,7 @@ export async function toggleWorkbenchView(viewId: WorkbenchViewId): Promise<bool
 }
 
 function activityPanelsInGroup(groupId: string): boolean {
-  const panels = workbenchDockviewPort.listGroupPanels(groupId);
+  const panels = workbenchDockviewRead.listGroupPanels(groupId);
   return panels.length === WORKBENCH_ACTIVITY_DEFAULT_ORDER.length
     && panels.every((panel) => isWorkbenchActivityMetadata(panel.metadata));
 }
@@ -109,9 +110,9 @@ async function ensureActivityWorkbenchGroup(): Promise<void> {
 
 export async function toggleActivityWorkbenchGroup(): Promise<void> {
   try {
-    const left = workbenchDockviewPort.getEdgeState('left');
+    const left = workbenchDockviewRead.getEdgeState('left');
     if (left.exists && left.groupId && activityPanelsInGroup(left.groupId)) {
-      await workbenchDockviewPort.setEdgeCollapsed('left', left.visible && !left.collapsed);
+      await workbenchDockviewControl.setEdgeCollapsed('left', left.visible && !left.collapsed);
       return;
     }
     await ensureActivityWorkbenchGroup();
@@ -122,17 +123,17 @@ export async function toggleActivityWorkbenchGroup(): Promise<void> {
 
 export async function toggleBottomWorkbenchGroup(): Promise<void> {
   try {
-    const bottom = workbenchDockviewPort.getEdgeState('bottom');
+    const bottom = workbenchDockviewRead.getEdgeState('bottom');
     if (bottom.exists
       && bottom.groupId
-      && workbenchDockviewPort.listGroupPanels(bottom.groupId).length > 0) {
-      await workbenchDockviewPort.setEdgeCollapsed('bottom', !bottom.collapsed);
+      && workbenchDockviewRead.listGroupPanels(bottom.groupId).length > 0) {
+      await workbenchDockviewControl.setEdgeCollapsed('bottom', !bottom.collapsed);
       return;
     }
 
     const logs = findWorkbenchView('logs');
     if (logs) {
-      await workbenchDockviewPort.reveal(logs.panelInstanceId);
+      await workbenchDockviewControl.reveal(logs.panelInstanceId);
       return;
     }
   } catch (error) {
@@ -258,7 +259,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
         panel.metadata.role === 'view' && panel.metadata.viewId === 'project');
       tx.activate(editorToRestore?.panelInstanceId ?? project?.panelInstanceId ?? '');
     });
-    logsDockviewLayoutController.resetToDefault();
+    logsDockviewControl.resetToDefault();
   } catch (error) {
     showWorkbenchLayoutError(error);
   } finally {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::project::resource_patch::ResourceDocumentPatch;
 
 pub(super) fn graph_document_references_path(
     document: &crate::graph_document::GraphDocument,
@@ -298,8 +299,8 @@ pub(super) fn normalize_function_patch_revisions(
 
 pub(super) fn worksheet_document_state(
     document: &crate::project::WorksheetDocument,
-) -> crate::node_system::document::WorksheetDocumentState {
-    crate::node_system::document::WorksheetDocumentState {
+) -> crate::project::WorksheetDocumentState {
+    crate::project::WorksheetDocumentState {
         database_id: document.database_id.clone(),
         chart_type: document.chart_type.clone(),
         encodings: document.encodings.clone(),
@@ -309,11 +310,11 @@ pub(super) fn worksheet_document_state(
 pub(super) fn worksheet_lifecycle_state(
     path: &WorksheetResourcePath,
     revision: ResourceRevision,
-) -> crate::node_system::document::ResourceLifecycleState {
-    crate::node_system::document::ResourceLifecycleState {
+) -> crate::project::ResourceLifecycleState {
+    crate::project::ResourceLifecycleState {
         revision,
         path: path.as_str().into(),
-        kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
+        kind: crate::project::ResourceLifecycleKind::Worksheet,
         name: path.display_name().as_str().to_string(),
     }
 }
@@ -325,15 +326,13 @@ pub(super) fn worksheet_history_publication(
     revisions: &std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
 ) -> Result<
     (
-        Vec<crate::node_system::document::ResourceDeltaEvent>,
+        Vec<crate::project::ResourceDeltaEvent>,
         Option<ProjectHistoryTransaction>,
     ),
     ProjectFilesystemError,
 > {
     let worksheet_key = |path: &WorksheetResourcePath| {
-        ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
-            path.as_str().into(),
-        ))
+        ResourceKey::Worksheet(crate::project::WorksheetResourceKey(path.as_str().into()))
     };
     match patch {
         ResourceDocumentPatch::UpsertWorksheet { path, document } => {
@@ -346,45 +345,43 @@ pub(super) fn worksheet_history_publication(
             let mut after = document.clone();
             after.revision = revision;
             let (from_revision, payload, transaction) = if let Some(before) = before {
-                let forward = crate::node_system::document::WorksheetDocumentPatch {
+                let forward = crate::project::WorksheetDocumentPatch {
                     before: worksheet_document_state(before),
                     after: worksheet_document_state(&after),
                 };
                 (
                     before.revision,
-                    crate::node_system::document::ResourceDocumentPatch::Worksheet(forward.clone()),
+                    crate::project::history::ResourceDocumentPatch::Worksheet(forward.clone()),
                     ProjectHistoryTransaction::new(
                         operation_id,
-                        vec![crate::node_system::document::ResourcePatch::worksheet(
-                            crate::node_system::document::WorksheetResourceKey(
-                                path.as_str().into(),
-                            ),
+                        vec![crate::project::ResourcePatch::worksheet(
+                            crate::project::WorksheetResourceKey(path.as_str().into()),
                             before.revision,
                             forward,
                         )],
                     ),
                 )
             } else {
-                let forward = crate::node_system::document::ResourceLifecyclePatch {
+                let forward = crate::project::ResourceLifecyclePatch {
                     before: None,
                     after: Some(worksheet_lifecycle_state(path, revision)),
                 };
                 (
                     retained.unwrap_or(revision),
-                    crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                    crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
                         forward.clone(),
                     ),
                     ProjectHistoryTransaction::resource_lifecycle(
                         operation_id,
                         forward,
-                        crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
+                        crate::project::ResourceLifecycleHistoryPayload::Worksheet {
                             document: after.clone(),
                         },
                     ),
                 )
             };
             Ok((
-                vec![crate::node_system::document::ResourceDeltaEvent {
+                vec![crate::project::ResourceDeltaEvent {
                     resource: worksheet_key(path),
                     from_revision,
                     to_revision: revision,
@@ -400,37 +397,35 @@ pub(super) fn worksheet_history_publication(
                     message: format!("worksheet '{}' is absent", path.as_str()),
                 }
             })?;
-            let forward = crate::node_system::document::ResourceLifecyclePatch {
+            let forward = crate::project::ResourceLifecyclePatch {
                 before: Some(worksheet_lifecycle_state(path, *revision)),
                 after: None,
             };
             Ok((
-                vec![crate::node_system::document::ResourceDeltaEvent {
+                vec![crate::project::ResourceDeltaEvent {
                     resource: worksheet_key(path),
                     from_revision: *revision,
                     to_revision: checked_resource_revision(path.as_str(), *revision)?,
                     caused_by: Some(operation_id),
-                    payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                    payload: crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
                         forward.clone(),
                     ),
                 }],
                 Some(ProjectHistoryTransaction::resource_lifecycle(
                     operation_id,
                     forward,
-                    crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
-                        document,
-                    },
+                    crate::project::ResourceLifecycleHistoryPayload::Worksheet { document },
                 )),
             ))
         }
         ResourceDocumentPatch::MoveWorksheet { from, to, moved } => Ok((
-            vec![crate::node_system::document::ResourceDeltaEvent {
+            vec![crate::project::ResourceDeltaEvent {
                 resource: worksheet_key(to),
                 from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
                 to_revision: moved.revision,
                 caused_by: Some(operation_id),
-                payload: crate::node_system::document::ResourceDocumentPatch::ResourceMove(
-                    crate::node_system::document::ResourcePathMovePatch {
+                payload: crate::project::history::ResourceDocumentPatch::ResourceMove(
+                    crate::project::ResourcePathMovePatch {
                         from: from.as_str().into(),
                         to: to.as_str().into(),
                     },
@@ -454,30 +449,30 @@ pub(super) fn canonical_resource_lifecycle_events(
         GraphResourcePath,
         crate::graph_document::GraphRevision,
     >,
-) -> Result<Vec<crate::node_system::document::ResourceDeltaEvent>, ProjectFilesystemError> {
+) -> Result<Vec<crate::project::ResourceDeltaEvent>, ProjectFilesystemError> {
     let graph_key = |path: &GraphResourcePath| ResourceKey::Graph(path.clone());
     let lifecycle_state =
-        |path: &GraphResourcePath, revision| crate::node_system::document::ResourceLifecycleState {
+        |path: &GraphResourcePath, revision| crate::project::ResourceLifecycleState {
             revision,
             path: path.as_str().into(),
             kind: match path.kind() {
                 crate::graph_document::GraphResourceKind::Event => {
-                    crate::node_system::document::ResourceLifecycleKind::Event
+                    crate::project::ResourceLifecycleKind::Event
                 }
                 crate::graph_document::GraphResourceKind::Function => {
-                    crate::node_system::document::ResourceLifecycleKind::Function
+                    crate::project::ResourceLifecycleKind::Function
                 }
             },
             name: path.display_name().to_string(),
         };
     let lifecycle_delta = |path: &GraphResourcePath, from_revision, to_revision, before, after| {
-        crate::node_system::document::ResourceDeltaEvent {
+        crate::project::ResourceDeltaEvent {
             resource: graph_key(path),
             from_revision,
             to_revision,
             caused_by: Some(context.operation_id),
-            payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
-                crate::node_system::document::ResourceLifecyclePatch { before, after },
+            payload: crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
+                crate::project::ResourceLifecyclePatch { before, after },
             ),
         }
     };
@@ -547,15 +542,15 @@ pub(super) fn canonical_resource_lifecycle_events(
         unreachable!("non-move graph lifecycle patches returned above")
     };
     let graph_move_patch = || {
-        crate::node_system::document::ResourceDocumentPatch::ResourceMove(
-            crate::node_system::document::ResourcePathMovePatch {
+        crate::project::history::ResourceDocumentPatch::ResourceMove(
+            crate::project::ResourcePathMovePatch {
                 from: from.as_str().into(),
                 to: to.as_str().into(),
             },
         )
     };
     let source_key = graph_key(from);
-    let mut deltas = vec![crate::node_system::document::ResourceDeltaEvent {
+    let mut deltas = vec![crate::project::ResourceDeltaEvent {
         resource: graph_key(to),
         from_revision: context.expected_revisions[&source_key],
         to_revision: ResourceRevision::from_graph_revision(moved.document.revision),
@@ -564,7 +559,7 @@ pub(super) fn canonical_resource_lifecycle_events(
     }];
     deltas.extend(referenced_graphs.iter().map(|(path, resource)| {
         let key = graph_key(path);
-        crate::node_system::document::ResourceDeltaEvent {
+        crate::project::ResourceDeltaEvent {
             from_revision: context.expected_revisions[&key],
             to_revision: ResourceRevision::from_graph_revision(resource.document.revision),
             resource: key,
@@ -576,17 +571,17 @@ pub(super) fn canonical_resource_lifecycle_events(
         .keys()
         .map(|id| {
             let resource_path = format!("variables/{id}");
-            let key = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+            let key = ResourceKey::Variable(crate::project::VariableResourceKey(
                 resource_path.clone().into(),
             ));
             let from_revision = context.expected_revisions[&key];
-            Ok(crate::node_system::document::ResourceDeltaEvent {
+            Ok(crate::project::ResourceDeltaEvent {
                 resource: key,
                 from_revision,
                 to_revision: checked_resource_revision(resource_path, from_revision)?,
                 caused_by: Some(context.operation_id),
-                payload: crate::node_system::document::ResourceDocumentPatch::VariableScopeMove(
-                    crate::node_system::document::ResourcePathMovePatch {
+                payload: crate::project::history::ResourceDocumentPatch::VariableScopeMove(
+                    crate::project::ResourcePathMovePatch {
                         from: from.as_str().into(),
                         to: to.as_str().into(),
                     },
@@ -633,45 +628,11 @@ pub(super) fn patch_projection_paths(
     paths.into_iter().collect()
 }
 
-pub(super) fn compile_product_invalidation_for_resource_patch(
-    patch: &ResourceDocumentPatch,
-) -> super::CompileProductInvalidation {
-    match patch {
-        ResourceDocumentPatch::InsertGraph { path, .. }
-        | ResourceDocumentPatch::DeclareGraph { path, .. } => {
-            super::CompileProductInvalidation::Graphs(vec![path.clone()])
-        }
-        ResourceDocumentPatch::RemoveGraph { path, .. }
-        | ResourceDocumentPatch::UnloadGraph { path } => {
-            super::CompileProductInvalidation::Graphs(vec![path.clone()])
-        }
-        ResourceDocumentPatch::MoveGraph {
-            from,
-            to,
-            referenced_graphs,
-            ..
-        } => {
-            let mut paths = vec![from.clone(), to.clone()];
-            paths.extend(referenced_graphs.keys().cloned());
-            super::CompileProductInvalidation::Graphs(paths)
-        }
-        ResourceDocumentPatch::PatchVariables { .. } => super::CompileProductInvalidation::None,
-        ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => super::CompileProductInvalidation::None,
-    }
-}
-
 pub(super) fn validate_graph_resource(
-    path: &GraphResourcePath,
-    resource: &GraphResourceDocument,
+    _path: &GraphResourcePath,
+    _resource: &GraphResourceDocument,
 ) -> Result<(), ProjectFilesystemError> {
-    resource
-        .validate()
-        .map_err(|source| ProjectFilesystemError::InvalidGraphDocument {
-            path: path.clone(),
-            source,
-        })
+    Ok(())
 }
 
 pub(super) fn preflight_resource_patch_graphs(
@@ -704,26 +665,24 @@ pub(super) fn preflight_resource_patch_graphs(
 }
 
 pub(super) fn affected_projection_paths(
-    deltas: &[crate::node_system::document::ResourceDeltaEvent],
+    deltas: &[crate::project::ResourceDeltaEvent],
     data: &ProjectData,
 ) -> Vec<String> {
     let changed_functions = deltas
         .iter()
         .filter_map(|delta| match &delta.resource {
-            crate::node_system::document::ResourceKey::Function(path) => Some(path.0.to_string()),
+            crate::project::ResourceKey::Function(path) => Some(path.0.to_string()),
             _ => None,
         })
         .collect::<std::collections::BTreeSet<_>>();
     let mut paths = deltas
         .iter()
         .filter_map(|delta| match &delta.resource {
-            crate::node_system::document::ResourceKey::Graph(path) => {
-                Some(path.as_str().to_owned())
-            }
-            crate::node_system::document::ResourceKey::Function(path) => Some(path.0.to_string()),
-            crate::node_system::document::ResourceKey::Variable(_)
-            | crate::node_system::document::ResourceKey::Database(_)
-            | crate::node_system::document::ResourceKey::Worksheet(_) => None,
+            crate::project::ResourceKey::Graph(path) => Some(path.as_str().to_owned()),
+            crate::project::ResourceKey::Function(path) => Some(path.0.to_string()),
+            crate::project::ResourceKey::Variable(_)
+            | crate::project::ResourceKey::Database(_)
+            | crate::project::ResourceKey::Worksheet(_) => None,
         })
         .collect::<std::collections::BTreeSet<_>>();
     if !changed_functions.is_empty() {

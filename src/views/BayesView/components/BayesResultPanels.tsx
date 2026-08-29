@@ -10,12 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  diagnosticSeverityClass,
-  evaluateInferenceDiagnostics,
-  parameterDiagnosticStatus,
-  type DiagnosticSuggestion,
-} from '@/features/application/viewCapabilities';
+import { diagnosticSeverityClass, evaluateInferenceDiagnostics, parameterDiagnosticStatus } from '@/features/domain/bayes/diagnostics';
+import type { DiagnosticSuggestion } from '@/features/domain/bayes/diagnostics';
 import {
   useBayesArtifacts,
   type BayesArtifactsModel,

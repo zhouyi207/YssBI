@@ -1,14 +1,13 @@
-#![allow(
-    dead_code,
-    reason = "staged until Project database authority is installed"
-)]
-
 use std::fmt;
+use std::sync::Arc;
 
 use thiserror::Error;
 
 use super::execution::session_slot::{
     ApplicationSessionEpoch, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
+use crate::application::events::{
+    CommittedResourceMutation, committed_resource_mutation_from_project,
 };
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database::runtime::DatabaseRuntimeSession;
@@ -60,12 +59,22 @@ impl DatabaseMutationRequest {
             operation: self.operation,
         }
     }
+
+    pub(crate) fn database(&self) -> &DatabaseId {
+        &self.database
+    }
+
+    pub(crate) const fn expected_runtime_revision(&self) -> u64 {
+        self.expected_runtime_revision
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct PreparedProjectDatabaseMutation {
     session_epoch: ApplicationSessionEpoch,
     database: DatabaseId,
+    expected_runtime_revision: u64,
+    project_authority: Option<crate::project::database_authority::DatabaseAuthorityToken>,
 }
 
 impl PreparedProjectDatabaseMutation {
@@ -73,7 +82,41 @@ impl PreparedProjectDatabaseMutation {
         Self {
             session_epoch,
             database,
+            expected_runtime_revision: 0,
+            project_authority: None,
         }
+    }
+
+    pub(crate) fn from_project_authority(
+        session_epoch: ApplicationSessionEpoch,
+        database: DatabaseId,
+        expected_runtime_revision: u64,
+        project_authority: crate::project::database_authority::DatabaseAuthorityToken,
+    ) -> Self {
+        Self {
+            session_epoch,
+            database,
+            expected_runtime_revision,
+            project_authority: Some(project_authority),
+        }
+    }
+
+    pub(crate) fn take_project_authority(
+        mut self,
+    ) -> Option<(
+        ApplicationSessionEpoch,
+        DatabaseId,
+        u64,
+        crate::project::database_authority::DatabaseAuthorityToken,
+    )> {
+        self.project_authority.take().map(|authority| {
+            (
+                self.session_epoch,
+                self.database,
+                self.expected_runtime_revision,
+                authority,
+            )
+        })
     }
 }
 
@@ -85,27 +128,46 @@ pub(crate) enum ProjectDatabaseMutationError {
     StaleSession,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub(crate) enum ProjectDatabaseFinalizeError {
     #[error("Project database finalization rejected the runtime change")]
     Rejected,
     #[error("Project database finalization observed a stale session")]
     StaleSession,
+    #[error("Project database finalization was rejected")]
+    Project(#[source] crate::project::ProjectDatabaseError),
 }
 
 #[derive(Debug)]
 pub(crate) struct ProjectDatabaseMutationReceipt {
     session_epoch: ApplicationSessionEpoch,
     database: DatabaseId,
+    mutation: CommittedResourceMutation,
 }
 
 impl ProjectDatabaseMutationReceipt {
+    pub(crate) fn from_project(
+        session_epoch: ApplicationSessionEpoch,
+        database: DatabaseId,
+        mutation: crate::project::project_writers::ProjectResourceMutationFacts,
+    ) -> Self {
+        Self {
+            session_epoch,
+            database,
+            mutation: committed_resource_mutation_from_project(mutation),
+        }
+    }
+
     pub(crate) fn session_epoch(&self) -> ApplicationSessionEpoch {
         self.session_epoch
     }
 
     pub(crate) fn database(&self) -> &DatabaseId {
         &self.database
+    }
+
+    pub(crate) fn mutation(&self) -> &CommittedResourceMutation {
+        &self.mutation
     }
 }
 
@@ -129,6 +191,7 @@ pub(crate) struct UnresolvedDatabaseCompensation {
     database: DatabaseId,
     failure: DatabaseCompensationFailureCode,
     owner: CommittedDatabaseRuntimeChange,
+    physical: Option<crate::database::runtime::PreparedDatabasePhysicalMutation>,
 }
 
 impl fmt::Debug for UnresolvedDatabaseCompensation {
@@ -151,14 +214,25 @@ impl UnresolvedDatabaseCompensation {
     }
 
     pub(crate) fn retry(self) -> Result<DatabaseMutationRecovery, UnresolvedDatabaseCompensation> {
-        match self.owner.compensate() {
+        let mut owner = self;
+        if let Some(physical) = owner.physical.as_ref()
+            && physical.rollback().is_err()
+        {
+            return Err(owner);
+        }
+        owner.physical.take();
+        match owner.owner.compensate() {
             DatabaseCompensationAttempt::Restored(_) => Ok(DatabaseMutationRecovery::Restored {
-                database: self.database,
+                database: owner.database,
             }),
-            DatabaseCompensationAttempt::Retryable { owner, failure } => Err(Self {
-                database: self.database,
+            DatabaseCompensationAttempt::Retryable {
+                owner: committed_owner,
+                failure,
+            } => Err(Self {
+                database: owner.database,
                 failure: failure.code(),
-                owner,
+                owner: committed_owner,
+                physical: None,
             }),
         }
     }
@@ -222,6 +296,15 @@ pub(crate) fn mutate_database_with_project_authority(
     let captured = state
         .capture_session()
         .map_err(DatabaseMutationApplicationError::SessionCapture)?;
+    mutate_database_in_captured_session(state, &captured, request, project)
+}
+
+pub(crate) fn mutate_database_in_captured_session(
+    state: &ApplicationState,
+    captured: &Arc<super::execution::session_slot::ApplicationSession>,
+    request: DatabaseMutationRequest,
+    project: &dyn ProjectDatabaseMutationPort,
+) -> Result<DatabaseMutationApplicationReceipt, DatabaseMutationApplicationError> {
     let _admission = captured
         .database()
         .admit_operation(DatabaseOperation::PrepareMutation)
@@ -277,15 +360,31 @@ fn coordinate_database_handoff(
     let prepared_project = project
         .prepare(session_epoch, &request)
         .map_err(HandoffError::ProjectPrepare)?;
-    let prepared_database = prepare_database_runtime_change(database, request.into_runtime())
+    let physical = database
+        .prepare_physical_mutation(&request.database, &request.operation)
         .map_err(HandoffError::DatabasePrepare)?;
-    let committed_database = commit_database_runtime_change(database, prepared_database)
-        .map_err(HandoffError::DatabaseCommit)?;
+    let edit_state = physical.edit_state();
+    let prepared_database = match prepare_database_runtime_change(database, request.into_runtime())
+    {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let _ = physical.rollback();
+            return Err(HandoffError::DatabasePrepare(error));
+        }
+    };
+    let committed_database = match commit_database_runtime_change(database, prepared_database) {
+        Ok(committed) => committed,
+        Err(error) => {
+            let _ = physical.rollback();
+            return Err(HandoffError::DatabaseCommit(error));
+        }
+    };
+    database.install_physical_mutation(&physical);
     let database_outcome = committed_database.outcome();
     if let Err(source) = final_session_gate() {
         return Err(HandoffError::StaleSession {
             source,
-            recovery: compensate_committed_change(committed_database),
+            recovery: compensate_committed_change(committed_database, physical),
         });
     }
 
@@ -294,7 +393,7 @@ fn coordinate_database_handoff(
         Err(source) => {
             return Err(HandoffError::ProjectFinalize {
                 source,
-                recovery: compensate_committed_change(committed_database),
+                recovery: compensate_committed_change(committed_database, physical),
             });
         }
     };
@@ -302,13 +401,26 @@ fn coordinate_database_handoff(
     Ok(DatabaseMutationApplicationReceipt {
         session_epoch: project_receipt.session_epoch(),
         database: database_outcome.database().clone(),
+        edit_state,
+        mutation: project_receipt.mutation().clone(),
     })
 }
 
 fn compensate_committed_change(
     committed: CommittedDatabaseRuntimeChange,
+    physical: crate::database::runtime::PreparedDatabasePhysicalMutation,
 ) -> DatabaseMutationRecovery {
     let database = committed.outcome().database().clone();
+    if physical.rollback().is_err() {
+        return DatabaseMutationRecovery::Retryable {
+            owner: UnresolvedDatabaseCompensation {
+                database,
+                failure: DatabaseCompensationFailureCode::Driver,
+                owner: committed,
+                physical: Some(physical),
+            },
+        };
+    }
     match committed.compensate() {
         DatabaseCompensationAttempt::Restored(_) => DatabaseMutationRecovery::Restored { database },
         DatabaseCompensationAttempt::Retryable { owner, failure } => {
@@ -317,6 +429,7 @@ fn compensate_committed_change(
                     database,
                     failure: failure.code(),
                     owner,
+                    physical: None,
                 },
             }
         }
@@ -327,6 +440,8 @@ fn compensate_committed_change(
 pub(crate) struct DatabaseMutationApplicationReceipt {
     session_epoch: ApplicationSessionEpoch,
     database: DatabaseId,
+    edit_state: crate::database::EditState,
+    mutation: CommittedResourceMutation,
 }
 
 impl DatabaseMutationApplicationReceipt {
@@ -337,12 +452,21 @@ impl DatabaseMutationApplicationReceipt {
     pub(crate) fn database(&self) -> &DatabaseId {
         &self.database
     }
+
+    pub(crate) fn edit_state(&self) -> &crate::database::EditState {
+        &self.edit_state
+    }
+
+    pub(crate) fn mutation(&self) -> &CommittedResourceMutation {
+        &self.mutation
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
+    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
     use crate::database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
@@ -391,14 +515,26 @@ mod tests {
                 ),
             )])
             .expect("observation set is valid");
+        let dataframe = polars::df!("value" => &[1_i64]).expect("test dataframe is valid");
+        let instance = DatabaseInstance {
+            decl: declaration.clone(),
+            state: DatabaseState::Loaded {
+                dataframe: Arc::new(dataframe.clone()),
+                original: Arc::new(dataframe),
+                history: EditHistory::new(),
+            },
+        };
         DatabaseRuntimeRegistry::new()
-            .open_session(DatabaseSessionOpenRequest::new(
-                DatabaseSessionIdentity::from_existing("session".into()),
-                NonZeroU64::new(1).expect("generation is non-zero"),
-                None,
-                vec![declaration].into(),
-                observations,
-            ))
+            .open_session_with_instances(
+                DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing("session".into()),
+                    NonZeroU64::new(1).expect("generation is non-zero"),
+                    None,
+                    vec![declaration].into(),
+                    observations,
+                ),
+                [instance],
+            )
             .expect("database session is valid")
     }
 
@@ -419,6 +555,7 @@ mod tests {
                 row: 0,
                 column: "value".into(),
                 value: crate::tabular::contract::TabularScalar::Null,
+                row_id: None,
             },
         )
     }

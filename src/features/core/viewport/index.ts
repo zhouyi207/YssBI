@@ -28,6 +28,7 @@ export {
   remapEditorViewStateGraphPath,
 } from './editorViewStateMemento';
 export { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
+export { projectPathForViewport, setProjectPathForViewport } from './projectPath';
 export {
   applyViewportTransform,
   applyViewportGrid,

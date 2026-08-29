@@ -1,5 +1,5 @@
 import type { TaskErrorDetailsDTO } from '@/shared/types/bayes';
-import { IpcError } from '@/services/ipc';
+import { isApplicationIpcError } from '@/features/application/errorReference';
 
 const DETAIL_KEYS = ['column', 'row', 'parameter', 'path'] as const;
 
@@ -15,7 +15,7 @@ export function normalizeBayesApplicationError(
   caught: unknown,
   fallbackCode: string,
 ): BayesApplicationError {
-  if (!(caught instanceof IpcError)) {
+  if (!isApplicationIpcError(caught)) {
     return { code: fallbackCode, details: null, incidentId: null };
   }
   return {
@@ -29,7 +29,7 @@ export function normalizeBayesActionError(
   caught: unknown,
   fallbackCode: string,
 ): BayesApplicationError | null {
-  return caught instanceof IpcError
+  return isApplicationIpcError(caught)
     ? normalizeBayesApplicationError(caught, fallbackCode)
     : null;
 }

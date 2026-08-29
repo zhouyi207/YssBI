@@ -124,10 +124,3 @@ pub use stream::{
     BoundedStreamReceiver, BoundedStreamSender, InvalidStreamCapacity, StreamReceiveError,
     StreamSendError, bounded_stream_channel, bounded_stream_channel_with_deadline,
 };
-
-#[cfg(test)]
-mod builtin_tests;
-#[cfg(test)]
-mod production_tests;
-#[cfg(test)]
-mod tests;

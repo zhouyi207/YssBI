@@ -9,3 +9,4 @@ export {
   type ProjectResourceBrowserRow,
 } from './projectResourceBrowser';
 export { useProjectResourceBrowser } from './useProjectResourceBrowser';
+export type { RevealProjectResourceRequest } from './sidebarResourceActions';

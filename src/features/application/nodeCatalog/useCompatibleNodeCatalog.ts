@@ -11,8 +11,8 @@ import {
   isCurrentProjectIdentity,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { CatalogService } from '@/services/nodeSystem/catalogService';
-import { toErrorReference } from '@/services/ipc';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import { toErrorReference } from '@/features/application/errorReference';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import type { LocalizedNodeCatalogState } from './useLocalizedNodeCatalog';
 

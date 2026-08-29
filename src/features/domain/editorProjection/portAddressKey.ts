@@ -1,5 +1,5 @@
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { GraphOutputRefDto } from '@/shared/types/dto/result';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
+import type { GraphOutputRefDto } from '@/shared/types/domain/result';
 
 const part = (value: string): string => `${value.length}:${value}`;
 

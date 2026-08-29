@@ -1,10 +1,10 @@
 use super::{CancellationToken, ResultId, ResultState, ResultStore, RunError, StoredValue};
-use crate::node_system::analysis::ResourceVersionSet;
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     CallArgumentBinding, CallResultBinding, ExecutionPlan, ExecutionSemanticsVersion,
     FunctionPlanHandle, OperationStableId,
 };
-use crate::node_system::registry::hash_canonical;
+use crate::graph::analysis::contracts::ResourceVersionSet;
+use crate::graph::registry::hash_canonical;
 use std::collections::BTreeMap;
 
 use std::sync::{Arc, Condvar, Mutex};

@@ -17,13 +17,13 @@ import type {
   HistoryStatusDto,
   MutationRequestDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import { FunctionMutationService } from '@/services/nodeSystem/functionMutationService';
-import { isIpcErrorCode } from '@/services/ipc';
+import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
 import {
   ProjectService,
-  type ProjectGraphIndexRow,
 } from '@/services/project/projectService';
+import type { ProjectGraphIndexRow } from '@/shared/types/domain/project';
 import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
@@ -76,7 +76,7 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
 
 
 function isFunctionRevisionConflict(error: unknown): boolean {
-  return isIpcErrorCode(error, 'function_revision_conflict');
+  return isApplicationIpcErrorCode(error, 'function_revision_conflict');
 }
 
 function buildSignature(
@@ -192,7 +192,7 @@ export async function executeFunctionSignatureMutation(
       if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
     } catch (error) {
       if (!isCurrentProjectIdentity(identity)
-        || isIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
+        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
       if (epoch !== coordinatorEpoch) return { status: 'stale' };
       if (!isFunctionRevisionConflict(error)) throw error;
       await hydrateAuthoritativeState(

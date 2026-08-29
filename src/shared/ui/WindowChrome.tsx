@@ -1,9 +1,10 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { useCustomTitleBar } from "@/features/application/window/useWindowDecorations";
 import { WindowTitleBar, WindowTitleBarActions } from "./WindowTitleBar";
 
 export type WindowChromeProps = ComponentProps<"div"> & {
+    /** Resolved by the Application/window composition owner. */
+    customChrome: boolean;
     /** Main editor title bar — higher stacking */
     elevated?: boolean;
     /** Child / satellite window title bar */
@@ -23,10 +24,10 @@ export function WindowChrome({
     actions,
     className,
     children,
+    customChrome,
     ...props
 }: WindowChromeProps) {
-    const showCustomChrome = useCustomTitleBar();
-    if (!showCustomChrome) return null;
+    if (!customChrome) return null;
 
     return (
         <WindowTitleBar elevated={elevated} childWindow={childWindow} className={className} {...props}>
@@ -37,6 +38,8 @@ export function WindowChrome({
 }
 
 export type WindowMenuBarProps = ComponentProps<"div"> & {
+    /** Resolved by the Application/window composition owner. */
+    customChrome: boolean;
     /** Toolbar buttons shown in both custom and native modes (theme, settings, etc.) */
     toolbar?: ReactNode;
     /** Window chrome controls — only rendered when titleBarStyle is custom */
@@ -48,8 +51,8 @@ export type WindowMenuBarProps = ComponentProps<"div"> & {
  * Menubar / toolbar row that becomes native-style (no drag region, no window controls)
  * when titleBarStyle is "native".
  */
-export function WindowMenuBar({ toolbar, windowActions, className, children, ...props }: WindowMenuBarProps) {
-    const showCustomChrome = useCustomTitleBar();
+export function WindowMenuBar({ customChrome, toolbar, windowActions, className, children, ...props }: WindowMenuBarProps) {
+    const showCustomChrome = customChrome;
 
     if (showCustomChrome) {
         return (

@@ -24,7 +24,7 @@ import type {
   ResolvedPortStatusDto,
   SchemaSummaryDto,
   TypeSummaryDto,
-} from '../dto/editorProjection';
+} from '../domain/editorProjection';
 
 // ==================== NodeData ====================
 /** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */

@@ -4,15 +4,9 @@ use crate::application::editor_projection::{
     EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionModel,
     ParameterEditorKind,
 };
-use crate::node_system::analysis::{
-    CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
-    DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
-    EditorInputBindingDto, EditorNodeProjectionDto, NodeCapabilitiesDto, NodeDisplayDto,
-    NodePositionDto, ParameterDisplayDto, ParameterEditorDto, PortConnectionCapabilityDto,
-    PortDirectionDto, PortDisplayDto, PortInstanceKindDto, PortKindDto, ResolvedPortDto,
-    ResolvedPortStatusDto, TypeSummaryDto,
-};
-use crate::node_system::registry::RegistryFingerprint;
+use crate::graph::registry::RegistryFingerprint;
+
+pub use super::editor_projection_types::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TransportMappingError {
@@ -29,7 +23,7 @@ impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
 
     fn try_from(model: &EditorProjectionModel) -> Result<Self, Self::Error> {
         Ok(Self {
-            basis: crate::node_system::analysis::ProjectionBasis {
+            basis: ProjectionBasis {
                 graph_path: model.basis.graph_path.as_str().into(),
                 graph_revision: model.basis.graph_revision.get(),
                 registry_fingerprint: RegistryFingerprint::from_bytes(
@@ -63,6 +57,13 @@ impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
                 || !matches!(model.outcome, EditorCompilationOutcome::Complete),
         })
     }
+}
+
+/// Explicit command-facing entry point for the sole editor wire mapper.
+pub fn map_editor_projection(
+    model: &EditorProjectionModel,
+) -> Result<EditorGraphProjectionDto, TransportMappingError> {
+    model.try_into()
 }
 
 fn map_node(
@@ -119,13 +120,13 @@ fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingE
             instance_label: port.display.instance_label.clone(),
         },
         direction: match port.direction {
-            crate::node_system::protocol::PortDirection::Input => PortDirectionDto::Input,
-            crate::node_system::protocol::PortDirection::Output => PortDirectionDto::Output,
+            crate::graph::protocol::PortDirection::Input => PortDirectionDto::Input,
+            crate::graph::protocol::PortDirection::Output => PortDirectionDto::Output,
         },
         kind: match port.kind {
-            crate::node_system::protocol::PortKind::Data => PortKindDto::Data,
-            crate::node_system::protocol::PortKind::Control => PortKindDto::Control,
-            crate::node_system::protocol::PortKind::Effect => PortKindDto::Effect,
+            crate::graph::protocol::PortKind::Data => PortKindDto::Data,
+            crate::graph::protocol::PortKind::Control => PortKindDto::Control,
+            crate::graph::protocol::PortKind::Effect => PortKindDto::Effect,
         },
         instance_kind: match port.instance_kind {
             EditorPortInstanceKind::Declared => PortInstanceKindDto::Declared,
@@ -147,17 +148,13 @@ fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingE
             protocol_default: input.protocol_default.clone(),
             effective: match input.effective {
                 EditorEffectiveInputBinding::Connections => {
-                    crate::node_system::analysis::EffectiveInputBindingKindDto::Connections
+                    EffectiveInputBindingKindDto::Connections
                 }
-                EditorEffectiveInputBinding::Literal => {
-                    crate::node_system::analysis::EffectiveInputBindingKindDto::Literal
-                }
+                EditorEffectiveInputBinding::Literal => EffectiveInputBindingKindDto::Literal,
                 EditorEffectiveInputBinding::ProtocolDefault => {
-                    crate::node_system::analysis::EffectiveInputBindingKindDto::ProtocolDefault
+                    EffectiveInputBindingKindDto::ProtocolDefault
                 }
-                EditorEffectiveInputBinding::Unbound => {
-                    crate::node_system::analysis::EffectiveInputBindingKindDto::Unbound
-                }
+                EditorEffectiveInputBinding::Unbound => EffectiveInputBindingKindDto::Unbound,
             },
         }),
         resolved_type: port.resolved_type.as_ref().map(|value| TypeSummaryDto {
@@ -190,20 +187,12 @@ fn map_parameter(
             description: parameter.display.description.clone(),
         },
         editor: match parameter.editor {
-            ParameterEditorKind::Auto => crate::node_system::analysis::ParameterEditorKindDto::Auto,
-            ParameterEditorKind::Text => crate::node_system::analysis::ParameterEditorKindDto::Text,
-            ParameterEditorKind::Number => {
-                crate::node_system::analysis::ParameterEditorKindDto::Number
-            }
-            ParameterEditorKind::Toggle => {
-                crate::node_system::analysis::ParameterEditorKindDto::Toggle
-            }
-            ParameterEditorKind::Select => {
-                crate::node_system::analysis::ParameterEditorKindDto::Select
-            }
-            ParameterEditorKind::Resource => {
-                crate::node_system::analysis::ParameterEditorKindDto::Resource
-            }
+            ParameterEditorKind::Auto => ParameterEditorKindDto::Auto,
+            ParameterEditorKind::Text => ParameterEditorKindDto::Text,
+            ParameterEditorKind::Number => ParameterEditorKindDto::Number,
+            ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,
+            ParameterEditorKind::Select => ParameterEditorKindDto::Select,
+            ParameterEditorKind::Resource => ParameterEditorKindDto::Resource,
         },
         presentation: parameter.presentation.into(),
         value_type: parameter.value_type.clone(),
@@ -237,29 +226,31 @@ fn map_location(
     location: &crate::graph::analysis::GraphDiagnosticLocation,
 ) -> DiagnosticLocationDto {
     match location {
-        crate::node_system::analysis::DiagnosticLocation::Graph => DiagnosticLocationDto::Graph,
-        crate::node_system::analysis::DiagnosticLocation::Node(node_id) => {
+        crate::graph::analysis::contracts::DiagnosticLocation::Graph => {
+            DiagnosticLocationDto::Graph
+        }
+        crate::graph::analysis::contracts::DiagnosticLocation::Node(node_id) => {
             DiagnosticLocationDto::Node {
                 node_id: node_id.to_string().into(),
             }
         }
-        crate::node_system::analysis::DiagnosticLocation::Port(address) => {
+        crate::graph::analysis::contracts::DiagnosticLocation::Port(address) => {
             DiagnosticLocationDto::Port {
                 address: address.into(),
             }
         }
-        crate::node_system::analysis::DiagnosticLocation::Connection(connection_id) => {
+        crate::graph::analysis::contracts::DiagnosticLocation::Connection(connection_id) => {
             DiagnosticLocationDto::Connection {
                 connection_id: connection_id.to_string().into(),
             }
         }
-        crate::node_system::analysis::DiagnosticLocation::Parameter { node_id, key } => {
+        crate::graph::analysis::contracts::DiagnosticLocation::Parameter { node_id, key } => {
             DiagnosticLocationDto::Parameter {
                 node_id: node_id.to_string().into(),
                 key: key.as_str().into(),
             }
         }
-        crate::node_system::analysis::DiagnosticLocation::Resource(identity) => {
+        crate::graph::analysis::contracts::DiagnosticLocation::Resource(identity) => {
             DiagnosticLocationDto::Resource {
                 identity: identity.clone(),
             }
@@ -295,14 +286,12 @@ mod tests {
         EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
         EditorTypeSummary,
     };
-    use crate::graph_document::{
-        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
-    };
-    use crate::node_system::analysis::{
+    use crate::graph::analysis::contracts::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };
-    use crate::node_system::protocol::{
-        NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId,
+    use crate::graph::protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
+    use crate::graph_document::{
+        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
     };
     use serde_json::json;
     use std::collections::BTreeMap;

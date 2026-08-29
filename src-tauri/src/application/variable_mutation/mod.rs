@@ -8,15 +8,9 @@ use thiserror::Error;
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::application::events::{
-    ApplicationEvent, CommittedResourceMutation, HistoryStatus, ResourceMove,
-    ResourceProjectionStatus,
-};
+use crate::application::events::{ApplicationEvent, committed_resource_mutation_from_project};
 use crate::data_contract::{DataType, DataValue};
-use crate::project::project_writers::{
-    GlobalVariableMutationResult, ProjectHistoryStatus, ProjectProjectionStatus,
-    ProjectResourceMove, ProjectResourceMutationFacts,
-};
+use crate::project::project_writers::GlobalVariableMutationResult;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceRevision};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
@@ -284,68 +278,7 @@ fn committed_variable_mutation(
 ) -> Result<CommittedVariableMutation, VariableMutationApplicationError> {
     let receipt = committed.into_application_receipt()?;
     let (variable, facts) = receipt.into_parts();
-    let event = ApplicationEvent::ResourceCommitted(resource_mutation(facts));
+    let event =
+        ApplicationEvent::ResourceCommitted(committed_resource_mutation_from_project(facts));
     Ok(CommittedVariableMutation { variable, event })
-}
-
-fn resource_mutation(facts: ProjectResourceMutationFacts) -> CommittedResourceMutation {
-    let (
-        operation_id,
-        project_instance_id,
-        publication_revision,
-        moves,
-        deltas,
-        projection_status,
-        history,
-    ) = facts.into_parts();
-    CommittedResourceMutation {
-        operation_id,
-        project_instance_id,
-        publication_revision,
-        moves: moves.into_vec().into_iter().map(resource_move).collect(),
-        deltas: deltas.into_vec(),
-        projection_status: projection_status.into(),
-        history: history.into(),
-    }
-}
-
-impl From<ProjectResourceMove> for ResourceMove {
-    fn from(value: ProjectResourceMove) -> Self {
-        Self {
-            from: value.from,
-            to: value.to,
-            kind: value.kind,
-            name: value.name,
-        }
-    }
-}
-
-fn resource_move(value: ProjectResourceMove) -> ResourceMove {
-    value.into()
-}
-
-impl From<ProjectProjectionStatus> for ResourceProjectionStatus {
-    fn from(value: ProjectProjectionStatus) -> Self {
-        match value {
-            ProjectProjectionStatus::Complete {
-                expected_graph_paths,
-            } => Self::Complete {
-                expected_graph_paths: expected_graph_paths.into_vec(),
-            },
-            ProjectProjectionStatus::Incomplete {
-                invalidated_graph_paths,
-            } => Self::Incomplete {
-                invalidated_graph_paths: invalidated_graph_paths.into_vec(),
-            },
-        }
-    }
-}
-
-impl From<ProjectHistoryStatus> for HistoryStatus {
-    fn from(value: ProjectHistoryStatus) -> Self {
-        Self {
-            can_undo: value.can_undo,
-            can_redo: value.can_redo,
-        }
-    }
 }

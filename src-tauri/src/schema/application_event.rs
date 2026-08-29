@@ -2,17 +2,207 @@ use crate::application::events::{
     ApplicationEvent, CommittedResourceMutation, LifecycleRecoveryAction, ProjectLifecycleKind,
     ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceProjectionStatus,
 };
-use crate::event::{
-    EventProject, LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
-    LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
-    ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
-};
+use crate::event::EventProject;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectActivationResultDto {
+    pub path: String,
+    pub project_instance_id: String,
+    pub activation_revision: u64,
+}
+
+pub(crate) fn project_activation_to_transport(
+    activation: &crate::application::project_query::ProjectActivation,
+) -> ProjectActivationResultDto {
+    ProjectActivationResultDto {
+        path: activation.path.clone(),
+        project_instance_id: activation.project_instance_id.to_string(),
+        activation_revision: activation.activation_revision,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LifecycleMutationKindDto {
+    SaveAs,
+    Create,
+    Delete,
+    RegistryCleanup,
+    Load,
+    Clear,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LifecycleMutationPhaseDto {
+    DestinationCommitted,
+    RegistryCommitted,
+    AuthorityCommitted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LifecycleMutationOutcomeDto {
+    Committed,
+    RegistryFailed,
+    ActivationFailed,
+    RegistryPending,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleRecoveryDto {
+    pub required: bool,
+    pub action: String,
+    pub path: Option<String>,
+    pub identity: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleInvalidationDto {
+    pub project: bool,
+    pub registry: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleMutationResultDto {
+    pub operation_id: crate::project::OperationId,
+    pub kind: LifecycleMutationKindDto,
+    pub old_project_instance_id: Option<String>,
+    pub new_project_instance_id: Option<String>,
+    pub phase: LifecycleMutationPhaseDto,
+    pub outcome: LifecycleMutationOutcomeDto,
+    pub record: Option<crate::project::ProjectRecord>,
+    pub path: Option<String>,
+    pub recovery: Option<LifecycleRecoveryDto>,
+    pub invalidation: LifecycleInvalidationDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphProjectionReplacementDto {
+    pub graph_path: String,
+    pub projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_editor_projection:
+        Option<crate::schema::editor_projection_types::FunctionEditorProjectionDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphDeltaEventDto<T> {
+    pub graph_path: String,
+    pub from_revision: crate::project::ResourceRevision,
+    pub to_revision: crate::project::ResourceRevision,
+    pub caused_by: Option<crate::project::OperationId>,
+    pub payload: T,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphMutationResultDto {
+    pub project_instance_id: String,
+    pub delta: GraphDeltaEventDto<crate::graph::document::GraphDocumentPatch>,
+    pub projection_replacement: GraphProjectionReplacementDto,
+    pub history: crate::project::HistoryStatusDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ProjectionStatusDto {
+    Complete {
+        expected_graph_paths: Vec<String>,
+    },
+    Incomplete {
+        invalidated_graph_paths: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceMoveDto {
+    pub from: String,
+    pub to: String,
+    pub kind: crate::project::ResourceLifecycleKind,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceMutationCommandResultDto<T> {
+    pub data: T,
+    pub mutation: ResourceMutationResultDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceMutationResultDto {
+    pub operation_id: crate::project::OperationId,
+    pub project_instance_id: String,
+    pub publication_revision: u64,
+    pub moves: Vec<ResourceMoveDto>,
+    pub deltas: Vec<crate::project::ResourceDeltaEvent>,
+    pub projection_replacements: Vec<GraphProjectionReplacementDto>,
+    pub projection_status: ProjectionStatusDto,
+    pub history: crate::project::HistoryStatusDto,
+}
 
 pub type ApplicationEventDto = EventProject;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("application event transport mapping failed")]
 pub struct TransportMappingError;
+
+#[derive(Debug, thiserror::Error)]
+pub enum GraphMutationTransportError {
+    #[error("editor projection transport mapping failed")]
+    Projection(#[source] crate::schema::editor_projection::TransportMappingError),
+}
+
+pub fn graph_mutation_to_transport(
+    result: &crate::application::events::GraphMutationResult,
+) -> Result<GraphMutationResultDto, GraphMutationTransportError> {
+    Ok(GraphMutationResultDto {
+        project_instance_id: result.project_instance_id.to_string(),
+        delta: graph_delta_to_transport(&result.delta),
+        projection_replacement: GraphProjectionReplacementDto {
+            graph_path: result.projection_replacement.graph_path.to_string(),
+            projection: crate::schema::editor_projection::map_editor_projection(
+                &result.projection_replacement.projection,
+            )
+            .map_err(GraphMutationTransportError::Projection)?,
+            function_editor_projection: result
+                .projection_replacement
+                .function_editor_projection
+                .as_ref()
+                .map(crate::schema::editor_projection_types::FunctionEditorProjectionDto::from),
+        },
+        history: crate::project::HistoryStatusDto {
+            can_undo: result.history.can_undo,
+            can_redo: result.history.can_redo,
+        },
+    })
+}
+
+pub(crate) fn graph_delta_to_transport(
+    delta: &crate::application::events::GraphDeltaEvent<crate::graph::document::GraphDocumentPatch>,
+) -> GraphDeltaEventDto<crate::graph::document::GraphDocumentPatch> {
+    GraphDeltaEventDto {
+        graph_path: delta.graph_path.as_str().to_owned(),
+        from_revision: delta.from_revision,
+        to_revision: delta.to_revision,
+        caused_by: delta.caused_by,
+        payload: delta.payload.clone(),
+    }
+}
 
 pub fn application_event_to_transport(
     event: &ApplicationEvent,
@@ -29,7 +219,7 @@ pub fn application_event_to_transport(
     }
 }
 
-fn project_lifecycle_to_transport(
+pub(crate) fn project_lifecycle_to_transport(
     event: &crate::application::events::ProjectLifecycleApplicationEvent,
 ) -> LifecycleMutationResultDto {
     LifecycleMutationResultDto {
@@ -93,6 +283,7 @@ fn recovery_to_transport(
         action: match recovery.action {
             LifecycleRecoveryAction::RemoveRegistryRecord => "removeRegistryRecord",
             LifecycleRecoveryAction::CleanupRegistry => "cleanupRegistry",
+            LifecycleRecoveryAction::ActivateDestination => "activateDestination",
         }
         .to_owned(),
         path: recovery.path.as_deref().map(str::to_owned),
@@ -100,7 +291,7 @@ fn recovery_to_transport(
     }
 }
 
-fn resource_mutation_to_transport(
+pub(crate) fn resource_mutation_to_transport(
     mutation: &CommittedResourceMutation,
 ) -> ResourceMutationResultDto {
     ResourceMutationResultDto {
@@ -120,7 +311,7 @@ fn resource_mutation_to_transport(
         deltas: mutation.deltas.clone(),
         projection_replacements: Vec::new(),
         projection_status: projection_status_to_transport(&mutation.projection_status),
-        history: crate::node_system::document::HistoryStatusDto {
+        history: crate::project::HistoryStatusDto {
             can_undo: mutation.history.can_undo,
             can_redo: mutation.history.can_redo,
         },
@@ -157,9 +348,9 @@ mod tests {
         ProjectLifecycleKind, ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove,
         ResourceProjectionStatus,
     };
-    use crate::event::ResourceMutationResultDto;
-    use crate::node_system::document::ResourceLifecycleKind;
+    use crate::project::ResourceLifecycleKind;
     use crate::project::{OperationId, ProjectInstanceId};
+    use crate::schema::application_event::ResourceMutationResultDto;
     use serde_json::json;
 
     #[test]

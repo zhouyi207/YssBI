@@ -17,6 +17,7 @@ mod graph;
 pub mod graph_document;
 pub mod julia;
 pub mod math;
+#[cfg(test)]
 pub mod node_system;
 pub mod platform;
 pub mod project;
@@ -38,23 +39,12 @@ use tauri::Manager;
 
 // ==================== 应用入口 ====================
 
-fn initialize_project_state()
--> Result<project::ProjectState, node_system::catalog::BuiltinInitializationError> {
-    project::ProjectState::try_new()
+fn initialize_project_state() -> project::ProjectState {
+    project::ProjectState::new()
 }
 
 #[derive(Debug, thiserror::Error)]
 enum ApplicationInitializationError {
-    #[error("initial project snapshot could not be captured")]
-    ProjectSnapshot(#[source] project::ProjectFilesystemError),
-    #[error("initial database session could not be prepared")]
-    DatabaseSession(#[source] application::database_session::DatabaseSessionApplicationError),
-    #[error("initial database declaration observations could not be prepared")]
-    DatabaseObservations(
-        #[source] crate::database_contract::DatabaseDeclarationObservationSetError,
-    ),
-    #[error("initial application session candidate could not be built")]
-    SessionCandidate(#[source] application::execution::session_factory::SessionCandidateBuildError),
     #[error("initial application session candidate could not be installed")]
     SessionInstallation,
     #[error("initial application session composition could not be prepared")]
@@ -66,6 +56,8 @@ enum ApplicationInitializationError {
 fn initialize_application_state(
     project_state: Arc<project::ProjectState>,
 ) -> Result<application::execution::ApplicationState, ApplicationInitializationError> {
+    let scientific_backend: Arc<dyn execution::ports::scientific::ScientificBackend> =
+        Arc::new(backend_adapters::execution::scientific::SciApiScientificBackend::new());
     let builder =
         application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(
             backend_adapters::execution::resources::database_resource_provider_factory,
@@ -74,11 +66,14 @@ fn initialize_application_state(
         &builder,
         application::execution::ApplicationSessionEpoch::INITIAL,
         Arc::clone(&project_state),
+        std::iter::empty(),
+        Arc::clone(&scientific_backend),
     )
     .map_err(ApplicationInitializationError::SessionComposition)?;
     let application = application::execution::ApplicationState::from_composition(
         Arc::new(application::execution::ApplicationSessionSlot::new()),
         builder,
+        scientific_backend,
     );
     application
         .install_candidate(candidate)
@@ -118,11 +113,9 @@ pub fn run() {
                 );
             }
 
-            let project_state =
-                initialize_project_state().map_err(Box::<dyn std::error::Error>::from)?;
-            let application_state = initialize_application_state(Arc::new(project_state.clone()))
+            let project_state = Arc::new(initialize_project_state());
+            let application_state = initialize_application_state(Arc::clone(&project_state))
                 .map_err(Box::<dyn std::error::Error>::from)?;
-            app.manage(project_state);
             app.manage(application_state);
 
             let app_dir = app.path().app_data_dir()?;
@@ -135,11 +128,16 @@ pub fn run() {
             let project_registry =
                 project::ProjectRegistry::new(std::sync::Arc::new(registry_store), registry_path);
             app.manage(project_registry);
-            app.manage(application::bayes::BayesInferenceService::with_backend(
-                std::sync::Arc::new(sci::backends::julia::bayes::JuliaBayesBackend::new(
-                    app_dir.clone(),
-                    bayes_worker.clone(),
-                )),
+            let bayes_adapter = julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new(
+                app_dir.clone(),
+                bayes_worker.clone(),
+            );
+            app.manage(application::bayes::BayesInferenceService::with_worker(
+                app_dir.clone(),
+                std::sync::Arc::new(bayes_adapter),
+                std::sync::Arc::new(
+                    backend_adapters::execution::bayes_artifacts::PolarsBayesArtifactReader,
+                ),
             ));
             let warmup_worker = bayes_worker.clone();
             tauri::async_runtime::spawn_blocking(move || {

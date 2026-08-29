@@ -12,9 +12,15 @@ import {
   type MenubarMenuItem,
 } from '@/features/application/menubar/menubarViewItems';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
-import { useActiveProjectPath, useSettingsStore } from '@/features/application/viewCapabilities';
-import { APP_LINKS } from '@/app/appConfig/default';
+import {
+  openExternalUrlWithDialog,
+  useCurrentWindowActions,
+  useCustomTitleBar,
+} from '@/features/application/window';
+import { useActiveProjectPath } from '@/features/application/project/projectSession';
+import { useSettingsRead } from '@/features/core/settings/read';
+import { settingsUi } from '@/features/core/settings/ui';
+import { APP_LINKS } from '@/shared/config-default';
 import {
   Menubar as ShadcnMenubar,
   MenubarCheckboxItem,
@@ -279,11 +285,12 @@ export function Menubar() {
 
   const currentPath = useActiveProjectPath();
   const projectAvailable = Boolean(currentPath);
-  const themeMode = useSettingsStore((state) => state.theme.mode ?? 'dark');
-  const appearance = useSettingsStore((state) => state.appearance);
-  const updateAppearance = useSettingsStore((state) => state.updateAppearance);
+  const themeMode = useSettingsRead((state) => state.theme.mode ?? 'dark');
+  const appearance = useSettingsRead((state) => state.appearance);
+  const updateAppearance = settingsUi.updateAppearance;
   const isLightTheme = themeMode === 'light';
   const windowActions = useCurrentWindowActions();
+  const customChrome = useCustomTitleBar();
 
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
@@ -379,6 +386,7 @@ export function Menubar() {
   return (
     <>
       <WindowMenuBar
+        customChrome={customChrome}
         toolbar={
           <>
             <ToolbarIconButton

@@ -15,9 +15,7 @@ import { isNodeCreationDescriptorDto } from '@/shared/types/dto/nodeCreationDesc
 import { isEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionGuards';
 import { parseEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionParser';
 import { isSchemaAwareParameterEditorDto } from '@/shared/types/dto/parameterEditorValidators';
-import {
-  parseProjectMutationEvent,
-} from '@/features/core/sync/utils/projectEventWireParser';
+import { parseProjectEvent } from '@/services/project/projectEventParser';
 import { parseProjectGraphIndexRow } from '@/services/project/projectService';
 import { parseGraphProjectionReplacementDto } from '@/shared/types/dto/editorMutationWireParser';
 import { parseRunEvent } from '@/shared/types/dto/runEventParser';
@@ -82,7 +80,9 @@ describe('Rust-generated node-system golden contracts', () => {
     expect(projectEvents.resourceMutationResults.map(({ scenario }) => scenario)).toEqual([
       'create', 'save', 'rename', 'remove', 'undo', 'redo',
     ]);
-    expect(projectEvents.events.map(parseProjectMutationEvent)).toEqual(projectEvents.events);
+    expect(projectEvents.events.map((event) => parseProjectEvent(event).ok)).toEqual(
+      projectEvents.events.map(() => true),
+    );
   });
 
   it('shares one canonical Registry fingerprint across every wire purpose', () => {

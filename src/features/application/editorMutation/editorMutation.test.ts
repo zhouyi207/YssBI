@@ -3,7 +3,7 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { normalizeIpcError } from '@/services/ipc';
 import {

@@ -5,7 +5,7 @@ import { NodeContainer } from "./NodeContainer";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 import { MathNodeLayout } from "./MathNodeLayout";
 import { RerouteNodeLayout } from './RerouteNodeLayout';
-import { uiNodeIsReroute } from '@/features/application/viewCapabilities';
+import { uiNodeIsReroute } from '@/features/core/dataStore/nodeView';
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 export interface NodeProps {

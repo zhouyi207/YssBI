@@ -4,21 +4,20 @@ use std::sync::Arc;
 use std::sync::{Barrier, Mutex};
 
 use crate::data_contract::DataType;
-use crate::execution::plan::PlanCompilationBasis;
+use crate::graph::analysis::contracts::CompilationBasis;
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
+use crate::graph::catalog::{
+    BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
+};
 use crate::graph::error::GraphMutationError;
-use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
-use crate::graph_document::{
-    DynamicPortBinding, GraphDocument, GraphResourcePath, PortAddress, PortRef,
-};
-use crate::node_system::catalog::{
-    BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgsDto,
-};
-use crate::node_system::compiler::ProjectCompileCoordinator;
-use crate::node_system::protocol::{
+use crate::graph::protocol::{
     NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
 };
-use crate::node_system::registry::NodeRegistry;
+use crate::graph::registry::NodeRegistry;
+use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
+use crate::graph_document::{
+    DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
+};
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -37,7 +36,6 @@ impl GraphRuntimeEpoch {
 pub struct GraphRuntimeComponents {
     pub registry: Arc<NodeRegistry>,
     pub catalog: Arc<BuiltinCatalog>,
-    pub compiler: Arc<ProjectCompileCoordinator>,
     pub resource_catalog: Arc<ResourceCatalogSnapshot>,
 }
 
@@ -181,13 +179,52 @@ impl GraphRuntimeState {
         self.epoch
     }
 
-    pub fn accepts_basis(&self, basis: &PlanCompilationBasis) -> bool {
-        basis.registry_fingerprint().as_bytes()
-            == *self.components.registry.fingerprint().as_bytes()
+    pub fn accepts_basis(
+        &self,
+        basis: &CompilationBasis<crate::graph_document::GraphRevision>,
+    ) -> bool {
+        *basis.registry_fingerprint.as_bytes() == *self.components.registry.fingerprint().as_bytes()
     }
 
     pub fn resource_catalog(&self) -> &ResourceCatalogSnapshot {
         &self.components.resource_catalog
+    }
+
+    pub(crate) fn registry(&self) -> &NodeRegistry {
+        self.components.registry.as_ref()
+    }
+
+    pub(crate) fn plan_editor_mutation(
+        &self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        mutation: crate::graph::document::EditorGraphMutation,
+        catalog: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
+    ) -> Result<crate::graph::document::GraphDocumentPatch, crate::graph::document::MutationConflict>
+    {
+        mutation.into_patch_with_catalog_snapshot(
+            graph_path,
+            document,
+            self.registry(),
+            Some(catalog),
+        )
+    }
+
+    pub(crate) fn export_subgraph(
+        &self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        catalog: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
+        node_ids: Vec<NodeId>,
+    ) -> Result<crate::graph::document::ClipboardSubgraph, crate::graph::document::MutationConflict>
+    {
+        crate::graph::document::export_subgraph(
+            graph_path,
+            document,
+            self.registry(),
+            catalog,
+            node_ids,
+        )
     }
 
     pub(crate) fn registry_fingerprint(&self) -> [u8; 32] {
@@ -199,7 +236,7 @@ impl GraphRuntimeState {
         document: &GraphDocument,
         catalog: &ResourceCatalogSnapshot,
         settings: &crate::graph::settings::GraphCompileSettings,
-        basis: &PlanCompilationBasis,
+        basis: &CompilationBasis<crate::graph_document::GraphRevision>,
     ) -> GraphAnalysis {
         let analysis = crate::graph::analysis::analyze(GraphAnalysisInput {
             document,
@@ -224,6 +261,9 @@ impl GraphRuntimeState {
         &self,
         document: &GraphDocument,
     ) -> Result<Arc<GraphDocument>, GraphMutationError> {
+        document.validate().map_err(|_| {
+            GraphMutationError::Internal(crate::graph::error::GraphMutationSource::invariant())
+        })?;
         let candidate = Arc::new(document.clone());
         #[cfg(test)]
         if let Some(control) = &self.test_control {
@@ -274,11 +314,14 @@ impl GraphRuntimeState {
             let Ok(node_type) = NodeTypeId::new(item.node_type_id.as_ref()) else {
                 return false;
             };
-            let resource = item.resource_path.as_ref().and_then(|path| {
-                resources.iter().find(|entry| {
-                    entry.resource_path.as_str() == path.as_str() && entry.node_type_id == node_type
-                })
-            });
+            let resource = item.resource_path.as_ref().and_then(
+                |path: &crate::graph::catalog::CatalogResourcePath| {
+                    resources.iter().find(|entry| {
+                        entry.resource_path.as_str() == path.as_str()
+                            && entry.node_type_id == node_type
+                    })
+                },
+            );
             self.candidate_ports(graph_path, &node_type, resource, catalog)
                 .iter()
                 .any(|candidate| ports_are_compatible(&source, candidate))
@@ -378,7 +421,7 @@ impl GraphRuntimeState {
             return candidates;
         };
         match resource.create_args {
-            ResourceBoundCreateArgsDto::Variable => {
+            ResourceBoundCreateArgs::Variable => {
                 if let Some(variable) = catalog
                     .variable_contract(&GraphResourceId::new(resource.resource_path.as_str()))
                 {
@@ -392,7 +435,7 @@ impl GraphRuntimeState {
                     }
                 }
             }
-            ResourceBoundCreateArgsDto::Database => {
+            ResourceBoundCreateArgs::Database => {
                 if node_type.as_str() == "yssbi.dataframe.source.get" {
                     if let Some(value_type) = concrete_type("tabular.dataframe") {
                         for candidate in &mut candidates {
@@ -403,7 +446,7 @@ impl GraphRuntimeState {
                     }
                 }
             }
-            ResourceBoundCreateArgsDto::Function => {
+            ResourceBoundCreateArgs::Function => {
                 let Ok(function_path) = GraphResourcePath::new(resource.resource_path.as_str())
                 else {
                     return candidates;
@@ -460,7 +503,7 @@ struct PortCandidate {
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
-    type_parameters: Box<[crate::node_system::protocol::TypeParameterId]>,
+    type_parameters: Box<[crate::graph::protocol::TypeParameterId]>,
 }
 
 fn ports_are_compatible(source: &PortCandidate, candidate: &PortCandidate) -> bool {
@@ -474,25 +517,25 @@ fn ports_are_compatible(source: &PortCandidate, candidate: &PortCandidate) -> bo
         return source.kind == candidate.kind && source.kind != PortKind::Data;
     }
     let compatibility = match source.direction {
-        PortDirection::Output => crate::node_system::compiler::type_exprs_compatibility(
+        PortDirection::Output => crate::graph::protocol::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &source.type_parameters,
             &candidate.type_parameters,
         ),
-        PortDirection::Input => crate::node_system::compiler::type_exprs_compatibility(
+        PortDirection::Input => crate::graph::protocol::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &source.type_parameters,
         ),
     };
-    compatibility != crate::node_system::compiler::TypeCompatibility::Incompatible
+    compatibility != crate::graph::protocol::TypeCompatibility::Incompatible
 }
 
 fn is_unresolved(
     expression: &TypeExpr,
-    parameters: &[crate::node_system::protocol::TypeParameterId],
+    parameters: &[crate::graph::protocol::TypeParameterId],
 ) -> bool {
     let declared = parameters.iter().collect::<std::collections::BTreeSet<_>>();
     match expression {

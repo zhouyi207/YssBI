@@ -3,6 +3,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::execution::plan::PlanGraphRevision;
+use crate::execution::plan::ResultCategory;
 use crate::execution::value::RuntimeValue;
 
 use super::run_registry::RunId;
@@ -27,6 +28,35 @@ pub enum StoredResult {
     Scalar(f64),
     Text(Box<str>),
     Empty,
+    Categorized {
+        value: Box<StoredResult>,
+        category: ResultCategory,
+    },
+}
+
+impl StoredResult {
+    pub(crate) fn with_category(value: StoredResult, category: ResultCategory) -> Self {
+        Self::Categorized {
+            value: Box::new(value),
+            category,
+        }
+    }
+
+    pub fn value(&self) -> &StoredResult {
+        match self {
+            Self::Categorized { value, .. } => value.value(),
+            value => value,
+        }
+    }
+
+    pub const fn category(&self) -> ResultCategory {
+        match self {
+            Self::Categorized { category, .. } => *category,
+            Self::Runtime(_) | Self::Scalar(_) | Self::Text(_) | Self::Empty => {
+                ResultCategory::Value
+            }
+        }
+    }
 }
 
 /// Neutral activation identity retained by pin history.

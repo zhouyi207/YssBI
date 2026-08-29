@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { useGraphDataStore } from '@/features/application/viewCapabilities';
+import { useGraphRead } from '@/features/core/graph/read';
+import type { NodeData } from '@/shared/types/store/graph';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm } from '../shared/DetailForm';
 import { DetailText } from '../shared/DetailText';
 import { NodeParameterEditor } from '../node/parameterEditors/NodeParameterEditor';
-import { selectNodeDetailNode } from './NodeDetailPanel';
 
 function formatProjectedValue(value: unknown): string {
   if (value == null) return '—';
@@ -13,7 +13,10 @@ function formatProjectedValue(value: unknown): string {
 
 export function NodeInspectPanel({ graphPath, nodeId }: { graphPath: string; nodeId: string }) {
   const { t, i18n } = useTranslation();
-  const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
+  const projectedNode = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
+  const node = projectedNode
+    ? structuredClone(projectedNode) as unknown as NodeData
+    : undefined;
 
   if (!node) {
     return (

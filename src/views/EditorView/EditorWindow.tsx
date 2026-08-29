@@ -1,4 +1,4 @@
-import { useWorkbenchStore } from '@/features/application/viewCapabilities';
+import { useWorkbenchUi, workbenchUi } from '@/features/core/workbench/ui';
 import { useTranslation } from "react-i18next";
 
 import { BottomBar } from "./Layout/BottomBar";
@@ -22,10 +22,10 @@ import { NodeDocumentationModal } from "./Layout/NodeDocumentationModal";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
 function EditorWindowReady() {
-  const isSettingsOpen = useWorkbenchStore((state) => state.isSettingsOpen);
-  const isNodeDocumentationOpen = useWorkbenchStore((state) => state.isNodeDocumentationOpen);
-  const setSettingsOpen = useWorkbenchStore((state) => state.setSettingsOpen);
-  const setNodeDocumentationOpen = useWorkbenchStore((state) => state.setNodeDocumentationOpen);
+  const isSettingsOpen = useWorkbenchUi((state) => state.isSettingsOpen);
+  const isNodeDocumentationOpen = useWorkbenchUi((state) => state.isNodeDocumentationOpen);
+  const setSettingsOpen = workbenchUi.setSettingsOpen;
+  const setNodeDocumentationOpen = workbenchUi.setNodeDocumentationOpen;
   useWorkbenchLayout();
   useProjectSync();
   useProjectionLocaleSync();

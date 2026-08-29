@@ -1,28 +1,25 @@
 import { useContext, useEffect } from 'react';
-import { GroupContext, useEditorGroupWorkspace, useWorksheetStore, WorksheetService } from '@/features/application/viewCapabilities';
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+import { GroupContext, useEditorGroupWorkspace } from '@/features/application/editor/editorGroupContext';
+import { useWorksheetRead } from '@/features/core/worksheet/read';
+import { loadWorksheetDocumentForView } from '@/features/application/worksheet/worksheetViewActions';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 import { WorksheetEmptyState } from './WorksheetEmptyState';
 
 export function WorksheetEditor() {
   const groupId = useContext(GroupContext);
   const { activeTabId } = useEditorGroupWorkspace(groupId);
-  const document = useWorksheetStore((s) =>
-    activeTabId ? s.documents[activeTabId] ?? null : null,
+  const document = useWorksheetRead((snapshot) =>
+    activeTabId ? snapshot.documents[activeTabId] ?? null : null,
+  );
+  const hasActiveDocument = useWorksheetRead((snapshot) =>
+    activeTabId ? Boolean(snapshot.documents[activeTabId]) : false,
   );
 
   useEffect(() => {
     if (!activeTabId) return;
-    if (useWorksheetStore.getState().documents[activeTabId]) return;
-    const context = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(context.projectInstanceId, activeTabId)
-      .then((loaded) => {
-        if (context.isCurrent()) {
-          useWorksheetStore.getState().upsertDocument(activeTabId, loaded);
-        }
-      })
-      .catch(() => undefined);
-  }, [activeTabId]);
+    if (hasActiveDocument) return;
+    void loadWorksheetDocumentForView(activeTabId);
+  }, [activeTabId, hasActiveDocument]);
 
   if (!activeTabId) {
     return (

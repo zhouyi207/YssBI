@@ -2,7 +2,11 @@ import { memo } from 'react';
 import Canvas from './Canvas';
 import { useIsActiveEditorPanel } from '@/features/application/editor';
 import { CanvasDropZone } from './CanvasDropZone';
-import { useGraphDataStore, useProjectProjection, resourceKey, useDocumentStateStore, type EditorResourceKind } from '@/features/application/viewCapabilities';
+import { useGraphRead } from '@/features/core/graph/read';
+import { useProjectProjection } from '@/features/application/project/projectProjection';
+import { resourceKey } from '@/features/core/resource';
+import { useResourceRead } from '@/features/core/resource/read';
+import type { EditorResourceKind } from '@/features/core/dockview';
 
 export interface GraphEditorProps {
     panelInstanceId: string;
@@ -24,11 +28,11 @@ export const GraphEditor = memo(function GraphEditor({
     const mode = useIsActiveEditorPanel(panelInstanceId) ? 'interactive' : 'preview';
     const { graphLoadStatus: graphLoads } = useProjectProjection();
     const graphLoadStatus = graphLoads[graphPath];
-    const graphProjectionReady = useGraphDataStore((state) => (
-        state.hasGraph(graphPath)
+    const graphProjectionReady = useGraphRead((snapshot) => Boolean(
+        snapshot.graphEntities[graphPath],
     ));
-    const graphDocument = useDocumentStateStore((state) => (
-        state.documents[resourceKey({ id: graphPath, kind: graphKind })]
+    const graphDocument = useResourceRead((snapshot) => (
+        snapshot.documents[resourceKey({ id: graphPath, kind: graphKind })]
     ));
     const graphReady = graphProjectionReady
         && graphDocument?.loaded === true

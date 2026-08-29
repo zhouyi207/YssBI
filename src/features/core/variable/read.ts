@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import { freezeProjectionSnapshot } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import type { VariableId, Variable } from '@/shared/types/domain';
 

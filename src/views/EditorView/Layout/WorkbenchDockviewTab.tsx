@@ -30,17 +30,10 @@ import {
   requestCloseWorkbenchPanels,
 } from '@/features/application/editor/workbenchPanelClose';
 import { buildTabContextMenuSections } from '@/features/application/editor/tabContextMenu';
-import {
-  isWorkbenchActivityViewId,
-  isWorkbenchPersistentViewMetadata,
-  layoutTabFromEditorMetadata,
-  workbenchDockviewRead,
-  type WorkbenchPanelInfo,
-  type WorkbenchPanelMetadata,
-  type WorkbenchPanelParams,
-  type WorkbenchViewId,
-} from '@/features/application/viewCapabilities';
-import { resourceKey, useDocumentStateStore } from '@/features/application/viewCapabilities';
+import { isWorkbenchActivityViewId, isWorkbenchPersistentViewMetadata, layoutTabFromEditorMetadata, workbenchDockviewRead } from '@/features/core/dockview';
+import type { WorkbenchPanelInfo, WorkbenchPanelMetadata, WorkbenchPanelParams, WorkbenchViewId } from '@/features/core/dockview';
+import { resourceKey } from '@/features/core/resource';
+import { useResourceRead } from '@/features/core/resource/read';
 import {
   ActionMenu,
   usePositionedActionMenu,
@@ -187,8 +180,8 @@ export function WorkbenchDockviewTab(
   const editorDocumentKey = metadata.role === 'editor'
     ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
     : null;
-  const dirty = useDocumentStateStore((state) => (
-    editorDocumentKey ? state.documents[editorDocumentKey]?.dirty === true : false
+  const dirty = useResourceRead((snapshot) => (
+    editorDocumentKey ? snapshot.documents[editorDocumentKey]?.dirty === true : false
   ));
   const {
     contextMenu,

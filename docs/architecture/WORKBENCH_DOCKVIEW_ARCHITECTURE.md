@@ -79,7 +79,9 @@ Logs panel 内包含工作台唯一的 bounded nested Dockview。它只拥有七
 
 Logs layout 有两种明确生命周期：
 
-- **main**：主窗口 Logs 绑定 `logsDockviewLayoutController`，最新 nested snapshot 作为 `nested.logs` 随工作台 payload 持久化；
+- **main**：主窗口 Logs 通过 `logsDockviewRootBinding` 绑定；Application
+  `workbenchLayoutController` 负责 hydration、project replacement 与 persistence，最新 nested
+  snapshot 作为 `nested.logs` 随工作台 payload 持久化；
 - **ephemeral**：独立 `LogWindow` 每次挂载都从七 domain 默认布局开始，不绑定 main controller，也不读写工作台 layout persistence。
 
 ## 4. Canonical metadata 与 identity
@@ -116,7 +118,8 @@ Singleton 与 multi-instance contract：
 
 ### 5.1 Public seam
 
-`src/features/core/dockview/workbenchDockviewPort.ts` 定义 public `workbenchDockviewPort`。它提供 role-aware semantic operations：
+Core Dockview 将 public 能力拆成独立的 `workbenchDockviewRead`、`workbenchDockviewControl`
+和 `workbenchDockviewRootBinding`。它们提供 role-aware semantic operations：
 
 - `openEditor`、`setEditorPinned`；
 - `ensureView`、`upsertResult`；
@@ -124,11 +127,16 @@ Singleton 与 multi-instance contract：
 - `configureEdge`、`setEdgeCollapsed`、`setEdgeSize`；
 - canonical panel/group queries、resource remap 与 serialization。
 
-调用方不持有 raw root `DockviewApi`，也不自行实现 singleton、Result upsert、home edge 或 reveal 规则。
+Application 负责组合这些能力；调用方不持有 raw root `DockviewApi`，也不自行实现
+singleton、Result upsert、home edge 或 reveal 规则。
 
 ### 5.2 Internal seam
 
-`src/features/core/dockview/workbenchDockviewInternal.ts` 保存 bind/hydration、committed removal、layout transaction 与 publication transaction。它不从 `src/features/core/dockview/index.ts` barrel export；这些能力不属于普通 view 或 application caller 的 public interface。
+`src/features/core/dockview/workbenchDockviewInternal.ts` 保存 bind/hydration、committed
+removal、layout transaction 与 publication transaction。它不从
+`src/features/core/dockview/index.ts` barrel export；这些能力不属于普通 View 或普通 Core
+caller 的 public interface。Application `workbenchLayoutController` 负责 window-scoped
+bind、startup hydration、persistence flush 与 project-generation invalidation。
 
 root `fromJSON` 只由 startup `workbenchLayoutController` 在空 root 上执行。运行时 reset、project cleanup、publication 和复合布局修改都使用 FIFO 中的 `ShadowWorkbenchModel` transaction：先从 live snapshot 构造 shadow、执行同步语义命令并验证 identity/topology/currentness，再把 buffered commands 应用到 live Dockview。运行时不使用 root `fromJSON` 重建布局。
 
@@ -246,10 +254,10 @@ Persistence invariant：
 当前 contract 由以下 focused tests 覆盖：
 
 - `src/views/EditorView/Layout/Workspace.editorPanel.test.tsx`：唯一 root Dockview、activation gates、root 与 Logs nested keyboard boundary；
-- `src/features/core/dockview/workbenchDockviewPort.test.ts`：role-aware operations、identity、edge state、FIFO、committed removal、shadow transactions 与 public/internal interface；
+- `src/features/core/dockview/workbenchRuntime.test.ts`：root runtime、role-aware operations、identity、edge state、FIFO、committed removal 与 shadow transactions；
 - `src/features/core/dockview/workbenchPanelModel.test.ts`：canonical metadata validation 与 component mapping；
 - `src/features/core/dockview/workbenchLayoutPersistence.test.ts`：semantic key、exact envelope、session-only stripping、project scrub 与七-domain Logs validation；
-- `src/features/core/dockview/logsDockviewLayoutController.test.ts`：main Logs restore、snapshot 与 reset lifecycle；
+- `src/features/core/dockview/logsRuntime.test.ts`：main Logs binding、snapshot 与 reset lifecycle；
 - `src/views/LogView/LogWorkspaceDockview.test.tsx`：七个 bounded domain panels、main binding 与 ephemeral default；
 - `src/features/application/layout/workbenchLayoutController.test.ts`：startup hydration、root `fromJSON` 限制、persistence flush 与 project generations；
 - `src/features/application/layout/workbenchLayoutActions.test.ts`：home、reveal、bottom collapse 与 deterministic reset；

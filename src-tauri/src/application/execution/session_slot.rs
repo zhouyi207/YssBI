@@ -5,19 +5,20 @@ use std::time::Instant;
 use thiserror::Error;
 
 use super::session_factory::{
-    ProjectSessionCandidateError, SessionResourceFactoryBuilder, UnpublishedApplicationSession,
-    build_current_project_candidate,
+    SessionResourceFactoryBuilder, UnpublishedApplicationSession, build_current_project_candidate,
 };
 use crate::database::runtime::{
-    DatabaseDrainDeadline, DatabaseRuntimeSession, DatabaseSessionDrainControl,
+    DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
+    DatabaseSessionDrainControl,
 };
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use crate::execution::ports::scientific::ScientificBackend;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::{
     ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState,
 };
 use crate::graph::runtime_state::GraphRuntimeState;
-use crate::node_system::ProjectSessionId;
+use crate::project::ProjectSessionId;
 use crate::project::{ProjectInstanceId, ProjectState};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -225,12 +226,12 @@ pub enum SessionRecoveryError {
     AttemptIdExhausted,
     #[error("session recovery deadline elapsed during {phase:?}")]
     DeadlineElapsed { phase: SessionRecoveryPhase },
-    #[error("session recovery phase is staged without an installed coordinator")]
-    StagedOnly { phase: SessionRecoveryPhase },
     #[error("session recovery claim is no longer current")]
     StaleClaim,
     #[error("session recovery claim has already been consumed")]
     ClaimConsumed,
+    #[error("the retained Project state could not be cleared during recovery")]
+    ProjectClearFailed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
@@ -366,6 +367,21 @@ struct ReplacementWorker {
     completed: bool,
 }
 
+/// A replacement that has closed the old session's admission and drained its
+/// Execution/Database work. The Project authority may perform its lifecycle
+/// I/O while this value is held; dropping it retains the old session in
+/// `Recovering` instead of publishing a partial candidate.
+pub(crate) struct ProjectReplacement {
+    worker: ReplacementWorker,
+    project: Arc<ProjectState>,
+}
+
+impl ProjectReplacement {
+    pub(crate) fn project(&self) -> &ProjectState {
+        &self.project
+    }
+}
+
 struct SessionRecoveryClaimGuard {
     slot: Arc<SessionSlotInner>,
     epoch: ApplicationSessionEpoch,
@@ -444,10 +460,6 @@ impl ReplacementWorker {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "replacement failure transfer is staged until the production coordinator exists"
-    )]
     fn retain_recovery(
         &mut self,
         phase: SessionRecoveryPhase,
@@ -529,8 +541,7 @@ impl SessionRecoveryClaimGuard {
         self.phase
     }
 
-    #[cfg(test)]
-    fn finish_for_test(
+    fn finish(
         mut self,
         next: Option<SessionRecoveryPhase>,
     ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
@@ -594,6 +605,14 @@ impl SessionRecoveryClaimGuard {
         };
         Ok(outcome)
     }
+
+    #[cfg(test)]
+    fn finish_for_test(
+        self,
+        next: Option<SessionRecoveryPhase>,
+    ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
+        self.finish(next)
+    }
 }
 
 impl Drop for SessionRecoveryClaimGuard {
@@ -642,10 +661,9 @@ fn recovery_required(
     }
 }
 
-// Task 3 intentionally stops at the ownership-safe boundary. It does not
-// close/drain concrete runtimes, clear or hydrate Project state, build a
-// candidate, or publish a production session. Those operations require the
-// later composition builder and remain unreachable from the production root.
+// The slot is the sole production owner of session replacement. All fallible
+// drain/build work happens outside its short state lock and publishes one
+// complete Project/Graph/Execution/Database envelope.
 pub struct ApplicationSessionSlot {
     inner: Arc<SessionSlotInner>,
 }
@@ -689,10 +707,7 @@ impl ApplicationSessionSlot {
         Ok(())
     }
 
-    fn replace_candidate(
-        &self,
-        candidate: UnpublishedApplicationSession,
-    ) -> Result<(), SessionReplacementError> {
+    fn begin_project_replacement(&self) -> Result<ProjectReplacement, SessionReplacementError> {
         let mut worker = self.begin_replacement()?;
         let old = worker
             .old
@@ -728,9 +743,47 @@ impl ApplicationSessionSlot {
             return Err(SessionReplacementError::RecoveryRequired(required));
         }
         worker.complete_phase(ReplacementPhase::DrainDatabase)?;
-        worker.complete_phase(ReplacementPhase::ClearProject)?;
-        worker.complete_phase(ReplacementPhase::HydrateProject)?;
-        worker.complete_phase(ReplacementPhase::BuildCandidate)?;
+
+        Ok(ProjectReplacement {
+            project: Arc::new(old.project().clone()),
+            worker,
+        })
+    }
+
+    fn finish_project_replacement(
+        &self,
+        mut replacement: ProjectReplacement,
+        builder: &SessionResourceFactoryBuilder,
+        scientific_backend: &Arc<dyn ScientificBackend>,
+    ) -> Result<(), ApplicationSessionRefreshError> {
+        replacement
+            .worker
+            .complete_phase(ReplacementPhase::ClearProject)
+            .map_err(|_| ApplicationSessionRefreshError::Replacement)?;
+        replacement
+            .worker
+            .complete_phase(ReplacementPhase::HydrateProject)
+            .map_err(|_| ApplicationSessionRefreshError::Replacement)?;
+
+        let reusable_instances = replacement
+            .worker
+            .old
+            .as_ref()
+            .map(|old| old.database().instances_for_replacement())
+            .unwrap_or_default();
+        let candidate = build_current_project_candidate(
+            builder,
+            replacement.worker.epoch,
+            replacement.project,
+            reusable_instances,
+            Arc::clone(scientific_backend),
+        )
+        .map_err(|_| ApplicationSessionRefreshError::Candidate)?;
+
+        replacement
+            .worker
+            .complete_phase(ReplacementPhase::BuildCandidate)
+            .map_err(|_| ApplicationSessionRefreshError::Replacement)?;
 
         let mut state = self
             .inner
@@ -738,18 +791,18 @@ impl ApplicationSessionSlot {
             .write()
             .unwrap_or_else(|error| error.into_inner());
         let SessionSlotState::Replacing { epoch, phase } = &*state else {
-            return Err(SessionReplacementError::StaleWorker);
+            return Err(ApplicationSessionRefreshError::Replacement);
         };
-        if *epoch != worker.epoch || *phase != ReplacementPhase::PublishCandidate {
-            return Err(SessionReplacementError::WrongPhase);
+        if *epoch != replacement.worker.epoch || *phase != ReplacementPhase::PublishCandidate {
+            return Err(ApplicationSessionRefreshError::Replacement);
         }
         let session = candidate.into_session();
         if session.epoch() != *epoch {
-            return Err(SessionReplacementError::CandidateConstructionUnavailable);
+            return Err(ApplicationSessionRefreshError::Replacement);
         }
         *state = SessionSlotState::Active(Arc::new(session));
-        worker.completed = true;
-        worker.old.take();
+        replacement.worker.completed = true;
+        replacement.worker.old.take();
         Ok(())
     }
 
@@ -827,10 +880,6 @@ impl ApplicationSessionSlot {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "recovery orchestration is staged until Application owns replacement I/O"
-    )]
     fn claim_recovery(
         &self,
         recovery: SessionRecoveryId,
@@ -870,10 +919,6 @@ impl ApplicationSessionSlot {
         })
     }
 
-    #[allow(
-        dead_code,
-        reason = "the staged slot has no production replacement coordinator yet"
-    )]
     fn retry_session_recovery(
         &self,
         recovery: SessionRecoveryId,
@@ -884,16 +929,50 @@ impl ApplicationSessionSlot {
         if control.deadline().is_expired() {
             return Err(SessionRecoveryError::DeadlineElapsed { phase });
         }
-        // The slot owns the retained session and single-claimer protocol now.
-        // Actual Execution/Database drain and authority resolution require the
-        // composition builder introduced by the later production cutover.
-        Err(SessionRecoveryError::StagedOnly { phase })
+        match phase {
+            SessionRecoveryPhase::DrainOldExecution => {
+                match guard
+                    .old
+                    .execution()
+                    .cancel_and_drain(&ExecutionDrainControl::new(control.deadline().0))
+                {
+                    ExecutionDrainOutcome::Drained { .. } => {
+                        guard.finish(Some(SessionRecoveryPhase::DrainOldDatabase))
+                    }
+                    ExecutionDrainOutcome::TimedOut { .. } => {
+                        Err(SessionRecoveryError::DeadlineElapsed { phase })
+                    }
+                }
+            }
+            SessionRecoveryPhase::DrainOldDatabase => {
+                guard.old.database().close_admission();
+                match guard
+                    .old
+                    .database()
+                    .drain(&DatabaseSessionDrainControl::new(
+                        DatabaseDrainDeadline::at(control.deadline().0),
+                    )) {
+                    DatabaseDrainOutcome::Drained { .. } => {
+                        guard.finish(Some(SessionRecoveryPhase::ClearOldProject))
+                    }
+                    DatabaseDrainOutcome::TimedOut { .. } => {
+                        Err(SessionRecoveryError::DeadlineElapsed { phase })
+                    }
+                }
+            }
+            SessionRecoveryPhase::ClearOldProject => {
+                guard
+                    .old
+                    .project()
+                    .clear_project()
+                    .map_err(|_| SessionRecoveryError::ProjectClearFailed)?;
+                guard.finish(None)
+            }
+            SessionRecoveryPhase::RetryDatabaseCompensation
+            | SessionRecoveryPhase::ResolveOldDatabase => Err(SessionRecoveryError::WrongPhase),
+        }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Database authority resolution is staged until its coordinator is installed"
-    )]
     fn resolve_session_database_recovery(
         &self,
         recovery: SessionRecoveryId,
@@ -907,10 +986,21 @@ impl ApplicationSessionSlot {
         ) {
             return Err(SessionRecoveryError::WrongPhase);
         }
-        // Do not call the incomplete Database recovery seam or manufacture a
-        // successful resolution. The guard drops and reinstalls this exact
-        // retained work before returning the typed staged-only result.
-        Err(SessionRecoveryError::StagedOnly { phase })
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        guard.old.database().close_admission();
+        match guard
+            .old
+            .database()
+            .drain(&DatabaseSessionDrainControl::new(
+                DatabaseDrainDeadline::at(deadline),
+            )) {
+            DatabaseDrainOutcome::Drained { .. } => {
+                guard.finish(Some(SessionRecoveryPhase::ClearOldProject))
+            }
+            DatabaseDrainOutcome::TimedOut { .. } => {
+                Err(SessionRecoveryError::DeadlineElapsed { phase })
+            }
+        }
     }
 
     #[cfg(test)]
@@ -1004,13 +1094,13 @@ impl Default for ApplicationSessionSlot {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum ApplicationSessionRefreshError {
+pub enum ApplicationSessionRefreshError {
     #[error("application session capture failed")]
-    Capture(#[from] SessionCaptureError),
+    Capture(SessionCaptureError),
     #[error("application session candidate build failed")]
-    Candidate(#[from] ProjectSessionCandidateError),
+    Candidate,
     #[error("application session replacement failed")]
-    Replacement(#[from] SessionReplacementError),
+    Replacement,
     #[error("application session composition is not configured")]
     CompositionUnavailable,
 }
@@ -1019,6 +1109,7 @@ pub(crate) enum ApplicationSessionRefreshError {
 pub struct ApplicationState {
     session_slot: Arc<ApplicationSessionSlot>,
     factory_builder: Option<Arc<SessionResourceFactoryBuilder>>,
+    scientific_backend: Option<Arc<dyn ScientificBackend>>,
 }
 
 impl ApplicationState {
@@ -1026,16 +1117,19 @@ impl ApplicationState {
         Self {
             session_slot,
             factory_builder: None,
+            scientific_backend: None,
         }
     }
 
     pub(crate) fn from_composition(
         session_slot: Arc<ApplicationSessionSlot>,
         builder: SessionResourceFactoryBuilder,
+        scientific_backend: Arc<dyn ScientificBackend>,
     ) -> Self {
         Self {
             session_slot,
             factory_builder: Some(Arc::new(builder)),
+            scientific_backend: Some(scientific_backend),
         }
     }
 
@@ -1057,6 +1151,28 @@ impl ApplicationState {
         self.session_slot.revalidate_captured_session(captured)
     }
 
+    pub(crate) fn begin_project_replacement(
+        &self,
+    ) -> Result<ProjectReplacement, SessionReplacementError> {
+        self.session_slot.begin_project_replacement()
+    }
+
+    pub(crate) fn finish_project_replacement(
+        &self,
+        replacement: ProjectReplacement,
+    ) -> Result<(), ApplicationSessionRefreshError> {
+        let builder = self
+            .factory_builder
+            .as_deref()
+            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
+        let scientific_backend = self
+            .scientific_backend
+            .as_ref()
+            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
+        self.session_slot
+            .finish_project_replacement(replacement, builder, scientific_backend)
+    }
+
     pub fn retry_session_recovery(
         &self,
         recovery: SessionRecoveryId,
@@ -1074,18 +1190,10 @@ impl ApplicationState {
     }
 
     pub(crate) fn refresh_current_project(&self) -> Result<(), ApplicationSessionRefreshError> {
-        let builder = self
-            .factory_builder
-            .as_deref()
-            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
-        let current = self.capture_session()?;
-        let epoch = current
-            .epoch()
-            .next()
-            .ok_or(SessionReplacementError::EpochExhausted)?;
-        let candidate =
-            build_current_project_candidate(builder, epoch, Arc::new(current.project().clone()))?;
-        Ok(self.session_slot.replace_candidate(candidate)?)
+        let replacement = self
+            .begin_project_replacement()
+            .map_err(|_| ApplicationSessionRefreshError::Replacement)?;
+        self.finish_project_replacement(replacement)
     }
 }
 
@@ -1098,10 +1206,9 @@ mod tests {
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use crate::execution::identity::ExecutionSessionId;
+    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{GraphRuntimeComponents, GraphRuntimeEpoch};
-    use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::compiler::ProjectCompileCoordinator;
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::{Arc, Barrier};
@@ -1118,7 +1225,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                compiler: Arc::new(ProjectCompileCoordinator::new()),
                 resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
                     BTreeMap::new(),
                     BTreeMap::new(),
@@ -1258,9 +1364,7 @@ mod tests {
         ));
         assert!(matches!(
             application.retry_session_recovery(required.recovery, &control),
-            Err(SessionRecoveryError::StagedOnly {
-                phase: SessionRecoveryPhase::ResolveOldDatabase,
-            })
+            Err(SessionRecoveryError::WrongPhase)
         ));
         let first = slot
             .claim_recovery(required.recovery)

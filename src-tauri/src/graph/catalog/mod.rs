@@ -1,0 +1,51 @@
+//! Graph-owned built-in catalog and localization contracts.
+
+#![deny(unused_must_use)]
+
+mod builtin;
+mod control;
+mod core_nodes;
+pub(crate) mod dataframe;
+pub(crate) mod diagnostics;
+mod distribution;
+mod documentation;
+mod localization;
+mod plot;
+pub(crate) mod project;
+mod statistics;
+
+pub use builtin::{
+    BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
+};
+#[cfg(test)]
+pub(crate) use builtin::{
+    BuiltinAssemblyTestFault, build_builtin_node_system_with_test_fault,
+    builtin_bundle_parts_for_test, register_builtin_nominal_validators_for_test,
+    validate_builtin_bundle_for_test,
+};
+pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
+pub(crate) const CONTROL_REROUTE_NODE_TYPE: &str = "yssbi.reroute.control";
+pub(crate) const EFFECT_REROUTE_NODE_TYPE: &str = "yssbi.reroute.effect";
+pub(crate) const REROUTE_INPUT_PORT: &str = "input";
+pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
+pub(crate) use core_nodes::reroute::validate_reroute_protocol_contract;
+pub use dataframe::DATAFRAME_RESOURCE_SCHEMA_RESOLVER;
+pub(crate) fn reroute_node_type_for_kind(
+    kind: crate::graph::protocol::PortKind,
+) -> crate::graph::protocol::NodeTypeId {
+    crate::graph::protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
+        .expect("built-in reroute protocol identifiers are valid")
+}
+
+pub(crate) use diagnostics::{
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnostic, CompilerDiagnosticDefinition,
+    CompilerDiagnosticDefinitionError, CompilerDiagnosticLocation, CompilerNodeDiagnostic,
+    compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
+    validate_compiler_diagnostic_definitions,
+};
+pub(crate) use localization::{Aliases, Message, Text, authoritative_static_descriptor};
+pub use localization::{
+    BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, I18nBundleValidationError,
+    LocalizedCatalog, LocalizedCatalogItem, LocalizedCategory, LocalizedParameter, LocalizedPort,
+    NodeCreation, ResourceBoundCreateArgs,
+};

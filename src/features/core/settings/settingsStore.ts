@@ -11,8 +11,8 @@ import {
     DEFAULT_EDITOR,
     DEFAULT_APPEARANCE,
     DEFAULT_PROJECT,
-} from "@/app/appConfig/default";
-import { logger } from '@/utils/appLogger';
+} from "@/shared/config-default";
+import { logger } from '@/features/core/observability/logger';
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
 const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";

@@ -43,5 +43,6 @@ command 内旧 workflow、重复 mapper/test 和对应精确债务。事件转�
 Application fact → Transport DTO 单向完成，不建立第二 listener、第二 channel 或双 emit。
 
 完成条件：`debt/presentation_command.rs` 为空，Commands 只保留批准的 Application/Transport
-capability，composition root 只负责构造与注册，production architecture audit、CommandError/
-wire focused tests 和 `pnpm rust:check` 全部通过。
+capability，composition root 只负责构造与注册。当前 graph/catalog/database/variable/
+worksheet/execution/statistics commands 均通过 Application 或 schema mapper，production
+architecture audit、CommandError wire gate 和 `pnpm rust:check` 已通过。

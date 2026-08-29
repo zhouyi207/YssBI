@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
-import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
+import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
 
 const logEntry = {

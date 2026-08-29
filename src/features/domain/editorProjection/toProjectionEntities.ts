@@ -1,5 +1,5 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
-import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
+import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
+import { validateEditorGraphProjection } from '@/shared/types/domain/editorProjectionParser';
 import { portAddressKey } from './portAddressKey';
 import type { EditorProjectionEntities } from './types';
 

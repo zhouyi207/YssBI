@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::schema::DataSchema;
 use crate::data_contract::DataType;
 use crate::graph_document::GraphResourcePath;

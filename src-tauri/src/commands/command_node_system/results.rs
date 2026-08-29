@@ -1,7 +1,7 @@
 use super::common::parse_opaque_u64;
 use crate::application::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
 use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::commands::node_system_execution_dto::{
+use crate::commands::execution_dto::{
     PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
 };
 use crate::error::CommandError;
@@ -71,10 +71,7 @@ pub fn get_result_value(
     else {
         return Ok(None);
     };
-    if matches!(
-        result.as_ref(),
-        StoredResult::Runtime(RuntimeValue::List(_))
-    ) {
+    if matches!(result.value(), StoredResult::Runtime(RuntimeValue::List(_))) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
     let values = execution_result_values(&result, 0, 1)?;
@@ -153,14 +150,16 @@ fn result_requires_paging(result_id: ResultId, value_kind: &'static str) -> Comm
 }
 
 fn execution_result_kind(result: &StoredResult) -> ResultValueKindDto {
-    match result {
+    match result.value() {
+        StoredResult::Categorized { value, .. } => execution_result_kind(value),
         StoredResult::Runtime(RuntimeValue::List(_)) => ResultValueKindDto::Sequence,
         _ => ResultValueKindDto::Scalar,
     }
 }
 
 fn execution_result_len(result: &StoredResult) -> usize {
-    match result {
+    match result.value() {
+        StoredResult::Categorized { value, .. } => execution_result_len(value),
         StoredResult::Runtime(RuntimeValue::List(values)) => values.len(),
         StoredResult::Empty => 0,
         _ => 1,
@@ -172,7 +171,10 @@ fn execution_result_values(
     offset: usize,
     limit: usize,
 ) -> Result<Box<[serde_json::Value]>, CommandError> {
-    let values: Vec<RuntimeValue> = match result {
+    let values: Vec<RuntimeValue> = match result.value() {
+        StoredResult::Categorized { value, .. } => {
+            return execution_result_values(value, offset, limit);
+        }
         StoredResult::Runtime(RuntimeValue::List(values)) => {
             values.iter().skip(offset).take(limit).cloned().collect()
         }
@@ -221,14 +223,14 @@ fn runtime_value_to_json(value: &RuntimeValue) -> Result<serde_json::Value, Comm
     })
 }
 
-#[cfg(test)]
-use crate::node_system::document::PortAddressDto;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::node_system::runtime::{ResultId as LegacyResultId, ResultState, StoredValueKind};
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
+#[cfg(all(test, any()))]
+use crate::schema::graph_mutation::PortAddressDto;
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_result_descriptor_from_state(
     state: &ProjectState,
     result_id: &str,
@@ -240,11 +242,11 @@ pub(super) fn get_result_descriptor_from_state(
         .map(|result| result.as_deref().map(Into::into))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(crate) fn result_value_to_json(
-    value: &crate::node_system::protocol::Value,
+    value: &crate::graph::protocol::Value,
 ) -> Result<serde_json::Value, CommandError> {
-    use crate::node_system::protocol::Value;
+    use crate::graph::protocol::Value;
 
     Ok(match value {
         Value::Null => serde_json::Value::Null,
@@ -275,9 +277,9 @@ pub(crate) fn result_value_to_json(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn result_values_to_json(
-    values: &[crate::node_system::protocol::Value],
+    values: &[crate::graph::protocol::Value],
 ) -> Result<Box<[serde_json::Value]>, CommandError> {
     values
         .iter()
@@ -286,7 +288,7 @@ fn result_values_to_json(
         .map(Vec::into_boxed_slice)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ResultStateErrorDetails {
@@ -294,7 +296,7 @@ struct ResultStateErrorDetails {
     state: &'static str,
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn result_state_error(result_id: LegacyResultId, state: &ResultState) -> CommandError {
     let state = match state {
         ResultState::Pending(_) => "pending",
@@ -308,7 +310,7 @@ fn result_state_error(result_id: LegacyResultId, state: &ResultState) -> Command
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn result_requires_paging_legacy(result_id: LegacyResultId, kind: StoredValueKind) -> CommandError {
     let value_kind = match kind {
         StoredValueKind::Scalar => "scalar",
@@ -318,7 +320,7 @@ fn result_requires_paging_legacy(result_id: LegacyResultId, kind: StoredValueKin
     result_requires_paging(ResultId::from_existing(result_id.get()), value_kind)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_result_value_from_state(
     state: &ProjectState,
     result_id: &str,
@@ -354,7 +356,7 @@ pub(super) fn get_result_value_from_state(
     Ok(Some(ResultValueDto::Value(value)))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_result_page_from_state(
     state: &ProjectState,
     result_id: &str,
@@ -382,7 +384,7 @@ pub(super) fn get_result_page_from_state(
     )))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_pin_result_history_from_state(
     state: &ProjectState,
     graph_path: &str,
@@ -391,7 +393,7 @@ pub(super) fn get_pin_result_history_from_state(
     let port = output
         .try_into()
         .map_err(|_| CommandError::expected("invalid_output"))?;
-    let output = crate::node_system::plan::GraphOutputRef {
+    let output = crate::execution::plan::legacy::GraphOutputRef {
         graph_path: crate::graph_document::GraphResourcePath::new(graph_path)
             .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?,
         port,

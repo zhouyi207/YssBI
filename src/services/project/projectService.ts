@@ -8,11 +8,16 @@ import { parseInternalCompilationErrorDetails } from "@/shared/types/dto/executi
 import { parseExecutionDemandDto } from "@/shared/types/dto/runEventParser";
 
 import type {
-  FunctionSignatureDto,
-  HistoryStatusDto,
-} from "@/shared/types/dto/editorMutation";
-import type { FunctionEditorProjectionDto } from '@/shared/types/dto/editorProjection';
-import type { DatabaseEngineDTO } from '@/shared/types/dto/database';
+  ProjectDatabaseIndexRow,
+  ProjectEventGraphIndexRow,
+  ProjectFunctionGraphIndexRow,
+  ProjectGraphIndexRow,
+  ProjectIndexRow,
+  ProjectVariableIndexRow,
+  ProjectWorksheetIndexRow,
+} from '@/shared/types/domain/project';
+import type { FunctionSignatureDto, HistoryStatusDto } from '@/shared/types/domain/editorMutation';
+import type { DatabaseEngineDTO } from '@/shared/types/domain/database';
 import type { WorksheetChartType } from '@/shared/types/domain/worksheet';
 import {
   isFunctionEditorProjectionDto,
@@ -53,58 +58,6 @@ export function isExecutionCancelledError(error: unknown): boolean {
 function commandSentTerminalRunEvent(error: unknown): boolean {
     return error instanceof IpcError
         && error.details?.terminalRunEventSent === true;
-}
-
-interface ProjectGraphIndexRowBase {
-    path: string;
-    name: string;
-    revision: number;
-}
-
-export interface ProjectEventGraphIndexRow extends ProjectGraphIndexRowBase {
-    type: "event";
-}
-
-export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
-    type: "function";
-    functionRevision: number;
-    functionSignature: FunctionSignatureDto;
-    functionEditorProjection: FunctionEditorProjectionDto;
-}
-
-export type ProjectGraphIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
-
-export interface ProjectWorksheetIndexRow {
-  worksheetPath: string;
-  name: string;
-  databaseId: string;
-  chartType: WorksheetChartType;
-  revision: number;
-}
-
-export interface ProjectVariableIndexRow {
-  id: string;
-  resourcePath: string;
-  revision: number;
-  name: string;
-  dataType: import('@/shared/types/domain').DataType;
-  dataValue: import('@/shared/types/domain').DataValue;
-  description: string;
-  scope: import('@/shared/types/domain/variable').VariableScope;
-  tags: string[];
-  ownerGraphPath?: string | null;
-  ownerGraphName?: string | null;
-  ownerGraphKind?: 'event' | 'function' | null;
-}
-
-export interface ProjectDatabaseIndexRow {
-  id: string;
-  resourcePath: string;
-  revision: number;
-  engine: DatabaseEngineDTO;
-  schemaVersion: number;
-  required: boolean;
-  name: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -302,19 +255,6 @@ export interface ProjectActivationResult {
   projectInstanceId: string;
   activationRevision: number;
 }
-
-export interface ProjectIndexRow {
-  projectInstanceId: string;
-  projectName: string;
-  exportTime: string;
-  publicationRevision: number;
-  history: HistoryStatusDto;
-  graphs: ProjectGraphIndexRow[];
-  worksheets: ProjectWorksheetIndexRow[];
-  variables: ProjectVariableIndexRow[];
-  databases: ProjectDatabaseIndexRow[];
-}
-
 
 // ==================== 项目状态管理 API ====================
 

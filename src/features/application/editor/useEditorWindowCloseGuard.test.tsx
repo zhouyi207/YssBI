@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentAppWindow } from '@/services/platform/appWindow';
 import type { AppWindowHandle } from '@/services/platform/appWindow';
-import { WorkbenchLayoutError } from '@/features/core/dockview/workbenchDockviewPort';
+import { WorkbenchLayoutError } from '@/features/core/dockview/workbenchTypes';
 import { useEditorWindowCloseGuard } from './useEditorWindowCloseGuard';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -57,7 +57,7 @@ vi.mock('@/app/i18n', () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   },
 }));
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: { app: { error: mocks.logError, warn: mocks.logWarn } },
 }));
 

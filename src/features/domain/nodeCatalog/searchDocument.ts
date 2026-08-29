@@ -1,5 +1,5 @@
 import { pinyin } from 'pinyin-pro';
-import type { LocalizedCatalogItemDto } from '@/shared/types/dto/localizedCatalog';
+import type { LocalizedCatalogItemDto } from '@/shared/types/domain/localizedCatalog';
 
 export interface CatalogSearchDocument {
   nodeTypeId: string;

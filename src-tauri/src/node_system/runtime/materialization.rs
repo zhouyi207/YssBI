@@ -3,8 +3,8 @@ use super::{
     RunError, RunId, RunPhase, RuntimeValue, StoredValue, StreamReceiveError, StreamSendError,
     StreamValue, bounded_stream_channel_with_deadline, check_terminal,
 };
-use crate::node_system::plan::{MaterializationLimits, PlannedAdapter};
-use crate::node_system::protocol::Value;
+use crate::execution::plan::legacy::{MaterializationLimits, PlannedAdapter};
+use crate::graph::protocol::Value;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;

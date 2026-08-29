@@ -1,13 +1,14 @@
 import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 
 import { switchEditorTab } from './switchEditorTab';
 
 function activeEditorPanelInGroup(groupId: string) {
-  const panels = workbenchDockviewPort
+  const panels = workbenchDockviewRead
     .listGroupPanels(groupId)
     .filter((panel) => panel.metadata.role === 'editor');
-  const activePanelInstanceId = workbenchDockviewPort
+  const activePanelInstanceId = workbenchDockviewRead
     .listGroups()
     .find((group) => group.groupId === groupId)
     ?.activePanelInstanceId;
@@ -23,14 +24,14 @@ export async function splitEditorAtEdge(
   const panel = activeEditorPanelInGroup(groupId);
   if (!panel || panel.metadata.role !== 'editor') return null;
 
-  const split = await workbenchDockviewPort.split({
+  const split = await workbenchDockviewControl.split({
     panelInstanceId: panel.panelInstanceId,
     referenceGroupId: groupId,
     direction: edge,
   });
   if (!split) return null;
 
-  const moved = workbenchDockviewPort.getPanel(panel.panelInstanceId);
+  const moved = workbenchDockviewRead.getPanel(panel.panelInstanceId);
   if (moved?.metadata.role !== 'editor') return null;
   await switchEditorTab(
     moved.groupId,

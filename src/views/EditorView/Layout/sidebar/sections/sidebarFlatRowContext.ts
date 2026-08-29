@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { DetailTarget, SidebarSectionActionConfig, SidebarSectionKey } from '@/features/application/viewCapabilities';
+import type { DetailTarget } from '@/shared/types/ui/detail';
+import type { SidebarSectionActionConfig, SidebarSectionKey } from '@/features/core/sidebar';
 
 export type SidebarFlatRowContextValue = {
   sectionActions: Partial<Record<SidebarSectionKey, SidebarSectionActionConfig>>;

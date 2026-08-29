@@ -1,17 +1,40 @@
 //! Serial-correlation test commands.
 
-use crate::error::CommandError;
-use crate::sci::api::time_series::serial_tests::{
-    SerialTestsInput, SerialTestsOutput, compute_serial_tests as compute_serial_tests_api,
+use crate::application::statistics::{
+    SerialTestsApplicationError, SerialTestsRequest,
+    compute_serial_tests as compute_serial_tests_application,
 };
-use crate::sci::engine::SciContext;
-use crate::sci::error::SciError;
+use crate::error::CommandError;
+use crate::schema::statistics::{
+    DurbinWatsonResultDto, SerialTestWithLagDto, SerialTestsRequestDto, SerialTestsResponseDto,
+};
 
 #[tauri::command]
-pub fn compute_serial_tests(req: SerialTestsInput) -> Result<SerialTestsOutput, CommandError> {
-    compute_serial_tests_api(&SciContext::rust(), req).map_err(sci_command_error)
+pub fn compute_serial_tests(
+    req: SerialTestsRequestDto,
+) -> Result<SerialTestsResponseDto, CommandError> {
+    let result = compute_serial_tests_application(SerialTestsRequest {
+        residuals: req.residuals,
+        lags: req.lags,
+        exog: req.exog,
+        bg_nomiss0: req.bg_nomiss0,
+    })
+    .map_err(sci_command_error)?;
+    Ok(SerialTestsResponseDto {
+        bg: result.bg.map(|value| SerialTestWithLagDto {
+            stat: value.stat,
+            p_value: value.p_value,
+            lags: value.lags,
+        }),
+        q: result.q.map(|value| SerialTestWithLagDto {
+            stat: value.stat,
+            p_value: value.p_value,
+            lags: value.lags,
+        }),
+        dw: DurbinWatsonResultDto { d: result.dw.d },
+    })
 }
 
-fn sci_command_error(error: SciError) -> CommandError {
-    CommandError::expected(error.code())
+fn sci_command_error(error: SerialTestsApplicationError) -> CommandError {
+    CommandError::expected(error.command_code())
 }

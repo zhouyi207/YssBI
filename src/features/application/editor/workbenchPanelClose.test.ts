@@ -8,7 +8,7 @@ import type {
 import type {
   WorkbenchPanelCommitToken,
   WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+} from '@/features/core/dockview/workbenchTypes';
 
 const mocks = vi.hoisted(() => {
   type FakePanel = {
@@ -214,13 +214,14 @@ vi.mock('i18next', () => ({
   },
 }));
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
     listPanels: () => mocks.panels,
   },
 }));
 
 vi.mock('@/features/core/dockview/workbenchDockviewInternal', () => ({
+  workbenchDockviewRuntime: { control: {} },
   workbenchDockviewInternal: {
     commitRemove: mocks.commitRemove,
     runPublicationTransaction: mocks.runPublicationTransaction,
@@ -246,6 +247,10 @@ vi.mock('@/features/core/worksheet/worksheetStore', () => ({
     }),
     setState: mocks.setWorksheetState,
   },
+}));
+
+vi.mock('@/features/application/worksheet/saveWorksheetDocument', () => ({
+  saveWorksheetDocument: mocks.saveWorksheet,
 }));
 
 vi.mock('@/features/application/projectCommandContext', () => ({
@@ -291,7 +296,7 @@ vi.mock('@/features/core/viewport', () => ({
   releaseEditorViewport: mocks.releaseEditorViewport,
 }));
 
-vi.mock('@/features/core/editor/detail/clearDetailFocusForClosedTab', () => ({
+vi.mock('@/features/application/editor/clearDetailFocusForClosedTab', () => ({
   clearDetailFocusForClosedTab: mocks.clearDetailFocusForClosedTab,
 }));
 

@@ -16,7 +16,7 @@ import type {
   FilterOperatorDto,
   FilterPredicateDto,
   SchemaAwareParameterEditorDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 
 interface EditorProps<TEditor, TValue> {
   editor: TEditor;

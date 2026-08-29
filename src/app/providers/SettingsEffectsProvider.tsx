@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { useApplicationSettings } from "@/features/application/settings/applicationSettings";
 import {
   applySmoothScrollSetting,
   syncColorThemePreset,
@@ -10,6 +10,7 @@ import {
     resolveThemeTokens,
     type ResolvedThemeTokens,
 } from "@/shared/theme/themeTokens";
+import { THEME_TOKENS_CHANGED_EVENT } from "@/shared/theme/chartTheme";
 
 import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
 import { SettingsSyncCoordinator } from "@/features/application/settings/settingsSyncCoordinator";
@@ -104,17 +105,22 @@ export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens)
     set("--pin-temporal", tokens.pins.temporal);
     set("--pin-table", tokens.pins.table);
     set("--pin-object", tokens.pins.object);
+
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(THEME_TOKENS_CHANGED_EVENT));
+    }
 }
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const theme = useSettingsStore((s) => s.theme);
-    const language = useSettingsStore((s) => s.appearance.language);
-    const colorTheme = useSettingsStore((s) => s.appearance.colorTheme);
-    const smoothScroll = useSettingsStore((s) => s.appearance.smoothScroll);
-    const isLoading = useSettingsStore((s) => s.isLoading);
-    const updateTheme = useSettingsStore((s) => s.updateTheme);
-    const updateAppearance = useSettingsStore((s) => s.updateAppearance);
-    const load = useSettingsStore((s) => s.load);
+    const {
+        theme,
+        appearance,
+        isLoading,
+        load,
+        updateTheme,
+        updateAppearance,
+    } = useApplicationSettings();
+    const { language, colorTheme, smoothScroll, lastLightColorTheme, lastDarkColorTheme } = appearance;
 
     useWindowDecorationEffect();
 
@@ -137,15 +143,14 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
     useEffect(() => {
         if (isLoading) return;
         const mode = getThemeModeForPreset(colorTheme);
-        const state = useSettingsStore.getState();
-        const remembered = mode === "light" ? state.appearance.lastLightColorTheme : state.appearance.lastDarkColorTheme;
+        const remembered = mode === "light" ? lastLightColorTheme : lastDarkColorTheme;
         if (remembered !== colorTheme) {
             updateAppearance(mode === "light"
                 ? { lastLightColorTheme: colorTheme }
                 : { lastDarkColorTheme: colorTheme });
         }
         syncColorThemePreset(colorTheme, updateTheme);
-    }, [colorTheme, updateAppearance, updateTheme, isLoading]);
+    }, [colorTheme, lastDarkColorTheme, lastLightColorTheme, updateAppearance, updateTheme, isLoading]);
 
     useEffect(() => {
         applySmoothScrollSetting(smoothScroll);

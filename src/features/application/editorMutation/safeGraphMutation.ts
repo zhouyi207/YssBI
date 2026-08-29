@@ -2,7 +2,7 @@
 import { executeCommandOutcome } from '@/features/core/history';
 import type { GraphMutationCommandInvocation } from '@/features/core/history/commandExecutor';
 import type { GraphMutationCommandResult } from '@/features/core/history/types';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 
 export async function executeSafeGraphMutationOutcome(

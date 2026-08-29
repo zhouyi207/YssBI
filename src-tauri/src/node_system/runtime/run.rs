@@ -3,9 +3,9 @@ use super::{
     RelationalError, RelationalErrorCode, RunResourceBudgets, SchedulingPolicy, StoredValue,
     StreamReceiveError,
 };
-use crate::node_system::analysis::CompileProvenance;
-use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
-use crate::node_system::protocol::Value;
+use crate::execution::plan::legacy::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
+use crate::graph::analysis::contracts::CompileProvenance;
+use crate::graph::protocol::Value;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -413,8 +413,11 @@ impl ActivationId {
 
 impl FrameId {
     pub(crate) fn allocate(allocator: &AtomicU64) -> Result<Self, RunError> {
-        crate::node_system::allocate_nonzero_id(allocator)
-            .map(|id| Self(id.get()))
+        allocator
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                NonZeroU64::new(current)?.get().checked_add(1)
+            })
+            .map(Self)
             .map_err(|_| RunError::RuntimeIdExhausted)
     }
 
@@ -552,7 +555,7 @@ pub struct RunResult {
     pub result_ids: BTreeMap<Box<str>, super::ResultId>,
     pub(crate) results: super::ResultStore,
     pub committed_variable_ids: Box<[crate::variable::VariableId]>,
-    pub resource_mutation: Option<crate::event::ResourceMutationResultDto>,
+    pub resource_mutation: Option<crate::schema::application_event::ResourceMutationResultDto>,
 }
 
 impl RunResult {

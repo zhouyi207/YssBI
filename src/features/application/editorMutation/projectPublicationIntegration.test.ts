@@ -15,8 +15,8 @@ function productionFiles(directory: string): string[] {
 
 describe('project publication integration boundary', () => {
   it('has a single project-event publication owner', () => {
-    const owners = productionFiles('src/features').filter((path) =>
-      readFileSync(path, 'utf8').includes('syncApplicationEventPort().resourceMutationCommitted'),
+    const owners = productionFiles('src/features/application').filter((path) =>
+      readFileSync(path, 'utf8').includes('publishResourceMutationCommitted:'),
     );
 
     expect(owners).toHaveLength(1);

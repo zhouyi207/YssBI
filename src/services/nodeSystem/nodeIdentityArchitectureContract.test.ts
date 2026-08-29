@@ -19,7 +19,8 @@ const sourceRoot = resolve('src');
 const auditPath = 'src/services/nodeSystem/nodeIdentityArchitectureContract.test.ts';
 const functionPinSource = 'src/shared/types/domain/functionSignaturePin.ts';
 const dataTypeSource = 'src/shared/types/domain/dataType.ts';
-const functionSignatureDtoSource = 'src/shared/types/dto/editorMutation.ts';
+const functionSignatureDtoSource = 'src/shared/types/domain/editorMutation.ts';
+const functionSignatureWireSource = 'src/shared/types/dto/editorMutation.ts';
 const graphDataStoreSource = 'src/features/core/dataStore/graphDataStore.ts';
 const nodeDetailPanelSource = 'src/views/EditorView/Layout/Detail/panels/NodeDetailPanel.tsx';
 
@@ -27,6 +28,7 @@ const fixtureSupportSources = {
   [functionPinSource]: readFileSync(resolve(functionPinSource), 'utf8'),
   [dataTypeSource]: readFileSync(resolve(dataTypeSource), 'utf8'),
   [functionSignatureDtoSource]: readFileSync(resolve(functionSignatureDtoSource), 'utf8'),
+  [functionSignatureWireSource]: readFileSync(resolve(functionSignatureWireSource), 'utf8'),
   [graphDataStoreSource]: readFileSync(resolve(graphDataStoreSource), 'utf8'),
 } as const;
 
@@ -670,7 +672,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     },
     {
       'src/__architecture_fixture__/entry.ts': `
-        import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+        import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
         import { dataTypeFromDisplayString } from '../shared/types/domain/dataType';
         interface Envelope<T> {
           payload: T;
@@ -688,7 +690,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import { createDataSignaturePin as renamedPin } from '../shared/types/domain/functionSignaturePin';
           export const project = (signature: FunctionSignatureDto) =>
             signature.parameters.map((parameter) =>
@@ -700,7 +702,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import * as pins from '../shared/types/domain/functionSignaturePin';
           export const project = (signature: FunctionSignatureDto) =>
             signature.parameters.map((parameter) =>
@@ -712,7 +714,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import { createDataSignaturePin } from '../shared/types/domain/functionSignaturePin';
           const renamedPin = createDataSignaturePin;
           export const project = (signature: FunctionSignatureDto) =>
@@ -728,7 +730,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
           export { createDataSignaturePin as movedPin } from '../shared/types/domain/functionSignaturePin';
         `,
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import { movedPin } from './bridge';
           import { dataTypeFromDisplayString } from '../shared/types/domain/dataType';
           export const project = (signature: FunctionSignatureDto) =>
@@ -744,7 +746,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/helper.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import { createDataSignaturePin as buildPin } from '../shared/types/domain/functionSignaturePin';
           import { dataTypeFromDisplayString as parseType } from '../shared/types/domain/dataType';
           export const movedHelper = (rawSignature: FunctionSignatureDto) =>
@@ -764,7 +766,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           import { dataTypeFromDisplayString as parseType } from '../shared/types/domain/dataType';
           export const project = (signature: FunctionSignatureDto) =>
             parseType(signature.return_type ?? 'Any');
@@ -775,7 +777,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
     [
       {
         'src/__architecture_fixture__/entry.ts': `
-          import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+          import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
           export const project = (signature: FunctionSignatureDto) =>
             signature.parameters.map((parameter) => ({
               id: parameter.id,
@@ -794,7 +796,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
   it('tracks parser results through aliases into Any fallback and fixed Result projection', () => {
     const offenders = sourceOffendersFromFixture({
       'src/__architecture_fixture__/entry.ts': `
-        import type { FunctionSignatureDto } from '../shared/types/dto/editorMutation';
+        import type { FunctionSignatureDto } from '../shared/types/domain/editorMutation';
         import { createDataSignaturePin as makePin } from '../shared/types/domain/functionSignaturePin';
         import { dataTypeFromDisplayString as parseType } from '../shared/types/domain/dataType';
         function project(signature: FunctionSignatureDto) {

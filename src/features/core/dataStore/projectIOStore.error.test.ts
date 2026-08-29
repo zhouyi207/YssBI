@@ -6,10 +6,6 @@ import {
   startProjectLifecycle,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { LoadStatus } from '@/shared/types/ui/common';
-import {
-  registerProjectIOApplicationPort,
-  resetProjectIOApplicationPort,
-} from './projectIOApplicationPort';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 
 const loggerMocks = vi.hoisted(() => ({
@@ -20,7 +16,7 @@ const loggerMocks = vi.hoisted(() => ({
 const loadGraphProjection = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
 const removeProjectScopedWorkbenchPanels = vi.hoisted(() => vi.fn(async () => undefined));
 
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     sys: loggerMocks,
   },
@@ -34,30 +30,22 @@ vi.mock('@/services/project/projectService', () => ({
   },
 }));
 
-const projectInstanceId = 'project-error-state-test';
+vi.mock('@/features/application/project/projectWorkbenchLifecycle', () => ({
+  removeProjectScopedWorkbenchPanels,
+}));
 
-function installProjectIOPort(): void {
-  registerProjectIOApplicationPort({
-    hydrateFunctionSignatures: () => undefined,
-    resetFunctionSignatures: () => undefined,
-    resetHistory: () => undefined,
-    validatePublicationStart: () => undefined,
-    startPublication: () => undefined,
-    acceptProjectActivation: () => true,
-    reconcileOpenTabs: () => undefined,
-    removeProjectScopedWorkbenchPanels,
-    resetGraphProjection: () => undefined,
-    beginGraphLoad: () => 1,
-    loadGraphProjection,
-    submitPublication: async () => undefined,
-  });
-}
+vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
+  beginGraphLoadLifecycle: () => 1,
+  loadGraphProjection,
+}));
+
+const projectInstanceId = 'project-error-state-test';
 
 describe('projectIOStore error references', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     startProjectLifecycle(projectInstanceId);
-    installProjectIOPort();
     useProjectIOStore.setState({
       status: LoadStatus.Idle,
       error: null,
@@ -73,7 +61,6 @@ describe('projectIOStore error references', () => {
   });
 
   afterEach(() => {
-    resetProjectIOApplicationPort();
     clearProjectLifecycle();
   });
 

@@ -5,6 +5,7 @@ import {
   type PresentationWindowState,
 } from '@/features/application/presentation';
 import type { CurrentWindowActions } from './useCurrentWindowActions';
+import { useCustomTitleBar } from './useWindowDecorations';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
 
@@ -32,6 +33,7 @@ export function PresentationWindowShell({
   children,
 }: PresentationWindowShellProps) {
   const { t } = useTranslation();
+  const customChrome = useCustomTitleBar();
   const error = presentationWindowErrorMessage(state, {
     ...errorMessages,
     pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
@@ -51,6 +53,7 @@ export function PresentationWindowShell({
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-foreground">
       <WindowChrome
+        customChrome={customChrome}
         childWindow
         actions={
           <WindowChromeControls

@@ -1,4 +1,4 @@
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from '@/app/appConfig/default';
+import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from '@/shared/config-default';
 import type { ThemeSettings } from '@/shared/types/settings';
 
 const THEME_BASE_KEYS = [

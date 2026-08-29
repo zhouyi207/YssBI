@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 
 import { loadActivatedProject } from '@/features/application/project/projectIOStore';
 import { resolveActiveProjectPath } from '@/features/application/project/projectSession';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import {
   captureProjectIdentity,
@@ -25,7 +24,7 @@ import {
   hasPendingGraphMutations,
   waitForPendingGraphMutations,
 } from '@/features/application/editorMutation/pendingMutationRegistry';
-import { resultRef } from '@/features/core/resultSource';
+import { resultRef } from '@/features/application/results';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
   captureSettledGraphSaveCommandContext,
@@ -34,15 +33,17 @@ import {
 } from '@/features/application/projectCommandContext';
 import {
   useExecutionStore,
-  getExecutionEventGraph,
-  resolveExecutionGraphPath,
   graphHasClearableArtifacts,
 } from '@/features/core/execution';
+import {
+  getExecutionEventGraph,
+  resolveExecutionGraphPath,
+} from './resolveExecutionGraphPath';
 
 import type { RecordedEvent } from '@/shared/types/ui/execution';
 import { ensureGraphExecutionTerminal } from '@/features/core/execution/executionRecording';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   ProjectLifecycleProtocolError,
   applyProjectLifecycleReceipt,
@@ -53,6 +54,7 @@ import {
   type PendingProjectLifecycleOperation,
 } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+import { saveWorksheetDocument } from '@/features/application/worksheet/saveWorksheetDocument';
 import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 import {
   captureActiveEditorCommandTarget,
@@ -173,7 +175,7 @@ export function useProjectOperations() {
       }
 
       if (target.resourceKind === 'worksheet') {
-        const saved = await useWorksheetStore.getState().saveDocument(target.resourceRef);
+        const saved = await saveWorksheetDocument(target.resourceRef);
         if (!isEditorCommandTargetCurrent(target)) return;
         if (!saved) {
           showBlockingMessage(t('notifications.project.saveFailed', {

@@ -16,26 +16,30 @@ import {
 import { useEditorStore } from '@/features/core/editor';
 import { useResourceStore } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
 import { ProjectService } from '@/services/project/projectService';
 import { normalizeIpcError } from '@/services/ipc';
 import type {
   LifecycleMutationOutcome,
   LifecycleMutationResultDto,
   ProjectRecordRow,
-} from '@/shared/types/dto/project';
+} from '@/shared/types/domain/project';
 
 import { useProjectOperations } from '@/features/application/editor/useProjectOperations';
 import { useProjectPicker } from './useProjectPicker';
 import { saveAllDirtyGraphs } from '@/features/application/editor/saveAllDirtyGraphs';
-import { logger } from '@/utils/appLogger';
-import {
-  installCoreApplicationTestPorts,
-  resetCoreApplicationTestPorts,
-} from '@/features/application/testHelpers/coreApplicationPorts';
+import { logger } from '@/features/application/observability/appLogger';
 import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 import { removeProjectScopedWorkbenchPanels } from './projectWorkbenchLifecycle';
+import * as projectWorkbenchLifecycle from './projectWorkbenchLifecycle';
+
+function deliverLifecycleEvent(result: LifecycleMutationResultDto): void {
+  void applyProjectLifecycleReceipt(
+    result,
+    'event',
+    createProjectLifecycleReceiptDependencies(),
+  );
+}
 
 const navigate = vi.fn();
 const openPathDialog = vi.hoisted(() => vi.fn());
@@ -192,18 +196,6 @@ describe('project lifecycle initiating operations', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     resetProjectLifecycleReceiptHandlerForTests();
-    installCoreApplicationTestPorts({
-      syncEvents: {
-        applyProjectLifecycleReceipt: async (result, dependencies) => {
-          await applyProjectLifecycleReceipt(
-            result as LifecycleMutationResultDto,
-            'event',
-            dependencies as Parameters<typeof applyProjectLifecycleReceipt>[2]
-              ?? createProjectLifecycleReceiptDependencies(),
-          );
-        },
-      },
-    });
     vi.mocked(saveAllDirtyGraphs).mockResolvedValue(true);
     openPathDialog.mockResolvedValue({
       ok: true,
@@ -236,14 +228,10 @@ describe('project lifecycle initiating operations', () => {
     act(() => root.unmount());
     host.remove();
     uiStore.finishProgress();
-    resetCoreApplicationTestPorts();
   });
 
 
   it('resets project-scoped editor context after authoritative replacement', async () => {
-    installCoreApplicationTestPorts({
-      projectIO: { removeProjectScopedWorkbenchPanels },
-    });
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
@@ -297,9 +285,8 @@ describe('project lifecycle initiating operations', () => {
       await cleanup.promise;
       order.push('cleanup:complete');
     });
-    installCoreApplicationTestPorts({
-      projectIO: { removeProjectScopedWorkbenchPanels },
-    });
+    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
+      .mockImplementation(removeProjectScopedWorkbenchPanels);
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     mockProjectBHydration();
@@ -350,9 +337,8 @@ describe('project lifecycle initiating operations', () => {
     ) => {
       await cleanup.promise;
     });
-    installCoreApplicationTestPorts({
-      projectIO: { removeProjectScopedWorkbenchPanels },
-    });
+    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
+      .mockImplementation(removeProjectScopedWorkbenchPanels);
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     mockProjectBHydration();
@@ -409,7 +395,7 @@ describe('project lifecycle initiating operations', () => {
     await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
     const result = saveAsReceipt(saveAs.mock.calls[0][1]);
     await act(async () => {
-      new ProjectLifecycleCommittedHandler().handle({ result });
+      deliverLifecycleEvent(result);
       await vi.waitFor(() => expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2));
     });
     await act(async () => {
@@ -501,7 +487,7 @@ describe('project lifecycle initiating operations', () => {
     const result = projectReceipt(create.mock.calls[0][2], 'create', { row: created });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
     await act(async () => {
-      new ProjectLifecycleCommittedHandler().handle({ result });
+      deliverLifecycleEvent(result);
       await vi.waitFor(() => {
         expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       });
@@ -533,7 +519,7 @@ describe('project lifecycle initiating operations', () => {
     });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
     await act(async () => {
-      new ProjectLifecycleCommittedHandler().handle({ result });
+      deliverLifecycleEvent(result);
       await vi.waitFor(() => {
         expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       });
@@ -573,7 +559,7 @@ describe('project lifecycle initiating operations', () => {
 
       if (order === 'event-first') {
         await act(async () => {
-          new ProjectLifecycleCommittedHandler().handle({ result: structuredClone(result) });
+          deliverLifecycleEvent(structuredClone(result));
           await vi.waitFor(() => {
             expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
           });
@@ -601,7 +587,7 @@ describe('project lifecycle initiating operations', () => {
       expect(hydrate).not.toHaveBeenCalled();
 
       await act(async () => {
-        new ProjectLifecycleCommittedHandler().handle({ result: structuredClone(result) });
+        deliverLifecycleEvent(structuredClone(result));
         await Promise.resolve();
       });
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
@@ -630,15 +616,8 @@ describe('project lifecycle initiating operations', () => {
       cleanupCall += 1;
       if (cleanupCall === 1) await cleanup.promise;
     });
-    installCoreApplicationTestPorts({
-      projectIO: {
-        acceptProjectActivation: (projectInstanceId, revision) =>
-          projectPublicationCoordinator.acceptProjectActivation(projectInstanceId, revision),
-        startPublication: (projectInstanceId, revision) =>
-          projectPublicationCoordinator.startProject(projectInstanceId, revision),
-        removeProjectScopedWorkbenchPanels: removeWorkbenchPanels,
-      },
-    });
+    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
+      .mockImplementation(removeWorkbenchPanels);
 
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles')
@@ -745,7 +724,7 @@ describe('project lifecycle initiating operations', () => {
     });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
     await act(async () => {
-      new ProjectLifecycleCommittedHandler().handle({ result });
+      deliverLifecycleEvent(result);
       await vi.waitFor(() => {
         expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       });

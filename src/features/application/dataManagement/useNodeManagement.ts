@@ -6,7 +6,7 @@ import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { executeCommand } from '@/features/core/history';
 import { canDeleteNode } from '@/features/core/dataStore/graphNodeSelectors';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,

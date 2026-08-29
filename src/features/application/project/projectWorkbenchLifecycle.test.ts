@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import {
   captureProjectLifecycleState,
   startProjectLifecycle,
@@ -37,8 +37,8 @@ vi.mock('@/features/application/layout/workbenchLayoutController', () => ({
   },
 }));
 
-vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
-  workbenchDockviewPort: {
+vi.mock('@/features/core/dockview/workbenchRead', () => ({
+  workbenchDockviewRead: {
     get isReady() {
       return lifecycleMocks.state.ready;
     },
@@ -66,7 +66,7 @@ vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
   },
 }));
 
-vi.mock('@/features/core/dataStore/projectClientReset', () => ({
+vi.mock('@/features/application/project/projectReset', () => ({
   resetProjectScopedRightSidebarState: lifecycleMocks.resetResultAndContext,
 }));
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Suspense } from 'react';
-import { useResultViewPresentation } from '@/features/application/viewCapabilities';
+import { useResultViewPresentation } from '@/features/application/results';
 import { SectionHeader } from './RegressionShared';
 import { REPORT_SECTION_ICONS, type ReportSectionIcon } from './reportIcons';
 

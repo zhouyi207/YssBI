@@ -1,19 +1,26 @@
-use super::common::{mutation_conflict_to_command_error, parse_graph_path};
+#[cfg(all(test, any()))]
+use super::common::mutation_conflict_to_command_error;
+use super::common::parse_graph_path;
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::event::emit_project_event;
-use crate::event::{Event, EventProject, GraphMutationResultDto, emit_project_event_result};
+use crate::event::{Event, EventProject, emit_project_event_result};
+#[cfg(all(test, any()))]
+use crate::graph::document::ClipboardSubgraph;
+use crate::graph::document::EditorGraphMutation;
 use crate::graph_document::NodeId;
-use crate::node_system::analysis::EditorGraphProjectionDto;
-use crate::node_system::document::{ClipboardSubgraphDto, EditorGraphMutationDto, MutationRequest};
-use crate::project::ProjectInstanceId;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
+use crate::project::{MutationRequest, ProjectInstanceId};
+use crate::schema::application_event::GraphMutationResultDto;
+use crate::schema::editor_projection_types::EditorGraphProjectionDto;
+use crate::schema::graph_clipboard::ClipboardSubgraphDto;
+use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::{AppHandle, State};
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn hydrate_editor_graph_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -41,7 +48,7 @@ pub fn hydrate_editor_graph(
             locale,
         ))
         .map_err(open_graph_command_error)?;
-    EditorGraphProjectionDto::try_from(receipt.projection())
+    crate::schema::editor_projection::map_editor_projection(receipt.projection())
         .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
@@ -82,13 +89,13 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(crate) fn export_graph_subgraph_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     node_ids: Vec<NodeId>,
-) -> Result<ClipboardSubgraphDto, CommandError> {
+) -> Result<ClipboardSubgraph, CommandError> {
     state
         .export_editor_subgraph(
             &project_instance_id,
@@ -107,20 +114,33 @@ pub fn export_graph_subgraph(
 ) -> Result<ClipboardSubgraphDto, CommandError> {
     application
         .export_graph_subgraph(project_instance_id, parse_graph_path(graph_path)?, node_ids)
+        .map(ClipboardSubgraphDto::from)
         .map_err(map_editor_resource_error)
 }
 
 pub(super) fn parse_editor_mutation_request(
     request: serde_json::Value,
-) -> Result<MutationRequest<EditorGraphMutationDto>, CommandError> {
-    serde_json::from_value(request.clone()).map_err(|_| {
-        let code = if is_create_node_descriptor_shape_error(&request) {
-            "catalog_descriptor_invalid"
-        } else {
-            "invalid_editor_mutation"
-        };
-        CommandError::expected(code)
-    })
+) -> Result<MutationRequest<EditorGraphMutation>, CommandError> {
+    let request =
+        serde_json::from_value::<MutationRequest<EditorGraphMutationDto>>(request.clone())
+            .map_err(|_| {
+                let code = if is_create_node_descriptor_shape_error(&request) {
+                    "catalog_descriptor_invalid"
+                } else {
+                    "invalid_editor_mutation"
+                };
+                CommandError::expected(code)
+            })?;
+    let payload = request
+        .payload
+        .try_into()
+        .map_err(|_| CommandError::expected("invalid_editor_mutation"))?;
+    Ok(MutationRequest::new(
+        request.resource,
+        request.base_revision,
+        request.operation_id,
+        payload,
+    ))
 }
 
 fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
@@ -143,14 +163,14 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
         return true;
     }
     create.get("descriptor").is_none_or(|descriptor| {
-        serde_json::from_value::<crate::node_system::catalog::NodeCreationDescriptor>(
+        serde_json::from_value::<crate::schema::catalog::NodeCreationDescriptorDto>(
             descriptor.clone(),
         )
         .is_err()
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(crate) fn mutate_graph_document_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -171,7 +191,7 @@ pub(crate) fn mutate_graph_document_with_emitter(
     if !result.delta.payload.operations.is_empty() {
         emit(Event::Project(EventProject::GraphDelta {
             project_instance_id: result.project_instance_id.clone(),
-            delta: result.delta.clone(),
+            delta: crate::schema::application_event::graph_delta_to_transport(&result.delta),
         }));
     }
     Ok(result)
@@ -199,32 +219,18 @@ pub fn mutate_graph_document(
         emit_project_event_result(
             &app,
             &Event::Project(EventProject::GraphDelta {
-                project_instance_id: result.project_instance_id.clone(),
-                delta: result.delta.clone(),
+                project_instance_id: result.project_instance_id.to_string(),
+                delta: crate::schema::application_event::graph_delta_to_transport(&result.delta),
             }),
         )
         .map_err(|error| CommandError::diagnosed("graph_event_emit_failed", error))?;
     }
-    Ok(result)
+    crate::schema::application_event::graph_mutation_to_transport(&result)
+        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 fn map_editor_resource_error(
     error: crate::application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
-    use crate::application::resource_mutation::ResourceMutationApplicationError;
-    match error {
-        ResourceMutationApplicationError::SessionCapture(error) => {
-            session_capture_command_error(error)
-        }
-        ResourceMutationApplicationError::Project(error) => CommandError::from(error),
-        ResourceMutationApplicationError::Mutation(error) => {
-            mutation_conflict_to_command_error(error, "graph_revision_conflict")
-        }
-        ResourceMutationApplicationError::SessionChanged(error) => {
-            CommandError::diagnosed("graph_session_changed", error)
-        }
-        ResourceMutationApplicationError::SessionRefresh(error) => {
-            CommandError::diagnosed("graph_session_refresh_failed", error)
-        }
-    }
+    super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
 }

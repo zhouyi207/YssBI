@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { executeCommand } from "@/features/core/history";
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/core/observability/logger';
 import type { DataType } from '@/shared/types/domain/dataType';
 import { scalarPinInputKey } from '@/shared/types/domain/pinSemantics';
 

@@ -1,31 +1,36 @@
-use crate::application::database::{self, ApplicationDatabaseError, DatabaseMutation};
-#[cfg(test)]
+use crate::application::database::{
+    self, ApplicationDatabaseError, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult,
+    DatabaseRowsResult, LoadDatabaseResult,
+};
+#[cfg(all(test, any()))]
 use crate::application::database::{
     DatabaseApplicationError, cleanup_export_temporary_file,
     export_database_for_project_with_before_publish,
 };
 use crate::error::CommandError;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::event::emit_project_event;
-use crate::event::{
-    Event, EventProject, ResourceMutationCommandResultDto, emit_project_event_result,
-};
+use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::project::ProjectInstanceId;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
 use crate::project::{OperationId, ResourceRevision};
-use crate::schema::DatabaseImportSourceDTO;
+use crate::schema::application_event::ResourceMutationCommandResultDto;
+use crate::schema::{
+    DatabaseEngineDTO, DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto,
+    LoadDatabaseResultDto,
+};
 use tauri::{AppHandle, State};
 
 mod error;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod types;
 
 use error::database_command_error;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use types::dataframe_to_row_matrix;
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn emit_database_result<T>(
     result: &ResourceMutationCommandResultDto<T>,
     mut emit: impl FnMut(Event),
@@ -35,7 +40,7 @@ fn emit_database_result<T>(
     }));
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn load_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -62,7 +67,7 @@ fn load_database_with_emitter(
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn mutate_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -85,7 +90,7 @@ fn mutate_database_with_emitter(
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn save_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -116,7 +121,7 @@ fn save_database_with_emitter(
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn delete_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -173,6 +178,9 @@ fn map_application_database_error(error: ApplicationDatabaseError) -> CommandErr
             CommandError::diagnosed("database_session_refresh_failed", error)
         }
         ApplicationDatabaseError::Database(error) => database_command_error(error),
+        ApplicationDatabaseError::Mutation(error) => {
+            CommandError::diagnosed("database_mutation_failed", error)
+        }
     }
 }
 
@@ -187,6 +195,76 @@ fn emit_application_database_result<T>(
         }),
     )
     .map_err(|error| CommandError::diagnosed("database_event_emit_failed", error))
+}
+
+fn database_mutation_to_transport<T>(
+    result: DatabaseMutationResult<T>,
+) -> ResourceMutationCommandResultDto<T> {
+    ResourceMutationCommandResultDto {
+        data: result.data,
+        mutation: crate::schema::application_event::resource_mutation_to_transport(
+            &result.mutation,
+        ),
+    }
+}
+
+fn load_database_result_to_transport(
+    result: DatabaseMutationResult<LoadDatabaseResult>,
+) -> ResourceMutationCommandResultDto<LoadDatabaseResultDto> {
+    let data = result.data;
+    ResourceMutationCommandResultDto {
+        data: LoadDatabaseResultDto {
+            id: data.id,
+            name: data.name,
+            row_count: data.row_count,
+            column_count: data.column_count,
+            columns: crate::schema::column_info_from_schema(&data.columns),
+        },
+        mutation: crate::schema::application_event::resource_mutation_to_transport(
+            &result.mutation,
+        ),
+    }
+}
+
+fn database_meta_to_transport(result: DatabaseMetaResult) -> DatabaseMetaResultDto {
+    DatabaseMetaResultDto {
+        id: result.id,
+        name: result.name,
+        row_count: result.row_count,
+        column_count: result.column_count,
+        columns: crate::schema::column_info_from_schema(&result.columns),
+    }
+}
+
+fn database_rows_to_transport(
+    result: DatabaseRowsResult,
+) -> Result<DatabaseRowsResultDto, CommandError> {
+    let row_count = result.rows.row_count();
+    let rows = (0..row_count)
+        .map(|row| {
+            result
+                .rows
+                .columns()
+                .iter()
+                .map(|column| {
+                    serde_json::to_value(&column.values()[row]).map_err(|error| {
+                        CommandError::diagnosed("database_serialization_failed", error)
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(DatabaseRowsResultDto {
+        rows,
+        row_ids: result.row_ids,
+    })
+}
+
+fn database_engine_from_import(
+    source: DatabaseImportSourceDTO,
+) -> Result<crate::database_contract::DatabaseEngine, CommandError> {
+    crate::database_contract::DatabaseEngine::try_from(DatabaseEngineDTO::from(source))
+        .map_err(|_| CommandError::expected("invalid_database_engine"))
 }
 
 fn serialize_application_database_value<T: serde::Serialize>(
@@ -214,11 +292,12 @@ fn mutate_database_from_application(
             mutation,
         )
         .map_err(map_application_database_error)?;
+    let result = database_mutation_to_transport(result);
     emit_application_database_result(app, &result)?;
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DatabaseRowsPayload {
@@ -226,7 +305,7 @@ struct DatabaseRowsPayload {
     row_ids: Vec<i64>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn serialize_database_value<T: serde::Serialize>(
     value: T,
 ) -> Result<serde_json::Value, CommandError> {
@@ -234,7 +313,7 @@ fn serialize_database_value<T: serde::Serialize>(
         .map_err(|error| CommandError::diagnosed("database_serialization_failed", error))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_database_meta_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -245,7 +324,7 @@ fn get_database_meta_for_project(
     serialize_database_value(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_database_rows_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -261,7 +340,7 @@ fn get_database_rows_for_project(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_column_stats_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -272,7 +351,7 @@ fn get_column_stats_for_project(
     serialize_database_value(stats)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_column_distribution_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -283,7 +362,7 @@ fn get_column_distribution_for_project(
     serialize_database_value(distributions)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_dataset_overview_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -294,7 +373,7 @@ fn get_dataset_overview_for_project(
     serialize_database_value(overview)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn get_edit_state_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -312,15 +391,17 @@ pub async fn load_database(
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     engine: DatabaseImportSourceDTO,
-) -> Result<
-    ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
-    CommandError,
-> {
+) -> Result<ResourceMutationCommandResultDto<LoadDatabaseResultDto>, CommandError> {
     let application = application.inner().clone();
     run_on_blocking_pool(move || {
         let result = application
-            .load_database_for_application(project_instance_id, operation_id, engine.into())
+            .load_database_for_application(
+                project_instance_id,
+                operation_id,
+                database_engine_from_import(engine)?,
+            )
             .map_err(map_application_database_error)?;
+        let result = load_database_result_to_transport(result);
         emit_application_database_result(&app, &result)?;
         Ok(result)
     })
@@ -363,7 +444,7 @@ pub fn get_database_meta(
     let result = application
         .query_database_meta_for_application(project_instance_id, id)
         .map_err(map_application_database_error)?;
-    serialize_application_database_value(result)
+    serialize_application_database_value(database_meta_to_transport(result))
 }
 
 #[tauri::command]
@@ -385,13 +466,14 @@ pub async fn delete_database(
                 operation_id,
             )
             .map_err(map_application_database_error)?;
+        let result = database_mutation_to_transport(result);
         emit_application_database_result(&app, &result)?;
         Ok(result)
     })
     .await
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 fn rename_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -443,6 +525,7 @@ pub fn rename_database(
             operation_id,
         )
         .map_err(map_application_database_error)?;
+    let result = database_mutation_to_transport(result);
     emit_application_database_result(&app, &result)?;
     Ok(result)
 }
@@ -458,7 +541,7 @@ pub fn get_database_rows(
     let result = application
         .query_database_rows_for_application(project_instance_id, id, offset, limit)
         .map_err(map_application_database_error)?;
-    serialize_application_database_value(result)
+    serialize_application_database_value(database_rows_to_transport(result)?)
 }
 
 #[tauri::command]
@@ -727,6 +810,7 @@ pub fn save_database_changes(
     let result = application
         .save_database_for_application(project_instance_id, id, expected_revision, operation_id)
         .map_err(map_application_database_error)?;
+    let result = database_mutation_to_transport(result);
     emit_application_database_result(&app, &result)?;
     Ok(result)
 }
@@ -762,7 +846,7 @@ pub fn get_edit_state(
     serialize_application_database_value(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use crate::database::DatabaseState;

@@ -33,14 +33,16 @@ import type {
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
   MoveWorkbenchPanelRequest,
-  WorkbenchDockviewPort,
+  WorkbenchDockviewReadContract,
+  WorkbenchDockviewControlContract,
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchLayoutErrorCode,
   WorkbenchPanelCommitToken,
   WorkbenchPanelInfo,
-} from './workbenchDockviewPort';
+} from './workbenchTypes';
+import { WorkbenchLayoutError } from './workbenchTypes';
 
 export interface WorkbenchDockviewTransaction {
   listPanels(): readonly WorkbenchPanelInfo[];
@@ -85,16 +87,6 @@ export interface WorkbenchDockviewInternal {
   runPublicationTransaction<T>(
     operation: (transaction: WorkbenchDockviewTransaction) => T | Promise<T>,
   ): Promise<T>;
-}
-
-export class WorkbenchLayoutError extends Error {
-  constructor(
-    readonly code: WorkbenchLayoutErrorCode,
-    readonly details: Readonly<Record<string, string>> = {},
-  ) {
-    super(code);
-    this.name = 'WorkbenchLayoutError';
-  }
 }
 
 type WorkbenchLocation = WorkbenchPanelInfo['location'];
@@ -1380,8 +1372,9 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   return isRecord(value) && typeof value.then === 'function';
 }
 
-export function createWorkbenchDockviewPort(): {
-  readonly port: WorkbenchDockviewPort;
+export function createWorkbenchDockviewRuntime(): {
+  readonly read: WorkbenchDockviewReadContract;
+  readonly control: WorkbenchDockviewControlContract;
   readonly internal: WorkbenchDockviewInternal;
 } {
   let api: DockviewApi | undefined;
@@ -1396,7 +1389,9 @@ export function createWorkbenchDockviewPort(): {
   let listenerDeferralDepth = 0;
   let deferredNotification = false;
   const listeners = new Set<() => void>();
-  const hydrationWaiters = new Set<() => void>();
+  const hydrationWaiters = new Set<(
+    result: { readonly status: 'hydrated' | 'unbound' },
+  ) => void>();
   const idleWaiters = new Set<() => void>();
   const rootDisposables: Disposable[] = [];
   const edgeDisposables = new Map<WorkbenchEdgePosition, Disposable>();
@@ -1614,12 +1609,12 @@ export function createWorkbenchDockviewPort(): {
     });
   };
 
-  const port: WorkbenchDockviewPort = {
+  const runtime: WorkbenchDockviewReadContract & WorkbenchDockviewControlContract = {
     get isReady() { return api !== undefined; },
     get isHydrated() { return hydrated; },
     whenHydrated: () => hydrated
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => hydrationWaiters.add(resolve)),
+      ? Promise.resolve({ status: 'hydrated' as const })
+      : new Promise((resolve) => hydrationWaiters.add(resolve)),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -1934,6 +1929,8 @@ export function createWorkbenchDockviewPort(): {
       disposeSubscriptions();
       bindingGeneration += 1;
       api = undefined;
+      for (const resolve of hydrationWaiters) resolve({ status: 'unbound' });
+      hydrationWaiters.clear();
       rejectQueuedOperations(
         (pending) => pending.bindingGeneration === invalidatedBindingGeneration,
       );
@@ -1951,7 +1948,7 @@ export function createWorkbenchDockviewPort(): {
       if (epoch !== undefined && epoch !== hydrationEpoch) return;
       if (!hydrated) {
         hydrated = true;
-        for (const resolve of hydrationWaiters) resolve();
+        for (const resolve of hydrationWaiters) resolve({ status: 'hydrated' });
         hydrationWaiters.clear();
         publish();
       }
@@ -2085,10 +2082,9 @@ export function createWorkbenchDockviewPort(): {
     }),
   };
 
-  return { port, internal };
+  return { read: runtime, control: runtime, internal };
 }
 
-const singleton = createWorkbenchDockviewPort();
+export const workbenchDockviewRuntime = createWorkbenchDockviewRuntime();
 
-export const workbenchDockviewPort = singleton.port;
-export const workbenchDockviewInternal = singleton.internal;
+export const workbenchDockviewInternal = workbenchDockviewRuntime.internal;

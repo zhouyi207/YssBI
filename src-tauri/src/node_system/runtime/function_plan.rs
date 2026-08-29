@@ -1,11 +1,11 @@
 use super::FunctionPlanProvider;
-use crate::graph_document::GraphResourcePath;
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{ResourceKey, ResourceVersion, ResourceVersionSet};
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle, PlanSourceFacts,
 };
-use crate::node_system::registry::RegistryFingerprint;
+use crate::graph::analysis::contracts::{ResourceKey, ResourceVersion, ResourceVersionSet};
+use crate::graph::registry::RegistryFingerprint;
+use crate::graph_document::GraphResourcePath;
+use crate::project::ProjectSessionId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
@@ -274,7 +274,7 @@ fn validate_plan(
             message: format!("execution plan is invalid: {error}").into(),
         }
     })?;
-    if &plan.provenance.project_session_id != project_session_id {
+    if plan.provenance.project_session_id.as_str() != project_session_id.as_str() {
         return Err(FunctionPlanStoreError::InvalidBasis {
             path: path.clone(),
             message: "project session does not match the store".into(),
@@ -319,7 +319,7 @@ pub enum FunctionPlanStoreError {
     AbiValueContractMismatch {
         path: GraphResourcePath,
         direction: &'static str,
-        value: crate::node_system::plan::ValueRef,
+        value: crate::execution::plan::legacy::ValueRef,
     },
     Stale {
         path: GraphResourcePath,

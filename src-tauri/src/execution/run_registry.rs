@@ -98,6 +98,7 @@ impl RunRegistry {
                 | (RunState::Running, RunState::Cancelled)
                 | (RunState::Running, RunState::Failed)
                 | (RunState::Finalizing, RunState::Succeeded)
+                | (RunState::Finalizing, RunState::Cancelled)
                 | (RunState::Finalizing, RunState::Failed)
         );
         if !valid {

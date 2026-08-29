@@ -1,6 +1,6 @@
 use super::KernelFragment;
-use crate::node_system::plan::ResourceId;
-use crate::node_system::protocol::Value;
+use crate::execution::plan::legacy::ResourceId;
+use crate::graph::protocol::Value;
 use crate::node_system::runtime::{
     Kernel, KernelContext, KernelError, NullPolicy, NumericSeriesView, ResourceLease, RuntimeValue,
     numeric_series, require_data_series,
@@ -619,7 +619,7 @@ mod tests {
 
     #[test]
     fn kernel_fragment_matches_current_plot_catalog_inventory() {
-        let node_system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+        let node_system = crate::graph::catalog::build_builtin_node_system().unwrap();
         let catalog_handles = node_system
             .registry
             .iter()

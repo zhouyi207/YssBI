@@ -11,7 +11,7 @@ const execError = vi.hoisted(() => vi.fn());
 
 vi.mock('./createPersistedWindow', () => ({ createPersistedWindow }));
 vi.mock('./windowLabels', () => ({ createEphemeralWindowLabel: (kind: string) => `${kind}-test` }));
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: { app: { error: appError }, exec: { error: execError } },
 }));
 vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } }));

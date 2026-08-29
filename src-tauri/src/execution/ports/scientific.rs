@@ -25,6 +25,10 @@ impl BackendCancellationToken {
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
     }
+
+    pub(crate) fn from_shared(cancelled: Arc<AtomicBool>) -> Self {
+        Self { cancelled }
+    }
 }
 
 /// Admission control for a synchronous scientific backend call.
@@ -34,6 +38,15 @@ impl BackendCancellationToken {
 pub struct BackendExecutionControl {
     pub cancellation: BackendCancellationToken,
     pub deadline: Instant,
+}
+
+impl BackendExecutionControl {
+    pub(crate) fn from_shared(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
+        Self {
+            cancellation: BackendCancellationToken::from_shared(cancellation),
+            deadline,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

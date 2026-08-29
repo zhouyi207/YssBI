@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { useEditorSessionResources } from '@/features/application/editor';
-import { useDetailTarget, useLogStore, useWorksheetStore } from '@/features/application/viewCapabilities';
+import { useEditorUi } from '@/features/core/editor/ui';
+import { useLogStore } from '@/features/application/log';
+import { useWorksheetRead } from '@/features/core/worksheet/read';
+import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
 import type { DetailPanelModel } from './resolveDetailPanelModel';
 
@@ -8,20 +11,24 @@ export function useDetailPanelModel(): {
   model: DetailPanelModel;
   worksheetPath: string | null;
   worksheetName: string | null;
-  worksheetDocument: ReturnType<typeof useWorksheetStore.getState>['documents'][string] | null;
+  worksheetDocument: WorksheetDocument | null;
 } {
   const { variables, events, functions, dataframes } = useEditorSessionResources();
-  const target = useDetailTarget();
+  const target = useEditorUi((snapshot) => snapshot.detailFocus);
   const selectedLog = useLogStore((s) => s.selectedLog);
 
   const worksheetPath = target?.kind === 'worksheet' ? target.worksheetPath : null;
 
-  const worksheetDocument = useWorksheetStore((state) =>
-    worksheetPath ? state.documents[worksheetPath] ?? null : null,
-  );
-  const worksheetName = useWorksheetStore((state) =>
+  const worksheetDocument = useWorksheetRead((snapshot) =>
     worksheetPath
-      ? state.index.find((worksheet) => worksheet.worksheetPath === worksheetPath)?.name ?? null
+      ? snapshot.documents[worksheetPath]
+        ? structuredClone(snapshot.documents[worksheetPath]) as WorksheetDocument
+        : null
+      : null,
+  );
+  const worksheetName = useWorksheetRead((snapshot) =>
+    worksheetPath
+      ? snapshot.index.find((worksheet) => worksheet.worksheetPath === worksheetPath)?.name ?? null
       : null,
   );
 

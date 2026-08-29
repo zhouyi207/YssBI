@@ -24,17 +24,12 @@ import { executeEditorDragEnd } from '@/features/application/editor/editorDragDr
 import { synchronizeActiveEditorTab } from '@/features/application/editor/switchEditorTab';
 import { useWorkbenchLayout } from '@/features/application/layout/useWorkbenchLayout';
 import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
-import {
-  layoutTabFromEditorMetadata,
-  workbenchDockviewRead,
-} from '@/features/application/viewCapabilities';
-import {
-  buildSidebarDragState,
-  isSidebarSpawnDrag,
-  parseCanvasDragPayload,
-  snapTopLeftToCursor,
-} from '@/features/application/viewCapabilities';
-import { useModifierKeyStore, useSettingsStore, useSidebarDragStore } from '@/features/application/viewCapabilities';
+import { layoutTabFromEditorMetadata, workbenchDockviewRead } from '@/features/core/dockview';
+import { buildSidebarDragState, isSidebarSpawnDrag, parseCanvasDragPayload } from '@/features/core/dnd';
+import { snapTopLeftToCursor } from '@/features/core/dnd/snapTopLeftToCursorModifier';
+import { keyboardUi } from '@/features/core/keyboard/ui';
+import { useSettingsRead } from '@/features/core/settings/read';
+import { sidebarDragUi } from '@/features/core/sidebarDrag/ui';
 import { resolveYssbiDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { WatermarkView } from '../Canvas/overlays/WatermarkView';
@@ -62,9 +57,10 @@ function preventDockviewNativeTabClose(
 }
 
 export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref) => {
-  const setActiveDrag = useSidebarDragStore((state) => state.setActiveDrag);
-  const updatePosition = useSidebarDragStore((state) => state.updatePosition);
-  const themeMode = useSettingsStore((state) => state.theme.mode);
+  const setActiveDrag = sidebarDragUi.setActiveDrag;
+  const updatePosition = sidebarDragUi.updatePosition;
+  const setModifierKeys = keyboardUi.setModifierKeys;
+  const themeMode = useSettingsRead((state) => state.theme.mode);
   const bindWorkbenchLayout = useWorkbenchLayout();
   const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
   const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
@@ -116,7 +112,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
       'pointermove',
       (pointerEvent) => {
         updatePosition(pointerEvent.clientX, pointerEvent.clientY);
-        useModifierKeyStore.getState().setModifierKeys(pointerEvent);
+        setModifierKeys(pointerEvent);
       },
     );
   };

@@ -1,12 +1,18 @@
-import type { ExecutionProjectionPublication } from '@/features/core/execution/publication';
 import type { ExecutionUi } from '@/features/core/execution/ui';
 import type {
   RunEvent,
   RunOutputChannelEvent,
-} from '@/shared/types/dto/runEvent';
+} from '@/shared/types/domain/runEvent';
 import type { PinHistoryProjection, RecordedEvent } from '@/shared/types/ui/execution';
 
-export type { ExecutionProjectionPublication } from '@/features/core/execution/publication';
+export interface ExecutionProjectionPublication {
+  readonly startRun: (graphPath: string, runId: string) => void;
+  readonly applyRunEvent: (event: RunEvent) => void;
+  readonly applyRunOutput: (event: RunOutputChannelEvent) => void;
+  readonly applyPinHistory: (projection: PinHistoryProjection) => void;
+  readonly finishRun: (graphPath: string) => void;
+  readonly clearForProject: (projectInstanceId: string | null) => void;
+}
 
 export type ExecutionChannelEvent = RunEvent | RunOutputChannelEvent;
 

@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react';
 
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import {
   useEditorStore,
   type EditorContextMenuState,
 } from './stores/useEditorStore';
-import type { DetailFocus } from './detail/types';
+import type { DetailFocus } from '@/shared/types/ui/detail';
 
 export interface EditorUiSnapshot {
   readonly contextMenu: DeepReadonly<EditorContextMenuState> | null;

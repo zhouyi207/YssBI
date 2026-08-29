@@ -6,7 +6,7 @@ import type {
   EditorNodeProjectionDto,
   ProjectionBasisDto,
   ResolvedPortDto,
-} from '@/shared/types/dto/editorProjection';
+} from '@/shared/types/domain/editorProjection';
 
 export type EditorProjectionNodeEntity = Omit<EditorNodeProjectionDto, 'ports'>;
 export type EditorProjectionPortEntity = ResolvedPortDto;
@@ -27,3 +27,5 @@ export interface EditorProjectionEntities {
 }
 
 export type ValidatedEditorGraphProjection = EditorGraphProjectionDto;
+
+export type * from '@/shared/types/domain/editorProjection';

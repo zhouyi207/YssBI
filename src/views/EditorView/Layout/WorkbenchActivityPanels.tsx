@@ -21,10 +21,8 @@ import { SidebarDataTab } from './sidebar/tabs/SidebarDataTab';
 import { SidebarNodesTab } from './sidebar/tabs/SidebarNodesTab';
 import { SidebarProjectTab } from './sidebar/tabs/SidebarProjectTab';
 import type { SidebarProjectTreeActions } from './sidebar/rows/SidebarProjectTreeRow';
-import {
-  PROJECT_TREE_CATEGORY_IDS,
-  type ProjectTreeCategoryId,
-} from '@/features/application/viewCapabilities';
+import { PROJECT_TREE_CATEGORY_IDS } from '@/features/core/sidebar/projectTreeState';
+import type { ProjectTreeCategoryId } from '@/features/core/sidebar/projectTreeState';
 import { ActionMenu } from '@/shared/ui/actionMenu';
 
 interface WorkbenchActivityPanelsContextValue {

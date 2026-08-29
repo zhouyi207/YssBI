@@ -4,14 +4,15 @@ import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
-import { normalizeIpcError } from '@/services/ipc';
+import { normalizeApplicationIpcError } from '@/features/application/errorReference';
 import { openPathDialog } from '@/services/platform/pathDialog';
-import type { LoadDatabaseResult } from '@/shared/types/dto/database';
-import { databaseRecordFromLoad } from '@/shared/types/dto/database';
-import type { DatabaseImportSourceDTO, DatabaseRecord } from '@/shared/types/dto/database';
-import { logger } from '@/utils/appLogger';
+import type { LoadDatabaseResult } from '@/shared/types/domain/database';
+import type { DatabaseImportSourceDTO } from '@/shared/types/domain/database';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import { logger } from '@/features/application/observability/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
 import { executeDatabaseCreate, executeDatabaseMutation } from './databaseMutation';
+import { databaseRecordFromLoad } from './databaseRecords';
 
 function showDataOperationMessage(message: string, type: 'info' | 'warning' = 'warning'): void {
   void uiStore.alert({
@@ -27,7 +28,7 @@ function showDataOperationError(
   command: string,
   messageForCode: (code: string) => string,
 ): void {
-  const ipcError = normalizeIpcError(command, error);
+  const ipcError = normalizeApplicationIpcError(command, error);
   void uiStore.alert({
     title: i18n.t('common.error'),
     message: messageForCode(ipcError.code),
@@ -39,7 +40,7 @@ function showDataOperationError(
 }
 
 function logDataOperationFailure(error: unknown, command: string, context: string): void {
-  const ipcError = normalizeIpcError(command, error);
+  const ipcError = normalizeApplicationIpcError(command, error);
   logger.data.error(
     `${context} failed code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
     'DatabaseManagement',

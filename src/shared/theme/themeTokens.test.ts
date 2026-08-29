@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DARK_THEME } from '@/app/appConfig/default';
+import { DEFAULT_DARK_THEME } from '@/shared/config-default';
 import {
   getPinPalette,
   getReadableForeground,

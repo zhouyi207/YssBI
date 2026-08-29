@@ -1,12 +1,16 @@
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
-import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
-import { normalizeIpcError } from '@/services/ipc';
+import { ProjectService } from '@/services/project/projectService';
+import { normalizeApplicationIpcError } from '@/features/application/errorReference';
 import { revealPath } from '@/services/platform/opener';
 
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { renameResource } from '@/features/application/resource/resourceActions';
 
+export type RevealProjectResourceRequest = {
+  readonly kind: 'graph' | 'database' | 'worksheet';
+  readonly resourceId: string;
+};
 
 export async function revealProjectResourceInExplorer(
   request: RevealProjectResourceRequest,
@@ -20,7 +24,7 @@ export async function revealProjectResourceInExplorer(
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;
-    const ipcError = normalizeIpcError('reveal_project_resource', error);
+    const ipcError = normalizeApplicationIpcError('reveal_project_resource', error);
     logger.app.error(
       `Failed to reveal project resource code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
       'SidebarResourceActions',

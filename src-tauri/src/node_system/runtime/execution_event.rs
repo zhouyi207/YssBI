@@ -1,8 +1,8 @@
 use super::run_output::RunOutputMessage;
 use super::{RelationalErrorCode, ResultId, RunError, RunId, RunPhase};
+use crate::execution::plan::legacy::GraphOutputRef;
 use crate::graph_document::GraphResourcePath;
-use crate::node_system::ProjectSessionId;
-use crate::node_system::plan::GraphOutputRef;
+use crate::project::ProjectSessionId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -318,8 +318,8 @@ pub static NOOP_RUN_EVENT_SINK: NoopRunEventSink = NoopRunEventSink;
 mod tests {
     use super::*;
     use crate::graph_document::GraphResourcePath;
-    use crate::node_system::ProjectSessionId;
     use crate::node_system::runtime::RunId;
+    use crate::project::ProjectSessionId;
 
     #[test]
     fn events_carry_only_graph_run_identity_and_kind() {
@@ -343,12 +343,12 @@ mod tests {
     #[test]
     fn error_events_reduce_runtime_errors_to_stable_codes() {
         let error = RunError::KernelFailed {
-            operation: crate::node_system::plan::OperationIndex::new(3),
+            operation: crate::execution::plan::legacy::OperationIndex::new(3),
             kind: crate::node_system::runtime::KernelErrorKind::Permanent,
             message: "sensitive literal".into(),
         };
         let relational = RunError::RelationalFailed {
-            operation: crate::node_system::plan::OperationIndex::new(4),
+            operation: crate::execution::plan::legacy::OperationIndex::new(4),
             code: RelationalErrorCode::TypeMismatch,
             message: "sensitive backend detail".into(),
         };

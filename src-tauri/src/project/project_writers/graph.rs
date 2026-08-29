@@ -5,7 +5,7 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<ProjectSaveResultDto, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let mut expected = BTreeMap::new();
         let mut mutations = vec![
@@ -87,7 +87,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
-    ) -> Result<ProjectSaveResultDto, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let resource = snapshot
             .data

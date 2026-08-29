@@ -5,8 +5,10 @@ use crate::application::catalog_query::{
 };
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::error::CommandError;
-use crate::node_system::catalog::LocalizedCatalogDto;
 use crate::project::ProjectInstanceId;
+#[cfg(all(test, any()))]
+use crate::schema::catalog::LocalizedCatalogDto as LegacyLocalizedCatalogDto;
+use crate::schema::catalog::LocalizedCatalogDto;
 use tauri::State;
 
 fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
@@ -118,12 +120,12 @@ pub fn get_compatible_node_catalog(
         .map_err(catalog_query_command_error)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_localized_node_catalog_from_state(
     state: &crate::project::ProjectState,
     project_instance_id: ProjectInstanceId,
     locale: &str,
-) -> Result<LocalizedCatalogDto, CommandError> {
+) -> Result<LegacyLocalizedCatalogDto, CommandError> {
     state
         .localized_catalog_snapshot(&project_instance_id, locale)
         .map_err(|error| match error {

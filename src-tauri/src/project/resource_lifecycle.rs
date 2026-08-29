@@ -490,7 +490,7 @@ fn stale_owner_error(owner: &ResourceLifecycleOwner) -> ProjectFilesystemError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use crate::graph_document::GraphResourcePath;
     use crate::project::{

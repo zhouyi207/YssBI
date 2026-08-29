@@ -45,23 +45,24 @@ sanitized `tracing`，不能成为 IPC code、details 或成功 DTO 的一部分
 删除旧 declaration、旧 route、重复 test 和对应精确债务。任何时刻只有一条 production
 route；不建立 forwarder、双注册或按运行时条件选择旧新实现的分支。
 
-## Staged activation debt
+## Active composition
 
-`julia/bayes_worker_adapter/` 已实现最终 SCI `BayesWorkerPort`，但保持 production-unreachable。
-它没有 `lib.rs`、Application、Commands 或 Project constructor caller；当前
-`sci/backends/julia/**` 仍是唯一 active Bayes route。该 staged adapter 的激活与旧 pipeline
-删除由 Execution Task 8 在同一 compiling slice 完成，不能提前增加 converter、forwarder、
-fallback 或第二条 composition route。
+`julia/bayes_worker_adapter/` 是唯一 production Bayes worker adapter，实现最终 SCI
+`BayesWorkerPort`。`lib.rs` 将它注入 `Application::BayesInferenceService`；Application 从
+Project/Database coherent snapshot 生成 typed `StatisticalInput`，worker 负责 task handle、
+generation、artifact ownership 与 Julia exchange。旧 `sci/backends/julia/**` route 已删除。
 
 `backend_adapters/execution/scientific.rs` 已实现 Execution-owned `ScientificBackend`，并仅在
 该 exact adapter owner 内穷尽映射 Execution settings、request、control、result 与 SCI
-public API/error。它保持 production-unreachable；当前 node runtime、commands 与 Application
-仍直接调用 SCI，且是唯一 active scientific route。该 staged adapter 的构造注入、旧 direct-SCI
-route 删除和 capability 收敛同样由 Execution Task 8 在同一 compiling slice 完成。
+public API/error。`lib.rs` 将它注入 `ExecutionRuntimeState`；Application statistics 与
+Execution runtime 不再直接调用 concrete SCI implementation。
 当前 SCI operations 是同步 API，adapter 只在 method admission 时将 Execution control 映射为
 Task 2 SCI control 并检查 cancellation/deadline；这不是 mid-computation cooperative
-cancellation 承诺。真实 checkpoint 若需要，由 Execution Task 8 activation slice 与 backend
-调用一起落地，不增加 polling shim 或伪异步路径。
+cancellation 承诺；不增加 polling shim 或伪异步路径。
 
-完成条件：`debt/backend_adapter.rs` 为空，且 production architecture audit、相关 focused
-tests、`pnpm rust:check` 与 `git diff --check` 全部通过。
+`backend_adapters/execution/bayes_artifacts.rs` 是唯一 Polars/IPC Bayes artifact reader，
+实现 Application-owned `BayesArtifactReader`。Application 不再直接持有 Polars artifact
+parsing implementation，SCI worker result 只通过 typed reader 进入 presentation 查询。
+
+完成条件：`debt/backend_adapter.rs` 为空，production adapters 已在唯一 composition root
+激活；production architecture audit、`pnpm rust:check` 与 `git diff --check` 已通过。

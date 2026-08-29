@@ -8,13 +8,13 @@ use crate::database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
+use crate::graph::catalog::{
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
+};
+use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{FunctionSignature, GraphResourceId, VariableValueContract};
 use crate::graph::runtime_state::GraphRuntimeCatalogError;
 use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
-use crate::node_system::catalog::{
-    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgsDto,
-};
-use crate::node_system::registry::RegistryFingerprint;
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
 
 use super::execution::session_slot::{
@@ -316,8 +316,8 @@ impl ProjectCatalogResources {
                 name: graph.name.into_boxed_str(),
                 node_type_id: node_type("yssbi.project.function.call")?,
                 resource_path: CatalogResourcePath::new(graph.path),
-                resource_revision: graph.function_revision.unwrap_or(graph.revision),
-                create_args: ResourceBoundCreateArgsDto::Function,
+                resource_revision: graph.function_revision.unwrap_or(graph.revision).get(),
+                create_args: ResourceBoundCreateArgs::Function,
                 technical_terms: vec!["call".into(), "function".into()],
             });
         }
@@ -336,9 +336,9 @@ impl ProjectCatalogResources {
                 entries.push(CatalogResourceEntry {
                     name: variable.name.clone().into_boxed_str(),
                     node_type_id,
-                    resource_path: variable.resource_path.clone(),
-                    resource_revision: variable.revision,
-                    create_args: ResourceBoundCreateArgsDto::Variable,
+                    resource_path: CatalogResourcePath::new(variable.resource_path.as_str()),
+                    resource_revision: variable.revision.get(),
+                    create_args: ResourceBoundCreateArgs::Variable,
                     technical_terms: vec!["variable".into()],
                 });
             }
@@ -371,8 +371,8 @@ impl ProjectCatalogResources {
                 name: declaration.name.clone(),
                 node_type_id: node_type("yssbi.dataframe.source.get")?,
                 resource_path: CatalogResourcePath::new(format!("databases/{}", database.id)),
-                resource_revision: database.revision,
-                create_args: ResourceBoundCreateArgsDto::Database,
+                resource_revision: database.revision.get(),
+                create_args: ResourceBoundCreateArgs::Database,
                 technical_terms: vec!["dataframe".into(), "database".into()],
             });
         }
@@ -706,21 +706,21 @@ fn map_graph_catalog_error(error: GraphRuntimeCatalogError) -> CatalogQueryAppli
     }
 }
 
-fn graph_signature(
-    signature: crate::node_system::document::FunctionSignature,
-) -> Result<FunctionSignature, ()> {
+fn graph_signature(signature: crate::project::FunctionSignature) -> Result<FunctionSignature, ()> {
     let parameters = signature
         .parameters
         .iter()
         .map(|parameter| {
-            crate::node_system::analysis::resolve_function_data_type(&parameter.type_name)
-                .map_err(|_| ())
+            crate::project::function_editor_projection::resolve_function_data_type(
+                &parameter.type_name,
+            )
+            .map_err(|_| ())
         })
         .collect::<Result<Vec<_>, _>>()?;
     let result = signature
         .return_type
         .as_deref()
-        .map(crate::node_system::analysis::resolve_function_data_type)
+        .map(crate::project::function_editor_projection::resolve_function_data_type)
         .transpose()
         .map_err(|_| ())?;
     Ok(FunctionSignature::new(parameters, result))
@@ -728,8 +728,8 @@ fn graph_signature(
 
 fn node_type(
     value: &'static str,
-) -> Result<crate::node_system::protocol::NodeTypeId, ProjectCatalogReadSource> {
-    crate::node_system::protocol::NodeTypeId::new(value)
+) -> Result<crate::graph::protocol::NodeTypeId, ProjectCatalogReadSource> {
+    crate::graph::protocol::NodeTypeId::new(value)
         .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())
 }
 

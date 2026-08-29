@@ -1,7 +1,7 @@
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type { ResourceDeltaDto } from '@/shared/types/dto/editorMutation';
 import { isRustDataValueWire } from '@/shared/types/dto/dataValue';
-import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
+import { isGraphResourcePath } from '@/shared/types/domain/editorProjectionGuards';
 import { isTypeExprWire } from '@/shared/types/dto/editorMutationWireParser';
 
 type UnknownRecord = Record<string, unknown>;

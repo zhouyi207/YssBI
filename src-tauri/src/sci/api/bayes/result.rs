@@ -1,16 +1,23 @@
 use serde::{Deserialize, Serialize};
 
-use crate::julia::worker::JuliaWorkerTaskDirectory;
 use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+/// Opaque ownership for backend-produced artifacts.
+///
+/// The scientific contract can retain and release an artifact lease without
+/// knowing which adapter owns the underlying files or process resources.
+pub trait ResultArtifactOwner: std::fmt::Debug + Send + Sync {
+    fn cleanup(&self) -> Result<(), Box<str>>;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceResult {
     summaries: Vec<ParameterSummary>,
     diagnostics: InferenceDiagnostics,
     artifact_manifest: ResultArtifactManifest,
     #[serde(skip)]
-    artifact_owner: Option<JuliaWorkerTaskDirectory>,
+    artifact_owner: Option<Box<dyn ResultArtifactOwner>>,
 }
 
 impl Clone for InferenceResult {
@@ -21,6 +28,14 @@ impl Clone for InferenceResult {
             artifact_manifest: self.artifact_manifest.clone(),
             artifact_owner: None,
         }
+    }
+}
+
+impl PartialEq for InferenceResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.summaries == other.summaries
+            && self.diagnostics == other.diagnostics
+            && self.artifact_manifest == other.artifact_manifest
     }
 }
 
@@ -38,11 +53,11 @@ impl InferenceResult {
         }
     }
 
-    pub(crate) fn set_artifact_owner(&mut self, owner: JuliaWorkerTaskDirectory) {
-        self.artifact_owner = Some(owner);
+    pub(crate) fn set_artifact_owner(&mut self, owner: impl ResultArtifactOwner + 'static) {
+        self.artifact_owner = Some(Box::new(owner));
     }
 
-    pub(crate) fn take_artifact_owner(&mut self) -> Option<JuliaWorkerTaskDirectory> {
+    pub(crate) fn take_artifact_owner(&mut self) -> Option<Box<dyn ResultArtifactOwner>> {
         self.artifact_owner.take()
     }
 
@@ -67,6 +82,13 @@ pub struct ResultArtifactManifest {
 }
 
 impl ResultArtifactManifest {
+    pub(crate) fn from_worker(task_id: impl Into<String>, artifacts: Vec<ResultArtifact>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            artifacts,
+        }
+    }
+
     pub fn task_id(&self) -> &str {
         &self.task_id
     }
@@ -86,6 +108,20 @@ pub struct ResultArtifact {
 }
 
 impl ResultArtifact {
+    pub(crate) fn from_worker(
+        kind: ResultArtifactKind,
+        format: ResultArtifactFormat,
+        path: impl Into<String>,
+        rows: Option<usize>,
+    ) -> Self {
+        Self {
+            kind,
+            format,
+            path: path.into(),
+            rows,
+        }
+    }
+
     pub fn kind(&self) -> ResultArtifactKind {
         self.kind
     }

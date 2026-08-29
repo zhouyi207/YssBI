@@ -1,5 +1,5 @@
 use super::{ConnectionId, GraphResourcePath, GraphRevision, NodeId, PortInstanceId};
-use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
+use crate::graph::protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;

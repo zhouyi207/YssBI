@@ -1,8 +1,5 @@
-import type {
-  SidebarItemRow,
-  SidebarPanelModel,
-  SidebarSectionKey,
-} from '@/features/application/viewCapabilities';
+import type { SidebarItemRow, SidebarPanelModel } from '@/features/core/sidebar/flatRows';
+import type { SidebarSectionKey } from '@/features/core/sidebar';
 
 export type SidebarRenderRow =
   | SidebarItemRow

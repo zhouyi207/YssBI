@@ -1,4 +1,4 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphMetaStore, type GraphMeta } from '@/features/core/dataStore/graphMetaStore';

@@ -130,10 +130,22 @@ pub struct ValidatedBayesTask {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum BayesTaskValidationError {
+    #[error("Bayes worker task ID is invalid")]
+    InvalidTaskId,
     #[error("Bayes worker model is invalid")]
     InvalidModel,
     #[error("Bayes worker input is invalid")]
     InvalidInput { index: usize },
+}
+
+pub(crate) fn validate_bayes_task(
+    task_id: &str,
+    model: BayesModelSpec,
+    inputs: Arc<[StatisticalInput]>,
+) -> Result<ValidatedBayesTask, BayesTaskValidationError> {
+    let task_id =
+        BayesTaskId::try_from(task_id).map_err(|_| BayesTaskValidationError::InvalidTaskId)?;
+    ValidatedBayesTask::try_new(task_id, model, inputs)
 }
 
 impl ValidatedBayesTask {

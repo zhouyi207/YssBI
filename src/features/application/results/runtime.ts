@@ -1,15 +1,15 @@
-import { create } from 'zustand';
+import { createBoundApplicationStore } from '@/features/core/state/applicationStore';
 
 import { ResultService } from '@/services/result/resultService';
-import { toErrorReference } from '@/services/ipc';
+import { toErrorReference } from '@/features/application/errorReference';
 import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import type { ErrorReference } from '@/services/ipc';
+import type { ErrorReference } from '@/features/application/errorReference';
 import type {
   PinResultEntry,
   ResultDescriptor,
   ResultPage,
   ResultValue,
-} from '@/shared/types/dto/result';
+} from './types';
 import {
   createResultQueryCoordinator,
   type ResultPageRequest,
@@ -17,7 +17,7 @@ import {
   type ResultQueryReadCapability,
   type ResultQueryScope,
 } from './resultQueryCoordinator';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 
 interface ResultProjectionState {
   readonly projectInstanceId: string | null;
@@ -37,7 +37,7 @@ const emptyState: ResultProjectionState = {
   failures: {},
 };
 
-const resultProjection = create<ResultProjectionState>(() => emptyState);
+const resultProjection = createBoundApplicationStore<ResultProjectionState>(() => emptyState);
 
 function pageKey(request: ResultPageRequest): string {
   return `${request.resultId}:${request.offset}:${request.limit}`;

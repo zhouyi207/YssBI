@@ -1,17 +1,18 @@
 use super::common::mutation_conflict_to_command_error;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use super::common::{EmitOutcome, emit_resource_result};
 use crate::error::CommandError;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::event::emit_project_event;
-use crate::event::{Event, ResourceMutationResultDto, emit_project_event_result};
-use crate::node_system::document::{HistoryMutation, HistoryStatusDto, MutationRequest};
+use crate::event::{Event, emit_project_event_result};
 use crate::project::ProjectInstanceId;
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::project::ProjectState;
+use crate::project::{HistoryMutation, HistoryStatusDto, MutationRequest};
+use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn get_project_history_status_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -28,10 +29,14 @@ pub fn get_project_history_status(
 ) -> Result<HistoryStatusDto, CommandError> {
     application
         .query_history_status(project_instance_id)
+        .map(|status| HistoryStatusDto {
+            can_undo: status.can_undo,
+            can_redo: status.can_redo,
+        })
         .map_err(map_history_error)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn undo_graph_document_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -57,11 +62,12 @@ pub fn undo_graph_document(
     let result = application
         .undo_graph_document(project_instance_id, locale, request)
         .map_err(map_history_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_history_result(&app, &result)?;
     Ok(result)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 pub(super) fn redo_graph_document_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -87,6 +93,7 @@ pub fn redo_graph_document(
     let result = application
         .redo_graph_document(project_instance_id, locale, request)
         .map_err(map_history_error)?;
+    let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_history_result(&app, &result)?;
     Ok(result)
 }
@@ -107,29 +114,5 @@ fn emit_application_history_result(
 fn map_history_error(
     error: crate::application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
-    use crate::application::resource_mutation::ResourceMutationApplicationError;
-    match error {
-        ResourceMutationApplicationError::SessionCapture(error) => match error {
-            crate::application::execution::SessionCaptureError::Inactive => {
-                CommandError::expected("stale_project_lifecycle")
-            }
-            crate::application::execution::SessionCaptureError::Replacing => {
-                CommandError::expected("project_lifecycle_admission_closed")
-            }
-            crate::application::execution::SessionCaptureError::Recovering => {
-                CommandError::expected("project_recovery_required")
-                    .with_details(serde_json::json!({ "recoveryRequired": true }))
-            }
-        },
-        ResourceMutationApplicationError::Project(error) => CommandError::from(error),
-        ResourceMutationApplicationError::Mutation(error) => {
-            mutation_conflict_to_command_error(error, "history_revision_conflict")
-        }
-        ResourceMutationApplicationError::SessionChanged(error) => {
-            CommandError::diagnosed("history_session_changed", error)
-        }
-        ResourceMutationApplicationError::SessionRefresh(error) => {
-            CommandError::diagnosed("history_session_refresh_failed", error)
-        }
-    }
+    super::common::resource_mutation_to_command_error(error, "history_revision_conflict")
 }

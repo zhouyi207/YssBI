@@ -1,4 +1,4 @@
-import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
+import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/shared/config-default';
 
 export const LOG_ROW_STRIDE = LOG_ITEM_HEIGHT + LOG_ITEM_GAP;
 

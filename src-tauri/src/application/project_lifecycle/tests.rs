@@ -1,11 +1,11 @@
 use super::*;
 use crate::data_contract::{DataType, DataValue};
-use crate::event::{
-    LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
-    LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
-};
 use crate::project::{
     ProjectData, ProjectRootBinding, ProjectRootIdentityState, ProjectState, fixtures,
+};
+use crate::schema::application_event::{
+    LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
+    LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
 };
 use crate::variable::VariableScope;
 use sqlx::Connection;

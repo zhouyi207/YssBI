@@ -1,8 +1,3 @@
-#![allow(
-    dead_code,
-    reason = "staged until the execution cutover installs its consumer"
-)]
-
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +10,10 @@ use super::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::application::catalog_query::capture_localized_project_facts;
-use crate::application::graph_contracts::{build_resource_catalog, graph_compile_settings};
+use crate::application::graph_contracts::{
+    build_resource_catalog, execution_package_from_graph, graph_compilation_basis,
+    graph_compile_settings,
+};
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
 use crate::execution::error::RunPhase;
@@ -210,6 +208,8 @@ pub(crate) enum ExecutionApplicationError {
     GraphCompilation(#[source] crate::graph::error::GraphCompileError),
     #[error("graph contract mapping failed")]
     GraphContract(#[source] crate::application::graph_contracts::GraphContractMappingError),
+    #[error("graph execution package mapping failed")]
+    GraphPackage(#[source] crate::application::graph_contracts::GraphPackageMappingError),
     #[error("execution package preparation failed")]
     PackagePreparation(#[source] PackagePreparationError),
     #[error("compiled graph did not produce an execution package")]
@@ -222,6 +222,8 @@ pub(crate) enum ExecutionApplicationError {
     ProjectEffectFinalization(#[source] ProjectEffectCommitError),
     #[error("execution finalization failed")]
     Finalization(#[source] FinalizationError),
+    #[error("execution run terminal publication failed")]
+    RunFinalization(#[source] crate::execution::run_registry::RunRegistryError),
     #[error("captured application session is stale")]
     StaleSession(#[source] SessionRevalidationError),
 }
@@ -320,20 +322,23 @@ where
         prepared_project.authority().graph_revision(),
         prepared_project.resources().grants(),
     )?;
+    let graph_basis = graph_compilation_basis(&basis);
     let compilation = compile(GraphCompilationInput::new(
         graph_document,
         &graph_catalog,
         &settings,
-        basis,
+        graph_basis,
         request.graph_path.clone(),
-        crate::execution::plan::PlanCompileId::from_existing(
+        crate::graph::analysis::contracts::CompileId::new(
             prepared_project.authority().graph_revision().get(),
         ),
     ))
     .map_err(ExecutionApplicationError::GraphCompilation)?;
-    let package = compilation
+    let graph_package = compilation
         .executable
         .ok_or(ExecutionApplicationError::PackageUnavailable)?;
+    let package = execution_package_from_graph(graph_package, basis)
+        .map_err(ExecutionApplicationError::GraphPackage)?;
     let prepared_plan = captured
         .execution()
         .prepare_compiled_package(package, captured.runtime_generation())
@@ -351,50 +356,116 @@ where
 
     let control =
         RunExecutionControl::with_cancellation(Arc::clone(&request.cancellation), request.deadline);
-    let executed = captured
-        .execution()
-        .execute_prepared_handoff(
-            &prepared_plan,
-            bindings,
-            captured.resource_provider_factory(),
-            &control,
-        )
-        .map_err(ExecutionApplicationError::PreparedExecution)?;
+    let mut started_identity = None;
+    let executed = match captured.execution().execute_prepared_handoff(
+        &prepared_plan,
+        bindings,
+        captured.resource_provider_factory(),
+        &control,
+        |run_id| {
+            let identity = RunIdentity::new(
+                PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+                request.graph_path.clone(),
+                run_id,
+            );
+            started_identity = Some(identity.clone());
+            let _ = deliver(RunApplicationEvent::new(
+                identity,
+                RunApplicationEventKind::RunStarted,
+            ));
+        },
+    ) {
+        Ok(executed) => executed,
+        Err(error) => {
+            if let Some(identity) = started_identity {
+                let kind = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
+                    RunApplicationEventKind::RunCancelled
+                } else {
+                    RunApplicationEventKind::RunErrored {
+                        phase: RunPhase::Execution,
+                    }
+                };
+                let _ = deliver(RunApplicationEvent::new(identity, kind));
+            }
+            return Err(ExecutionApplicationError::PreparedExecution(error));
+        }
+    };
     let run_id = executed.run_id();
-    let identity = RunIdentity::new(
-        PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        request.graph_path.clone(),
-        run_id,
-    );
-    let _ = deliver(RunApplicationEvent::new(
-        identity.clone(),
-        RunApplicationEventKind::RunStarted,
-    ));
+    let identity = started_identity.unwrap_or_else(|| {
+        RunIdentity::new(
+            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+            request.graph_path.clone(),
+            run_id,
+        )
+    });
 
-    let prepared_effects = captured
-        .project()
-        .prepare_execution_effects(
-            prepared_project.authority(),
-            CandidateProjectEffects::empty(),
-        )
-        .map_err(ExecutionApplicationError::ProjectEffectPreparation)?;
-    let committed_effects = captured
-        .project()
-        .finalize_execution_effects(
-            prepared_effects,
-            &ProjectEffectCommitControl::new(Arc::clone(&request.cancellation), request.deadline),
-        )
-        .map_err(ExecutionApplicationError::ProjectEffectFinalization)?;
-    let outcome = finalize_successful_run(
+    let prepared_effects = match captured.project().prepare_execution_effects(
+        prepared_project.authority(),
+        CandidateProjectEffects::empty(),
+    ) {
+        Ok(effects) => effects,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                terminal_kind_for_effect_error(&error),
+            );
+            return Err(ExecutionApplicationError::ProjectEffectPreparation(error));
+        }
+    };
+    let committed_effects = match captured.project().finalize_execution_effects(
+        prepared_effects,
+        &ProjectEffectCommitControl::new(Arc::clone(&request.cancellation), request.deadline),
+    ) {
+        Ok(effects) => effects,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                terminal_kind_for_effect_error(&error),
+            );
+            return Err(ExecutionApplicationError::ProjectEffectFinalization(error));
+        }
+    };
+    let outcome = match finalize_successful_run(
         executed.into_handoff(),
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
         PlanGraphId::from_existing(request.graph_path.as_str().into()),
         run_id,
-    )
-    .map_err(ExecutionApplicationError::Finalization)?;
+    ) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                RunApplicationEventKind::RunErrored {
+                    phase: RunPhase::Finalization,
+                },
+            );
+            return Err(ExecutionApplicationError::Finalization(error));
+        }
+    };
     captured
         .execution()
         .publish_committed_results(outcome.handoff());
+    if let Err(error) = captured.execution().finalize_run_success(run_id) {
+        publish_run_failure(
+            captured.execution(),
+            run_id,
+            &identity,
+            &mut deliver,
+            RunApplicationEventKind::RunErrored {
+                phase: RunPhase::Finalization,
+            },
+        );
+        return Err(ExecutionApplicationError::RunFinalization(error));
+    }
 
     for inspection in outcome.inspection_requests() {
         let _ = deliver(RunApplicationEvent::new(
@@ -455,6 +526,32 @@ fn check_control(request: &RunGraphRequest) -> Result<(), ExecutionApplicationEr
         return Err(ExecutionApplicationError::DeadlineExceeded);
     }
     Ok(())
+}
+
+fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplicationEventKind {
+    match error {
+        ProjectEffectCommitError::Cancelled => RunApplicationEventKind::RunCancelled,
+        _ => RunApplicationEventKind::RunErrored {
+            phase: RunPhase::Finalization,
+        },
+    }
+}
+
+fn publish_run_failure<D>(
+    execution: &crate::execution::state::ExecutionRuntimeState,
+    run_id: RunId,
+    identity: &RunIdentity,
+    deliver: &mut D,
+    terminal: RunApplicationEventKind,
+) where
+    D: FnMut(RunApplicationEvent) -> bool + Send,
+{
+    if matches!(&terminal, RunApplicationEventKind::RunCancelled) {
+        let _ = execution.finalize_run_cancelled(run_id);
+    } else {
+        let _ = execution.finalize_run_failure(run_id);
+    }
+    let _ = deliver(RunApplicationEvent::new(identity.clone(), terminal));
 }
 
 fn revalidate_final_session(
@@ -685,13 +782,12 @@ mod tests {
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
+    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     };
-    use crate::node_system::ProjectSessionId;
-    use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::compiler::ProjectCompileCoordinator;
+    use crate::project::ProjectSessionId;
     use crate::project::ProjectState;
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
@@ -706,7 +802,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                compiler: Arc::new(ProjectCompileCoordinator::new()),
                 resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
                     BTreeMap::new(),
                     BTreeMap::new(),

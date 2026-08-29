@@ -1,5 +1,5 @@
 import { graphOutputKey } from '@/features/domain/editorProjection';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import type { PinHistoryProjection } from '@/shared/types/ui';
 
 function addressedPinCacheKey(graphPath: string, port: PortAddressDto): string {

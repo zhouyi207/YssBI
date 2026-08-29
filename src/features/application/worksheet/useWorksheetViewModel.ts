@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { ErrorReference } from '@/services/ipc';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { ErrorReference } from '@/features/application/errorReference';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import { useWorksheetRead } from '@/features/core/worksheet/read';
 import { worksheetUi } from '@/features/core/worksheet/ui';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';

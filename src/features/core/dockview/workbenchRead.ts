@@ -1,12 +1,12 @@
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
-import {
-  workbenchDockviewPort,
-  type WorkbenchDockviewPort,
-  type WorkbenchEdgePosition,
-  type WorkbenchEdgeState,
-  type WorkbenchGroupInfo,
-  type WorkbenchPanelInfo,
-} from './workbenchDockviewPort';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
+
+import { workbenchDockviewRuntime } from './workbenchDockviewInternal';
+import type {
+  WorkbenchEdgePosition,
+  WorkbenchEdgeState,
+  WorkbenchGroupInfo,
+  WorkbenchPanelInfo,
+} from './workbenchTypes';
 
 export interface WorkbenchDockviewRead {
   readonly isReady: boolean;
@@ -24,57 +24,7 @@ export interface WorkbenchDockviewRead {
   getEdgeState(position: WorkbenchEdgePosition): DeepReadonly<WorkbenchEdgeState>;
 }
 
-let bindingGeneration = 0;
-let waiters: Array<{
-  readonly generation: number;
-  readonly resolve: (value: { readonly status: 'hydrated' | 'unbound' }) => void;
-}> = [];
-
-function settle(status: 'hydrated' | 'unbound', generation: number): void {
-  const pending = waiters;
-  waiters = [];
-  for (const waiter of pending) {
-    if (waiter.generation === generation || status === 'unbound') waiter.resolve({ status });
-    else waiters.push(waiter);
-  }
-}
-
-export function notifyWorkbenchRootBound(): void {
-  bindingGeneration += 1;
-  if (workbenchDockviewPort.isHydrated) settle('hydrated', bindingGeneration);
-}
-
-export function notifyWorkbenchRootUnbound(generation: number): void {
-  settle('unbound', generation);
-}
-
-export function createWorkbenchDockviewRead(
-  port: WorkbenchDockviewPort = workbenchDockviewPort,
-): WorkbenchDockviewRead {
-  return {
-    get isReady() { return port.isReady; },
-    get isHydrated() { return port.isHydrated; },
-    whenHydrated: () => {
-      const generation = bindingGeneration;
-      if (!port.isHydrated) {
-        return new Promise((resolve) => waiters.push({ generation, resolve }));
-      }
-      return Promise.resolve({ status: 'hydrated' as const });
-    },
-    subscribe: port.subscribe,
-    getSnapshot: port.getSnapshot,
-    getPanel: port.getPanel,
-    getActivePanel: port.getActivePanel,
-    getActiveEditorPanel: port.getActiveEditorPanel,
-    listPanels: port.listPanels,
-    listGroups: port.listGroups,
-    listGroupPanels: port.listGroupPanels,
-    findEditorPanelsByResource: port.findEditorPanelsByResource,
-    getEdgeState: port.getEdgeState,
-  };
-}
-
-export const workbenchDockviewRead = createWorkbenchDockviewRead();
+export const workbenchDockviewRead: WorkbenchDockviewRead = workbenchDockviewRuntime.read;
 
 export type {
   WorkbenchEdgePosition,

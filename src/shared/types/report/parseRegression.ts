@@ -13,7 +13,7 @@ import {
 } from './guards';
 import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from './iv';
 import { parseCoefficientList, parseFiniteNumberArray, parseModelBasicInfo } from './parseCommon';
-import type { PlotPointDTO } from '@/shared/types/dto/plotPayload';
+import type { PlotPointDTO } from '@/shared/types/domain/plotPayload';
 import type { BinaryModelStatistics, DiagnosticInfo, RegressionResultData } from './regression';
 
 const DIAGNOSTIC_OPTIONAL_KEYS = [

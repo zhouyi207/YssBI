@@ -1,5 +1,5 @@
-import type { ErrorReference } from '@/services/ipc';
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { ErrorReference } from '@/features/application/errorReference';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import {
   getWorksheetSnapshot,
   type PendingWorksheetSave,

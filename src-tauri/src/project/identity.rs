@@ -41,6 +41,32 @@ macro_rules! uuid_id {
 uuid_id!(OperationId);
 uuid_id!(HistoryEntryId);
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ProjectResourcePath(Box<str>);
+
+impl ProjectResourcePath {
+    pub fn new(value: impl Into<Box<str>>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for ProjectResourcePath {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for ProjectResourcePath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]

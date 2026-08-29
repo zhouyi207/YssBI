@@ -1,4 +1,4 @@
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { isResourceDocumentDirty } from '@/features/core/resource';
 
@@ -10,14 +10,14 @@ import {
 } from './rightSidebarActions';
 
 function editorPanelsInGroup(groupId: string) {
-  return workbenchDockviewPort
+  return workbenchDockviewRead
     .listGroupPanels(groupId)
     .filter((panel) => panel.metadata.role === 'editor');
 }
 
 function applyPassiveCloseFallback(): void {
   if (useEditorStore.getState().detailFocus) return;
-  const active = workbenchDockviewPort.getActiveEditorPanel();
+  const active = workbenchDockviewRead.getActiveEditorPanel();
   if (active?.metadata.role !== 'editor') return;
 
   const { resourceKind, resourceRef } = active.metadata;
@@ -68,7 +68,7 @@ export function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
 /** Physical Close Group owns every canonical panel currently in that Dockview group. */
 export function closeEditorGroup(groupId: string): Promise<boolean> {
   return closePanelIds(
-    workbenchDockviewPort
+    workbenchDockviewRead
       .listGroupPanels(groupId)
       .map((panel) => panel.panelInstanceId),
   );

@@ -1,14 +1,12 @@
-mod graph_operations;
 mod operation_ledger;
+#[cfg(test)]
 mod rename_operations;
-
 #[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod tests;
 
 pub(crate) use operation_ledger::ResourceOperationLedger;
 pub(crate) use operation_ledger::ResourceOperationReservation;
+#[cfg(test)]
 pub(crate) use rename_operations::{remap_graph_document_references, remap_variable_scope_path};
 
 #[cfg(test)]
@@ -16,13 +14,13 @@ pub(crate) use test_support::{ResourceMutationTestHook, ResourceMutationTestPoin
 
 #[cfg(test)]
 fn fixture_result_path(
-    result: &crate::event::ResourceMutationResultDto,
+    result: &crate::schema::application_event::ResourceMutationResultDto,
 ) -> Option<crate::graph_document::GraphResourcePath> {
     let paths = match &result.projection_status {
-        crate::event::ProjectionStatusDto::Complete {
+        crate::schema::application_event::ProjectionStatusDto::Complete {
             expected_graph_paths,
         } => expected_graph_paths,
-        crate::event::ProjectionStatusDto::Incomplete {
+        crate::schema::application_event::ProjectionStatusDto::Incomplete {
             invalidated_graph_paths,
         } => invalidated_graph_paths,
     };

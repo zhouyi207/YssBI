@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { currentAppWindow } from '@/services/platform/appWindow';
 import { WindowStateService } from '@/services/window/windowStateService';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { captureWindowGeometryPreservingMaximized } from './windowGeometryCapture';
 import { readSecondaryWindowState, saveSecondaryWindowState } from './secondaryWindowGeometryStore';
 

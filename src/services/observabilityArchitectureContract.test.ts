@@ -46,11 +46,11 @@ describe('observability architecture contract', () => {
     const didSource = readFileSync(resolve('src-tauri/src/sci/models/panel_did.rs'), 'utf8');
     const didBlock = didSource.match(/pub struct DidPlaceboFakeGroupBlock\s*\{([\s\S]*?)\n\}/)?.[1];
     const worksheetType = readFileSync(resolve('src/shared/types/domain/worksheet.ts'), 'utf8');
-    const resultState = readFileSync(resolve('src/features/core/resultSource/types.ts'), 'utf8');
+    const resultState = readFileSync(resolve('src/features/application/results/types.ts'), 'utf8');
     const catalogState = readFileSync(resolve('src/features/core/nodeCatalog/nodeCatalogStore.ts'), 'utf8');
-    const projectState = readFileSync(resolve('src/features/core/dataStore/projectIOStore.ts'), 'utf8');
+    const projectState = readFileSync(resolve('src/features/application/project/projectIOStore.ts'), 'utf8');
     const compilerDiagnostics = readFileSync(
-      resolve('src-tauri/src/node_system/compiler/diagnostics.rs'),
+      resolve('src-tauri/src/graph/catalog/diagnostics.rs'),
       'utf8',
     );
     const resourceResolutionDiagnostic = compilerDiagnostics.match(
@@ -80,23 +80,24 @@ describe('observability architecture contract', () => {
       .match(/pub struct JuliaRuntimeStatus\s*\{([\s\S]*?)\n\}/)?.[1];
     const workerStatus = readFileSync(resolve('src-tauri/src/julia/worker.rs'), 'utf8')
       .match(/pub struct JuliaWorkerStatus\s*\{([\s\S]*?)\n\}/)?.[1];
-    const resultFailure = readFileSync(resolve('src-tauri/src/commands/node_system_execution_dto.rs'), 'utf8')
-      .match(/pub struct ResultFailureDto\s*\{([\s\S]*?)\n\}/)?.[1];
+    const executionDto = readFileSync(resolve('src-tauri/src/commands/execution_dto.rs'), 'utf8');
+    const resultFailure = executionDto.match(/pub\(crate\) enum RunErrorOutcomeDto\s*\{([\s\S]*?)\n\}/)?.[1];
     const pathCommand = readFileSync(resolve('src-tauri/src/commands/command_project/path.rs'), 'utf8');
     if (!runtimeStatus || !workerStatus || !resultFailure) throw new Error('safe status DTO contract not found');
 
     const fields = (body: string) => [...body.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map(match => match[1]);
     expect(fields(runtimeStatus)).toEqual(['state', 'version', 'install_dir']);
     expect(fields(workerStatus)).toEqual(['runtime_state', 'environment_state', 'process_state', 'project_dir']);
-    expect([...resultFailure.matchAll(/^\s*(\w+)\s*:/gm)].map(match => match[1]))
-      .toEqual(['code', 'cause', 'upstream_result_ids']);
+    expect(resultFailure.trim()).toBe('Failed,');
+    expect(resultFailure).not.toMatch(/message|detail|hint|cause|upstream_result_ids/);
     expect(pathCommand).toMatch(/validate_new_project_path\(path: String\) -> Result<\(\), CommandError>/);
     expect(pathCommand).not.toMatch(/ProjectPathValidation/);
   });
 
   it('keeps business application workflows independent from diagnostic storage', () => {
     const applicationFiles = productionFiles('src/features/application', ['.ts', '.tsx'])
-      .filter((path) => !path.startsWith('src/features/application/log/'));
+      .filter((path) => !path.startsWith('src/features/application/log/'))
+      .filter((path) => !path.startsWith('src/features/application/observability/'));
     const diagnosticImports = /(?:@\/features\/core\/log|@\/services\/log|@\/shared\/types\/dto\/diagnostics)/;
 
     expect(matchingFiles(applicationFiles, diagnosticImports)).toEqual([]);

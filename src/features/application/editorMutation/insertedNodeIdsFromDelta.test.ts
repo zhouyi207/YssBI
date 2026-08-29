@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GraphDeltaDto, GraphDocumentOperationDto } from '@/shared/types/dto/editorMutation';
+import type { GraphDeltaDto, GraphDocumentOperationDto } from '@/shared/types/domain/editorMutation';
 import { insertedNodeIdsFromDelta } from './insertedNodeIdsFromDelta';
 
 const node = (id: string) => ({

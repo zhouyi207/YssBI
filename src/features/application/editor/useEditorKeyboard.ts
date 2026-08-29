@@ -19,7 +19,8 @@ import {
   shouldIgnoreEditorShortcutEvent,
   type EditorCommandTarget,
 } from './editorCommandFocus';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { requestCloseWorkbenchPanel } from './workbenchPanelClose';
 import {
   toggleActivityWorkbenchGroup,
@@ -50,9 +51,9 @@ function getActiveCanvasLocalPoint(
 }
 
 function cyclePhysicalPanel(backward: boolean): boolean {
-  const activePanel = workbenchDockviewPort.getActivePanel();
+  const activePanel = workbenchDockviewRead.getActivePanel();
   if (!activePanel) return false;
-  const panels = workbenchDockviewPort.listGroupPanels(activePanel.groupId);
+  const panels = workbenchDockviewRead.listGroupPanels(activePanel.groupId);
   if (panels.length < 2) return false;
   const currentIndex = panels.findIndex(
     (panel) => panel.panelInstanceId === activePanel.panelInstanceId,
@@ -60,7 +61,7 @@ function cyclePhysicalPanel(backward: boolean): boolean {
   if (currentIndex < 0) return false;
   const offset = backward ? -1 : 1;
   const nextIndex = (currentIndex + offset + panels.length) % panels.length;
-  void workbenchDockviewPort.activate(panels[nextIndex].panelInstanceId);
+  void workbenchDockviewControl.activate(panels[nextIndex].panelInstanceId);
   return true;
 }
 
@@ -237,7 +238,7 @@ export function useEditorKeyboard(): void {
       }
 
       if (isControlKey && key === 'w') {
-        const activePanel = workbenchDockviewPort.getActivePanel();
+        const activePanel = workbenchDockviewRead.getActivePanel();
         if (!activePanel) return;
         event.preventDefault();
         void requestCloseWorkbenchPanel(activePanel.panelInstanceId);

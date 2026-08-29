@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
-import { usePinInput } from "@/features/application/viewCapabilities";
+import { usePinInput } from "@/features/core/pin";
 import { Select } from "@/shared/ui";
 import type { DataType, PinMetaDataDTO } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";

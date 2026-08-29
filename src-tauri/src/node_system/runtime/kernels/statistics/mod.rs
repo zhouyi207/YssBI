@@ -1,7 +1,7 @@
 //! Statistical kernels over materialized protocol series and model values.
 
 use super::KernelFragment;
-use crate::node_system::protocol::Value;
+use crate::graph::protocol::Value;
 use crate::node_system::runtime::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     NullPolicy, NumericSeriesView, RuntimeValue, numeric_series as read_numeric_series,
@@ -977,7 +977,7 @@ mod tests {
             &[input],
         )
         .unwrap_err();
-        assert_eq!(error.to_string(), "unsupported ADF regression 'unexpected'");
+        assert_eq!(error.to_string(), "scientific input is invalid");
     }
 
     #[test]

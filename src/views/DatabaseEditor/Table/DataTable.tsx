@@ -20,14 +20,14 @@ import {
 } from '@/components/ui/empty';
 import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
 import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import { useSettingsStore } from '@/features/application/viewCapabilities';
+import { useSettingsRead } from '@/features/core/settings/read';
 import { resolveThemeTokens } from '@/shared/theme/themeTokens';
-import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
+import type { ColumnInfo, DatabaseRow } from '@/shared/types/domain/database';
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
   DATABASE_EDITOR_ROW_HEIGHT,
   DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-} from '@/app/appConfig/default';
+} from '@/shared/config-default';
 import {
   DatabaseCellRenderer,
   DatabaseColumnHeader,
@@ -96,7 +96,7 @@ export const DataTable: React.FC<DataTableProps> = ({
   onSelectionChange,
 }) => {
   const { t } = useTranslation();
-  const appTheme = useSettingsStore((state) => state.theme);
+  const appTheme = useSettingsRead((state) => state.theme);
   const themeTokens = useMemo(() => resolveThemeTokens(appTheme), [appTheme]);
   const gridRef = useRef<AgGridReact<DatabaseGridRow>>(null);
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);

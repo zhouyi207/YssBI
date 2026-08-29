@@ -1,6 +1,6 @@
 use super::RunError;
-use crate::node_system::analysis::CompileProvenance;
-use crate::node_system::plan::{CompiledResourceRequirement, ResourceId};
+use crate::execution::plan::legacy::{CompiledResourceRequirement, ResourceId};
+use crate::graph::analysis::contracts::CompileProvenance;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;

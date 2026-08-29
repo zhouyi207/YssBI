@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useGraphDataStore } from '@/features/application/viewCapabilities';
+import { useGraphRead } from '@/features/core/graph/read';
 import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { detailEmptyHintClass } from '../shared/detailStyles';
@@ -55,10 +55,19 @@ export function NodePinInterfacePanel({
   outputs,
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
-  const bucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
-  const graphPins = useMemo(() => Object.values(bucket?.pins ?? {}), [bucket]);
-  const graphConnections = useMemo(() => Object.values(bucket?.connections ?? {}), [bucket]);
-  const graphNodes = bucket?.nodes ?? {};
+  const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
+  const graphPins = useMemo(
+    () => Object.values(bucket?.pins ?? {}).map((pin) => structuredClone(pin) as PinData),
+    [bucket],
+  );
+  const graphConnections = useMemo(
+    () => Object.values(bucket?.connections ?? {}).map((connection) => structuredClone(connection) as ConnectionData),
+    [bucket],
+  );
+  const graphNodes = useMemo(
+    () => structuredClone(bucket?.nodes ?? {}) as Record<string, NodeData>,
+    [bucket],
+  );
 
   return (
     <>

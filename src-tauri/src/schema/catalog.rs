@@ -1,16 +1,308 @@
 use crate::application::catalog_query::CatalogQueryResult;
-use crate::node_system::catalog::LocalizedCatalogDto;
+use crate::graph::catalog::{
+    LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
+    LocalizedParameter as DomainParameter, LocalizedPort as DomainPort,
+    NodeCreation as DomainCreationDescriptor, ResourceBoundCreateArgs as DomainCreateArgs,
+};
+use serde::Serialize;
+
+/// The catalog wire shape is owned by the transport schema layer.
+///
+/// Graph supplies the transport-neutral projection; this conversion is the
+/// only boundary that adds project/session metadata to the catalog wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedCatalogDto {
+    pub project_instance_id: Box<str>,
+    pub registry_fingerprint: Box<str>,
+    pub resource_publication_revision: u64,
+    pub locale: Box<str>,
+    pub categories: Vec<LocalizedCategoryDto>,
+    pub items: Vec<LocalizedCatalogItemDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedCategoryDto {
+    pub category_id: Box<str>,
+    pub parent_category_id: Option<Box<str>>,
+    pub order: i32,
+    pub title: Box<str>,
+    pub search_text: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedCatalogItemDto {
+    pub node_type_id: Box<str>,
+    pub title: Box<str>,
+    pub documentation: Option<Box<str>>,
+    pub category_id: Box<str>,
+    pub icon_id: Box<str>,
+    pub style_id: Box<str>,
+    pub aliases: Vec<Box<str>>,
+    pub technical_terms: Vec<Box<str>>,
+    pub backend_search_text: Vec<Box<str>>,
+    pub resource_names: Vec<Box<str>>,
+    pub ports: Vec<LocalizedPortDto>,
+    pub parameters: Vec<LocalizedParameterDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_path: Option<Box<str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_revision: Option<u64>,
+    pub creation: NodeCreationDescriptorDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedPortDto {
+    pub key: Box<str>,
+    pub label: Box<str>,
+    pub direction: Box<str>,
+    pub kind: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedParameterDto {
+    pub key: Box<str>,
+    pub title: Box<str>,
+    pub description: Option<Box<str>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum NodeCreationDescriptorDto {
+    #[serde(rename = "static")]
+    Static {
+        #[serde(rename = "nodeTypeId")]
+        node_type_id: Box<str>,
+    },
+    #[serde(rename = "parameterizedStatic")]
+    ParameterizedStatic {
+        #[serde(rename = "nodeTypeId")]
+        node_type_id: Box<str>,
+        #[serde(rename = "requiredParameters")]
+        required_parameters: Box<[Box<str>]>,
+    },
+    #[serde(rename = "resourceBound")]
+    ResourceBound {
+        #[serde(rename = "nodeTypeId")]
+        node_type_id: Box<str>,
+        #[serde(rename = "resourcePath")]
+        resource_path: Box<str>,
+        #[serde(rename = "resourceRevision")]
+        resource_revision: u64,
+        #[serde(rename = "createArgs")]
+        create_args: ResourceBoundCreateArgsDto,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ResourceBoundCreateArgsDto {
+    Function,
+    Variable,
+    Database,
+}
+
+impl From<crate::graph::catalog::LocalizedCatalog> for LocalizedCatalogDto {
+    fn from(catalog: crate::graph::catalog::LocalizedCatalog) -> Self {
+        Self {
+            project_instance_id: Box::default(),
+            registry_fingerprint: Box::default(),
+            resource_publication_revision: 0,
+            locale: catalog.locale,
+            categories: catalog
+                .categories
+                .into_iter()
+                .map(LocalizedCategoryDto::from)
+                .collect(),
+            items: catalog
+                .items
+                .into_iter()
+                .map(LocalizedCatalogItemDto::from)
+                .collect(),
+        }
+    }
+}
 
 impl From<CatalogQueryResult> for LocalizedCatalogDto {
     fn from(result: CatalogQueryResult) -> Self {
         let (project_instance_id, registry_fingerprint, resource_publication_revision, catalog) =
             result.into_transport_parts().into_fields();
+        let mut mapped = Self::from(catalog);
+        mapped.project_instance_id = project_instance_id.as_str().into();
+        mapped.registry_fingerprint = registry_fingerprint.to_hex().into();
+        mapped.resource_publication_revision = resource_publication_revision;
+        mapped
+    }
+}
 
-        catalog.into_dto(
-            project_instance_id.as_str(),
-            registry_fingerprint.to_hex(),
-            resource_publication_revision,
-        )
+impl From<crate::graph::catalog::LocalizedCategory> for LocalizedCategoryDto {
+    fn from(category: DomainCategory) -> Self {
+        Self {
+            category_id: category.category_id,
+            parent_category_id: category.parent_category_id,
+            order: category.order,
+            title: category.title,
+            search_text: category.search_text,
+        }
+    }
+}
+
+impl From<crate::graph::catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
+    fn from(item: DomainCatalogItem) -> Self {
+        Self {
+            node_type_id: item.node_type_id,
+            title: item.title,
+            documentation: item.documentation,
+            category_id: item.category_id,
+            icon_id: item.icon_id,
+            style_id: item.style_id,
+            aliases: item.aliases,
+            technical_terms: item.technical_terms,
+            backend_search_text: item.backend_search_text,
+            resource_names: item.resource_names,
+            ports: item.ports.into_iter().map(LocalizedPortDto::from).collect(),
+            parameters: item
+                .parameters
+                .into_iter()
+                .map(LocalizedParameterDto::from)
+                .collect(),
+            resource_path: item
+                .resource_path
+                .map(|path: crate::graph::catalog::CatalogResourcePath| path.as_str().into()),
+            resource_revision: item.resource_revision,
+            creation: item.creation.into(),
+        }
+    }
+}
+
+impl From<DomainPort> for LocalizedPortDto {
+    fn from(port: DomainPort) -> Self {
+        Self {
+            key: port.key,
+            label: port.label,
+            direction: port.direction,
+            kind: port.kind,
+        }
+    }
+}
+
+impl From<DomainParameter> for LocalizedParameterDto {
+    fn from(parameter: DomainParameter) -> Self {
+        Self {
+            key: parameter.key,
+            title: parameter.title,
+            description: parameter.description,
+        }
+    }
+}
+
+impl From<DomainCreationDescriptor> for NodeCreationDescriptorDto {
+    fn from(descriptor: DomainCreationDescriptor) -> Self {
+        match descriptor {
+            DomainCreationDescriptor::Static { node_type_id } => Self::Static {
+                node_type_id: node_type_id.as_str().into(),
+            },
+            DomainCreationDescriptor::ParameterizedStatic {
+                node_type_id,
+                required_parameters,
+            } => Self::ParameterizedStatic {
+                node_type_id: node_type_id.as_str().into(),
+                required_parameters: required_parameters
+                    .into_iter()
+                    .map(|parameter: crate::graph::protocol::ParameterKey| {
+                        parameter.as_str().into()
+                    })
+                    .collect(),
+            },
+            DomainCreationDescriptor::ResourceBound {
+                node_type_id,
+                resource_path,
+                resource_revision,
+                create_args,
+            } => Self::ResourceBound {
+                node_type_id: node_type_id.as_str().into(),
+                resource_path: resource_path.as_str().into(),
+                resource_revision,
+                create_args: create_args.into(),
+            },
+        }
+    }
+}
+
+impl From<DomainCreateArgs> for ResourceBoundCreateArgsDto {
+    fn from(value: DomainCreateArgs) -> Self {
+        match value {
+            DomainCreateArgs::Function => Self::Function,
+            DomainCreateArgs::Variable => Self::Variable,
+            DomainCreateArgs::Database => Self::Database,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum NodeCreationMappingError {
+    #[error("node creation descriptor contains an invalid node type")]
+    InvalidNodeType,
+    #[error("node creation descriptor contains an invalid required parameter")]
+    InvalidParameter,
+}
+
+impl TryFrom<NodeCreationDescriptorDto> for crate::graph::catalog::NodeCreation {
+    type Error = NodeCreationMappingError;
+
+    fn try_from(value: NodeCreationDescriptorDto) -> Result<Self, Self::Error> {
+        let node_type = |value: Box<str>| {
+            crate::graph::protocol::NodeTypeId::new(value)
+                .map_err(|_| NodeCreationMappingError::InvalidNodeType)
+        };
+        let parameter = |value: Box<str>| {
+            crate::graph::protocol::ParameterKey::new(value)
+                .map_err(|_| NodeCreationMappingError::InvalidParameter)
+        };
+        Ok(match value {
+            NodeCreationDescriptorDto::Static { node_type_id } => {
+                crate::graph::catalog::NodeCreation::Static {
+                    node_type_id: node_type(node_type_id)?,
+                }
+            }
+            NodeCreationDescriptorDto::ParameterizedStatic {
+                node_type_id,
+                required_parameters,
+            } => crate::graph::catalog::NodeCreation::ParameterizedStatic {
+                node_type_id: node_type(node_type_id)?,
+                required_parameters: required_parameters
+                    .into_vec()
+                    .into_iter()
+                    .map(parameter)
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_boxed_slice(),
+            },
+            NodeCreationDescriptorDto::ResourceBound {
+                node_type_id,
+                resource_path,
+                resource_revision,
+                create_args,
+            } => crate::graph::catalog::NodeCreation::ResourceBound {
+                node_type_id: node_type(node_type_id)?,
+                resource_path: crate::graph::catalog::CatalogResourcePath::new(resource_path),
+                resource_revision,
+                create_args: match create_args {
+                    ResourceBoundCreateArgsDto::Function => {
+                        crate::graph::catalog::ResourceBoundCreateArgs::Function
+                    }
+                    ResourceBoundCreateArgsDto::Variable => {
+                        crate::graph::catalog::ResourceBoundCreateArgs::Variable
+                    }
+                    ResourceBoundCreateArgsDto::Database => {
+                        crate::graph::catalog::ResourceBoundCreateArgs::Database
+                    }
+                },
+            },
+        })
     }
 }
 
@@ -29,13 +321,12 @@ mod tests {
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
+    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     };
-    use crate::node_system::ProjectSessionId;
-    use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::compiler::ProjectCompileCoordinator;
+    use crate::project::ProjectSessionId;
     use crate::project::{GraphDocumentKind, ProjectData};
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
@@ -71,7 +362,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                compiler: Arc::new(ProjectCompileCoordinator::new()),
                 resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
                     BTreeMap::new(),
                     BTreeMap::new(),

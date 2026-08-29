@@ -7,7 +7,7 @@ import { useDatabaseStore } from '@/features/core/dataStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import type { DatabaseRowsResult } from '@/services/database/databaseService';
 import type { LoadDatabaseResult } from '@/shared/types/dto/database';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { useDataLoader } from './useDataLoader';
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';

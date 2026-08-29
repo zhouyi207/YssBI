@@ -7,7 +7,7 @@ const graphWarn = vi.hoisted(() => vi.fn());
 
 vi.mock('@/features/core/history', () => ({ executeCommandOutcome }));
 vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
-vi.mock('@/utils/appLogger', () => ({
+vi.mock('@/features/application/observability/appLogger', () => ({
   logger: {
     graph: { warn: graphWarn },
   },

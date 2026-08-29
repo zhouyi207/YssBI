@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockviewReact,
-  type DockviewApi,
   type DockviewReadyEvent,
   type DockviewWillDropEvent,
   type IDockviewPanelHeaderProps,
 } from 'dockview-react';
 
-import {
-  DEFAULT_LOGS_DOCKVIEW_LAYOUT,
-  LOGS_DOCKVIEW_COMPONENT_ID,
-} from '@/features/application/viewCapabilities';
-import type { LogsDockviewLayoutController } from '@/features/application/viewCapabilities';
-import { useSettingsStore } from '@/features/application/viewCapabilities';
+import { DEFAULT_LOGS_DOCKVIEW_LAYOUT, LOGS_DOCKVIEW_COMPONENT_ID } from '@/features/core/dockview/logsDockviewLayout';
+import { logsDockviewRootBinding } from '@/features/core/dockview';
+import type { LogsDockviewBindingToken } from '@/features/core/dockview';
+import { useSettingsRead } from '@/features/core/settings/read';
 import { resolveYssbiLogsDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { LogDomainPanel } from './LogDomainPanel';
 import { LogWorkspaceActions } from './LogWorkspaceActions';
@@ -23,7 +20,7 @@ const LOG_WORKSPACE_COMPONENTS = {
 };
 
 export type LogWorkspaceLayoutLifecycle =
-  | { readonly kind: 'main'; readonly controller: LogsDockviewLayoutController }
+  | { readonly kind: 'main' }
   | { readonly kind: 'ephemeral' };
 
 export interface LogWorkspaceDockviewProps {
@@ -31,8 +28,7 @@ export interface LogWorkspaceDockviewProps {
 }
 
 interface BoundMainLayout {
-  readonly api: DockviewApi;
-  readonly controller: LogsDockviewLayoutController;
+  readonly token: LogsDockviewBindingToken;
 }
 
 function LogWorkspaceTab({ api }: IDockviewPanelHeaderProps) {
@@ -63,24 +59,24 @@ function restrictLogsTabDrop(event: DockviewWillDropEvent): void {
 
 export function LogWorkspaceDockview({ layout }: LogWorkspaceDockviewProps) {
   const boundMainLayoutRef = useRef<BoundMainLayout | null>(null);
-  const themeMode = useSettingsStore((state) => state.theme.mode);
-  const mainController = layout.kind === 'main' ? layout.controller : null;
-  const presentation = layout.kind === 'main' ? 'embedded' : 'standalone';
+  const themeMode = useSettingsRead((state) => state.theme.mode);
+  const isMainLayout = layout.kind === 'main';
+  const presentation = isMainLayout ? 'embedded' : 'standalone';
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
-    if (mainController) {
-      mainController.bind(event.api);
-      boundMainLayoutRef.current = { api: event.api, controller: mainController };
+    if (isMainLayout) {
+      const token = logsDockviewRootBinding.bind(event.api);
+      boundMainLayoutRef.current = { token };
       return;
     }
 
     event.api.fromJSON(structuredClone(DEFAULT_LOGS_DOCKVIEW_LAYOUT));
-  }, [mainController]);
+  }, [isMainLayout]);
 
   useEffect(() => () => {
     const bound = boundMainLayoutRef.current;
     boundMainLayoutRef.current = null;
-    if (bound) bound.controller.unbind(bound.api);
+    if (bound) logsDockviewRootBinding.unbind(bound.token);
   }, []);
 
   return (

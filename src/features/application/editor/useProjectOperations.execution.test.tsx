@@ -8,7 +8,7 @@ import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { RunEvent } from '@/shared/types/dto/runEvent';
+import type { RunEvent } from '@/shared/types/domain/runEvent';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
 import {
   completePendingMutation,
@@ -57,6 +57,14 @@ vi.mock('@/features/core/execution', () => ({
 }));
 vi.mock('@/features/core/execution/executionRecording', () => ({
   ensureGraphExecutionTerminal: vi.fn(),
+}));
+vi.mock('./resolveExecutionGraphPath', () => ({
+  resolveExecutionGraphPath: (targetGraphPath?: string) =>
+    targetGraphPath ?? 'events/Main.yssbi-event',
+  getExecutionEventGraph: () => ({
+    graphPath: 'events/Main.yssbi-event',
+    graph: { name: 'Main', path: 'events/Main.yssbi-event', type: 'event' },
+  }),
 }));
 vi.mock('@/features/application/execution/openInspectableResult', () => ({
   openInspectableResult: vi.fn().mockResolvedValue(true),

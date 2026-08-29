@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultService } from '@/services/result/resultService';
 import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
-import type { PinResultEntry } from '@/shared/types/dto/result';
+import type { PinResultEntry } from '@/shared/types/domain/result';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { openInspectableResult } from './openInspectableResult';
 import { PinHistoryMenu } from './PinHistoryMenu';

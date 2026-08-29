@@ -11,7 +11,7 @@ import {
 } from '@/features/application/resource/resourceActions';
 import { deleteGraphWithConfirm } from '@/features/application/dataManagement/deleteGraphWithConfirm';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 
 type OpenGraphOptions = {

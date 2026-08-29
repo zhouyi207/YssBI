@@ -1,4 +1,4 @@
-import type { EditorGraphMutationDto } from '@/shared/types/dto/editorMutation';
+import type { EditorGraphMutationDto } from '@/shared/types/domain/editorMutation';
 import type { GraphMutationCommandResult } from './types';
 
 export interface GraphMutationPort {

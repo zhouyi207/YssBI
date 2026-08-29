@@ -22,7 +22,7 @@ import { CatalogService } from '@/services/nodeSystem/catalogService';
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from '@/shared/types/domain/editorMutation';
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
 import { isLocalizedCatalogDto } from '@/shared/types/dto/localizedCatalog';
 import { NodeParameterEditor } from '@/views/EditorView/Layout/Detail/node/parameterEditors/NodeParameterEditor';

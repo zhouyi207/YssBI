@@ -19,7 +19,7 @@ mod tests {
         DocumentNode, GraphDocument, GraphResourcePath, GraphResourcePathError, NodeId,
         NodePosition, ParameterValues, TypedValue,
     };
-    use crate::node_system::protocol::{NodeTypeId, ParameterKey};
+    use crate::graph::protocol::{NodeTypeId, ParameterKey};
     use serde_json::json;
 
     #[test]

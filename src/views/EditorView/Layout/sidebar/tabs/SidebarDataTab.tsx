@@ -1,11 +1,8 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EditorDataframes } from '@/features/application/viewCapabilities';
-import {
-  buildDataSidebarModel,
-  useSidebarSectionExpandSnapshot,
-  useSidebarStore,
-} from '@/features/application/viewCapabilities';
+import type { DatabaseRecord } from '@/shared/types/domain/database';
+import { buildDataSidebarModel } from '@/features/core/sidebar/flatRows';
+import { sidebarUi, useSidebarUi } from '@/features/core/sidebar/ui';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
 
@@ -15,14 +12,16 @@ export function SidebarDataTab({
   onSectionContextMenu,
   onDatabaseContextMenu,
 }: {
-  dataframes: EditorDataframes;
+  dataframes: Record<string, DatabaseRecord>;
   onImport: () => void;
   onSectionContextMenu: (e: React.MouseEvent) => void;
   onDatabaseContextMenu: (e: React.MouseEvent, id: string, name: string) => void;
 }) {
   const { t } = useTranslation();
-  const sectionExpanded = useSidebarSectionExpandSnapshot('dataData');
-  const toggleSection = useSidebarStore((s) => s.toggleSection);
+  const sectionExpanded = useSidebarUi((snapshot) => ({
+    dataData: snapshot.expandedSections.dataData ?? true,
+  }));
+  const toggleSection = sidebarUi.toggleSection;
 
   const model = useMemo(
     () =>

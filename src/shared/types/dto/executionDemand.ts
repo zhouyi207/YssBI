@@ -1,25 +1,3 @@
-import type { PortAddressDto } from './editorProjection';
-
-export interface GraphOutputRefDto {
-  graphPath: string;
-  port: PortAddressDto;
-}
-
-export type ExecutionDemandDto =
-  | { type: 'default' }
-  | {
-      type: 'outputs';
-      outputs: GraphOutputRefDto[];
-      includeDefaultResults: boolean;
-    }
-  | {
-      type: 'pinPreview';
-      output: GraphOutputRefDto;
-      generation: number;
-    };
-
-export const EXECUTION_DEMAND_TYPES = {
-  default: true,
-  outputs: true,
-  pinPreview: true,
-} as const satisfies Record<ExecutionDemandDto['type'], true>;
+/** Stable IPC import surface for execution contracts. */
+export type * from '@/shared/types/domain/executionDemand';
+export { EXECUTION_DEMAND_TYPES } from '@/shared/types/domain/executionDemand';

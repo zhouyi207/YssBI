@@ -4,7 +4,7 @@ use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::resource_mutations::ResourceOperationReservation;
 use crate::project::{
     ProjectFilesystemError, ProjectGraphHistoryChange, ProjectGraphHistoryState,
-    ProjectGraphResidency, ProjectInstanceId, ProjectSession,
+    ProjectGraphResidency, ProjectHistoryTransaction, ProjectInstanceId, ProjectSession,
 };
 
 use super::state::ProjectState;
@@ -20,6 +20,10 @@ pub struct GraphOperationCapture {
 impl GraphOperationCapture {
     pub(crate) fn into_authority(self) -> GraphOperationAuthority {
         self.authority
+    }
+
+    pub(crate) fn operation_id(&self) -> crate::project::OperationId {
+        self.authority.operation_id
     }
 }
 
@@ -380,6 +384,16 @@ impl ProjectState {
             graph_revisions.insert(graph_path.clone(), next_revision);
             drop(graph_revisions);
 
+            let mut history = self
+                .history
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            history.record_committed_transaction(ProjectHistoryTransaction::graph_change(
+                operation_id,
+                history_change.clone(),
+            ));
+            let history_status = history.status();
+
             publication.commit_prepared(publication_advance);
             Ok((
                 GraphCommitReceipt {
@@ -388,8 +402,8 @@ impl ProjectState {
                     from_revision: revision,
                     to_revision: next_revision,
                     history: ProjectHistoryStatus {
-                        can_undo: true,
-                        can_redo: false,
+                        can_undo: history_status.can_undo,
+                        can_redo: history_status.can_redo,
                     },
                     history_change: Some(history_change),
                     invalidations: GraphInvalidationSet {

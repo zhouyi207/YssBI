@@ -3,6 +3,15 @@
 use polars::prelude::*;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
+use std::future::Future;
+
+fn block_on<F: Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("database SQLite runtime should be constructible")
+        .block_on(future)
+}
 
 /// 构建 SQLite 连接 URL（只读）
 fn sqlite_url(db_path: &str) -> String {
@@ -25,7 +34,7 @@ fn sqlite_url(db_path: &str) -> String {
 /// 列出 SQLite 数据库中的用户表（排除 sqlite_ 前缀的系统表）
 pub fn list_tables(db_path: &str) -> Result<Vec<String>, String> {
     let url = sqlite_url(db_path);
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: SqliteConnectOptions = url
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid SQLite URL: {}", e))?;
@@ -76,7 +85,7 @@ fn sqlite_value_to_anyvalue(row: &SqliteRow, i: usize) -> Result<AnyValue<'stati
 /// 从 SQLite 表读取数据并构建 Polars DataFrame
 pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, String> {
     let url = sqlite_url(db_path);
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let opts: SqliteConnectOptions = url
             .parse()
             .map_err(|e: sqlx::Error| format!("Invalid SQLite URL: {}", e))?;

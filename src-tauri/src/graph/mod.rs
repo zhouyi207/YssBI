@@ -1,8 +1,13 @@
 pub mod analysis;
+pub mod catalog;
+pub(crate) mod compatibility;
 pub mod compiler;
+pub mod document;
 pub mod error;
 pub mod mutation;
 pub mod node;
+pub mod protocol;
+pub mod registry;
 pub mod resource_catalog;
 pub mod runtime_state;
 pub mod schema;

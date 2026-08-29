@@ -140,7 +140,8 @@ DuckDB overview 仍准确提供：
 |---|---|
 | `database_instance.rs` | State-dependent query/edit/export interface |
 | `project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
-| `database_schema.rs` | DuckDB/Polars metadata 到 domain `DataSchema`/`DataType` 的 normalization |
+| `schema_snapshot.rs` | DuckDB/Polars metadata 到 Database-owned `DatabaseSchemaFact`/`DataType` 的 normalization |
+| `../schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
 | `duckdb_reader.rs` | Ingest、Arrow bridge、table metadata |
 | `duckdb_editing.rs` | Incremental SQL edit/undo helpers |
 | `duckdb_column_snapshot.rs` | Bounded reversible delete-column snapshot |

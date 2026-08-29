@@ -48,6 +48,33 @@ pub struct DatabaseDeclDTO {
     pub load_failed: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadDatabaseResultDto {
+    pub id: String,
+    pub name: String,
+    pub row_count: usize,
+    pub column_count: usize,
+    pub columns: Vec<ColumnInfoDTO>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseMetaResultDto {
+    pub id: String,
+    pub name: String,
+    pub row_count: usize,
+    pub column_count: usize,
+    pub columns: Vec<ColumnInfoDTO>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseRowsResultDto {
+    pub rows: Vec<Vec<serde_json::Value>>,
+    pub row_ids: Vec<i64>,
+}
+
 impl From<&crate::database_contract::DatabaseDecl> for DatabaseDeclDTO {
     fn from(value: &crate::database_contract::DatabaseDecl) -> Self {
         Self {

@@ -6,7 +6,7 @@ import type {
 } from '@/features/core/canvas';
 import { executeSafeGraphMutationOutcome } from '@/features/application/editorMutation/safeGraphMutation';
 import { graphMutationErrorMessageKey } from '@/features/application/editorMutation/graphMutationError';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import { insertRerouteAtConnection } from './edgeOperations';
 import { ensureGraphMutationPortRegistered } from '@/features/application/editorMutation/registerGraphMutationPort';
 

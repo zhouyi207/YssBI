@@ -9,9 +9,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { pinHistoryCacheKey, useExecutionStore } from '@/features/core/execution';
-import { resultRef } from '@/features/core/resultSource';
+import { resultRef } from '@/features/application/results';
 import { ResultService } from '@/services/result/resultService';
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
 import type { PinHistoryProjection } from '@/shared/types/ui';
 import { openInspectableResult } from './openInspectableResult';
 

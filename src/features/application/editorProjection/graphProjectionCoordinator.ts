@@ -5,9 +5,9 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { markResourceStale, useResourceStore } from '@/features/core/resource';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
+import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,

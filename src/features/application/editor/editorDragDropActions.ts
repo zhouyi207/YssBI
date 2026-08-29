@@ -10,7 +10,7 @@ import {
   type CanvasDropTarget,
 } from './dropFunctionIntoEventEditor';
 import { canvasDropHandlerStore, useSidebarDragStore } from '@/features/core/sidebarDrag';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
 import type { SidebarDragPayload } from '@/features/core/dnd';
 import {
   findSidebarDropCanvasAtPointer,
@@ -25,7 +25,7 @@ import {
   readDragModifiers,
 } from '@/features/core/dnd';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
+import { logger } from '@/features/application/observability/appLogger';
 
 export function readEditorDragModifiers(event: DragEndEvent): {
   altKey: boolean;
@@ -101,7 +101,7 @@ async function executeSidebarSpawnDragEnd(
   if (isNodeTemplateDragData(activeData)) {
     const target = resolveCanvasDropTarget(event, dropPointer);
     if (target && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
-      if (!await workbenchDockviewPort.activate(target.panelInstanceId)) {
+      if (!await workbenchDockviewControl.activate(target.panelInstanceId)) {
         clearEditorDragSession();
         return;
       }

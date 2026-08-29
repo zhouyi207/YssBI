@@ -1,5 +1,5 @@
 import { useContext, useMemo } from 'react';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
 import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
 import { GroupContext } from '../context/GroupContext';
@@ -7,10 +7,10 @@ import { useEditorGroupPlacement } from './useEditorGroupPlacement';
 
 export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   const contextGroupId = useContext(GroupContext);
-  useDockviewPortSnapshot(workbenchDockviewPort);
+  useDockviewPortSnapshot(workbenchDockviewRead);
   const groupId = overrideGroupId
     ?? contextGroupId
-    ?? workbenchDockviewPort.getActiveEditorPanel()?.groupId
+    ?? workbenchDockviewRead.getActiveEditorPanel()?.groupId
     ?? null;
   const placement = useEditorGroupPlacement(groupId);
 

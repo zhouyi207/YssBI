@@ -16,6 +16,10 @@ vi.mock('@/features/application/editor', () => ({
   useEditorSessionCommandsContext: () => ({
     addVariable: mocks.addVariable,
   }),
+  useEditorSessionResources: () => ({
+    events: {},
+    functions: {},
+  }),
 }));
 
 vi.mock('@/features/application/window', () => ({
@@ -27,14 +31,25 @@ vi.mock('@/features/core/editor', () => ({
 }));
 
 vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
-  useGraphSessionStore: (selector: (state: {
-    focusedSession: { groupId: string; graphPath: string };
-  }) => unknown) => selector({
-    focusedSession: {
-      groupId: 'group-1',
-      graphPath: 'worksheets/Report.yssbi-worksheet',
+  useGraphSessionStore: Object.assign(
+    (selector: (state: {
+      focusedSession: { groupId: string; graphPath: string };
+    }) => unknown) => selector({
+      focusedSession: {
+        groupId: 'group-1',
+        graphPath: 'worksheets/Report.yssbi-worksheet',
+      },
+    }),
+    {
+      getState: () => ({
+        focusedSession: {
+          groupId: 'group-1',
+          graphPath: 'worksheets/Report.yssbi-worksheet',
+        },
+      }),
+      subscribe: () => () => {},
     },
-  }),
+  ),
 }));
 
 vi.mock('@/features/core/layout', () => ({

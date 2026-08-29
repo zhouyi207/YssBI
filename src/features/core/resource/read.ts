@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import type { DeepReadonly } from '@/features/core/projection/deepReadonly';
+import type { DeepReadonly } from '@/shared/types/deepReadonly';
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
 import { useResourceStore } from './resourceStore';
 import type { ProjectResourceMeta, ResourceKey } from './resourceTypes';

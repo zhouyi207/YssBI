@@ -3,11 +3,11 @@ import { VscClose } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { uiStore } from "@/features/application/viewCapabilities";
 import type { ProgressState } from "@/shared/types/ui";
 
 export interface ProgressOverlayProps {
   progress: ProgressState;
+  onCancel: () => void;
 }
 
 /**
@@ -16,7 +16,7 @@ export interface ProgressOverlayProps {
  * - `progress.percent` 为 0~1 时显示确定型进度条；未提供时显示不确定型滑动条。
  * - `progress.cancelable` 为 true 时显示关闭按钮。
  */
-export function ProgressOverlay({ progress }: ProgressOverlayProps) {
+export function ProgressOverlay({ progress, onCancel }: ProgressOverlayProps) {
   const { t } = useTranslation();
   const indeterminate = progress.percent === undefined;
   const pct = indeterminate
@@ -38,7 +38,7 @@ export function ProgressOverlay({ progress }: ProgressOverlayProps) {
             variant="ghost"
             size="icon-sm"
             className="absolute right-3 top-3 z-10"
-            onClick={() => uiStore.cancelProgress()}
+            onClick={onCancel}
             aria-label={t("common.close")}
           >
             <VscClose size={16} />

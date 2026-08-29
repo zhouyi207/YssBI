@@ -6,7 +6,7 @@ import {
   DEFAULT_EDITOR,
   DEFAULT_PROJECT,
   DEFAULT_THEME,
-} from '@/app/appConfig/default';
+} from '@/shared/config-default';
 import type { AppSettings } from '@/shared/types/settings';
 import type { PlatformOutcome } from '@/services/platform/platformTypes';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';

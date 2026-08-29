@@ -14,19 +14,19 @@ mod streams;
 
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
-use crate::graph_document::{
-    FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
-};
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{
+use crate::execution::plan::legacy::*;
+use crate::graph::analysis::contracts::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
-use crate::node_system::plan::*;
-use crate::node_system::protocol::{
+use crate::graph::protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
     RetryPolicy, TypeExpr, TypeId, Value,
 };
-use crate::node_system::registry::RegistryFingerprint;
+use crate::graph::registry::RegistryFingerprint;
+use crate::graph_document::{
+    FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
+};
+use crate::project::ProjectSessionId;
 use crate::project::{NumericTolerance, StatisticalMissingValuePolicy};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -60,7 +60,7 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .iter()
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
-                contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
                 consumption: InputConsumption::FullyMaterialized,
                 bound_value: None,
             })
@@ -70,10 +70,10 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .iter()
             .map(|value| PlannedOutput {
                 value: ValueRef::new(*value),
-                contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
                 public_output: None,
-                presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
             })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -105,16 +105,16 @@ fn adapter_operation(
         ),
         inputs: Box::new([PlannedInput {
             value: ValueRef::new(input),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             consumption: contract.input_consumption,
             bound_value: None,
         }]),
         outputs: Box::new([PlannedOutput {
             value: ValueRef::new(output),
-            contract: crate::node_system::plan::PlannedValueContract::opaque(),
+            contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
             production: contract.output_production,
             public_output: None,
-            presentation: crate::node_system::plan::ResultPresentation::Inspector,
+            presentation: crate::execution::plan::legacy::ResultPresentation::Inspector,
         }]),
         params: id("adapter.test", CompiledParameterHandle::new),
         resource_dependencies: Box::new([]),
@@ -502,7 +502,7 @@ fn relational_subplan(backend: &str, fragment: &str, _: Box<[()]>) -> Relational
             operators: Box::new([RelationalOperator::Input {
                 name: fragment.into(),
             }]),
-            fragment_roots: Box::new([crate::node_system::plan::RelationalFragmentRoot {
+            fragment_roots: Box::new([crate::execution::plan::legacy::RelationalFragmentRoot {
                 fragment: id(fragment, RelationalFragmentId::new),
                 operator: RelationalOperatorIndex::new(0),
             }]),

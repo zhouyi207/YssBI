@@ -3,7 +3,7 @@ import { area, axisBottom, axisLeft, extent, line, scaleLinear, select } from 'd
 import { cn } from '@/lib/utils';
 import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
-import type { PlotPointDTO } from '@/shared/types/dto/plotPayload';
+import type { PlotPointDTO } from '@/shared/types/domain/plotPayload';
 
 export type KDEPoint = PlotPointDTO;
 

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DARK_THEME } from '@/app/appConfig/default';
+import { DEFAULT_DARK_THEME } from '@/shared/config-default';
 import { resolveThemeTokens } from '@/shared/theme/themeTokens';
 import { applyThemeTokens } from './SettingsEffectsProvider';
 

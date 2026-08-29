@@ -1,16 +1,16 @@
 use super::*;
-use crate::graph_document::{GraphResourcePath, GraphRevision};
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
-};
-use crate::node_system::plan::{
+use crate::execution::plan::legacy::{
     CompiledResourceRequirement, ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle,
     PlannedValueContract, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
     ValueRef,
 };
-use crate::node_system::protocol::OutputProduction;
-use crate::node_system::registry::RegistryFingerprint;
+use crate::graph::analysis::contracts::{
+    CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
+};
+use crate::graph::protocol::OutputProduction;
+use crate::graph::registry::RegistryFingerprint;
+use crate::graph_document::{GraphResourcePath, GraphRevision};
+use crate::project::ProjectSessionId;
 use polars::prelude::{Column, DataFrame};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -461,8 +461,8 @@ fn function_plan_generation_rejects_aliased_abi_members() {
 
 #[test]
 fn function_plan_generation_requires_exact_result_production_keys() {
+    use crate::execution::plan::legacy::PlanValueSource;
     use crate::graph_document::FunctionParameterId;
-    use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -520,8 +520,8 @@ fn function_plan_generation_requires_exact_result_production_keys() {
 
 #[test]
 fn function_plan_generation_rejects_stale_result_production_contract() {
+    use crate::execution::plan::legacy::PlanValueSource;
     use crate::graph_document::FunctionParameterId;
-    use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -568,8 +568,8 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
 
 #[test]
 fn function_plan_generation_requires_initializable_parameters_and_sourced_results() {
+    use crate::execution::plan::legacy::PlanValueSource;
     use crate::graph_document::FunctionParameterId;
-    use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);

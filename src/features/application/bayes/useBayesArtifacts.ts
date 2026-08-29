@@ -9,15 +9,15 @@ import {
 import { revealPath } from '@/services/platform/opener';
 import { savePathDialog } from '@/services/platform/pathDialog';
 import type { PlatformFailure } from '@/services/platform/platformTypes';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
-import { databaseRead } from '@/features/core/database/read';
-import { useDatabaseRead } from '@/features/core/database/read';
+import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+import { databaseRead } from '@/features/application/dataManagement/databaseRead';
+import { useDatabaseRead } from '@/features/application/dataManagement/databaseRead';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { freezeProjectionSnapshot, type DeepReadonly } from '@/features/core/projection/deepReadonly';
+import { freezeProjectionSnapshot, type DeepReadonly } from '@/shared/types/deepReadonly';
 import type {
   AutocorrelationPlotDataDTO,
   DensityPlotDataDTO,

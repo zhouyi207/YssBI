@@ -12,15 +12,13 @@ import {
   createDefaultLogsDockviewLayout,
   LOGS_DOCKVIEW_COMPONENT_ID,
 } from '@/features/core/dockview/logsDockviewLayout';
-import { createLogsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
+import { createLogsDockviewRuntime } from '@/features/core/dockview/logsRuntime';
 import type {
   WorkbenchDockviewInternal,
   WorkbenchLayoutTransaction,
 } from '@/features/core/dockview/workbenchDockviewInternal';
-import type {
-  WorkbenchDockviewPort,
-  WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+import type { WorkbenchDockviewRead, WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
 import type {
   WorkbenchComponentId,
   WorkbenchViewId,
@@ -536,7 +534,7 @@ function createFakePort(
     configureEdge,
     move,
     serialize,
-  } as unknown as WorkbenchDockviewPort;
+  } as unknown as WorkbenchDockviewRead & WorkbenchDockviewControl;
 
   const internal = {
     bind: vi.fn(() => { order.push('internal.bind'); }),
@@ -562,6 +560,8 @@ function createFakePort(
 
   return {
     port,
+    read: port,
+    control: port,
     internal,
     subscribe,
     openEditor,
@@ -610,12 +610,22 @@ function createHarness(options: HarnessOptions = {}) {
   const order: string[] = [];
   const fakeRoot = createFakeRoot(options.rootLayout, order);
   const fakePort = createFakePort(order, options.outputMoveGate);
-  const logsController = createLogsDockviewLayoutController();
+  const logsController = createLogsDockviewRuntime();
   const storage = createStorage(order, options.raw ?? null);
   const controller = createWorkbenchLayoutController({
-    port: fakePort.port,
+    dockviewRead: fakePort.read,
+    dockviewControl: fakePort.control,
     internal: fakePort.internal,
-    logsController,
+    logsRead: {
+      subscribe: (listener) => logsController.subscribe(listener),
+      getLatestSnapshot: () => logsController.getLatestSnapshot(),
+    },
+    logsControl: {
+      beginRestore: () => logsController.beginRestore(),
+      stageRestore: (epoch, layout) => logsController.stageRestore(epoch, layout),
+      captureBoundSnapshot: () => logsController.captureBoundSnapshot(),
+      resetToDefault: () => logsController.resetToDefault(),
+    },
     storage,
     ...(options.read ? { read: options.read } : {}),
     debounceMs: options.debounceMs ?? 25,
