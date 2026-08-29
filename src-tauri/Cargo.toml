@@ -10,7 +10,7 @@ rust-version.workspace = true
 
 [workspace]
 resolver = "3"
-members = [".", "sci"]
+members = [".", "crates/yss-sci"]
 
 [workspace.package]
 rust-version = "1.94"
@@ -39,7 +39,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-yss-sci = { path = "./sci" }
+yss-sci = { path = "./crates/yss-sci" }
 tauri = { version = "2.11", features = [] }
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-dialog = "2.7"
