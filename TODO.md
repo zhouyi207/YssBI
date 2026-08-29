@@ -541,3 +541,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] Project→Application boundary cleanup 完成记录：Project production reachability audit
   保持无 Application/Commands 依赖，Database project storage 与 schema wire conversion 使用
   最终 owner；相关计划 checklist 与维护文档已同步。
+
+## 2026.08.30
+
+- [ ] 修复 Application Zustand 绑定器的 selector 快照稳定性，避免对象 projection 在 React 19
+  `useSyncExternalStore` 中触发无限更新。
