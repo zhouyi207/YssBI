@@ -4,14 +4,8 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::graph::error::GraphMaterializationError;
-use crate::graph::runtime_state::{
-    GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
-    GraphRuntimeTestEvent,
-};
 use crate::project::ProjectSessionId;
 use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState};
-use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
@@ -24,7 +18,10 @@ use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_runtime::{
+    GraphMaterializationError, GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
+    GraphRuntimeTestControl, GraphRuntimeTestEvent,
+};
 
 struct TestProject {
     root: PathBuf,
@@ -85,12 +82,6 @@ fn staged_session(project: TestProject, control: GraphRuntimeTestControl) -> Sta
         GraphRuntimeComponents {
             registry: builtin.registry,
             catalog: builtin.catalog,
-            resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
-                BTreeMap::new(),
-                BTreeMap::new(),
-                BTreeMap::new(),
-                ResourceCatalogFingerprint::from_bytes([0; 32]),
-            )),
         },
         control.clone(),
     ));
@@ -194,13 +185,7 @@ fn materialization_failure_preserves_loaded_residency_and_skips_projection() {
     let data = session.session.project().get_data().unwrap();
     assert!(data.graphs.contains_key(&path));
     assert_eq!(data.graphs[&path].document.revision, GraphRevision::INITIAL);
-    assert_eq!(
-        control.events(),
-        [
-            GraphRuntimeTestEvent::Bound,
-            GraphRuntimeTestEvent::Materialized
-        ]
-    );
+    assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
 }
 
 #[test]
@@ -241,13 +226,7 @@ fn graph_open_replacement_respects_final_materialization_commit_boundary() {
             .graphs
             .contains_key(&path)
     );
-    assert_eq!(
-        control.events(),
-        [
-            GraphRuntimeTestEvent::Bound,
-            GraphRuntimeTestEvent::Materialized
-        ]
-    );
+    assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
 
     let control = GraphRuntimeTestControl::default();
     let session = staged_session(
@@ -268,13 +247,7 @@ fn graph_open_replacement_respects_final_materialization_commit_boundary() {
 
     assert_eq!(receipt.graph_path(), &path);
     assert_eq!(receipt.graph_revision(), GraphRevision::INITIAL);
-    assert_eq!(
-        control.events(),
-        [
-            GraphRuntimeTestEvent::Bound,
-            GraphRuntimeTestEvent::Materialized
-        ]
-    );
+    assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
 }
 
 #[test]

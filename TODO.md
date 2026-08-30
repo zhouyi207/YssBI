@@ -630,3 +630,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   projected/materialization/revision-store 兼容路径；资源参数绑定只读取 registry protocol，兼容目录
   过滤不再在 runtime 复制端口推断；Application 仅保留 catalog snapshot 编排与 session-revalidated
   graph commit seam。
+- [ ] 将 session-scoped registry/catalog 组合、analysis、open candidate materialization 与 catalog query
+  迁入 `src-tauri/crates/yss-graph-runtime/`；删除最后的根 `graph` facade、零调用 basis/catalog API、
+  未读取且会形成第二事实源的 cached resource catalog，以及生产中恒为空操作的 bind hook；测试故障注入
+  只通过 `test-support` feature 暴露，Application 继续唯一拥有 session capture/revalidation/commit。

@@ -11,13 +11,13 @@ use crate::database::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
 };
-use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectInstanceId, ProjectState};
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::{ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState};
+use yss_graph_runtime::GraphRuntimeState;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ApplicationSessionEpoch(u64);
@@ -1199,8 +1199,6 @@ impl ApplicationState {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::runtime_state::{GraphRuntimeComponents, GraphRuntimeEpoch};
-    use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::{Arc, Barrier};
     use std::thread;
@@ -1211,7 +1209,7 @@ mod tests {
     };
     use yss_execution::identity::ExecutionSessionId;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch};
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));
@@ -1223,12 +1221,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    ResourceCatalogFingerprint::from_bytes([epoch as u8; 32]),
-                )),
             },
         ));
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(

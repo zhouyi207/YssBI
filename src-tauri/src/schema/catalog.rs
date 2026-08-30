@@ -312,12 +312,8 @@ mod tests {
         ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
     };
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::runtime_state::{
-        GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
-    };
     use crate::project::ProjectSessionId;
     use crate::project::{GraphDocumentKind, ProjectData};
-    use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -328,7 +324,7 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 
     fn application_with_function() -> (
         crate::project::fixtures::TempProject,
@@ -360,12 +356,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    ResourceCatalogFingerprint::from_bytes([0; 32]),
-                )),
             },
         ));
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(

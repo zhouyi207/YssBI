@@ -2114,11 +2114,9 @@ fn graph_compiler_has_one_owner_without_optional_or_mirrored_compile_state() {
         );
     }
 
-    let root_graph_error = std::fs::read_to_string(root.join("src-tauri/src/graph/error.rs"))
-        .expect("root graph error source must be readable");
     assert!(
-        !root_graph_error.contains("GraphCompile"),
-        "compile errors must have a single owner in yss-graph-compiler"
+        !root.join("src-tauri/src/graph/error.rs").exists(),
+        "the root crate must not restore a second graph error owner"
     );
     let run_graph =
         std::fs::read_to_string(root.join("src-tauri/src/application/execution/run_graph.rs"))
@@ -2457,11 +2455,12 @@ fn graph_editor_has_one_graph_crate_owner_without_root_compatibility_modules() {
         );
     }
 
-    let runtime = std::fs::read_to_string(root.join("src-tauri/src/graph/runtime_state.rs"))
-        .expect("the graph runtime coordinator must be readable");
+    let runtime =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-runtime/src/lib.rs"))
+            .expect("the graph runtime owner must be readable");
     assert!(
         runtime.contains("filter_compatible_catalog"),
-        "the root graph runtime must delegate compatible-catalog filtering to yss-graph-editor"
+        "the graph runtime must delegate compatible-catalog filtering to yss-graph-editor"
     );
     for duplicate in [
         "fn source_port(",
@@ -2472,9 +2471,61 @@ fn graph_editor_has_one_graph_crate_owner_without_root_compatibility_modules() {
     ] {
         assert!(
             !runtime.contains(duplicate),
-            "the root graph runtime must not restore duplicate editor compatibility logic '{duplicate}'"
+            "the graph runtime must not restore duplicate editor compatibility logic '{duplicate}'"
         );
     }
+}
+
+#[test]
+fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-runtime/Cargo.toml",
+        "src-tauri/crates/yss-graph-runtime/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph runtime owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph").exists(),
+        "the root crate must not retain a graph runtime facade"
+    );
+
+    let manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-graph-runtime\"",
+        "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\" }",
+        "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\", features = [\"test-support\"] }",
+    ] {
+        assert!(
+            manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let runtime =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-runtime/src/lib.rs"))
+            .expect("the graph runtime owner must be readable");
+    for removed in [
+        "resource_catalog:",
+        "fn accepts_basis(",
+        "fn resource_catalog(",
+        "bind_open_graph",
+        "GraphRuntimeTestEvent::Bound",
+        "pub(crate)",
+    ] {
+        assert!(
+            !runtime.contains(removed),
+            "the graph runtime must not restore dead or root-private API '{removed}'"
+        );
+    }
+    assert!(
+        runtime.contains("cfg(any(test, feature = \"test-support\"))"),
+        "runtime fault injection must remain behind the explicit test-support boundary"
+    );
 }
 
 #[test]

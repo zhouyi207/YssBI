@@ -106,7 +106,6 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/application/` | 跨 module 用例编排 |
 | `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
-| `src-tauri/src/graph/` | Graph editor document behavior、compatibility、runtime state 与剩余 mutation/catalog errors |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
@@ -114,6 +113,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
+| `src-tauri/crates/yss-graph-runtime/` | 独立 Graph 层：session-scoped registry/catalog 组合、analysis、open candidate materialization 与 catalog query 的唯一 owner；不持有 Project/session authority |
 | `src-tauri/crates/yss-graph-type-mapping/` | 独立 Pure Leaf：persisted `DataType` 到 Graph `TypeExpr` 的唯一 typed conversion owner |
 | `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
@@ -328,6 +328,8 @@ yss-graph-document + yss-graph-protocol
   → yss-graph-document-edit
 yss-graph-document-edit + yss-graph-catalog + yss-graph-registry + yss-graph-resource-contract + yss-graph-type-mapping
   → yss-graph-editor → Application resource mutation
+yss-graph-analysis + yss-graph-catalog + yss-graph-document-edit + yss-graph-editor + yss-graph-registry
+  → yss-graph-runtime → Application session use cases
 yss-graph-document + yss-graph-protocol + yss-canonical-hash
   → yss-graph-registry → yss-graph-analysis-contract
   → yss-graph-compiler-diagnostics
@@ -352,6 +354,7 @@ yss-graph-resource-contract
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
 - `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
+- `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
 - `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。

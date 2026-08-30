@@ -7,7 +7,6 @@ use thiserror::Error;
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
 use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use yss_database_contract::{
@@ -20,6 +19,7 @@ use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
+use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 
 /// Composition-root supplied construction for one session-bound resource factory.
 ///
@@ -298,16 +298,10 @@ pub(crate) fn build_current_project_candidate(
     )
     .map_err(ProjectSessionCandidateError::DatabaseSession)?;
     let graph = Arc::new(GraphRuntimeState::from_components(
-        crate::graph::runtime_state::GraphRuntimeEpoch::from_existing(epoch.get()),
-        crate::graph::runtime_state::GraphRuntimeComponents {
+        GraphRuntimeEpoch::from_existing(epoch.get()),
+        GraphRuntimeComponents {
             registry: builtin.registry,
             catalog: builtin.catalog,
-            resource_catalog: Arc::new(yss_graph_resource_contract::ResourceCatalogSnapshot::new(
-                BTreeMap::new(),
-                BTreeMap::new(),
-                BTreeMap::new(),
-                yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
-            )),
         },
     ));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
@@ -341,12 +335,8 @@ pub(crate) fn build_current_project_candidate(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::runtime_state::{
-        GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
-    };
     use crate::project::ProjectSessionId;
     use crate::project::{ProjectInstanceId, ProjectState};
-    use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -358,7 +348,6 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())
@@ -372,12 +361,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: graph_components.registry,
                 catalog: graph_components.catalog,
-                resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    ResourceCatalogFingerprint::from_bytes([7; 32]),
-                )),
             },
         ));
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty())

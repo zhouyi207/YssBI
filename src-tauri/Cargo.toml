@@ -28,6 +28,7 @@ members = [
     "crates/yss-graph-protocol",
     "crates/yss-graph-resource-contract",
     "crates/yss-graph-registry",
+    "crates/yss-graph-runtime",
     "crates/yss-graph-type-mapping",
     "crates/yss-math",
     "crates/yss-sci",
@@ -90,6 +91,7 @@ yss-graph-editor = { path = "./crates/yss-graph-editor" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
 yss-graph-resource-contract = { path = "./crates/yss-graph-resource-contract" }
 yss-graph-registry = { path = "./crates/yss-graph-registry" }
+yss-graph-runtime = { path = "./crates/yss-graph-runtime" }
 yss-graph-type-mapping = { path = "./crates/yss-graph-type-mapping" }
 yss-math = { path = "./crates/yss-math" }
 yss-sci = { path = "./crates/yss-sci" }
@@ -135,6 +137,7 @@ syn = { version = "3", features = ["full", "visit"] }
 tracing-subscriber.workspace = true
 yss-execution = { path = "./crates/yss-execution", features = ["test-support"] }
 yss-graph-catalog = { path = "./crates/yss-graph-catalog", features = ["test-support"] }
+yss-graph-runtime = { path = "./crates/yss-graph-runtime", features = ["test-support"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

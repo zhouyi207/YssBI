@@ -92,7 +92,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-graph-compiler/src/lib.rs",
         RustLayer::Graph,
     ),
-    ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
     (
         "src-tauri/src/project/variable_defaults.rs",
         RustLayer::Project,
@@ -1801,6 +1800,7 @@ fn non_build_memberships(
             | "yss-graph-document-edit"
             | "yss-graph-editor"
             | "yss-graph-registry"
+            | "yss-graph-runtime"
     ) {
         layers.insert(RustLayer::Graph);
     } else if package == "yss-sci" {

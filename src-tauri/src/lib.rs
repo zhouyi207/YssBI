@@ -9,7 +9,6 @@ pub mod database;
 pub mod error;
 pub mod event;
 
-mod graph;
 pub mod julia;
 pub mod platform;
 pub mod project;

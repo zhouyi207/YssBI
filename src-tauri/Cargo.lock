@@ -9264,6 +9264,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-runtime"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-graph-analysis",
+ "yss-graph-analysis-contract",
+ "yss-graph-catalog",
+ "yss-graph-document",
+ "yss-graph-document-edit",
+ "yss-graph-editor",
+ "yss-graph-registry",
+ "yss-graph-resource-contract",
+]
+
+[[package]]
 name = "yss-graph-type-mapping"
 version = "0.1.0"
 dependencies = [
@@ -9393,6 +9408,7 @@ dependencies = [
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-resource-contract",
+ "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-math",
  "yss-sci",

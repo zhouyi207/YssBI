@@ -3,13 +3,13 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::graph::error::GraphMaterializationError;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId};
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_runtime::GraphMaterializationError;
 
 use super::catalog_query::revalidate_project_catalog_facts;
 use super::catalog_query::{ProjectCatalogReadError, capture_localized_project_facts};
@@ -270,7 +270,6 @@ pub(crate) fn open_graph_in_session(
     // active lower-level load/commit operation. Graph owns the lock-free
     // binding and candidate materialization stage; the candidate is never
     // sent through the mutation-only graph commit primitive.
-    captured.graph().bind_open_graph();
     let candidate_document = captured
         .graph()
         .materialize_open_candidate(&loaded_document)?;

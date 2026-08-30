@@ -4,7 +4,6 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::graph::runtime_state::GraphRuntimeCatalogError;
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
@@ -16,6 +15,7 @@ use yss_graph_catalog::{
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
 use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, VariableValueContract};
+use yss_graph_runtime::GraphRuntimeCatalogError;
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
@@ -661,12 +661,8 @@ fn map_project_catalog_error(error: ProjectFilesystemError) -> ProjectCatalogRea
     }
 }
 
-fn map_graph_catalog_error(error: GraphRuntimeCatalogError) -> CatalogQueryApplicationError {
-    match error {
-        GraphRuntimeCatalogError::SourceInvalid => {
-            GraphCatalogQueryError::CompatibleSourceInvalid.into()
-        }
-    }
+fn map_graph_catalog_error(_: GraphRuntimeCatalogError) -> CatalogQueryApplicationError {
+    GraphCatalogQueryError::CompatibleSourceInvalid.into()
 }
 
 fn graph_signature(signature: crate::project::FunctionSignature) -> Result<FunctionSignature, ()> {

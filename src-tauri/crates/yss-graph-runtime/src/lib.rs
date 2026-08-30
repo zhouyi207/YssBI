@@ -1,9 +1,10 @@
+#![forbid(unsafe_code)]
+
 use std::sync::Arc;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use std::sync::{Barrier, Mutex};
 
-use crate::graph::error::GraphMaterializationError;
 use thiserror::Error;
 use yss_graph_analysis::{GraphAnalysis, GraphAnalysisInput, analyze, projection_facts};
 use yss_graph_analysis_contract::CompilationBasis;
@@ -33,24 +34,22 @@ impl GraphRuntimeEpoch {
 pub struct GraphRuntimeComponents {
     pub registry: Arc<NodeRegistry>,
     pub catalog: Arc<BuiltinCatalog>,
-    pub resource_catalog: Arc<ResourceCatalogSnapshot>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum GraphRuntimeTestEvent {
-    Bound,
+pub enum GraphRuntimeTestEvent {
     Materialized,
     CatalogComputed,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Default)]
-pub(crate) struct GraphRuntimeTestControl {
+pub struct GraphRuntimeTestControl {
     state: Arc<Mutex<GraphRuntimeTestControlState>>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 struct GraphRuntimeTestControlState {
     events: Vec<GraphRuntimeTestEvent>,
@@ -59,50 +58,42 @@ struct GraphRuntimeTestControlState {
     catalog_pause: Option<GraphRuntimeTestRendezvous>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone)]
 struct GraphRuntimeTestRendezvous {
     entered: Arc<Barrier>,
     release: Arc<Barrier>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl GraphRuntimeTestControl {
-    pub(crate) fn fail_next_materialization(&self) {
+    pub fn fail_next_materialization(&self) {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .fail_next_materialization = true;
     }
 
-    pub(crate) fn pause_after_materialization(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
+    pub fn pause_after_materialization(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .materialization_pause = Some(GraphRuntimeTestRendezvous { entered, release });
     }
 
-    pub(crate) fn pause_after_catalog_compute(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
+    pub fn pause_after_catalog_compute(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .catalog_pause = Some(GraphRuntimeTestRendezvous { entered, release });
     }
 
-    pub(crate) fn events(&self) -> Vec<GraphRuntimeTestEvent> {
+    pub fn events(&self) -> Vec<GraphRuntimeTestEvent> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .events
             .clone()
-    }
-
-    fn record_bound(&self) {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .events
-            .push(GraphRuntimeTestEvent::Bound);
     }
 
     fn before_materialization_return(&self) -> bool {
@@ -134,7 +125,7 @@ impl GraphRuntimeTestControl {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn wait_for_test_rendezvous(rendezvous: Option<GraphRuntimeTestRendezvous>) {
     if let Some(rendezvous) = rendezvous {
         rendezvous.entered.wait();
@@ -145,7 +136,7 @@ fn wait_for_test_rendezvous(rendezvous: Option<GraphRuntimeTestRendezvous>) {
 pub struct GraphRuntimeState {
     epoch: GraphRuntimeEpoch,
     components: GraphRuntimeComponents,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     test_control: Option<Arc<GraphRuntimeTestControl>>,
 }
 
@@ -154,13 +145,13 @@ impl GraphRuntimeState {
         Self {
             epoch,
             components,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             test_control: None,
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_for_test(
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn new_for_test(
         epoch: GraphRuntimeEpoch,
         components: GraphRuntimeComponents,
         control: GraphRuntimeTestControl,
@@ -176,22 +167,11 @@ impl GraphRuntimeState {
         self.epoch
     }
 
-    pub fn accepts_basis(
-        &self,
-        basis: &CompilationBasis<yss_graph_document::GraphRevision>,
-    ) -> bool {
-        *basis.registry_fingerprint.as_bytes() == *self.components.registry.fingerprint().as_bytes()
-    }
-
-    pub fn resource_catalog(&self) -> &ResourceCatalogSnapshot {
-        &self.components.resource_catalog
-    }
-
-    pub(crate) fn registry(&self) -> &NodeRegistry {
+    fn registry(&self) -> &NodeRegistry {
         self.components.registry.as_ref()
     }
 
-    pub(crate) fn plan_editor_mutation(
+    pub fn plan_editor_mutation(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
@@ -206,7 +186,7 @@ impl GraphRuntimeState {
         )
     }
 
-    pub(crate) fn export_subgraph(
+    pub fn export_subgraph(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
@@ -216,11 +196,11 @@ impl GraphRuntimeState {
         export_subgraph(graph_path, document, self.registry(), catalog, node_ids)
     }
 
-    pub(crate) fn registry_fingerprint(&self) -> [u8; 32] {
+    pub fn registry_fingerprint(&self) -> [u8; 32] {
         *self.components.registry.fingerprint().as_bytes()
     }
 
-    pub(crate) fn analyze(
+    pub fn analyze(
         &self,
         document: &GraphDocument,
         basis: &CompilationBasis<yss_graph_document::GraphRevision>,
@@ -232,29 +212,22 @@ impl GraphRuntimeState {
         ))
     }
 
-    pub(crate) fn bind_open_graph(&self) {
-        #[cfg(test)]
-        if let Some(control) = &self.test_control {
-            control.record_bound();
-        }
-    }
-
-    pub(crate) fn materialize_open_candidate(
+    pub fn materialize_open_candidate(
         &self,
         document: &GraphDocument,
     ) -> Result<Arc<GraphDocument>, GraphMaterializationError> {
         validate_graph_document(document).map_err(|_| GraphMaterializationError::invariant())?;
         let candidate = Arc::new(document.clone());
-        #[cfg(test)]
-        if let Some(control) = &self.test_control {
-            if control.before_materialization_return() {
-                return Err(GraphMaterializationError::invariant());
-            }
+        #[cfg(any(test, feature = "test-support"))]
+        if let Some(control) = &self.test_control
+            && control.before_materialization_return()
+        {
+            return Err(GraphMaterializationError::invariant());
         }
         Ok(candidate)
     }
 
-    pub(crate) fn localized_catalog_with_resources(
+    pub fn localized_catalog_with_resources(
         &self,
         resources: &[CatalogResourceEntry],
         locale: &str,
@@ -264,14 +237,14 @@ impl GraphRuntimeState {
             locale,
             resources,
         );
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(control) = &self.test_control {
             control.after_catalog_compute();
         }
         localized
     }
 
-    pub(crate) fn compatible_catalog_with_resources(
+    pub fn compatible_catalog_with_resources(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
@@ -294,8 +267,8 @@ impl GraphRuntimeState {
             resources,
             localized,
         )
-        .map_err(|_| GraphRuntimeCatalogError::SourceInvalid)?;
-        #[cfg(test)]
+        .map_err(|_| GraphRuntimeCatalogError)?;
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(control) = &self.test_control {
             control.after_catalog_compute();
         }
@@ -304,7 +277,67 @@ impl GraphRuntimeState {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum GraphRuntimeCatalogError {
-    #[error("compatible source port is invalid")]
-    SourceInvalid,
+#[error("compatible source port is invalid")]
+pub struct GraphRuntimeCatalogError;
+
+#[derive(Debug, Error)]
+#[error("graph materialization invariant failed")]
+pub struct GraphMaterializationError;
+
+impl GraphMaterializationError {
+    const fn invariant() -> Self {
+        Self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_graph_catalog::build_builtin_node_system;
+
+    fn components() -> GraphRuntimeComponents {
+        let builtin = build_builtin_node_system().expect("built-in graph system must be valid");
+        GraphRuntimeComponents {
+            registry: builtin.registry,
+            catalog: builtin.catalog,
+        }
+    }
+
+    #[test]
+    fn epoch_preserves_the_session_generation() {
+        let epoch = GraphRuntimeEpoch::from_existing(42);
+        assert_eq!(epoch.get(), 42);
+    }
+
+    #[test]
+    fn materialization_validates_and_owns_the_candidate() {
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let document = GraphDocument::default();
+
+        let candidate = runtime
+            .materialize_open_candidate(&document)
+            .expect("the empty document must satisfy graph invariants");
+
+        assert_eq!(candidate.as_ref(), &document);
+        assert!(!std::ptr::eq(candidate.as_ref(), &document));
+    }
+
+    #[test]
+    fn materialization_fault_injection_is_explicit_and_observable() {
+        let control = GraphRuntimeTestControl::default();
+        control.fail_next_materialization();
+        let runtime = GraphRuntimeState::new_for_test(
+            GraphRuntimeEpoch::from_existing(1),
+            components(),
+            control.clone(),
+        );
+
+        assert!(
+            runtime
+                .materialize_open_candidate(&GraphDocument::default())
+                .is_err()
+        );
+        assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
+    }
 }

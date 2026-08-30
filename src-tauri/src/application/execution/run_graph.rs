@@ -764,12 +764,8 @@ mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::runtime_state::{
-        GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
-    };
     use crate::project::ProjectSessionId;
     use crate::project::ProjectState;
-    use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
@@ -779,7 +775,7 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));
@@ -791,12 +787,6 @@ mod tests {
             GraphRuntimeComponents {
                 registry: builtin.registry,
                 catalog: builtin.catalog,
-                resource_catalog: Arc::new(ResourceCatalogSnapshot::new(
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    ResourceCatalogFingerprint::from_bytes([epoch as u8; 32]),
-                )),
             },
         ));
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
