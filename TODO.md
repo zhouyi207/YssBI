@@ -658,3 +658,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-worksheet-document/` Pure Leaf；Project 仅保留 redirect-safe 扫描、事务 I/O、
   history 与 authority，全部消费者直接依赖唯一 owner；嵌套 encodings 严格拒绝未知字段，并删除根
   resource-path owner、test-only 目录 helper 与生产扩展名字符串副本。
+- [ ] 将 project discovery/cleanup 的取消 capability 与 active-task registry 收归
+  `src-tauri/crates/yss-project-progress/` Pure Leaf，删除根 `project_picker_task` owner、字符串 sentinel
+  与裸 `AtomicBool` 泄漏；使用 typed discovery error 保证递归扫描中途取消仍映射为 `Cancelled`，
+  而不是错误漂移为 `ScanFailed`；新任务替换 active task 时先取消旧任务，避免孤儿扫描。

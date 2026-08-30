@@ -449,7 +449,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new",
             "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
             "yssbi_lib::julia::worker::JuliaWorkerManager::new",
-            "yssbi_lib::project::project_picker_task::ProjectPickerTaskCancelRegistry::new",
             "yssbi_lib::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yssbi_lib::project::project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
@@ -1052,7 +1051,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/commands/command_project/registry.rs",
         fully_qualified_owner: "yssbi_lib::commands::command_project::registry",
         canonical_origin_targets: &[
-            "yssbi_lib::project::project_picker_task::ProjectPickerTaskCancelRegistry",
             "yssbi_lib::application::project_lifecycle::delete_registered_project",
             "yssbi_lib::error::CommandError",
             "yssbi_lib::project::project_registry::CleanupInvalidProjectsResult",

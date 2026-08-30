@@ -4,14 +4,15 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::{
-    NormalizedProjectRoot, ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError,
-    ProjectRootBinding, ProjectRootIdentity, format_path_for_user, format_path_for_user_path,
-    is_picker_task_cancelled,
+    NormalizedProjectRoot, ProjectDiscoveryError, ProjectRegistryRecord, ProjectRegistryStore,
+    ProjectRegistryStoreError, ProjectRootBinding, ProjectRootIdentity, format_path_for_user,
+    format_path_for_user_path,
 };
 
 use yss_project_identity::ProjectInstanceId;
 use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
+    ProjectTaskCancellation,
 };
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
@@ -289,16 +290,16 @@ impl ProjectRegistry {
     pub async fn cleanup_invalid_projects(
         &self,
         progress: Option<&dyn ProjectProgressSink>,
-        cancel: Arc<std::sync::atomic::AtomicBool>,
+        cancellation: ProjectTaskCancellation,
     ) -> Result<CleanupInvalidProjectsResult, ProjectRegistryError> {
-        if is_picker_task_cancelled(&cancel) {
+        if cancellation.is_cancelled() {
             return Err(ProjectRegistryError::Cancelled);
         }
         let projects = self.list_projects().await?;
         let total = projects.len();
         let mut removed = 0usize;
         for (index, project) in projects.iter().enumerate() {
-            if is_picker_task_cancelled(&cancel) {
+            if cancellation.is_cancelled() {
                 return Err(ProjectRegistryError::Cancelled);
             }
             if let Some(sink) = progress {
@@ -332,17 +333,22 @@ impl ProjectRegistry {
         &self,
         directory: &str,
         progress: Option<&dyn ProjectProgressSink>,
-        cancel: Arc<std::sync::atomic::AtomicBool>,
+        cancellation: ProjectTaskCancellation,
     ) -> Result<crate::project::ScanProjectsResult, ProjectRegistryError> {
-        if is_picker_task_cancelled(&cancel) {
+        if cancellation.is_cancelled() {
             return Err(ProjectRegistryError::Cancelled);
         }
         if let Some(sink) = progress {
             sink.publish(ProjectProgress::Scan(ProjectScanProgress::Scanning));
         }
         let root = PathBuf::from(directory.trim());
-        let metadata_files = crate::project::discover_project_metadata_files(&root, &cancel)
-            .map_err(|_| ProjectRegistryError::ScanFailed)?;
+        let metadata_files = crate::project::discover_project_metadata_files(&root, &cancellation)
+            .map_err(|error| match error {
+                ProjectDiscoveryError::Cancelled => ProjectRegistryError::Cancelled,
+                ProjectDiscoveryError::InvalidRoot | ProjectDiscoveryError::Io(_) => {
+                    ProjectRegistryError::ScanFailed
+                }
+            })?;
         if let Some(sink) = progress {
             sink.publish(ProjectProgress::Scan(ProjectScanProgress::Discovered {
                 count: metadata_files.len(),
@@ -351,7 +357,7 @@ impl ProjectRegistry {
         let mut newly_registered = 0;
         let mut projects = Vec::with_capacity(metadata_files.len());
         for (index, metadata_path) in metadata_files.iter().enumerate() {
-            if is_picker_task_cancelled(&cancel) {
+            if cancellation.is_cancelled() {
                 return Err(ProjectRegistryError::Cancelled);
             }
             if let Some(sink) = progress {

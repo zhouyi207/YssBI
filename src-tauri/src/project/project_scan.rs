@@ -1,7 +1,18 @@
 use std::path::{Path, PathBuf};
 
 use super::{PROJECT_METADATA_FILE, normalize_project_name};
-use crate::project::{is_picker_task_cancelled, picker_task_cancelled_error};
+use thiserror::Error;
+use yss_project_progress::ProjectTaskCancellation;
+
+#[derive(Debug, Error)]
+pub enum ProjectDiscoveryError {
+    #[error("project discovery was cancelled")]
+    Cancelled,
+    #[error("project discovery root must be a directory")]
+    InvalidRoot,
+    #[error("project discovery I/O failed")]
+    Io(#[from] std::io::Error),
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,18 +32,18 @@ const SKIP_DIR_NAMES: &[&str] = &[
 
 pub fn discover_project_metadata_files(
     root: &Path,
-    cancel: &std::sync::atomic::AtomicBool,
-) -> Result<Vec<PathBuf>, String> {
-    if is_picker_task_cancelled(cancel) {
-        return Err(picker_task_cancelled_error());
+    cancellation: &ProjectTaskCancellation,
+) -> Result<Vec<PathBuf>, ProjectDiscoveryError> {
+    if cancellation.is_cancelled() {
+        return Err(ProjectDiscoveryError::Cancelled);
     }
     if !root.is_dir() {
-        return Err("扫描路径必须是文件夹".into());
+        return Err(ProjectDiscoveryError::InvalidRoot);
     }
     let mut found = Vec::new();
-    walk_for_metadata(root, &mut found, cancel).map_err(|e| format!("扫描文件夹失败: {e}"))?;
-    if is_picker_task_cancelled(cancel) {
-        return Err(picker_task_cancelled_error());
+    walk_for_metadata(root, &mut found, cancellation)?;
+    if cancellation.is_cancelled() {
+        return Err(ProjectDiscoveryError::Cancelled);
     }
     found.sort();
     found.dedup();
@@ -51,10 +62,10 @@ pub fn project_name_from_metadata_path(metadata_path: &Path) -> String {
 fn walk_for_metadata(
     dir: &Path,
     found: &mut Vec<PathBuf>,
-    cancel: &std::sync::atomic::AtomicBool,
-) -> std::io::Result<()> {
-    if is_picker_task_cancelled(cancel) {
-        return Ok(());
+    cancellation: &ProjectTaskCancellation,
+) -> Result<(), ProjectDiscoveryError> {
+    if cancellation.is_cancelled() {
+        return Err(ProjectDiscoveryError::Cancelled);
     }
 
     let metadata_path = dir.join(PROJECT_METADATA_FILE);
@@ -63,8 +74,8 @@ fn walk_for_metadata(
     }
 
     for entry in std::fs::read_dir(dir)? {
-        if is_picker_task_cancelled(cancel) {
-            return Ok(());
+        if cancellation.is_cancelled() {
+            return Err(ProjectDiscoveryError::Cancelled);
         }
         let entry = entry?;
         let path = entry.path();
@@ -74,7 +85,7 @@ fn walk_for_metadata(
         if should_skip_dir(&path) {
             continue;
         }
-        walk_for_metadata(&path, found, cancel)?;
+        walk_for_metadata(&path, found, cancellation)?;
     }
     Ok(())
 }
@@ -93,6 +104,7 @@ fn should_skip_dir(path: &Path) -> bool {
 mod tests {
     use super::*;
     use std::fs;
+    use yss_project_progress::ProjectTaskCancellationRegistry;
 
     #[test]
     fn discover_nested_metadata_files() {
@@ -103,8 +115,9 @@ mod tests {
         fs::write(root.join("alpha/metadata.yssbi"), "{}").unwrap();
         fs::write(root.join("nested/beta/metadata.yssbi"), "{}").unwrap();
 
-        let cancel = std::sync::atomic::AtomicBool::new(false);
-        let found = discover_project_metadata_files(&root, &cancel).unwrap();
+        let registry = ProjectTaskCancellationRegistry::new();
+        let cancellation = registry.begin();
+        let found = discover_project_metadata_files(&root, &cancellation).unwrap();
         assert_eq!(found.len(), 2);
 
         let _ = fs::remove_dir_all(&root);
@@ -117,9 +130,11 @@ mod tests {
         fs::create_dir_all(root.join("alpha")).unwrap();
         fs::write(root.join("alpha/metadata.yssbi"), "{}").unwrap();
 
-        let cancel = std::sync::atomic::AtomicBool::new(true);
-        let err = discover_project_metadata_files(&root, &cancel).unwrap_err();
-        assert_eq!(err, picker_task_cancelled_error());
+        let registry = ProjectTaskCancellationRegistry::new();
+        let cancellation = registry.begin();
+        registry.cancel_active();
+        let error = discover_project_metadata_files(&root, &cancellation).unwrap_err();
+        assert!(matches!(error, ProjectDiscoveryError::Cancelled));
 
         let _ = fs::remove_dir_all(&root);
     }

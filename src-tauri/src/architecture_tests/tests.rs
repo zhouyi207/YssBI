@@ -3082,6 +3082,12 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
             .exists(),
         "the root crate must not retain a project progress owner"
     );
+    assert!(
+        !root
+            .join("src-tauri/src/project/project_picker_task.rs")
+            .exists(),
+        "the root crate must not retain a project task cancellation owner"
+    );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
@@ -3100,6 +3106,8 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     for facade in [
         "mod project_progress",
         "pub use project_progress",
+        "mod project_picker_task",
+        "pub use project_picker_task",
         "pub use yss_project_progress",
     ] {
         assert!(
@@ -3116,6 +3124,8 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         "pub enum ProjectScanProgress",
         "pub enum ProjectCleanupProgress",
         "pub trait ProjectProgressSink",
+        "pub struct ProjectTaskCancellation",
+        "pub struct ProjectTaskCancellationRegistry",
     ] {
         assert!(
             progress_owner.contains(contract),
@@ -3130,13 +3140,16 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     }
 
     for relative in [
+        "src-tauri/src/lib.rs",
         "src-tauri/src/project/project_registry.rs",
+        "src-tauri/src/project/project_scan.rs",
+        "src-tauri/src/commands/command_project/registry.rs",
         "src-tauri/src/commands/command_project/progress.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
         assert!(
-            consumer.contains("use yss_project_progress::"),
+            consumer.contains("yss_project_progress::"),
             "{relative} must consume the project progress owner directly"
         );
         assert!(
@@ -3151,11 +3164,29 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         !scan.contains("ProjectScanProgressEvent"),
         "project scan must not restore the zero-caller duplicate progress DTO"
     );
-    let picker = std::fs::read_to_string(root.join("src-tauri/src/project/project_picker_task.rs"))
-        .expect("project picker task source must be readable");
+    for removed_cancellation_implementation in [
+        "AtomicBool",
+        "PICKER_TASK_CANCELLED",
+        "picker_task_cancelled_error",
+    ] {
+        assert!(
+            !scan.contains(removed_cancellation_implementation),
+            "Project scan must consume typed cancellation instead of '{removed_cancellation_implementation}'"
+        );
+    }
+
+    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
+        .expect("project registry source must be readable");
     assert!(
-        !picker.contains("ProjectCleanupProgressEvent"),
-        "project picker task must not restore the zero-caller duplicate progress DTO"
+        registry.contains("ProjectDiscoveryError::Cancelled => ProjectRegistryError::Cancelled"),
+        "scan cancellation must remain cancellation instead of drifting into ScanFailed"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        !policy.contains("yssbi_lib::project::project_picker_task"),
+        "CompositionRoot and Commands must not retain a Project task-control capability"
     );
 
     let command_adapter =

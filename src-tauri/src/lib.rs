@@ -83,7 +83,7 @@ pub fn run() {
         .manage(application::project_watcher::ProjectWatcherState::new(
             std::sync::Arc::new(platform::NotifyProjectFileWatcher::new()),
         ))
-        .manage(project::ProjectPickerTaskCancelRegistry::new())
+        .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();

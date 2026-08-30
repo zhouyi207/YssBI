@@ -121,7 +121,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
 | `src-tauri/crates/yss-project-identity/` | 独立 Pure Leaf：project instance/session/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior |
-| `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件与输出 port 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
+| `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
@@ -377,7 +377,7 @@ yss-resource-naming + yss-project-identity
 - `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
 - `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
 - `yss-project-identity`：统一拥有 `ProjectInstanceId`、`ProjectSessionId`、`OperationId`、`HistoryEntryId` 与 monotonic revision 值对象。project instance 与 replaceable runtime session 保持不同强类型；Graph/Project revision 只允许显式命名转换，测试便利的 `next()` 仅通过 `test-support` feature 暴露。根 `project` 不做兼容 re-export。
-- `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件与 `ProjectProgressSink` 输出 port。Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection；删除未被消费的 scan/cleanup 重复事件 DTO，避免形成幽灵 API 与多事实源。
+- `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件、`ProjectProgressSink` 输出 port 与封装过的任务取消 capability/registry。新任务会取消并替换旧 active task，避免产生不可再取消的孤儿扫描；Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection。Project 不再暴露原子标志或字符串取消 sentinel，扫描中途取消会保持 typed `Cancelled` 语义而不会误报为 `ScanFailed`。
 - `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。

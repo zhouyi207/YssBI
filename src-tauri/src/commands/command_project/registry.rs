@@ -4,14 +4,14 @@ use super::progress::{
 };
 use crate::error::CommandError;
 use crate::project::{
-    CleanupInvalidProjectsResult, ProjectPickerTaskCancelRegistry, ProjectRecord, ProjectRegistry,
-    ScanProjectsResult,
+    CleanupInvalidProjectsResult, ProjectRecord, ProjectRegistry, ScanProjectsResult,
 };
 use crate::schema::application_event::LifecycleMutationResultDto;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
+use yss_project_progress::ProjectTaskCancellationRegistry;
 
 #[tauri::command]
 pub async fn list_registered_projects(
@@ -26,7 +26,7 @@ pub async fn list_registered_projects(
 #[tauri::command]
 pub async fn scan_projects_in_directory(
     registry: State<'_, ProjectRegistry>,
-    task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
+    task_cancel: State<'_, ProjectTaskCancellationRegistry>,
     directory: String,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<ScanProjectsResult, CommandError> {
@@ -56,14 +56,14 @@ pub async fn scan_projects_in_directory(
 }
 
 #[tauri::command]
-pub fn cancel_project_picker_task(task_cancel: State<'_, ProjectPickerTaskCancelRegistry>) {
+pub fn cancel_project_picker_task(task_cancel: State<'_, ProjectTaskCancellationRegistry>) {
     task_cancel.cancel_active();
 }
 
 #[tauri::command]
 pub async fn cleanup_invalid_registered_projects(
     registry: State<'_, ProjectRegistry>,
-    task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
+    task_cancel: State<'_, ProjectTaskCancellationRegistry>,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<CleanupInvalidProjectsResult, CommandError> {
     let cancel = task_cancel.begin();
