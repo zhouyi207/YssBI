@@ -1,6 +1,5 @@
 use crate::project::{
-    NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectSession, ProjectState,
-    ProjectStore,
+    NormalizedProjectRoot, ProjectFilesystemError, ProjectSession, ProjectState, ProjectStore,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -8,6 +7,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
+use yss_project_model::ProjectData;
 use yss_variable_contract::VariableId;
 use yss_variable_value::normalize_variable_tabular;
 use yss_worksheet_document::WorksheetResourcePath;

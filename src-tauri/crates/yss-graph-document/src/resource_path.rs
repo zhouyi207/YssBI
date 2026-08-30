@@ -4,7 +4,8 @@ use std::str::FromStr;
 use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
 use yss_resource_naming::validate_resource_name;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum GraphResourceKind {
     Event,
     Function,

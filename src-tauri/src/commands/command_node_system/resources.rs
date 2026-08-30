@@ -21,7 +21,7 @@ pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_name: &str,
-    kind: crate::project::GraphDocumentKind,
+    kind: yss_graph_document::GraphResourceKind,
     operation_id: OperationId,
     mut emit: impl FnMut(Event) -> R,
 ) -> Result<ResourceMutationResultDto, CommandError> {
@@ -47,7 +47,7 @@ pub fn create_event(
         .create_graph_resource(
             project_instance_id,
             graph_name,
-            crate::project::GraphDocumentKind::Event,
+            yss_graph_document::GraphResourceKind::Event,
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;
@@ -68,7 +68,7 @@ pub fn create_function(
         .create_graph_resource(
             project_instance_id,
             graph_name,
-            crate::project::GraphDocumentKind::Function,
+            yss_graph_document::GraphResourceKind::Function,
             operation_id,
         )
         .map_err(map_resource_mutation_error)?;

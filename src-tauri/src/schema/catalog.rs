@@ -312,7 +312,6 @@ mod tests {
         ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
     };
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::project::{GraphDocumentKind, ProjectData};
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -323,8 +322,10 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_document::GraphResourceKind;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
     use yss_project_identity::ProjectSessionId;
+    use yss_project_model::ProjectData;
 
     fn application_with_function() -> (
         crate::project::fixtures::TempProject,
@@ -335,9 +336,9 @@ mod tests {
         let mut project = ProjectData::new();
         project.graphs.insert(
             path.clone(),
-            crate::project::GraphResourceDocument::new(
+            yss_project_model::GraphResourceDocument::new(
                 "Opaque Function",
-                GraphDocumentKind::Function,
+                GraphResourceKind::Function,
             ),
         );
         let fixture = crate::project::fixtures::TempProject::activate(

@@ -202,10 +202,10 @@ impl ProjectState {
                     from: from.as_str().into(),
                     to: to.as_str().into(),
                     kind: match moved.kind {
-                        crate::project::GraphDocumentKind::Event => {
+                        yss_graph_document::GraphResourceKind::Event => {
                             yss_project_history::ResourceLifecycleKind::Event
                         }
-                        crate::project::GraphDocumentKind::Function => {
+                        yss_graph_document::GraphResourceKind::Function => {
                             yss_project_history::ResourceLifecycleKind::Function
                         }
                     },
@@ -282,7 +282,7 @@ impl ProjectState {
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
                     let existing = data.graphs.get(&path);
                     let retained_function_revision = if existing.is_some_and(|resource| {
-                        resource.kind == crate::project::GraphDocumentKind::Function
+                        resource.kind == yss_graph_document::GraphResourceKind::Function
                     }) {
                         let retained = graph_revisions
                             .get(&path)
@@ -343,7 +343,7 @@ impl ProjectState {
                 } => {
                     let existing = data.graphs.get(&from);
                     let retained_function_revision =
-                        if moved.kind == crate::project::GraphDocumentKind::Function {
+                        if moved.kind == yss_graph_document::GraphResourceKind::Function {
                             let retained = graph_revisions
                                 .get(&from)
                                 .copied()

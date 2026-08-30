@@ -4,7 +4,7 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState};
+use crate::project::ProjectState;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
@@ -17,11 +17,13 @@ use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
+use yss_graph_document::GraphResourceKind;
 use yss_graph_runtime::{
     GraphMaterializationError, GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     GraphRuntimeTestControl, GraphRuntimeTestEvent,
 };
 use yss_project_identity::ProjectSessionId;
+use yss_project_model::{GraphResourceDocument, ProjectData};
 
 struct TestProject {
     root: PathBuf,
@@ -140,7 +142,7 @@ fn graph_project(path: &GraphResourcePath) -> ProjectData {
         .map_or(path.display_name(), |(name, _)| name);
     data.graphs.insert(
         path.clone(),
-        GraphResourceDocument::new(name, GraphDocumentKind::Event),
+        GraphResourceDocument::new(name, GraphResourceKind::Event),
     );
     data
 }

@@ -4,12 +4,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, ProjectData, ProjectError,
-    ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
-    scan_graph_resource_index,
+    GraphResourceIndex, GraphResourcePath, ProjectError, ProjectWorksheetIndexEntry,
+    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yss_graph_document::GraphDocument as NodeGraphDocument;
+use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_identity::ProjectResourcePath;
 #[cfg(test)]
 use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
@@ -20,6 +19,7 @@ use yss_project_layout::{
 use yss_project_manifest::{
     CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest, deserialize_current_project_schema_version,
 };
+use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ pub struct GlobalVariablesDocument {
 #[serde(rename_all = "camelCase")]
 pub struct GraphDocument {
     pub schema_version: u32,
-    pub kind: GraphDocumentKind,
+    pub kind: GraphResourceKind,
     pub name: String,
     #[serde(default)]
     pub revision: yss_project_identity::ResourceRevision,
@@ -43,29 +43,13 @@ pub struct GraphDocument {
     pub local_variables: HashMap<VariableId, VariableInstance>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum GraphDocumentKind {
-    Event,
-    Function,
-}
-
-impl From<yss_graph_document::GraphResourceKind> for GraphDocumentKind {
-    fn from(kind: yss_graph_document::GraphResourceKind) -> Self {
-        match kind {
-            yss_graph_document::GraphResourceKind::Event => Self::Event,
-            yss_graph_document::GraphResourceKind::Function => Self::Function,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectGraphIndexEntry {
     pub path: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub graph_type: GraphDocumentKind,
+    pub graph_type: GraphResourceKind,
     pub revision: yss_project_identity::ResourceRevision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_revision: Option<yss_project_identity::ResourceRevision>,
@@ -90,7 +74,7 @@ pub struct ProjectVariableIndexEntry {
     pub owner_graph_path: Option<String>,
     pub owner_graph_name: Option<String>,
     #[serde(rename = "ownerGraphKind", skip_serializing_if = "Option::is_none")]
-    pub owner_graph_kind: Option<GraphDocumentKind>,
+    pub owner_graph_kind: Option<GraphResourceKind>,
 }
 
 impl From<VariableInstance> for ProjectVariableIndexEntry {
@@ -251,8 +235,8 @@ fn write_loaded_graph_document(
     let local_variables =
         local_variables_for_graph(&project_data.variables, graph_path, graph.kind);
     let (dir, extension) = match graph.kind {
-        GraphDocumentKind::Event => (EVENTS_DIR, EVENT_EXTENSION),
-        GraphDocumentKind::Function => (FUNCTIONS_DIR, FUNCTION_EXTENSION),
+        GraphResourceKind::Event => (EVENTS_DIR, EVENT_EXTENSION),
+        GraphResourceKind::Function => (FUNCTIONS_DIR, FUNCTION_EXTENSION),
     };
     let relative_path =
         graph_relative_path_for_save(root, dir, extension, &graph.name, graph_path)?;
@@ -348,14 +332,14 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         root,
         EVENTS_DIR,
         EVENT_EXTENSION,
-        GraphDocumentKind::Event,
+        GraphResourceKind::Event,
         &graph_resources,
     )?);
     graphs.extend(read_graph_index_entries(
         root,
         FUNCTIONS_DIR,
         FUNCTION_EXTENSION,
-        GraphDocumentKind::Function,
+        GraphResourceKind::Function,
         &graph_resources,
     )?);
     let worksheets = read_worksheet_index_entries(root)?;
@@ -401,11 +385,11 @@ pub(crate) fn load_project_graph_document_from_file(
 pub fn load_project_graph_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
-) -> Result<super::GraphResourceDocument, ProjectError> {
+) -> Result<yss_project_model::GraphResourceDocument, ProjectError> {
     let document = load_project_graph_document_from_file(path, graph_path)?;
     let mut graph = document.document;
     graph.revision = document.revision.to_graph_revision();
-    Ok(super::GraphResourceDocument {
+    Ok(yss_project_model::GraphResourceDocument {
         name: document.name,
         kind: document.kind,
         document: graph,
@@ -441,16 +425,16 @@ pub fn project_root_from_path(path: &str) -> PathBuf {
 fn local_variables_for_graph(
     variables: &HashMap<VariableId, VariableInstance>,
     graph_path: &GraphResourcePath,
-    graph_kind: GraphDocumentKind,
+    graph_kind: GraphResourceKind,
 ) -> HashMap<VariableId, VariableInstance> {
     let graph_path = graph_path.as_str();
     variables
         .iter()
         .filter(|(_, variable)| match (&variable.scope, graph_kind) {
-            (VariableScope::Event { event_path }, GraphDocumentKind::Event) => {
+            (VariableScope::Event { event_path }, GraphResourceKind::Event) => {
                 event_path == graph_path
             }
-            (VariableScope::Function { function_path }, GraphDocumentKind::Function) => {
+            (VariableScope::Function { function_path }, GraphResourceKind::Function) => {
                 function_path == graph_path
             }
             _ => false,
@@ -468,7 +452,7 @@ pub(crate) fn parse_global_variables_document(
 pub(crate) fn parse_graph_resource_document(
     contents: &[u8],
     path: &Path,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
 ) -> Result<GraphDocument, ProjectError> {
     let document: GraphDocument =
         serde_json::from_slice(contents).map_err(ProjectError::Deserialize)?;
@@ -492,7 +476,7 @@ pub(crate) fn parse_graph_resource_document(
 
 fn read_graph_document(
     path: &Path,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
 ) -> Result<GraphDocument, ProjectError> {
     let contents = std::fs::read(path)?;
     let mut document = parse_graph_resource_document(&contents, path, expected_kind)?;
@@ -505,7 +489,7 @@ fn read_graph_document(
 fn read_graph_document_for_resource(
     root: &Path,
     path: &Path,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
 ) -> Result<GraphDocument, ProjectError> {
     let document = read_graph_document(path, expected_kind)?;
     let graph_resources = load_graph_resource_index(root)?;
@@ -528,7 +512,7 @@ fn read_graph_document_for_resource(
 
 fn bind_graph_document_scope_by_path(
     mut document: GraphDocument,
-    kind: GraphDocumentKind,
+    kind: GraphResourceKind,
     resource_path: &str,
 ) -> GraphDocument {
     let scope = scoped_variable_scope(kind, resource_path);
@@ -542,7 +526,7 @@ fn bind_graph_document_scope_by_path(
 #[serde(rename_all = "camelCase")]
 struct GraphFileHeader {
     schema_version: u32,
-    kind: GraphDocumentKind,
+    kind: GraphResourceKind,
     name: String,
     #[serde(default)]
     revision: yss_project_identity::ResourceRevision,
@@ -557,15 +541,15 @@ fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> 
 
 fn validate_function_shape(
     path: &Path,
-    kind: GraphDocumentKind,
+    kind: GraphResourceKind,
     function: Option<&yss_project_history::FunctionDocument>,
 ) -> Result<(), ProjectError> {
     match (kind, function) {
-        (GraphDocumentKind::Function, None) => Err(ProjectError::InvalidProjectFormat(format!(
+        (GraphResourceKind::Function, None) => Err(ProjectError::InvalidProjectFormat(format!(
             "function graph file '{}' is missing its function document",
             path.display()
         ))),
-        (GraphDocumentKind::Event, Some(_)) => Err(ProjectError::InvalidProjectFormat(format!(
+        (GraphResourceKind::Event, Some(_)) => Err(ProjectError::InvalidProjectFormat(format!(
             "event graph file '{}' must not contain a function document",
             path.display()
         ))),
@@ -584,7 +568,7 @@ fn read_graph_index_entries(
     root: &Path,
     dir: &str,
     extension: &str,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
     graph_resources: &GraphResourceIndex,
 ) -> Result<Vec<ProjectGraphIndexEntry>, ProjectError> {
     let mut entries = Vec::new();
@@ -652,12 +636,12 @@ fn read_graph_index_entries(
     Ok(entries)
 }
 
-fn scoped_variable_scope(kind: GraphDocumentKind, graph_path: &str) -> VariableScope {
+fn scoped_variable_scope(kind: GraphResourceKind, graph_path: &str) -> VariableScope {
     match kind {
-        GraphDocumentKind::Event => VariableScope::Event {
+        GraphResourceKind::Event => VariableScope::Event {
             event_path: graph_path.to_string(),
         },
-        GraphDocumentKind::Function => VariableScope::Function {
+        GraphResourceKind::Function => VariableScope::Function {
             function_path: graph_path.to_string(),
         },
     }
@@ -682,7 +666,7 @@ fn read_graph_local_variable_index_entries(
     root: &Path,
     dir: &str,
     extension: &str,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
 ) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
     let mut entries = Vec::new();
     for path in list_graph_files(root, dir, extension)? {
@@ -720,13 +704,13 @@ fn read_variable_index_entries(
         root,
         EVENTS_DIR,
         EVENT_EXTENSION,
-        GraphDocumentKind::Event,
+        GraphResourceKind::Event,
     )?);
     entries.extend(read_graph_local_variable_index_entries(
         root,
         FUNCTIONS_DIR,
         FUNCTION_EXTENSION,
-        GraphDocumentKind::Function,
+        GraphResourceKind::Function,
     )?);
     Ok(entries)
 }
@@ -811,7 +795,7 @@ fn find_graph_file_path(
 pub(crate) fn find_graph_document_path(
     root: &Path,
     graph_path: &GraphResourcePath,
-) -> Result<Option<(PathBuf, GraphDocumentKind, GraphDocument)>, ProjectError> {
+) -> Result<Option<(PathBuf, GraphResourceKind, GraphDocument)>, ProjectError> {
     if let Some(resource) = load_graph_resource_index(root)?.get_by_path(graph_path.as_str()) {
         let path = root.join(resource.path.as_str());
         let document = bind_graph_document_scope_by_path(
@@ -931,9 +915,10 @@ pub fn discover_databases_from_root(
 
 #[cfg(test)]
 mod project_manifest_adapter_tests {
-    use super::{ProjectData, ProjectError, ProjectManifest, serialize_project_manifest};
+    use super::{ProjectError, ProjectManifest, serialize_project_manifest};
     use serde_json::json;
     use yss_computation_settings::ProjectComputationSettings;
+    use yss_project_model::ProjectData;
 
     #[test]
     fn project_manifest_serialization_uses_the_canonical_validated_contract() {
@@ -967,7 +952,7 @@ mod project_manifest_adapter_tests {
 mod tests {
     use super::*;
     use crate::graph::document::EffectiveInputBinding;
-    use crate::project::{GraphResourceDocument, NumericTolerance};
+    use crate::project::NumericTolerance;
     use serde_json::json;
     use yss_graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -975,6 +960,7 @@ mod tests {
         OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
     use yss_graph_protocol::{NodeTypeId, PortKey};
+    use yss_project_model::GraphResourceDocument;
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-production-{}", uuid::Uuid::new_v4()));
@@ -1104,7 +1090,7 @@ mod tests {
         );
         GraphResourceDocument {
             name: "RoundTrip".into(),
-            kind: GraphDocumentKind::Event,
+            kind: GraphResourceKind::Event,
             document,
             function: None,
         }
@@ -1211,7 +1197,7 @@ mod tests {
         let mut project = ProjectData::new();
         project.graphs.insert(
             function_path.clone(),
-            GraphResourceDocument::new("Strict", GraphDocumentKind::Function),
+            GraphResourceDocument::new("Strict", GraphResourceKind::Function),
         );
         let mut event = normalized_graph();
         event.name = "Strict".into();
@@ -1307,7 +1293,7 @@ mod tests {
         );
         let graph = GraphResourceDocument {
             name: "Precedence".into(),
-            kind: GraphDocumentKind::Event,
+            kind: GraphResourceKind::Event,
             document,
             function: None,
         };
@@ -1447,7 +1433,7 @@ mod tests {
         );
         let graph = GraphResourceDocument {
             name: "Stable".into(),
-            kind: GraphDocumentKind::Event,
+            kind: GraphResourceKind::Event,
             document,
             function: None,
         };
@@ -1536,7 +1522,7 @@ mod tests {
         let root = temp_project_dir();
         let graph_path = GraphResourcePath::new("events/Unknown.yssbi-event").unwrap();
         let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x501));
-        let mut graph = GraphResourceDocument::new("Unknown", GraphDocumentKind::Event);
+        let mut graph = GraphResourceDocument::new("Unknown", GraphResourceKind::Event);
         graph.document.nodes.insert(
             node_id,
             DocumentNode {

@@ -253,6 +253,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-project-model"
+                && root.target == "yss_project_model"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-data-contract"
                 && root.target == "yss_data_contract"
                 && root.kind == ProductionRootKind::Library)
@@ -765,6 +773,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_project_model"
+                    && alias.member_package == "yss-project-model"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-project-model"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_tabular_contract"
                     && alias.member_package == "yss-tabular-contract"
             })
@@ -1015,6 +1041,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-project-manifest/src/lib.rs"),
     };
+    let project_model_root = ProductionRoot {
+        package_id: "project-model-package".to_owned(),
+        package: "yss-project-model".to_owned(),
+        target: "yss_project_model".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-project-model/src/lib.rs"),
+    };
     let tabular_contract_root = ProductionRoot {
         package_id: "tabular-contract-package".to_owned(),
         package: "yss-tabular-contract".to_owned(),
@@ -1073,6 +1106,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         project_discovery_root.clone(),
         project_history_root.clone(),
         project_manifest_root.clone(),
+        project_model_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
         variable_value_root.clone(),
@@ -1211,6 +1245,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_project_manifest",
             ),
             module(
+                &project_model_root,
+                "src-tauri/crates/yss-project-model/src/lib.rs",
+                "yss_project_model",
+            ),
+            module(
                 &tabular_contract_root,
                 "src-tauri/crates/yss-tabular-contract/src/lib.rs",
                 "yss_tabular_contract",
@@ -1339,6 +1378,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-project-manifest/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-project-model/src/lib.rs"],
+        RustLayer::Project
     );
     assert_eq!(
         classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
@@ -3395,7 +3438,7 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         "src-tauri/src/commands/command_project/settings.rs",
         "src-tauri/src/event/event_project.rs",
         "src-tauri/src/project/execution_authority.rs",
-        "src-tauri/src/project/project_data.rs",
+        "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/crates/yss-project-manifest/src/lib.rs",
         "src-tauri/src/project/project_state.rs",
     ] {
@@ -3682,8 +3725,9 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("Rust architecture policy must be readable");
     assert!(
-        policy.contains("\"yss-project-discovery\" | \"yss-project-history\"")
-            && policy.contains("layers.insert(RustLayer::Project)"),
+        policy.contains(
+            "\"yss-project-discovery\" | \"yss-project-history\" | \"yss-project-model\""
+        ) && policy.contains("layers.insert(RustLayer::Project)"),
         "project discovery must be classified as Project behavior, not as a Pure Leaf"
     );
 }
@@ -3796,9 +3840,192 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("Rust architecture policy must be readable");
     assert!(
-        policy.contains("\"yss-project-discovery\" | \"yss-project-history\"")
-            && policy.contains("layers.insert(RustLayer::Project)"),
+        policy.contains(
+            "\"yss-project-discovery\" | \"yss-project-history\" | \"yss-project-model\""
+        ) && policy.contains("layers.insert(RustLayer::Project)"),
         "project history must be classified as Project behavior, not as a Pure Leaf"
+    );
+}
+
+#[test]
+fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph_kind() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-model/Cargo.toml",
+        "src-tauri/crates/yss-project-model/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project model owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/project/project_data.rs",
+        "src-tauri/src/project/project_metadata.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root crate must not retain project-model owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-model\"",
+        "yss-project-model = { path = \"./crates/yss-project-model\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-model/Cargo.toml"))
+            .expect("project model manifest must be readable");
+    for dependency in [
+        "serde.workspace = true",
+        "yss-computation-settings = { path = \"../yss-computation-settings\" }",
+        "yss-database-contract = { path = \"../yss-database-contract\" }",
+        "yss-graph-document = { path = \"../yss-graph-document\" }",
+        "yss-project-history = { path = \"../yss-project-history\" }",
+        "yss-variable-contract = { path = \"../yss-variable-contract\" }",
+        "yss-worksheet-document = { path = \"../yss-worksheet-document\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project model must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["chrono", "tauri", "sqlx", "polars"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project model must not absorb runtime dependency '{forbidden}'"
+        );
+    }
+
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-project-model/src/lib.rs"))
+        .expect("project model owner must be readable");
+    for contract in [
+        "pub struct GraphResourceDocument",
+        "pub struct ProjectMetadata",
+        "pub struct ProjectData",
+        "pub fn new() -> Self",
+        "function: matches!(kind, GraphResourceKind::Function)",
+        "project_name: \"未命名项目\".to_owned()",
+        "export_time: String::new()",
+        "pub computation_settings: ProjectComputationSettings",
+        "pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>",
+        "pub worksheets: HashMap<WorksheetResourcePath, WorksheetDocument>",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project model crate must own invariant '{contract}'"
+        );
+    }
+    assert!(
+        owner.contains("#[derive(Debug, Default, Clone)]\npub struct ProjectData")
+            && owner.contains("#[derive(Debug, Clone, PartialEq, Eq)]\npub struct ProjectMetadata"),
+        "the in-memory aggregate and metadata must not become implicit wire contracts"
+    );
+    for removed_or_misplaced in [
+        "pub fn info",
+        "pub fn to_json",
+        "pub fn from_json",
+        "pub fn update_metadata",
+        "chrono::",
+        "ProjectError",
+        "std::fs",
+        "tauri::",
+    ] {
+        assert!(
+            !owner.contains(removed_or_misplaced),
+            "project model must not restore dead or runtime concern '{removed_or_misplaced}'"
+        );
+    }
+
+    let graph_kind_owner = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-graph-document/src/resource_path.rs"),
+    )
+    .expect("graph resource kind owner must be readable");
+    assert!(
+        graph_kind_owner
+            .contains("#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]",)
+            && graph_kind_owner
+                .contains("#[serde(rename_all = \"lowercase\")]\npub enum GraphResourceKind"),
+        "the canonical graph resource kind must own its stable lower-case wire"
+    );
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod project_data",
+        "mod project_metadata",
+        "pub use yss_project_model",
+        "pub use project_data",
+        "pub use project_metadata",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore compatibility facade '{facade}'"
+        );
+    }
+
+    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
+        .expect("Project IO must be readable");
+    for duplicate in ["pub enum GraphDocumentKind", "pub enum GraphResourceKind"] {
+        assert!(
+            !project_io.contains(duplicate),
+            "Project IO must not restore duplicate graph kind '{duplicate}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/application/execution/run_graph.rs",
+        "src-tauri/src/application/resource_mutation.rs",
+        "src-tauri/src/project/history_hydration.rs",
+        "src-tauri/src/project/project_io.rs",
+        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/src/project/project_state.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_model"),
+            "{relative} must consume the canonical project model directly"
+        );
+        for removed_path in [
+            "crate::project::ProjectData",
+            "crate::project::GraphResourceDocument",
+        ] {
+            assert!(
+                !consumer.contains(removed_path),
+                "{relative} must not restore removed model path '{removed_path}'"
+            );
+        }
+    }
+
+    let lifecycle =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_lifecycle.rs"))
+            .expect("project lifecycle must be readable");
+    assert!(
+        lifecycle.contains("data.metadata.export_time = current_export_time();")
+            && lifecycle.contains("chrono::Utc::now().to_rfc3339()"),
+        "lifecycle must own the explicit export-time clock read"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains(
+            "\"yss-project-discovery\" | \"yss-project-history\" | \"yss-project-model\"",
+        ) && policy.contains("layers.insert(RustLayer::Project)"),
+        "project model must be classified as Project behavior, not as a Pure Leaf"
+    );
+    assert!(
+        !policy.contains("project_io::GraphResourceKind"),
+        "architecture capabilities must not preserve the deleted graph-kind facade"
     );
 }
 
@@ -4037,7 +4264,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/crates/yss-project-history/src/lib.rs",
         "src-tauri/src/project/history_hydration.rs",
         "src-tauri/src/project/project_activation.rs",
-        "src-tauri/src/project/project_data.rs",
+        "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/src/project/project_error.rs",
         "src-tauri/src/project/project_lifecycle.rs",
         "src-tauri/src/project/project_reads.rs",

@@ -6,7 +6,6 @@ pub mod function_editor_projection;
 pub mod graph_resource_index;
 mod history_hydration;
 pub mod project_change;
-pub mod project_data;
 pub mod project_error;
 pub mod resource_lifecycle;
 
@@ -14,7 +13,6 @@ pub mod database_authority;
 pub mod project_activation;
 pub mod project_io;
 pub mod project_lifecycle;
-pub mod project_metadata;
 pub mod project_reads;
 pub mod project_registry;
 pub mod project_session;
@@ -33,7 +31,6 @@ pub use filesystem::*;
 pub use function_editor_projection::*;
 pub use graph_resource_index::*;
 pub use project_change::*;
-pub use project_data::*;
 pub use project_error::*;
 pub use resource_lifecycle::*;
 
@@ -41,7 +38,6 @@ pub use database_authority::ProjectDatabaseError;
 pub use project_activation::*;
 pub use project_io::*;
 pub use project_lifecycle::*;
-pub use project_metadata::*;
 pub use project_registry::*;
 pub use project_session::*;
 pub use project_state::*;
@@ -55,8 +51,9 @@ use yss_graph_document::GraphResourcePath;
 
 #[cfg(test)]
 pub(crate) mod fixtures {
-    use super::{GraphResourcePath, ProjectData, ProjectError};
+    use super::{GraphResourcePath, ProjectError};
     use std::path::{Path, PathBuf};
+    use yss_project_model::ProjectData;
     use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
     pub(crate) struct TempProject {

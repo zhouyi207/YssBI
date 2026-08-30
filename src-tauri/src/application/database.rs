@@ -33,9 +33,9 @@ use crate::database::{
     DatabaseExportFormat, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
     ingest_parquet_to_duckdb, sql_reader, write_display_name,
 };
-use crate::project::ProjectDatabaseError;
 use crate::project::{
-    ProjectFilesystemError, ProjectSession, ProjectState, relative_project_duckdb_path,
+    ProjectDatabaseError, ProjectFilesystemError, ProjectSession, ProjectState,
+    relative_project_duckdb_path,
 };
 use uuid::Uuid;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};

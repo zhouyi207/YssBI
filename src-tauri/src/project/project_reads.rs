@@ -1,8 +1,7 @@
-use crate::project::{
-    ProjectData, ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState,
-};
+use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
+use yss_project_model::ProjectData;
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 impl ProjectState {

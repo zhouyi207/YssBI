@@ -384,12 +384,13 @@ pub fn new_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{ProjectData, ProjectFilesystemError};
+    use crate::project::ProjectFilesystemError;
     use crate::schema::application_event::{
         LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
         LifecycleRecoveryDto,
     };
     use yss_project_identity::OperationId;
+    use yss_project_model::ProjectData;
 
     fn lifecycle_result(
         outcome: LifecycleMutationOutcomeDto,

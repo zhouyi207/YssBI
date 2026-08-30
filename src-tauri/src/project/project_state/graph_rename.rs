@@ -465,7 +465,7 @@ impl ProjectState {
         data: &ProjectData,
         source: &GraphResourcePath,
         name: &str,
-        kind: crate::project::GraphDocumentKind,
+        kind: yss_graph_document::GraphResourceKind,
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let requested = ResourceName::parse(name)?;
         let root = crate::project::project_root_from_path(project_path);
@@ -495,21 +495,21 @@ impl ProjectState {
                 message: format!(
                     "a {} named '{}' already exists",
                     match kind {
-                        crate::project::GraphDocumentKind::Event => "event",
-                        crate::project::GraphDocumentKind::Function => "function",
+                        yss_graph_document::GraphResourceKind::Event => "event",
+                        yss_graph_document::GraphResourceKind::Function => "function",
                     },
                     requested.as_str()
                 ),
             });
         }
         let target = match kind {
-            crate::project::GraphDocumentKind::Event => GraphResourcePath::new(format!(
+            yss_graph_document::GraphResourceKind::Event => GraphResourcePath::new(format!(
                 "{}/{}.{}",
                 yss_project_layout::EVENTS_DIR,
                 requested.as_str(),
                 yss_project_layout::EVENT_EXTENSION
             )),
-            crate::project::GraphDocumentKind::Function => GraphResourcePath::new(format!(
+            yss_graph_document::GraphResourceKind::Function => GraphResourcePath::new(format!(
                 "{}/{}.{}",
                 yss_project_layout::FUNCTIONS_DIR,
                 requested.as_str(),

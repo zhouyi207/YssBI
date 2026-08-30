@@ -851,9 +851,9 @@ mod tests {
     use super::*;
     use crate::database::DatabaseState;
     use crate::event::{Event, EventProject};
-    use crate::project::ProjectData;
     use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_project_model::ProjectData;
 
     struct FailingSerialize;
 

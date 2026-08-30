@@ -1,10 +1,7 @@
-use crate::project::{
-    GraphDocumentKind, ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet,
-    ProjectSession,
-};
+use crate::project::{ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectSession};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use yss_graph_document::GraphResourcePath;
+use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_project_history::{
     HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectDocumentState,
     ProjectHistory, ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
@@ -12,6 +9,7 @@ use yss_project_history::{
 };
 use yss_project_identity::{HistoryEntryId, ResourceRevision};
 use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEET_EXTENSION};
+use yss_project_model::ProjectData;
 use yss_variable_contract::{VariableInstance, VariableScope};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
@@ -124,7 +122,7 @@ pub(super) fn discover_touched_resources(
                             known_graphs,
                             key,
                             event_path,
-                            GraphDocumentKind::Event,
+                            GraphResourceKind::Event,
                         )?;
                     }
                     VariableScope::Function { function_path } => {
@@ -134,7 +132,7 @@ pub(super) fn discover_touched_resources(
                             known_graphs,
                             key,
                             function_path,
-                            GraphDocumentKind::Function,
+                            GraphResourceKind::Function,
                         )?;
                     }
                 }
@@ -460,7 +458,7 @@ fn hydrate_graph_document(
         .insert(document_key, graph.clone());
     snapshot.data.graphs.insert(
         graph_path.clone(),
-        crate::project::GraphResourceDocument {
+        yss_project_model::GraphResourceDocument {
             name: disk.name,
             kind: disk.kind,
             document: graph,
@@ -927,11 +925,11 @@ fn insert_local_variable_owner(
     known_graphs: &BTreeSet<GraphResourcePath>,
     key: &VariableResourceKey,
     owner: String,
-    expected_kind: GraphDocumentKind,
+    expected_kind: GraphResourceKind,
 ) -> Result<(), String> {
     let path = GraphResourcePath::new(owner)
         .map_err(|error| format!("Variable '{}' has invalid owner graph: {error}", key.0))?;
-    if GraphDocumentKind::from(path.kind()) != expected_kind || !known_graphs.contains(&path) {
+    if path.kind() != expected_kind || !known_graphs.contains(&path) {
         return Err(format!(
             "Variable '{}' owner graph '{}' is not authoritative",
             key.0, path
@@ -947,15 +945,15 @@ fn insert_local_variable_owner(
 #[cfg(test)]
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
-    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
     use std::collections::{BTreeMap, BTreeSet};
     use yss_data_contract::{DataType, DataValue};
-    use yss_graph_document::GraphResourcePath;
+    use yss_graph_document::{GraphResourceKind, GraphResourcePath};
     use yss_project_history::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, ProjectHistoryTransaction,
         ResourcePatch, VariableDocumentPatch, VariableResourceKey,
     };
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_project_model::{GraphResourceDocument, ProjectData};
     use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
     const EVENT_PATH: &str = "events/Stable.yssbi-event";
@@ -1030,7 +1028,7 @@ mod tests {
         let mut data = ProjectData::new();
         data.graphs.insert(
             function_path(),
-            GraphResourceDocument::new("Stable", GraphDocumentKind::Function),
+            GraphResourceDocument::new("Stable", GraphResourceKind::Function),
         );
         data.variables.insert(local.id, local);
 

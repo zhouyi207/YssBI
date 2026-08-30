@@ -433,10 +433,10 @@ fn map_session_capture_error(
 mod tests {
     use super::*;
     use crate::event::{Event, EventProject};
-    use crate::project::ProjectData;
     use std::collections::BTreeMap;
     use yss_project_history::{HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_project_model::ProjectData;
 
     fn active_state(label: &str) -> (std::path::PathBuf, ProjectState, ProjectInstanceId) {
         let root = std::env::temp_dir().join(format!(
@@ -991,9 +991,9 @@ mod tests {
         let mut data = ProjectData::new();
         data.graphs.insert(
             graph_path.clone(),
-            crate::project::GraphResourceDocument::new(
+            yss_project_model::GraphResourceDocument::new(
                 "Local",
-                crate::project::GraphDocumentKind::Event,
+                yss_graph_document::GraphResourceKind::Event,
             ),
         );
         if let Some(variable) = variable {

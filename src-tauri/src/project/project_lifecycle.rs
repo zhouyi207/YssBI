@@ -1,5 +1,5 @@
 use crate::project::{
-    NormalizedProjectRoot, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
+    NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootLifecycleGuard, ProjectSession,
     ProjectState, ProjectTransactionContext, StagedFilesystemMutation, ensure_directory,
     read_project_source_tree, remove_directory_if_created, validate_deletion_root,
@@ -14,6 +14,7 @@ use yss_project_layout::{
     WORKSHEETS_DIR,
 };
 use yss_project_manifest::ProjectManifest;
+use yss_project_model::ProjectData;
 use yss_worksheet_document::WorksheetDocument;
 
 pub struct PreparedProjectCopy {
@@ -184,7 +185,7 @@ impl ProjectState {
         let destination_binding = destination_binding.bind_existing()?;
         let mut data = ProjectData::new();
         data.metadata.project_name = project_name.clone();
-        data.update_metadata();
+        data.metadata.export_time = current_export_time();
         let context = lifecycle_context(
             ProjectSession {
                 instance_id: ProjectInstanceId::new(),
@@ -283,6 +284,10 @@ impl ProjectState {
         )?;
         Ok(self.commit_project_deletion(prepared))
     }
+}
+
+fn current_export_time() -> String {
+    chrono::Utc::now().to_rfc3339()
 }
 
 #[cfg(test)]
@@ -477,18 +482,17 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemFaultPoint,
-        fixtures, load_project_from_file,
-    };
+    use crate::project::{ProjectFilesystemFaultPoint, fixtures, load_project_from_file};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourceKind;
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
     use yss_graph_protocol::NodeTypeId;
     use yss_project_history::{MutationRequest, ResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_project_model::{GraphResourceDocument, ProjectData};
     use yss_variable_contract::VariableScope;
 
     fn root(label: &str) -> PathBuf {
@@ -584,7 +588,7 @@ mod tests {
     fn lifecycle_unload_retains_exact_graph_revision() {
         let (state, root, instance_id) = active_state("unload-revision");
         let graph_path = state
-            .create_graph_resource_fixture("Lifecycle Revision", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Lifecycle Revision", GraphResourceKind::Event)
             .unwrap();
         state
             .load_graph_projection(&instance_id, &graph_path, 1, "en-US")
@@ -627,10 +631,10 @@ mod tests {
     fn lifecycle_graph_cache_unload_preserves_complete_project_history() {
         let (state, root, instance_id) = active_state("history-unload");
         let unloaded = state
-            .create_graph_resource_fixture("Unloaded", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Unloaded", GraphResourceKind::Event)
             .unwrap();
         let retained = state
-            .create_graph_resource_fixture("Retained", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Retained", GraphResourceKind::Event)
             .unwrap();
         state
             .load_graph_projection(&instance_id, &unloaded, 1, "en-US")
@@ -691,10 +695,10 @@ mod tests {
     fn stale_lifecycle_unload_token_preserves_history_and_residency() {
         let (state, root, instance_id) = active_state("stale-unload-token");
         let unloaded = state
-            .create_graph_resource_fixture("Unloaded", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Unloaded", GraphResourceKind::Event)
             .unwrap();
         let retained = state
-            .create_graph_resource_fixture("Retained", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Retained", GraphResourceKind::Event)
             .unwrap();
         state
             .load_graph_projection(&instance_id, &unloaded, 1, "en-US")
@@ -740,11 +744,11 @@ mod tests {
         let mut replacement = ProjectData::new();
         replacement.graphs.insert(
             unloaded.clone(),
-            GraphResourceDocument::new("Unloaded", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Unloaded", GraphResourceKind::Event),
         );
         replacement.graphs.insert(
             retained.clone(),
-            GraphResourceDocument::new("Retained", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Retained", GraphResourceKind::Event),
         );
         state.activate_project_fixture(root.to_string_lossy().into_owned(), replacement);
         let current_instance_id = state.capture_project_session().unwrap().instance_id;
@@ -865,7 +869,7 @@ mod tests {
         authority.metadata.project_name = "Authoritative Copy".into();
         authority.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new("Authority", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Authority", GraphResourceKind::Event),
         );
         let variable = yss_variable_contract::VariableInstance {
             id: yss_variable_contract::VariableId::new(),
@@ -953,13 +957,13 @@ mod tests {
         state
             .insert_graph(
                 load_path.clone(),
-                GraphResourceDocument::new("Load", GraphDocumentKind::Event),
+                GraphResourceDocument::new("Load", GraphResourceKind::Event),
             )
             .unwrap();
         state
             .insert_graph(
                 rename_path.clone(),
-                GraphResourceDocument::new("Rename", GraphDocumentKind::Event),
+                GraphResourceDocument::new("Rename", GraphResourceKind::Event),
             )
             .unwrap();
         let (worksheet_path, worksheet) = fixtures::worksheet("Sheet", "database");

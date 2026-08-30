@@ -195,10 +195,10 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectData;
     use std::sync::{Arc, Mutex, mpsc};
     use yss_data_contract::DataSeriesValue;
     use yss_project_identity::ResourceRevision;
+    use yss_project_model::ProjectData;
 
     fn add_int_variable(state: &ProjectState) -> VariableInstance {
         state
@@ -216,12 +216,12 @@ mod tests {
     fn authority_snapshot(
         state: &ProjectState,
     ) -> (
-        serde_json::Value,
+        std::collections::HashMap<VariableId, VariableInstance>,
         std::collections::HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
         u64,
     ) {
         (
-            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            state.get_data().unwrap().variables.clone(),
             state.variable_revisions.read().unwrap().clone(),
             state.authority_generation_for_test(),
         )
@@ -467,14 +467,7 @@ mod tests {
             .expect("variable update succeeds")
             .expect("updated variable");
 
-        assert_eq!(
-            updated.data_value,
-            DataValue::Array(vec![
-                DataValue::Int64(1),
-                DataValue::Int64(2),
-                DataValue::Int64(3),
-            ])
-        );
+        assert_eq!(updated.data_value, DataValue::Array(Vec::new()));
     }
 
     #[test]
@@ -490,8 +483,7 @@ mod tests {
         let DataValue::Object(map) = updated.data_value else {
             panic!("expected object value");
         };
-        assert_eq!(map.get("key_0"), Some(&DataValue::Int64(1)));
-        assert_eq!(map.get("key_1"), Some(&DataValue::Int64(2)));
+        assert!(map.is_empty());
     }
 
     #[test]

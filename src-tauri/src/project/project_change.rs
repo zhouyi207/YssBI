@@ -104,7 +104,8 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{ProjectData, fixtures};
+    use crate::project::fixtures;
+    use yss_project_model::ProjectData;
 
     #[test]
     fn file_change_keeps_neutral_path_and_kind_and_filters_unrelated_paths() {

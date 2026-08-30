@@ -492,13 +492,11 @@ fn stale_owner_error(owner: &ResourceLifecycleOwner) -> ProjectFilesystemError {
 
 #[cfg(all(test, any()))]
 mod tests {
-    use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, NormalizedProjectRoot, ProjectData,
-        ProjectSession, ProjectState, fixtures,
-    };
+    use crate::project::{NormalizedProjectRoot, ProjectSession, ProjectState, fixtures};
     use std::sync::Arc;
-    use yss_graph_document::GraphResourcePath;
+    use yss_graph_document::{GraphResourceKind, GraphResourcePath};
     use yss_project_identity::ProjectInstanceId;
+    use yss_project_model::{GraphResourceDocument, ProjectData};
 
     fn session(label: &str) -> ProjectSession {
         ProjectSession {
@@ -1189,7 +1187,7 @@ mod tests {
         let mut project_a = ProjectData::new();
         project_a.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new("Shared", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Shared", GraphResourceKind::Event),
         );
         fixtures::write_project(&project_a, root.to_string_lossy().as_ref()).unwrap();
         fixtures::write_graph(&project_a, root.to_string_lossy().as_ref(), &graph_path).unwrap();

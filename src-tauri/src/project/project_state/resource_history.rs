@@ -188,7 +188,7 @@ pub(super) fn normalize_loaded_function_resource_revision(
     resource: &mut GraphResourceDocument,
     retained: Option<yss_graph_document::GraphRevision>,
 ) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
-    if resource.kind != crate::project::GraphDocumentKind::Function {
+    if resource.kind != yss_graph_document::GraphResourceKind::Function {
         return Ok(resource.document.revision);
     }
     let incoming = resource.document.revision;
@@ -210,7 +210,7 @@ pub(in crate::project) fn normalize_function_resource_revision(
     resource: &mut GraphResourceDocument,
     retained: Option<yss_graph_document::GraphRevision>,
 ) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
-    if resource.kind != crate::project::GraphDocumentKind::Function {
+    if resource.kind != yss_graph_document::GraphResourceKind::Function {
         return Ok(resource.document.revision);
     }
     let revision = authoritative_function_revision(path, resource.document.revision, retained)?;
@@ -256,7 +256,7 @@ pub(super) fn normalize_function_patch_revisions(
         }
         ResourceDocumentPatch::RemoveGraph { path, revision } => {
             if data.graphs.get(path).is_some_and(|resource| {
-                resource.kind == crate::project::GraphDocumentKind::Function
+                resource.kind == yss_graph_document::GraphResourceKind::Function
             }) {
                 authoritative_function_revision(
                     path,
@@ -272,7 +272,7 @@ pub(super) fn normalize_function_patch_revisions(
             referenced_graphs,
             ..
         } => {
-            if moved.kind == crate::project::GraphDocumentKind::Function {
+            if moved.kind == yss_graph_document::GraphResourceKind::Function {
                 authoritative_function_revision(
                     from,
                     moved.document.revision,

@@ -249,7 +249,6 @@ fn map_project_query_error(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::project::ProjectData;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document::GraphRevision;
@@ -260,6 +259,7 @@ mod tests {
     };
     use yss_project_identity::OperationId;
     use yss_project_identity::ProjectInstanceId;
+    use yss_project_model::ProjectData;
     use yss_variable_contract::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
@@ -339,9 +339,9 @@ mod tests {
         state
             .insert_graph(
                 function_path.clone(),
-                crate::project::GraphResourceDocument::new(
+                yss_project_model::GraphResourceDocument::new(
                     "Recovery",
-                    crate::project::GraphDocumentKind::Function,
+                    yss_graph_document::GraphResourceKind::Function,
                 ),
             )
             .unwrap();
@@ -397,9 +397,9 @@ mod tests {
         state
             .insert_graph(
                 function_path.clone(),
-                crate::project::GraphResourceDocument::new(
+                yss_project_model::GraphResourceDocument::new(
                     "History",
-                    crate::project::GraphDocumentKind::Function,
+                    yss_graph_document::GraphResourceKind::Function,
                 ),
             )
             .unwrap();
@@ -490,18 +490,18 @@ mod tests {
         state
             .insert_graph(
                 graph_path.clone(),
-                crate::project::GraphResourceDocument::new(
+                yss_project_model::GraphResourceDocument::new(
                     "GraphOnly",
-                    crate::project::GraphDocumentKind::Event,
+                    yss_graph_document::GraphResourceKind::Event,
                 ),
             )
             .unwrap();
         state
             .insert_graph(
                 function_path.clone(),
-                crate::project::GraphResourceDocument::new(
+                yss_project_model::GraphResourceDocument::new(
                     "Next",
-                    crate::project::GraphDocumentKind::Function,
+                    yss_graph_document::GraphResourceKind::Function,
                 ),
             )
             .unwrap();

@@ -9358,6 +9358,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "yss-computation-settings",
+ "yss-database-contract",
+ "yss-graph-document",
+ "yss-project-history",
+ "yss-variable-contract",
+ "yss-worksheet-document",
+]
+
+[[package]]
 name = "yss-project-progress"
 version = "0.1.0"
 
@@ -9528,6 +9542,7 @@ dependencies = [
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-manifest",
+ "yss-project-model",
  "yss-project-progress",
  "yss-project-registry-contract",
  "yss-resource-naming",

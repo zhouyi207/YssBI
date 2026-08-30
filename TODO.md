@@ -694,3 +694,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-path-display/` Pure Leaf；Project registry 与 Application query 直接消费唯一
   owner，删除根 `project/path_format.rs` 与兼容 capability，并让 `\\?\` / `\\?\UNC\` 处理在所有
   宿主平台保持一致；路径存在性、canonicalization、校验与 I/O 继续由调用方拥有。
+- [ ] 将内存 `ProjectData`、`ProjectMetadata` 与 Graph resource aggregate 迁入
+  `src-tauri/crates/yss-project-model/` Project 层；删除根 `project_data.rs`、`project_metadata.rs`
+  与兼容 re-export，移除零调用的整包 JSON/`info`/隐式 metadata 刷新 API，统一复用
+  `yss-graph-document::GraphResourceKind`；Project lifecycle 显式拥有 export-time 时钟，磁盘 wire
+  继续由 manifest、Graph/Worksheet contract 与 Project I/O 分别拥有。

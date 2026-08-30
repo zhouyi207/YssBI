@@ -20,14 +20,14 @@ use super::graph_contracts::{
 };
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
+use crate::project::ProjectFilesystemError;
 use crate::project::project_writers::ProjectSaveResult;
-use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectFilesystemError};
 use std::collections::BTreeMap;
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_catalog::CatalogResourcePath;
-use yss_graph_document::GraphResourcePath;
+use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
@@ -35,6 +35,7 @@ use yss_graph_editor::{
 };
 use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_project_model::GraphResourceDocument;
 
 #[derive(Debug, Error)]
 pub enum ResourceMutationApplicationError {
@@ -143,12 +144,12 @@ fn build_catalog_mutation_validation_snapshot(
 fn build_graph_shell(
     path: &GraphResourcePath,
     name: String,
-    kind: GraphDocumentKind,
+    kind: GraphResourceKind,
 ) -> Result<GraphResourceDocument, ResourceMutationApplicationError> {
     let mut resource = GraphResourceDocument::new(name, kind);
     let shell_types: &[(&str, f64)] = match kind {
-        GraphDocumentKind::Event => &[("yssbi.project.event.begin", 120.0)],
-        GraphDocumentKind::Function => &[
+        GraphResourceKind::Event => &[("yssbi.project.event.begin", 120.0)],
+        GraphResourceKind::Function => &[
             ("yssbi.project.function.entry", 120.0),
             ("yssbi.project.function.return", 560.0),
         ],
@@ -156,7 +157,7 @@ fn build_graph_shell(
     let mut shell_nodes = Vec::new();
     for (node_type, x) in shell_types {
         let id = yss_graph_document::NodeId::new();
-        let parameters = if kind == GraphDocumentKind::Function {
+        let parameters = if kind == GraphResourceKind::Function {
             [(
                 yss_graph_protocol::ParameterKey::new("function").map_err(|error| {
                     ResourceMutationApplicationError::Project(
@@ -430,7 +431,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         name: String,
-        kind: GraphDocumentKind,
+        kind: GraphResourceKind,
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;

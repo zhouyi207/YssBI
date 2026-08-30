@@ -1,6 +1,6 @@
 use super::fixture_result_path;
-use crate::project::{GraphDocumentKind, ProjectFilesystemError, ProjectState};
-use yss_graph_document::{GraphResourcePath, GraphRevision};
+use crate::project::{ProjectFilesystemError, ProjectState};
+use yss_graph_document::{GraphResourceKind, GraphResourcePath, GraphRevision};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -45,7 +45,7 @@ impl ProjectState {
     pub(crate) fn create_graph_resource_fixture(
         &self,
         name: &str,
-        kind: GraphDocumentKind,
+        kind: GraphResourceKind,
     ) -> Result<GraphResourcePath, String> {
         let session = self
             .capture_project_session()

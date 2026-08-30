@@ -814,9 +814,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::event_project::EventProject",
             "yss_project_history::MutationRequest",
             "yssbi_lib::project::project_writers::ProjectSaveResult",
-            "yssbi_lib::project::project_io::GraphDocumentKind",
-            "yssbi_lib::project::project_io::GraphDocumentKind::Event",
-            "yssbi_lib::project::project_io::GraphDocumentKind::Function",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
             "yssbi_lib::schema::application_event::resource_mutation_to_transport",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
@@ -1731,7 +1728,10 @@ fn non_build_memberships(
             | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
-    } else if matches!(package, "yss-project-discovery" | "yss-project-history") {
+    } else if matches!(
+        package,
+        "yss-project-discovery" | "yss-project-history" | "yss-project-model"
+    ) {
         layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {
         layers.insert(exact_layer.unwrap_or(RustLayer::Graph));

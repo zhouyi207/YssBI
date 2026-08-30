@@ -7,13 +7,12 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use crate::project::{
-    MutationPublication, NormalizedProjectRoot, ProjectData, ProjectSession, ProjectState,
-};
+use crate::project::{MutationPublication, NormalizedProjectRoot, ProjectSession, ProjectState};
 
 use yss_computation_settings::ProjectComputationSettings;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_project_model::ProjectData;
 use yss_variable_contract::{VariableId, VariableInstance};
 
 /// Project-owned identity used when a plan names a resource.
@@ -1263,10 +1262,12 @@ fn check_commit_control(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, fixtures};
+    use crate::project::fixtures;
     use std::sync::atomic::AtomicBool;
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourceKind;
+    use yss_project_model::{GraphResourceDocument, ProjectData};
     use yss_variable_contract::VariableScope;
 
     fn project_with_graph(label: &str) -> (fixtures::TempProject, GraphResourcePath) {
@@ -1274,7 +1275,7 @@ mod tests {
         let mut data = ProjectData::new();
         data.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new(label, GraphDocumentKind::Event),
+            GraphResourceDocument::new(label, GraphResourceKind::Event),
         );
         (fixtures::TempProject::activate(label, data), graph_path)
     }
@@ -1368,7 +1369,7 @@ mod tests {
         state
             .insert_graph(
                 graph_path,
-                GraphResourceDocument::new("changed", GraphDocumentKind::Event),
+                GraphResourceDocument::new("changed", GraphResourceKind::Event),
             )
             .unwrap();
         assert!(matches!(

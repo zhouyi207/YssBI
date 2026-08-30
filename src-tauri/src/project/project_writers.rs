@@ -1,7 +1,7 @@
 use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
-    GraphDocument, ProjectData, ProjectFilesystemError, ProjectFilesystemTransaction,
-    ProjectSession, ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
+    GraphDocument, ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession,
+    ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
 };
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
 use yss_project_manifest::ProjectManifest;
+use yss_project_model::ProjectData;
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 use yss_variable_value::default_value_for;
@@ -622,17 +623,16 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use super::set_writer_snapshot_test_hook;
-    use crate::project::{
-        GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
-        ProjectFilesystemFaultPoint, ProjectState, fixtures,
-    };
+    use crate::project::{GraphDocument, ProjectFilesystemFaultPoint, ProjectState, fixtures};
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourceKind;
     use yss_graph_document::GraphResourcePath;
     use yss_project_history::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEETS_DIR};
+    use yss_project_model::{GraphResourceDocument, ProjectData};
     use yss_resource_naming::ResourceName;
     use yss_variable_contract::VariableScope;
 
@@ -704,7 +704,7 @@ mod tests {
         let mut data = ProjectData::new();
         data.graphs.insert(
             path.clone(),
-            GraphResourceDocument::new("Before", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Before", GraphResourceKind::Event),
         );
         let state = Arc::new(active_state(&project, data));
         let session = state.capture_project_session().unwrap();
@@ -747,11 +747,11 @@ mod tests {
         data.metadata.project_name = "coherent-authority".into();
         data.graphs.insert(
             loaded.clone(),
-            GraphResourceDocument::new("Loaded", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Loaded", GraphResourceKind::Event),
         );
         data.graphs.insert(
             removed.clone(),
-            GraphResourceDocument::new("Removed", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Removed", GraphResourceKind::Event),
         );
         crate::project::fixtures::write_graph(
             &data,
@@ -805,7 +805,7 @@ mod tests {
         let mut data = ProjectData::new();
         data.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new("Before", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Before", GraphResourceKind::Event),
         );
         crate::project::fixtures::write_graph(
             &data,
@@ -861,7 +861,7 @@ mod tests {
     fn function_save_persists_signature_and_graph_at_one_revision() {
         let project = TestProject::new("function-revision");
         let path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
-        let mut function = GraphResourceDocument::new("Shared", GraphDocumentKind::Function);
+        let mut function = GraphResourceDocument::new("Shared", GraphResourceKind::Function);
         function.document.revision = yss_graph_document::GraphRevision::new(4);
         function.function.as_mut().unwrap().revision = ResourceRevision::new(4);
         let mut data = ProjectData::new();

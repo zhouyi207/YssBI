@@ -2,11 +2,11 @@
 
 use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
-    GraphResourceDocument, NormalizedProjectRoot, PreparedProjectActivation, ProjectData,
-    ProjectFilesystemCoordinator, ProjectFilesystemError, ProjectFilesystemTransaction,
-    ProjectSession, ProjectStore, ProjectTransactionContext, ResourceLifecycleIntent,
-    ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
-    StagedFilesystemMutation, load_project_graph_from_file,
+    NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemCoordinator,
+    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession, ProjectStore,
+    ProjectTransactionContext, ResourceLifecycleIntent, ResourceLifecycleOperation,
+    ResourceLifecycleRegistry, ResourceRenameOwnershipLease, StagedFilesystemMutation,
+    load_project_graph_from_file,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -23,6 +23,7 @@ use yss_project_history::{
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
 use yss_project_manifest::ProjectManifest;
+use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 mod activation;

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::project::{
-    GraphResourceDocument, ProjectFilesystemError, ProjectState, ResourceLifecycleIntent,
-    ResourceLifecycleOperation, StagedFilesystemMutation,
+    ProjectFilesystemError, ProjectState, ResourceLifecycleIntent, ResourceLifecycleOperation,
+    StagedFilesystemMutation,
 };
 
 use yss_graph_document::{
@@ -10,6 +10,7 @@ use yss_graph_document::{
     NodeId, PortAddress, PortInstanceId, PortRef,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_project_model::GraphResourceDocument;
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use super::VariableRevisionEntry;
@@ -630,7 +631,7 @@ impl ProjectState {
     }
 
     pub(super) fn install_validated_resident_graph(
-        data: &mut crate::project::ProjectData,
+        data: &mut yss_project_model::ProjectData,
         path: GraphResourcePath,
         resource: GraphResourceDocument,
     ) -> GraphResourceDocument {
@@ -642,7 +643,7 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         name: &str,
-        kind: crate::project::GraphDocumentKind,
+        kind: yss_graph_document::GraphResourceKind,
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -656,9 +657,9 @@ impl ProjectState {
 
     pub(in crate::project) fn allocate_graph_path_from_snapshot(
         project_path: Option<&str>,
-        data: &crate::project::ProjectData,
+        data: &yss_project_model::ProjectData,
         name: &str,
-        kind: crate::project::GraphDocumentKind,
+        kind: yss_graph_document::GraphResourceKind,
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let persisted = project_path
             .map(|path| {
@@ -689,11 +690,11 @@ impl ProjectState {
         let requested = ResourceName::parse(name)?;
         let allocated = allocate_unique_resource_name(&requested, existing.iter());
         let (directory, extension) = match kind {
-            crate::project::GraphDocumentKind::Event => (
+            yss_graph_document::GraphResourceKind::Event => (
                 yss_project_layout::EVENTS_DIR,
                 yss_project_layout::EVENT_EXTENSION,
             ),
-            crate::project::GraphDocumentKind::Function => (
+            yss_graph_document::GraphResourceKind::Function => (
                 yss_project_layout::FUNCTIONS_DIR,
                 yss_project_layout::FUNCTION_EXTENSION,
             ),
@@ -1010,10 +1011,10 @@ impl ProjectState {
                         from: graph_path.as_str().to_owned().into(),
                         to: target.as_str().to_owned().into(),
                         kind: match source.kind {
-                            crate::project::GraphDocumentKind::Event => {
+                            yss_graph_document::GraphResourceKind::Event => {
                                 yss_project_history::ResourceLifecycleKind::Event
                             }
-                            crate::project::GraphDocumentKind::Function => {
+                            yss_graph_document::GraphResourceKind::Function => {
                                 yss_project_history::ResourceLifecycleKind::Function
                             }
                         },
@@ -1098,14 +1099,14 @@ impl ProjectState {
 
 fn renamed_graph_path(
     name: &ResourceName,
-    kind: crate::project::GraphDocumentKind,
+    kind: yss_graph_document::GraphResourceKind,
 ) -> Result<GraphResourcePath, ProjectFilesystemError> {
     let (directory, extension) = match kind {
-        crate::project::GraphDocumentKind::Event => (
+        yss_graph_document::GraphResourceKind::Event => (
             yss_project_layout::EVENTS_DIR,
             yss_project_layout::EVENT_EXTENSION,
         ),
-        crate::project::GraphDocumentKind::Function => (
+        yss_graph_document::GraphResourceKind::Function => (
             yss_project_layout::FUNCTIONS_DIR,
             yss_project_layout::FUNCTION_EXTENSION,
         ),

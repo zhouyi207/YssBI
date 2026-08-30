@@ -1,16 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use super::GraphDocumentKind;
 use super::project_error::ProjectError;
-use yss_graph_document::{GraphResourcePath, normalize_graph_resource_path};
+use yss_graph_document::{GraphResourceKind, GraphResourcePath, normalize_graph_resource_path};
 use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
 use yss_resource_naming::ResourceName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScannedGraphEntry {
     pub path: GraphResourcePath,
-    pub kind: GraphDocumentKind,
+    pub kind: GraphResourceKind,
 }
 
 #[derive(Debug, Clone)]
@@ -68,20 +67,20 @@ pub fn normalize_resource_path(path: &str) -> String {
 
 fn collect_graph_resource_files(
     root: &Path,
-) -> Result<Vec<(String, GraphDocumentKind)>, ProjectError> {
+) -> Result<Vec<(String, GraphResourceKind)>, ProjectError> {
     let mut files = Vec::new();
     collect_kind_files(
         root,
         EVENTS_DIR,
         EVENT_EXTENSION,
-        GraphDocumentKind::Event,
+        GraphResourceKind::Event,
         &mut files,
     )?;
     collect_kind_files(
         root,
         FUNCTIONS_DIR,
         FUNCTION_EXTENSION,
-        GraphDocumentKind::Function,
+        GraphResourceKind::Function,
         &mut files,
     )?;
     files.sort_by(|a, b| a.0.cmp(&b.0));
@@ -92,8 +91,8 @@ fn collect_kind_files(
     root: &Path,
     dir: &str,
     extension: &str,
-    kind: GraphDocumentKind,
-    files: &mut Vec<(String, GraphDocumentKind)>,
+    kind: GraphResourceKind,
+    files: &mut Vec<(String, GraphResourceKind)>,
 ) -> Result<(), ProjectError> {
     let graph_dir = root.join(dir);
     let metadata = match std::fs::symlink_metadata(&graph_dir) {
