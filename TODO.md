@@ -566,6 +566,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-tabular-contract/` Pure Leaf，
   集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
   adapter/application owner 持有，主 crate 不保留兼容 module。
+- [ ] 将 Polars materialization 与 JSON-to-`AnyValue` 严格转换迁入独立
+  `src-tauri/crates/yss-tabular-polars/` Backend Adapter；删除根 `backend_adapters::tabular`
+  owner、测试 module 与兼容 facade；统一 database/Bayes 的 scalar/column conversion，保留完整
+  `u64`，修复 1970 年前时间戳投影，并移除从未构造的 `UnsupportedColumnType` 分支和零调用的
+  `database/row_mapping` 重复实现。
 - [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
   Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
   application/project 仅持有 mutation、normalization 与 authority。

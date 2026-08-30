@@ -202,7 +202,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
     let files = [
         TABULAR_CONTRACT_SOURCE,
         VARIABLE_VALUE_SOURCE,
-        "src-tauri/src/backend_adapters/tabular/polars.rs",
+        "src-tauri/crates/yss-tabular-polars/src/lib.rs",
         "src-tauri/src/database/tabular_io.rs",
     ];
     let mut violations = Vec::new();
@@ -247,7 +247,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         {
             violations.push(format!("{relative}: missing typed normalization error"));
         }
-        if relative == "src-tauri/src/backend_adapters/tabular/polars.rs"
+        if relative == "src-tauri/crates/yss-tabular-polars/src/lib.rs"
             && !source.contains("TabularMaterializationError")
         {
             violations.push(format!("{relative}: missing typed materialization error"));

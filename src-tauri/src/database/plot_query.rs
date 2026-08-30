@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use polars::prelude::{AnyValue, DataType as PolarsDataType, PlSmallStr, PolarsResult, Series};
+use polars::prelude::{DataType as PolarsDataType, PolarsResult, Series};
 use thiserror::Error;
 
 use crate::database::error::{
@@ -13,7 +13,8 @@ use crate::database::session_api::{
 };
 use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
-use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar};
+use yss_tabular_contract::TabularColumnName;
+use yss_tabular_polars::column_to_series;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {
@@ -173,7 +174,7 @@ pub fn read_numeric_column_pair(
             )
         })?;
 
-    let x_series = tabular_column_to_series(x_source).map_err(|error| {
+    let x_series = column_to_series(x_source).map_err(|error| {
         materialization_error(
             database,
             Some(x_column),
@@ -184,7 +185,7 @@ pub fn read_numeric_column_pair(
             ),
         )
     })?;
-    let y_series = tabular_column_to_series(y_source).map_err(|error| {
+    let y_series = column_to_series(y_source).map_err(|error| {
         materialization_error(
             database,
             Some(y_column),
@@ -329,26 +330,6 @@ fn series_to_numeric_values(
     Ok(Arc::from(values.into_boxed_slice()))
 }
 
-fn tabular_column_to_series(column: &TabularColumn) -> PolarsResult<Series> {
-    let values = column
-        .values()
-        .iter()
-        .map(tabular_scalar_to_any_value)
-        .collect::<Vec<_>>();
-    Series::from_any_values(PlSmallStr::from(column.name().as_str()), &values, false)
-}
-
-fn tabular_scalar_to_any_value(value: &TabularScalar) -> AnyValue<'static> {
-    match value {
-        TabularScalar::Null => AnyValue::Null,
-        TabularScalar::Bool(value) => AnyValue::Boolean(*value),
-        TabularScalar::Integer(value) => AnyValue::Int64(*value),
-        TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
-        TabularScalar::Decimal(value) => AnyValue::Float64(value.as_f64()),
-        TabularScalar::String(value) => AnyValue::StringOwned(value.to_string().into()),
-    }
-}
-
 fn numeric_kind(data_type: &DataType) -> NumericColumnKind {
     match data_type {
         DataType::Date => NumericColumnKind::Date,
@@ -378,7 +359,7 @@ mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
-    use polars::prelude::{AnyValue, Column, DataFrame, TimeUnit};
+    use polars::prelude::{AnyValue, Column, DataFrame, PlSmallStr, TimeUnit};
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{

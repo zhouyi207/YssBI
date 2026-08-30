@@ -2064,15 +2064,137 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
         "src-tauri/crates/yss-tabular-contract/Cargo.toml",
         "src-tauri/crates/yss-tabular-contract/src/lib.rs",
         "src-tauri/crates/yss-tabular-contract/tests/wire_contract.rs",
+        "src-tauri/crates/yss-tabular-polars/Cargo.toml",
+        "src-tauri/crates/yss-tabular-polars/src/lib.rs",
+        "src-tauri/crates/yss-tabular-polars/src/tests.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
             "tabular contract owner must exist at {relative}"
         );
     }
+    for removed_owner in [
+        "src-tauri/src/tabular",
+        "src-tauri/src/backend_adapters/tabular",
+        "src-tauri/src/backend_adapters/tabular_tests.rs",
+        "src-tauri/src/database/row_mapping.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root crate must not retain tabular adapter owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-tabular-polars\"",
+        "yss-tabular-polars = { path = \"./crates/yss-tabular-polars\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let adapter_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/Cargo.toml"))
+            .expect("the tabular Polars manifest must be readable");
+    for dependency in [
+        "chrono.workspace = true",
+        "polars.workspace = true",
+        "serde_json.workspace = true",
+        "thiserror.workspace = true",
+        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
+    ] {
+        assert!(
+            adapter_manifest.contains(dependency),
+            "the tabular Polars adapter must declare {dependency}"
+        );
+    }
+
+    let adapter =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/src/lib.rs"))
+            .expect("the tabular Polars adapter must be readable");
+    for owned_api in [
+        "pub enum TabularMaterializationError",
+        "pub fn to_dataframe",
+        "pub fn column_to_series",
+        "pub fn tabular_scalar_to_any_value",
+        "pub fn anyvalue_to_json",
+        "pub fn json_to_anyvalue",
+    ] {
+        assert!(
+            adapter.contains(owned_api),
+            "the tabular Polars crate must own {owned_api}"
+        );
+    }
+    for backwards_dependency in ["crate::", "yssbi_lib", "tauri::"] {
+        assert!(
+            !adapter.contains(backwards_dependency),
+            "the tabular Polars adapter must not depend backwards on {backwards_dependency}"
+        );
+    }
     assert!(
-        !root.join("src-tauri/src/tabular").exists(),
-        "the root crate must not retain a tabular compatibility module"
+        !adapter.contains("UnsupportedColumnType"),
+        "the tabular Polars adapter must not restore the unreachable error variant"
+    );
+
+    let database_editor =
+        std::fs::read_to_string(root.join("src-tauri/src/database/edit_operation.rs"))
+            .expect("the database editor must be readable");
+    assert!(
+        database_editor.contains("use yss_tabular_polars::{anyvalue_to_json, json_to_anyvalue};")
+            && !database_editor.contains("backend_adapters::tabular"),
+        "the database editor must consume the extracted adapter directly"
+    );
+    assert!(
+        !database_editor.contains("pub fn anyvalue_to_json"),
+        "the database editor must not retain the extracted JSON projection"
+    );
+    let database_instance =
+        std::fs::read_to_string(root.join("src-tauri/src/database/database_instance.rs"))
+            .expect("the database instance must be readable");
+    assert!(
+        database_instance.contains("use yss_tabular_polars::anyvalue_to_json;"),
+        "the database instance must consume the canonical JSON projection directly"
+    );
+    assert!(
+        !root.join("src-tauri/src/database/row_mapping.rs").exists(),
+        "the unused duplicate dataframe row projection must stay removed"
+    );
+    for relative in [
+        "src-tauri/src/application/bayes.rs",
+        "src-tauri/src/database/plot_query.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_tabular_polars::column_to_series")
+                || consumer.contains("use yss_tabular_polars::column_to_series;"),
+            "{relative} must consume the canonical column materializer"
+        );
+        assert!(
+            !consumer.contains("fn tabular_scalar_to_any_value")
+                && !consumer.contains("fn tabular_column_to_series"),
+            "{relative} must not retain duplicate tabular-to-Polars conversion logic"
+        );
+    }
+
+    let backend_adapters =
+        std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
+            .expect("the root backend adapter module must be readable");
+    assert!(
+        !backend_adapters.contains("tabular"),
+        "the root backend adapter module must not retain a tabular facade"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("\"yss-project-registry-sqlite\" | \"yss-tabular-polars\"")
+            && policy.contains("layers.insert(RustLayer::BackendAdapter)"),
+        "the tabular Polars crate must be classified as a Backend Adapter"
     );
     let violations = tabular_contract_source_violations(&root);
     assert!(
@@ -3432,7 +3554,7 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "project registry workflow must be classified in the Project layer"
     );
     assert!(
-        policy.contains("package == \"yss-project-registry-sqlite\"")
+        policy.contains("\"yss-project-registry-sqlite\" | \"yss-tabular-polars\"")
             && policy.contains("layers.insert(RustLayer::BackendAdapter)"),
         "project registry SQLite must be classified as a Backend Adapter"
     );

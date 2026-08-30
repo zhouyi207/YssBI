@@ -1,13 +1,13 @@
+//! Polars materialization and value conversion for canonical tabular data.
+
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use polars::prelude::{AnyValue, Column, DataFrame, DataType as PDataType, PlSmallStr, Series};
 use serde_json::Value;
 
-use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
+use yss_tabular_contract::{TabularColumn, TabularScalar, TabularSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TabularMaterializationError {
-    #[error("tabular column type is unsupported")]
-    UnsupportedColumnType { column: TabularColumnName },
     #[error("tabular materialization failed")]
     BuildFailed,
 }
@@ -21,77 +21,95 @@ pub fn to_dataframe(snapshot: &TabularSnapshot) -> Result<DataFrame, TabularMate
     let series = snapshot
         .columns()
         .iter()
-        .map(values_to_series)
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(column_to_series)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| TabularMaterializationError::BuildFailed)?;
     let columns = series.into_iter().map(Column::from).collect();
     DataFrame::new(snapshot.row_count(), columns)
         .map_err(|_| TabularMaterializationError::BuildFailed)
 }
 
-fn values_to_series(
-    column: &yss_tabular_contract::TabularColumn,
-) -> Result<Series, TabularMaterializationError> {
-    let dtype = infer_polars_dtype(column.values());
+pub fn column_to_series(column: &TabularColumn) -> polars::prelude::PolarsResult<Series> {
     let values = column
         .values()
         .iter()
-        .map(|value| scalar_to_json(value).and_then(|value| json_to_anyvalue(&value, &dtype)))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(tabular_scalar_to_any_value)
+        .collect::<Vec<_>>();
     Series::from_any_values(PlSmallStr::from(column.name().as_str()), &values, false)
-        .map_err(|_| TabularMaterializationError::BuildFailed)
 }
 
-fn infer_polars_dtype(values: &[TabularScalar]) -> PDataType {
-    let mut saw_int = false;
-    let mut saw_float = false;
-    let mut saw_bool = false;
-    let mut saw_string = false;
-    let mut non_null = 0usize;
-
-    for value in values {
-        match value {
-            TabularScalar::Null => continue,
-            TabularScalar::Bool(_) => saw_bool = true,
-            TabularScalar::Integer(_) => saw_int = true,
-            TabularScalar::Unsigned(_) => saw_int = true,
-            TabularScalar::Decimal(_) => saw_float = true,
-            TabularScalar::String(_) => saw_string = true,
-        }
-        non_null += 1;
-    }
-
-    if non_null == 0 {
-        return PDataType::String;
-    }
-    if saw_string || (saw_bool as u8 + saw_int as u8 + saw_float as u8) > 1 {
-        return PDataType::String;
-    }
-    if saw_bool {
-        PDataType::Boolean
-    } else if saw_float {
-        PDataType::Float64
-    } else if saw_int {
-        PDataType::Int64
-    } else {
-        PDataType::String
-    }
-}
-
-fn scalar_to_json(value: &TabularScalar) -> Result<Value, TabularMaterializationError> {
+pub fn tabular_scalar_to_any_value(value: &TabularScalar) -> AnyValue<'static> {
     match value {
-        TabularScalar::Null => Ok(Value::Null),
-        TabularScalar::Bool(value) => Ok(Value::Bool(*value)),
-        TabularScalar::Integer(value) => Ok(serde_json::json!(value)),
-        TabularScalar::Unsigned(value) => i64::try_from(*value)
-            .map(|value| serde_json::json!(value))
-            .map_err(|_| TabularMaterializationError::BuildFailed),
-        TabularScalar::Decimal(value) if value.as_f64().is_finite() => {
-            serde_json::Number::from_f64(value.as_f64())
-                .map(Value::Number)
-                .ok_or(TabularMaterializationError::BuildFailed)
+        TabularScalar::Null => AnyValue::Null,
+        TabularScalar::Bool(value) => AnyValue::Boolean(*value),
+        TabularScalar::Integer(value) => AnyValue::Int64(*value),
+        TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
+        TabularScalar::Decimal(value) => AnyValue::Float64(value.as_f64()),
+        TabularScalar::String(value) => AnyValue::StringOwned(value.to_string().into()),
+    }
+}
+
+pub fn anyvalue_to_json(value: AnyValue<'_>) -> Value {
+    use polars::prelude::TimeUnit;
+
+    match value {
+        AnyValue::Null => Value::Null,
+        AnyValue::Boolean(value) => Value::Bool(value),
+        AnyValue::String(value) => Value::String(value.to_owned()),
+        AnyValue::StringOwned(value) => Value::String(value.to_string()),
+        AnyValue::Int8(value) => serde_json::json!(value),
+        AnyValue::Int16(value) => serde_json::json!(value),
+        AnyValue::Int32(value) => serde_json::json!(value),
+        AnyValue::Int64(value) => serde_json::json!(value),
+        AnyValue::UInt8(value) => serde_json::json!(value),
+        AnyValue::UInt16(value) => serde_json::json!(value),
+        AnyValue::UInt32(value) => serde_json::json!(value),
+        AnyValue::UInt64(value) => serde_json::json!(value),
+        AnyValue::Float32(value) => serde_json::Number::from_f64(f64::from(value))
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
+        AnyValue::Float64(value) => serde_json::Number::from_f64(value)
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
+        AnyValue::Date(days) => {
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+                .expect("the Unix epoch is a valid date")
+                .num_days_from_ce();
+            NaiveDate::from_num_days_from_ce_opt(epoch + days)
+                .map(|date| Value::String(date.format("%Y-%m-%d").to_string()))
+                .unwrap_or_else(|| Value::String(days.to_string()))
         }
-        TabularScalar::Decimal(_) => Err(TabularMaterializationError::BuildFailed),
-        TabularScalar::String(value) => Ok(Value::String(value.to_string())),
+        AnyValue::Datetime(timestamp, unit, _) | AnyValue::DatetimeOwned(timestamp, unit, _) => {
+            let units_per_second = match unit {
+                TimeUnit::Nanoseconds => 1_000_000_000,
+                TimeUnit::Microseconds => 1_000_000,
+                TimeUnit::Milliseconds => 1_000,
+            };
+            let seconds = timestamp.div_euclid(units_per_second);
+            let nanoseconds =
+                timestamp.rem_euclid(units_per_second) * (1_000_000_000 / units_per_second);
+            chrono::DateTime::from_timestamp(seconds, nanoseconds as u32)
+                .map(|datetime| {
+                    let formatted = datetime.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+                    Value::String(
+                        formatted
+                            .trim_end_matches('0')
+                            .trim_end_matches('.')
+                            .to_owned(),
+                    )
+                })
+                .unwrap_or_else(|| Value::String(timestamp.to_string()))
+        }
+        AnyValue::Time(nanoseconds) => {
+            let seconds = (nanoseconds / 1_000_000_000) as u32;
+            Value::String(format!(
+                "{:02}:{:02}:{:02}",
+                seconds / 3600,
+                (seconds % 3600) / 60,
+                seconds % 60
+            ))
+        }
+        _ => Value::String(value.to_string()),
     }
 }
 
@@ -224,7 +242,7 @@ pub fn json_to_anyvalue(
                     let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
                         .ok_or(TabularMaterializationError::BuildFailed)?
                         .num_days_from_ce();
-                    Ok(AnyValue::Date((date.num_days_from_ce() - epoch) as i32))
+                    Ok(AnyValue::Date(date.num_days_from_ce() - epoch))
                 }
                 PDataType::Datetime(_, _) => {
                     let datetime = if let Ok(datetime) =
@@ -252,3 +270,6 @@ pub fn json_to_anyvalue(
         _ => Err(TabularMaterializationError::BuildFailed),
     }
 }
+
+#[cfg(test)]
+mod tests;

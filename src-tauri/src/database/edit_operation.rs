@@ -1,9 +1,8 @@
-use chrono::{Datelike, NaiveDate};
 use polars::chunked_array::cast::CastOptions;
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::backend_adapters::tabular::polars::json_to_anyvalue;
+use yss_tabular_polars::{anyvalue_to_json, json_to_anyvalue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -110,64 +109,6 @@ impl EditHistory {
             undo_count: self.undo_stack.len(),
             redo_count: self.redo_stack.len(),
         }
-    }
-}
-
-pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
-    use polars::prelude::TimeUnit;
-    match val {
-        AnyValue::Null => serde_json::Value::Null,
-        AnyValue::Boolean(b) => serde_json::Value::Bool(b),
-        AnyValue::String(s) => serde_json::Value::String(s.to_string()),
-        AnyValue::StringOwned(s) => serde_json::Value::String(s.to_string()),
-        AnyValue::Int8(v) => serde_json::json!(v),
-        AnyValue::Int16(v) => serde_json::json!(v),
-        AnyValue::Int32(v) => serde_json::json!(v),
-        AnyValue::Int64(v) => serde_json::json!(v),
-        AnyValue::UInt8(v) => serde_json::json!(v),
-        AnyValue::UInt16(v) => serde_json::json!(v),
-        AnyValue::UInt32(v) => serde_json::json!(v),
-        AnyValue::UInt64(v) => serde_json::json!(v),
-        AnyValue::Float32(v) => serde_json::Number::from_f64(v as f64)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        AnyValue::Float64(v) => serde_json::Number::from_f64(v)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        AnyValue::Date(days) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
-                .unwrap()
-                .num_days_from_ce();
-            NaiveDate::from_num_days_from_ce_opt(epoch + days as i32)
-                .map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
-                .unwrap_or_else(|| serde_json::Value::String(days.to_string()))
-        }
-        AnyValue::Datetime(ts, unit, _) | AnyValue::DatetimeOwned(ts, unit, _) => {
-            let (secs, nsecs) = match unit {
-                TimeUnit::Nanoseconds => ((ts / 1_000_000_000) as i64, (ts % 1_000_000_000) as u32),
-                TimeUnit::Microseconds => {
-                    ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32)
-                }
-                TimeUnit::Milliseconds => ((ts / 1000) as i64, ((ts % 1000) * 1_000_000) as u32),
-            };
-            chrono::DateTime::from_timestamp(secs, nsecs)
-                .map(|dt| {
-                    let s = dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
-                    let s = s.trim_end_matches('0').trim_end_matches('.');
-                    serde_json::Value::String(s.to_string())
-                })
-                .unwrap_or_else(|| serde_json::Value::String(ts.to_string()))
-        }
-        AnyValue::Time(ns) => {
-            let secs = (ns / 1_000_000_000) as u32;
-            serde_json::Value::String(format!(
-                "{:02}:{:02}:{:02}",
-                secs / 3600,
-                (secs % 3600) / 60,
-                secs % 60
-            ))
-        }
-        _ => serde_json::Value::String(format!("{}", val)),
     }
 }
 

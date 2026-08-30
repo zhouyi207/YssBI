@@ -3,9 +3,9 @@ use super::DatabaseState;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 
 use super::{
-    EditHistory, EditOperation, EditState, anyvalue_to_json, apply_operation, capture_column_data,
-    capture_row_data, cast_column as sci_cast_column, dtype_from_string, dtype_to_string,
-    export_dataframe, export_duckdb_table, reverse_operation, write_display_name,
+    EditHistory, EditOperation, EditState, apply_operation, capture_column_data, capture_row_data,
+    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, export_dataframe,
+    export_duckdb_table, reverse_operation, write_display_name,
 };
 use super::{
     PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, duckdb_table_sql,
@@ -22,6 +22,7 @@ use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use yss_tabular_polars::anyvalue_to_json;
 
 #[derive(Clone)]
 pub struct DatabaseInstance {

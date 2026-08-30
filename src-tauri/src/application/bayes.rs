@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Instant;
 
 #[cfg(test)]
-use polars::prelude::{AnyValue, Column, DataFrame, Float64Chunked, PlSmallStr, Series};
+use polars::prelude::{Column, DataFrame, Float64Chunked};
 
 #[cfg(test)]
 use crate::database::error::DatabaseDriverError;
@@ -1674,12 +1674,7 @@ fn dataframe_from_snapshot(
     let series = columns
         .iter()
         .map(|column| {
-            let values = column
-                .values()
-                .iter()
-                .map(tabular_scalar_to_any_value)
-                .collect::<Vec<_>>();
-            Series::from_any_values(PlSmallStr::from(column.name().as_str()), &values, false)
+            yss_tabular_polars::column_to_series(column)
                 .map(Column::from)
                 .map_err(|error| BayesApplicationError::DatasetLoadFailed {
                     source: BayesDatasetLoadError::Database(DatabaseError::driver(
@@ -1757,20 +1752,6 @@ fn statistical_inputs_from_snapshot(
         .collect::<Result<Vec<_>, BayesApplicationError>>()
         .map(Vec::into_boxed_slice)
         .map(Arc::from)
-}
-
-#[cfg(test)]
-fn tabular_scalar_to_any_value(value: &yss_tabular_contract::TabularScalar) -> AnyValue<'static> {
-    match value {
-        yss_tabular_contract::TabularScalar::Null => AnyValue::Null,
-        yss_tabular_contract::TabularScalar::Bool(value) => AnyValue::Boolean(*value),
-        yss_tabular_contract::TabularScalar::Integer(value) => AnyValue::Int64(*value),
-        yss_tabular_contract::TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
-        yss_tabular_contract::TabularScalar::Decimal(value) => AnyValue::Float64(value.as_f64()),
-        yss_tabular_contract::TabularScalar::String(value) => {
-            AnyValue::StringOwned(value.to_string().into())
-        }
-    }
 }
 
 fn new_task_id() -> String {

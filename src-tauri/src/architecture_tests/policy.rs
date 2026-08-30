@@ -149,14 +149,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/backend_adapters/execution/resources.rs",
         RustLayer::BackendAdapter,
     ),
-    (
-        "src-tauri/src/backend_adapters/tabular/mod.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/backend_adapters/tabular/polars.rs",
-        RustLayer::BackendAdapter,
-    ),
     ("src-tauri/src/julia/mod.rs", RustLayer::BackendAdapter),
     ("src-tauri/src/julia/worker.rs", RustLayer::BackendAdapter),
     (
@@ -227,11 +219,24 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::DatabaseCore,
+        repository_relative_source_file: "src-tauri/src/database/database_instance.rs",
+        fully_qualified_owner: "yssbi_lib::database::database_instance",
+        canonical_origin_targets: &["yss_tabular_polars::anyvalue_to_json"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::DatabaseCore,
         repository_relative_source_file: "src-tauri/src/database/edit_operation.rs",
         fully_qualified_owner: "yssbi_lib::database::edit_operation",
         canonical_origin_targets: &[
-            "yssbi_lib::backend_adapters::tabular::polars::json_to_anyvalue",
+            "yss_tabular_polars::anyvalue_to_json",
+            "yss_tabular_polars::json_to_anyvalue",
         ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::DatabaseCore,
+        repository_relative_source_file: "src-tauri/src/database/plot_query.rs",
+        fully_qualified_owner: "yssbi_lib::database::plot_query",
+        canonical_origin_targets: &["yss_tabular_polars::column_to_series"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
@@ -1757,7 +1762,10 @@ fn non_build_memberships(
         layers.insert(RustLayer::Logging);
     } else if package == "yss-window-state" {
         layers.insert(RustLayer::PlatformAdapter);
-    } else if package == "yss-project-registry-sqlite" {
+    } else if matches!(
+        package,
+        "yss-project-registry-sqlite" | "yss-tabular-polars"
+    ) {
         layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {
         layers.insert(layer);

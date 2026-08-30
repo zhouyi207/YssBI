@@ -1,7 +1,5 @@
-use crate::backend_adapters::tabular::polars::{
-    TabularMaterializationError, json_to_anyvalue, to_dataframe,
-};
-use polars::prelude::{AnyValue, DataType};
+use super::{TabularMaterializationError, anyvalue_to_json, json_to_anyvalue, to_dataframe};
+use polars::prelude::{AnyValue, DataType, TimeUnit};
 use serde_json::json;
 use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
@@ -43,20 +41,33 @@ fn polars_adapter_materializes_inferred_signed_int_and_shape() {
 }
 
 #[test]
-fn review_fix_polars_adapter_rejects_out_of_range_strict_conversion() {
+fn polars_adapter_preserves_unsigned_values_without_narrowing() {
     let oversized_unsigned = TabularSnapshot::try_from_columns(
         [TabularColumn::new(
             TabularColumnName::try_from("ids").expect("valid test name"),
-            vec![TabularScalar::Unsigned(i64::MAX as u64 + 1)].into_boxed_slice(),
+            vec![TabularScalar::Unsigned(u64::MAX)].into_boxed_slice(),
         )]
         .into(),
     )
     .expect("valid snapshot");
 
+    let dataframe = to_dataframe(&oversized_unsigned).expect("unsigned snapshot materializes");
     assert_eq!(
-        to_dataframe(&oversized_unsigned),
-        Err(TabularMaterializationError::BuildFailed)
+        dataframe.column("ids").expect("ids column").dtype(),
+        &DataType::UInt64
     );
+    assert_eq!(
+        dataframe
+            .column("ids")
+            .expect("ids column")
+            .get(0)
+            .expect("ids value"),
+        AnyValue::UInt64(u64::MAX)
+    );
+}
+
+#[test]
+fn strict_json_conversion_rejects_incompatible_values() {
     assert_eq!(
         json_to_anyvalue(&json!(300), &DataType::Int8),
         Err(TabularMaterializationError::BuildFailed)
@@ -73,4 +84,13 @@ fn review_fix_polars_adapter_rejects_out_of_range_strict_conversion() {
         json_to_anyvalue(&json!(7), &DataType::Int8),
         Ok(AnyValue::Int8(7))
     );
+}
+
+#[test]
+fn json_projection_preserves_pre_epoch_datetimes() {
+    assert_eq!(
+        anyvalue_to_json(AnyValue::Datetime(-1, TimeUnit::Milliseconds, None)),
+        json!("1969-12-31 23:59:59.999")
+    );
+    assert_eq!(anyvalue_to_json(AnyValue::Date(1)), json!("1970-01-02"));
 }
