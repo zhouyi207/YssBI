@@ -1,6 +1,10 @@
-use super::{TabularMaterializationError, anyvalue_to_json, json_to_anyvalue, to_dataframe};
-use polars::prelude::{AnyValue, DataType, TimeUnit};
+use super::{
+    TabularMaterializationError, anyvalue_to_json, apply_operation, cast_column, json_to_anyvalue,
+    reverse_operation, to_dataframe,
+};
+use polars::prelude::{AnyValue, DataType, TimeUnit, df};
 use serde_json::json;
+use yss_database_edit::EditOperation;
 use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
 fn snapshot() -> TabularSnapshot {
@@ -93,4 +97,59 @@ fn json_projection_preserves_pre_epoch_datetimes() {
         json!("1969-12-31 23:59:59.999")
     );
     assert_eq!(anyvalue_to_json(AnyValue::Date(1)), json!("1970-01-02"));
+}
+
+#[test]
+fn database_edit_operation_applies_and_reverses_without_dtype_drift() {
+    let mut dataframe = df!("value" => &[1_i64, 2]).expect("dataframe");
+    let operation = EditOperation::EditCell {
+        row: 0,
+        row_id: None,
+        col: "value".to_owned(),
+        old_value: json!(1),
+        new_value: json!(3),
+    };
+
+    apply_operation(&mut dataframe, &operation).expect("apply edit");
+    assert_eq!(
+        dataframe.column("value").expect("value").dtype(),
+        &DataType::Int64
+    );
+    assert_eq!(
+        dataframe
+            .column("value")
+            .expect("value")
+            .get(0)
+            .expect("cell"),
+        AnyValue::Int64(3)
+    );
+
+    reverse_operation(&mut dataframe, &operation).expect("reverse edit");
+    assert_eq!(
+        dataframe
+            .column("value")
+            .expect("value")
+            .get(0)
+            .expect("cell"),
+        AnyValue::Int64(1)
+    );
+}
+
+#[test]
+fn strict_cast_failure_leaves_the_original_column_unchanged() {
+    let mut dataframe = df!("value" => &["1", "not-an-integer"]).expect("dataframe");
+
+    assert!(cast_column(&mut dataframe, "value", "Int64", false).is_err());
+    assert_eq!(
+        dataframe.column("value").expect("value").dtype(),
+        &DataType::String
+    );
+    assert_eq!(
+        dataframe
+            .column("value")
+            .expect("value")
+            .get(1)
+            .expect("cell"),
+        AnyValue::String("not-an-integer")
+    );
 }

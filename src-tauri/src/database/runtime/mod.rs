@@ -18,6 +18,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseExportFormat, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
 };
+use yss_database_edit::EditState;
 
 pub(crate) use registry::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
@@ -367,7 +368,7 @@ impl DatabaseRuntimeSession {
     pub(crate) fn read_physical_edit_state(
         &self,
         database: &DatabaseId,
-    ) -> Result<crate::database::EditState, DatabaseError> {
+    ) -> Result<EditState, DatabaseError> {
         self.physical.read_edit_state(database)
     }
 

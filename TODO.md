@@ -766,3 +766,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   paged/column query 整体迁入 `yss-duckdb::table`；删除根 owner/re-export，所有 Application、Project、Database
   和 integration test 消费方直接依赖 engine crate，并将不再属于根 package 的 `polars-arrow` 依赖一并下沉；
   同时统一 DuckDB 父目录创建，并修复删除/覆盖表时遗留命名 ENUM type、无 metadata table 时先删表后报错的问题。
+- [ ] 将共享 `EditOperation`、`EditHistory` 与 `EditState` 迁入无 Polars/DuckDB 依赖的
+  `src-tauri/crates/yss-database-edit/` Database Core；删除根 `database/edit_operation.rs` owner/facade，并将
+  DataFrame apply/reverse/cast 迁入现有 `yss-tabular-polars::edit` adapter，使 DuckDB 与 Loaded state 复用同一
+  operation model，同时下沉 root package 不再直接使用的 `polars-dtype` 依赖，并删除零调用的
+  `EditOperation` serde wire compatibility，只保留实际跨 IPC 的 `EditState` camelCase projection。

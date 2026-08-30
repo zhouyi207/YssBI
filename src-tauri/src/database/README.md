@@ -1,8 +1,9 @@
 # Database module
 
 `src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
-`DatabaseEngineSql` contracts. `src-tauri/src/database/` owns `DatabaseInstance` semantics、
-DuckDB storage、runtime binding、schema metadata、query/edit/history、overview 与 export。
+`DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
+history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast。`src-tauri/src/database/`
+owns `DatabaseInstance` semantics、DuckDB runtime binding、schema metadata 与 query/edit orchestration。
 Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
 
@@ -77,6 +78,8 @@ Snapshot 保存：
 
 Cast operation 也在 `EditOperation::CastColumn` 中保存 `old_dtype`。In-memory reverse path 使用 `old_dtype + old_data` 重建原列；DuckDB reverse path 将 column cast 回保存的 dtype。
 
+共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，不保留未使用的 serde wire；实际跨 IPC 的 `EditState` 保持 strict camelCase。Polars 路径由 `yss-tabular-polars::edit` 实现，DuckDB SQL 路径由 engine adapter 消费同一 operation。
+
 ## 4. Identifier 与 checked conversion
 
 DuckDB SQL 将 identifiers 与 literals 分开处理：
@@ -144,7 +147,8 @@ DuckDB overview 仍准确提供：
 | `../schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
 | `duckdb_editing.rs` | Incremental SQL edit/undo helpers |
 | `duckdb_column_snapshot.rs` | Bounded reversible delete-column snapshot |
-| `edit_operation.rs` | EditOperation、EditHistory、checked JSON/Polars conversion |
+| `../../crates/yss-database-edit/` | EditOperation、EditHistory 与 EditState |
+| `../../crates/yss-tabular-polars/src/edit.rs` | checked JSON/Polars edit apply、reverse 与 cast |
 | `../../crates/yss-duckdb/src/table.rs` | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query |
 | `../../crates/yss-duckdb/src/profile.rs` | DuckDB physical stats/distribution/overview SQL |
 | `../../crates/yss-duckdb/src/sql.rs` | Identifier/literal quoting 与 editable dtype allowlist |

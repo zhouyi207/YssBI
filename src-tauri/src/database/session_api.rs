@@ -16,6 +16,7 @@ use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
+use yss_database_edit::EditState;
 use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -691,7 +692,7 @@ pub(crate) fn dataset_overview(
 pub(crate) fn edit_state(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
-) -> Result<crate::database::EditState, DatabaseError> {
+) -> Result<EditState, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
     if !runtime_snapshot.revisions.contains_key(&database) {
         return Err(DatabaseError::not_found(
@@ -936,12 +937,13 @@ pub(crate) fn database_catalog_snapshot_fixture(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
+    use crate::database::{DatabaseInstance, DatabaseState};
     use std::time::Instant;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionOpenRequest,
     };
+    use yss_database_edit::EditHistory;
 
     fn declaration(id: &str) -> DatabaseDecl {
         DatabaseDecl {

@@ -221,15 +221,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::DatabaseCore,
         repository_relative_source_file: "src-tauri/src/database/database_instance.rs",
         fully_qualified_owner: "yssbi_lib::database::database_instance",
-        canonical_origin_targets: &["yss_tabular_polars::anyvalue_to_json"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/src/database/edit_operation.rs",
-        fully_qualified_owner: "yssbi_lib::database::edit_operation",
         canonical_origin_targets: &[
             "yss_tabular_polars::anyvalue_to_json",
-            "yss_tabular_polars::json_to_anyvalue",
+            "yss_tabular_polars::edit::apply_operation",
+            "yss_tabular_polars::edit::capture_column_data",
+            "yss_tabular_polars::edit::capture_row_data",
+            "yss_tabular_polars::edit::cast_column",
+            "yss_tabular_polars::edit::dtype_from_string",
+            "yss_tabular_polars::edit::dtype_to_string",
+            "yss_tabular_polars::edit::reverse_operation",
         ],
     },
     InternalDependencyCapability {
@@ -564,7 +564,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::schema::database::DatabaseRowsResultDto",
             "yssbi_lib::schema::database::LoadDatabaseResultDto",
             "yssbi_lib::schema::database::column_info_from_schema",
-            "yssbi_lib::database::edit_operation::EditState",
+            "yss_database_edit::EditState",
         ],
     },
     InternalDependencyCapability {
@@ -1754,7 +1754,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::Graph);
     } else if matches!(
         package,
-        "yss-dataset-profile" | "yss-duckdb" | "yss-tabular-io"
+        "yss-database-edit" | "yss-dataset-profile" | "yss-duckdb" | "yss-tabular-io"
     ) {
         layers.insert(RustLayer::DatabaseCore);
     } else if package == "yss-sci" {

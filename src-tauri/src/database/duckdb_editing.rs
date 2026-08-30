@@ -6,7 +6,8 @@ use std::path::Path;
 use duckdb::Connection;
 
 use super::duckdb_column_snapshot::{duckdb_storage_type, user_column_names};
-use super::{EditOperation, restore_deleted_column};
+use super::restore_deleted_column;
+use yss_database_edit::EditOperation;
 use yss_duckdb::{
     DUCKDB_ROWID_SQL, DuckDbColumnMeta, YSSBI_ENUM_PREFIX, duckdb_table_sql,
     editable_dtype_to_duckdb_sql, quote_duckdb_identifier, quote_duckdb_string_literal,

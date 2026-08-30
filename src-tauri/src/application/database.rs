@@ -25,7 +25,6 @@ use crate::application::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
-use crate::database::EditState;
 use crate::database::error::{DatabaseError, DatabaseErrorCode};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::session_api;
@@ -37,6 +36,7 @@ use uuid::Uuid;
 use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
 };
+use yss_database_edit::EditState;
 use yss_display_naming::allocate_unique_display_name;
 use yss_duckdb::{
     DuckDbTableMeta, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,

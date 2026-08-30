@@ -73,12 +73,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "rand",
         target_condition: None,
     },
@@ -218,6 +212,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-database-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-edit",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-edit",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -692,6 +698,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-tabular-polars",
         mode: RustDependencyMode::Runtime,
         package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-polars",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars-dtype",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

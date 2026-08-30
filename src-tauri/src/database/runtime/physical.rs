@@ -10,6 +10,7 @@ use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperati
 use crate::database::schema_snapshot::{DatabaseColumnFact, DatabaseSchemaFact};
 use crate::database::session_api::DatabaseMutationOperation;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
+use yss_database_edit::EditState;
 use yss_tabular_contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot,
 };
@@ -216,7 +217,7 @@ impl DatabaseRuntimePhysicalState {
     pub(crate) fn read_edit_state(
         &self,
         database: &DatabaseId,
-    ) -> Result<crate::database::EditState, DatabaseError> {
+    ) -> Result<EditState, DatabaseError> {
         let instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })?;
@@ -334,7 +335,7 @@ pub(crate) struct PreparedDatabasePhysicalMutation {
 }
 
 impl PreparedDatabasePhysicalMutation {
-    pub(crate) fn edit_state(&self) -> crate::database::EditState {
+    pub(crate) fn edit_state(&self) -> EditState {
         self.after.edit_state()
     }
 
@@ -367,7 +368,7 @@ impl PreparedDatabasePhysicalMutation {
 fn apply_mutation(
     instance: &mut DatabaseInstance,
     operation: &DatabaseMutationOperation,
-) -> Result<crate::database::EditState, String> {
+) -> Result<EditState, String> {
     match operation {
         DatabaseMutationOperation::EditCell {
             row,

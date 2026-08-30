@@ -9128,6 +9128,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-database-edit"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "yss-dataset-profile"
 version = "0.1.0"
 dependencies = [
@@ -9539,8 +9547,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "polars",
+ "polars-dtype",
  "serde_json",
  "thiserror 2.0.20",
+ "yss-database-edit",
  "yss-tabular-contract",
 ]
 
@@ -9616,7 +9626,6 @@ dependencies = [
  "ndarray",
  "notify",
  "polars",
- "polars-dtype",
  "proc-macro2",
  "rand 0.10.2",
  "serde",
@@ -9643,6 +9652,7 @@ dependencies = [
  "yss-computation-settings",
  "yss-data-contract",
  "yss-database-contract",
+ "yss-database-edit",
  "yss-dataset-profile",
  "yss-diagnostics",
  "yss-display-naming",

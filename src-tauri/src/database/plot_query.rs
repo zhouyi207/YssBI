@@ -358,7 +358,7 @@ fn label_for_series(series: &Series) -> Option<Box<str>> {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
+    use crate::database::{DatabaseInstance, DatabaseState};
     use polars::prelude::{AnyValue, Column, DataFrame, PlSmallStr, TimeUnit};
     use std::num::NonZeroU64;
     use std::sync::Arc;
@@ -367,6 +367,7 @@ mod tests {
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_database_edit::EditHistory;
 
     fn session_with_loaded_data(identity: &str) -> DatabaseRuntimeSession {
         let declaration = DatabaseDecl {

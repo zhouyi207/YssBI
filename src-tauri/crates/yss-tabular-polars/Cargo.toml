@@ -8,6 +8,8 @@ publish = false
 [dependencies]
 chrono.workspace = true
 polars.workspace = true
+polars-dtype.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+yss-database-edit = { path = "../yss-database-edit" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }

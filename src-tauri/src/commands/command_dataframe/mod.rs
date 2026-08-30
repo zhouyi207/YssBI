@@ -19,6 +19,9 @@ use crate::schema::{
     LoadDatabaseResultDto,
 };
 use tauri::{AppHandle, State};
+#[cfg(all(test, any()))]
+use yss_database_edit::EditHistory;
+use yss_database_edit::EditState;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -76,7 +79,7 @@ fn mutate_database_with_emitter(
     operation_id: OperationId,
     mutation: DatabaseMutation,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     let result = database::mutate_database_resource(
         state,
         &project_instance_id,
@@ -98,7 +101,7 @@ fn save_database_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     let result = database::save_database_changes(
         state,
         &project_instance_id,
@@ -282,7 +285,7 @@ fn mutate_database_from_application(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mutation: DatabaseMutation,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     let result = application
         .mutate_database_for_application(
             project_instance_id,
@@ -606,7 +609,7 @@ pub fn edit_cell(
     col_name: String,
     value: serde_json::Value,
     row_id: Option<i64>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -632,7 +635,7 @@ pub fn add_row(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     index: Option<usize>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -654,7 +657,7 @@ pub fn delete_rows(
     operation_id: OperationId,
     indices: Vec<usize>,
     row_ids: Option<Vec<i64>>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -676,7 +679,7 @@ pub fn add_column(
     operation_id: OperationId,
     name: String,
     dtype: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -697,7 +700,7 @@ pub fn delete_column(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     name: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -720,7 +723,7 @@ pub fn cast_column(
     col_name: String,
     new_dtype: String,
     force: Option<bool>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -746,7 +749,7 @@ pub fn rename_column(
     operation_id: OperationId,
     old_name: String,
     new_name: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -766,7 +769,7 @@ pub fn undo_edit(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -786,7 +789,7 @@ pub fn redo_edit(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     mutate_database_from_application(
         &app,
         application.inner(),
@@ -806,7 +809,7 @@ pub fn save_database_changes(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
     let result = application
         .save_database_for_application(project_instance_id, id, expected_revision, operation_id)
         .map_err(map_application_database_error)?;
@@ -938,7 +941,7 @@ mod tests {
                 state: crate::database::DatabaseState::Loaded {
                     dataframe: std::sync::Arc::new(dataframe.clone()),
                     original: std::sync::Arc::new(dataframe),
-                    history: crate::database::EditHistory::new(),
+                    history: EditHistory::new(),
                 },
             },
         );

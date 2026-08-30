@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use super::{DatabaseInstance, DatabaseState, EditHistory};
+use super::{DatabaseInstance, DatabaseState};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
+use yss_database_edit::EditHistory;
 use yss_duckdb::{drop_data_table, read_table_meta};
 
 pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) -> DatabaseInstance {

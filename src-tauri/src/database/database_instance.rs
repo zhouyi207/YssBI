@@ -1,11 +1,8 @@
 use super::DatabaseState;
 use super::error::DatabaseExportError;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
+use yss_database_edit::{EditHistory, EditOperation, EditState};
 
-use super::{
-    EditHistory, EditOperation, EditState, apply_operation, capture_column_data, capture_row_data,
-    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, reverse_operation,
-};
 use super::{
     apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json, fetch_row_json,
     refresh_duckdb_meta, resolve_row_id_by_index, resolve_row_ids_by_indices,
@@ -28,7 +25,10 @@ use yss_duckdb::{
     query_page_with_rowids, query_to_dataframe_for_table, write_display_name,
 };
 use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
-use yss_tabular_polars::anyvalue_to_json;
+use yss_tabular_polars::{
+    anyvalue_to_json, apply_operation, capture_column_data, capture_row_data,
+    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, reverse_operation,
+};
 
 fn duckdb_profile_columns(columns: &[DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
     columns

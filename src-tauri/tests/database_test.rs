@@ -3,14 +3,15 @@ use std::sync::Arc;
 
 use polars::prelude::*;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseId};
+use yss_database_edit::EditHistory;
 use yss_duckdb::{
     ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
     write_display_name,
 };
 use yss_project_identity::OperationId;
 use yssbi_lib::database::{
-    DatabaseInstance, DatabaseState, EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS,
-    MAX_IN_MEMORY_EDIT_ROWS, bind_duckdb_instance,
+    DatabaseInstance, DatabaseState, MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS,
+    bind_duckdb_instance,
 };
 use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 

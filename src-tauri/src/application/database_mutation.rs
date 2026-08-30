@@ -19,6 +19,7 @@ use crate::database::session_api::{
     commit_database_runtime_change, prepare_database_runtime_change,
 };
 use yss_database_contract::{DatabaseDeclarationObservation, DatabaseId};
+use yss_database_edit::EditState;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DatabaseMutationRequest {
@@ -440,7 +441,7 @@ fn compensate_committed_change(
 pub(crate) struct DatabaseMutationApplicationReceipt {
     session_epoch: ApplicationSessionEpoch,
     database: DatabaseId,
-    edit_state: crate::database::EditState,
+    edit_state: EditState,
     mutation: CommittedResourceMutation,
 }
 
@@ -453,7 +454,7 @@ impl DatabaseMutationApplicationReceipt {
         &self.database
     }
 
-    pub(crate) fn edit_state(&self) -> &crate::database::EditState {
+    pub(crate) fn edit_state(&self) -> &EditState {
         &self.edit_state
     }
 
@@ -466,12 +467,13 @@ impl DatabaseMutationApplicationReceipt {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
+    use crate::database::{DatabaseInstance, DatabaseState};
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_database_edit::EditHistory;
 
     struct RejectingProject;
 
