@@ -13,6 +13,7 @@ use yss_project_layout::{
     GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE, WORKSHEET_EXTENSION,
     WORKSHEETS_DIR,
 };
+use yss_project_manifest::ProjectManifest;
 use yss_worksheet_document::WorksheetDocument;
 
 pub struct PreparedProjectCopy {
@@ -419,7 +420,7 @@ fn copy_mutations(
 
 fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {
     if path == Path::new(PROJECT_METADATA_FILE) {
-        return serde_json::from_slice::<crate::project::ProjectManifest>(contents)
+        return serde_json::from_slice::<ProjectManifest>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string());
     }

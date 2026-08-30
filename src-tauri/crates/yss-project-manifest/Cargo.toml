@@ -1,0 +1,13 @@
+[package]
+name = "yss-project-manifest"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+yss-computation-settings = { path = "../yss-computation-settings" }
+
+[dev-dependencies]
+serde_json.workspace = true

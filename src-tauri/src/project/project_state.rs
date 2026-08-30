@@ -22,6 +22,7 @@ use yss_project_history::{
 };
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
+use yss_project_manifest::ProjectManifest;
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 mod activation;
@@ -157,7 +158,7 @@ impl ProjectState {
                 contents,
             }],
             |_, staged| {
-                serde_json::from_slice::<crate::project::project_io::ProjectManifest>(staged)
+                serde_json::from_slice::<ProjectManifest>(staged)
                     .map(|_| ())
                     .map_err(|error| error.to_string())
             },

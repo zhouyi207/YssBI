@@ -17,6 +17,7 @@ use yss_project_history::{
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
+use yss_project_manifest::ProjectManifest;
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
@@ -494,7 +495,7 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
             .map(|_| ())
             .map_err(|error| error.to_string()),
         _ if path == Path::new(PROJECT_METADATA_FILE) => {
-            serde_json::from_slice::<crate::project::ProjectManifest>(contents)
+            serde_json::from_slice::<ProjectManifest>(contents)
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }

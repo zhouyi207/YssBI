@@ -975,6 +975,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-project-history/src/lib.rs"),
     };
+    let project_manifest_root = ProductionRoot {
+        package_id: "project-manifest-package".to_owned(),
+        package: "yss-project-manifest".to_owned(),
+        target: "yss_project_manifest".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-project-manifest/src/lib.rs"),
+    };
     let tabular_contract_root = ProductionRoot {
         package_id: "tabular-contract-package".to_owned(),
         package: "yss-tabular-contract".to_owned(),
@@ -1024,6 +1031,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         math_root.clone(),
         project_discovery_root.clone(),
         project_history_root.clone(),
+        project_manifest_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
         window_state_root.clone(),
@@ -1151,6 +1159,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_project_history",
             ),
             module(
+                &project_manifest_root,
+                "src-tauri/crates/yss-project-manifest/src/lib.rs",
+                "yss_project_manifest",
+            ),
+            module(
                 &tabular_contract_root,
                 "src-tauri/crates/yss-tabular-contract/src/lib.rs",
                 "yss_tabular_contract",
@@ -1266,6 +1279,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-project-history/src/lib.rs"],
         RustLayer::Project
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-project-manifest/src/lib.rs"],
+        RustLayer::PureLeaf
     );
     assert_eq!(
         classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
@@ -3080,7 +3097,7 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         "src-tauri/src/event/event_project.rs",
         "src-tauri/src/project/execution_authority.rs",
         "src-tauri/src/project/project_data.rs",
-        "src-tauri/src/project/project_io.rs",
+        "src-tauri/crates/yss-project-manifest/src/lib.rs",
         "src-tauri/src/project/project_state.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -3105,14 +3122,15 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         );
     }
 
-    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
-        .expect("project IO must be readable");
+    let manifest_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-manifest/src/lib.rs"))
+            .expect("project manifest owner must be readable");
     for validation_boundary in [
         "deserialize_valid_computation_settings",
         "settings.validate().map_err",
     ] {
         assert!(
-            project_io.contains(validation_boundary),
+            manifest_owner.contains(validation_boundary),
             "project manifest reads must enforce '{validation_boundary}'"
         );
     }
@@ -3482,6 +3500,135 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         policy.contains("\"yss-project-discovery\" | \"yss-project-history\"")
             && policy.contains("layers.insert(RustLayer::Project)"),
         "project history must be classified as Project behavior, not as a Pure Leaf"
+    );
+}
+
+#[test]
+fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seams() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-manifest/Cargo.toml",
+        "src-tauri/crates/yss-project-manifest/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project manifest owner must exist at {relative}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-manifest\"",
+        "yss-project-manifest = { path = \"./crates/yss-project-manifest\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-manifest/Cargo.toml"))
+            .expect("project manifest crate manifest must be readable");
+    assert!(
+        manifest.contains("yss-computation-settings = { path = \"../yss-computation-settings\" }"),
+        "project manifest must consume the canonical computation-settings contract"
+    );
+    for forbidden in ["chrono", "tauri", "sqlx"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project manifest must not absorb runtime dependency '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-manifest/src/lib.rs"))
+            .expect("project manifest owner must be readable");
+    for contract in [
+        "pub const CURRENT_PROJECT_SCHEMA_VERSION",
+        "pub struct ProjectManifest",
+        "pub fn deserialize_current_project_schema_version",
+        "pub fn try_new",
+        "pub fn into_parts",
+        "computation_settings.validate()?",
+        "settings.validate().map_err",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project manifest crate must own strict contract or invariant '{contract}'"
+        );
+    }
+    for mutation_seam in [
+        "pub schema_version:",
+        "pub project_name:",
+        "pub export_time:",
+        "pub computation_settings:",
+    ] {
+        assert!(
+            !owner.contains(mutation_seam),
+            "validated project manifest state must not expose mutation seam '{mutation_seam}'"
+        );
+    }
+    for misplaced_owner in ["std::fs", "ProjectData", "chrono::", "tauri::", "sqlx::"] {
+        assert!(
+            !owner.contains(misplaced_owner),
+            "project manifest must not absorb I/O/runtime concern '{misplaced_owner}'"
+        );
+    }
+
+    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
+        .expect("project IO must be readable");
+    for removed_root_owner in [
+        "pub const SCHEMA_VERSION",
+        "pub struct ProjectManifest",
+        "deserialize_valid_computation_settings",
+        "deserialize_current_schema_version",
+    ] {
+        assert!(
+            !project_io.contains(removed_root_owner),
+            "project IO must not retain manifest owner '{removed_root_owner}'"
+        );
+    }
+    assert_eq!(
+        project_io.matches("ProjectManifest::try_new").count(),
+        1,
+        "project IO must use one canonical validated manifest construction seam"
+    );
+
+    for relative in [
+        "src-tauri/src/project/project_io.rs",
+        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/src/project/project_state.rs",
+        "src-tauri/src/project/project_writers.rs",
+        "src-tauri/src/project/project_state/variable_effects.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_manifest"),
+            "{relative} must consume the canonical project manifest owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::ProjectManifest")
+                && !consumer.contains("crate::project::project_io::ProjectManifest"),
+            "{relative} must not restore a root project-manifest facade"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    assert!(
+        !project_module.contains("pub use yss_project_manifest"),
+        "the root project module must not restore a project-manifest compatibility facade"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-project-manifest\"")
+            && policy.contains("layers.insert(RustLayer::PureLeaf)"),
+        "project manifest must remain a Pure Leaf contract"
     );
 }
 

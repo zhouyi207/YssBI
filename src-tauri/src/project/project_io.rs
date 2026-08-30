@@ -8,7 +8,6 @@ use super::{
     ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
     scan_graph_resource_index,
 };
-use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_graph_document::GraphDocument as NodeGraphDocument;
 use yss_project_identity::ProjectResourcePath;
@@ -18,49 +17,15 @@ use yss_project_layout::{
     DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
     GLOBAL_VARIABLES_FILE, PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
 };
+use yss_project_manifest::{
+    CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest, deserialize_current_project_schema_version,
+};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
-
-pub const SCHEMA_VERSION: u32 = 3;
-
-pub(crate) fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let schema_version = u32::deserialize(deserializer)?;
-    if schema_version != SCHEMA_VERSION {
-        return Err(serde::de::Error::custom(format!(
-            "unsupported schema version {schema_version}; expected {SCHEMA_VERSION}"
-        )));
-    }
-    Ok(schema_version)
-}
-
-fn deserialize_valid_computation_settings<'de, D>(
-    deserializer: D,
-) -> Result<ProjectComputationSettings, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let settings = ProjectComputationSettings::deserialize(deserializer)?;
-    settings.validate().map_err(serde::de::Error::custom)?;
-    Ok(settings)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectManifest {
-    #[serde(deserialize_with = "deserialize_current_schema_version")]
-    pub schema_version: u32,
-    pub project_name: String,
-    pub export_time: String,
-    #[serde(deserialize_with = "deserialize_valid_computation_settings")]
-    pub computation_settings: ProjectComputationSettings,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalVariablesDocument {
-    #[serde(deserialize_with = "deserialize_current_schema_version")]
+    #[serde(deserialize_with = "deserialize_current_project_schema_version")]
     pub schema_version: u32,
     pub variables: HashMap<VariableId, VariableInstance>,
 }
@@ -181,13 +146,20 @@ pub struct ProjectIndex {
 }
 
 pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
-    serde_json::to_vec_pretty(&ProjectManifest {
-        schema_version: SCHEMA_VERSION,
-        project_name: data.metadata.project_name.clone(),
-        export_time: data.metadata.export_time.clone(),
-        computation_settings: data.computation_settings.clone(),
+    serde_json::to_vec_pretty(&project_manifest_from_data(data)?).map_err(ProjectError::Serialize)
+}
+
+fn project_manifest_from_data(data: &ProjectData) -> Result<ProjectManifest, ProjectError> {
+    ProjectManifest::try_new(
+        data.metadata.project_name.clone(),
+        data.metadata.export_time.clone(),
+        data.computation_settings.clone(),
+    )
+    .map_err(|error| {
+        ProjectError::InvalidProjectFormat(format!(
+            "project computation settings are invalid: {error}"
+        ))
     })
-    .map_err(ProjectError::Serialize)
 }
 
 pub fn serialize_global_variables(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
@@ -207,7 +179,7 @@ pub(crate) fn serialize_global_variable_map(
     >,
 ) -> Result<Vec<u8>, ProjectError> {
     serde_json::to_vec_pretty(&GlobalVariablesDocument {
-        schema_version: SCHEMA_VERSION,
+        schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
         variables,
     })
     .map_err(ProjectError::Serialize)
@@ -255,7 +227,7 @@ fn graph_document_from_resource(
     local_variables: HashMap<VariableId, VariableInstance>,
 ) -> GraphDocument {
     GraphDocument {
-        schema_version: SCHEMA_VERSION,
+        schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
         kind: graph.kind,
         name: graph.name.clone(),
         revision: yss_project_identity::ResourceRevision::from_graph_revision(
@@ -287,7 +259,7 @@ fn write_loaded_graph_document(
     write_json(
         root.join(&relative_path).as_path(),
         &GraphDocument {
-            schema_version: SCHEMA_VERSION,
+            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             kind: graph.kind,
             name: graph.name.clone(),
             revision: yss_project_identity::ResourceRevision::from_graph_revision(
@@ -319,7 +291,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     write_json(
         root.join(GLOBAL_VARIABLES_FILE).as_path(),
         &GlobalVariablesDocument {
-            schema_version: SCHEMA_VERSION,
+            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             variables: global_variables,
         },
     )?;
@@ -336,15 +308,8 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         std::fs::write(target, contents)?;
     }
 
-    write_json(
-        root.join(PROJECT_METADATA_FILE).as_path(),
-        &ProjectManifest {
-            schema_version: SCHEMA_VERSION,
-            project_name: project_data.metadata.project_name.clone(),
-            export_time: project_data.metadata.export_time.clone(),
-            computation_settings: project_data.computation_settings.clone(),
-        },
-    )?;
+    let manifest = project_manifest_from_data(project_data)?;
+    write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
 }
 
@@ -352,10 +317,11 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
 pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     let root = project_root_from_path(path);
     let manifest = read_project_manifest_from_root(root.as_path())?;
+    let (project_name, export_time, computation_settings) = manifest.into_parts();
     let mut project_data = ProjectData::new();
-    project_data.metadata.project_name = manifest.project_name;
-    project_data.metadata.export_time = manifest.export_time;
-    project_data.computation_settings = manifest.computation_settings;
+    project_data.metadata.project_name = project_name;
+    project_data.metadata.export_time = export_time;
+    project_data.computation_settings = computation_settings;
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.worksheets = load_worksheets_from_root(root.as_path())?;
 
@@ -395,13 +361,14 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
     let worksheets = read_worksheet_index_entries(root)?;
     let variables = read_variable_index_entries(root)?;
 
+    let (project_name, export_time, _) = manifest.into_parts();
     Ok(ProjectIndex {
         project_instance_id: String::new(),
         publication_revision: 0,
         authority_generation: 0,
         history: Default::default(),
-        project_name: manifest.project_name,
-        export_time: manifest.export_time,
+        project_name,
+        export_time,
         graphs,
         worksheets,
         variables,
@@ -505,12 +472,12 @@ pub(crate) fn parse_graph_resource_document(
 ) -> Result<GraphDocument, ProjectError> {
     let document: GraphDocument =
         serde_json::from_slice(contents).map_err(ProjectError::Deserialize)?;
-    if document.schema_version != SCHEMA_VERSION {
+    if document.schema_version != CURRENT_PROJECT_SCHEMA_VERSION {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph file '{}' uses unsupported schema version {}; expected {}",
             path.display(),
             document.schema_version,
-            SCHEMA_VERSION
+            CURRENT_PROJECT_SCHEMA_VERSION
         )));
     }
     if document.kind != expected_kind {
@@ -630,12 +597,12 @@ fn read_graph_index_entries(
         let Some(resource) = graph_resources.get_by_path(&relative_path) else {
             continue;
         };
-        if header.schema_version != SCHEMA_VERSION {
+        if header.schema_version != CURRENT_PROJECT_SCHEMA_VERSION {
             return Err(ProjectError::InvalidProjectFormat(format!(
                 "graph file '{}' uses unsupported schema version {}; expected {}",
                 path.display(),
                 header.schema_version,
-                SCHEMA_VERSION
+                CURRENT_PROJECT_SCHEMA_VERSION
             )));
         }
         if header.kind != expected_kind {
@@ -952,7 +919,7 @@ pub fn discover_databases_from_root(
                 path: relative_path.clone(),
                 table: table.clone(),
             },
-            schema_version: SCHEMA_VERSION,
+            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             required: false,
             name: display_name.into(),
         };
@@ -963,50 +930,36 @@ pub fn discover_databases_from_root(
 }
 
 #[cfg(test)]
-mod computation_settings_manifest_tests {
-    use super::{ProjectManifest, SCHEMA_VERSION};
+mod project_manifest_adapter_tests {
+    use super::{ProjectData, ProjectError, ProjectManifest, serialize_project_manifest};
     use serde_json::json;
     use yss_computation_settings::ProjectComputationSettings;
 
-    fn manifest_with(settings: serde_json::Value) -> serde_json::Value {
-        json!({
-            "schemaVersion": SCHEMA_VERSION,
-            "projectName": "Computation Settings",
-            "exportTime": "2026-08-30T00:00:00Z",
-            "computationSettings": settings
-        })
+    #[test]
+    fn project_manifest_serialization_uses_the_canonical_validated_contract() {
+        let mut data = ProjectData::new();
+        data.metadata.project_name = "Canonical Manifest".into();
+        data.metadata.export_time = "2026-08-30T00:00:00Z".into();
+
+        let contents = serialize_project_manifest(&data).unwrap();
+        let manifest: ProjectManifest = serde_json::from_slice(&contents).unwrap();
+
+        assert_eq!(manifest.project_name(), "Canonical Manifest");
+        assert_eq!(manifest.export_time(), "2026-08-30T00:00:00Z");
+        assert_eq!(manifest.computation_settings(), &data.computation_settings);
     }
 
     #[test]
-    fn project_manifest_requires_valid_strict_computation_settings() {
-        let valid = serde_json::to_value(ProjectComputationSettings::default()).unwrap();
+    fn project_manifest_serialization_rejects_invalid_internal_settings() {
+        let mut data = ProjectData::new();
+        data.computation_settings = serde_json::from_value::<ProjectComputationSettings>(json!({
+            "numeric": { "tolerance": { "absolute": 0.0, "relative": 0.0 } },
+            "missingValues": { "statistics": "listwise" }
+        }))
+        .unwrap();
 
-        for invalid in [
-            json!({
-                "numeric": { "tolerance": { "absolute": 0.0, "relative": 0.0 } },
-                "missingValues": { "statistics": "listwise" }
-            }),
-            json!({
-                "numeric": { "tolerance": { "absolute": -1.0, "relative": 1e-9 } },
-                "missingValues": { "statistics": "listwise" }
-            }),
-            json!({
-                "numeric": {
-                    "tolerance": { "absolute": 1e-12, "relative": 1e-9 },
-                    "legacyTolerance": 1.0
-                },
-                "missingValues": { "statistics": "listwise" }
-            }),
-        ] {
-            assert!(serde_json::from_value::<ProjectManifest>(manifest_with(invalid)).is_err());
-        }
-
-        let decoded: ProjectManifest =
-            serde_json::from_value(manifest_with(valid.clone())).unwrap();
-        assert_eq!(
-            serde_json::to_value(decoded.computation_settings).unwrap(),
-            valid
-        );
+        let error = serialize_project_manifest(&data).unwrap_err();
+        assert!(matches!(error, ProjectError::InvalidProjectFormat(_)));
     }
 }
 
@@ -1056,7 +1009,7 @@ mod tests {
         initialize_project_directory(&ProjectData::new(), root.as_path()).unwrap();
         let manifest_path = root.join(PROJECT_METADATA_FILE);
         let mut value: serde_json::Value = read_json(&manifest_path).unwrap();
-        value["schemaVersion"] = json!(SCHEMA_VERSION - 1);
+        value["schemaVersion"] = json!(CURRENT_PROJECT_SCHEMA_VERSION - 1);
         write_json(&manifest_path, &value).unwrap();
 
         let error = read_project_index(root.to_string_lossy().as_ref()).unwrap_err();
@@ -1074,7 +1027,7 @@ mod tests {
         let mut value: serde_json::Value =
             serde_json::from_slice(&serialize_global_variables(&ProjectData::new()).unwrap())
                 .unwrap();
-        value["schemaVersion"] = json!(SCHEMA_VERSION + 1);
+        value["schemaVersion"] = json!(CURRENT_PROJECT_SCHEMA_VERSION + 1);
         let contents = serde_json::to_vec(&value).unwrap();
 
         let error = parse_global_variables_document(&contents).unwrap_err();
@@ -1169,7 +1122,10 @@ mod tests {
         let graph_file = root.join(graph_path.as_str());
         let value: serde_json::Value = read_json(&graph_file).unwrap();
         let serialized = serde_json::to_string(&value).unwrap();
-        assert_eq!(value["schemaVersion"], serde_json::json!(SCHEMA_VERSION));
+        assert_eq!(
+            value["schemaVersion"],
+            serde_json::json!(CURRENT_PROJECT_SCHEMA_VERSION)
+        );
         assert!(value.get("document").is_some());
         assert!(value.get("graph").is_none());
         assert!(!serialized.contains("pins"));

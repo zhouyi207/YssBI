@@ -9345,6 +9345,15 @@ name = "yss-project-layout"
 version = "0.1.0"
 
 [[package]]
+name = "yss-project-manifest"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "yss-computation-settings",
+]
+
+[[package]]
 name = "yss-project-progress"
 version = "0.1.0"
 
@@ -9501,6 +9510,7 @@ dependencies = [
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",
+ "yss-project-manifest",
  "yss-project-progress",
  "yss-project-registry-contract",
  "yss-resource-naming",

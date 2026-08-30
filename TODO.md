@@ -682,3 +682,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-project-discovery/` Project 层；删除根 `project_scan` owner 与兼容 re-export，
   注册结果继续由 registry workflow 拥有；扫描拒绝进入 Unix symlink 与 Windows reparse point，
   避免越过用户选择的 discovery root 或因目录重定向形成递归循环。
+- [ ] 将 `metadata.yssbi` 的当前 schema version、严格 `ProjectManifest` wire 与 computation settings
+  fail-closed validation 迁入 `src-tauri/crates/yss-project-manifest/` Pure Leaf；Project I/O 只通过
+  唯一受校验构造器生成 manifest，不再拥有重复 schema/validation 定义，validated fields 不公开
+  mutation seam；文件系统、运行时 `ProjectData`、时钟与 lifecycle 继续留在 Project 层。

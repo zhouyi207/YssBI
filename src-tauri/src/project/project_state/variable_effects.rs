@@ -124,7 +124,7 @@ pub(in crate::project) fn variable_effect_filesystem_mutations(
             relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
             contents: serde_json::to_vec_pretty(
                 &crate::project::project_io::GlobalVariablesDocument {
-                    schema_version: crate::project::project_io::SCHEMA_VERSION,
+                    schema_version: yss_project_manifest::CURRENT_PROJECT_SCHEMA_VERSION,
                     variables,
                 },
             )

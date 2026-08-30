@@ -1725,6 +1725,7 @@ fn non_build_memberships(
             | "yss-math"
             | "yss-project-identity"
             | "yss-project-layout"
+            | "yss-project-manifest"
             | "yss-project-progress"
             | "yss-project-registry-contract"
             | "yss-resource-naming"
