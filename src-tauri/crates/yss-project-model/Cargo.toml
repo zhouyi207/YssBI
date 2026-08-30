@@ -11,6 +11,7 @@ yss-computation-settings = { path = "../yss-computation-settings" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-project-history = { path = "../yss-project-history" }
+yss-project-identity = { path = "../yss-project-identity" }
 yss-variable-contract = { path = "../yss-variable-contract" }
 yss-worksheet-document = { path = "../yss-worksheet-document" }
 

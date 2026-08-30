@@ -1,4 +1,3 @@
-use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
     GraphDocument, ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession,
     ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
@@ -18,7 +17,7 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
 use yss_project_manifest::ProjectManifest;
-use yss_project_model::ProjectData;
+use yss_project_model::{ProjectData, ProjectDataPatch};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 use yss_variable_value::default_value_for;

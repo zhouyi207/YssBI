@@ -1,5 +1,5 @@
 use super::*;
-use crate::project::resource_patch::ResourceDocumentPatch;
+use yss_project_model::ProjectDataPatch;
 use yss_resource_naming::ResourceName;
 
 impl ProjectState {
@@ -314,10 +314,10 @@ impl ProjectState {
             .and_then(|_| {
                 self.apply_resource_document_patch_with_environment(
                     &context,
-                    ResourceDocumentPatch::MoveGraph {
+                    ProjectDataPatch::MoveGraph {
                         from: graph_path.clone(),
                         to: target.clone(),
-                        moved_before,
+                        moved_before: Box::new(moved_before),
                         moved,
                         referenced_graphs_before,
                         referenced_graphs,

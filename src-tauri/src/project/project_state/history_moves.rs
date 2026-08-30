@@ -1,5 +1,5 @@
 use super::*;
-use crate::project::resource_patch::ResourceDocumentPatch;
+use yss_project_model::ProjectDataPatch;
 
 impl ProjectState {
     pub(super) fn commit_variable_effect_history_direction(
@@ -386,7 +386,7 @@ impl ProjectState {
         self.run_history_after_disk_commit_test_hook();
         let publication = self.apply_resource_document_patch_internal(
             &context,
-            ResourceDocumentPatch::MoveWorksheet {
+            ProjectDataPatch::MoveWorksheet {
                 from: source,
                 to: target,
                 moved: {
@@ -622,10 +622,10 @@ impl ProjectState {
         self.run_graph_move_history_io_checkpoint();
         let publication = self.apply_resource_document_patch_internal(
             &context,
-            ResourceDocumentPatch::MoveGraph {
+            ProjectDataPatch::MoveGraph {
                 from: source,
                 to: target,
-                moved_before: current_moved,
+                moved_before: Box::new(current_moved),
                 moved: desired_moved,
                 referenced_graphs_before,
                 referenced_graphs,

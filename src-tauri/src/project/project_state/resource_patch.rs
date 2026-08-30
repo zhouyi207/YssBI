@@ -1,5 +1,5 @@
 use super::*;
-use crate::project::resource_patch::ResourceDocumentPatch;
+use yss_project_model::ProjectDataPatch;
 
 pub(super) struct CommittedResourceMutation {
     pub(in crate::project::project_state) operation_id: yss_project_identity::OperationId,
@@ -108,7 +108,7 @@ impl ProjectState {
     pub fn apply_resource_document_patch(
         &self,
         context: &ProjectTransactionContext,
-        patch: ResourceDocumentPatch,
+        patch: ProjectDataPatch,
     ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
     {
         self.apply_resource_document_patch_internal(context, patch, None, None)
@@ -119,7 +119,7 @@ impl ProjectState {
     pub(in crate::project) fn apply_resource_document_patch_with_environment(
         &self,
         context: &ProjectTransactionContext,
-        patch: ResourceDocumentPatch,
+        patch: ProjectDataPatch,
         projection_environment: ProjectionEnvironmentSnapshot,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
@@ -138,7 +138,7 @@ impl ProjectState {
     pub(in crate::project) fn apply_project_resource_document_patch(
         &self,
         context: &ProjectTransactionContext,
-        patch: ResourceDocumentPatch,
+        patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectFilesystemError>
     {
@@ -149,7 +149,7 @@ impl ProjectState {
     pub(in crate::project::project_state) fn apply_resource_document_patch_internal(
         &self,
         context: &ProjectTransactionContext,
-        mut patch: ResourceDocumentPatch,
+        mut patch: ProjectDataPatch,
         history_head: Option<(bool, HistoryEntryId)>,
         mut rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
@@ -196,7 +196,7 @@ impl ProjectState {
                 canonical_resource_lifecycle_events(context, &patch, &graph_revisions)?;
             deltas.extend(worksheet_deltas);
             let moves = match &patch {
-                ResourceDocumentPatch::MoveGraph {
+                ProjectDataPatch::MoveGraph {
                     from, to, moved, ..
                 } => vec![crate::project::project_writers::ProjectResourceMove {
                     from: from.as_str().into(),
@@ -211,7 +211,7 @@ impl ProjectState {
                     },
                     name: moved.name.clone().into_boxed_str(),
                 }],
-                ResourceDocumentPatch::MoveWorksheet { from, to, .. } => {
+                ProjectDataPatch::MoveWorksheet { from, to, .. } => {
                     vec![crate::project::project_writers::ProjectResourceMove {
                         from: from.as_str().into(),
                         to: to.as_str().into(),
@@ -222,7 +222,7 @@ impl ProjectState {
                 _ => Vec::new(),
             };
             let resource_history = match &patch {
-                ResourceDocumentPatch::MoveGraph {
+                ProjectDataPatch::MoveGraph {
                     from,
                     to,
                     moved_before,
@@ -237,7 +237,7 @@ impl ProjectState {
                     from.clone(),
                     to.clone(),
                     serde_json::to_value(GraphMoveHistoryPayload {
-                        moved_before: moved_before.clone(),
+                        moved_before: moved_before.as_ref().clone(),
                         moved_after: moved.clone(),
                         referenced_graphs_before: referenced_graphs_before.clone(),
                         referenced_graphs_after: referenced_graphs.clone(),
@@ -271,15 +271,15 @@ impl ProjectState {
             }
 
             match patch {
-                ResourceDocumentPatch::InsertGraph { path, resource } => {
+                ProjectDataPatch::InsertGraph { path, resource } => {
                     let revision = resource.document.revision;
                     Self::install_validated_resident_graph(&mut data, path.clone(), resource);
                     graph_revisions.insert(path, revision);
                 }
-                ResourceDocumentPatch::DeclareGraph { path, revision } => {
+                ProjectDataPatch::DeclareGraph { path, revision } => {
                     graph_revisions.insert(path, revision.to_graph_revision());
                 }
-                ResourceDocumentPatch::RemoveGraph { path, .. } => {
+                ProjectDataPatch::RemoveGraph { path, .. } => {
                     let existing = data.graphs.get(&path);
                     let retained_function_revision = if existing.is_some_and(|resource| {
                         resource.kind == yss_graph_document::GraphResourceKind::Function
@@ -326,13 +326,13 @@ impl ProjectState {
                         variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
                     }
                 }
-                ResourceDocumentPatch::UnloadGraph { path } => {
+                ProjectDataPatch::UnloadGraph { path } => {
                     data.graphs.remove(&path);
                     data.variables.retain(|_, variable| {
                         !variable_scope_references_path(&variable.scope, path.as_str())
                     });
                 }
-                ResourceDocumentPatch::MoveGraph {
+                ProjectDataPatch::MoveGraph {
                     from,
                     to,
                     moved,
@@ -392,7 +392,7 @@ impl ProjectState {
                         );
                     }
                 }
-                ResourceDocumentPatch::PatchVariables { updates, removals } => {
+                ProjectDataPatch::PatchVariables { updates, removals } => {
                     let mut next_revisions = variable_revisions.clone();
                     for id in &removals {
                         let retained = next_revisions
@@ -419,7 +419,7 @@ impl ProjectState {
                     data.variables.extend(updates);
                     *variable_revisions = next_revisions;
                 }
-                ResourceDocumentPatch::UpsertWorksheet { path, mut document } => {
+                ProjectDataPatch::UpsertWorksheet { path, mut document } => {
                     validate_worksheet_path_insertion(&data, &path)?;
                     let retained_revision = worksheet_revisions.get(&path).copied();
                     let revision = match retained_revision {
@@ -441,12 +441,12 @@ impl ProjectState {
                     data.worksheets.insert(path.clone(), document);
                     worksheet_revisions.insert(path, revision);
                 }
-                ResourceDocumentPatch::RemoveWorksheet { path, revision } => {
+                ProjectDataPatch::RemoveWorksheet { path, revision } => {
                     let next_revision = checked_resource_revision(path.as_str(), revision)?;
                     data.worksheets.remove(&path);
                     worksheet_revisions.insert(path, next_revision);
                 }
-                ResourceDocumentPatch::MoveWorksheet {
+                ProjectDataPatch::MoveWorksheet {
                     from,
                     to,
                     mut moved,

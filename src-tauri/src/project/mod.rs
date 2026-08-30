@@ -22,7 +22,6 @@ pub mod resource_mutations;
 pub mod project_state_variable;
 pub mod project_store;
 
-pub mod resource_patch;
 pub mod resource_reveal;
 pub mod worksheet_io;
 
@@ -40,7 +39,6 @@ pub use project_session::*;
 pub use project_state::*;
 pub use project_store::*;
 
-pub use resource_patch::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;
 

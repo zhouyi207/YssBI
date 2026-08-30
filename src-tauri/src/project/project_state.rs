@@ -1,6 +1,5 @@
 //! Authoritative project state for normalized node-system graph documents.
 
-use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
     NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemCoordinator,
     ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession, ProjectStore,

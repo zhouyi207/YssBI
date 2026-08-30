@@ -1,11 +1,17 @@
+use crate::GraphResourceDocument;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::GraphResourcePath;
-use yss_project_model::GraphResourceDocument;
+use yss_project_identity::ResourceRevision;
 use yss_variable_contract::{VariableId, VariableInstance};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
+/// An atomic candidate change to the in-memory [`crate::ProjectData`] aggregate.
+///
+/// This is deliberately distinct from
+/// [`yss_project_history::ResourceDocumentPatch`], which describes persisted
+/// history payloads rather than the complete state transition being committed.
 #[derive(Clone, Debug)]
-pub enum ResourceDocumentPatch {
+pub enum ProjectDataPatch {
     InsertGraph {
         path: GraphResourcePath,
         resource: GraphResourceDocument,
@@ -13,11 +19,11 @@ pub enum ResourceDocumentPatch {
     /// Publish an on-disk graph declaration without installing a resident document.
     DeclareGraph {
         path: GraphResourcePath,
-        revision: yss_project_identity::ResourceRevision,
+        revision: ResourceRevision,
     },
     RemoveGraph {
         path: GraphResourcePath,
-        revision: yss_project_identity::ResourceRevision,
+        revision: ResourceRevision,
     },
     UnloadGraph {
         path: GraphResourcePath,
@@ -25,7 +31,7 @@ pub enum ResourceDocumentPatch {
     MoveGraph {
         from: GraphResourcePath,
         to: GraphResourcePath,
-        moved_before: GraphResourceDocument,
+        moved_before: Box<GraphResourceDocument>,
         moved: GraphResourceDocument,
         referenced_graphs_before: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         referenced_graphs: BTreeMap<GraphResourcePath, GraphResourceDocument>,
@@ -43,7 +49,7 @@ pub enum ResourceDocumentPatch {
     },
     RemoveWorksheet {
         path: WorksheetResourcePath,
-        revision: yss_project_identity::ResourceRevision,
+        revision: ResourceRevision,
     },
     MoveWorksheet {
         from: WorksheetResourcePath,

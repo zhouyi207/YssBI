@@ -4,6 +4,10 @@
 //! remain owned by their dedicated crates and Project I/O adapters. This model
 //! deliberately does not read the clock or expose monolithic JSON persistence.
 
+mod patch;
+
+pub use patch::ProjectDataPatch;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use yss_computation_settings::ProjectComputationSettings;
@@ -102,5 +106,26 @@ mod tests {
         assert!(project.graphs.is_empty());
         assert!(project.worksheets.is_empty());
         assert!(project.databases.is_empty());
+    }
+
+    #[test]
+    fn project_data_patch_keeps_typed_graph_identity_and_revision() {
+        let path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let revision = yss_project_identity::ResourceRevision::new(7);
+        let patch = ProjectDataPatch::DeclareGraph {
+            path: path.clone(),
+            revision,
+        };
+
+        match patch {
+            ProjectDataPatch::DeclareGraph {
+                path: actual_path,
+                revision: actual_revision,
+            } => {
+                assert_eq!(actual_path, path);
+                assert_eq!(actual_revision, revision);
+            }
+            _ => panic!("declare-graph patch changed variant"),
+        }
     }
 }

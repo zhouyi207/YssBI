@@ -186,7 +186,7 @@ impl ProjectState {
         let committed = prepared.commit()?;
         let mut result = match self.apply_project_resource_document_patch(
             &context,
-            ResourceDocumentPatch::UpsertWorksheet {
+            ProjectDataPatch::UpsertWorksheet {
                 path: worksheet_path.clone(),
                 document: document.clone(),
             },
@@ -371,7 +371,7 @@ impl ProjectState {
         let committed = prepared.commit()?;
         let mut result = match self.apply_project_resource_document_patch(
             &mutation_context,
-            ResourceDocumentPatch::MoveWorksheet {
+            ProjectDataPatch::MoveWorksheet {
                 from: worksheet_path.clone(),
                 to: target.clone(),
                 moved: moved.clone(),
@@ -463,7 +463,7 @@ impl ProjectState {
         let committed = prepared.commit()?;
         let mut result = match self.apply_project_resource_document_patch(
             &mutation_context,
-            ResourceDocumentPatch::RemoveWorksheet {
+            ProjectDataPatch::RemoveWorksheet {
                 path: worksheet_path.clone(),
                 revision: expected_revision,
             },

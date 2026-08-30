@@ -708,3 +708,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   watcher 故障伪造为 metadata 文件变更，并将无关路径从 error control flow 改为 no-op；notify adapter
   忽略普通 read/open access 但保留 `Close(Write)`，同时保留 rename 语义及跨边界事件中的安全根内路径；
   ProjectState 重读协调继续留在 Project 层。
+
+## 2026.08.31
+
+- [ ] 将运行期 project aggregate 的原子候选 patch 迁入 `yss-project-model::ProjectDataPatch`；删除根
+  `project/resource_patch.rs` 与 facade，并与 `yss-project-history::ResourceDocumentPatch` 的持久化历史
+  payload 明确分名，避免两个不同语义继续共享 `ResourceDocumentPatch` 名称；ProjectState 保留锁、事务、
+  I/O、history 转换与 publication authority。

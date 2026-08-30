@@ -9388,6 +9388,7 @@ dependencies = [
  "yss-database-contract",
  "yss-graph-document",
  "yss-project-history",
+ "yss-project-identity",
  "yss-variable-contract",
  "yss-worksheet-document",
 ]

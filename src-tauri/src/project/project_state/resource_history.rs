@@ -1,5 +1,5 @@
 use super::*;
-use crate::project::resource_patch::ResourceDocumentPatch;
+use yss_project_model::ProjectDataPatch;
 
 pub(super) fn graph_document_references_path(
     document: &yss_graph_document::GraphDocument,
@@ -222,7 +222,7 @@ pub(in crate::project) fn normalize_function_resource_revision(
 }
 
 pub(super) fn normalize_function_patch_revisions(
-    patch: &mut ResourceDocumentPatch,
+    patch: &mut ProjectDataPatch,
     data: &ProjectData,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
@@ -230,14 +230,14 @@ pub(super) fn normalize_function_patch_revisions(
     >,
 ) -> Result<(), ProjectFilesystemError> {
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, resource } => {
+        ProjectDataPatch::InsertGraph { path, resource } => {
             normalize_function_resource_revision(
                 path,
                 resource,
                 graph_revisions.get(path).copied(),
             )?;
         }
-        ResourceDocumentPatch::DeclareGraph { path, revision } => {
+        ProjectDataPatch::DeclareGraph { path, revision } => {
             if path.kind() == yss_graph_document::GraphResourceKind::Function {
                 let canonical = authoritative_function_revision(
                     path,
@@ -254,7 +254,7 @@ pub(super) fn normalize_function_patch_revisions(
                 }
             }
         }
-        ResourceDocumentPatch::RemoveGraph { path, revision } => {
+        ProjectDataPatch::RemoveGraph { path, revision } => {
             if data.graphs.get(path).is_some_and(|resource| {
                 resource.kind == yss_graph_document::GraphResourceKind::Function
             }) {
@@ -265,7 +265,7 @@ pub(super) fn normalize_function_patch_revisions(
                 )?;
             }
         }
-        ResourceDocumentPatch::MoveGraph {
+        ProjectDataPatch::MoveGraph {
             from,
             to,
             moved,
@@ -288,11 +288,11 @@ pub(super) fn normalize_function_patch_revisions(
                 )?;
             }
         }
-        ResourceDocumentPatch::UnloadGraph { .. }
-        | ResourceDocumentPatch::PatchVariables { .. }
-        | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
+        ProjectDataPatch::UnloadGraph { .. }
+        | ProjectDataPatch::PatchVariables { .. }
+        | ProjectDataPatch::UpsertWorksheet { .. }
+        | ProjectDataPatch::RemoveWorksheet { .. }
+        | ProjectDataPatch::MoveWorksheet { .. } => {}
     }
     Ok(())
 }
@@ -321,7 +321,7 @@ pub(super) fn worksheet_lifecycle_state(
 
 pub(super) fn worksheet_history_publication(
     operation_id: OperationId,
-    patch: &ResourceDocumentPatch,
+    patch: &ProjectDataPatch,
     data: &ProjectData,
     revisions: &std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
 ) -> Result<
@@ -337,7 +337,7 @@ pub(super) fn worksheet_history_publication(
         ))
     };
     match patch {
-        ResourceDocumentPatch::UpsertWorksheet { path, document } => {
+        ProjectDataPatch::UpsertWorksheet { path, document } => {
             let before = data.worksheets.get(path);
             let retained = revisions.get(path).copied();
             let revision = match retained {
@@ -391,7 +391,7 @@ pub(super) fn worksheet_history_publication(
                 Some(transaction),
             ))
         }
-        ResourceDocumentPatch::RemoveWorksheet { path, revision } => {
+        ProjectDataPatch::RemoveWorksheet { path, revision } => {
             let document = data.worksheets.get(path).cloned().ok_or_else(|| {
                 ProjectFilesystemError::ResourceRevisionConflict {
                     message: format!("worksheet '{}' is absent", path.as_str()),
@@ -418,7 +418,7 @@ pub(super) fn worksheet_history_publication(
                 )),
             ))
         }
-        ResourceDocumentPatch::MoveWorksheet { from, to, moved } => Ok((
+        ProjectDataPatch::MoveWorksheet { from, to, moved } => Ok((
             vec![yss_project_history::ResourceDeltaEvent {
                 resource: worksheet_key(to),
                 from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
@@ -444,7 +444,7 @@ pub(super) fn worksheet_history_publication(
 
 pub(super) fn canonical_resource_lifecycle_events(
     context: &ProjectTransactionContext,
-    patch: &ResourceDocumentPatch,
+    patch: &ProjectDataPatch,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
         yss_graph_document::GraphRevision,
@@ -477,7 +477,7 @@ pub(super) fn canonical_resource_lifecycle_events(
         }
     };
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, resource } => {
+        ProjectDataPatch::InsertGraph { path, resource } => {
             let revision = ResourceRevision::from_graph_revision(resource.document.revision);
             return Ok(vec![lifecycle_delta(
                 path,
@@ -491,7 +491,7 @@ pub(super) fn canonical_resource_lifecycle_events(
                 Some(lifecycle_state(path, revision)),
             )]);
         }
-        ResourceDocumentPatch::DeclareGraph { path, revision } => {
+        ProjectDataPatch::DeclareGraph { path, revision } => {
             return Ok(vec![lifecycle_delta(
                 path,
                 graph_revisions
@@ -504,7 +504,7 @@ pub(super) fn canonical_resource_lifecycle_events(
                 Some(lifecycle_state(path, *revision)),
             )]);
         }
-        ResourceDocumentPatch::UnloadGraph { path } => {
+        ProjectDataPatch::UnloadGraph { path } => {
             let revision = context.expected_revisions[&graph_key(path)];
             return Ok(vec![lifecycle_delta(
                 path,
@@ -514,7 +514,7 @@ pub(super) fn canonical_resource_lifecycle_events(
                 Some(lifecycle_state(path, revision)),
             )]);
         }
-        ResourceDocumentPatch::RemoveGraph { path, revision } => {
+        ProjectDataPatch::RemoveGraph { path, revision } => {
             let revision = *revision;
             return Ok(vec![lifecycle_delta(
                 path,
@@ -524,13 +524,13 @@ pub(super) fn canonical_resource_lifecycle_events(
                 None,
             )]);
         }
-        ResourceDocumentPatch::MoveGraph { .. } => {}
-        ResourceDocumentPatch::PatchVariables { .. }
-        | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => return Ok(Vec::new()),
+        ProjectDataPatch::MoveGraph { .. } => {}
+        ProjectDataPatch::PatchVariables { .. }
+        | ProjectDataPatch::UpsertWorksheet { .. }
+        | ProjectDataPatch::RemoveWorksheet { .. }
+        | ProjectDataPatch::MoveWorksheet { .. } => return Ok(Vec::new()),
     }
-    let ResourceDocumentPatch::MoveGraph {
+    let ProjectDataPatch::MoveGraph {
         from,
         to,
         moved,
@@ -593,19 +593,16 @@ pub(super) fn canonical_resource_lifecycle_events(
     Ok(deltas)
 }
 
-pub(super) fn patch_projection_paths(
-    patch: &ResourceDocumentPatch,
-    data: &ProjectData,
-) -> Vec<String> {
+pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectData) -> Vec<String> {
     let mut paths = std::collections::BTreeSet::new();
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, .. }
-        | ResourceDocumentPatch::DeclareGraph { path, .. }
-        | ResourceDocumentPatch::RemoveGraph { path, .. }
-        | ResourceDocumentPatch::UnloadGraph { path } => {
+        ProjectDataPatch::InsertGraph { path, .. }
+        | ProjectDataPatch::DeclareGraph { path, .. }
+        | ProjectDataPatch::RemoveGraph { path, .. }
+        | ProjectDataPatch::UnloadGraph { path } => {
             paths.insert(path.as_str().to_string());
         }
-        ResourceDocumentPatch::MoveGraph {
+        ProjectDataPatch::MoveGraph {
             from,
             to,
             loaded_referenced_graphs,
@@ -620,10 +617,10 @@ pub(super) fn patch_projection_paths(
                     .map(|path| path.as_str().to_string()),
             );
         }
-        ResourceDocumentPatch::PatchVariables { .. }
-        | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
+        ProjectDataPatch::PatchVariables { .. }
+        | ProjectDataPatch::UpsertWorksheet { .. }
+        | ProjectDataPatch::RemoveWorksheet { .. }
+        | ProjectDataPatch::MoveWorksheet { .. } => {}
     }
     paths.into_iter().collect()
 }
@@ -636,13 +633,13 @@ pub(super) fn validate_graph_resource(
 }
 
 pub(super) fn preflight_resource_patch_graphs(
-    patch: &ResourceDocumentPatch,
+    patch: &ProjectDataPatch,
 ) -> Result<(), ProjectFilesystemError> {
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, resource } => {
+        ProjectDataPatch::InsertGraph { path, resource } => {
             validate_graph_resource(path, resource)?;
         }
-        ResourceDocumentPatch::MoveGraph {
+        ProjectDataPatch::MoveGraph {
             to,
             moved,
             referenced_graphs,
@@ -653,13 +650,13 @@ pub(super) fn preflight_resource_patch_graphs(
                 validate_graph_resource(path, resource)?;
             }
         }
-        ResourceDocumentPatch::DeclareGraph { .. }
-        | ResourceDocumentPatch::RemoveGraph { .. }
-        | ResourceDocumentPatch::UnloadGraph { .. }
-        | ResourceDocumentPatch::PatchVariables { .. }
-        | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
+        ProjectDataPatch::DeclareGraph { .. }
+        | ProjectDataPatch::RemoveGraph { .. }
+        | ProjectDataPatch::UnloadGraph { .. }
+        | ProjectDataPatch::PatchVariables { .. }
+        | ProjectDataPatch::UpsertWorksheet { .. }
+        | ProjectDataPatch::RemoveWorksheet { .. }
+        | ProjectDataPatch::MoveWorksheet { .. } => {}
     }
     Ok(())
 }

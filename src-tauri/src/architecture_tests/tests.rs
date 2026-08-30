@@ -3993,6 +3993,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     for relative in [
         "src-tauri/crates/yss-project-model/Cargo.toml",
         "src-tauri/crates/yss-project-model/src/lib.rs",
+        "src-tauri/crates/yss-project-model/src/patch.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -4002,6 +4003,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     for removed_owner in [
         "src-tauri/src/project/project_data.rs",
         "src-tauri/src/project/project_metadata.rs",
+        "src-tauri/src/project/resource_patch.rs",
     ] {
         assert!(
             !root.join(removed_owner).exists(),
@@ -4030,6 +4032,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "yss-database-contract = { path = \"../yss-database-contract\" }",
         "yss-graph-document = { path = \"../yss-graph-document\" }",
         "yss-project-history = { path = \"../yss-project-history\" }",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
         "yss-variable-contract = { path = \"../yss-variable-contract\" }",
         "yss-worksheet-document = { path = \"../yss-worksheet-document\" }",
     ] {
@@ -4167,6 +4170,95 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         !policy.contains("project_io::GraphResourceKind"),
         "architecture capabilities must not preserve the deleted graph-kind facade"
     );
+}
+
+#[test]
+fn project_data_patch_has_one_model_owner_without_history_name_collision() {
+    let root = repository_root();
+    let patch_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-model/src/patch.rs"))
+            .expect("project data patch owner must be readable");
+    for contract in [
+        "pub enum ProjectDataPatch",
+        "use yss_project_identity::ResourceRevision",
+        "InsertGraph",
+        "MoveGraph",
+        "moved_before: Box<GraphResourceDocument>",
+        "PatchVariables",
+        "UpsertWorksheet",
+    ] {
+        assert!(
+            patch_owner.contains(contract),
+            "project model must own aggregate patch contract '{contract}'"
+        );
+    }
+    for misplaced in [
+        "pub enum ResourceDocumentPatch",
+        "crate::project",
+        "ProjectState",
+        "std::fs",
+    ] {
+        assert!(
+            !patch_owner.contains(misplaced),
+            "project data patch must not absorb '{misplaced}'"
+        );
+    }
+
+    let model_root =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-model/src/lib.rs"))
+            .expect("project model root must be readable");
+    assert!(
+        model_root.contains("mod patch;")
+            && model_root.contains("pub use patch::ProjectDataPatch;"),
+        "project model must expose its aggregate patch directly"
+    );
+
+    let history_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-history/src/lib.rs"))
+            .expect("project history owner must be readable");
+    assert!(
+        history_owner.contains("pub enum ResourceDocumentPatch"),
+        "persisted history payloads must retain their distinct canonical owner"
+    );
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("root project module must be readable");
+    for facade in [
+        "mod resource_patch",
+        "pub mod resource_patch",
+        "pub use resource_patch",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "root project module must not restore aggregate patch facade '{facade}'"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/resource_patch.rs")
+            .exists(),
+        "the deleted root aggregate patch owner must stay absent"
+    );
+
+    for relative in [
+        "src-tauri/src/project/project_writers.rs",
+        "src-tauri/src/project/project_writers/worksheets.rs",
+        "src-tauri/src/project/project_state/graph_rename.rs",
+        "src-tauri/src/project/project_state/history_moves.rs",
+        "src-tauri/src/project/project_state/resource_history.rs",
+        "src-tauri/src/project/project_state/resource_patch.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("ProjectDataPatch"),
+            "{relative} must use the unambiguous aggregate patch name"
+        );
+        assert!(
+            !consumer.contains("crate::project::resource_patch"),
+            "{relative} must consume the project model owner directly"
+        );
+    }
 }
 
 #[test]
@@ -4576,7 +4668,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/src/project/project_state.rs",
         "src-tauri/src/project/project_writers.rs",
         "src-tauri/src/project/resource_lifecycle.rs",
-        "src-tauri/src/project/resource_patch.rs",
+        "src-tauri/crates/yss-project-model/src/patch.rs",
         "src-tauri/src/project/resource_reveal.rs",
         "src-tauri/src/project/worksheet_io.rs",
     ] {
