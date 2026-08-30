@@ -1,5 +1,4 @@
 use super::*;
-use crate::graph::analysis::contracts::{CompilationBasis, ResourceKey, ResourceVersion};
 use crate::graph::analysis::{
     GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
     GraphProjectionFacts,
@@ -7,6 +6,7 @@ use crate::graph::analysis::{
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::settings::GraphCompileSettings;
 use std::collections::BTreeMap;
+use yss_graph_analysis_contract::{CompilationBasis, ResourceKey, ResourceVersion};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,

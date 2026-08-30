@@ -121,12 +121,12 @@ mod tests {
             ExecutionSemanticsVersion, OperationStableId, PlannedValueContract, ResultPresentation,
             ValueRef,
         };
-        use crate::graph::analysis::contracts::ResourceVersionSet;
         use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
             ActivationId, ActivationProvenance, CancellationToken, DemandFingerprint,
             OperationMemoKey, PendingOutputDescriptor, ResultId, ResultUsage, StoredValue,
         };
+        use yss_graph_analysis_contract::ResourceVersionSet;
         use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId};
         use yss_graph_protocol::Value;
 
@@ -201,13 +201,13 @@ mod tests {
     #[test]
     fn project_replacement_drains_memo_producer_and_waiter() {
         use crate::execution::plan::legacy::{ExecutionSemanticsVersion, OperationStableId};
-        use crate::graph::analysis::contracts::ResourceVersionSet;
         use crate::node_system::runtime::{
             CancellationToken, ComputationSettingsFingerprint, DemandFingerprint,
             MemoCommitCheckpoint, OperationMemoKey, ResultId, RunError,
         };
         use std::sync::{Arc, Barrier, mpsc};
         use std::time::Duration;
+        use yss_graph_analysis_contract::ResourceVersionSet;
 
         let store = Arc::new(ProjectStore::new());
         let key = OperationMemoKey {

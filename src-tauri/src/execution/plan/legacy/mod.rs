@@ -17,10 +17,10 @@ pub use validation::{PlanValidationError, PlanValidationErrors};
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::graph::analysis::contracts::{
+    use crate::project::ProjectSessionId;
+    use yss_graph_analysis_contract::{
         CompilationBasis, CompileId, CompileProvenance, ResourceVersionSet,
     };
-    use crate::project::ProjectSessionId;
     use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use yss_graph_protocol::{
         CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use crate::graph::analysis::contracts::{CompilationBasis, CompileId};
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput, analyze};
 use crate::graph::compiler::package::{
     GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
@@ -10,6 +9,7 @@ use crate::graph::compiler::package::{
 use crate::graph::error::GraphCompileError;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
+use yss_graph_analysis_contract::{CompilationBasis, CompileId};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";

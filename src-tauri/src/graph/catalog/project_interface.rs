@@ -113,7 +113,7 @@ fn function_path(
 }
 
 fn parameter_members(
-    basis: &crate::graph::analysis::contracts::CompilationBasis<
+    basis: &yss_graph_analysis_contract::CompilationBasis<
         yss_graph_document::GraphRevision,
     >,
     function: &GraphResourcePath,
@@ -140,7 +140,7 @@ fn parameter_members(
 }
 
 fn result_members(
-    basis: &crate::graph::analysis::contracts::CompilationBasis<
+    basis: &yss_graph_analysis_contract::CompilationBasis<
         yss_graph_document::GraphRevision,
     >,
     function: &GraphResourcePath,

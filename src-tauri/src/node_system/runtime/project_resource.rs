@@ -2,9 +2,6 @@ use super::{PlotSink, ResourceError, ResourceLease, ResourceProvider};
 use crate::execution::plan::legacy::{
     CompiledResourceRequirement, ResourceAccess, ResourceId, ResourceKind,
 };
-use crate::graph::analysis::contracts::{
-    CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
-};
 use crate::project::ProjectSessionId;
 use polars::prelude::DataFrame;
 use std::any::Any;
@@ -16,6 +13,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::DataValue;
+use yss_graph_analysis_contract::{
+    CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
+};
 use yss_variable_contract::VariableInstance;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

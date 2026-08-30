@@ -4,13 +4,13 @@ use super::{
     StreamReceiveError,
 };
 use crate::execution::plan::legacy::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
-use crate::graph::analysis::contracts::CompileProvenance;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, Weak};
 use std::time::{Duration, Instant};
+use yss_graph_analysis_contract::CompileProvenance;
 use yss_graph_protocol::Value;
 
 #[derive(

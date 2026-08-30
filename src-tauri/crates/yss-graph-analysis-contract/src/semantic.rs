@@ -4,28 +4,35 @@ use std::collections::BTreeMap;
 use yss_graph_protocol::NodeTypeId;
 use yss_graph_registry::ProtocolFingerprint;
 
+pub type ValidatedSemanticNodeSet<
+    NodeId,
+    PortAddress,
+    ParameterValue,
+    ResolvedType,
+    ResolvedSchema,
+> = Box<[ValidatedSemanticNode<NodeId, PortAddress, ParameterValue, ResolvedType, ResolvedSchema>]>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatedSemanticGraph<
     GraphRevision,
     NodeId,
-    PortAddress: Ord,
+    PortAddress,
     ConnectionId,
     ParameterValue,
     ResolvedType,
     ResolvedSchema,
 > {
     pub basis: CompilationBasis<GraphRevision>,
-    pub nodes: Box<
-        [ValidatedSemanticNode<
-            NodeId,
-            PortAddress,
-            ParameterValue,
-            ResolvedType,
-            ResolvedSchema,
-        >],
-    >,
+    pub nodes:
+        ValidatedSemanticNodeSet<NodeId, PortAddress, ParameterValue, ResolvedType, ResolvedSchema>,
     pub dependencies: Box<[SemanticDependency<NodeId, PortAddress, ConnectionId>]>,
-    #[serde(with = "super::snapshot::ordered_map_entries")]
+    #[serde(
+        with = "super::snapshot::ordered_map_entries",
+        bound(
+            serialize = "PortAddress: Serialize",
+            deserialize = "PortAddress: Deserialize<'de> + Ord"
+        )
+    )]
     pub resolved_schemas: BTreeMap<PortAddress, yss_graph_protocol::ResolvedSchemaFact>,
 }
 

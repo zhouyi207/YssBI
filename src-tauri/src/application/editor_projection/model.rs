@@ -1,6 +1,6 @@
 use crate::graph::analysis::GraphDiagnosticLocation;
-use crate::graph::analysis::contracts::{DiagnosticArguments, ResourceVersionSet};
 use yss_data_contract::DataType;
+use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
@@ -294,12 +294,12 @@ pub struct EditorProjectionInput<'a> {
     pub registry_fingerprint: [u8; 32],
 }
 
-impl From<crate::graph::analysis::contracts::DiagnosticSeverity> for EditorDiagnosticSeverity {
-    fn from(value: crate::graph::analysis::contracts::DiagnosticSeverity) -> Self {
+impl From<yss_graph_analysis_contract::DiagnosticSeverity> for EditorDiagnosticSeverity {
+    fn from(value: yss_graph_analysis_contract::DiagnosticSeverity) -> Self {
         match value {
-            crate::graph::analysis::contracts::DiagnosticSeverity::Error => Self::Error,
-            crate::graph::analysis::contracts::DiagnosticSeverity::Warning => Self::Warning,
-            crate::graph::analysis::contracts::DiagnosticSeverity::Information => Self::Information,
+            yss_graph_analysis_contract::DiagnosticSeverity::Error => Self::Error,
+            yss_graph_analysis_contract::DiagnosticSeverity::Warning => Self::Warning,
+            yss_graph_analysis_contract::DiagnosticSeverity::Information => Self::Information,
         }
     }
 }

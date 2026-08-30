@@ -329,7 +329,7 @@ where
         &settings,
         graph_basis,
         request.graph_path.clone(),
-        crate::graph::analysis::contracts::CompileId::new(
+        yss_graph_analysis_contract::CompileId::new(
             prepared_project.authority().graph_revision().get(),
         ),
     ))

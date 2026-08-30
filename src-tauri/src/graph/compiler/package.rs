@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use crate::graph::analysis::contracts::{CompilationBasis, CompileId};
 use crate::graph::analysis::result_category::GraphResultCategory;
+use yss_graph_analysis_contract::{CompilationBasis, CompileId};
 use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
 
 /// Graph-owned value reference used while lowering a document.  Application

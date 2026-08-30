@@ -1,9 +1,9 @@
 use super::RunError;
 use crate::execution::plan::legacy::{CompiledResourceRequirement, ResourceId};
-use crate::graph::analysis::contracts::CompileProvenance;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;
+use yss_graph_analysis_contract::CompileProvenance;
 
 pub trait ResourceLease: Send + Sync {
     fn resource_id(&self) -> &ResourceId;

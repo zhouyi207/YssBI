@@ -1,0 +1,17 @@
+[package]
+name = "yss-graph-analysis-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }
+
+[dev-dependencies]
+serde_json.workspace = true
+uuid.workspace = true
+yss-canonical-hash = { path = "../yss-canonical-hash" }

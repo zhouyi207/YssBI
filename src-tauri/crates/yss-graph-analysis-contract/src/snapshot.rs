@@ -1,4 +1,4 @@
-use super::{CompilationBasis, DiagnosticSeverity, NodeDiagnostic, ValidatedSemanticGraph};
+use super::{CompilationBasis, NodeDiagnostic, ValidatedSemanticGraph};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use yss_graph_protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr};
@@ -82,6 +82,27 @@ pub enum ValidationError {
     BasisMismatch,
 }
 
+pub type SemanticValidationResult<
+    GraphRevision,
+    NodeId,
+    PortAddress,
+    ConnectionId,
+    ParameterValue,
+    ResolvedType,
+    ResolvedSchema,
+> = Result<
+    ValidatedSemanticGraph<
+        GraphRevision,
+        NodeId,
+        PortAddress,
+        ConnectionId,
+        ParameterValue,
+        ResolvedType,
+        ResolvedSchema,
+    >,
+    ValidationError,
+>;
+
 pub(super) mod ordered_map_entries {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::collections::BTreeMap;
@@ -130,10 +151,68 @@ impl std::fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
+impl<
+    GraphRevision: PartialEq,
+    NodeId,
+    PortAddress: Ord,
+    ConnectionId,
+    ResourceIdentity,
+    ParameterValue,
+    TypeFact,
+    SchemaFact,
+>
+    AnalysisSnapshot<
+        GraphRevision,
+        NodeId,
+        PortAddress,
+        ConnectionId,
+        ResourceIdentity,
+        ParameterValue,
+        TypeFact,
+        SchemaFact,
+    >
+{
+    pub fn validated<ResolvedType, ResolvedSchema>(
+        &self,
+        graph: ValidatedSemanticGraph<
+            GraphRevision,
+            NodeId,
+            PortAddress,
+            ConnectionId,
+            ParameterValue,
+            ResolvedType,
+            ResolvedSchema,
+        >,
+    ) -> SemanticValidationResult<
+        GraphRevision,
+        NodeId,
+        PortAddress,
+        ConnectionId,
+        ParameterValue,
+        ResolvedType,
+        ResolvedSchema,
+    > {
+        let blocking_count = self
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity.is_blocking())
+            .count();
+        if blocking_count != 0 {
+            return Err(ValidationError::BlockingDiagnostics {
+                count: blocking_count,
+            });
+        }
+        if graph.basis != self.basis {
+            return Err(ValidationError::BasisMismatch);
+        }
+        Ok(graph)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::analysis::contracts::{ResourceVersion, ResourceVersionSet};
+    use crate::{ResourceKey, ResourceVersion, ResourceVersionSet};
     use uuid::Uuid;
     use yss_graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use yss_graph_protocol::{SchemaExpr, TypeExpr, TypeId};
@@ -217,7 +296,7 @@ mod tests {
                 graph_revision: GraphRevision::new(5),
                 registry_fingerprint: RegistryFingerprint::from_bytes([3; 32]),
                 resource_versions: ResourceVersionSet::from([(
-                    crate::graph::analysis::contracts::ResourceKey::new("resource.test"),
+                    ResourceKey::new("resource.test"),
                     ResourceVersion::new("1"),
                 )]),
                 resource_observations: Default::default(),
@@ -394,72 +473,5 @@ mod tests {
         let error = serde_json::from_value::<TestSnapshot>(json).unwrap_err();
 
         assert_eq!(error.to_string(), "duplicate ordered map key");
-    }
-}
-
-impl<
-    GraphRevision: PartialEq,
-    NodeId,
-    PortAddress: Ord,
-    ConnectionId,
-    ResourceIdentity,
-    ParameterValue,
-    TypeFact,
-    SchemaFact,
->
-    AnalysisSnapshot<
-        GraphRevision,
-        NodeId,
-        PortAddress,
-        ConnectionId,
-        ResourceIdentity,
-        ParameterValue,
-        TypeFact,
-        SchemaFact,
-    >
-{
-    pub fn has_blocking_errors(&self) -> bool {
-        self.diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
-    }
-
-    pub fn validated<ResolvedType, ResolvedSchema>(
-        &self,
-        graph: ValidatedSemanticGraph<
-            GraphRevision,
-            NodeId,
-            PortAddress,
-            ConnectionId,
-            ParameterValue,
-            ResolvedType,
-            ResolvedSchema,
-        >,
-    ) -> Result<
-        ValidatedSemanticGraph<
-            GraphRevision,
-            NodeId,
-            PortAddress,
-            ConnectionId,
-            ParameterValue,
-            ResolvedType,
-            ResolvedSchema,
-        >,
-        ValidationError,
-    > {
-        let blocking_count = self
-            .diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.severity.is_blocking())
-            .count();
-        if blocking_count != 0 {
-            return Err(ValidationError::BlockingDiagnostics {
-                count: blocking_count,
-            });
-        }
-        if graph.basis != self.basis {
-            return Err(ValidationError::BasisMismatch);
-        }
-        Ok(graph)
     }
 }

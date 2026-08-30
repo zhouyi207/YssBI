@@ -11,10 +11,6 @@ impl GraphSessionId {
         Self(value.into())
     }
 
-    pub fn unknown() -> Self {
-        Self::new("unknown")
-    }
-
     pub fn as_str(&self) -> &str {
         &self.0
     }

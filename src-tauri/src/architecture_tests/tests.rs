@@ -277,6 +277,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-analysis-contract"
+                && root.target == "yss_graph_analysis_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-document"
                 && root.target == "yss_graph_document"
                 && root.kind == ProductionRootKind::Library)
@@ -422,6 +430,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-diagnostics"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_analysis_contract"
+                    && alias.member_package == "yss-graph-analysis-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-analysis-contract"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -636,6 +662,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
     };
+    let graph_analysis_contract_root = ProductionRoot {
+        package_id: "graph-analysis-contract-package".to_owned(),
+        package: "yss-graph-analysis-contract".to_owned(),
+        target: "yss_graph_analysis_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"),
+    };
     let graph_document_root = ProductionRoot {
         package_id: "graph-document-package".to_owned(),
         package: "yss-graph-document".to_owned(),
@@ -698,6 +731,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         data_contract_root.clone(),
         database_contract_root.clone(),
         diagnostics_root.clone(),
+        graph_analysis_contract_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
         graph_registry_root.clone(),
@@ -757,6 +791,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &diagnostics_root,
                 "src-tauri/crates/yss-diagnostics/src/lib.rs",
                 "yss_diagnostics",
+            ),
+            module(
+                &graph_analysis_contract_root,
+                "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
+                "yss_graph_analysis_contract",
             ),
             module(
                 &graph_document_root,
@@ -838,6 +877,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-diagnostics/src/lib.rs"],
         RustLayer::Diagnostics
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"],
+        RustLayer::Graph
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-document/src/lib.rs"],
@@ -1480,6 +1523,71 @@ fn graph_registry_has_one_graph_crate_owner_without_compatibility_module() {
         assert!(
             !sources.contains(removed),
             "graph registry/catalog must not restore removed dead API '{removed}'"
+        );
+    }
+}
+
+#[test]
+fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-analysis-contract/Cargo.toml",
+        "src-tauri/crates/yss-graph-analysis-contract/src/basis.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/diagnostic.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/provenance.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/semantic.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/snapshot.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph analysis contract owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph/analysis/contracts").exists(),
+        "the root crate must not retain a graph analysis contract compatibility module"
+    );
+
+    let sources = [
+        "src-tauri/crates/yss-graph-analysis-contract/src/basis.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/diagnostic.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/provenance.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/semantic.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/snapshot.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "AnalysisResourceResolver",
+        "ResolvedFunctionValue",
+        "CompileProjection",
+        "pub type Severity",
+        "pub type Location",
+        "fn unknown(",
+        "has_blocking_errors",
+    ] {
+        assert!(
+            !sources.contains(removed),
+            "graph analysis contract must not restore removed dead API '{removed}'"
+        );
+    }
+
+    let compatibility = std::fs::read_to_string(root.join("src-tauri/src/graph/compatibility.rs"))
+        .expect("graph compatibility source must be readable");
+    for removed in [
+        "cfg(all(test, any()))",
+        "fn from_projection(",
+        "fn source_from_projection(",
+    ] {
+        assert!(
+            !compatibility.contains(removed),
+            "graph compatibility must not restore removed dead projection path '{removed}'"
         );
     }
 }

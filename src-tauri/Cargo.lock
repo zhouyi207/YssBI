@@ -9134,6 +9134,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-analysis-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+ "yss-canonical-hash",
+ "yss-graph-document",
+ "yss-graph-protocol",
+ "yss-graph-registry",
+]
+
+[[package]]
 name = "yss-graph-document"
 version = "0.1.0"
 dependencies = [
@@ -9272,6 +9285,7 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-diagnostics",
+ "yss-graph-analysis-contract",
  "yss-graph-document",
  "yss-graph-protocol",
  "yss-graph-registry",

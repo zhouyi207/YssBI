@@ -9,10 +9,6 @@ use crate::execution::plan::{
     PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
     ValueRef,
 };
-use crate::graph::analysis::contracts::{
-    CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
-    ResourceVersion as GraphResourceVersion,
-};
 use crate::graph::analysis::result_category::GraphResultCategory;
 use crate::graph::compiler::{
     GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
@@ -28,6 +24,10 @@ use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
+use yss_graph_analysis_contract::{
+    CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
+    ResourceVersion as GraphResourceVersion,
+};
 use yss_graph_document::{GraphResourcePath, GraphRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

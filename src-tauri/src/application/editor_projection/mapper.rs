@@ -1,5 +1,4 @@
 use super::model::*;
-use crate::graph::analysis::contracts::DiagnosticLocation;
 use crate::graph::analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
     GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
@@ -7,6 +6,7 @@ use crate::graph::analysis::{
 };
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
+use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 

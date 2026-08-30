@@ -592,3 +592,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 provider/type/category/node registry、校验与 fingerprint 迁入独立
   `src-tauri/crates/yss-graph-registry/`；删除根兼容 module，并清除 nominal prepared-value/no-op
   lowerer、永久禁用 legacy lowerer、无调用 snapshot helper 与重复 capability API。
+- [ ] 将 analysis snapshot、semantic graph、diagnostic、basis 与 provenance 迁入独立
+  `src-tauri/crates/yss-graph-analysis-contract/`；删除根兼容 module，并清除零调用的 test-only
+  resource resolver、projection/alias helper、永久禁用 compatibility projection 路径与重复
+  unknown/blocking API。

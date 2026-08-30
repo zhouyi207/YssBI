@@ -529,7 +529,7 @@ mod tests {
         struct EmptyResources;
 
         impl crate::graph::compiler::engine::ResourceSnapshot for EmptyResources {
-            fn versions(&self) -> crate::graph::analysis::contracts::ResourceVersionSet {
+            fn versions(&self) -> yss_graph_analysis_contract::ResourceVersionSet {
                 Default::default()
             }
         }

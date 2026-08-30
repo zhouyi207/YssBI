@@ -1,11 +1,9 @@
-pub mod contracts;
-
-use crate::graph::analysis::contracts::{
+use crate::graph::resource_catalog::ResourceCatalogSnapshot;
+use crate::graph::settings::GraphCompileSettings;
+use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
 };
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
-use crate::graph::settings::GraphCompileSettings;
 use yss_graph_document::GraphRevision;
 use yss_graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
 use yss_graph_document::{DynamicPortBinding, PortRef};
@@ -491,8 +489,8 @@ fn graph_port_editor_fact(editor: &PortEditorSpec) -> GraphPortEditorFact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::analysis::contracts::CompilationBasis;
     use std::collections::BTreeMap;
+    use yss_graph_analysis_contract::CompilationBasis;
     use yss_graph_registry::RegistryFingerprint;
 
     #[test]

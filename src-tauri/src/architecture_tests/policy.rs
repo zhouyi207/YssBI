@@ -1402,14 +1402,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::editor_projection::model::EditorCompilationStage",
             "yssbi_lib::application::editor_projection::model::ParameterEditorKind",
             "yssbi_lib::graph::analysis::GraphDiagnosticLocation",
-            "yssbi_lib::graph::analysis::contracts::DiagnosticLocation",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Connection",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Graph",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Node",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Parameter",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Port",
-            "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Resource",
+            "yss_graph_analysis_contract::DiagnosticLocation",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Connection",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Graph",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Node",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Parameter",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Port",
+            "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Resource",
             "yss_graph_registry::fingerprint::RegistryFingerprint",
             "yss_graph_protocol::PortDirection",
             "yss_graph_protocol::PortKey",
@@ -1431,8 +1431,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/schema/editor_projection_types.rs",
         fully_qualified_owner: "yssbi_lib::schema::editor_projection_types",
         canonical_origin_targets: &[
-            "yssbi_lib::graph::analysis::contracts::ResourceVersionSet",
-            "yssbi_lib::graph::analysis::contracts::basis::ResourceVersionSet",
+            "yss_graph_analysis_contract::ResourceVersionSet",
+            "yss_graph_analysis_contract::basis::ResourceVersionSet",
             "yss_graph_protocol::dataframe::FilterOperator",
             "yss_graph_protocol::parameter::ParameterPresentation",
             "yss_graph_protocol::types::TypeExpr",
@@ -1767,7 +1767,10 @@ fn non_build_memberships(
             | "yss-variable-contract"
     ) {
         layers.insert(RustLayer::PureLeaf);
-    } else if package == "yss-graph-registry" {
+    } else if matches!(
+        package,
+        "yss-graph-analysis-contract" | "yss-graph-registry"
+    ) {
         layers.insert(RustLayer::Graph);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);

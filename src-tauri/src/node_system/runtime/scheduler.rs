@@ -18,8 +18,8 @@ use crate::execution::plan::legacy::{
     FunctionPlanHandle, OperationIndex, PlannedKernel, PlannedPublication, PlannedValueContract,
     PlannedValueKind, ResultPresentation, StructuredControlRegion, ValueRef, WorkloadClass,
 };
-use crate::graph::analysis::contracts::ResourceVersionSet;
 use crate::node_system::runtime::RunId;
+use yss_graph_analysis_contract::ResourceVersionSet;
 use yss_graph_protocol::{CachePolicy, RetryPolicy, Value};
 
 use std::cmp::Reverse;

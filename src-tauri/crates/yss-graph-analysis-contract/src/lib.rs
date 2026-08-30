@@ -9,19 +9,12 @@ mod provenance;
 mod semantic;
 mod snapshot;
 
-#[cfg(test)]
 pub use basis::{
-    AnalysisResourceReads, AnalysisResourceResolver, ResolvedDatabase, ResolvedDatabaseValue,
-    ResolvedFunction, ResolvedFunctionValue, ResolvedResource, ResolvedVariable,
-    ResourceObservationSet, ResourceResolutionError,
-};
-pub use basis::{
-    CompilationBasis, CompileId, CompileProjection, ResourceKey, ResourceObservedState,
+    CompilationBasis, CompileId, ResourceKey, ResourceObservationSet, ResourceObservedState,
     ResourceVersion, ResourceVersionSet,
 };
 pub use diagnostic::{
-    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, Location,
-    NodeDiagnostic, Severity,
+    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
 };
 
 /// Graph localization consumes a caller-provided lookup and does not own a
@@ -32,11 +25,11 @@ pub trait LocalizationLookup {
 pub use provenance::{CompileProvenance, GraphSessionId};
 pub use semantic::{
     ControlEdge, EffectDependency, SemanticDependency, ValidatedSemanticGraph,
-    ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,
+    ValidatedSemanticNode, ValidatedSemanticNodeSet, ValidatedSemanticPort, ValueEdge,
 };
 pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,
-    SchemaFacts, TypeFacts, ValidationError,
+    SchemaFacts, SemanticValidationResult, TypeFacts, ValidationError,
 };
 
 #[cfg(test)]

@@ -15,7 +15,7 @@ mod streams;
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
 use crate::execution::plan::legacy::*;
-use crate::graph::analysis::contracts::{
+use yss_graph_analysis_contract::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
 use yss_graph_protocol::{

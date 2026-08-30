@@ -7,7 +7,7 @@ mod statistics;
 
 use super::*;
 use crate::execution::plan::legacy::*;
-use crate::graph::analysis::contracts::{CompilationBasis, CompileId, CompileProvenance};
+use yss_graph_analysis_contract::{CompilationBasis, CompileId, CompileProvenance};
 use crate::graph::compiler::engine::{GraphCompiler, ResourceSnapshot};
 use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
@@ -88,7 +88,7 @@ fn compile_builtin_flow(
 ) -> crate::graph::compiler::engine::CompileResult {
     struct EmptyResources;
     impl ResourceSnapshot for EmptyResources {
-        fn versions(&self) -> crate::graph::analysis::contracts::ResourceVersionSet {
+        fn versions(&self) -> yss_graph_analysis_contract::ResourceVersionSet {
             BTreeMap::new()
         }
     }
@@ -244,8 +244,8 @@ fn execute_variable_kernel(
     let snapshot = ProjectResourceSnapshot::new(
         ProjectSessionId::new("variable-series-test"),
         BTreeMap::from([(
-            crate::graph::analysis::contracts::ResourceKey::new(resource.as_str()),
-            crate::graph::analysis::contracts::ResourceVersion::new("1"),
+            yss_graph_analysis_contract::ResourceKey::new(resource.as_str()),
+            yss_graph_analysis_contract::ResourceVersion::new("1"),
         )]),
     )
     .with_variable(resource.clone(), Arc::new(variable));

@@ -3,7 +3,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use std::sync::{Barrier, Mutex};
 
-use crate::graph::analysis::contracts::CompilationBasis;
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
 use crate::graph::catalog::{
     BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
@@ -13,6 +12,7 @@ use crate::graph::error::GraphMutationError;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use thiserror::Error;
 use yss_data_contract::DataType;
+use yss_graph_analysis_contract::CompilationBasis;
 use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
 };

@@ -3,9 +3,9 @@ use crate::execution::plan::legacy::{
     CallArgumentBinding, CallResultBinding, ExecutionPlan, ExecutionSemanticsVersion,
     FunctionPlanHandle, OperationStableId,
 };
-use crate::graph::analysis::contracts::ResourceVersionSet;
 use std::collections::BTreeMap;
 use yss_canonical_hash::hash_canonical;
+use yss_graph_analysis_contract::ResourceVersionSet;
 
 use std::sync::{Arc, Condvar, Mutex};
 

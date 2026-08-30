@@ -1,6 +1,6 @@
-use crate::graph::analysis::contracts::{DiagnosticArguments, LocalizationLookup};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_analysis_contract::{DiagnosticArguments, LocalizationLookup};
 use yss_graph_protocol::{I18nKey, NodeTypeId};
 use yss_graph_registry::{I18nManifest, NodeRegistry};
 

@@ -1,7 +1,7 @@
-use crate::graph::analysis::contracts::ResourceVersionSet;
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::{Deserialize, Serialize};
 use yss_data_contract::DataType;
+use yss_graph_analysis_contract::ResourceVersionSet;
 use yss_graph_protocol::{ParameterPresentation, TypeExpr};
 use yss_graph_registry::RegistryFingerprint;
 

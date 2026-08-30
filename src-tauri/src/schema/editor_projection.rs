@@ -226,31 +226,29 @@ fn map_location(
     location: &crate::graph::analysis::GraphDiagnosticLocation,
 ) -> DiagnosticLocationDto {
     match location {
-        crate::graph::analysis::contracts::DiagnosticLocation::Graph => {
-            DiagnosticLocationDto::Graph
-        }
-        crate::graph::analysis::contracts::DiagnosticLocation::Node(node_id) => {
+        yss_graph_analysis_contract::DiagnosticLocation::Graph => DiagnosticLocationDto::Graph,
+        yss_graph_analysis_contract::DiagnosticLocation::Node(node_id) => {
             DiagnosticLocationDto::Node {
                 node_id: node_id.to_string().into(),
             }
         }
-        crate::graph::analysis::contracts::DiagnosticLocation::Port(address) => {
+        yss_graph_analysis_contract::DiagnosticLocation::Port(address) => {
             DiagnosticLocationDto::Port {
                 address: address.into(),
             }
         }
-        crate::graph::analysis::contracts::DiagnosticLocation::Connection(connection_id) => {
+        yss_graph_analysis_contract::DiagnosticLocation::Connection(connection_id) => {
             DiagnosticLocationDto::Connection {
                 connection_id: connection_id.to_string().into(),
             }
         }
-        crate::graph::analysis::contracts::DiagnosticLocation::Parameter { node_id, key } => {
+        yss_graph_analysis_contract::DiagnosticLocation::Parameter { node_id, key } => {
             DiagnosticLocationDto::Parameter {
                 node_id: node_id.to_string().into(),
                 key: key.as_str().into(),
             }
         }
-        crate::graph::analysis::contracts::DiagnosticLocation::Resource(identity) => {
+        yss_graph_analysis_contract::DiagnosticLocation::Resource(identity) => {
             DiagnosticLocationDto::Resource {
                 identity: identity.clone(),
             }
@@ -286,11 +284,11 @@ mod tests {
         EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
         EditorTypeSummary,
     };
-    use crate::graph::analysis::contracts::{
-        DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
-    };
     use serde_json::json;
     use std::collections::BTreeMap;
+    use yss_graph_analysis_contract::{
+        DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
+    };
     use yss_graph_document::{
         ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
     };

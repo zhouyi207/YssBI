@@ -241,7 +241,7 @@ fn print_output_preserves_exact_first_second_third_order() {
 fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
     struct Resources;
     impl ResourceSnapshot for Resources {
-        fn versions(&self) -> crate::graph::analysis::contracts::ResourceVersionSet {
+        fn versions(&self) -> yss_graph_analysis_contract::ResourceVersionSet {
             BTreeMap::new()
         }
     }

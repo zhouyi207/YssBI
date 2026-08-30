@@ -31,8 +31,6 @@ impl DiagnosticSeverity {
     }
 }
 
-pub type Severity = DiagnosticSeverity;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity> {
     Graph,
@@ -42,9 +40,6 @@ pub enum DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity>
     Parameter { node_id: NodeId, key: ParameterKey },
     Resource(ResourceIdentity),
 }
-
-pub type Location<NodeId, PortAddress, ConnectionId, ResourceIdentity> =
-    DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeDiagnostic<NodeId, PortAddress, ConnectionId, ResourceIdentity> {
