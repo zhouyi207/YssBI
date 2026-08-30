@@ -16,6 +16,7 @@ pub(super) const PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE: &str = "rust.pure-leaf.grap
 pub(super) const TABULAR_CONTRACT_RULE: &str = "rust.tabular.contract";
 pub(super) const PROJECT_WATCHER_BOUNDARY_RULE: &str = "rust.project-watcher.boundary";
 const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/src/graph_document/model.rs";
+const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/src/graph_document/";
 
 const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
     "src-tauri/src/project/project_change.rs",
@@ -120,6 +121,9 @@ pub(super) fn pure_leaf_graph_document_json_violations(
     let mut graph_document_allowed_dependencies = 0;
     for dependency in dependencies.iter().filter(|dependency| {
         classification.get(&dependency.source_file) == Some(&RustLayer::PureLeaf)
+            && dependency
+                .source_file
+                .starts_with(GRAPH_DOCUMENT_SOURCE_PREFIX)
             && matches!(
                 &dependency.origin,
                 CanonicalOrigin::External(origin) if origin.package_name == "serde_json"
