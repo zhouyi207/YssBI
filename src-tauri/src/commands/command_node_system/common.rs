@@ -34,23 +34,16 @@ pub(super) fn parse_opaque_u64(field: &'static str, value: &str) -> Result<u64, 
 }
 
 pub(super) fn mutation_conflict_to_command_error(
-    error: crate::graph::document::MutationConflict,
-    revision_conflict_code: &'static str,
+    error: yss_graph_editor::MutationConflict,
 ) -> CommandError {
     match error {
-        crate::graph::document::MutationConflict::RecoveryRequired(_) => CommandError::expected(
-            "project_recovery_required",
-        )
-        .with_details(RecoveryRequiredDetails {
-            recovery_required: true,
-        }),
-        public_error @ (crate::graph::document::MutationConflict::CatalogResourceStale(_)
-        | crate::graph::document::MutationConflict::CatalogDescriptorInvalid(_)
-        | crate::graph::document::MutationConflict::ClipboardSubgraphInvalid(_)
-        | crate::graph::document::MutationConflict::ReferencedResourceUnavailable(
-            _,
-        )) => CommandError::expected(public_error.code()),
-        crate::graph::document::MutationConflict::Document(
+        public_error @ (yss_graph_editor::MutationConflict::CatalogResourceStale(_)
+        | yss_graph_editor::MutationConflict::CatalogDescriptorInvalid(_)
+        | yss_graph_editor::MutationConflict::ClipboardSubgraphInvalid(_)
+        | yss_graph_editor::MutationConflict::ReferencedResourceUnavailable(_)) => {
+            CommandError::expected(public_error.code())
+        }
+        yss_graph_editor::MutationConflict::Document(
             yss_graph_document_edit::DocumentError::ConnectionNotFound(_),
         ) => {
             tracing::warn!(
@@ -63,7 +56,7 @@ pub(super) fn mutation_conflict_to_command_error(
             CommandError::expected("graph_connection_not_found")
                 .with_details(GraphMutationErrorDetailsDto::VALUE)
         }
-        crate::graph::document::MutationConflict::Editor(error) => {
+        yss_graph_editor::MutationConflict::Editor(error) => {
             tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",
                 diagnostic_domain = "graph",
@@ -74,17 +67,6 @@ pub(super) fn mutation_conflict_to_command_error(
             );
             CommandError::expected(error.code.as_str())
                 .with_details(GraphMutationErrorDetailsDto::VALUE)
-        }
-        crate::graph::document::MutationConflict::StaleRevision { .. } => {
-            let command_error = CommandError::expected(revision_conflict_code);
-            if revision_conflict_code == "graph_revision_conflict" {
-                command_error.with_details(GraphMutationErrorDetailsDto::VALUE)
-            } else {
-                command_error
-            }
-        }
-        crate::graph::document::MutationConflict::StaleProjectLifecycle(_) => {
-            CommandError::expected("stale_project_lifecycle")
         }
         _ => CommandError::internal(error),
     }
@@ -112,7 +94,7 @@ pub(super) fn resource_mutation_to_command_error(
         },
         ResourceMutationApplicationError::Project(error) => CommandError::from(error),
         ResourceMutationApplicationError::Mutation(error) => {
-            mutation_conflict_to_command_error(error, revision_conflict_code)
+            mutation_conflict_to_command_error(error)
         }
         ResourceMutationApplicationError::History(error) => match error {
             crate::project::ProjectHistoryMutationError::StaleProjectLifecycle(_) => {
@@ -192,7 +174,9 @@ pub(super) fn resource_mutation_to_command_error(
                 CommandError::expected("duplicate_operation")
             }
         },
-        ResourceMutationApplicationError::GraphApplication(error) => CommandError::internal(error),
+        ResourceMutationApplicationError::GraphUnavailable { .. } => {
+            CommandError::expected("graph_not_loaded")
+        }
         ResourceMutationApplicationError::Catalog(error) => {
             CommandError::diagnosed("catalog_project_read_failed", error)
         }

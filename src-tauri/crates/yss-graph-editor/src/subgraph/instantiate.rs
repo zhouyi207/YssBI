@@ -57,25 +57,6 @@ pub(crate) fn instantiate_subgraph(
     Ok(patch)
 }
 
-#[cfg(test)]
-pub(crate) fn instantiate_subgraph_for_test(
-    graph_path: &GraphResourcePath,
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    catalog: &CatalogMutationValidationSnapshot,
-    snapshot: ClipboardSubgraph,
-    anchor: NodePosition,
-) -> Result<GraphDocumentPatch, MutationConflict> {
-    instantiate_subgraph(
-        graph_path,
-        document,
-        registry,
-        catalog,
-        ValidatedClipboardSubgraph(snapshot),
-        anchor,
-    )
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct LocalInstanceKey {
     node_id: ClipboardNodeId,
@@ -258,76 +239,23 @@ fn validate_resource_creation(
         ))
     })?;
     validate_resource_path(resource_path, create_args)?;
-    let (allowed, binding, kind, in_scope) = match (create_args, resource) {
-        (
-            ResourceBoundCreateArgs::Function,
-            CatalogMutationResource::Function {
-                allowed_node_type_id,
-                parameter_binding,
-                ..
-            },
-        ) => (
-            allowed_node_type_id == &protocol.type_id,
-            parameter_binding.as_ref(),
-            ResourceDisplayKind::Function,
-            true,
-        ),
-        (
-            ResourceBoundCreateArgs::Variable,
-            CatalogMutationResource::Variable {
-                allowed_node_type_ids,
-                parameter_binding,
-                scope,
-                ..
-            },
-        ) => (
-            allowed_node_type_ids.contains(&protocol.type_id),
-            parameter_binding.as_ref(),
-            ResourceDisplayKind::Variable,
-            variable_in_scope(graph_path, scope),
-        ),
-        (
-            ResourceBoundCreateArgs::Database,
-            CatalogMutationResource::Database {
-                allowed_node_type_id,
-                parameter_binding,
-                ..
-            },
-        ) => (
-            allowed_node_type_id == &protocol.type_id,
-            parameter_binding.as_ref(),
-            ResourceDisplayKind::Database,
-            true,
-        ),
-        _ => {
-            return Err(invalid_clipboard(format!(
-                "resource '{}' kind does not match clipboard creation arguments",
-                resource_path.as_str()
-            )));
-        }
-    };
-    if !allowed || !in_scope {
+    if resource.create_args() != create_args {
+        return Err(invalid_clipboard(format!(
+            "resource '{}' kind does not match clipboard creation arguments",
+            resource_path.as_str()
+        )));
+    }
+    let in_scope = resource
+        .variable_scope()
+        .is_none_or(|scope| crate::compatibility::variable_in_scope(graph_path, scope));
+    if !in_scope {
         return Err(unavailable_resource(format!(
             "resource '{}' is unavailable for this graph and node type",
             resource_path.as_str()
         )));
     }
-    let NodeInstanceDisplaySpec::ResourceParameter {
-        parameter,
-        kind: expected_kind,
-    } = &protocol.instance_display
-    else {
-        return Err(invalid_clipboard(format!(
-            "node type '{}' is not resource-bound",
-            protocol.type_id
-        )));
-    };
-    if parameter.as_str() != binding || *expected_kind != kind {
-        return Err(invalid_clipboard(format!(
-            "resource '{}' binding does not match protocol authority",
-            resource_path.as_str()
-        )));
-    }
+    let parameter = crate::compatibility::resource_parameter(protocol, create_args)
+        .map_err(invalid_clipboard)?;
     if parameters.get(parameter)
         != Some(&serde_json::Value::String(
             resource_path.as_str().to_owned(),
@@ -346,20 +274,7 @@ fn validate_resource_path(
     create_args: ResourceBoundCreateArgs,
 ) -> Result<(), MutationConflict> {
     let path = resource_path.as_str();
-    let valid = match create_args {
-        ResourceBoundCreateArgs::Function => yss_graph_document::GraphResourcePath::new(path)
-            .is_ok_and(|canonical| {
-                canonical.as_str() == path && canonical.as_str().starts_with("functions/")
-            }),
-        ResourceBoundCreateArgs::Variable => path
-            .strip_prefix("variables/")
-            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-            .is_some_and(|id| format!("variables/{id}") == path),
-        ResourceBoundCreateArgs::Database => path
-            .strip_prefix("databases/")
-            .is_some_and(|id| !id.is_empty()),
-    };
-    if valid {
+    if crate::compatibility::resource_path_is_valid(resource_path, create_args) {
         Ok(())
     } else {
         Err(invalid_clipboard(format!(

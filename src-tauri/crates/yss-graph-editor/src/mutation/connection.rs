@@ -1,88 +1,27 @@
 use super::*;
 
-pub(super) struct MutationPort<'a> {
-    pub(super) spec: &'a PortSpec,
-    pub(super) binding: Option<&'a DynamicPortBinding>,
-}
+type MutationPort<'a> = crate::compatibility::ResolvedEditorPort<'a>;
 
 pub(super) fn resolve_mutation_port<'a>(
     document: &'a GraphDocument,
     registry: &'a NodeRegistry,
     address: &PortAddress,
 ) -> Result<MutationPort<'a>, MutationConflict> {
-    let node = document.nodes.get(&address.node_id).ok_or_else(|| {
-        editor_error(
-            EditorMutationErrorCode::GraphPortNotFound,
-            format!("endpoint node '{}' does not exist", address.node_id),
-        )
-    })?;
-    let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
-        invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
-    })?;
-    let template = match &address.port {
-        PortRef::Declared { key } => key,
-        PortRef::Instance { template, .. } => template,
-    };
-    let spec = protocol
-        .interface
-        .ports
-        .iter()
-        .find(|spec| &spec.key == template)
-        .ok_or_else(|| {
-            editor_error(
-                EditorMutationErrorCode::GraphPortNotFound,
-                format!("unknown port '{address}'"),
-            )
-        })?;
-    let binding = match &address.port {
-        PortRef::Declared { .. } => {
-            if !matches!(spec.instances, PortInstances::Declared) {
-                return Err(editor_error(
-                    EditorMutationErrorCode::GraphPortNotFound,
-                    format!("port '{address}' requires an instance address"),
-                ));
-            }
-            None
-        }
-        PortRef::Instance { .. } => {
-            let binding = document.port_bindings.get(address).ok_or_else(|| {
-                editor_error(
-                    EditorMutationErrorCode::GraphPortNotFound,
-                    format!("instance port '{address}' has no binding"),
-                )
-            })?;
-            let compatible = matches!(
-                (&spec.instances, binding),
-                (
-                    PortInstances::UserCreated { .. },
-                    DynamicPortBinding::UserCreated { .. }
-                ) | (
-                    PortInstances::Derived { .. },
-                    DynamicPortBinding::Resolved { .. } | DynamicPortBinding::Orphan { .. }
-                )
-            );
-            if !compatible {
-                return Err(invalid_editor_mutation(format!(
-                    "port binding kind does not match template '{address}'"
-                )));
-            }
-            Some(binding)
-        }
-    };
-    Ok(MutationPort { spec, binding })
+    crate::compatibility::resolve_editor_port(document, registry, address)
+        .map_err(MutationConflict::Editor)
 }
 
 pub(crate) fn move_connection_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    snapshot: &EditorMutationValidationSnapshot,
+    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     source: PortAddress,
     target: PortAddress,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     move_connection_operations_with_id_allocator(
         document,
         registry,
-        snapshot,
+        catalog,
         source,
         target,
         &ConnectionId::new,
@@ -92,19 +31,14 @@ pub(crate) fn move_connection_operations(
 pub(crate) fn move_connection_operations_with_id_allocator(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    snapshot: &EditorMutationValidationSnapshot,
+    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     source: PortAddress,
     target: PortAddress,
     allocate: &dyn Fn() -> ConnectionId,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    if snapshot.graph_revision != document.revision {
-        return Err(MutationConflict::Projection(
-            "editor mutation validation snapshot revision does not match the document".into(),
-        ));
-    }
     let source_port = resolve_mutation_port(document, registry, &source)?;
     let target_port = resolve_mutation_port(document, registry, &target)?;
-    validate_move_endpoints(snapshot, &source, &target)?;
+    validate_move_endpoints(&source_port, &target_port)?;
     if source == target {
         return Err(editor_error(
             EditorMutationErrorCode::GraphConnectionMoveSamePort,
@@ -136,9 +70,14 @@ pub(crate) fn move_connection_operations_with_id_allocator(
                 PortDirection::Output => connection.output = target.clone(),
                 PortDirection::Input => connection.input = target.clone(),
             }
-            snapshot
-                .validate_connection_types(&connection.output, &connection.input)
-                .map_err(MutationConflict::Editor)?;
+            crate::compatibility::validate_connection_types(
+                document,
+                registry,
+                catalog,
+                &connection.output,
+                &connection.input,
+            )
+            .map_err(MutationConflict::Editor)?;
             Ok(connection)
         })
         .collect::<Result<Vec<_>, MutationConflict>>()?;
@@ -209,35 +148,24 @@ pub(crate) fn move_connection_operations_with_id_allocator(
 }
 
 fn validate_move_endpoints(
-    snapshot: &EditorMutationValidationSnapshot,
-    source: &PortAddress,
-    target: &PortAddress,
+    source: &MutationPort<'_>,
+    target: &MutationPort<'_>,
 ) -> Result<(), MutationConflict> {
-    let source_port = snapshot.ports.get(source).ok_or_else(|| {
-        editor_error(
-            EditorMutationErrorCode::GraphPortNotFound,
-            format!("move source port '{source}' is absent from validation snapshot"),
-        )
-    })?;
-    let target_port = snapshot.ports.get(target).ok_or_else(|| {
-        editor_error(
-            EditorMutationErrorCode::GraphPortNotFound,
-            format!("move target port '{target}' is absent from validation snapshot"),
-        )
-    })?;
-    if source_port.orphan || target_port.orphan {
+    if matches!(source.binding, Some(DynamicPortBinding::Orphan { .. }))
+        || matches!(target.binding, Some(DynamicPortBinding::Orphan { .. }))
+    {
         return Err(editor_error(
             EditorMutationErrorCode::GraphPortOrphan,
             "orphan ports cannot be move endpoints",
         ));
     }
-    if source_port.direction != target_port.direction {
+    if source.spec.direction != target.spec.direction {
         return Err(editor_error(
             EditorMutationErrorCode::GraphConnectionDirectionMismatch,
             "connection move endpoints have different directions",
         ));
     }
-    if source_port.kind != target_port.kind {
+    if source.spec.kind != target.spec.kind {
         return Err(editor_error(
             EditorMutationErrorCode::GraphConnectionKindMismatch,
             "connection move endpoints have different kinds",
@@ -246,89 +174,12 @@ fn validate_move_endpoints(
     Ok(())
 }
 
-pub(super) fn projected_connect_operations(
-    graph_path: &GraphResourcePath,
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    output: PortAddress,
-    input: PortAddress,
-    order: Option<OrderKey>,
-    plan: ProjectedConnectPlan,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let projected_is_output = output == plan.projection_address;
-    let projected_is_input = input == plan.projection_address;
-    if projected_is_output == projected_is_input {
-        return Err(invalid_editor_mutation(
-            "exactly one connection endpoint must match the projected member",
-        ));
-    }
-    if projected_is_output != (plan.direction == PortDirection::Output)
-        || projected_is_input != (plan.direction == PortDirection::Input)
-    {
-        return Err(invalid_editor_mutation(
-            "connection endpoints have invalid directions",
-        ));
-    }
-    let ordinary = if projected_is_output {
-        input.clone()
-    } else {
-        output.clone()
-    };
-    let ordinary_port = resolve_mutation_port(document, registry, &ordinary)?;
-    if matches!(
-        ordinary_port.binding,
-        Some(DynamicPortBinding::Orphan { .. })
-    ) {
-        return Err(invalid_editor_mutation("orphan ports cannot be connected"));
-    }
-    let expected_ordinary_direction = match plan.member.direction() {
-        PortDirection::Output => PortDirection::Input,
-        PortDirection::Input => PortDirection::Output,
-    };
-    if ordinary_port.spec.direction != expected_ordinary_direction {
-        return Err(invalid_editor_mutation(
-            "connection endpoints have invalid directions",
-        ));
-    }
-    if ordinary_port.spec.kind != plan.kind {
-        return Err(invalid_editor_mutation(
-            "connection endpoint kinds do not match",
-        ));
-    }
-    let ordinary_capacity = endpoint_capacity(document, &ordinary, ordinary_port.spec.connections)?;
-    let input_connections = if plan.direction == PortDirection::Input {
-        plan.connections
-    } else {
-        ordinary_port.spec.connections
-    };
-    validate_connection_order(input_connections, order.as_ref())?;
-    let mut operations = match ordinary_capacity {
-        EndpointCapacity::Append => Vec::new(),
-        EndpointCapacity::Replace(connections) => connections
-            .into_iter()
-            .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
-            .collect(),
-    };
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
-    validate_connection_capacity(&staged, &ordinary, ordinary_port.spec.connections)?;
-    operations.extend(materialize_projected_member_operations(
-        graph_path,
-        document,
-        plan.member,
-        plan.authorization,
-        ordinary,
-        order,
-    )?);
-    Ok(operations)
-}
-
 pub(crate) fn validate_resolved_dynamic_binding_authority(
     protocol: &NodeProtocol,
     spec: &PortSpec,
     parameters: &ParameterValues,
     origin: &DynamicMemberLocator,
-    catalog: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
+    catalog: &crate::compatibility::CatalogMutationValidationSnapshot,
 ) -> Result<yss_graph_protocol::TypeExpr, MutationConflict> {
     let PortInstances::Derived { resolver } = &spec.instances else {
         return Err(invalid_editor_mutation(
@@ -340,26 +191,17 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
             function,
             parameter,
         } => {
-            let target = parameters
-                .get(
-                    &yss_graph_protocol::ParameterKey::new("target")
-                        .expect("function target is a valid parameter key"),
-                )
-                .and_then(serde_json::Value::as_str);
-            if target != Some(function.as_str()) {
-                return Err(invalid_editor_mutation(
-                    "resolved function member does not match the node target",
-                ));
-            }
-            let path = CatalogResourcePath::new(function.as_str());
-            let Some(crate::graph::compatibility::CatalogMutationResource::Function {
-                signature,
-                ..
-            }) = catalog.resources.get(&path)
+            let resource = authoritative_origin_resource(
+                protocol,
+                parameters,
+                function.as_str(),
+                ResourceBoundCreateArgs::Function,
+                catalog,
+            )?;
+            let crate::compatibility::CatalogMutationResource::Function { signature, .. } =
+                resource
             else {
-                return Err(MutationConflict::ReferencedResourceUnavailable(
-                    format!("function resource '{}' is unavailable", function.as_str()).into(),
-                ));
+                unreachable!("authoritative resource kind was checked before destructuring");
             };
             let resolver_id = resolver.as_str();
             let type_name = if resolver_id == yss_graph_catalog::FUNCTION_CALL_ARGUMENTS_RESOLVER
@@ -387,7 +229,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     protocol.type_id
                 ))
             })?;
-            crate::graph::compatibility::function_type_expr(type_name).map_err(|error| {
+            crate::compatibility::function_type_expr(type_name).map_err(|error| {
                 invalid_editor_mutation(format!(
                     "function member '{}:{}' has invalid authoritative type '{}': {error}",
                     function.as_str(),
@@ -397,15 +239,13 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
             })
         }
         DynamicMemberLocator::SchemaField { source, field } => {
-            let path = CatalogResourcePath::new(source.as_str());
-            if !matches!(
-                catalog.resources.get(&path),
-                Some(crate::graph::compatibility::CatalogMutationResource::Database { .. })
-            ) {
-                return Err(MutationConflict::ReferencedResourceUnavailable(
-                    format!("database resource '{}' is unavailable", source.as_str()).into(),
-                ));
-            }
+            authoritative_origin_resource(
+                protocol,
+                parameters,
+                source.as_str(),
+                ResourceBoundCreateArgs::Database,
+                catalog,
+            )?;
             if resolver.as_str() != yss_graph_catalog::DATAFRAME_COLUMNS_RESOLVER {
                 return Err(invalid_editor_mutation(format!(
                     "schema member '{}:{}' is invalid for template '{}'",
@@ -424,6 +264,38 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
             ))
         }
     }
+}
+
+fn authoritative_origin_resource<'a>(
+    protocol: &NodeProtocol,
+    parameters: &ParameterValues,
+    resource_path: &str,
+    create_args: ResourceBoundCreateArgs,
+    catalog: &'a crate::compatibility::CatalogMutationValidationSnapshot,
+) -> Result<&'a crate::compatibility::CatalogMutationResource, MutationConflict> {
+    let parameter = crate::compatibility::resource_parameter(protocol, create_args)
+        .map_err(invalid_editor_mutation)?;
+    if parameters
+        .get(parameter)
+        .and_then(serde_json::Value::as_str)
+        != Some(resource_path)
+    {
+        return Err(invalid_editor_mutation(
+            "resolved dynamic member does not match the node resource binding",
+        ));
+    }
+    let path = CatalogResourcePath::new(resource_path);
+    let resource = catalog.resources.get(&path).ok_or_else(|| {
+        MutationConflict::ReferencedResourceUnavailable(
+            format!("catalog resource '{resource_path}' is unavailable").into(),
+        )
+    })?;
+    if resource.create_args() != create_args {
+        return Err(invalid_editor_mutation(
+            "resolved dynamic member resource does not match protocol authority",
+        ));
+    }
+    Ok(resource)
 }
 
 pub(crate) fn validate_subgraph_port(
@@ -445,17 +317,8 @@ pub(crate) fn validate_subgraph_connection(
     let input_port = resolve_mutation_port(document, registry, input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
     validate_connection_does_not_exist(document, output, input)?;
-    let output_type = authoritative_subgraph_port_type(&output_port);
-    let input_type = authoritative_subgraph_port_type(&input_port);
-    validate_connection_type_exprs(
-        document,
-        registry,
-        output,
-        input,
-        output_port.spec.kind,
-        output_type,
-        input_type,
-    )?;
+    crate::compatibility::validate_connection_types(document, registry, None, output, input)
+        .map_err(MutationConflict::Editor)?;
     validate_connection_order(input_port.spec.connections, order)?;
     validate_connection_capacity(document, output, output_port.spec.connections)?;
     validate_connection_capacity(document, input, input_port.spec.connections)
@@ -464,7 +327,7 @@ pub(crate) fn validate_subgraph_connection(
 pub(super) fn connect_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    validation: &EditorMutationValidationSnapshot,
+    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
@@ -472,7 +335,7 @@ pub(super) fn connect_operations(
     connect_operations_with_id_allocator(
         document,
         registry,
-        validation,
+        catalog,
         output,
         input,
         order,
@@ -483,25 +346,17 @@ pub(super) fn connect_operations(
 pub(crate) fn connect_operations_with_id_allocator(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    validation: &EditorMutationValidationSnapshot,
+    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
     allocate: impl FnOnce() -> ConnectionId,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    if validation.graph_revision != document.revision {
-        return Err(MutationConflict::Projection(
-            "editor mutation validation snapshot revision does not match the document".into(),
-        ));
-    }
     let output_port = resolve_mutation_port(document, registry, &output)?;
     let input_port = resolve_mutation_port(document, registry, &input)?;
-    validation
-        .validate_connection_endpoints(&output, &input)
-        .map_err(MutationConflict::Editor)?;
+    validate_document_connection_endpoints(&output_port, &input_port)?;
     validate_connection_does_not_exist(document, &output, &input)?;
-    validation
-        .validate_connection_types(&output, &input)
+    crate::compatibility::validate_connection_types(document, registry, catalog, &output, &input)
         .map_err(MutationConflict::Editor)?;
     plan_connection_operations_after_type_validation(
         document,
@@ -512,106 +367,6 @@ pub(crate) fn connect_operations_with_id_allocator(
         order,
         allocate,
     )
-}
-
-pub(super) fn connect_operations_prevalidated_type(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    output: PortAddress,
-    input: PortAddress,
-    order: Option<OrderKey>,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let output_port = resolve_mutation_port(document, registry, &output)?;
-    let input_port = resolve_mutation_port(document, registry, &input)?;
-    validate_document_connection_endpoints(&output_port, &input_port)?;
-    validate_connection_does_not_exist(document, &output, &input)?;
-    validate_static_connection_types(
-        document,
-        registry,
-        &output,
-        &input,
-        &output_port,
-        &input_port,
-    )?;
-    plan_connection_operations_after_type_validation(
-        document,
-        output_port.spec.connections,
-        input_port.spec.connections,
-        output,
-        input,
-        order,
-        ConnectionId::new,
-    )
-}
-
-fn authoritative_subgraph_port_type<'a>(
-    port: &'a MutationPort<'a>,
-) -> &'a yss_graph_protocol::TypeExpr {
-    match port.binding {
-        Some(DynamicPortBinding::Resolved { last_known, .. }) => last_known
-            .value_type
-            .as_ref()
-            .unwrap_or(&port.spec.value_type),
-        _ => &port.spec.value_type,
-    }
-}
-
-fn validate_static_connection_types(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    output: &PortAddress,
-    input: &PortAddress,
-    output_port: &MutationPort<'_>,
-    input_port: &MutationPort<'_>,
-) -> Result<(), MutationConflict> {
-    validate_connection_type_exprs(
-        document,
-        registry,
-        output,
-        input,
-        output_port.spec.kind,
-        &output_port.spec.value_type,
-        &input_port.spec.value_type,
-    )
-}
-
-fn validate_connection_type_exprs(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    output: &PortAddress,
-    input: &PortAddress,
-    kind: PortKind,
-    output_type: &yss_graph_protocol::TypeExpr,
-    input_type: &yss_graph_protocol::TypeExpr,
-) -> Result<(), MutationConflict> {
-    if kind != PortKind::Data {
-        return Ok(());
-    }
-    let output_type_parameters = registry
-        .protocol(&document.nodes[&output.node_id].node_type)
-        .expect("resolved mutation ports have registered protocols")
-        .interface
-        .type_parameters
-        .as_ref();
-    let input_type_parameters = registry
-        .protocol(&document.nodes[&input.node_id].node_type)
-        .expect("resolved mutation ports have registered protocols")
-        .interface
-        .type_parameters
-        .as_ref();
-    if yss_graph_protocol::type_exprs_compatibility(
-        output_type,
-        input_type,
-        output_type_parameters,
-        input_type_parameters,
-    ) == yss_graph_protocol::TypeCompatibility::Incompatible
-    {
-        Err(invalid_editor_mutation(
-            "connection endpoint types are incompatible",
-        ))
-    } else {
-        Ok(())
-    }
 }
 
 fn validate_connection_does_not_exist(

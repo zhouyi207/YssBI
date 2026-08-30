@@ -37,12 +37,6 @@ fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandEr
             crate::application::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
                 CommandError::expected("compatible_source_invalid")
             }
-            crate::application::catalog_query::GraphCatalogQueryError::Catalog(error) => {
-                CommandError::diagnosed("graph_catalog_invalid", error)
-            }
-            crate::application::catalog_query::GraphCatalogQueryError::Internal(error) => {
-                CommandError::diagnosed("graph_catalog_failed", error)
-            }
         },
     }
 }

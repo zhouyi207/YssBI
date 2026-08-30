@@ -624,3 +624,9 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 persisted `DataType` 到 Graph `TypeExpr` 的 canonical typed conversion 迁入
   `src-tauri/crates/yss-graph-type-mapping/` Pure Leaf；editor/runtime 直接消费该 crate，并由架构
   门禁禁止两套逐 variant 映射表回流。
+- [ ] 将 editor mutation、连接兼容性与 portable subgraph codec/instantiate 迁入
+  `src-tauri/crates/yss-graph-editor/`；删除根 `graph/document`、`graph/compatibility`、
+  `graph/mutation` 与空 `graph/node` owner，收敛端口解析和类型校验为单一事实源，并清除永久禁用的
+  projected/materialization/revision-store 兼容路径；资源参数绑定只读取 registry protocol，兼容目录
+  过滤不再在 runtime 复制端口推断；Application 仅保留 catalog snapshot 编排与 session-revalidated
+  graph commit seam。

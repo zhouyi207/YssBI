@@ -2180,18 +2180,10 @@ fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_modul
         );
     }
 
-    let compatibility = std::fs::read_to_string(root.join("src-tauri/src/graph/compatibility.rs"))
-        .expect("graph compatibility source must be readable");
-    for removed in [
-        "cfg(all(test, any()))",
-        "fn from_projection(",
-        "fn source_from_projection(",
-    ] {
-        assert!(
-            !compatibility.contains(removed),
-            "graph compatibility must not restore removed dead projection path '{removed}'"
-        );
-    }
+    assert!(
+        !root.join("src-tauri/src/graph/compatibility.rs").exists(),
+        "analysis compatibility must not restore the removed root graph compatibility owner"
+    );
 }
 
 #[test]
@@ -2361,6 +2353,7 @@ fn graph_document_edit_has_one_graph_crate_owner_without_root_reexports() {
         );
     }
     for relative in [
+        "src-tauri/src/graph/document",
         "src-tauri/src/graph/document/error.rs",
         "src-tauri/src/graph/document/patch.rs",
         "src-tauri/src/graph/document/transaction.rs",
@@ -2368,23 +2361,6 @@ fn graph_document_edit_has_one_graph_crate_owner_without_root_reexports() {
         assert!(
             !root.join(relative).exists(),
             "the root crate must not retain graph document edit owner {relative}"
-        );
-    }
-
-    let root_document_module =
-        std::fs::read_to_string(root.join("src-tauri/src/graph/document/mod.rs"))
-            .expect("the root graph document module must be readable");
-    for moved_api in [
-        "DocumentError",
-        "GraphDocumentOperation",
-        "GraphDocumentPatch",
-        "apply_graph_document_patch",
-        "validate_graph_document",
-        "port_member_group_state",
-    ] {
-        assert!(
-            !root_document_module.contains(moved_api),
-            "the root graph document module must not re-export {moved_api}"
         );
     }
 
@@ -2396,6 +2372,109 @@ fn graph_document_edit_has_one_graph_crate_owner_without_root_reexports() {
         !validation.contains("address_is_complete"),
         "the zero-consumer address completeness helper must stay removed"
     );
+}
+
+#[test]
+fn graph_editor_has_one_graph_crate_owner_without_root_compatibility_modules() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-editor/Cargo.toml",
+        "src-tauri/crates/yss-graph-editor/src/compatibility.rs",
+        "src-tauri/crates/yss-graph-editor/src/lib.rs",
+        "src-tauri/crates/yss-graph-editor/src/mutation.rs",
+        "src-tauri/crates/yss-graph-editor/src/mutation/connection.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph/clipboard.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph/instantiate.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph editor owner must exist at {relative}"
+        );
+    }
+    for relative in [
+        "src-tauri/src/graph/compatibility.rs",
+        "src-tauri/src/graph/document",
+        "src-tauri/src/graph/mutation.rs",
+        "src-tauri/src/graph/node",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "the root crate must not retain graph editor compatibility owner {relative}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-graph-editor\"",
+        "yss-graph-editor = { path = \"./crates/yss-graph-editor\" }",
+    ] {
+        assert!(
+            manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    let editor_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-editor/Cargo.toml"))
+            .expect("the graph editor manifest must be readable");
+    assert!(
+        editor_manifest.contains(
+            "yss-graph-resource-contract = { path = \"../yss-graph-resource-contract\" }"
+        ),
+        "compatible-catalog filtering must consume the canonical resource contract"
+    );
+
+    let sources = [
+        "src-tauri/crates/yss-graph-editor/src/compatibility.rs",
+        "src-tauri/crates/yss-graph-editor/src/mutation.rs",
+        "src-tauri/crates/yss-graph-editor/src/mutation/connection.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph/clipboard.rs",
+        "src-tauri/crates/yss-graph-editor/src/subgraph/instantiate.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "cfg(all(test, any()))",
+        "EditorMutationValidationSnapshot",
+        "ProjectedConnectPlan",
+        "RevisionedGraphStore",
+        "fn from_projection(",
+        "projected_connect_operations",
+        "fn source_from_projection(",
+        "parameter_binding",
+        "allowed_node_type_id",
+        ".parameters.values().find_map",
+    ] {
+        assert!(
+            !sources.contains(removed),
+            "graph editor must not restore removed dormant API '{removed}'"
+        );
+    }
+
+    let runtime = std::fs::read_to_string(root.join("src-tauri/src/graph/runtime_state.rs"))
+        .expect("the graph runtime coordinator must be readable");
+    assert!(
+        runtime.contains("filter_compatible_catalog"),
+        "the root graph runtime must delegate compatible-catalog filtering to yss-graph-editor"
+    );
+    for duplicate in [
+        "fn source_port(",
+        "fn candidate_ports(",
+        "fn ports_are_compatible(",
+        "fn is_unresolved(",
+        "fn source_is_database(",
+    ] {
+        assert!(
+            !runtime.contains(duplicate),
+            "the root graph runtime must not restore duplicate editor compatibility logic '{duplicate}'"
+        );
+    }
 }
 
 #[test]

@@ -1,3 +1,4 @@
+#[cfg(all(test, any()))]
 use super::common::mutation_conflict_to_command_error;
 #[cfg(all(test, any()))]
 use super::common::{EmitOutcome, emit_resource_result};
@@ -48,7 +49,7 @@ pub(super) fn undo_graph_document_with_emitter<R: EmitOutcome>(
         .undo_last_transaction_observed(&project_instance_id, locale, request, |result| {
             emit_resource_result(&mut emit, result)
         })
-        .map_err(|error| mutation_conflict_to_command_error(error, "history_revision_conflict"))
+        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]
@@ -79,7 +80,7 @@ pub(super) fn redo_graph_document_with_emitter<R: EmitOutcome>(
         .redo_last_transaction_observed(&project_instance_id, locale, request, |result| {
             emit_resource_result(&mut emit, result)
         })
-        .map_err(|error| mutation_conflict_to_command_error(error, "history_revision_conflict"))
+        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]

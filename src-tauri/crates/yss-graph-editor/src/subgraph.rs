@@ -3,13 +3,8 @@ use super::mutation::{
     validate_resolved_dynamic_binding_authority, validate_subgraph_connection,
     validate_subgraph_port,
 };
-use super::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, LastKnownPortMetadata,
-    MutationConflict, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
-    PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
-};
-use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
+use crate::compatibility::CatalogMutationValidationSnapshot;
+use crate::mutation::MutationConflict;
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,30 +12,35 @@ use std::fmt;
 use yss_graph_catalog::{
     CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };
+use yss_graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, LastKnownPortMetadata,
+    NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef,
+    SchemaFieldIdentity, SchemaSourceIdentity,
+};
 use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_protocol::{
-    NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, ResourceDisplayKind,
-    TypeExpr,
+    NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
 
 #[path = "subgraph/clipboard.rs"]
 mod clipboard;
-pub use clipboard::{
-    CLIPBOARD_SUBGRAPH_SCHEMA_VERSION, ClipboardConnection, ClipboardDynamicMemberOrigin,
-    ClipboardDynamicPortBinding, ClipboardInputState, ClipboardLastKnownPortMetadata,
-    ClipboardNode, ClipboardNodeCreation, ClipboardNodeId, ClipboardPortAddress,
-    ClipboardPortBinding, ClipboardPortInstanceId, ClipboardPortRef, ClipboardSubgraph,
-    MAX_CLIPBOARD_CONNECTIONS, MAX_CLIPBOARD_INPUT_STATES, MAX_CLIPBOARD_NODES,
-    MAX_CLIPBOARD_PARAMETER_BYTES, MAX_CLIPBOARD_PORT_BINDINGS, MAX_CLIPBOARD_SERIALIZED_BYTES,
-    MAX_CLIPBOARD_VALUE_DEPTH,
+pub use clipboard::deserialize_clipboard_subgraph;
+pub(crate) use clipboard::{
+    CLIPBOARD_SUBGRAPH_SCHEMA_VERSION, MAX_CLIPBOARD_CONNECTIONS, MAX_CLIPBOARD_INPUT_STATES,
+    MAX_CLIPBOARD_NODES, MAX_CLIPBOARD_PARAMETER_BYTES, MAX_CLIPBOARD_PORT_BINDINGS,
+    MAX_CLIPBOARD_SERIALIZED_BYTES, MAX_CLIPBOARD_VALUE_DEPTH, ValidatedClipboardSubgraph,
 };
-pub(crate) use clipboard::{ValidatedClipboardSubgraph, deserialize_clipboard_subgraph};
+pub use clipboard::{
+    ClipboardConnection, ClipboardDynamicMemberOrigin, ClipboardDynamicPortBinding,
+    ClipboardInputState, ClipboardLastKnownPortMetadata, ClipboardNode, ClipboardNodeCreation,
+    ClipboardNodeId, ClipboardPortAddress, ClipboardPortBinding, ClipboardPortInstanceId,
+    ClipboardPortRef, ClipboardSubgraph,
+};
 #[path = "subgraph/instantiate.rs"]
 mod instantiate;
 pub(crate) use instantiate::instantiate_subgraph;
-#[cfg(test)]
-pub(crate) use instantiate::instantiate_subgraph_for_test;
 
 pub fn export_subgraph(
     graph_path: &GraphResourcePath,
@@ -183,7 +183,7 @@ pub fn export_subgraph(
     Ok(snapshot)
 }
 
-pub fn duplicate_subgraph(
+pub(crate) fn duplicate_subgraph(
     graph_path: &GraphResourcePath,
     document: &GraphDocument,
     registry: &NodeRegistry,
@@ -249,7 +249,7 @@ fn validate_targets(
 
 fn authoritative_creation(
     graph_path: &GraphResourcePath,
-    node: &super::DocumentNode,
+    node: &DocumentNode,
     registry: &NodeRegistry,
     catalog: &CatalogMutationValidationSnapshot,
 ) -> Result<ClipboardNodeCreation, MutationConflict> {
@@ -266,14 +266,9 @@ fn authoritative_creation(
         )));
     }
 
-    let matches = matching_resources(graph_path, node, catalog)?;
-    if matches.len() > 1 {
-        return Err(invalid_export(format!(
-            "node '{}' matches multiple authoritative resources",
-            node.id
-        )));
-    }
-    if let Some((resource_path, create_args)) = matches.into_iter().next() {
+    if let Some((resource_path, create_args)) =
+        matching_resource(graph_path, node, protocol, catalog)?
+    {
         return Ok(ClipboardNodeCreation::ResourceBound {
             node_type_id: node.node_type.clone(),
             resource_path,
@@ -302,79 +297,25 @@ fn authoritative_creation(
     }
 }
 
-fn matching_resources(
+fn matching_resource(
     graph_path: &GraphResourcePath,
-    node: &super::DocumentNode,
+    node: &DocumentNode,
+    protocol: &yss_graph_protocol::NodeProtocol,
     catalog: &CatalogMutationValidationSnapshot,
-) -> Result<Vec<(CatalogResourcePath, ResourceBoundCreateArgs)>, MutationConflict> {
-    let mut matches = Vec::new();
-    for (resource_path, resource) in &catalog.resources {
-        let (allowed, parameter_binding, create_args, in_scope) = match resource {
-            CatalogMutationResource::Function {
-                allowed_node_type_id,
-                parameter_binding,
-                ..
-            } => (
-                allowed_node_type_id == &node.node_type,
-                parameter_binding.as_ref(),
-                ResourceBoundCreateArgs::Function,
-                true,
-            ),
-            CatalogMutationResource::Variable {
-                allowed_node_type_ids,
-                parameter_binding,
-                scope,
-                ..
-            } => (
-                allowed_node_type_ids.contains(&node.node_type),
-                parameter_binding.as_ref(),
-                ResourceBoundCreateArgs::Variable,
-                variable_in_scope(graph_path, &scope),
-            ),
-            CatalogMutationResource::Database {
-                allowed_node_type_id,
-                parameter_binding,
-                ..
-            } => (
-                allowed_node_type_id == &node.node_type,
-                parameter_binding.as_ref(),
-                ResourceBoundCreateArgs::Database,
-                true,
-            ),
-        };
-        if !allowed || !in_scope {
-            continue;
-        }
-        let key = ParameterKey::new(parameter_binding).map_err(|error| {
-            invalid_export(format!(
-                "catalog resource '{}' has an invalid parameter binding: {error}",
-                resource_path.as_str()
-            ))
-        })?;
-        if node.parameters.get(&key)
-            == Some(&serde_json::Value::String(
-                resource_path.as_str().to_owned(),
-            ))
-        {
-            matches.push((resource_path.clone(), create_args));
-        }
+) -> Result<Option<(CatalogResourcePath, ResourceBoundCreateArgs)>, MutationConflict> {
+    let Some((resource_path, resource)) =
+        crate::compatibility::bound_catalog_resource(node, protocol, catalog)
+            .map_err(|error| invalid_export(error.detail))?
+    else {
+        return Ok(None);
+    };
+    if resource
+        .variable_scope()
+        .is_some_and(|scope| !crate::compatibility::variable_in_scope(graph_path, scope))
+    {
+        return Ok(None);
     }
-    Ok(matches)
-}
-
-fn variable_in_scope(
-    graph_path: &GraphResourcePath,
-    scope: &yss_variable_contract::VariableScope,
-) -> bool {
-    match scope {
-        yss_variable_contract::VariableScope::Global => true,
-        yss_variable_contract::VariableScope::Event { event_path } => {
-            event_path.as_str() == graph_path.as_str()
-        }
-        yss_variable_contract::VariableScope::Function { function_path } => {
-            function_path.as_str() == graph_path.as_str()
-        }
-    }
+    Ok(Some((resource_path.clone(), resource.create_args())))
 }
 
 fn local_instance_ids<'a>(

@@ -68,12 +68,6 @@ pub enum GraphContractMappingError {
     MissingDatabaseSchema { database: DatabaseId },
     #[error("catalog snapshot contains an undeclared database schema")]
     UnexpectedDatabaseSchema { database: DatabaseId },
-    #[error("database schema cannot be represented by the Graph catalog")]
-    InvalidDatabaseSchema {
-        database: DatabaseId,
-        #[source]
-        source: crate::graph::error::GraphCatalogError,
-    },
 }
 
 pub fn build_resource_catalog(

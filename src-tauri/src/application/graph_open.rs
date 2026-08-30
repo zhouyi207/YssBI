@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::graph::error::GraphMutationError;
+use crate::graph::error::GraphMaterializationError;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId};
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
@@ -154,7 +154,7 @@ pub enum OpenGraphApplicationError {
     #[error(transparent)]
     Contract(#[from] GraphContractMappingError),
     #[error(transparent)]
-    Materialization(#[from] GraphMutationError),
+    Materialization(#[from] GraphMaterializationError),
     #[error(transparent)]
     Projection(#[from] EditorProjectionError),
 }

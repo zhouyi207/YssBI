@@ -1,0 +1,20 @@
+[package]
+name = "yss-graph-editor"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-graph-catalog = { path = "../yss-graph-catalog" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-document-edit = { path = "../yss-graph-document-edit" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }
+yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
+yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
+yss-variable-contract = { path = "../yss-variable-contract" }

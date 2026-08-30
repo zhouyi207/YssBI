@@ -178,7 +178,7 @@ pub enum EditorMutationMappingError {
     InvalidClipboardSubgraph,
 }
 
-impl TryFrom<EditorGraphMutationDto> for crate::graph::document::EditorGraphMutation {
+impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
     type Error = EditorMutationMappingError;
 
     fn try_from(value: EditorGraphMutationDto) -> Result<Self, Self::Error> {
@@ -191,7 +191,7 @@ impl TryFrom<EditorGraphMutationDto> for crate::graph::document::EditorGraphMuta
                 position,
                 user_label,
                 connect_from,
-            } => crate::graph::document::EditorGraphMutation::CreateNode {
+            } => yss_graph_editor::EditorGraphMutation::CreateNode {
                 descriptor: descriptor
                     .try_into()
                     .map_err(|_| EditorMutationMappingError::InvalidNodeCreation)?,
@@ -200,20 +200,20 @@ impl TryFrom<EditorGraphMutationDto> for crate::graph::document::EditorGraphMuta
                 connect_from: connect_from.map(address).transpose()?,
             },
             EditorGraphMutationDto::DeleteNodes { node_ids } => {
-                crate::graph::document::EditorGraphMutation::DeleteNodes { node_ids }
+                yss_graph_editor::EditorGraphMutation::DeleteNodes { node_ids }
             }
             EditorGraphMutationDto::SetParameters {
                 node_id,
                 parameters,
-            } => crate::graph::document::EditorGraphMutation::SetParameters {
+            } => yss_graph_editor::EditorGraphMutation::SetParameters {
                 node_id,
                 parameters,
             },
             EditorGraphMutationDto::MoveNodes { positions } => {
-                crate::graph::document::EditorGraphMutation::MoveNodes {
+                yss_graph_editor::EditorGraphMutation::MoveNodes {
                     positions: positions
                         .into_iter()
-                        .map(|position| crate::graph::document::NodePositionMutation {
+                        .map(|position| yss_graph_editor::NodePositionMutation {
                             node_id: position.node_id,
                             position: position.position,
                         })
@@ -224,41 +224,39 @@ impl TryFrom<EditorGraphMutationDto> for crate::graph::document::EditorGraphMuta
                 output,
                 input,
                 order,
-            } => crate::graph::document::EditorGraphMutation::Connect {
+            } => yss_graph_editor::EditorGraphMutation::Connect {
                 output: address(output)?,
                 input: address(input)?,
                 order,
             },
             EditorGraphMutationDto::MoveConnections { source, target } => {
-                crate::graph::document::EditorGraphMutation::MoveConnections {
+                yss_graph_editor::EditorGraphMutation::MoveConnections {
                     source: address(source)?,
                     target: address(target)?,
                 }
             }
             EditorGraphMutationDto::DisconnectConnections { connection_ids } => {
-                crate::graph::document::EditorGraphMutation::DisconnectConnections {
-                    connection_ids,
-                }
+                yss_graph_editor::EditorGraphMutation::DisconnectConnections { connection_ids }
             }
             EditorGraphMutationDto::InsertReroute {
                 connection_id,
                 position,
-            } => crate::graph::document::EditorGraphMutation::InsertReroute {
+            } => yss_graph_editor::EditorGraphMutation::InsertReroute {
                 connection_id,
                 position,
             },
             EditorGraphMutationDto::DisconnectPort { address: value } => {
-                crate::graph::document::EditorGraphMutation::DisconnectPort {
+                yss_graph_editor::EditorGraphMutation::DisconnectPort {
                     address: address(value)?,
                 }
             }
             EditorGraphMutationDto::DisconnectNode { node_id } => {
-                crate::graph::document::EditorGraphMutation::DisconnectNode { node_id }
+                yss_graph_editor::EditorGraphMutation::DisconnectNode { node_id }
             }
             EditorGraphMutationDto::SetLiteral {
                 address: value,
                 literal,
-            } => crate::graph::document::EditorGraphMutation::SetLiteral {
+            } => yss_graph_editor::EditorGraphMutation::SetLiteral {
                 address: address(value)?,
                 literal,
             },
@@ -266,23 +264,23 @@ impl TryFrom<EditorGraphMutationDto> for crate::graph::document::EditorGraphMuta
                 node_id,
                 template,
                 order,
-            } => crate::graph::document::EditorGraphMutation::AddPortInstance {
+            } => yss_graph_editor::EditorGraphMutation::AddPortInstance {
                 node_id,
                 template,
                 order,
             },
             EditorGraphMutationDto::RemovePortInstance { address: value } => {
-                crate::graph::document::EditorGraphMutation::RemovePortInstance {
+                yss_graph_editor::EditorGraphMutation::RemovePortInstance {
                     address: address(value)?,
                 }
             }
             EditorGraphMutationDto::DuplicateSubgraph { node_ids, offset } => {
-                crate::graph::document::EditorGraphMutation::DuplicateSubgraph { node_ids, offset }
+                yss_graph_editor::EditorGraphMutation::DuplicateSubgraph { node_ids, offset }
             }
             EditorGraphMutationDto::InsertSubgraph {
                 snapshot_json,
                 anchor,
-            } => crate::graph::document::EditorGraphMutation::InsertSubgraph {
+            } => yss_graph_editor::EditorGraphMutation::InsertSubgraph {
                 snapshot: crate::schema::graph_clipboard::parse_clipboard_snapshot(&snapshot_json)
                     .map_err(|_| EditorMutationMappingError::InvalidClipboardSubgraph)?,
                 anchor,

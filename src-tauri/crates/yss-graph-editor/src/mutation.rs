@@ -1,14 +1,10 @@
-use super::materialization::ProjectedMemberRef;
-use super::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    GraphDocument, GraphResourcePath, MaterializationAuthorization, NodeId, NodePosition, OrderKey,
-    ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue,
-};
-use crate::graph::compatibility::EditorMutationValidationSnapshot;
-#[cfg(test)]
-use crate::project::{MutationRequest, OperationId, ResourceKey, ResourceRevision};
 use yss_graph_catalog::reroute_node_type_for_kind;
 use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
+use yss_graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    GraphDocument, GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, ParameterValues,
+    PortAddress, PortInstanceId, PortRef, TypedValue,
+};
 use yss_graph_document_edit::{
     DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
     port_member_group_state,
@@ -19,8 +15,6 @@ use yss_graph_protocol::{
 };
 use yss_graph_registry::NodeRegistry;
 
-#[cfg(test)]
-use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -28,34 +22,13 @@ use std::fmt;
 #[path = "mutation/connection.rs"]
 mod connection;
 use connection::{
-    connect_operations, connect_operations_prevalidated_type, normalize_editor_literal_target,
-    projected_connect_operations, resolve_mutation_port,
+    connect_operations, move_connection_operations, normalize_editor_literal_target,
+    resolve_mutation_port,
 };
-#[allow(unused_imports)]
 pub(super) use connection::{
-    connect_operations_with_id_allocator, move_connection_operations,
-    move_connection_operations_with_id_allocator, validate_literal_target,
-    validate_resolved_dynamic_binding_authority, validate_subgraph_connection,
-    validate_subgraph_port,
+    validate_literal_target, validate_resolved_dynamic_binding_authority,
+    validate_subgraph_connection, validate_subgraph_port,
 };
-
-#[cfg(test)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RevisionGap {
-    pub expected_before_revision: ResourceRevision,
-    pub actual_before_revision: ResourceRevision,
-}
-
-#[cfg(test)]
-pub fn detect_revision_gap<T>(
-    applied_revision: ResourceRevision,
-    event: &crate::application::events::GraphDeltaEvent<T>,
-) -> Option<RevisionGap> {
-    (event.from_revision != applied_revision).then_some(RevisionGap {
-        expected_before_revision: applied_revision,
-        actual_before_revision: event.from_revision,
-    })
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum EditorMutationErrorCode {
@@ -112,41 +85,19 @@ pub struct EditorMutationError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MutationConflict {
-    RecoveryRequired(Box<str>),
-    ResourceMismatch {
-        requested: Box<str>,
-        store: Box<str>,
-    },
-    StaleRevision {
-        base_revision: u64,
-        current_revision: u64,
-    },
-    CompilationBasisGraphMismatch {
-        basis_graph_path: GraphResourcePath,
-        store_graph_path: GraphResourcePath,
-    },
-    CompilationBasisStale {
-        basis_revision: u64,
-        current_revision: u64,
-    },
-    MaterializationUnauthorized,
-    StaleProjectLifecycle(Box<str>),
     CatalogResourceStale(Box<str>),
     CatalogDescriptorInvalid(Box<str>),
     ClipboardSubgraphInvalid(Box<str>),
     ReferencedResourceUnavailable(Box<str>),
     Editor(EditorMutationError),
     InvalidEditorMutation(Box<str>),
-    Projection(Box<str>),
-    History(Box<str>),
+    RegistryInvariant(Box<str>),
     Document(DocumentError),
 }
 
 impl MutationConflict {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::RecoveryRequired(_) => "project_recovery_required",
-            Self::StaleProjectLifecycle(_) => "stale_project_lifecycle",
             Self::CatalogResourceStale(_) => "catalog_resource_stale",
             Self::CatalogDescriptorInvalid(_) => "catalog_descriptor_invalid",
             Self::ClipboardSubgraphInvalid(_) => "clipboard_subgraph_invalid",
@@ -160,49 +111,14 @@ impl MutationConflict {
 impl fmt::Display for MutationConflict {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RecoveryRequired(message) => formatter.write_str(message),
-            Self::ResourceMismatch { requested, store } => write!(
-                formatter,
-                "mutation targets {requested:?}, but this store owns {store:?}"
-            ),
-            Self::StaleRevision {
-                base_revision,
-                current_revision,
-            } => write!(
-                formatter,
-                "mutation base revision {} is stale; current revision is {}",
-                base_revision, current_revision
-            ),
-            Self::CompilationBasisGraphMismatch {
-                basis_graph_path,
-                store_graph_path,
-            } => write!(
-                formatter,
-                "compilation basis graph {basis_graph_path:?} does not match store graph {store_graph_path:?}"
-            ),
-            Self::CompilationBasisStale {
-                basis_revision,
-                current_revision,
-            } => write!(
-                formatter,
-                "compilation basis revision {} is stale; current revision is {}",
-                basis_revision, current_revision
-            ),
-            Self::MaterializationUnauthorized => {
-                formatter.write_str("materialization authorization does not match projected member")
-            }
-            Self::StaleProjectLifecycle(message)
-            | Self::CatalogResourceStale(message)
+            Self::CatalogResourceStale(message)
             | Self::CatalogDescriptorInvalid(message)
             | Self::ClipboardSubgraphInvalid(message)
             | Self::ReferencedResourceUnavailable(message)
             | Self::InvalidEditorMutation(message) => formatter.write_str(message),
             Self::Editor(error) => formatter.write_str(&error.detail),
-            Self::Projection(message) => {
-                write!(formatter, "committed graph projection failed: {message}")
-            }
-            Self::History(message) => {
-                write!(formatter, "project history transaction failed: {message}")
+            Self::RegistryInvariant(message) => {
+                write!(formatter, "graph registry invariant failed: {message}")
             }
             Self::Document(source) => write!(formatter, "mutation patch failed: {source}"),
         }
@@ -274,7 +190,7 @@ pub enum EditorGraphMutation {
         offset: NodePosition,
     },
     InsertSubgraph {
-        snapshot: super::ClipboardSubgraph,
+        snapshot: crate::ClipboardSubgraph,
         anchor: NodePosition,
     },
 }
@@ -283,153 +199,6 @@ pub enum EditorGraphMutation {
 pub struct NodePositionMutation {
     pub node_id: NodeId,
     pub position: NodePosition,
-}
-
-#[cfg(all(test, any()))]
-impl From<&EditorGraphMutation> for crate::schema::graph_mutation::EditorGraphMutationDto {
-    fn from(value: &EditorGraphMutation) -> Self {
-        use crate::schema::graph_mutation::EditorGraphMutationDto;
-        let address =
-            |value: &PortAddress| crate::schema::graph_mutation::PortAddressDto::from(value);
-        match value {
-            EditorGraphMutation::CreateNode {
-                descriptor,
-                position,
-                user_label,
-                connect_from,
-            } => EditorGraphMutationDto::CreateNode {
-                descriptor: descriptor.clone(),
-                position: *position,
-                user_label: user_label.clone(),
-                connect_from: connect_from.as_ref().map(address),
-            },
-            EditorGraphMutation::DeleteNodes { node_ids } => EditorGraphMutationDto::DeleteNodes {
-                node_ids: node_ids.clone(),
-            },
-            EditorGraphMutation::SetParameters {
-                node_id,
-                parameters,
-            } => EditorGraphMutationDto::SetParameters {
-                node_id: *node_id,
-                parameters: parameters.clone(),
-            },
-            EditorGraphMutation::MoveNodes { positions } => EditorGraphMutationDto::MoveNodes {
-                positions: positions
-                    .iter()
-                    .map(
-                        |position| crate::schema::graph_mutation::NodePositionMutationDto {
-                            node_id: position.node_id,
-                            position: position.position,
-                        },
-                    )
-                    .collect(),
-            },
-            EditorGraphMutation::Connect {
-                output,
-                input,
-                order,
-            } => EditorGraphMutationDto::Connect {
-                output: address(output),
-                input: address(input),
-                order: order.clone(),
-            },
-            EditorGraphMutation::MoveConnections { source, target } => {
-                EditorGraphMutationDto::MoveConnections {
-                    source: address(source),
-                    target: address(target),
-                }
-            }
-            EditorGraphMutation::DisconnectConnections { connection_ids } => {
-                EditorGraphMutationDto::DisconnectConnections {
-                    connection_ids: connection_ids.clone(),
-                }
-            }
-            EditorGraphMutation::InsertReroute {
-                connection_id,
-                position,
-            } => EditorGraphMutationDto::InsertReroute {
-                connection_id: *connection_id,
-                position: *position,
-            },
-            EditorGraphMutation::DisconnectPort { address: value } => {
-                EditorGraphMutationDto::DisconnectPort {
-                    address: address(value),
-                }
-            }
-            EditorGraphMutation::DisconnectNode { node_id } => {
-                EditorGraphMutationDto::DisconnectNode { node_id: *node_id }
-            }
-            EditorGraphMutation::SetLiteral {
-                address: value,
-                literal,
-            } => EditorGraphMutationDto::SetLiteral {
-                address: address(value),
-                literal: literal.clone(),
-            },
-            EditorGraphMutation::AddPortInstance {
-                node_id,
-                template,
-                order,
-            } => EditorGraphMutationDto::AddPortInstance {
-                node_id: *node_id,
-                template: template.clone(),
-                order: order.clone(),
-            },
-            EditorGraphMutation::RemovePortInstance { address: value } => {
-                EditorGraphMutationDto::RemovePortInstance {
-                    address: address(value),
-                }
-            }
-            EditorGraphMutation::DuplicateSubgraph { node_ids, offset } => {
-                EditorGraphMutationDto::DuplicateSubgraph {
-                    node_ids: node_ids.clone(),
-                    offset: *offset,
-                }
-            }
-            EditorGraphMutation::InsertSubgraph { snapshot, anchor } => {
-                EditorGraphMutationDto::InsertSubgraph {
-                    snapshot_json: serde_json::to_string(snapshot)
-                        .expect("domain clipboard snapshots must serialize"),
-                    anchor: *anchor,
-                }
-            }
-        }
-    }
-}
-
-#[cfg(all(test, any()))]
-impl Serialize for EditorGraphMutation {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let dto = crate::schema::graph_mutation::EditorGraphMutationDto::from(self);
-        dto.serialize(serializer)
-    }
-}
-
-#[cfg(all(test, any()))]
-impl<'de> Deserialize<'de> for EditorGraphMutation {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let dto = crate::schema::graph_mutation::EditorGraphMutationDto::deserialize(deserializer)?;
-        dto.try_into().map_err(
-            |error: crate::schema::graph_mutation::EditorMutationMappingError| {
-                serde::de::Error::custom(error.to_string())
-            },
-        )
-    }
-}
-
-pub(crate) struct ProjectedConnectPlan {
-    pub projection_address: PortAddress,
-    pub direction: PortDirection,
-    pub kind: PortKind,
-    pub connections: ConnectionsPerPort,
-    pub member: ProjectedMemberRef,
-    pub authorization: MaterializationAuthorization,
 }
 
 impl EditorGraphMutation {
@@ -442,158 +211,12 @@ impl EditorGraphMutation {
         self.into_patch_with_catalog_snapshot(graph_path, document, registry, None)
     }
 
-    pub(crate) fn into_patch_with_catalog_snapshot(
+    pub fn into_patch_with_catalog_snapshot(
         self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
         registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_compatibility(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            None,
-            None,
-        )
-    }
-
-    pub(crate) fn into_patch_with_compatibility(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        projected_connect: Option<ProjectedConnectPlan>,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_editor_validation_impl(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            compatibility_source,
-            None,
-            projected_connect,
-            #[cfg(test)]
-            None,
-            #[cfg(test)]
-            None,
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn into_patch_with_editor_validation(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        mutation_validation: Option<&EditorMutationValidationSnapshot>,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_editor_validation_impl(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            compatibility_source,
-            mutation_validation,
-            None,
-            #[cfg(test)]
-            None,
-            #[cfg(test)]
-            None,
-        )
-    }
-
-    pub(crate) fn into_patch_with_editor_validation_and_projected_connect(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        mutation_validation: Option<&EditorMutationValidationSnapshot>,
-        projected_connect: Option<ProjectedConnectPlan>,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_editor_validation_impl(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            compatibility_source,
-            mutation_validation,
-            projected_connect,
-            #[cfg(test)]
-            None,
-            #[cfg(test)]
-            None,
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn into_patch_with_editor_validation_and_allocator(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        mutation_validation: Option<&EditorMutationValidationSnapshot>,
-        projected_connect: Option<ProjectedConnectPlan>,
-        allocate_connection_id: &dyn Fn() -> ConnectionId,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_editor_validation_impl(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            compatibility_source,
-            mutation_validation,
-            projected_connect,
-            None,
-            Some(allocate_connection_id),
-        )
-    }
-
-    #[cfg(test)]
-    pub(super) fn into_patch_with_editor_validation_and_allocators(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        mutation_validation: Option<&EditorMutationValidationSnapshot>,
-        allocate_node_id: &dyn Fn() -> NodeId,
-        allocate_connection_id: &dyn Fn() -> ConnectionId,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_editor_validation_impl(
-            graph_path,
-            document,
-            registry,
-            catalog_validation,
-            compatibility_source,
-            mutation_validation,
-            None,
-            Some(allocate_node_id),
-            Some(allocate_connection_id),
-        )
-    }
-
-    fn into_patch_with_editor_validation_impl(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        registry: &NodeRegistry,
-        catalog_validation: Option<&crate::graph::compatibility::CatalogMutationValidationSnapshot>,
-        compatibility_source: Option<&crate::graph::compatibility::SourcePort>,
-        mutation_validation: Option<&EditorMutationValidationSnapshot>,
-        projected_connect: Option<ProjectedConnectPlan>,
-        #[cfg(test)] allocate_node_id: Option<&dyn Fn() -> NodeId>,
-        #[cfg(test)] allocate_connection_id: Option<&dyn Fn() -> ConnectionId>,
+        catalog_validation: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
             Self::CreateNode {
@@ -604,7 +227,7 @@ impl EditorGraphMutation {
             } => {
                 validate_position(position)?;
                 let connection_descriptor = descriptor.clone();
-                let (node_type_id, parameters, resource_bound, allow_missing_parameters) =
+                let (node_type_id, protocol, parameters, resource_bound, allow_missing_parameters) =
                     match descriptor {
                         descriptor @ NodeCreation::Static { .. }
                         | descriptor @ NodeCreation::ParameterizedStatic { .. } => {
@@ -630,18 +253,28 @@ impl EditorGraphMutation {
                             }
                             let allow_missing =
                                 matches!(descriptor, NodeCreation::ParameterizedStatic { .. });
-                            (node_type_id, ParameterValues::new(), false, allow_missing)
+                            (
+                                node_type_id,
+                                protocol,
+                                ParameterValues::new(),
+                                false,
+                                allow_missing,
+                            )
                         }
                         NodeCreation::ResourceBound {
                             node_type_id,
                             resource_path,
                             resource_revision,
                             create_args,
-                        } => (
-                            node_type_id.clone(),
-                            materialize_resource_descriptor(
+                        } => {
+                            let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
+                                catalog_descriptor_invalid(format!(
+                                    "unknown node type '{node_type_id}'"
+                                ))
+                            })?;
+                            let parameters = materialize_resource_descriptor(
                                 graph_path,
-                                &node_type_id,
+                                protocol,
                                 &resource_path,
                                 resource_revision,
                                 create_args,
@@ -650,18 +283,10 @@ impl EditorGraphMutation {
                                         "resource validation snapshot is unavailable",
                                     )
                                 })?,
-                            )?,
-                            true,
-                            false,
-                        ),
+                            )?;
+                            (node_type_id, protocol, parameters, true, false)
+                        }
                     };
-                let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
-                    if resource_bound {
-                        catalog_descriptor_invalid(format!("unknown node type '{node_type_id}'"))
-                    } else {
-                        invalid_editor_mutation(format!("unknown node type '{node_type_id}'"))
-                    }
-                })?;
                 if resource_bound {
                     validate_node_scope(graph_path, protocol)
                         .map_err(catalog_descriptor_validation_error)?;
@@ -682,66 +307,33 @@ impl EditorGraphMutation {
                 );
                 if let Some(connect_from) = connect_from {
                     let source_address = connect_from;
-                    let source = compatibility_source.ok_or_else(|| {
-                        invalid_editor_mutation(
-                            "an analyzed compatibility source is required for create-and-connect",
-                        )
-                    })?;
-                    if source.address != source_address {
-                        return Err(invalid_editor_mutation(
-                            "connectFrom does not match the analyzed source port",
-                        ));
-                    }
-                    let source_port = resolve_mutation_port(document, registry, &source_address)?;
-                    if source_port.spec.direction != source.direction
-                        || source_port.spec.kind != source.kind
-                        || matches!(source_port.binding, Some(DynamicPortBinding::Orphan { .. }))
-                    {
-                        return Err(invalid_editor_mutation(
-                            "connectFrom no longer resolves to the analyzed source port",
-                        ));
-                    }
                     let resources = catalog_validation.ok_or_else(|| {
                         invalid_editor_mutation("catalog compatibility snapshot is unavailable")
                     })?;
-                    let validation = mutation_validation.ok_or_else(|| {
-                        MutationConflict::Projection(
-                            "create-and-connect validation snapshot is unavailable".into(),
-                        )
-                    })?;
-                    let candidates = crate::graph::compatibility::connection_candidates(
+                    let source = crate::compatibility::source_port(
+                        document,
+                        registry,
+                        resources,
+                        source_address,
+                    )
+                    .map_err(MutationConflict::Editor)?;
+                    let candidate = crate::compatibility::connection_candidates(
                         graph_path,
                         &connection_descriptor,
                         registry,
                         resources,
-                        source,
+                        &source,
                     )
-                    .map_err(invalid_editor_mutation)?;
-                    let mut first_type_error = None;
-                    let candidate = candidates
-                        .into_iter()
-                        .find(|candidate| {
-                            match validation.validate_create_connection(&source_address, candidate)
-                            {
-                                Ok(()) => true,
-                                Err(error) => {
-                                    first_type_error.get_or_insert(error);
-                                    false
-                                }
-                            }
-                        })
-                        .ok_or_else(|| {
-                            MutationConflict::Editor(
-                                first_type_error.expect(
-                                    "same-kind connection candidates produce a type result",
-                                ),
-                            )
-                        })?;
+                    .map_err(invalid_editor_mutation)?
+                    .into_iter()
+                    .next()
+                    .expect("compatible candidate lookup returns a non-empty result");
                     append_atomic_connection(
                         document,
                         registry,
+                        resources,
                         &mut operations,
-                        source,
+                        &source,
                         candidate,
                     )?;
                 }
@@ -778,38 +370,9 @@ impl EditorGraphMutation {
                 output,
                 input,
                 order,
-            } => {
-                if let Some(plan) = projected_connect {
-                    projected_connect_operations(
-                        graph_path, document, registry, output, input, order, plan,
-                    )?
-                } else if let Some(validation) = mutation_validation {
-                    #[cfg(test)]
-                    if let Some(allocate) = allocate_connection_id {
-                        return connect_operations_with_id_allocator(
-                            document, registry, validation, output, input, order, allocate,
-                        )
-                        .map(GraphDocumentPatch::new);
-                    }
-                    connect_operations(document, registry, validation, output, input, order)?
-                } else {
-                    connect_operations_prevalidated_type(document, registry, output, input, order)?
-                }
-            }
+            } => connect_operations(document, registry, catalog_validation, output, input, order)?,
             Self::MoveConnections { source, target } => {
-                let validation = mutation_validation.ok_or_else(|| {
-                    MutationConflict::Projection(
-                        "editor mutation validation snapshot is unavailable".into(),
-                    )
-                })?;
-                #[cfg(test)]
-                if let Some(allocate) = allocate_connection_id {
-                    return move_connection_operations_with_id_allocator(
-                        document, registry, validation, source, target, allocate,
-                    )
-                    .map(GraphDocumentPatch::new);
-                }
-                move_connection_operations(document, registry, validation, source, target)?
+                move_connection_operations(document, registry, catalog_validation, source, target)?
             }
             Self::DisconnectConnections { connection_ids } => {
                 validate_direct_targets(&connection_ids)?;
@@ -818,23 +381,7 @@ impl EditorGraphMutation {
             Self::InsertReroute {
                 connection_id,
                 position,
-            } => {
-                #[cfg(test)]
-                if let (Some(allocate_node_id), Some(allocate_connection_id)) =
-                    (allocate_node_id, allocate_connection_id)
-                {
-                    return insert_reroute_operations_with_allocators(
-                        document,
-                        registry,
-                        connection_id,
-                        position,
-                        allocate_node_id,
-                        allocate_connection_id,
-                    )
-                    .map(GraphDocumentPatch::new);
-                }
-                insert_reroute_operations(document, registry, connection_id, position)?
-            }
+            } => insert_reroute_operations(document, registry, connection_id, position)?,
             Self::DisconnectPort { address } => {
                 resolve_mutation_port(document, registry, &address)?;
                 let connection_ids = document.connections.values().filter_map(|connection| {
@@ -867,7 +414,7 @@ impl EditorGraphMutation {
                 vec![GraphDocumentOperation::SetInputState {
                     address,
                     before,
-                    after: literal.map(|value| super::InputState {
+                    after: literal.map(|value| InputState {
                         literal_override: Some(value),
                     }),
                 }]
@@ -881,7 +428,7 @@ impl EditorGraphMutation {
                 remove_port_instance_operations(document, registry, address)?
             }
             Self::DuplicateSubgraph { node_ids, offset } => {
-                return super::duplicate_subgraph(
+                return crate::subgraph::duplicate_subgraph(
                     graph_path,
                     document,
                     registry,
@@ -893,14 +440,14 @@ impl EditorGraphMutation {
                 );
             }
             Self::InsertSubgraph { snapshot, anchor } => {
-                return super::instantiate_subgraph(
+                return crate::subgraph::instantiate_subgraph(
                     graph_path,
                     document,
                     registry,
                     catalog_validation.ok_or_else(|| {
                         catalog_resource_stale("subgraph catalog snapshot is unavailable")
                     })?,
-                    super::subgraph::ValidatedClipboardSubgraph(snapshot),
+                    crate::subgraph::ValidatedClipboardSubgraph(snapshot),
                     anchor,
                 );
             }
@@ -934,11 +481,11 @@ fn catalog_descriptor_validation_error(error: MutationConflict) -> MutationConfl
 
 fn materialize_resource_descriptor(
     graph_path: &GraphResourcePath,
-    node_type_id: &NodeTypeId,
+    protocol: &NodeProtocol,
     resource_path: &CatalogResourcePath,
     resource_revision: u64,
     create_args: ResourceBoundCreateArgs,
-    snapshot: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
+    snapshot: &crate::compatibility::CatalogMutationValidationSnapshot,
 ) -> Result<ParameterValues, MutationConflict> {
     validate_resource_path(resource_path, create_args)?;
     let resource = snapshot.resources.get(resource_path).ok_or_else(|| {
@@ -947,92 +494,24 @@ fn materialize_resource_descriptor(
             resource_path.as_str()
         ))
     })?;
-    let (current_revision, allowed_node_type, binding, scope) = match (create_args, resource) {
-        (
-            ResourceBoundCreateArgs::Function,
-            crate::graph::compatibility::CatalogMutationResource::Function {
-                revision,
-                allowed_node_type_id,
-                parameter_binding,
-                ..
-            },
-        ) => (
-            *revision,
-            allowed_node_type_id,
-            parameter_binding.as_ref(),
-            None,
-        ),
-        (
-            ResourceBoundCreateArgs::Variable,
-            crate::graph::compatibility::CatalogMutationResource::Variable {
-                revision,
-                scope,
-                allowed_node_type_ids,
-                parameter_binding,
-                ..
-            },
-        ) => {
-            if !allowed_node_type_ids
-                .iter()
-                .any(|allowed| allowed == node_type_id)
-            {
-                return Err(catalog_descriptor_invalid(
-                    "resource descriptor node type is not allowed",
-                ));
-            }
-            (
-                *revision,
-                node_type_id,
-                parameter_binding.as_ref(),
-                Some(scope),
-            )
-        }
-        (
-            ResourceBoundCreateArgs::Database,
-            crate::graph::compatibility::CatalogMutationResource::Database {
-                authority_revision,
-                allowed_node_type_id,
-                parameter_binding,
-            },
-        ) => (
-            *authority_revision,
-            allowed_node_type_id,
-            parameter_binding.as_ref(),
-            None,
-        ),
-        _ => {
-            return Err(catalog_descriptor_invalid(
-                "resource descriptor create arguments do not match the resource kind",
-            ));
-        }
-    };
-    if allowed_node_type != node_type_id {
+    if resource.create_args() != create_args {
         return Err(catalog_descriptor_invalid(
-            "resource descriptor node type is not allowed",
+            "resource descriptor create arguments do not match the resource kind",
         ));
     }
-    if current_revision != resource_revision {
+    if resource.revision() != resource_revision {
         return Err(catalog_resource_stale(format!(
             "catalog resource '{}' revision is stale",
             resource_path.as_str()
         )));
     }
-    let expected_binding = match create_args {
-        ResourceBoundCreateArgs::Function => "target",
-        ResourceBoundCreateArgs::Variable => "variable",
-        ResourceBoundCreateArgs::Database => "dataframe",
-    };
-    if binding != expected_binding {
-        return Err(catalog_descriptor_invalid(
-            "catalog resource parameter binding is invalid",
-        ));
-    }
-    if let Some(scope) = scope {
+    if let Some(scope) = resource.variable_scope() {
         validate_variable_scope(graph_path, scope)?;
     }
+    let binding = crate::compatibility::resource_parameter(protocol, create_args)
+        .map_err(catalog_descriptor_invalid)?;
     Ok(BTreeMap::from([(
-        yss_graph_protocol::ParameterKey::new(expected_binding)
-            .expect("catalog bindings are static valid keys"),
+        binding.clone(),
         serde_json::Value::String(resource_path.as_str().to_owned()),
     )]))
 }
@@ -1042,20 +521,7 @@ fn validate_resource_path(
     create_args: ResourceBoundCreateArgs,
 ) -> Result<(), MutationConflict> {
     let path = resource_path.as_str();
-    let valid = match create_args {
-        ResourceBoundCreateArgs::Function => yss_graph_document::GraphResourcePath::new(path)
-            .is_ok_and(|canonical| {
-                canonical.as_str() == path && canonical.as_str().starts_with("functions/")
-            }),
-        ResourceBoundCreateArgs::Variable => path
-            .strip_prefix("variables/")
-            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-            .is_some_and(|id| format!("variables/{id}") == path),
-        ResourceBoundCreateArgs::Database => path
-            .strip_prefix("databases/")
-            .is_some_and(|id| !id.is_empty()),
-    };
-    if valid {
+    if crate::compatibility::resource_path_is_valid(resource_path, create_args) {
         Ok(())
     } else {
         Err(catalog_descriptor_invalid(format!(
@@ -1068,16 +534,7 @@ fn validate_variable_scope(
     graph_path: &GraphResourcePath,
     scope: &yss_variable_contract::VariableScope,
 ) -> Result<(), MutationConflict> {
-    let in_scope = match scope {
-        yss_variable_contract::VariableScope::Global => true,
-        yss_variable_contract::VariableScope::Event { event_path } => {
-            event_path.as_str() == graph_path.as_str()
-        }
-        yss_variable_contract::VariableScope::Function { function_path } => {
-            function_path.as_str() == graph_path.as_str()
-        }
-    };
-    if in_scope {
+    if crate::compatibility::variable_in_scope(graph_path, scope) {
         Ok(())
     } else {
         Err(catalog_descriptor_invalid(format!(
@@ -1137,27 +594,28 @@ fn delete_editor_node_operations(
         .then_some(connection.id)
     });
     let mut operations = disconnect_connection_operations(document, connection_ids)?;
-    operations.extend(document.input_states.iter().filter_map(|(address, state)| {
-        selected
-            .contains(&address.node_id)
-            .then(|| GraphDocumentOperation::SetInputState {
+    operations.extend(
+        document
+            .input_states
+            .iter()
+            .filter(|(address, _)| selected.contains(&address.node_id))
+            .map(|(address, state)| GraphDocumentOperation::SetInputState {
                 address: address.clone(),
                 before: Some(state.clone()),
                 after: None,
-            })
-    }));
+            }),
+    );
     operations.extend(
         document
             .port_bindings
             .iter()
-            .filter_map(|(address, binding)| {
-                selected.contains(&address.node_id).then(|| {
-                    GraphDocumentOperation::RemovePortBinding {
-                        address: address.clone(),
-                        binding: binding.clone(),
-                    }
-                })
-            }),
+            .filter(|(address, _)| selected.contains(&address.node_id))
+            .map(
+                |(address, binding)| GraphDocumentOperation::RemovePortBinding {
+                    address: address.clone(),
+                    binding: binding.clone(),
+                },
+            ),
     );
     operations.extend(
         selected
@@ -1227,7 +685,7 @@ fn insert_reroute_operations_with_allocators(
     })?;
     let contract =
         yss_graph_catalog::validate_reroute_protocol_contract(registered, output.spec.kind)
-            .map_err(|detail| MutationConflict::Projection(detail.into()))?;
+            .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
 
     let reroute_id = allocate_node_id();
     let source_connection_id = allocate_connection_id();
@@ -1321,9 +779,10 @@ pub(super) fn validate_node_scope(
 fn append_atomic_connection(
     document: &GraphDocument,
     registry: &NodeRegistry,
+    catalog: &crate::compatibility::CatalogMutationValidationSnapshot,
     operations: &mut Vec<GraphDocumentOperation>,
-    source: &crate::graph::compatibility::SourcePort,
-    candidate: crate::graph::compatibility::CandidatePort,
+    source: &crate::compatibility::SourcePort,
+    candidate: crate::compatibility::CandidatePort,
 ) -> Result<(), MutationConflict> {
     let node_id = operations
         .iter()
@@ -1383,8 +842,13 @@ fn append_atomic_connection(
     };
     let mut staged = document.clone();
     apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
-    operations.extend(connect_operations_prevalidated_type(
-        &staged, registry, output, input, order,
+    operations.extend(connect_operations(
+        &staged,
+        registry,
+        Some(catalog),
+        output,
+        input,
+        order,
     )?);
     Ok(())
 }
@@ -1460,15 +924,6 @@ pub(super) fn validate_parameters_with_registry(
     let nominal = |type_id: &yss_graph_protocol::TypeId, value: &serde_json::Value| {
         registry.validate_nominal_parameter(type_id, value)
     };
-    validate_shared_parameters(protocol, parameters, &nominal)
-}
-
-#[cfg(test)]
-pub(super) fn validate_parameters(
-    protocol: &NodeProtocol,
-    parameters: &ParameterValues,
-) -> Result<(), MutationConflict> {
-    let nominal = |_: &yss_graph_protocol::TypeId, _: &serde_json::Value| None;
     validate_shared_parameters(protocol, parameters, &nominal)
 }
 
@@ -1743,168 +1198,4 @@ fn user_created_instance_count(
                 && matches!(binding, DynamicPortBinding::UserCreated { .. })
         })
         .count()
-}
-
-/// Mutations accepted by the authoritative graph store.
-///
-/// The projected-member variant intentionally has no `PortInstanceId` field:
-/// its durable instance identity is allocated while the store builds the
-/// atomic materialize-and-connect patch.
-#[cfg(test)]
-#[derive(Debug)]
-pub enum GraphMutation {
-    CreateNode {
-        node: DocumentNode,
-    },
-    MaterializeProjectedMemberAndConnect {
-        member: ProjectedMemberRef,
-        authorization: MaterializationAuthorization,
-        output: PortAddress,
-        order: Option<OrderKey>,
-    },
-}
-
-#[cfg(test)]
-impl GraphMutation {
-    fn into_patch(
-        self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
-        let operations = match self {
-            Self::CreateNode { node } => {
-                vec![GraphDocumentOperation::InsertNode { node }]
-            }
-
-            Self::MaterializeProjectedMemberAndConnect {
-                member,
-                authorization,
-                output,
-                order,
-            } => materialize_projected_member_operations(
-                graph_path,
-                document,
-                member,
-                authorization,
-                output,
-                order,
-            )?,
-        };
-        Ok(GraphDocumentPatch::new(operations))
-    }
-}
-
-fn materialize_projected_member_operations(
-    graph_path: &GraphResourcePath,
-    document: &GraphDocument,
-    member: ProjectedMemberRef,
-    authorization: MaterializationAuthorization,
-    output: PortAddress,
-    order: Option<OrderKey>,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    if authorization.member() != &member {
-        return Err(MutationConflict::MaterializationUnauthorized);
-    }
-    if member.basis().graph_path() != graph_path {
-        return Err(MutationConflict::CompilationBasisGraphMismatch {
-            basis_graph_path: member.basis().graph_path().clone(),
-            store_graph_path: graph_path.clone(),
-        });
-    }
-    if member.basis().graph_revision() != document.revision {
-        return Err(MutationConflict::CompilationBasisStale {
-            basis_revision: member.basis().graph_revision().get(),
-            current_revision: document.revision.get(),
-        });
-    }
-
-    let materialized = PortAddress::instance(
-        member.node_id(),
-        member.template().clone(),
-        PortInstanceId::new(),
-    );
-    let (connection_output, connection_input) = match member.direction() {
-        PortDirection::Input => (output, materialized.clone()),
-        PortDirection::Output => (materialized.clone(), output),
-    };
-    Ok(vec![
-        GraphDocumentOperation::InsertPortBinding {
-            address: materialized,
-            binding: authorization.into_binding(),
-        },
-        GraphDocumentOperation::InsertConnection {
-            connection: DocumentConnection {
-                id: ConnectionId::new(),
-                output: connection_output,
-                input: connection_input,
-                order,
-            },
-        },
-    ])
-}
-
-/// Authoritative in-memory wrapper for one graph document.
-///
-/// Mutation planning and patch application are pure in-memory operations, so
-/// callers never need to hold this authority across filesystem or network I/O.
-#[cfg(test)]
-#[derive(Debug, Clone)]
-pub struct RevisionedGraphStore {
-    graph_path: GraphResourcePath,
-    document: GraphDocument,
-}
-
-#[cfg(test)]
-impl RevisionedGraphStore {
-    pub fn new(graph_path: GraphResourcePath, document: GraphDocument) -> Self {
-        Self {
-            graph_path,
-            document,
-        }
-    }
-
-    pub const fn document(&self) -> &GraphDocument {
-        &self.document
-    }
-
-    pub const fn revision(&self) -> ResourceRevision {
-        ResourceRevision::from_graph_revision(self.document.revision)
-    }
-
-    pub fn apply_mutation(
-        &mut self,
-        request: MutationRequest<GraphMutation>,
-    ) -> Result<crate::application::events::GraphDeltaEvent<GraphDocumentPatch>, MutationConflict>
-    {
-        let store_resource = ResourceKey::Graph(self.graph_path.clone());
-        if request.resource != store_resource {
-            return Err(MutationConflict::ResourceMismatch {
-                requested: match request.resource {
-                    ResourceKey::Graph(path) => path.as_str().into(),
-                    _ => self.graph_path.as_str().into(),
-                },
-                store: self.graph_path.as_str().into(),
-            });
-        }
-        if request.base_revision != ResourceRevision::from_graph_revision(self.document.revision) {
-            return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision.get(),
-                current_revision: self.document.revision.get(),
-            });
-        }
-
-        let from_revision = ResourceRevision::from_graph_revision(self.document.revision);
-        let patch = request
-            .payload
-            .into_patch(&self.graph_path, &self.document)?;
-        apply_graph_document_patch(&mut self.document, &patch)?;
-
-        Ok(crate::application::events::GraphDeltaEvent {
-            graph_path: self.graph_path.clone(),
-            from_revision,
-            to_revision: ResourceRevision::from_graph_revision(self.document.revision),
-            caused_by: Some(request.operation_id),
-            payload: patch,
-        })
-    }
 }

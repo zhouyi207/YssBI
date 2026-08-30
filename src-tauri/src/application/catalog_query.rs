@@ -157,39 +157,6 @@ pub enum ProjectCatalogReadError {
     Internal(#[source] ProjectCatalogReadSource),
 }
 
-#[allow(
-    dead_code,
-    reason = "staged transport extraction consumes this source later"
-)]
-#[derive(Debug, thiserror::Error)]
-#[error("graph catalog query failed")]
-pub struct GraphCatalogQuerySource {
-    #[source]
-    reason: GraphCatalogQuerySourceKind,
-}
-
-#[allow(
-    dead_code,
-    reason = "staged transport extraction consumes this source later"
-)]
-#[derive(Debug, thiserror::Error)]
-enum GraphCatalogQuerySourceKind {
-    #[error("graph catalog invariant failed")]
-    Invariant,
-}
-
-#[allow(
-    dead_code,
-    reason = "staged transport extraction consumes this source later"
-)]
-impl GraphCatalogQuerySource {
-    fn invariant() -> Self {
-        Self {
-            reason: GraphCatalogQuerySourceKind::Invariant,
-        }
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum GraphCatalogQueryError {
     #[error("graph revision changed during catalog query")]
@@ -201,10 +168,6 @@ pub enum GraphCatalogQueryError {
     GraphNotLoaded { graph: GraphResourcePath },
     #[error("compatible-catalog source port is invalid")]
     CompatibleSourceInvalid,
-    #[error("graph catalog resource is invalid")]
-    Catalog(#[source] crate::graph::error::GraphCatalogError),
-    #[error("graph catalog invariant failed")]
-    Internal(#[source] GraphCatalogQuerySource),
 }
 
 #[derive(Debug, thiserror::Error)]

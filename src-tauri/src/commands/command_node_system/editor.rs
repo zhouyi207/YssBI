@@ -8,9 +8,6 @@ use crate::error::CommandError;
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
 #[cfg(all(test, any()))]
-use crate::graph::document::ClipboardSubgraph;
-use crate::graph::document::EditorGraphMutation;
-#[cfg(all(test, any()))]
 use crate::project::ProjectState;
 use crate::project::{MutationRequest, ProjectInstanceId};
 use crate::schema::application_event::GraphMutationResultDto;
@@ -19,6 +16,9 @@ use crate::schema::graph_clipboard::ClipboardSubgraphDto;
 use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::{AppHandle, State};
 use yss_graph_document::NodeId;
+#[cfg(all(test, any()))]
+use yss_graph_editor::ClipboardSubgraph;
+use yss_graph_editor::EditorGraphMutation;
 
 #[cfg(all(test, any()))]
 pub(super) fn hydrate_editor_graph_from_state(
@@ -102,7 +102,7 @@ pub(crate) fn export_graph_subgraph_from_state(
             &parse_graph_path(graph_path)?,
             node_ids,
         )
-        .map_err(|error| mutation_conflict_to_command_error(error, "graph_revision_conflict"))
+        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]
@@ -187,7 +187,7 @@ pub(crate) fn mutate_graph_document_with_emitter(
             locale,
             request,
         )
-        .map_err(|error| mutation_conflict_to_command_error(error, "graph_revision_conflict"))?;
+        .map_err(mutation_conflict_to_command_error)?;
     if !result.delta.payload.operations.is_empty() {
         emit(Event::Project(EventProject::GraphDelta {
             project_instance_id: result.project_instance_id.clone(),

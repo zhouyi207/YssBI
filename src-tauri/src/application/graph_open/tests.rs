@@ -4,7 +4,7 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::graph::error::GraphMutationError;
+use crate::graph::error::GraphMaterializationError;
 use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
@@ -189,7 +189,7 @@ fn materialization_failure_preserves_loaded_residency_and_skips_projection() {
 
     assert!(matches!(
         error,
-        OpenGraphApplicationError::Materialization(GraphMutationError::Internal(_))
+        OpenGraphApplicationError::Materialization(GraphMaterializationError)
     ));
     let data = session.session.project().get_data().unwrap();
     assert!(data.graphs.contains_key(&path));

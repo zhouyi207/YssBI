@@ -6,13 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph::document::{
+use yss_graph_document::{NodePosition, TypedValue};
+use yss_graph_editor::{
     ClipboardConnection, ClipboardDynamicMemberOrigin, ClipboardDynamicPortBinding,
     ClipboardInputState, ClipboardLastKnownPortMetadata, ClipboardNode, ClipboardNodeCreation,
     ClipboardPortAddress, ClipboardPortBinding, ClipboardPortRef, ClipboardSubgraph,
-    MAX_CLIPBOARD_SERIALIZED_BYTES,
 };
-use yss_graph_document::{NodePosition, TypedValue};
 use yss_graph_protocol::{ParameterValues, TypeExpr};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -350,19 +349,6 @@ impl From<ClipboardConnection> for ClipboardConnectionDto {
 // by the mutation mapper for the raw snapshotJson payload.
 pub(crate) fn parse_clipboard_snapshot(
     snapshot_json: &str,
-) -> Result<ClipboardSubgraph, crate::graph::document::MutationConflict> {
-    if snapshot_json.len() > MAX_CLIPBOARD_SERIALIZED_BYTES {
-        return Err(
-            crate::graph::document::MutationConflict::ClipboardSubgraphInvalid(
-                "clipboard payload byte limit exceeded".into(),
-            ),
-        );
-    }
-    let dto = serde_json::from_str::<ClipboardSubgraphDto>(snapshot_json).map_err(|error| {
-        crate::graph::document::MutationConflict::ClipboardSubgraphInvalid(error.to_string().into())
-    })?;
-    let encoded = serde_json::to_vec(&dto).map_err(|error| {
-        crate::graph::document::MutationConflict::ClipboardSubgraphInvalid(error.to_string().into())
-    })?;
-    crate::graph::document::deserialize_clipboard_subgraph(&encoded).map(|validated| validated.0)
+) -> Result<ClipboardSubgraph, yss_graph_editor::MutationConflict> {
+    yss_graph_editor::deserialize_clipboard_subgraph(snapshot_json.as_bytes())
 }

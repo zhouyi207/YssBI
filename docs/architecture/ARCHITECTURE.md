@@ -197,7 +197,7 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 |---|---|---|
 | `project_lifecycle` | load/clear/create/save-as/delete 的用例结果 | ProjectState、registry 与恢复状态编排 |
 | `catalog_query` / `graph_open` | coherent localized/compatible catalog 与 graph projection | Application session capture、Project/Graph/Database snapshot 与 schema mapper |
-| `graph_mutation` / `resource_mutation` | capture/plan/commit 的 Graph 与 Project resource mutation | Application coordination、Project authority commit 与 neutral result facts |
+| `graph_commit` / `resource_mutation` | captured Graph candidate commit 与 Project resource mutation | Application session revalidation、`yss-graph-editor` planning、Project authority commit 与 neutral result facts |
 | `execution` | session capture、prepared plan、run/result/finalization | ApplicationSessionSlot 与 Execution-owned runtime |
 | `database` | typed import/read/mutate/save/export 用例 | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit |
 | `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesWorkerPort`、Database snapshot、SCI inputs 与 injected artifact reader |
@@ -214,7 +214,7 @@ command_project/lifecycle
   → project
 
 command_node_system
-  → application/catalog_query | graph_open | graph_mutation | execution
+  → application/catalog_query | graph_open | resource_mutation | graph_commit | execution
   → Project / Graph / Execution
 
 command_dataframe
@@ -325,7 +325,9 @@ yss-data-contract + yss-graph-document
 yss-data-contract + yss-graph-protocol
   → yss-graph-type-mapping → Graph editor/runtime
 yss-graph-document + yss-graph-protocol
-  → yss-graph-document-edit → Graph editor/runtime
+  → yss-graph-document-edit
+yss-graph-document-edit + yss-graph-catalog + yss-graph-registry + yss-graph-resource-contract + yss-graph-type-mapping
+  → yss-graph-editor → Application resource mutation
 yss-graph-document + yss-graph-protocol + yss-canonical-hash
   → yss-graph-registry → yss-graph-analysis-contract
   → yss-graph-compiler-diagnostics
@@ -335,7 +337,7 @@ yss-graph-registry + yss-graph-analysis-contract
   → Application graph package mapping
   → Execution immutable plan/runtime
 yss-graph-resource-contract
-  → Graph compatibility/runtime + Application catalog validation
+  → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
@@ -349,7 +351,8 @@ yss-graph-resource-contract
 - `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
-- `graph/document`：剩余 editor mutation、subgraph 与 materialization 编排；底层 document edit 规则直接消费 `yss-graph-document-edit`，不保留根兼容 re-export。
+- `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
+- `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。

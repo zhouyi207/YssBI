@@ -1,13 +1,13 @@
 use super::*;
 
-pub const CLIPBOARD_SUBGRAPH_SCHEMA_VERSION: u32 = 1;
-pub const MAX_CLIPBOARD_NODES: usize = 500;
-pub const MAX_CLIPBOARD_CONNECTIONS: usize = 2_000;
-pub const MAX_CLIPBOARD_PORT_BINDINGS: usize = 4_000;
-pub const MAX_CLIPBOARD_INPUT_STATES: usize = 4_000;
-pub const MAX_CLIPBOARD_PARAMETER_BYTES: usize = 1_048_576;
-pub const MAX_CLIPBOARD_VALUE_DEPTH: usize = 64;
-pub const MAX_CLIPBOARD_SERIALIZED_BYTES: usize = 4_194_304;
+pub(crate) const CLIPBOARD_SUBGRAPH_SCHEMA_VERSION: u32 = 1;
+pub(crate) const MAX_CLIPBOARD_NODES: usize = 500;
+pub(crate) const MAX_CLIPBOARD_CONNECTIONS: usize = 2_000;
+pub(crate) const MAX_CLIPBOARD_PORT_BINDINGS: usize = 4_000;
+pub(crate) const MAX_CLIPBOARD_INPUT_STATES: usize = 4_000;
+pub(crate) const MAX_CLIPBOARD_PARAMETER_BYTES: usize = 1_048_576;
+pub(crate) const MAX_CLIPBOARD_VALUE_DEPTH: usize = 64;
+pub(crate) const MAX_CLIPBOARD_SERIALIZED_BYTES: usize = 4_194_304;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -292,14 +292,8 @@ impl From<ClipboardSubgraphWire> for ClipboardSubgraph {
 #[derive(Debug)]
 pub(crate) struct ValidatedClipboardSubgraph(pub(crate) ClipboardSubgraph);
 
-/// The only allowed decoder for untrusted clipboard JSON.
-///
-/// `InsertSubgraph` carries raw JSON and must cross this byte-limited boundary before
-/// instantiation. The validated value is crate-private so production callers outside the
-/// document module cannot bypass this decoder with a typed DTO.
-pub(crate) fn deserialize_clipboard_subgraph(
-    bytes: &[u8],
-) -> Result<ValidatedClipboardSubgraph, MutationConflict> {
+/// Decodes untrusted clipboard JSON through the editor's byte and shape limits.
+pub fn deserialize_clipboard_subgraph(bytes: &[u8]) -> Result<ClipboardSubgraph, MutationConflict> {
     if bytes.len() > MAX_CLIPBOARD_SERIALIZED_BYTES {
         return Err(invalid_clipboard(format!(
             "clipboard payload byte limit exceeded ({} > {})",
@@ -308,7 +302,7 @@ pub(crate) fn deserialize_clipboard_subgraph(
         )));
     }
     serde_json::from_slice::<ClipboardSubgraphWire>(bytes)
-        .map(|wire| ValidatedClipboardSubgraph(wire.into()))
+        .map(Into::into)
         .map_err(|error| invalid_clipboard(format!("clipboard payload is invalid: {error}")))
 }
 

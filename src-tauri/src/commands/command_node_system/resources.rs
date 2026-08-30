@@ -295,7 +295,7 @@ pub(super) fn update_function_signature_with_emitter<R: EmitOutcome>(
             request,
             |result| emit_resource_result(&mut emit, result),
         )
-        .map_err(|error| mutation_conflict_to_command_error(error, "function_revision_conflict"))
+        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]

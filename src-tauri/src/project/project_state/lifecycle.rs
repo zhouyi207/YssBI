@@ -1,31 +1,5 @@
 use super::*;
 
-#[cfg(test)]
-impl From<ProjectHistoryMutationError> for crate::graph::document::MutationConflict {
-    fn from(error: ProjectHistoryMutationError) -> Self {
-        match error {
-            ProjectHistoryMutationError::StaleProjectLifecycle(message) => {
-                Self::StaleProjectLifecycle(message)
-            }
-            ProjectHistoryMutationError::RecoveryRequired(message) => {
-                Self::RecoveryRequired(message)
-            }
-            ProjectHistoryMutationError::StaleRevision {
-                base_revision,
-                current_revision,
-            } => Self::StaleRevision {
-                base_revision,
-                current_revision,
-            },
-            ProjectHistoryMutationError::ResourceMismatch { requested, store } => {
-                Self::ResourceMismatch { requested, store }
-            }
-            ProjectHistoryMutationError::Projection(message) => Self::Projection(message),
-            ProjectHistoryMutationError::History(message) => Self::History(message),
-        }
-    }
-}
-
 impl ProjectState {
     pub fn get_path(&self) -> Option<String> {
         self.project_path.read().unwrap().clone()

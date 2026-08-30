@@ -14,18 +14,12 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
+use super::graph_commit::{GraphCommitApplicationError, commit_captured_graph_candidate};
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
 };
-use super::graph_mutation::{GraphMutationApplicationError, commit_captured_graph_candidate};
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
-use crate::graph::compatibility::{
-    CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
-    CatalogMutationValidationSnapshot,
-};
-use crate::graph::document::MutationConflict;
-use crate::graph::document::{ClipboardSubgraph, EditorGraphMutation};
 use crate::project::project_writers::ProjectSaveResult;
 use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use crate::project::{
@@ -39,7 +33,10 @@ use yss_execution::plan::{
 use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_document_edit::apply_graph_document_patch;
-use yss_graph_protocol::NodeTypeId;
+use yss_graph_editor::{
+    CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
+    CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
+};
 
 #[derive(Debug, Error)]
 pub enum ResourceMutationApplicationError {
@@ -57,8 +54,8 @@ pub enum ResourceMutationApplicationError {
     ),
     #[error("graph operation commit failed")]
     GraphCommit(#[source] crate::project::project_state::graph_operation::ProjectGraphCommitError),
-    #[error("graph mutation application failed")]
-    GraphApplication(#[source] GraphMutationApplicationError),
+    #[error("graph resource is unavailable")]
+    GraphUnavailable { graph: GraphResourcePath },
     #[error("project catalog facts could not be captured")]
     Catalog(#[source] crate::application::catalog_query::ProjectCatalogReadError),
     #[error("database catalog snapshot failed")]
@@ -73,25 +70,17 @@ pub enum ResourceMutationApplicationError {
     SessionRefresh(#[source] ApplicationSessionRefreshError),
 }
 
-fn map_graph_mutation_application_error(
-    error: GraphMutationApplicationError,
+fn map_graph_commit_application_error(
+    error: GraphCommitApplicationError,
 ) -> ResourceMutationApplicationError {
     match error {
-        GraphMutationApplicationError::SessionCapture(error) => {
+        GraphCommitApplicationError::SessionCapture(error) => {
             ResourceMutationApplicationError::SessionCapture(error)
         }
-        GraphMutationApplicationError::SessionChanged => {
+        GraphCommitApplicationError::SessionChanged => {
             ResourceMutationApplicationError::SessionChanged(SessionRevalidationError::Changed)
         }
-        GraphMutationApplicationError::Project(error) => {
-            ResourceMutationApplicationError::GraphOperation(error)
-        }
-        GraphMutationApplicationError::Graph(error) => {
-            ResourceMutationApplicationError::GraphApplication(
-                GraphMutationApplicationError::Graph(error),
-            )
-        }
-        GraphMutationApplicationError::Commit(error) => {
+        GraphCommitApplicationError::Commit(error) => {
             ResourceMutationApplicationError::GraphCommit(error)
         }
     }
@@ -126,8 +115,6 @@ fn build_catalog_mutation_validation_snapshot(
                         .collect(),
                     return_type: signature.return_type,
                 },
-                allowed_node_type_id: editor_node_type("yssbi.project.function.call")?,
-                parameter_binding: "target".into(),
             },
         );
     }
@@ -139,11 +126,6 @@ fn build_catalog_mutation_validation_snapshot(
                 revision: variable.revision.get(),
                 scope: variable.scope,
                 data_type: variable.data_type,
-                allowed_node_type_ids: [
-                    editor_node_type("yssbi.project.variable.get")?,
-                    editor_node_type("yssbi.project.variable.set")?,
-                ],
-                parameter_binding: "variable".into(),
             },
         );
     }
@@ -153,26 +135,11 @@ fn build_catalog_mutation_validation_snapshot(
             CatalogResourcePath::new(database.resource_path.as_str()),
             CatalogMutationResource::Database {
                 authority_revision: database.revision.get(),
-                allowed_node_type_id: editor_node_type("yssbi.dataframe.source.get")?,
-                parameter_binding: "dataframe".into(),
             },
         );
     }
 
-    Ok(CatalogMutationValidationSnapshot {
-        authority_generation: index.authority_generation,
-        resources,
-    })
-}
-
-fn editor_node_type(value: &'static str) -> Result<NodeTypeId, ResourceMutationApplicationError> {
-    NodeTypeId::new(value).map_err(|error| {
-        ResourceMutationApplicationError::Project(
-            ProjectFilesystemError::TransactionPrepareFailed {
-                message: format!("invalid built-in editor node type '{value}': {error}"),
-            },
-        )
-    })
+    Ok(CatalogMutationValidationSnapshot { resources })
 }
 
 fn build_graph_shell(
@@ -340,11 +307,8 @@ impl ApplicationState {
             .graphs
             .get(&graph_path)
             .map(|resource| resource.document.clone())
-            .ok_or_else(|| {
-                ResourceMutationApplicationError::Mutation(MutationConflict::ResourceMismatch {
-                    requested: graph_path.as_str().into(),
-                    store: graph_path.as_str().into(),
-                })
+            .ok_or_else(|| ResourceMutationApplicationError::GraphUnavailable {
+                graph: graph_path.clone(),
             })?;
         let result = captured
             .graph()
@@ -394,7 +358,7 @@ impl ApplicationState {
             capture,
             std::sync::Arc::new(candidate.clone()),
         )
-        .map_err(map_graph_mutation_application_error)?;
+        .map_err(map_graph_commit_application_error)?;
         let projection =
             build_graph_projection_replacement(&captured, &graph_path, &candidate, &locale)?;
         self.revalidate_captured_session(&captured)

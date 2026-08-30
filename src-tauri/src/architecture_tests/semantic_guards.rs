@@ -303,9 +303,6 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
     let identity_path = "src-tauri/src/project/identity.rs";
     let identity = std::fs::read_to_string(repository_root.join(identity_path))
         .unwrap_or_else(|error| panic!("failed to read {identity_path}: {error}"));
-    let mutation_path = "src-tauri/src/graph/document/mutation.rs";
-    let mutation = std::fs::read_to_string(repository_root.join(mutation_path))
-        .unwrap_or_else(|error| panic!("failed to read {mutation_path}: {error}"));
     let mut violations = Vec::new();
     for forbidden in [
         "impl From<yss_graph_document::GraphRevision> for ResourceRevision",
@@ -318,11 +315,6 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
                 "{identity_path}: implicit revision bridge `{forbidden}`"
             ));
         }
-    }
-    if mutation.contains("base_revision: impl Into<ResourceRevision>") {
-        violations.push(format!(
-            "{mutation_path}: MutationRequest::new accepts an implicit revision bridge"
-        ));
     }
     violations
 }

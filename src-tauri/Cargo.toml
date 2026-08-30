@@ -24,6 +24,7 @@ members = [
     "crates/yss-graph-compiler-diagnostics",
     "crates/yss-graph-document",
     "crates/yss-graph-document-edit",
+    "crates/yss-graph-editor",
     "crates/yss-graph-protocol",
     "crates/yss-graph-resource-contract",
     "crates/yss-graph-registry",
@@ -85,6 +86,7 @@ yss-graph-compiler = { path = "./crates/yss-graph-compiler" }
 yss-graph-compiler-diagnostics = { path = "./crates/yss-graph-compiler-diagnostics" }
 yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-document-edit = { path = "./crates/yss-graph-document-edit" }
+yss-graph-editor = { path = "./crates/yss-graph-editor" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
 yss-graph-resource-contract = { path = "./crates/yss-graph-resource-contract" }
 yss-graph-registry = { path = "./crates/yss-graph-registry" }

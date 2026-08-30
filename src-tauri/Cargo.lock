@@ -9219,6 +9219,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-editor"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+ "yss-data-contract",
+ "yss-graph-catalog",
+ "yss-graph-document",
+ "yss-graph-document-edit",
+ "yss-graph-protocol",
+ "yss-graph-registry",
+ "yss-graph-resource-contract",
+ "yss-graph-type-mapping",
+ "yss-variable-contract",
+]
+
+[[package]]
 name = "yss-graph-protocol"
 version = "0.1.0"
 dependencies = [
@@ -9371,6 +9389,7 @@ dependencies = [
  "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-document-edit",
+ "yss-graph-editor",
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-resource-contract",
