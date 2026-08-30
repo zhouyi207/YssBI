@@ -425,7 +425,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yssbi_lib::project::project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
-            "yssbi_lib::project::project_state::state::ProjectState::try_new",
             "yssbi_lib::application::project_watcher::ProjectWatcherState::new",
             "yssbi_lib::application::execution::session_factory::ProjectSessionCandidateError",
             "yssbi_lib::application::execution::session_factory::SessionResourceFactoryBuilder::from_composition",

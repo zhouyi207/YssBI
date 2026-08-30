@@ -12,8 +12,6 @@ pub mod execution;
 
 mod graph;
 pub mod julia;
-#[cfg(test)]
-pub mod node_system;
 pub mod platform;
 pub mod project;
 mod schema;

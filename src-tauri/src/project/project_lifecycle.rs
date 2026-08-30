@@ -42,8 +42,6 @@ pub struct PreparedProjectDeletion {
     active_project_instance_id: Option<ProjectInstanceId>,
     activation: Option<crate::project::ProjectActivationToken>,
     lifecycle: Option<ProjectRootLifecycleGuard>,
-    #[cfg(test)]
-    run_drain: Option<crate::node_system::runtime::ProjectRunDrainGuard>,
 }
 
 impl PreparedProjectDeletion {
@@ -54,8 +52,6 @@ impl PreparedProjectDeletion {
 
 impl Drop for PreparedProjectDeletion {
     fn drop(&mut self) {
-        #[cfg(test)]
-        self.run_drain.take();
         self.lifecycle.take();
         self.activation.take();
     }
@@ -224,17 +220,8 @@ impl ProjectState {
         let mut lifecycle = self.filesystem().begin_root_lifecycle(normalized.clone())?;
         root_binding.revalidate()?;
         validate_deletion_root(&normalized)?;
-        #[cfg(test)]
-        let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
-        #[cfg(not(test))]
         let _active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
-        #[cfg(test)]
-        let run_snapshot = active.as_ref().map(|_| self.current_run_registry());
         lifecycle.release_initial_and_drain();
-        #[cfg(test)]
-        let run_drain = run_snapshot
-            .as_ref()
-            .map(|(runs, session_id)| runs.begin_drain(session_id));
         lifecycle.acquire_final()?;
         root_binding.revalidate()?;
         validate_deletion_root(&normalized)?;
@@ -263,8 +250,6 @@ impl ProjectState {
             active_project_instance_id: cleared_project_instance_id,
             activation: Some(activation),
             lifecycle: Some(lifecycle),
-            #[cfg(test)]
-            run_drain,
         })
     }
 

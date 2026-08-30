@@ -50,10 +50,6 @@ pub(super) use resource_history::{
     checked_resource_revision, normalize_function_resource_revision, validate_context_revisions,
 };
 use resource_patch::CommittedResourceMutation;
-#[cfg(test)]
-pub(super) use variable_effects::variable_effect_run_error;
-#[cfg(test)]
-pub(super) use variable_effects::{VariableEffectCommitError, VariableEffectCommitResult};
 pub(super) use variable_effects::{
     install_variable_effect_snapshots, validate_variable_effect_document,
     variable_effect_filesystem_mutations, variable_history_scope, variable_scope_graph_path,
@@ -72,31 +68,13 @@ use test_support::ProjectStateTestHooks;
 use test_support::{
     ActivationPublicationTestHook, CommittedResourceCompletionTestHook, CompilePublicationTestHook,
     ComputationSettingsPublicationTestHook, DurableHistoryTestHook, ExecutionTestHook,
-    LifecycleLockTestHook, MutationPublicationTestHook, ProductionRelationalBackendFactory,
-    ProjectionEnvironmentCaptureTestHook, ProjectionTestHook,
-    VariableAuthorityAssignmentPanicTestHook, VariableStagingTestHook,
+    LifecycleLockTestHook, MutationPublicationTestHook, ProjectionEnvironmentCaptureTestHook,
+    ProjectionTestHook, VariableStagingTestHook,
 };
 
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 impl ProjectState {
-    #[cfg(test)]
-    pub(crate) fn current_run_registry(
-        &self,
-    ) -> (
-        std::sync::Arc<crate::node_system::runtime::ProjectRunRegistry>,
-        crate::project::ProjectSessionId,
-    ) {
-        let store = self
-            .project_store
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        (
-            std::sync::Arc::clone(&store.runs),
-            store.project_session_id.clone(),
-        )
-    }
-
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
@@ -492,42 +470,6 @@ impl ProjectState {
     pub(super) fn run_activation_preparation_after_read_test_hook(&self) {}
 
     #[cfg(test)]
-    pub(crate) fn set_production_relational_observer(
-        &self,
-        observer: Arc<crate::node_system::runtime::ProductionRelationalObserver>,
-    ) {
-        *self
-            .test_hooks
-            .production_relational_observer
-            .write()
-            .unwrap() = Some(observer);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_production_relational_backend_factory(
-        &self,
-        factory: ProductionRelationalBackendFactory,
-    ) {
-        *self
-            .test_hooks
-            .production_relational_backend_factory
-            .write()
-            .unwrap() = Some(factory);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_project_resource_lease_observer(
-        &self,
-        observer: crate::node_system::runtime::ProjectResourceLeaseObserver,
-    ) {
-        *self
-            .test_hooks
-            .project_resource_lease_observer
-            .write()
-            .unwrap() = Some(observer);
-    }
-
-    #[cfg(test)]
     pub(crate) fn set_projection_test_hook(&self, hook: ProjectionTestHook) {
         *self.test_hooks.projection_test_hook.write().unwrap() = Some(hook);
     }
@@ -837,18 +779,6 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(crate) fn set_variable_authority_assignment_panic_for_test(
-        &self,
-        hook: VariableAuthorityAssignmentPanicTestHook,
-    ) {
-        *self
-            .test_hooks
-            .variable_authority_assignment_panic_test_hook
-            .write()
-            .unwrap() = Some(hook);
-    }
-
-    #[cfg(test)]
     pub(crate) fn set_project_activation_test_hook(&self, hook: ProjectActivationTestHook) {
         *self
             .test_hooks
@@ -996,31 +926,6 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(crate) fn try_current_pre_run_admission_for_test(&self) -> Option<bool> {
-        let store = self.project_store.try_read().ok()?;
-        let result = store.runs.track_pre_run(
-            store.project_session_id.clone(),
-            crate::node_system::runtime::CancellationToken::new(),
-        );
-        let accepted = result.is_ok();
-        drop(result);
-        Some(accepted)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn try_current_run_admission_for_test(&self) -> Option<bool> {
-        let store = self.project_store.try_read().ok()?;
-        let result = store.runs.track(
-            store.project_session_id.clone(),
-            crate::node_system::runtime::RunId::new(9_004),
-            crate::node_system::runtime::CancellationToken::new(),
-        );
-        let accepted = result.is_ok();
-        drop(result);
-        Some(accepted)
-    }
-
-    #[cfg(test)]
     pub(crate) fn resource_lifecycle_entry_count(&self) -> usize {
         self.resource_lifecycle.entry_count()
     }
@@ -1056,44 +961,6 @@ impl ProjectState {
         );
     }
 
-    #[cfg(test)]
-    pub(crate) fn validate_catalog_snapshot_current(
-        &self,
-        snapshot: &crate::project::CatalogProjectSnapshot,
-    ) -> Result<(), ProjectFilesystemError> {
-        let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != snapshot.project_instance_id.as_str()
-            || publication.authority_generation() != snapshot.authority_generation
-        {
-            return Err(ProjectFilesystemError::CatalogResourceStale {
-                message: "catalog or graph authority changed during compatibility resolution"
-                    .into(),
-            });
-        }
-        Ok(())
-    }
-
-    #[cfg(test)]
-    pub fn localized_catalog_snapshot(
-        &self,
-        project_instance_id: &ProjectInstanceId,
-        locale: &str,
-    ) -> Result<crate::schema::catalog::LocalizedCatalogDto, ProjectFilesystemError> {
-        let snapshot = self.catalog_snapshot(project_instance_id)?;
-        let registry_fingerprint = snapshot.registry.fingerprint().to_string();
-        let localized = snapshot.catalog.localize_with_resources(
-            snapshot.registry.as_ref(),
-            locale,
-            &snapshot.resources,
-        );
-
-        let mut result = crate::schema::catalog::LocalizedCatalogDto::from(localized);
-        result.project_instance_id = snapshot.project_instance_id.as_str().into();
-        result.registry_fingerprint = registry_fingerprint.into();
-        result.resource_publication_revision = snapshot.resource_publication_revision;
-        Ok(result)
-    }
-
     pub fn worksheet_creation_snapshot(
         &self,
     ) -> Result<(Vec<String>, Option<String>), ProjectFilesystemError> {
@@ -1106,58 +973,5 @@ impl ProjectState {
                 .collect(),
             data.databases.keys().next().cloned(),
         ))
-    }
-
-    #[cfg(test)]
-    pub(super) fn set_function_load_checkpoint(
-        &self,
-        checkpoint: Arc<dyn Fn(&crate::node_system::runtime::CancellationToken) + Send + Sync>,
-    ) {
-        *self.test_hooks.function_load_checkpoint.write().unwrap() = Some(checkpoint);
-    }
-
-    #[cfg(test)]
-    pub fn result(
-        &self,
-        result_id: crate::node_system::runtime::ResultId,
-    ) -> Result<Option<Arc<crate::node_system::runtime::StoredResult>>, ProjectFilesystemError>
-    {
-        self.ensure_project_operational()?;
-        let results = self.project_store.read().unwrap().results.clone();
-        Ok(results.result(result_id))
-    }
-
-    #[cfg(test)]
-    pub fn pin_result_history(
-        &self,
-        output: &crate::execution::plan::legacy::GraphOutputRef,
-    ) -> Result<
-        Box<
-            [(
-                crate::node_system::runtime::PinResultEntry,
-                Arc<crate::node_system::runtime::StoredResult>,
-            )],
-        >,
-        ProjectFilesystemError,
-    > {
-        self.ensure_project_operational()?;
-        let results = self.project_store.read().unwrap().results.clone();
-        results
-            .pin_history(output)
-            .into_vec()
-            .into_iter()
-            .map(|entry| {
-                let result = results.result(entry.result_id).ok_or_else(|| {
-                    ProjectFilesystemError::ResultSourceReadFailed {
-                        message: format!(
-                            "pin history references missing result {}",
-                            entry.result_id.get()
-                        ),
-                    }
-                })?;
-                Ok((entry, result))
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(Vec::into_boxed_slice)
     }
 }

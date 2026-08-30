@@ -39,30 +39,11 @@ impl Default for ProjectState {
 }
 
 impl ProjectState {
-    #[cfg(not(test))]
     pub fn new() -> Self {
         Self::from_store_and_filesystem(
             ProjectStore::new(),
             ProjectFilesystemCoordinator::default(),
         )
-    }
-
-    #[cfg(test)]
-    pub fn try_new() -> Result<Self, yss_graph_catalog::BuiltinInitializationError> {
-        Self::try_with_filesystem(ProjectFilesystemCoordinator::default())
-    }
-
-    #[cfg(test)]
-    pub fn new() -> Self {
-        Self::try_new().expect("test built-ins are valid")
-    }
-
-    #[cfg(test)]
-    fn try_with_filesystem(
-        filesystem: ProjectFilesystemCoordinator,
-    ) -> Result<Self, yss_graph_catalog::BuiltinInitializationError> {
-        let store = ProjectStore::try_new()?;
-        Ok(Self::from_store_and_filesystem(store, filesystem))
     }
 
     fn from_store_and_filesystem(

@@ -79,12 +79,6 @@ pub use project_io::*;
 pub use project_lifecycle::*;
 pub use project_metadata::*;
 pub use project_picker_task::*;
-#[cfg(test)]
-pub use project_reads::ProjectResourceSnapshot;
-#[cfg(test)]
-pub use project_reads::{
-    CatalogMutationResource, CatalogMutationValidationSnapshot, CatalogProjectSnapshot,
-};
 pub use project_registry::*;
 pub use project_scan::*;
 pub use project_session::*;

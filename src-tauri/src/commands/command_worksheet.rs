@@ -1,26 +1,15 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::worksheet::WorksheetApplicationError;
 use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
-#[cfg(test)]
-use crate::database::DatabaseInstance;
 use crate::error::CommandError;
-#[cfg(test)]
-use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-#[cfg(test)]
-use crate::project::ProjectState;
 use crate::project::{OperationId, ResourceRevision};
 use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, WorksheetDocument, WorksheetResourcePath,
 };
 use crate::schema::application_event::ResourceMutationResultDto;
-#[cfg(test)]
-use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
 use tauri::{AppHandle, State};
-
-#[cfg(test)]
-const DEFAULT_MAX_PLOT_POINTS: usize = 10_000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,113 +36,6 @@ pub struct PlotColumnPairPayload {
 
 fn database_computation_error(error: impl std::fmt::Display + std::fmt::Debug) -> CommandError {
     CommandError::diagnosed("database_computation_failed", error)
-}
-
-#[cfg(test)]
-fn series_to_plot_f64(s: &Series) -> Result<Series, CommandError> {
-    let dt = s.dtype();
-    let casted = if matches!(dt, PDataType::Date) {
-        s.cast(&PDataType::Int32)
-            .map_err(database_computation_error)?
-            .cast(&PDataType::Float64)
-            .map_err(database_computation_error)?
-    } else if matches!(dt, PDataType::Datetime(_, _)) {
-        s.cast(&PDataType::Int64)
-            .map_err(database_computation_error)?
-            .cast(&PDataType::Float64)
-            .map_err(database_computation_error)?
-    } else if matches!(dt, PDataType::Time) {
-        s.cast(&PDataType::Int64)
-            .map_err(database_computation_error)?
-            .cast(&PDataType::Float64)
-            .map_err(database_computation_error)?
-    } else {
-        s.cast(&PDataType::Float64)
-            .map_err(database_computation_error)?
-    };
-    Ok(casted)
-}
-
-#[cfg(test)]
-fn plot_format_for_series(series: &Series) -> &'static str {
-    match series.dtype() {
-        dt if matches!(dt, PDataType::Date) => "date",
-        dt if matches!(dt, PDataType::Datetime(_, _)) => "datetime",
-        _ => "number",
-    }
-}
-
-#[cfg(test)]
-fn subsample_points<T>(mut data: Vec<T>, max_points: usize) -> Vec<T> {
-    if data.len() <= max_points {
-        return data;
-    }
-    let stride = (data.len() as f64 / max_points as f64).ceil() as usize;
-    if stride <= 1 {
-        data.truncate(max_points);
-        return data;
-    }
-    data.into_iter()
-        .enumerate()
-        .filter_map(|(index, point)| (index % stride == 0).then_some(point))
-        .take(max_points)
-        .collect()
-}
-
-#[cfg(test)]
-fn compute_plot_column_pair(
-    db: &mut DatabaseInstance,
-    x_col: &str,
-    y_col: &str,
-    max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, CommandError> {
-    let x_series = db
-        .load_column_series(x_col)
-        .map_err(database_computation_error)?;
-    let y_series = db
-        .load_column_series(y_col)
-        .map_err(database_computation_error)?;
-
-    let x_cast = series_to_plot_f64(&x_series)?;
-    let y_cast = series_to_plot_f64(&y_series)?;
-
-    let x_f64 = x_cast.f64().map_err(database_computation_error)?;
-    let y_f64 = y_cast.f64().map_err(database_computation_error)?;
-
-    let mut data: Vec<PlotPoint> = x_f64
-        .into_iter()
-        .zip(y_f64.into_iter())
-        .filter_map(|(ox, oy)| match (ox, oy) {
-            (Some(x), Some(y)) if x.is_finite() && y.is_finite() => Some(PlotPoint { x, y }),
-            _ => None,
-        })
-        .collect();
-
-    if data.is_empty() {
-        return Err(CommandError::expected("plot_data_empty"));
-    }
-
-    let max_points = max_points.unwrap_or(DEFAULT_MAX_PLOT_POINTS);
-    data = subsample_points(data, max_points);
-
-    let x_label = x_series.name().to_string();
-    let y_label = y_series.name().to_string();
-
-    Ok(PlotColumnPairPayload {
-        data,
-        x_label: if x_label.is_empty() {
-            None
-        } else {
-            Some(x_label)
-        },
-        y_label: if y_label.is_empty() {
-            None
-        } else {
-            Some(y_label)
-        },
-        x_format: plot_format_for_series(&x_series).to_string(),
-        y_format: plot_format_for_series(&y_series).to_string(),
-    })
 }
 
 #[derive(Serialize)]
@@ -342,22 +224,6 @@ pub fn remove_worksheet(
     Ok(result)
 }
 
-#[cfg(test)]
-fn get_plot_column_pair_for_project(
-    state: &ProjectState,
-    project_instance_id: &ProjectInstanceId,
-    database_id: &str,
-    x_col: &str,
-    y_col: &str,
-    max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, CommandError> {
-    state
-        .with_database_snapshot_for_project(project_instance_id, database_id, |database| {
-            compute_plot_column_pair(database, x_col, y_col, max_points)
-        })
-        .map_err(CommandError::from)?
-}
-
 #[tauri::command]
 pub fn get_plot_column_pair(
     state: State<'_, ApplicationState>,
@@ -449,150 +315,4 @@ fn plot_axis_format(format: crate::application::worksheet_plot::PlotAxisFormat) 
         crate::application::worksheet_plot::PlotAxisFormat::Datetime => "datetime",
     }
     .to_owned()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::database::{DatabaseState, EditHistory};
-    use crate::event::{Event, EventProject};
-    use crate::project::ProjectData;
-    use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-
-    fn install_plot_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
-        let mut project = ProjectData::new();
-        let decl = DatabaseDecl {
-            id: DatabaseId::from_existing("sales".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "sales".into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: project_name.into(),
-        };
-        project.databases.insert("sales".into(), decl.clone());
-        state.activate_project_fixture(project_name.into(), project);
-        let dataframe =
-            polars::df!("amount" => &[1_i64, 2_i64], "cost" => &[3_i64, 4_i64]).unwrap();
-        state.project_store.write().unwrap().databases.insert(
-            "sales".into(),
-            DatabaseInstance {
-                decl,
-                state: DatabaseState::Loaded {
-                    dataframe: std::sync::Arc::new(dataframe.clone()),
-                    original: std::sync::Arc::new(dataframe),
-                    history: EditHistory::new(),
-                },
-            },
-        );
-        state.capture_project_session().unwrap().instance_id
-    }
-
-    #[test]
-    fn worksheet_plot_read_rejects_stale_project_identity() {
-        let state = ProjectState::new();
-        let stale = install_plot_database(&state, "plot-original");
-        install_plot_database(&state, "plot-replacement");
-
-        let error =
-            get_plot_column_pair_for_project(&state, &stale, "sales", "amount", "cost", None)
-                .unwrap_err();
-
-        assert_eq!(error.code(), "stale_project_lifecycle");
-    }
-
-    #[test]
-    fn worksheet_plot_computation_returns_stable_database_error() {
-        let state = ProjectState::new();
-        let current = install_plot_database(&state, "plot-computation");
-
-        let error =
-            get_plot_column_pair_for_project(&state, &current, "sales", "missing", "cost", None)
-                .unwrap_err();
-
-        assert_eq!(error.code(), "database_computation_failed");
-    }
-
-    #[test]
-    fn worksheet_ipc_errors_serialize_the_approved_resource_contract() {
-        let worksheet_path =
-            WorksheetResourcePath::parse("worksheets/Sales Report.yssbi-worksheet").unwrap();
-        for (source, expected_code, has_incident) in [
-            (
-                ProjectFilesystemError::WorksheetNotFound {
-                    path: worksheet_path.clone(),
-                },
-                "resource_not_found",
-                false,
-            ),
-            (
-                ProjectFilesystemError::ResourceNameConflict {
-                    message: "a worksheet named 'Sales Report' already exists".into(),
-                },
-                "resource_name_conflict",
-                false,
-            ),
-            (
-                ProjectFilesystemError::ResourceRevisionConflict {
-                    message: "worksheet revision changed".into(),
-                },
-                "resource_revision_conflict",
-                false,
-            ),
-            (
-                ProjectFilesystemError::TransactionPrepareFailed {
-                    message: "prepare fault".into(),
-                },
-                "filesystem_prepare_failed",
-                true,
-            ),
-            (
-                ProjectFilesystemError::TransactionCommitFailed {
-                    message: "commit fault".into(),
-                },
-                "filesystem_commit_failed",
-                true,
-            ),
-        ] {
-            let error = worksheet_command_error(&worksheet_path, source);
-            let serialized = serde_json::to_value(error).unwrap();
-            assert_eq!(serialized.as_object().unwrap().len(), 3);
-            assert_eq!(serialized["code"], expected_code);
-            assert_eq!(
-                serialized["details"],
-                serde_json::json!({
-                    "resourceKind": "worksheet",
-                    "resourcePath": worksheet_path.as_str(),
-                })
-            );
-            assert!(serialized.get("message").is_none());
-            if has_incident {
-                assert!(uuid::Uuid::parse_str(serialized["incidentId"].as_str().unwrap()).is_ok());
-            } else {
-                assert!(serialized["incidentId"].is_null());
-            }
-        }
-
-        let recovery = worksheet_command_error(
-            &worksheet_path,
-            ProjectFilesystemError::TransactionRollbackFailed {
-                message: "restore fault".into(),
-                recovery_required: true,
-            },
-        );
-        let serialized = serde_json::to_value(recovery).unwrap();
-        assert_eq!(serialized.as_object().unwrap().len(), 3);
-        assert_eq!(serialized["code"], "publication_recovery_required");
-        assert_eq!(
-            serialized["details"],
-            serde_json::json!({
-                "resourceKind": "worksheet",
-                "resourcePath": worksheet_path.as_str(),
-                "recoveryRequired": true,
-            })
-        );
-        assert!(uuid::Uuid::parse_str(serialized["incidentId"].as_str().unwrap()).is_ok());
-        assert!(serialized.get("message").is_none());
-        assert!(!serialized.to_string().contains("restore fault"));
-    }
 }

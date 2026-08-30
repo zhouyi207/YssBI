@@ -31,8 +31,6 @@ impl PublishedProjectActivation {
             garbage,
             postcommit_panic,
         } = self;
-        #[cfg(test)]
-        garbage._store.finalize_session();
         drop(garbage);
         if let Some(payload) = postcommit_panic {
             std::panic::resume_unwind(payload);

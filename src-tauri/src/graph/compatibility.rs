@@ -379,43 +379,6 @@ pub(crate) fn refine_source_type(
     }
 }
 
-#[cfg(test)]
-pub(crate) fn compatible_catalog(
-    snapshot: &crate::project::CatalogProjectSnapshot,
-    graph_path: &GraphResourcePath,
-    source: &SourcePort,
-    locale: &str,
-) -> crate::schema::catalog::LocalizedCatalogDto {
-    let mut localized = snapshot.catalog.localize_with_resources(
-        snapshot.registry.as_ref(),
-        locale,
-        &snapshot.resources,
-    );
-    localized.items.retain(|item| {
-        candidate_ports(
-            graph_path,
-            &item.creation,
-            snapshot.registry.as_ref(),
-            &snapshot.validation,
-        )
-        .is_ok_and(|ports| ports.iter().any(|port| ports_are_compatible(source, port)))
-    });
-    let categories = localized
-        .items
-        .iter()
-        .map(|item| item.category_id.as_ref())
-        .collect::<std::collections::BTreeSet<_>>();
-    localized
-        .categories
-        .retain(|category| categories.contains(category.category_id.as_ref()));
-
-    let mut dto = crate::schema::catalog::LocalizedCatalogDto::from(localized);
-    dto.project_instance_id = snapshot.project_instance_id.as_str().into();
-    dto.registry_fingerprint = snapshot.registry.fingerprint().to_string().into();
-    dto.resource_publication_revision = snapshot.resource_publication_revision;
-    dto
-}
-
 pub(crate) fn connection_candidates(
     graph_path: &GraphResourcePath,
     descriptor: &NodeCreation,

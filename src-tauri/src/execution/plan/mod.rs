@@ -1,7 +1,3 @@
-#[cfg(test)]
-#[doc(hidden)]
-pub(crate) mod legacy;
-
 pub(crate) mod basis;
 pub mod identity;
 pub(crate) mod model;

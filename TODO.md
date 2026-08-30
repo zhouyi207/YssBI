@@ -603,3 +603,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-graph-catalog/`；删除根兼容 module、未挂载且重复 resolver ID 的
   `project_interface.rs`、漂移的永久禁用 plot tests、零调用 fault/mutator API 与无效导入；根库测试入口通过
   `test-support` feature 显式隔离。
+- [ ] 在提取 `yss-execution` 前删除仅由 `cfg(test)` 挂载的旧 `node_system` runtime 与
+  `execution::plan::legacy`，同步清除 ProjectStore 中生产不存在的 database/catalog/run/result
+  镜像、永久禁用旧 command/application route 及其测试，确保新 execution 成为唯一运行时事实源。

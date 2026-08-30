@@ -1452,6 +1452,40 @@ fn rust_project_production_does_not_depend_on_graph_layer() {
 }
 
 #[test]
+fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/src/node_system",
+        "src-tauri/src/execution/plan/legacy",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "the removed legacy execution owner must not return: {relative}"
+        );
+    }
+
+    let project_store =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_store.rs"))
+            .expect("ProjectStore source must be readable");
+    for removed_mirror in [
+        "databases:",
+        "node_registry:",
+        "catalog:",
+        "kernels:",
+        "compiled_parameters:",
+        "function_plans:",
+        "results:",
+        "memoization:",
+        "runs:",
+    ] {
+        assert!(
+            !project_store.contains(removed_mirror),
+            "ProjectStore must not restore the test-only runtime mirror '{removed_mirror}'"
+        );
+    }
+}
+
+#[test]
 fn rust_graph_project_revision_conversions_are_explicit() {
     assert_eq!(
         graph_project_revision_bridge_violations(&repository_root()),

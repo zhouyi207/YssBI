@@ -7,10 +7,7 @@ pub(super) type MutationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type DurableHistoryTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type CompilePublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type ExecutionTestHook = Arc<dyn Fn() + Send + Sync>;
-pub(super) type ProductionRelationalBackendFactory =
-    Arc<dyn Fn() -> Arc<dyn crate::node_system::runtime::RelationalBackend> + Send + Sync>;
 pub(super) type VariableStagingTestHook = Arc<dyn Fn() + Send + Sync>;
-pub(super) type VariableAuthorityAssignmentPanicTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -22,15 +19,6 @@ pub(in crate::project) struct ProjectStateTestHooks {
         Arc<RwLock<Option<Arc<dyn Fn() + Send + Sync>>>>,
     pub(in crate::project) graph_move_history_io_checkpoint:
         Arc<RwLock<Option<Arc<dyn Fn() + Send + Sync>>>>,
-    pub(in crate::project) function_load_checkpoint: Arc<
-        RwLock<Option<Arc<dyn Fn(&crate::node_system::runtime::CancellationToken) + Send + Sync>>>,
-    >,
-    pub(in crate::project) production_relational_observer:
-        Arc<RwLock<Option<Arc<crate::node_system::runtime::ProductionRelationalObserver>>>>,
-    pub(in crate::project) production_relational_backend_factory:
-        Arc<RwLock<Option<ProductionRelationalBackendFactory>>>,
-    pub(in crate::project) project_resource_lease_observer:
-        Arc<RwLock<Option<crate::node_system::runtime::ProjectResourceLeaseObserver>>>,
     pub(in crate::project) projection_test_hook: Arc<RwLock<Option<ProjectionTestHook>>>,
     pub(in crate::project) committed_resource_completion_test_hook:
         Arc<RwLock<Option<CommittedResourceCompletionTestHook>>>,
@@ -64,8 +52,6 @@ pub(in crate::project) struct ProjectStateTestHooks {
     pub(in crate::project) execution_before_commit_gate_test_hook:
         Arc<RwLock<Option<ExecutionTestHook>>>,
     pub(in crate::project) variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
-    pub(in crate::project) variable_authority_assignment_panic_test_hook:
-        Arc<RwLock<Option<VariableAuthorityAssignmentPanicTestHook>>>,
     pub(in crate::project) project_activation_test_hook:
         Arc<RwLock<Option<ProjectActivationTestHook>>>,
     pub(in crate::project) activation_store_replaced_test_hook:
