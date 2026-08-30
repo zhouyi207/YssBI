@@ -1,90 +1,59 @@
 use std::collections::BTreeMap;
 
-use crate::graph::compiler::package::{
+use crate::package::{
     GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
     GraphOperation, GraphParameterHandle, GraphParameterPayload, GraphParameterScalar,
     GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
-use crate::graph::error::GraphCompileError;
-use yss_graph_analysis::{GraphAnalysis, GraphAnalysisInput, analyze, result_category_for_node};
-use yss_graph_analysis_contract::{CompilationBasis, CompileId};
+use crate::{GraphCompileError, GraphCompileErrorCode};
+use yss_graph_analysis::result_category_for_node;
+use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
-pub(crate) struct GraphCompilationInput<'a> {
+pub struct GraphCompilationInput<'a> {
     document: &'a GraphDocument,
-    basis: CompilationBasis<GraphRevision>,
+    expected_revision: GraphRevision,
     graph: GraphResourcePath,
     compile_id: CompileId,
 }
 
 impl<'a> GraphCompilationInput<'a> {
-    pub(crate) fn new(
+    pub fn new(
         document: &'a GraphDocument,
-        basis: CompilationBasis<GraphRevision>,
+        expected_revision: GraphRevision,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Self {
         Self {
             document,
-            basis,
+            expected_revision,
             graph,
             compile_id,
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct GraphDiagnostic {
-    pub(crate) code: Box<str>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CompilationReport {
-    pub(crate) analysis: GraphAnalysis,
-    pub(crate) diagnostics: Box<[GraphDiagnostic]>,
-    pub(crate) executable: Option<GraphCompiledPackage>,
-    pub(crate) basis: CompilationBasis<GraphRevision>,
-}
-
-pub(crate) fn compile(
+pub fn compile(
     input: GraphCompilationInput<'_>,
-) -> Result<CompilationReport, GraphCompileError> {
-    if input.basis.graph_revision != input.document.revision {
+) -> Result<GraphCompiledPackage, GraphCompileError> {
+    if input.expected_revision != input.document.revision {
         return Err(GraphCompileError::InvalidGraph {
             graph: input.graph,
-            code: crate::graph::error::GraphCompileErrorCode::InvalidDocument,
+            code: GraphCompileErrorCode::InvalidDocument,
         });
     }
 
-    let analysis = analyze(GraphAnalysisInput {
-        document: input.document,
-        basis: &input.basis,
-    });
-    let package = lower_package(
-        input.document,
-        input.graph.clone(),
-        input.compile_id,
-        &input.graph,
-        input.basis.clone(),
-    )?;
-    Ok(CompilationReport {
-        analysis,
-        diagnostics: Box::new([]),
-        executable: Some(package),
-        basis: input.basis,
-    })
+    lower_package(input.document, input.graph, input.compile_id)
 }
 
 fn lower_package(
     document: &GraphDocument,
     graph: GraphResourcePath,
     compile_id: CompileId,
-    graph_path: &GraphResourcePath,
-    basis: CompilationBasis<GraphRevision>,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
-    let value_refs = node_value_refs(document, graph_path)?;
+    let value_refs = node_value_refs(document, &graph)?;
     let operations = document
         .nodes
         .values()
@@ -92,7 +61,7 @@ fn lower_package(
             let value_ref = value_refs
                 .get(&node.id)
                 .copied()
-                .ok_or_else(|| lowering_error(graph_path))?;
+                .ok_or_else(|| lowering_error(&graph))?;
             let result_category = result_category_for_node(node.node_type.as_str());
             let parameter_handles = node
                 .parameters
@@ -100,7 +69,7 @@ fn lower_package(
                 .map(|key| node_parameter_handle(node.id, key.as_str()))
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            let inputs = lower_input_bindings(node.id, document, &value_refs, graph_path)?;
+            let inputs = lower_input_bindings(node.id, document, &value_refs, &graph)?;
             let observation_intents: Box<[GraphObservationIntent]> = if node.node_type.as_str()
                 == DEBUG_VIEW_NODE_TYPE
             {
@@ -120,9 +89,9 @@ fn lower_package(
         })
         .collect::<Result<Vec<_>, GraphCompileError>>()?;
 
-    let parameters = lower_parameters(document, graph_path)?;
+    let parameters = lower_parameters(document, &graph)?;
     Ok(GraphCompiledPackage::new(
-        basis,
+        graph,
         compile_id,
         operations.into_boxed_slice(),
         parameters,
@@ -305,6 +274,58 @@ fn lower_parameter_value(
 fn lowering_error(graph: &GraphResourcePath) -> GraphCompileError {
     GraphCompileError::InvalidGraph {
         graph: graph.clone(),
-        code: crate::graph::error::GraphCompileErrorCode::LoweringInvariant,
+        code: GraphCompileErrorCode::LoweringInvariant,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn graph_path() -> GraphResourcePath {
+        GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
+    }
+
+    #[test]
+    fn empty_document_compiles_to_an_identified_empty_package() {
+        let document = GraphDocument::default();
+        let graph = graph_path();
+        let compile_id = CompileId::new(7);
+
+        let package = compile(GraphCompilationInput::new(
+            &document,
+            document.revision,
+            graph.clone(),
+            compile_id,
+        ))
+        .expect("a current empty document must compile");
+
+        assert_eq!(package.graph(), &graph);
+        assert_eq!(package.compile_id(), compile_id);
+        assert!(package.operations().is_empty());
+        assert!(package.parameters().is_empty());
+    }
+
+    #[test]
+    fn stale_document_revision_is_rejected_before_lowering() {
+        let document = GraphDocument::default();
+        let graph = graph_path();
+        let stale_revision = GraphRevision::new(document.revision.get().saturating_add(1));
+
+        let error = compile(GraphCompilationInput::new(
+            &document,
+            stale_revision,
+            graph.clone(),
+            CompileId::new(1),
+        ))
+        .expect_err("a stale document must not compile");
+
+        assert!(matches!(
+            error,
+            GraphCompileError::InvalidGraph {
+                graph: error_graph,
+                code: GraphCompileErrorCode::InvalidDocument,
+            } if error_graph == graph
+        ));
     }
 }

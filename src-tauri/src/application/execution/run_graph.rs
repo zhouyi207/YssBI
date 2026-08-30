@@ -10,12 +10,9 @@ use super::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::application::catalog_query::capture_localized_project_facts;
-use crate::application::graph_contracts::{
-    build_resource_catalog, execution_package_from_graph, graph_compilation_basis,
-};
+use crate::application::graph_contracts::{build_resource_catalog, execution_package_from_graph};
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
-use crate::graph::compiler::{GraphCompilationInput, compile};
 use crate::project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
@@ -34,6 +31,7 @@ use yss_execution::run_registry::{RunId, RunState};
 use yss_execution::state::{
     ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
 };
+use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::GraphResourcePath;
 
 /// A run demand is an Application-owned interpretation of the graph execution
@@ -204,15 +202,13 @@ pub(crate) enum ExecutionApplicationError {
     #[error("database catalog snapshot failed")]
     DatabaseCatalog(#[source] DatabaseError),
     #[error("graph compilation failed")]
-    GraphCompilation(#[source] crate::graph::error::GraphCompileError),
+    GraphCompilation(#[source] yss_graph_compiler::GraphCompileError),
     #[error("graph contract mapping failed")]
     GraphContract(#[source] crate::application::graph_contracts::GraphContractMappingError),
     #[error("graph execution package mapping failed")]
     GraphPackage(#[source] crate::application::graph_contracts::GraphPackageMappingError),
     #[error("execution package preparation failed")]
     PackagePreparation(#[source] PackagePreparationError),
-    #[error("compiled graph did not produce an execution package")]
-    PackageUnavailable,
     #[error("prepared execution failed")]
     PreparedExecution(#[source] ExecutePreparedError),
     #[error("project effect preparation failed")]
@@ -321,19 +317,15 @@ where
         prepared_project.authority().graph_revision(),
         prepared_project.resources().grants(),
     )?;
-    let graph_basis = graph_compilation_basis(&basis);
-    let compilation = compile(GraphCompilationInput::new(
+    let graph_package = compile(GraphCompilationInput::new(
         graph_document,
-        graph_basis,
+        yss_graph_document::GraphRevision::new(prepared_project.authority().graph_revision().get()),
         request.graph_path.clone(),
         yss_graph_analysis_contract::CompileId::new(
             prepared_project.authority().graph_revision().get(),
         ),
     ))
     .map_err(ExecutionApplicationError::GraphCompilation)?;
-    let graph_package = compilation
-        .executable
-        .ok_or(ExecutionApplicationError::PackageUnavailable)?;
     let package = execution_package_from_graph(graph_package, basis)
         .map_err(ExecutionApplicationError::GraphPackage)?;
     let prepared_plan = captured

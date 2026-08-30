@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use yss_graph_analysis::GraphResultCategory;
-use yss_graph_analysis_contract::{CompilationBasis, CompileId};
-use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+use yss_graph_analysis_contract::CompileId;
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
 
 /// Graph-owned value reference used while lowering a document.  Application
 /// maps it to the execution package only after the Graph compilation result
@@ -197,7 +197,7 @@ impl GraphOperation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphCompiledPackage {
-    basis: CompilationBasis<GraphRevision>,
+    graph: GraphResourcePath,
     compile_id: CompileId,
     operations: Box<[GraphOperation]>,
     parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
@@ -205,21 +205,21 @@ pub struct GraphCompiledPackage {
 
 impl GraphCompiledPackage {
     pub fn new(
-        basis: CompilationBasis<GraphRevision>,
+        graph: GraphResourcePath,
         compile_id: CompileId,
         operations: Box<[GraphOperation]>,
         parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
     ) -> Self {
         Self {
-            basis,
+            graph,
             compile_id,
             operations,
             parameters,
         }
     }
 
-    pub fn basis(&self) -> &CompilationBasis<GraphRevision> {
-        &self.basis
+    pub fn graph(&self) -> &GraphResourcePath {
+        &self.graph
     }
 
     pub const fn compile_id(&self) -> CompileId {

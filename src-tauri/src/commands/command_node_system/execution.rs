@@ -53,14 +53,7 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
             CommandError::diagnosed("execution_database_catalog_failed", error)
         }
         ExecutionApplicationError::GraphCompilation(error) => {
-            let code = match &error {
-                crate::graph::error::GraphCompileError::Catalog(_) => "graph_catalog_invalid",
-                crate::graph::error::GraphCompileError::InvalidGraph { .. } => "invalid_graph",
-                crate::graph::error::GraphCompileError::Internal(_) => {
-                    "internal_compilation_failure"
-                }
-            };
-            CommandError::diagnosed(code, error)
+            CommandError::diagnosed("invalid_graph", error)
         }
         ExecutionApplicationError::GraphContract(error) => {
             CommandError::diagnosed("graph_contract_failed", error)
@@ -70,9 +63,6 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         }
         ExecutionApplicationError::PackagePreparation(error) => {
             CommandError::diagnosed("invalid_execution_plan", error)
-        }
-        ExecutionApplicationError::PackageUnavailable => {
-            CommandError::internal("compiled graph did not produce an execution package")
         }
         ExecutionApplicationError::PreparedExecution(error) => {
             let code = prepared_execution_command_code(&error);

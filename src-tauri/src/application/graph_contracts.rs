@@ -1,10 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::database::session_api::DatabaseCatalogSnapshot;
-use crate::graph::compiler::{
-    GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
-    GraphParameterValue, GraphSourceIdentity,
-};
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
@@ -20,6 +16,10 @@ use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatistica
 use yss_graph_analysis_contract::{
     CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
     ResourceVersion as GraphResourceVersion,
+};
+use yss_graph_compiler::{
+    GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
+    GraphParameterValue, GraphSourceIdentity,
 };
 use yss_graph_document::{GraphResourcePath, GraphRevision};
 use yss_graph_resource_contract::{
@@ -299,16 +299,8 @@ pub fn execution_package_from_graph(
             .insert(handle, PlanParameterPayload::new(schema, value))
             .map_err(GraphPackageMappingError::DuplicateParameter)?;
     }
-    let graph = PlanGraphId::new(
-        package
-            .operations()
-            .first()
-            .map(|operation| operation.source().graph().as_str())
-            .unwrap_or("graph")
-            .to_owned()
-            .into_boxed_str(),
-    )
-    .map_err(GraphPackageMappingError::Identity)?;
+    let graph = PlanGraphId::new(package.graph().as_str().to_owned().into_boxed_str())
+        .map_err(GraphPackageMappingError::Identity)?;
     let provenance = PlanProvenance::new(
         PlanSourceIdentity::new(graph, None, None),
         basis.clone(),

@@ -1,5 +1,4 @@
 use thiserror::Error;
-use yss_graph_document::GraphResourcePath;
 use yss_graph_resource_contract::GraphResourceId;
 
 #[derive(Debug, Error)]
@@ -64,45 +63,4 @@ pub enum GraphMutationError {
     InvalidMutation { code: GraphMutationErrorCode },
     #[error(transparent)]
     Internal(#[from] GraphMutationSource),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GraphCompileErrorCode {
-    InvalidDocument,
-    AnalysisInvariant,
-    LoweringInvariant,
-}
-
-#[derive(Debug, Error)]
-#[error("graph compilation failed")]
-pub struct GraphCompileSource {
-    #[source]
-    source: GraphCompileSourceKind,
-}
-
-#[derive(Debug, Error)]
-enum GraphCompileSourceKind {
-    #[error("graph compilation invariant failed")]
-    Invariant,
-}
-
-impl GraphCompileSource {
-    pub(crate) fn invariant() -> Self {
-        Self {
-            source: GraphCompileSourceKind::Invariant,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum GraphCompileError {
-    #[error(transparent)]
-    Catalog(#[from] GraphCatalogError),
-    #[error("graph is invalid for compilation")]
-    InvalidGraph {
-        graph: GraphResourcePath,
-        code: GraphCompileErrorCode,
-    },
-    #[error(transparent)]
-    Internal(#[from] GraphCompileSource),
 }

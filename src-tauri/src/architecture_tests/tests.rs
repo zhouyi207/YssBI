@@ -309,6 +309,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-compiler"
+                && root.target == "yss_graph_compiler"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-compiler-diagnostics"
                 && root.target == "yss_graph_compiler_diagnostics"
                 && root.kind == ProductionRootKind::Library)
@@ -542,6 +550,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-graph-catalog"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_compiler"
+                    && alias.member_package == "yss-graph-compiler"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-compiler"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -820,6 +846,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-catalog/src/lib.rs"),
     };
+    let graph_compiler_root = ProductionRoot {
+        package_id: "graph-compiler-package".to_owned(),
+        package: "yss-graph-compiler".to_owned(),
+        target: "yss_graph_compiler".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-compiler/src/lib.rs"),
+    };
     let graph_compiler_diagnostics_root = ProductionRoot {
         package_id: "graph-compiler-diagnostics-package".to_owned(),
         package: "yss-graph-compiler-diagnostics".to_owned(),
@@ -900,6 +933,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_analysis_root.clone(),
         graph_analysis_contract_root.clone(),
         graph_catalog_root.clone(),
+        graph_compiler_root.clone(),
         graph_compiler_diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
@@ -976,6 +1010,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_analysis_contract_root,
                 "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
                 "yss_graph_analysis_contract",
+            ),
+            module(
+                &graph_compiler_root,
+                "src-tauri/crates/yss-graph-compiler/src/lib.rs",
+                "yss_graph_compiler",
             ),
             module(
                 &graph_compiler_diagnostics_root,
@@ -1078,6 +1117,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"],
+        RustLayer::Graph
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-compiler/src/lib.rs"],
         RustLayer::Graph
     );
     assert_eq!(
@@ -1891,6 +1934,70 @@ fn graph_analysis_has_one_behavior_owner_without_noop_context_inputs() {
             "graph analysis must not restore ignored context input '{removed}'"
         );
     }
+}
+
+#[test]
+fn graph_compiler_has_one_owner_without_optional_or_mirrored_compile_state() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-compiler/Cargo.toml",
+        "src-tauri/crates/yss-graph-compiler/src/compiler.rs",
+        "src-tauri/crates/yss-graph-compiler/src/error.rs",
+        "src-tauri/crates/yss-graph-compiler/src/lib.rs",
+        "src-tauri/crates/yss-graph-compiler/src/package.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph compiler owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph/compiler").exists(),
+        "the root crate must not retain a graph compiler compatibility module"
+    );
+
+    let compiler_sources = [
+        "src-tauri/crates/yss-graph-compiler/src/compiler.rs",
+        "src-tauri/crates/yss-graph-compiler/src/error.rs",
+        "src-tauri/crates/yss-graph-compiler/src/lib.rs",
+        "src-tauri/crates/yss-graph-compiler/src/package.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "CompilationReport",
+        "GraphDiagnostic",
+        "Option<GraphCompiledPackage>",
+        "CompilationBasis",
+        "GraphAnalysisInput",
+        "AnalysisInvariant",
+        "GraphCompileSource",
+        "GraphCompileError::Catalog",
+        "GraphCompileError::Internal",
+    ] {
+        assert!(
+            !compiler_sources.contains(removed),
+            "graph compiler must not restore no-op or zero-producer state {removed}"
+        );
+    }
+
+    let root_graph_error = std::fs::read_to_string(root.join("src-tauri/src/graph/error.rs"))
+        .expect("root graph error source must be readable");
+    assert!(
+        !root_graph_error.contains("GraphCompile"),
+        "compile errors must have a single owner in yss-graph-compiler"
+    );
+    let run_graph =
+        std::fs::read_to_string(root.join("src-tauri/src/application/execution/run_graph.rs"))
+            .expect("run graph source must be readable");
+    assert!(
+        !run_graph.contains("PackageUnavailable"),
+        "an infallible optional-package branch must not return"
+    );
 }
 
 #[test]

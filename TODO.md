@@ -615,3 +615,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Graph document analysis、editor projection facts 与 result category 判定迁入
   `src-tauri/crates/yss-graph-analysis/`；根 crate 不保留兼容 module，并删除从 Project settings/
   resource catalog 构造后仅被丢弃的 no-op analysis 输入链。
+- [ ] 将 neutral Graph lowering、immutable compiled package 与 compile error 迁入
+  `src-tauri/crates/yss-graph-compiler/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
+  compilation report、空 diagnostics、重复 basis 与零生产者 error 分支。

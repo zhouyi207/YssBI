@@ -88,7 +88,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-graph-analysis/src/lib.rs",
         RustLayer::Graph,
     ),
-    ("src-tauri/src/graph/compiler/mod.rs", RustLayer::Graph),
+    (
+        "src-tauri/crates/yss-graph-compiler/src/lib.rs",
+        RustLayer::Graph,
+    ),
     ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
     (
         "src-tauri/src/project/variable_defaults.rs",
@@ -775,10 +778,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::Event",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::graph::error::GraphCompileError",
-            "yssbi_lib::graph::error::GraphCompileError::Catalog",
-            "yssbi_lib::graph::error::GraphCompileError::Internal",
-            "yssbi_lib::graph::error::GraphCompileError::InvalidGraph",
             "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::project::execution_authority::ProjectExecutionPreparationError",
             "yssbi_lib::project::execution_authority::ProjectExecutionPreparationError::DuplicateResourceRequirement",
@@ -1802,6 +1801,7 @@ fn non_build_memberships(
         package,
         "yss-graph-analysis"
             | "yss-graph-analysis-contract"
+            | "yss-graph-compiler"
             | "yss-graph-compiler-diagnostics"
             | "yss-graph-registry"
     ) {
