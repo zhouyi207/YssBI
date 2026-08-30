@@ -1,9 +1,9 @@
 use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState,
-    WorksheetDocument, WorksheetResourcePath,
 };
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 impl ProjectState {
     pub fn read_project_index(

@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use super::ensure_worksheets_dir;
 use super::{
     GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
     ProjectData, ProjectError, ProjectWorksheetIndexEntry, load_worksheets_from_root,
@@ -13,6 +11,8 @@ use super::{
 use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_project_identity::ProjectResourcePath;
+#[cfg(test)]
+use yss_worksheet_document::WORKSHEETS_DIR;
 
 use yss_graph_document::GraphDocument as NodeGraphDocument;
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
@@ -310,7 +310,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     std::fs::create_dir_all(root)?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
-    ensure_worksheets_dir(root)?;
+    std::fs::create_dir_all(root.join(WORKSHEETS_DIR))?;
     std::fs::create_dir_all(root.join(DATABASE_DIR))?;
 
     scan_graph_resource_index(root)?;

@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 use thiserror::Error;
 use yss_resource_naming::ResourceNameValidationError;
+use yss_worksheet_document::{WorksheetResourcePath, WorksheetResourcePathError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
     #[error("invalid resource name: {0}")]
     InvalidResourceName(#[from] ResourceNameValidationError),
     #[error("invalid worksheet resource path: {0}")]
-    InvalidWorksheetResourcePath(#[from] super::WorksheetResourcePathError),
+    InvalidWorksheetResourcePath(#[from] WorksheetResourcePathError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
     #[error("graph resource '{path}' is structurally invalid")]
@@ -29,7 +30,7 @@ pub enum ProjectFilesystemError {
     #[error("resource name conflict: {message}")]
     ResourceNameConflict { message: String },
     #[error("worksheet resource '{}' was not found", path.as_str())]
-    WorksheetNotFound { path: super::WorksheetResourcePath },
+    WorksheetNotFound { path: WorksheetResourcePath },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -64,9 +65,7 @@ impl ProjectFilesystemError {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),
             Self::InvalidWorksheetResourcePath(source) => match source {
-                super::WorksheetResourcePathError::InvalidName(source) => {
-                    resource_name_error_code(source)
-                }
+                WorksheetResourcePathError::InvalidName(source) => resource_name_error_code(source),
                 _ => "invalid_resource_name",
             },
             Self::InvalidRoot { .. } => "invalid_project_root",
@@ -147,8 +146,8 @@ impl From<yss_graph_document::GraphResourcePathError> for ProjectError {
 #[cfg(test)]
 mod tests {
     use super::ProjectFilesystemError;
-    use crate::project::WorksheetResourcePathError;
     use yss_resource_naming::ResourceNameValidationError;
+    use yss_worksheet_document::WorksheetResourcePathError;
 
     #[test]
     fn resource_name_errors_have_stable_ipc_codes() {

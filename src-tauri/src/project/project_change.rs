@@ -2,6 +2,7 @@ use crate::project::{ProjectFilesystemError, ProjectState};
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 use yss_project_identity::ProjectInstanceId;
+use yss_worksheet_document::WORKSHEETS_DIR;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProjectRelativePath(PathBuf);
@@ -71,7 +72,9 @@ pub fn is_relevant_project_path(path: &Path) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
     normalized.starts_with("events/")
         || normalized.starts_with("functions/")
-        || normalized.starts_with("worksheets/")
+        || normalized
+            .strip_prefix(WORKSHEETS_DIR)
+            .is_some_and(|suffix| suffix.starts_with('/'))
         || normalized == "variables.yssbi-vars"
         || normalized == "metadata.yssbi"
         || normalized.starts_with("database/")

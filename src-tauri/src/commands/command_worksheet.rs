@@ -3,12 +3,13 @@ use crate::application::worksheet::WorksheetApplicationError;
 use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::{ProjectFilesystemError, WorksheetDocument, WorksheetResourcePath};
+use crate::project::ProjectFilesystemError;
 use crate::schema::application_event::ResourceMutationResultDto;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

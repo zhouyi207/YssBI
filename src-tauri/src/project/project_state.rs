@@ -6,7 +6,7 @@ use crate::project::{
     ProjectFilesystemCoordinator, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectSession, ProjectStore, ProjectTransactionContext, ResourceLifecycleIntent,
     ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
-    StagedFilesystemMutation, WorksheetResourcePath, load_project_graph_from_file,
+    StagedFilesystemMutation, load_project_graph_from_file,
 };
 use crate::project::{
     HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
@@ -22,6 +22,7 @@ use yss_graph_document::GraphResourcePath;
 use yss_graph_document::NodeId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 mod activation;
 mod authority;

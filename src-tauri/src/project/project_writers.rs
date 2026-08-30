@@ -3,7 +3,6 @@ use crate::project::{FunctionResourceKey, ResourceKey, VariableResourceKey, Work
 use crate::project::{
     GraphDocument, ProjectData, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectSession, ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
-    WorksheetDocument, WorksheetResourcePath,
 };
 use crate::project::{
     HistoryStatusDto, ResourceDeltaEvent, ResourceLifecycleKind, ResourceLifecyclePatch,
@@ -19,6 +18,7 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
+use yss_worksheet_document::{WORKSHEET_EXTENSION, WorksheetDocument, WorksheetResourcePath};
 
 #[path = "project_writers/graph.rs"]
 mod graph;
@@ -489,7 +489,7 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
-        Some("yssbi-worksheet") => serde_json::from_slice::<WorksheetDocument>(contents)
+        Some(WORKSHEET_EXTENSION) => serde_json::from_slice::<WorksheetDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
         _ if path == Path::new(crate::project::PROJECT_METADATA_FILE) => {
@@ -622,8 +622,7 @@ mod tests {
     use crate::graph::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
-        ProjectFilesystemFaultPoint, ProjectState, WorksheetDocument, WorksheetResourcePath,
-        fixtures,
+        ProjectFilesystemFaultPoint, ProjectState, fixtures,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -634,14 +633,14 @@ mod tests {
     use yss_variable_contract::VariableScope;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
-        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
+        let worksheets = project.root.join(yss_worksheet_document::WORKSHEETS_DIR);
         let Ok(entries) = std::fs::read_dir(worksheets) else {
             return Vec::new();
         };
         let mut paths = entries
             .map(|entry| entry.unwrap().path())
             .filter(|path| {
-                path.extension().and_then(|value| value.to_str()) == Some("yssbi-worksheet")
+                path.extension().and_then(|value| value.to_str()) == Some(WORKSHEET_EXTENSION)
             })
             .collect::<Vec<_>>();
         paths.sort();

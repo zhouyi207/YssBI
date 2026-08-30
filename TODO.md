@@ -654,3 +654,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-computation-settings/` Pure Leaf；Project/Application/Commands/Event 直接消费
   唯一 owner，manifest 读取严格拒绝非法或未知 settings 字段，并删除 Application 中完全同构的
   mapping error 镜像与无效转换函数。
+- [ ] 将 worksheet persisted document、schema version、resource path 与布局常量迁入
+  `src-tauri/crates/yss-worksheet-document/` Pure Leaf；Project 仅保留 redirect-safe 扫描、事务 I/O、
+  history 与 authority，全部消费者直接依赖唯一 owner；嵌套 encodings 严格拒绝未知字段，并删除根
+  resource-path owner、test-only 目录 helper 与生产扩展名字符串副本。

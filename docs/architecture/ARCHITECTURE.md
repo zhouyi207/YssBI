@@ -125,6 +125,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
+| `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本、资源路径与磁盘布局常量的唯一 canonical owner；安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
@@ -354,12 +355,15 @@ yss-project-progress
   → Project registry workflows → Commands Tauri queue/Channel projection
 yss-computation-settings + yss-project-identity
   → Project persistence/authority → Application SCI/Execution mappings → Commands/Event wire
+yss-resource-naming + yss-project-identity
+  → yss-worksheet-document → Project worksheet persistence/authority → Application/Commands
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-computation-settings`：统一拥有持久化 numeric tolerance、missing-value policy、校验错误和 settings mutation envelopes。Project manifest 读取显式执行 fail-closed validation，嵌套 settings wire 拒绝未知字段；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
 - `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
+- `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire、资源路径和 `worksheets/*.yssbi-worksheet` 布局常量；Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。

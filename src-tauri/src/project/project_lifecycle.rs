@@ -3,13 +3,14 @@ use crate::project::{
     PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootIdentity,
     ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
-    StagedFilesystemMutation, WORKSHEETS_DIR, ensure_directory, read_project_source_tree,
+    StagedFilesystemMutation, ensure_directory, read_project_source_tree,
     remove_directory_if_created, validate_deletion_root, validate_destination_policy,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
+use yss_worksheet_document::{WORKSHEET_EXTENSION, WORKSHEETS_DIR, WorksheetDocument};
 
 pub struct PreparedProjectCopy {
     pub metadata_path: PathBuf,
@@ -434,11 +435,9 @@ fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
-        Some("yssbi-worksheet") => {
-            serde_json::from_slice::<crate::project::WorksheetDocument>(contents)
-                .map(|_| ())
-                .map_err(|error| error.to_string())
-        }
+        Some(WORKSHEET_EXTENSION) => serde_json::from_slice::<WorksheetDocument>(contents)
+            .map(|_| ())
+            .map_err(|error| error.to_string()),
         _ => Ok(()),
     }
 }
@@ -562,7 +561,10 @@ mod tests {
         before_revisions: &(
             std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
             std::collections::HashMap<yss_variable_contract::VariableId, ResourceRevision>,
-            std::collections::HashMap<crate::project::WorksheetResourcePath, ResourceRevision>,
+            std::collections::HashMap<
+                yss_worksheet_document::WorksheetResourcePath,
+                ResourceRevision,
+            >,
         ),
         before_generation: u64,
     ) {

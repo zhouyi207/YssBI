@@ -1,7 +1,7 @@
 use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::project::{
     NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectSession, ProjectState,
-    ProjectStore, WorksheetResourcePath,
+    ProjectStore,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,6 +10,7 @@ use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_variable_contract::VariableId;
+use yss_worksheet_document::WorksheetResourcePath;
 
 #[derive(Clone, Default)]
 pub(crate) struct ProjectActivationCoordinator {

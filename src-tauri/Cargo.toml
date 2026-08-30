@@ -41,6 +41,7 @@ members = [
     "crates/yss-tracing",
     "crates/yss-variable-contract",
     "crates/yss-window-state",
+    "crates/yss-worksheet-document",
 ]
 
 [workspace.package]
@@ -110,6 +111,7 @@ yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-variable-contract = { path = "./crates/yss-variable-contract" }
 yss-window-state = { path = "./crates/yss-window-state" }
+yss-worksheet-document = { path = "./crates/yss-worksheet-document" }
 tauri.workspace = true
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-dialog = "2.7"

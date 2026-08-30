@@ -1,4 +1,3 @@
-use crate::project::worksheet_io::{WorksheetDocument, WorksheetEncodings};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -7,6 +6,7 @@ use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, 
 #[cfg(test)]
 use yss_graph_document_edit::{DocumentError, GraphDocumentPatch};
 use yss_project_identity::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
+use yss_worksheet_document::{WorksheetDocument, WorksheetEncodings};
 
 fn checked_document_revision(revision: ResourceRevision) -> Result<ResourceRevision, u64> {
     revision.checked_next().map_err(|error| error.retained)

@@ -2,13 +2,14 @@ use crate::project::{
     GraphDocumentKind, HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectData,
     ProjectDocumentState, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectHistory,
     ProjectHistoryMutationError, ProjectHistoryTransaction, ProjectSession, ResourceKey,
-    VariableDocument, VariableResourceKey, WorksheetResourceKey, WorksheetResourcePath,
+    VariableDocument, VariableResourceKey, WorksheetResourceKey,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{HistoryEntryId, ResourceRevision};
 use yss_variable_contract::{VariableInstance, VariableScope};
+use yss_worksheet_document::{WORKSHEET_EXTENSION, WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HistoryGraphResidency {
@@ -797,9 +798,9 @@ pub(super) fn validate_durable_history_document(
     if relative_path
         .extension()
         .and_then(|extension| extension.to_str())
-        == Some(crate::project::WORKSHEET_EXTENSION)
+        == Some(WORKSHEET_EXTENSION)
     {
-        return serde_json::from_slice::<crate::project::WorksheetDocument>(contents)
+        return serde_json::from_slice::<WorksheetDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string());
     }

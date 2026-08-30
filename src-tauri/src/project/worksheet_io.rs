@@ -1,35 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+#[cfg(test)]
+use yss_worksheet_document::WORKSHEET_EXTENSION;
+use yss_worksheet_document::{WORKSHEETS_DIR, WorksheetDocument, WorksheetResourcePath};
 
-use super::{
-    ProjectError, SCHEMA_VERSION, WorksheetResourcePath,
-    project_io::deserialize_current_schema_version,
-};
-
-pub const WORKSHEETS_DIR: &str = "worksheets";
-pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorksheetEncodings {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub x: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub y: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorksheetDocument {
-    #[serde(deserialize_with = "deserialize_current_schema_version")]
-    pub schema_version: u32,
-    pub revision: yss_project_identity::ResourceRevision,
-    pub database_id: String,
-    pub chart_type: String,
-    pub encodings: WorksheetEncodings,
-}
+use super::ProjectError;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,24 +16,6 @@ pub struct ProjectWorksheetIndexEntry {
     pub database_id: String,
     pub chart_type: String,
     pub revision: yss_project_identity::ResourceRevision,
-}
-
-impl WorksheetDocument {
-    pub fn new(database_id: impl Into<String>) -> Self {
-        Self {
-            schema_version: SCHEMA_VERSION,
-            revision: yss_project_identity::ResourceRevision::INITIAL,
-            database_id: database_id.into(),
-            chart_type: "histogram".to_string(),
-            encodings: WorksheetEncodings { x: None, y: None },
-        }
-    }
-}
-
-#[cfg(test)]
-pub fn ensure_worksheets_dir(root: &Path) -> Result<(), ProjectError> {
-    std::fs::create_dir_all(root.join(WORKSHEETS_DIR))?;
-    Ok(())
 }
 
 pub fn read_worksheet_index_entries(
@@ -234,8 +193,8 @@ fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, Projec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::WorksheetResourcePath;
     use yss_resource_naming::ResourceName;
+    use yss_worksheet_document::{CURRENT_WORKSHEET_SCHEMA_VERSION, WorksheetResourcePath};
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-worksheet-{}", uuid::Uuid::new_v4()));
@@ -254,7 +213,7 @@ mod tests {
 
     fn document(revision: u64) -> WorksheetDocument {
         serde_json::from_value(serde_json::json!({
-            "schemaVersion": SCHEMA_VERSION,
+            "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION,
             "revision": revision,
             "databaseId": "db-1",
             "chartType": "histogram",
@@ -298,32 +257,11 @@ mod tests {
     }
 
     #[test]
-    fn worksheet_document_rejects_embedded_identity_fields() {
-        for field in ["id", "name"] {
-            let mut value = serde_json::to_value(document(0)).unwrap();
-            value.as_object_mut().unwrap().insert(
-                field.into(),
-                serde_json::Value::String("embedded-identity".into()),
-            );
-
-            assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());
-        }
-    }
-
-    #[test]
-    fn worksheet_document_requires_revision() {
-        let mut value = serde_json::to_value(document(4)).unwrap();
-        value.as_object_mut().unwrap().remove("revision");
-
-        assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());
-    }
-
-    #[test]
     fn worksheet_load_rejects_unsupported_schema_version() {
         let root = temp_project_dir();
         let path = worksheet_path("Unsupported");
         let mut value = serde_json::to_value(document(0)).unwrap();
-        value["schemaVersion"] = serde_json::json!(SCHEMA_VERSION + 1);
+        value["schemaVersion"] = serde_json::json!(CURRENT_WORKSHEET_SCHEMA_VERSION + 1);
         let file = root.join(path.relative_path());
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, serde_json::to_vec_pretty(&value).unwrap()).unwrap();

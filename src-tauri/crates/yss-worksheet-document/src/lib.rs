@@ -2,9 +2,61 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use yss_project_identity::ResourceRevision;
 use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
-use super::{WORKSHEET_EXTENSION, WORKSHEETS_DIR};
+pub const CURRENT_WORKSHEET_SCHEMA_VERSION: u32 = 3;
+pub const WORKSHEETS_DIR: &str = "worksheets";
+pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
+
+fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let schema_version = u32::deserialize(deserializer)?;
+    if schema_version != CURRENT_WORKSHEET_SCHEMA_VERSION {
+        return Err(serde::de::Error::custom(format!(
+            "unsupported schema version {schema_version}; expected {CURRENT_WORKSHEET_SCHEMA_VERSION}"
+        )));
+    }
+    Ok(schema_version)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorksheetEncodings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorksheetDocument {
+    #[serde(deserialize_with = "deserialize_current_schema_version")]
+    schema_version: u32,
+    pub revision: ResourceRevision,
+    pub database_id: String,
+    pub chart_type: String,
+    pub encodings: WorksheetEncodings,
+}
+
+impl WorksheetDocument {
+    pub fn new(database_id: impl Into<String>) -> Self {
+        Self {
+            schema_version: CURRENT_WORKSHEET_SCHEMA_VERSION,
+            revision: ResourceRevision::INITIAL,
+            database_id: database_id.into(),
+            chart_type: "histogram".to_owned(),
+            encodings: WorksheetEncodings { x: None, y: None },
+        }
+    }
+
+    pub const fn schema_version(&self) -> u32 {
+        self.schema_version
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WorksheetResourcePathError {
@@ -83,8 +135,13 @@ impl From<WorksheetResourcePath> for String {
 mod tests {
     use std::path::Path;
 
-    use super::{WorksheetResourcePath, WorksheetResourcePathError};
+    use serde_json::json;
     use yss_resource_naming::{ResourceName, ResourceNameValidationError};
+
+    use super::{
+        CURRENT_WORKSHEET_SCHEMA_VERSION, WorksheetDocument, WorksheetResourcePath,
+        WorksheetResourcePathError,
+    };
 
     #[test]
     fn worksheet_path_round_trips_canonical_resource_identity() {
@@ -126,5 +183,54 @@ mod tests {
                 ResourceNameValidationError::ForbiddenCharacter('?')
             ))
         );
+    }
+
+    #[test]
+    fn worksheet_document_has_one_current_strict_wire_contract() {
+        let document = WorksheetDocument::new("db-1");
+        assert_eq!(document.schema_version(), CURRENT_WORKSHEET_SCHEMA_VERSION);
+        assert_eq!(
+            serde_json::to_value(&document).unwrap(),
+            json!({
+                "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION,
+                "revision": 0,
+                "databaseId": "db-1",
+                "chartType": "histogram",
+                "encodings": {}
+            })
+        );
+
+        for invalid in [
+            json!({
+                "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION + 1,
+                "revision": 0,
+                "databaseId": "db-1",
+                "chartType": "histogram",
+                "encodings": {}
+            }),
+            json!({
+                "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION,
+                "revision": 0,
+                "databaseId": "db-1",
+                "chartType": "histogram",
+                "encodings": { "unknown": true }
+            }),
+            json!({
+                "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION,
+                "revision": 0,
+                "databaseId": "db-1",
+                "chartType": "histogram",
+                "encodings": {},
+                "name": "embedded identity"
+            }),
+            json!({
+                "schemaVersion": CURRENT_WORKSHEET_SCHEMA_VERSION,
+                "databaseId": "db-1",
+                "chartType": "histogram",
+                "encodings": {}
+            }),
+        ] {
+            assert!(serde_json::from_value::<WorksheetDocument>(invalid).is_err());
+        }
     }
 }

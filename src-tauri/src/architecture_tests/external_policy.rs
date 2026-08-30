@@ -616,6 +616,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         package_name: "windows-sys",
         target_condition: Some("cfg(windows)"),
     },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-worksheet-document",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-worksheet-document",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[

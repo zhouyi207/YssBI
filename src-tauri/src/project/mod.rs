@@ -35,7 +35,6 @@ pub mod variable_tabular;
 pub mod resource_patch;
 pub mod resource_reveal;
 pub mod worksheet_io;
-pub mod worksheet_resource_path;
 
 pub use filesystem::*;
 pub use function_editor_projection::*;
@@ -74,16 +73,14 @@ pub use project_store::*;
 pub use resource_patch::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;
-pub use worksheet_resource_path::*;
 
 use yss_graph_document::GraphResourcePath;
 
 #[cfg(test)]
 pub(crate) mod fixtures {
-    use super::{
-        GraphResourcePath, ProjectData, ProjectError, WorksheetDocument, WorksheetResourcePath,
-    };
+    use super::{GraphResourcePath, ProjectData, ProjectError};
     use std::path::{Path, PathBuf};
+    use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
     pub(crate) struct TempProject {
         state: Option<super::ProjectState>,

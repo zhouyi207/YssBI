@@ -162,7 +162,7 @@ mod tests {
                     before: crate::project::WorksheetDocumentState {
                         database_id: "database-before".into(),
                         chart_type: "histogram".into(),
-                        encodings: crate::project::WorksheetEncodings {
+                        encodings: yss_worksheet_document::WorksheetEncodings {
                             x: Some("region".into()),
                             y: None,
                         },
@@ -170,7 +170,7 @@ mod tests {
                     after: crate::project::WorksheetDocumentState {
                         database_id: "database-after".into(),
                         chart_type: "scatter".into(),
-                        encodings: crate::project::WorksheetEncodings {
+                        encodings: yss_worksheet_document::WorksheetEncodings {
                             x: Some("region".into()),
                             y: Some("revenue".into()),
                         },

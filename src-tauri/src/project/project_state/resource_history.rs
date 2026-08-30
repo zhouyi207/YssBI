@@ -298,7 +298,7 @@ pub(super) fn normalize_function_patch_revisions(
 }
 
 pub(super) fn worksheet_document_state(
-    document: &crate::project::WorksheetDocument,
+    document: &WorksheetDocument,
 ) -> crate::project::WorksheetDocumentState {
     crate::project::WorksheetDocumentState {
         database_id: document.database_id.clone(),

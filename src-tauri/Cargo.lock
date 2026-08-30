@@ -9392,6 +9392,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-worksheet-document"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-project-identity",
+ "yss-resource-naming",
+]
+
+[[package]]
 name = "yssbi"
 version = "0.3.0"
 dependencies = [
@@ -9455,6 +9466,7 @@ dependencies = [
  "yss-tracing",
  "yss-variable-contract",
  "yss-window-state",
+ "yss-worksheet-document",
 ]
 
 [[package]]

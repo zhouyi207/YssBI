@@ -1,7 +1,8 @@
-use crate::project::{GraphResourceDocument, WorksheetDocument, WorksheetResourcePath};
+use crate::project::GraphResourceDocument;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::GraphResourcePath;
 use yss_variable_contract::{VariableId, VariableInstance};
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Clone, Debug)]
 pub enum ResourceDocumentPatch {

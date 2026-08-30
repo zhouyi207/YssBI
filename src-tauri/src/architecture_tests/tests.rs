@@ -2921,6 +2921,150 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
 }
 
 #[test]
+fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-worksheet-document/Cargo.toml",
+        "src-tauri/crates/yss-worksheet-document/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "worksheet document owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/worksheet_resource_path.rs")
+            .exists(),
+        "Project must not retain the old worksheet resource-path owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-worksheet-document\"",
+        "yss-worksheet-document = { path = \"./crates/yss-worksheet-document\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod worksheet_resource_path",
+        "pub use worksheet_resource_path",
+        "pub use yss_worksheet_document",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "Project must not restore worksheet compatibility facade '{facade}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-worksheet-document/src/lib.rs"))
+            .expect("worksheet document owner must be readable");
+    for contract in [
+        "pub const CURRENT_WORKSHEET_SCHEMA_VERSION",
+        "pub const WORKSHEETS_DIR",
+        "pub const WORKSHEET_EXTENSION",
+        "pub struct WorksheetDocument",
+        "pub struct WorksheetEncodings",
+        "pub struct WorksheetResourcePath",
+        "pub enum WorksheetResourcePathError",
+        "deserialize_current_schema_version",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "worksheet document crate must own canonical contract '{contract}'"
+        );
+    }
+    assert!(
+        owner.matches("deny_unknown_fields").count() >= 2,
+        "worksheet document and nested encodings must both reject unknown fields"
+    );
+    assert!(
+        !owner.contains("pub schema_version: u32"),
+        "callers must not construct an unsupported worksheet schema version"
+    );
+    for forbidden in ["std::fs", "tauri"] {
+        assert!(
+            !owner.contains(forbidden),
+            "worksheet document contract must remain platform-neutral without '{forbidden}'"
+        );
+    }
+
+    let worksheet_io = std::fs::read_to_string(root.join("src-tauri/src/project/worksheet_io.rs"))
+        .expect("worksheet IO adapter must be readable");
+    for removed_owner in [
+        "pub struct WorksheetDocument {",
+        "pub struct WorksheetEncodings {",
+        "pub struct WorksheetResourcePath {",
+        "pub const WORKSHEETS_DIR",
+        "pub const WORKSHEET_EXTENSION",
+    ] {
+        assert!(
+            !worksheet_io.contains(removed_owner),
+            "Project IO must not restore worksheet contract '{removed_owner}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/application/worksheet.rs",
+        "src-tauri/src/commands/command_worksheet.rs",
+        "src-tauri/src/project/history.rs",
+        "src-tauri/src/project/history_hydration.rs",
+        "src-tauri/src/project/project_activation.rs",
+        "src-tauri/src/project/project_data.rs",
+        "src-tauri/src/project/project_error.rs",
+        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/src/project/project_reads.rs",
+        "src-tauri/src/project/project_state.rs",
+        "src-tauri/src/project/project_writers.rs",
+        "src-tauri/src/project/resource_lifecycle.rs",
+        "src-tauri/src/project/resource_patch.rs",
+        "src-tauri/src/project/resource_reveal.rs",
+        "src-tauri/src/project/worksheet_io.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_worksheet_document"),
+            "{relative} must consume the worksheet document owner directly"
+        );
+        for removed_path in [
+            "crate::project::WorksheetEncodings",
+            "crate::project::WorksheetResourcePath",
+            "crate::project::WORKSHEET_",
+        ] {
+            assert!(
+                !consumer.contains(removed_path),
+                "{relative} must not restore removed worksheet path '{removed_path}'"
+            );
+        }
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-worksheet-document\""),
+        "worksheet document must be classified as a Pure Leaf"
+    );
+    for removed_capability in [
+        "yssbi_lib::project::worksheet_io::WorksheetDocument",
+        "yssbi_lib::project::worksheet_resource_path::WorksheetResourcePath",
+    ] {
+        assert!(
+            !policy.contains(removed_capability),
+            "Commands must not retain Project capability '{removed_capability}'"
+        );
+    }
+}
+
+#[test]
 fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades() {
     let root = repository_root();
     for relative in [

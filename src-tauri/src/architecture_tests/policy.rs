@@ -1226,8 +1226,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::project_error::ProjectFilesystemError",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yss_resource_naming::ResourceName",
-            "yssbi_lib::project::worksheet_io::WorksheetDocument",
-            "yssbi_lib::project::worksheet_resource_path::WorksheetResourcePath",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
             "yssbi_lib::schema::application_event::resource_mutation_to_transport",
         ],
@@ -1749,6 +1747,7 @@ fn non_build_memberships(
             | "yss-resource-naming"
             | "yss-tabular-contract"
             | "yss-variable-contract"
+            | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
     } else if package == "yss-graph-catalog" {
