@@ -1,0 +1,17 @@
+[package]
+name = "yss-function-editor-projection"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-project-history = { path = "../yss-project-history" }
+yss-project-identity = { path = "../yss-project-identity" }
+
+[dev-dependencies]
+serde_json.workspace = true
+yss-graph-document = { path = "../yss-graph-document" }

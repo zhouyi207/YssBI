@@ -8,6 +8,7 @@ use super::{
     load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_identity::ProjectResourcePath;
 #[cfg(test)]
@@ -56,7 +57,7 @@ pub struct ProjectGraphIndexEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_signature: Option<yss_project_history::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_editor_projection: Option<crate::project::FunctionEditorProjection>,
+    pub function_editor_projection: Option<FunctionEditorProjection>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -599,19 +600,7 @@ fn read_graph_index_entries(
         let function_editor_projection = header
             .function
             .as_ref()
-            .map(|function| {
-                crate::project::build_function_editor_projection(
-                    function.revision.get(),
-                    function.signature.parameters.iter().map(|parameter| {
-                        (
-                            parameter.id.clone(),
-                            parameter.name.clone(),
-                            parameter.type_name.clone(),
-                        )
-                    }),
-                    function.signature.return_type.clone(),
-                )
-            })
+            .map(FunctionEditorProjection::try_from)
             .transpose()
             .map_err(|error| {
                 ProjectError::InvalidProjectFormat(format!(

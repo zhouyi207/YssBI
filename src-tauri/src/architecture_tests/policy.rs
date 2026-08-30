@@ -1283,6 +1283,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_project_history::ResourceDeltaEvent",
             "yss_project_history::ResourceKey",
             "yss_project_history::ResourceLifecycleKind",
+            "yss_function_editor_projection::FunctionEditorProjection",
         ],
     },
     InternalDependencyCapability {
@@ -1391,7 +1392,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_protocol::model::ParameterPresentation",
             "yss_graph_registry::RegistryFingerprint",
             "yss_graph_registry::fingerprint::RegistryFingerprint",
-            "yssbi_lib::project::function_editor_projection::FunctionEditorProjection",
         ],
     },
     InternalDependencyCapability {
@@ -1731,7 +1731,8 @@ fn non_build_memberships(
     } else if matches!(
         package,
         "yss-project-discovery" | "yss-project-history" | "yss-project-model"
-    ) {
+    ) || package == "yss-function-editor-projection"
+    {
         layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {
         layers.insert(exact_layer.unwrap_or(RustLayer::Graph));

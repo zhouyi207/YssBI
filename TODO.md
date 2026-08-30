@@ -699,3 +699,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   与兼容 re-export，移除零调用的整包 JSON/`info`/隐式 metadata 刷新 API，统一复用
   `yss-graph-document::GraphResourceKind`；Project lifecycle 显式拥有 export-time 时钟，磁盘 wire
   继续由 manifest、Graph/Worksheet contract 与 Project I/O 分别拥有。
+- [ ] 将函数文档到强类型 editor pin/projection 的转换迁入
+  `src-tauri/crates/yss-function-editor-projection/` Project 层；以 `ResourceRevision` 替代内部裸
+  `u64`，让 Project index 与 mutation event 复用同一个严格 camelCase wire，并删除根
+  `function_editor_projection.rs`、三处 parameter/signature 展开逻辑及 Transport 同构 DTO 镜像。

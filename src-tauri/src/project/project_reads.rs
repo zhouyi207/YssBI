@@ -1,4 +1,5 @@
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState};
+use yss_function_editor_projection::FunctionEditorProjection;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
@@ -285,18 +286,7 @@ fn overlay_authoritative_project_index(
             entry.function_revision = Some(function.revision);
             entry.function_signature = Some(function.signature.clone());
             entry.function_editor_projection = Some(
-                crate::project::build_function_editor_projection(
-                    function.revision.get(),
-                    function.signature.parameters.iter().map(|parameter| {
-                        (
-                            parameter.id.clone(),
-                            parameter.name.clone(),
-                            parameter.type_name.clone(),
-                        )
-                    }),
-                    function.signature.return_type.clone(),
-                )
-                .map_err(|message| {
+                FunctionEditorProjection::try_from(function).map_err(|message| {
                     ProjectFilesystemError::TransactionPrepareFailed {
                         message: message.to_string(),
                     }

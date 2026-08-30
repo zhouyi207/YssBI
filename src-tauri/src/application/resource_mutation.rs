@@ -26,6 +26,7 @@ use std::collections::BTreeMap;
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
+use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_graph_document_edit::apply_graph_document_patch;
@@ -260,19 +261,7 @@ fn build_graph_projection_replacement(
         .graphs
         .get(graph_path)
         .and_then(|resource| resource.function.as_ref())
-        .map(|function| {
-            crate::project::build_function_editor_projection(
-                function.revision.get(),
-                function.signature.parameters.iter().map(|parameter| {
-                    (
-                        parameter.id.clone(),
-                        parameter.name.clone(),
-                        parameter.type_name.clone(),
-                    )
-                }),
-                function.signature.return_type.clone(),
-            )
-        })
+        .map(FunctionEditorProjection::try_from)
         .transpose()
         .map_err(|error| {
             ResourceMutationApplicationError::Project(

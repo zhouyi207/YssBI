@@ -90,7 +90,7 @@ pub struct GraphProjectionReplacementDto {
     pub projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_editor_projection:
-        Option<crate::schema::editor_projection_types::FunctionEditorProjectionDto>,
+        Option<yss_function_editor_projection::FunctionEditorProjection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -183,8 +183,7 @@ pub fn graph_mutation_to_transport(
             function_editor_projection: result
                 .projection_replacement
                 .function_editor_projection
-                .as_ref()
-                .map(crate::schema::editor_projection_types::FunctionEditorProjectionDto::from),
+                .clone(),
         },
         history: yss_project_history::HistoryStatusDto {
             can_undo: result.history.can_undo,

@@ -4030,6 +4030,171 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
 }
 
 #[test]
+fn function_editor_projection_has_one_project_owner_without_root_or_transport_mirror() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-function-editor-projection/Cargo.toml",
+        "src-tauri/crates/yss-function-editor-projection/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "function editor projection owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/function_editor_projection.rs")
+            .exists(),
+        "Project must not retain the old function editor projection owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-function-editor-projection\"",
+        "yss-function-editor-projection = { path = \"./crates/yss-function-editor-projection\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-function-editor-projection/Cargo.toml"),
+    )
+    .expect("function editor projection manifest must be readable");
+    for dependency in [
+        "serde.workspace = true",
+        "thiserror.workspace = true",
+        "yss-data-contract = { path = \"../yss-data-contract\" }",
+        "yss-project-history = { path = \"../yss-project-history\" }",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "function editor projection must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["chrono", "tauri", "sqlx", "polars"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "function editor projection must not absorb runtime dependency '{forbidden}'"
+        );
+    }
+
+    let owner = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-function-editor-projection/src/lib.rs"),
+    )
+    .expect("function editor projection owner must be readable");
+    for invariant in [
+        "pub struct FunctionEditorPin",
+        "pub struct FunctionEditorProjection",
+        "pub function_revision: ResourceRevision",
+        "impl TryFrom<&FunctionDocument> for FunctionEditorProjection",
+        "pub fn parse_function_data_type",
+        "#[serde(rename_all = \"camelCase\", deny_unknown_fields)]",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "function editor projection must own invariant '{invariant}'"
+        );
+    }
+    for removed_or_weak_shape in [
+        "pub function_revision: u64",
+        "pub fn build_function_editor_projection",
+        "pub fn resolve_function_data_type",
+        "tauri::",
+        "std::fs",
+    ] {
+        assert!(
+            !owner.contains(removed_or_weak_shape),
+            "function editor projection must not restore '{removed_or_weak_shape}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod function_editor_projection",
+        "pub use function_editor_projection",
+        "pub use yss_function_editor_projection",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore facade '{facade}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_io.rs",
+        "src-tauri/src/project/project_reads.rs",
+        "src-tauri/src/application/resource_mutation.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_function_editor_projection::FunctionEditorProjection")
+                && consumer.contains("FunctionEditorProjection::try_from"),
+            "{relative} must project the canonical FunctionDocument directly"
+        );
+        for duplicate_mapping in [
+            "build_function_editor_projection",
+            "function.signature.parameters.iter().map",
+            "crate::project::FunctionEditorProjection",
+        ] {
+            assert!(
+                !consumer.contains(duplicate_mapping),
+                "{relative} must not restore duplicate mapping '{duplicate_mapping}'"
+            );
+        }
+    }
+
+    let catalog_query =
+        std::fs::read_to_string(root.join("src-tauri/src/application/catalog_query.rs"))
+            .expect("catalog query must be readable");
+    assert!(
+        catalog_query.contains("yss_function_editor_projection::parse_function_data_type")
+            && !catalog_query.contains("resolve_function_data_type"),
+        "catalog mapping must reuse the canonical function data-type parser"
+    );
+
+    let transport_types =
+        std::fs::read_to_string(root.join("src-tauri/src/schema/editor_projection_types.rs"))
+            .expect("editor projection transport types must be readable");
+    for duplicate in ["FunctionEditorPinDto", "FunctionEditorProjectionDto"] {
+        assert!(
+            !transport_types.contains(duplicate),
+            "Transport must not restore duplicate projection DTO '{duplicate}'"
+        );
+    }
+    let application_event =
+        std::fs::read_to_string(root.join("src-tauri/src/schema/application_event.rs"))
+            .expect("application event transport must be readable");
+    assert!(
+        application_event
+            .contains("Option<yss_function_editor_projection::FunctionEditorProjection>")
+            && application_event.contains(".function_editor_projection\n                .clone()"),
+        "event transport must reuse the canonical projection wire without field copying"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-function-editor-projection\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "function editor projection must remain Project behavior"
+    );
+    assert!(
+        policy.contains("\"yss_function_editor_projection::FunctionEditorProjection\"")
+            && !policy.contains(
+                "yssbi_lib::project::function_editor_projection::FunctionEditorProjection"
+            ),
+        "transport capability must point only at the canonical crate owner"
+    );
+}
+
+#[test]
 fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seams() {
     let root = repository_root();
     for relative in [

@@ -2,7 +2,6 @@
 
 pub mod execution_authority;
 pub mod filesystem;
-pub mod function_editor_projection;
 pub mod graph_resource_index;
 mod history_hydration;
 pub mod project_change;
@@ -28,7 +27,6 @@ pub mod resource_reveal;
 pub mod worksheet_io;
 
 pub use filesystem::*;
-pub use function_editor_projection::*;
 pub use graph_resource_index::*;
 pub use project_change::*;
 pub use project_error::*;

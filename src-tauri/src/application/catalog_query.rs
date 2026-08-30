@@ -9,6 +9,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
+use yss_function_editor_projection::parse_function_data_type;
 use yss_graph_catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
@@ -672,17 +673,12 @@ fn graph_signature(
     let parameters = signature
         .parameters
         .iter()
-        .map(|parameter| {
-            crate::project::function_editor_projection::resolve_function_data_type(
-                &parameter.type_name,
-            )
-            .map_err(|_| ())
-        })
+        .map(|parameter| parse_function_data_type(&parameter.type_name).map_err(|_| ()))
         .collect::<Result<Vec<_>, _>>()?;
     let result = signature
         .return_type
         .as_deref()
-        .map(crate::project::function_editor_projection::resolve_function_data_type)
+        .map(parse_function_data_type)
         .transpose()
         .map_err(|_| ())?;
     Ok(FunctionSignature::new(parameters, result))

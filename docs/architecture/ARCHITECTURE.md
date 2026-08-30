@@ -107,6 +107,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
+| `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery |
 | `src-tauri/crates/yss-computation-settings/` | 独立 Pure Leaf：持久化 computation settings、validation 与 project settings mutation wire contract 的唯一 canonical owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
@@ -364,6 +365,8 @@ yss-project-identity
   → yss-project-registry-contract → Project/Application/Transport/Backend Adapter
 yss-project-identity + yss-graph-document + yss-worksheet-document + yss-database-contract
   → yss-project-history → Project hydration/authority → Application/Commands/Transport
+yss-data-contract + yss-project-history + yss-project-identity
+  → yss-function-editor-projection → Project index/Application events/Transport
 yss-project-layout + yss-project-progress
   → yss-project-discovery → Project registry workflow → Commands
 yss-computation-settings
@@ -390,6 +393,7 @@ yss-resource-naming + yss-project-identity
 - `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version、manifest wire 与 computation settings 的反序列化校验；schema/settings 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
 - `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
 - `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
+- `yss-function-editor-projection`：统一从 `FunctionDocument` 构造带强类型 `ResourceRevision` 的 editor inputs/outputs，并拥有 Project index 与 mutation event 共用的严格 camelCase wire。三个调用方不再各自展开 parameter/signature，Transport 中字段完全相同的 DTO 镜像与复制转换已删除；Project I/O、Application event 编排和交付仍留在各自 owner。
 - `yss-project-model`：统一拥有运行期 `ProjectData`、`ProjectMetadata` 与 `GraphResourceDocument` 聚合；默认值确定性地使用空 export time，由 lifecycle 在创建/导出边界显式读取时钟。旧的整包 `ProjectData` JSON、`info` 与隐式 metadata 刷新 API 已删除，Graph kind 直接复用 `yss-graph-document::GraphResourceKind`，根 `project` 不提供兼容 facade。
 - `yss-variable-value`：统一拥有变量类型变更后的 inert 默认值、`var:{id}` handle 与 tabular literal/snapshot 归一化。数组和对象默认值为空，避免伪造用户数据或违反元素类型；canonical handle 缺失 snapshot 时 fail closed，DataSeries 只替换 handle 并保留 element/dummy/time-series metadata。Project 激活不再吞掉归一化错误，状态、事务和持久化仍留在 Project。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。

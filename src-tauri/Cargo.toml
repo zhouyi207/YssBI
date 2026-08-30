@@ -19,6 +19,7 @@ members = [
     "crates/yss-diagnostics",
     "crates/yss-display-naming",
     "crates/yss-execution",
+    "crates/yss-function-editor-projection",
     "crates/yss-graph-analysis",
     "crates/yss-graph-analysis-contract",
     "crates/yss-graph-catalog",
@@ -97,6 +98,7 @@ yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-display-naming = { path = "./crates/yss-display-naming" }
 yss-execution = { path = "./crates/yss-execution" }
+yss-function-editor-projection = { path = "./crates/yss-function-editor-projection" }
 yss-graph-analysis = { path = "./crates/yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
 yss-graph-catalog = { path = "./crates/yss-graph-catalog" }
