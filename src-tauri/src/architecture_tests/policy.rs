@@ -1014,7 +1014,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::error::CommandError",
             "yssbi_lib::project::ProjectIndex",
             "yssbi_lib::project::project_io::ProjectIndex",
-            "yssbi_lib::project::path_format::format_path_for_user_path",
             "yssbi_lib::project::project_registry::normalize_existing_path",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::project::resource_reveal::RevealProjectResourceRequest",
@@ -1719,6 +1718,7 @@ fn non_build_memberships(
             | "yss-graph-resource-contract"
             | "yss-graph-type-mapping"
             | "yss-math"
+            | "yss-path-display"
             | "yss-project-identity"
             | "yss-project-layout"
             | "yss-project-manifest"

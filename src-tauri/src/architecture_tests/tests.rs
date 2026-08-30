@@ -376,6 +376,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-path-display"
+                && root.target == "yss_path_display"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-tabular-contract"
                 && root.target == "yss_tabular_contract"
                 && root.kind == ProductionRootKind::Library)
@@ -739,6 +747,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_path_display"
+                    && alias.member_package == "yss-path-display"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-path-display"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_tabular_contract"
                     && alias.member_package == "yss-tabular-contract"
             })
@@ -961,6 +987,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-math/src/lib.rs"),
     };
+    let path_display_root = ProductionRoot {
+        package_id: "path-display-package".to_owned(),
+        package: "yss-path-display".to_owned(),
+        target: "yss_path_display".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-path-display/src/lib.rs"),
+    };
     let project_discovery_root = ProductionRoot {
         package_id: "project-discovery-package".to_owned(),
         package: "yss-project-discovery".to_owned(),
@@ -1036,6 +1069,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_type_mapping_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
+        path_display_root.clone(),
         project_discovery_root.clone(),
         project_history_root.clone(),
         project_manifest_root.clone(),
@@ -1155,6 +1189,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &math_root,
                 "src-tauri/crates/yss-math/src/lib.rs",
                 "yss_math",
+            ),
+            module(
+                &path_display_root,
+                "src-tauri/crates/yss-path-display/src/lib.rs",
+                "yss_path_display",
             ),
             module(
                 &project_discovery_root,
@@ -1283,6 +1322,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-path-display/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -2129,6 +2172,108 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
         policy.contains("| \"yss-variable-value\"")
             && policy.contains("layers.insert(RustLayer::PureLeaf)"),
         "variable-value must remain a Pure Leaf"
+    );
+}
+
+#[test]
+fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-path-display/Cargo.toml",
+        "src-tauri/crates/yss-path-display/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "path-display owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/project/path_format.rs").exists(),
+        "Project must not retain the removed path display owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-path-display\"",
+        "yss-path-display = { path = \"./crates/yss-path-display\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-path-display/Cargo.toml"))
+            .expect("path-display crate manifest must be readable");
+    assert!(
+        !manifest.contains("dependencies"),
+        "path-display must remain dependency-free"
+    );
+
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-path-display/src/lib.rs"))
+        .expect("path-display owner must be readable");
+    for invariant in [
+        "pub fn format_path_for_user",
+        "pub fn format_path_for_user_path",
+        r#"path.strip_prefix(r"\\?\UNC\")"#,
+        r#"path.strip_prefix(r"\\?\")"#,
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "path-display crate must own invariant '{invariant}'"
+        );
+    }
+    for misplaced_concern in [
+        "#[cfg(windows)]",
+        "std::fs",
+        "ProjectState",
+        "ProjectData",
+        "tauri::",
+        "sqlx::",
+    ] {
+        assert!(
+            !owner.contains(misplaced_concern),
+            "path-display must not absorb runtime concern '{misplaced_concern}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/application/project_query.rs",
+        "src-tauri/src/project/project_registry.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_path_display"),
+            "{relative} must consume the canonical path-display owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::path_format"),
+            "{relative} must not restore the removed Project path-format path"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in ["mod path_format", "pub use yss_path_display"] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore compatibility facade '{facade}'"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-path-display\"")
+            && policy.contains("layers.insert(RustLayer::PureLeaf)"),
+        "path-display must remain a Pure Leaf"
+    );
+    assert!(
+        !policy.contains("yssbi_lib::project::path_format::format_path_for_user_path"),
+        "architecture capabilities must not preserve the removed Project facade"
     );
 }
 

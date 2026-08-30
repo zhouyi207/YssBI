@@ -690,3 +690,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-variable-value/` Pure Leaf；删除 Project 中两个旧 owner 与兼容入口，复合类型
   默认值不得伪造示例数据，canonical handle 必须对应 snapshot，DataSeries 归一化必须保留附加 metadata；
   Project 继续拥有状态/事务/激活，并在非法持久化变量上 fail closed 而不是静默吞错。
+- [ ] 将用户可见路径的 Windows extended-length prefix 移除语义迁入无依赖
+  `src-tauri/crates/yss-path-display/` Pure Leaf；Project registry 与 Application query 直接消费唯一
+  owner，删除根 `project/path_format.rs` 与兼容 capability，并让 `\\?\` / `\\?\UNC\` 处理在所有
+  宿主平台保持一致；路径存在性、canonicalization、校验与 I/O 继续由调用方拥有。

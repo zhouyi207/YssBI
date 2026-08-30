@@ -3,10 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 
-use super::{
-    NormalizedProjectRoot, ProjectRootBinding, format_path_for_user, format_path_for_user_path,
-};
+use super::{NormalizedProjectRoot, ProjectRootBinding};
 
+use yss_path_display::{format_path_for_user, format_path_for_user_path};
 use yss_project_discovery::{
     ProjectDiscoveryError, discover_project_metadata_files, normalize_project_name,
     project_name_from_metadata_path,

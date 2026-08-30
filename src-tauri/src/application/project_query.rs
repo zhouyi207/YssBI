@@ -8,9 +8,10 @@ use super::execution::session_slot::{
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::project::{
     ProjectError, ProjectFilesystemError, ProjectIndex, RevealProjectResourceRequest,
-    format_path_for_user_path, normalize_existing_path, resolve_reveal_path,
+    normalize_existing_path, resolve_reveal_path,
 };
 use yss_database_contract::DatabaseDecl;
+use yss_path_display::format_path_for_user_path;
 use yss_project_identity::ProjectInstanceId;
 use yss_variable_contract::VariableInstance;
 
