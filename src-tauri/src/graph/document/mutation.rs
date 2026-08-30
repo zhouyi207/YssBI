@@ -1,16 +1,18 @@
 use super::materialization::ProjectedMemberRef;
 use super::{
-    ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicMemberLocator,
-    DynamicPortBinding, GraphDocument, GraphDocumentOperation, GraphDocumentPatch,
-    GraphResourcePath, MaterializationAuthorization, NodeId, NodePosition, OrderKey,
-    ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue, apply_graph_document_patch,
-    port_member_group_state,
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    GraphDocument, GraphResourcePath, MaterializationAuthorization, NodeId, NodePosition, OrderKey,
+    ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue,
 };
 use crate::graph::compatibility::EditorMutationValidationSnapshot;
 #[cfg(test)]
 use crate::project::{MutationRequest, OperationId, ResourceKey, ResourceRevision};
 use yss_graph_catalog::reroute_node_type_for_kind;
 use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
+use yss_graph_document_edit::{
+    DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
+    port_member_group_state,
+};
 use yss_graph_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
     PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,

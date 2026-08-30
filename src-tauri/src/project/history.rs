@@ -1,14 +1,12 @@
 use super::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
-#[cfg(test)]
-use crate::graph::document::DocumentError;
-#[cfg(test)]
-use crate::graph::document::GraphDocumentPatch;
 use crate::project::worksheet_io::{WorksheetDocument, WorksheetEncodings};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision};
+#[cfg(test)]
+use yss_graph_document_edit::{DocumentError, GraphDocumentPatch};
 
 fn checked_document_revision(revision: ResourceRevision) -> Result<ResourceRevision, u64> {
     revision.checked_next().map_err(|error| error.retained)
@@ -1264,7 +1262,6 @@ impl ProjectGraphHistoryChange {
 #[cfg(test)]
 mod wire_tests {
     use super::*;
-    use crate::graph::document::GraphDocumentPatch;
     use serde_json::json;
     use uuid::Uuid;
     use yss_graph_document::GraphResourcePath;

@@ -1,0 +1,11 @@
+[package]
+name = "yss-graph-document-edit"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }

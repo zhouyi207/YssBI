@@ -941,7 +941,6 @@ fn insert_local_variable_owner(
 #[cfg(test)]
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
-    use crate::graph::document::{GraphDocumentOperation, GraphDocumentPatch};
     use crate::project::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentKind,
         GraphResourceDocument, ProjectData, ProjectHistoryTransaction, ResourcePatch,
@@ -952,6 +951,7 @@ mod tests {
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath as DocumentGraphResourcePath;
     use yss_graph_document::GraphResourcePath;
+    use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
     use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
     const EVENT_PATH: &str = "events/Stable.yssbi-event";

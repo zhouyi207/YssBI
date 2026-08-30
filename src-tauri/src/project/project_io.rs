@@ -1219,15 +1219,15 @@ mod tests {
             ProjectError::InvalidGraphDocument { path, source }
                 if path == &graph_file
                     && source
-                        == &crate::graph::document::DocumentError::EndpointNodeNotFound(
+                        == &yss_graph_document_edit::DocumentError::EndpointNodeNotFound(
                             missing_node_id,
                         )
         ));
         let source = std::error::Error::source(&error)
-            .and_then(|source| source.downcast_ref::<crate::graph::document::DocumentError>());
+            .and_then(|source| source.downcast_ref::<yss_graph_document_edit::DocumentError>());
         assert_eq!(
             source,
-            Some(&crate::graph::document::DocumentError::EndpointNodeNotFound(missing_node_id,))
+            Some(&yss_graph_document_edit::DocumentError::EndpointNodeNotFound(missing_node_id,))
         );
         std::fs::remove_dir_all(root).unwrap();
     }

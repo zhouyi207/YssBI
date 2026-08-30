@@ -24,8 +24,8 @@ use crate::graph::compatibility::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot,
 };
+use crate::graph::document::MutationConflict;
 use crate::graph::document::{ClipboardSubgraph, EditorGraphMutation};
-use crate::graph::document::{MutationConflict, apply_graph_document_patch};
 use crate::project::project_writers::ProjectSaveResult;
 use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use crate::project::{
@@ -38,6 +38,7 @@ use yss_execution::plan::{
 };
 use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::GraphResourcePath;
+use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_protocol::NodeTypeId;
 
 #[derive(Debug, Error)]

@@ -3,7 +3,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use std::sync::{Barrier, Mutex};
 
-use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
 use thiserror::Error;
 use yss_data_contract::DataType;
@@ -15,6 +14,7 @@ use yss_graph_catalog::{
 use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
 };
+use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
 use yss_graph_protocol::{
     NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
 };
@@ -201,8 +201,7 @@ impl GraphRuntimeState {
         document: &GraphDocument,
         mutation: crate::graph::document::EditorGraphMutation,
         catalog: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
-    ) -> Result<crate::graph::document::GraphDocumentPatch, crate::graph::document::MutationConflict>
-    {
+    ) -> Result<GraphDocumentPatch, crate::graph::document::MutationConflict> {
         mutation.into_patch_with_catalog_snapshot(
             graph_path,
             document,

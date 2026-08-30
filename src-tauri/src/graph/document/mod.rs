@@ -1,13 +1,9 @@
-//! Pure, normalized graph document data and invariant-preserving transactions.
+//! Graph editor orchestration over canonical persisted documents and edit primitives.
 
-mod error;
 pub mod materialization;
 mod mutation;
-mod patch;
 mod subgraph;
-mod transaction;
 
-pub use error::DocumentError;
 pub use materialization::{
     CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,
     CompilationResourceVersion, CompilationResourceVersions, MaterializationAuthorization,
@@ -19,8 +15,6 @@ pub use mutation::{
 };
 #[cfg(test)]
 pub(crate) use mutation::{GraphMutation, RevisionedGraphStore};
-pub(crate) use patch::apply_graph_document_patch;
-pub use patch::{GraphDocumentOperation, GraphDocumentPatch};
 #[cfg(test)]
 pub(crate) use subgraph::instantiate_subgraph_for_test;
 pub use subgraph::{
@@ -31,7 +25,6 @@ pub use subgraph::{
     MAX_CLIPBOARD_SERIALIZED_BYTES, duplicate_subgraph, export_subgraph,
 };
 pub(crate) use subgraph::{deserialize_clipboard_subgraph, instantiate_subgraph};
-pub(crate) use transaction::{port_member_group_state, validate_graph_document};
 
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,

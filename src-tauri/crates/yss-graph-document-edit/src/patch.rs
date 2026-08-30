@@ -1,8 +1,8 @@
-use super::{
-    DocumentConnection, DocumentError, DocumentNode, DynamicPortBinding, GraphDocument, InputState,
-    PortAddress,
-};
+use crate::{DocumentError, validate_graph_document};
 use serde::{Deserialize, Serialize};
+use yss_graph_document::{
+    DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument, InputState, PortAddress,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GraphDocumentPatch {
@@ -31,14 +31,11 @@ impl GraphDocumentPatch {
         self.operations.is_empty()
     }
 
-    pub(crate) fn apply_without_revision(
-        &self,
-        document: &mut GraphDocument,
-    ) -> Result<(), DocumentError> {
+    fn apply_without_revision(&self, document: &mut GraphDocument) -> Result<(), DocumentError> {
         for operation in &self.operations {
             operation.apply(document)?;
         }
-        super::validate_graph_document(document)
+        validate_graph_document(document)
     }
 }
 
@@ -259,7 +256,19 @@ fn set_input_state(
     Ok(())
 }
 
-pub(crate) fn apply_graph_document_patch(
+/// Applies and validates a patch against a disposable candidate document.
+///
+/// This deliberately keeps the candidate's revision unchanged. The candidate
+/// may be partially modified when an operation fails, so callers must discard
+/// it on error.
+pub fn apply_graph_document_patch_to_candidate(
+    document: &mut GraphDocument,
+    patch: &GraphDocumentPatch,
+) -> Result<(), DocumentError> {
+    patch.apply_without_revision(document)
+}
+
+pub fn apply_graph_document_patch(
     document: &mut GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<(), DocumentError> {
@@ -281,6 +290,7 @@ pub(crate) fn apply_graph_document_patch(
 mod tests {
     use super::{
         DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
+        apply_graph_document_patch_to_candidate,
     };
     use yss_graph_document::{
         DocumentNode, DynamicPortBinding, GraphDocument, GraphRevision, NodeId, NodePosition,
@@ -324,5 +334,30 @@ mod tests {
 
         assert_eq!(error, DocumentError::UnexpectedPortBinding(declared_port));
         assert_eq!(document, before_invalid_patch);
+    }
+
+    #[test]
+    fn candidate_patch_preserves_revision() {
+        let node_id = NodeId::new();
+        let node = DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.test.candidate_patch").unwrap(),
+            position: NodePosition { x: 3.0, y: 4.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut document = GraphDocument {
+            revision: GraphRevision::new(7),
+            ..GraphDocument::default()
+        };
+
+        apply_graph_document_patch_to_candidate(
+            &mut document,
+            &GraphDocumentPatch::new([GraphDocumentOperation::InsertNode { node }]),
+        )
+        .unwrap();
+
+        assert_eq!(document.revision, GraphRevision::new(7));
+        assert!(document.nodes.contains_key(&node_id));
     }
 }

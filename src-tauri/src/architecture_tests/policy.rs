@@ -678,7 +678,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::execution::session_slot::SessionCaptureError::Inactive",
             "yssbi_lib::application::execution::session_slot::SessionCaptureError::Recovering",
             "yssbi_lib::application::execution::session_slot::SessionCaptureError::Replacing",
-            "yssbi_lib::graph::document::error::DocumentError::ConnectionNotFound",
+            "yss_graph_document_edit::DocumentError::ConnectionNotFound",
+            "yss_graph_document_edit::error::DocumentError::ConnectionNotFound",
             "yssbi_lib::graph::document::mutation::MutationConflict",
             "yssbi_lib::graph::document::mutation::MutationConflict::CatalogDescriptorInvalid",
             "yssbi_lib::graph::document::mutation::MutationConflict::CatalogResourceStale",
@@ -1308,8 +1309,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/event/event_project.rs",
         fully_qualified_owner: "yssbi_lib::event::event_project",
         canonical_origin_targets: &[
-            "yssbi_lib::graph::document::GraphDocumentPatch",
-            "yssbi_lib::graph::document::patch::GraphDocumentPatch",
+            "yss_graph_document_edit::GraphDocumentPatch",
+            "yss_graph_document_edit::patch::GraphDocumentPatch",
             "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
             "yssbi_lib::project::project_session::ProjectInstanceId",
@@ -1346,8 +1347,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::events::ResourceMove",
             "yssbi_lib::application::events::ResourceProjectionStatus",
             "yssbi_lib::application::project_query::ProjectActivation",
-            "yssbi_lib::graph::document::GraphDocumentPatch",
-            "yssbi_lib::graph::document::patch::GraphDocumentPatch",
+            "yss_graph_document_edit::GraphDocumentPatch",
+            "yss_graph_document_edit::patch::GraphDocumentPatch",
             "yssbi_lib::project::history::ResourceRevision",
             "yssbi_lib::project::history::HistoryStatusDto",
             "yssbi_lib::project::history::ResourceDeltaEvent",
@@ -1803,6 +1804,7 @@ fn non_build_memberships(
             | "yss-graph-analysis-contract"
             | "yss-graph-compiler"
             | "yss-graph-compiler-diagnostics"
+            | "yss-graph-document-edit"
             | "yss-graph-registry"
     ) {
         layers.insert(RustLayer::Graph);

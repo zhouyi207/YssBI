@@ -5,10 +5,9 @@ use super::mutation::{
 };
 use super::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, GraphDocument, GraphDocumentOperation, GraphDocumentPatch,
-    GraphResourcePath, InputState, LastKnownPortMetadata, MutationConflict, NodeId, NodePosition,
-    OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef, SchemaFieldIdentity,
-    SchemaSourceIdentity,
+    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, LastKnownPortMetadata,
+    MutationConflict, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
+    PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
 };
 use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
@@ -18,6 +17,7 @@ use std::fmt;
 use yss_graph_catalog::{
     CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };
+use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_protocol::{
     NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, ResourceDisplayKind,
     TypeExpr,

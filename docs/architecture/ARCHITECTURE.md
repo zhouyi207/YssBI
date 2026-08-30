@@ -111,6 +111,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity、resource path 与 resource-name validation 的唯一 canonical owner |
+| `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
 | `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
@@ -320,6 +321,8 @@ Graph 与 Execution 的依赖方向是：
 ```text
 yss-data-contract + yss-graph-document
   → yss-graph-resource-contract
+yss-graph-document + yss-graph-protocol
+  → yss-graph-document-edit → Graph editor/runtime
 yss-graph-document + yss-graph-protocol + yss-canonical-hash
   → yss-graph-registry → yss-graph-analysis-contract
   → yss-graph-compiler-diagnostics
@@ -334,6 +337,7 @@ yss-graph-resource-contract
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
+- `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
 - `yss-graph-analysis`：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner；analysis input 只接收实际参与结果的 document 与 compilation basis，不保留无效 settings/catalog 参数。
 - `yss-graph-compiler`：revision 校验、neutral document lowering、Graph-owned immutable package 与 compile error 的唯一 owner；成功直接返回 package，不保留恒为 `Some` 的 report、空 diagnostics 或重复 basis。
@@ -341,7 +345,7 @@ yss-graph-resource-contract
 - `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
-- `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
+- `graph/document`：剩余 editor mutation、subgraph 与 materialization 编排；底层 document edit 规则直接消费 `yss-graph-document-edit`，不保留根兼容 re-export。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。

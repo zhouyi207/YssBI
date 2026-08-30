@@ -618,3 +618,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 neutral Graph lowering、immutable compiled package 与 compile error 迁入
   `src-tauri/crates/yss-graph-compiler/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
   compilation report、空 diagnostics、重复 basis 与零生产者 error 分支。
+- [ ] 将 Graph document invariant、atomic patch、candidate staging 与 edit error 迁入
+  `src-tauri/crates/yss-graph-document-edit/`；根 crate 不保留兼容 re-export，并删除零调用的
+  `address_is_complete` helper，保持 `document → document-edit → editor → runtime` 单向依赖。

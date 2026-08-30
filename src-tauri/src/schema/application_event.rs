@@ -106,7 +106,7 @@ pub struct GraphDeltaEventDto<T> {
 #[serde(rename_all = "camelCase")]
 pub struct GraphMutationResultDto {
     pub project_instance_id: String,
-    pub delta: GraphDeltaEventDto<crate::graph::document::GraphDocumentPatch>,
+    pub delta: GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch>,
     pub projection_replacement: GraphProjectionReplacementDto,
     pub history: crate::project::HistoryStatusDto,
 }
@@ -193,8 +193,10 @@ pub fn graph_mutation_to_transport(
 }
 
 pub(crate) fn graph_delta_to_transport(
-    delta: &crate::application::events::GraphDeltaEvent<crate::graph::document::GraphDocumentPatch>,
-) -> GraphDeltaEventDto<crate::graph::document::GraphDocumentPatch> {
+    delta: &crate::application::events::GraphDeltaEvent<
+        yss_graph_document_edit::GraphDocumentPatch,
+    >,
+) -> GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch> {
     GraphDeltaEventDto {
         graph_path: delta.graph_path.as_str().to_owned(),
         from_revision: delta.from_revision,

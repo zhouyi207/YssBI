@@ -52,8 +52,7 @@ pub(crate) fn instantiate_subgraph(
         &connection_ids,
     )?;
     let mut staged = document.clone();
-    patch
-        .apply_without_revision(&mut staged)
+    yss_graph_document_edit::apply_graph_document_patch_to_candidate(&mut staged, &patch)
         .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
     Ok(patch)
 }
@@ -718,9 +717,11 @@ fn plan_instantiation(
     }
 
     let mut staged = document.clone();
-    GraphDocumentPatch::new(operations.clone())
-        .apply_without_revision(&mut staged)
-        .map_err(|error| invalid_clipboard(format!("node and port staging failed: {error}")))?;
+    yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+        &mut staged,
+        &GraphDocumentPatch::new(operations.clone()),
+    )
+    .map_err(|error| invalid_clipboard(format!("node and port staging failed: {error}")))?;
     for operation in &operations {
         if let GraphDocumentOperation::InsertPortBinding { address, .. } = operation {
             validate_subgraph_port(&staged, registry, address)
@@ -748,9 +749,11 @@ fn plan_instantiation(
             address,
             after: Some(entry.state.clone()),
         };
-        GraphDocumentPatch::new(vec![operation.clone()])
-            .apply_without_revision(&mut staged)
-            .map_err(|error| invalid_clipboard(format!("input state staging failed: {error}")))?;
+        yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+            &mut staged,
+            &GraphDocumentPatch::new(vec![operation.clone()]),
+        )
+        .map_err(|error| invalid_clipboard(format!("input state staging failed: {error}")))?;
         operations.push(operation);
     }
 
@@ -769,9 +772,11 @@ fn plan_instantiation(
                 order: entry.order.clone(),
             },
         };
-        GraphDocumentPatch::new(vec![operation.clone()])
-            .apply_without_revision(&mut staged)
-            .map_err(|error| invalid_clipboard(format!("connection staging failed: {error}")))?;
+        yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+            &mut staged,
+            &GraphDocumentPatch::new(vec![operation.clone()]),
+        )
+        .map_err(|error| invalid_clipboard(format!("connection staging failed: {error}")))?;
         operations.push(operation);
     }
     Ok(GraphDocumentPatch::new(operations))

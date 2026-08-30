@@ -51,7 +51,7 @@ pub(super) fn mutation_conflict_to_command_error(
             _,
         )) => CommandError::expected(public_error.code()),
         crate::graph::document::MutationConflict::Document(
-            crate::graph::document::DocumentError::ConnectionNotFound(_),
+            yss_graph_document_edit::DocumentError::ConnectionNotFound(_),
         ) => {
             tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",

@@ -333,6 +333,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-document-edit"
+                && root.target == "yss_graph_document_edit"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-protocol"
                 && root.target == "yss_graph_protocol"
                 && root.kind == ProductionRootKind::Library)
@@ -615,6 +623,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_document_edit"
+                    && alias.member_package == "yss-graph-document-edit"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-document-edit"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_graph_protocol"
                     && alias.member_package == "yss-graph-protocol"
             })
@@ -867,6 +893,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-document/src/lib.rs"),
     };
+    let graph_document_edit_root = ProductionRoot {
+        package_id: "graph-document-edit-package".to_owned(),
+        package: "yss-graph-document-edit".to_owned(),
+        target: "yss_graph_document_edit".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-document-edit/src/lib.rs"),
+    };
     let graph_protocol_root = ProductionRoot {
         package_id: "graph-protocol-package".to_owned(),
         package: "yss-graph-protocol".to_owned(),
@@ -936,6 +969,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_compiler_root.clone(),
         graph_compiler_diagnostics_root.clone(),
         graph_document_root.clone(),
+        graph_document_edit_root.clone(),
         graph_protocol_root.clone(),
         graph_resource_contract_root.clone(),
         graph_registry_root.clone(),
@@ -1025,6 +1059,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_document_root,
                 "src-tauri/crates/yss-graph-document/src/lib.rs",
                 "yss_graph_document",
+            ),
+            module(
+                &graph_document_edit_root,
+                "src-tauri/crates/yss-graph-document-edit/src/lib.rs",
+                "yss_graph_document_edit",
             ),
             module(
                 &graph_protocol_root,
@@ -1130,6 +1169,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-graph-document/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-document-edit/src/lib.rs"],
+        RustLayer::Graph
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
@@ -2214,6 +2257,59 @@ fn graph_document_has_one_pure_crate_owner_without_compatibility_module() {
             "project must consume the canonical graph-document name rule instead of duplicating {duplicate}"
         );
     }
+}
+
+#[test]
+fn graph_document_edit_has_one_graph_crate_owner_without_root_reexports() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-document-edit/Cargo.toml",
+        "src-tauri/crates/yss-graph-document-edit/src/error.rs",
+        "src-tauri/crates/yss-graph-document-edit/src/lib.rs",
+        "src-tauri/crates/yss-graph-document-edit/src/patch.rs",
+        "src-tauri/crates/yss-graph-document-edit/src/validation.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph document edit owner must exist at {relative}"
+        );
+    }
+    for relative in [
+        "src-tauri/src/graph/document/error.rs",
+        "src-tauri/src/graph/document/patch.rs",
+        "src-tauri/src/graph/document/transaction.rs",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "the root crate must not retain graph document edit owner {relative}"
+        );
+    }
+
+    let root_document_module =
+        std::fs::read_to_string(root.join("src-tauri/src/graph/document/mod.rs"))
+            .expect("the root graph document module must be readable");
+    for moved_api in [
+        "DocumentError",
+        "GraphDocumentOperation",
+        "GraphDocumentPatch",
+        "apply_graph_document_patch",
+        "validate_graph_document",
+        "port_member_group_state",
+    ] {
+        assert!(
+            !root_document_module.contains(moved_api),
+            "the root graph document module must not re-export {moved_api}"
+        );
+    }
+
+    let validation = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-graph-document-edit/src/validation.rs"),
+    )
+    .expect("the graph document validation owner must be readable");
+    assert!(
+        !validation.contains("address_is_complete"),
+        "the zero-consumer address completeness helper must stay removed"
+    );
 }
 
 #[test]

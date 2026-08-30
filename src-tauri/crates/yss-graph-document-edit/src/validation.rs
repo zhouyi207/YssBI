@@ -1,48 +1,41 @@
-use super::{DocumentError, GraphDocument, PortAddress};
+use crate::DocumentError;
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_document::{DynamicPortBinding, GraphDocument, NodeId, PortAddress, PortInstanceId};
 use yss_graph_protocol::{PortKey, PortMemberGroupSpec};
 
-pub(crate) struct PortMemberGroupState {
+pub struct PortMemberGroupState {
     required_templates: BTreeSet<PortKey>,
-    present_templates: BTreeMap<super::PortInstanceId, BTreeSet<PortKey>>,
+    present_templates: BTreeMap<PortInstanceId, BTreeSet<PortKey>>,
 }
 
 impl PortMemberGroupState {
-    pub(crate) fn complete_count(&self) -> usize {
+    pub fn complete_count(&self) -> usize {
         self.present_templates
             .values()
             .filter(|present| present.is_superset(&self.required_templates))
             .count()
     }
 
-    pub(crate) fn is_complete(&self, instance_id: super::PortInstanceId) -> bool {
+    pub fn is_complete(&self, instance_id: PortInstanceId) -> bool {
         self.present_templates
             .get(&instance_id)
             .is_some_and(|present| present.is_superset(&self.required_templates))
     }
-
-    pub(crate) fn address_is_complete(&self, address: &PortAddress) -> bool {
-        match &address.port {
-            super::PortRef::Instance { instance_id, .. } => self.is_complete(*instance_id),
-            super::PortRef::Declared { .. } => false,
-        }
-    }
 }
 
-pub(crate) fn port_member_group_state<'a>(
-    node_id: super::NodeId,
+pub fn port_member_group_state<'a>(
+    node_id: NodeId,
     group: &PortMemberGroupSpec,
-    bindings: impl IntoIterator<Item = (&'a PortAddress, &'a super::DynamicPortBinding)>,
+    bindings: impl IntoIterator<Item = (&'a PortAddress, &'a DynamicPortBinding)>,
 ) -> PortMemberGroupState {
     let required_templates = group.templates.iter().cloned().collect::<BTreeSet<_>>();
-    let mut present_templates = BTreeMap::<super::PortInstanceId, BTreeSet<PortKey>>::new();
+    let mut present_templates = BTreeMap::<PortInstanceId, BTreeSet<PortKey>>::new();
     for (address, binding) in bindings {
-        if address.node_id != node_id
-            || !matches!(binding, super::DynamicPortBinding::UserCreated { .. })
+        if address.node_id != node_id || !matches!(binding, DynamicPortBinding::UserCreated { .. })
         {
             continue;
         }
-        let super::PortRef::Instance {
+        let yss_graph_document::PortRef::Instance {
             template,
             instance_id,
         } = &address.port
@@ -62,7 +55,7 @@ pub(crate) fn port_member_group_state<'a>(
     }
 }
 
-pub(crate) fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentError> {
+pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentError> {
     for (id, node) in &document.nodes {
         if id != &node.id {
             return Err(DocumentError::DuplicateNode(node.id));

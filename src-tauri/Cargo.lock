@@ -9210,6 +9210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-document-edit"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "yss-graph-document",
+ "yss-graph-protocol",
+]
+
+[[package]]
 name = "yss-graph-protocol"
 version = "0.1.0"
 dependencies = [
@@ -9352,6 +9361,7 @@ dependencies = [
  "yss-graph-compiler",
  "yss-graph-compiler-diagnostics",
  "yss-graph-document",
+ "yss-graph-document-edit",
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-resource-contract",

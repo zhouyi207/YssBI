@@ -135,7 +135,7 @@ pub struct GraphProjectionReplacement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphMutationResult {
     pub project_instance_id: ProjectInstanceId,
-    pub delta: GraphDeltaEvent<crate::graph::document::GraphDocumentPatch>,
+    pub delta: GraphDeltaEvent<yss_graph_document_edit::GraphDocumentPatch>,
     pub projection_replacement: GraphProjectionReplacement,
     pub history: HistoryStatus,
 }

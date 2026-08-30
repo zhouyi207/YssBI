@@ -1,5 +1,5 @@
-use super::{ConnectionId, NodeId, PortAddress};
 use std::fmt;
+use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentError {

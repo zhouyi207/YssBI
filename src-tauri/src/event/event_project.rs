@@ -25,7 +25,7 @@ pub enum EventProject {
     GraphDelta {
         project_instance_id: String,
         delta: crate::schema::application_event::GraphDeltaEventDto<
-            crate::graph::document::GraphDocumentPatch,
+            yss_graph_document_edit::GraphDocumentPatch,
         >,
     },
     #[serde(rename_all = "camelCase")]
@@ -393,7 +393,7 @@ mod tests {
             caused_by: Some(crate::project::OperationId::from_uuid(
                 uuid::Uuid::from_u128(0x401),
             )),
-            payload: crate::graph::document::GraphDocumentPatch {
+            payload: yss_graph_document_edit::GraphDocumentPatch {
                 operations: Vec::new(),
             },
         };
