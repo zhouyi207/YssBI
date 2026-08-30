@@ -11,12 +11,12 @@ use crate::database::runtime::{
 use crate::database::schema_snapshot::{
     DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
 };
-use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 use yss_data_contract::DataType;
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
+use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {

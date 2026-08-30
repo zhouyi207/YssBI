@@ -1,9 +1,9 @@
 use crate::backend_adapters::tabular::polars::{
     TabularMaterializationError, json_to_anyvalue, to_dataframe,
 };
-use crate::tabular::contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 use polars::prelude::{AnyValue, DataType};
 use serde_json::json;
+use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
 fn snapshot() -> TabularSnapshot {
     TabularSnapshot::try_from_columns(

@@ -503,7 +503,7 @@ mod tests {
                 runtime_revision: 0,
                 schema_revision: 0,
                 columns: Box::new([database_column_fact_fixture(
-                    crate::tabular::contract::TabularColumnName::try_from("amount").unwrap(),
+                    yss_tabular_contract::TabularColumnName::try_from("amount").unwrap(),
                     DataType::Float64,
                     false,
                 )]),

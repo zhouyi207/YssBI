@@ -38,9 +38,9 @@ use crate::project::{
     OperationId, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
     ResourceRevision, relative_project_duckdb_path, unique_name,
 };
-use crate::tabular::contract::TabularSnapshot;
 use uuid::Uuid;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
+use yss_tabular_contract::TabularSnapshot;
 
 #[cfg(test)]
 static DATABASE_EXTERNAL_IO_TEST_HOOK: std::sync::Mutex<

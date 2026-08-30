@@ -110,6 +110,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/execution/` | immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
+| `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
@@ -117,7 +118,6 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
-| `src-tauri/src/tabular/` | 变量 tabular snapshot、canonical handle 与 DataFrame I/O |
 | `src-tauri/src/diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery |
 | `src-tauri/src/window_state/` | 后端权威窗口几何状态与原子持久化 |
 

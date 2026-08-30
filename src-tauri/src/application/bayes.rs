@@ -441,7 +441,7 @@ impl BayesInferenceService {
         let required_columns = required_input_columns(&spec)
             .into_iter()
             .map(|name| {
-                crate::tabular::contract::TabularColumnName::try_from(name.as_str()).map_err(|_| {
+                yss_tabular_contract::TabularColumnName::try_from(name.as_str()).map_err(|_| {
                     BayesApplicationError::DatasetLoadFailed {
                         source: BayesDatasetLoadError::Database(DatabaseError::invalid_request(
                             DatabaseOperation::DataSnapshot,
@@ -1654,7 +1654,7 @@ fn bayes_dataset_load_error_from_session_revalidation(
 #[cfg(test)]
 fn dataframe_from_snapshot(
     snapshot: &DatabaseDataSnapshot,
-    required_columns: &[crate::tabular::contract::TabularColumnName],
+    required_columns: &[yss_tabular_contract::TabularColumnName],
     database: &DatabaseId,
 ) -> Result<DataFrame, BayesApplicationError> {
     let columns = snapshot.rows().columns();
@@ -1703,7 +1703,7 @@ fn dataframe_from_snapshot(
 
 fn statistical_inputs_from_snapshot(
     snapshot: &DatabaseDataSnapshot,
-    required_columns: &[crate::tabular::contract::TabularColumnName],
+    required_columns: &[yss_tabular_contract::TabularColumnName],
     database: &DatabaseId,
 ) -> Result<Arc<[crate::sci::api::computation::StatisticalInput]>, BayesApplicationError> {
     let columns = snapshot.rows().columns();
@@ -1727,22 +1727,22 @@ fn statistical_inputs_from_snapshot(
                 .values()
                 .iter()
                 .map(|value| match value {
-                    crate::tabular::contract::TabularScalar::Null => None,
-                    crate::tabular::contract::TabularScalar::Bool(value) => {
+                    yss_tabular_contract::TabularScalar::Null => None,
+                    yss_tabular_contract::TabularScalar::Bool(value) => {
                         Some(crate::sci::api::computation::StatisticalScalar::Category(
                             value.to_string().into(),
                         ))
                     }
-                    crate::tabular::contract::TabularScalar::Integer(value) => Some(
+                    yss_tabular_contract::TabularScalar::Integer(value) => Some(
                         crate::sci::api::computation::StatisticalScalar::Numeric(*value as f64),
                     ),
-                    crate::tabular::contract::TabularScalar::Unsigned(value) => Some(
+                    yss_tabular_contract::TabularScalar::Unsigned(value) => Some(
                         crate::sci::api::computation::StatisticalScalar::Numeric(*value as f64),
                     ),
-                    crate::tabular::contract::TabularScalar::Decimal(value) => Some(
+                    yss_tabular_contract::TabularScalar::Decimal(value) => Some(
                         crate::sci::api::computation::StatisticalScalar::Numeric(value.as_f64()),
                     ),
-                    crate::tabular::contract::TabularScalar::String(value) => Some(
+                    yss_tabular_contract::TabularScalar::String(value) => Some(
                         crate::sci::api::computation::StatisticalScalar::Category(value.clone()),
                     ),
                 })
@@ -1760,18 +1760,14 @@ fn statistical_inputs_from_snapshot(
 }
 
 #[cfg(test)]
-fn tabular_scalar_to_any_value(
-    value: &crate::tabular::contract::TabularScalar,
-) -> AnyValue<'static> {
+fn tabular_scalar_to_any_value(value: &yss_tabular_contract::TabularScalar) -> AnyValue<'static> {
     match value {
-        crate::tabular::contract::TabularScalar::Null => AnyValue::Null,
-        crate::tabular::contract::TabularScalar::Bool(value) => AnyValue::Boolean(*value),
-        crate::tabular::contract::TabularScalar::Integer(value) => AnyValue::Int64(*value),
-        crate::tabular::contract::TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
-        crate::tabular::contract::TabularScalar::Decimal(value) => {
-            AnyValue::Float64(value.as_f64())
-        }
-        crate::tabular::contract::TabularScalar::String(value) => {
+        yss_tabular_contract::TabularScalar::Null => AnyValue::Null,
+        yss_tabular_contract::TabularScalar::Bool(value) => AnyValue::Boolean(*value),
+        yss_tabular_contract::TabularScalar::Integer(value) => AnyValue::Int64(*value),
+        yss_tabular_contract::TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
+        yss_tabular_contract::TabularScalar::Decimal(value) => AnyValue::Float64(value.as_f64()),
+        yss_tabular_contract::TabularScalar::String(value) => {
             AnyValue::StringOwned(value.to_string().into())
         }
     }

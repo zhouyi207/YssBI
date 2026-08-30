@@ -312,7 +312,7 @@ impl DatabaseRuntimeSession {
     pub(crate) fn read_physical_snapshot(
         &self,
         database: &DatabaseId,
-        requested: Option<&[crate::tabular::contract::TabularColumnName]>,
+        requested: Option<&[yss_tabular_contract::TabularColumnName]>,
         offset: usize,
         limit: usize,
     ) -> Result<DatabaseRuntimeDataSnapshot, DatabaseError> {

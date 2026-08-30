@@ -192,9 +192,9 @@ pub(super) fn pure_leaf_graph_document_json_violations(
 }
 
 pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<String> {
+    const TABULAR_CONTRACT_SOURCE: &str = "src-tauri/crates/yss-tabular-contract/src/lib.rs";
     let files = [
-        "src-tauri/src/tabular/mod.rs",
-        "src-tauri/src/tabular/contract.rs",
+        TABULAR_CONTRACT_SOURCE,
         "src-tauri/src/project/variable_tabular.rs",
         "src-tauri/src/backend_adapters/tabular/polars.rs",
         "src-tauri/src/database/tabular_io.rs",
@@ -208,24 +208,13 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         if source.contains("Result<") && source.contains(", String>") {
             violations.push(format!("{relative}: public String result error"));
         }
-        if relative == "src-tauri/src/tabular/mod.rs"
-            && [
-                "VariableInstance",
-                "serde_json",
-                "polars",
-                "dataframe_io",
-                "normalize_variable",
-            ]
-            .iter()
-            .any(|forbidden| source.contains(forbidden))
-        {
-            violations.push(format!("{relative}: mixed-owner dependency or re-export"));
-        }
-        if relative == "src-tauri/src/tabular/contract.rs" {
+        if relative == TABULAR_CONTRACT_SOURCE {
             for forbidden in [
                 "serde_json",
                 "polars",
                 "VariableInstance",
+                "dataframe_io",
+                "normalize_variable",
                 "BTreeMap",
                 "pub columns",
                 "#[derive(Serialize, Deserialize)]",

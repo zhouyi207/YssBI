@@ -15,6 +15,7 @@ members = [
     "crates/yss-data-contract",
     "crates/yss-database-contract",
     "crates/yss-sci",
+    "crates/yss-tabular-contract",
     "crates/yss-tracing",
 ]
 
@@ -53,6 +54,7 @@ tauri-build = { version = "2", features = [] }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-sci = { path = "./crates/yss-sci" }
+yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tracing = { path = "./crates/yss-tracing" }
 tauri = { version = "2.11", features = [] }
 tauri-plugin-opener = "2.5.4"

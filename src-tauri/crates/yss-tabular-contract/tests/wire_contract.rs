@@ -1,4 +1,4 @@
-use super::contract::{
+use yss_tabular_contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularContractError, TabularScalar,
     TabularSnapshot,
 };

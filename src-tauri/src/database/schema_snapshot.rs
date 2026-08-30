@@ -1,7 +1,7 @@
-use crate::tabular::contract::TabularColumnName;
 use polars::prelude::{DataFrame, DataType as PolarsDataType};
 use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
+use yss_tabular_contract::TabularColumnName;
 
 use super::DuckDbColumnMeta;
 

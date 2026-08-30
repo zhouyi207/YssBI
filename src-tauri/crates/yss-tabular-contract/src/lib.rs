@@ -4,7 +4,6 @@ use serde::de::{self, DeserializeSeed, Deserializer, Error as _, MapAccess, Visi
 use serde::ser::{SerializeMap, SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use std::error::Error;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -323,25 +322,16 @@ impl<'de> Deserialize<'de> for TabularSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TabularContractError {
+    #[error("invalid column name")]
     InvalidColumnName,
+    #[error("non-finite decimal")]
     NonFiniteDecimal,
+    #[error("duplicate column name")]
     DuplicateColumnName { column: TabularColumnName },
+    #[error("unequal column lengths")]
     UnequalColumnLengths,
+    #[error("invalid series column count")]
     SeriesColumnCount { actual: usize },
 }
-
-impl fmt::Display for TabularContractError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidColumnName => formatter.write_str("invalid column name"),
-            Self::NonFiniteDecimal => formatter.write_str("non-finite decimal"),
-            Self::DuplicateColumnName { .. } => formatter.write_str("duplicate column name"),
-            Self::UnequalColumnLengths => formatter.write_str("unequal column lengths"),
-            Self::SeriesColumnCount { .. } => formatter.write_str("invalid series column count"),
-        }
-    }
-}
-
-impl Error for TabularContractError {}

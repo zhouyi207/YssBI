@@ -11,9 +11,9 @@ use crate::database::schema_snapshot::DatabaseColumnFact;
 use crate::database::session_api::{
     self, DatabaseColumnSelection, DatabaseDataSnapshotRequest, DatabaseQueryBasis,
 };
-use crate::tabular::contract::{TabularColumn, TabularColumnName, TabularScalar};
 use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
+use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::tabular::contract::TabularSnapshot;
+use yss_tabular_contract::TabularSnapshot;
 
 use super::scientific::BackendCancellationToken;
 use crate::execution::plan::{ExecutionPlan, PlanResourceId};

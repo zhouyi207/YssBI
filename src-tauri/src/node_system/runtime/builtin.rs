@@ -218,10 +218,10 @@ fn data_series_element_type(
 
 fn tabular_series_value(
     element_type: DataSeriesElementType,
-    value: &crate::tabular::contract::TabularScalar,
+    value: &yss_tabular_contract::TabularScalar,
     index: usize,
 ) -> Result<Value, KernelError> {
-    use crate::tabular::contract::TabularScalar;
+    use yss_tabular_contract::TabularScalar;
 
     if matches!(value, TabularScalar::Null) {
         return Ok(Value::Null);

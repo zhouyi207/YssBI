@@ -2,7 +2,7 @@ use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use polars::prelude::{AnyValue, Column, DataFrame, DataType as PDataType, PlSmallStr, Series};
 use serde_json::Value;
 
-use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
+use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TabularMaterializationError {
@@ -29,7 +29,7 @@ pub fn to_dataframe(snapshot: &TabularSnapshot) -> Result<DataFrame, TabularMate
 }
 
 fn values_to_series(
-    column: &crate::tabular::contract::TabularColumn,
+    column: &yss_tabular_contract::TabularColumn,
 ) -> Result<Series, TabularMaterializationError> {
     let dtype = infer_polars_dtype(column.values());
     let values = column

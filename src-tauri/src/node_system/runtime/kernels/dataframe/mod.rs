@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataframeApi {
-    /// `crate::tabular` snapshots/catalog and the relational backend.
+    /// `yss-tabular-contract` snapshots and the relational backend.
     Tabular,
     /// `crate::sci` time-series transforms.
     ScientificTimeSeries,

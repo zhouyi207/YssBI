@@ -1,12 +1,10 @@
-use crate::tabular::contract::{
-    TabularColumn, TabularContractError, TabularScalar, TabularSnapshot,
-};
 use crate::variable::{VariableId, VariableInstance};
 use serde::Deserializer as _;
 use serde::de::{MapAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
 use yss_data_contract::{DataSeriesValue, DataType, DataValue};
+use yss_tabular_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
 
 const VARIABLE_HANDLE_PREFIX: &str = "var:";
 
@@ -22,11 +20,11 @@ pub enum VariableTabularNormalizationError {
     ExpectedColumnMap,
     #[error("tabular variable column must be an array")]
     ColumnNotArray {
-        column: crate::tabular::contract::TabularColumnName,
+        column: yss_tabular_contract::TabularColumnName,
     },
     #[error("tabular variable cell must be a scalar")]
     UnsupportedCell {
-        column: crate::tabular::contract::TabularColumnName,
+        column: yss_tabular_contract::TabularColumnName,
         row: usize,
     },
     #[error("tabular variable contract is invalid")]
@@ -48,7 +46,7 @@ fn parse_literal(payload: &str) -> Result<TabularSnapshot, VariableTabularNormal
         return Err(VariableTabularNormalizationError::ExpectedColumnMap);
     };
     for (name, values) in columns {
-        let column = crate::tabular::contract::TabularColumnName::try_from(name.as_str())
+        let column = yss_tabular_contract::TabularColumnName::try_from(name.as_str())
             .map_err(VariableTabularNormalizationError::Contract)?;
         let Some(values) = values.as_array() else {
             return Err(VariableTabularNormalizationError::ColumnNotArray { column });
@@ -74,7 +72,7 @@ fn parse_literal(payload: &str) -> Result<TabularSnapshot, VariableTabularNormal
         columns
             .into_iter()
             .map(|(name, values)| {
-                crate::tabular::contract::TabularColumnName::try_from(name.as_str())
+                yss_tabular_contract::TabularColumnName::try_from(name.as_str())
                     .map(|name| TabularColumn::new(name, values.into_boxed_slice()))
                     .map_err(VariableTabularNormalizationError::Contract)
             })
@@ -209,8 +207,8 @@ pub fn normalize_variable_tabular(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tabular::contract::TabularColumnName;
     use crate::variable::VariableScope;
+    use yss_tabular_contract::TabularColumnName;
 
     #[test]
     fn normalize_enforces_current_variable_canonical_handle() {

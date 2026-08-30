@@ -261,6 +261,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-tabular-contract"
+                && root.target == "yss_tabular_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-tracing"
                 && root.target == "yss_tracing"
                 && root.kind == ProductionRootKind::Library)
@@ -319,6 +327,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-database-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_tabular_contract"
+                    && alias.member_package == "yss-tabular-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-tabular-contract"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -393,6 +419,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-database-contract/src/lib.rs"),
     };
+    let tabular_contract_root = ProductionRoot {
+        package_id: "tabular-contract-package".to_owned(),
+        package: "yss-tabular-contract".to_owned(),
+        target: "yss_tabular_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
+    };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
         package: "fixture".to_owned(),
@@ -404,6 +437,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         runtime_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
+        tabular_contract_root.clone(),
         build_root.clone(),
     ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
@@ -448,6 +482,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_database_contract",
             ),
             module(
+                &tabular_contract_root,
+                "src-tauri/crates/yss-tabular-contract/src/lib.rs",
+                "yss_tabular_contract",
+            ),
+            module(
                 &runtime_root,
                 "src-tauri/src/graph/value/type_system.rs",
                 "fixture_lib::graph::value::type_system",
@@ -488,6 +527,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-database-contract/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1002,7 +1045,22 @@ fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
 
 #[test]
 fn tabular_contract_and_adapters_are_acyclic_and_typed() {
-    let violations = tabular_contract_source_violations(&repository_root());
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-tabular-contract/Cargo.toml",
+        "src-tauri/crates/yss-tabular-contract/src/lib.rs",
+        "src-tauri/crates/yss-tabular-contract/tests/wire_contract.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "tabular contract owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/tabular").exists(),
+        "the root crate must not retain a tabular compatibility module"
+    );
+    let violations = tabular_contract_source_violations(&root);
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"

@@ -554,7 +554,7 @@ mod tests {
             RuntimeDatabaseMutationOperation::EditCell {
                 row: 0,
                 column: "value".into(),
-                value: crate::tabular::contract::TabularScalar::Null,
+                value: yss_tabular_contract::TabularScalar::Null,
                 row_id: None,
             },
         )
