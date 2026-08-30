@@ -4,8 +4,8 @@ use crate::execution::plan::legacy::{
     FunctionPlanHandle, OperationStableId,
 };
 use crate::graph::analysis::contracts::ResourceVersionSet;
-use crate::graph::registry::hash_canonical;
 use std::collections::BTreeMap;
+use yss_canonical_hash::hash_canonical;
 
 use std::sync::{Arc, Condvar, Mutex};
 

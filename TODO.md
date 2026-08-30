@@ -587,3 +587,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   直接消费 canonical validation error 与名称长度上限，避免镜像错误类型和重复规则事实源。
 - [ ] 删除无生产调用的根 `graph/value` 层，不为 dead code 创建 `yss-graph-value`；移除两套
   漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
+- [ ] 将 canonical JSON 域分隔哈希迁入独立 `src-tauri/crates/yss-canonical-hash/` Pure Leaf；
+  registry、analysis 与 runtime 直接依赖该 crate，并删除 registry 中重复的手写 SHA-256 实现。

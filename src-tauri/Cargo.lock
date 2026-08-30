@@ -9091,6 +9091,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-canonical-hash"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "yss-data-contract"
 version = "0.1.0"
 dependencies = [
@@ -9249,6 +9258,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "windows-sys 0.61.2",
+ "yss-canonical-hash",
  "yss-data-contract",
  "yss-database-contract",
  "yss-diagnostics",

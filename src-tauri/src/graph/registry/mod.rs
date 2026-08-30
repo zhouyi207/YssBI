@@ -4,8 +4,7 @@ mod fingerprint;
 mod model;
 mod validation;
 
-pub(crate) use fingerprint::hash_canonical;
-pub use fingerprint::{CanonicalEncodingError, ProtocolFingerprint, RegistryFingerprint};
+pub use fingerprint::{ProtocolFingerprint, RegistryFingerprint};
 pub use model::{
     CatalogManifest, CategoryRegistration, CategoryRegistry, I18nManifest, ImplementationKind,
     LeafImplementation, NodeImplementation, NodeImplementationCapability, NodeRegistry,
@@ -19,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use yss_canonical_hash::CanonicalEncodingError;
 use yss_graph_protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
 
 static NEXT_NOMINAL_REGISTRATION_ID: AtomicU64 = AtomicU64::new(1);
@@ -351,12 +351,12 @@ pub fn canonical_semantic_protocol_snapshot(
         "format": "yssbi.semantic-node-protocol.v1",
         "nodes": nodes,
     }))
-    .map_err(CanonicalEncodingError::from_serde)
+    .map_err(CanonicalEncodingError::from)
 }
 
 pub fn i18n_inventory(registry: &NodeRegistry) -> Result<String, CanonicalEncodingError> {
     serde_json::to_string_pretty(&registry.catalog_manifest.i18n.keys)
-        .map_err(CanonicalEncodingError::from_serde)
+        .map_err(CanonicalEncodingError::from)
 }
 
 fn canonical_registry(

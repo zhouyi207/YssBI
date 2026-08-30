@@ -1758,7 +1758,8 @@ fn non_build_memberships(
     let exact_layer = exact_source_layer(source_file);
     if matches!(
         package,
-        "yss-data-contract"
+        "yss-canonical-hash"
+            | "yss-data-contract"
             | "yss-database-contract"
             | "yss-graph-document"
             | "yss-graph-protocol"

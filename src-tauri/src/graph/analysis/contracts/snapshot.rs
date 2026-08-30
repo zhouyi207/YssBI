@@ -313,18 +313,18 @@ mod tests {
             serde_json::to_vec(&reordered_semantic).unwrap()
         );
         assert_eq!(
-            crate::graph::registry::hash_canonical("yssbi.analysis-snapshot.test.v1", &baseline,)
+            yss_canonical_hash::hash_canonical("yssbi.analysis-snapshot.test.v1", &baseline,)
                 .unwrap(),
-            crate::graph::registry::hash_canonical("yssbi.analysis-snapshot.test.v1", &reordered,)
+            yss_canonical_hash::hash_canonical("yssbi.analysis-snapshot.test.v1", &reordered,)
                 .unwrap()
         );
         assert_eq!(
-            crate::graph::registry::hash_canonical(
+            yss_canonical_hash::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &baseline_semantic,
             )
             .unwrap(),
-            crate::graph::registry::hash_canonical(
+            yss_canonical_hash::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &reordered_semantic,
             )
@@ -354,18 +354,18 @@ mod tests {
             serde_json::to_vec(&changed_semantic).unwrap()
         );
         assert_ne!(
-            crate::graph::registry::hash_canonical("yssbi.analysis-snapshot.test.v1", &baseline,)
+            yss_canonical_hash::hash_canonical("yssbi.analysis-snapshot.test.v1", &baseline,)
                 .unwrap(),
-            crate::graph::registry::hash_canonical("yssbi.analysis-snapshot.test.v1", &changed,)
+            yss_canonical_hash::hash_canonical("yssbi.analysis-snapshot.test.v1", &changed,)
                 .unwrap()
         );
         assert_ne!(
-            crate::graph::registry::hash_canonical(
+            yss_canonical_hash::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &baseline_semantic,
             )
             .unwrap(),
-            crate::graph::registry::hash_canonical(
+            yss_canonical_hash::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &changed_semantic,
             )

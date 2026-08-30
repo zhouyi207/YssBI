@@ -322,6 +322,7 @@ yss-graph-document + yss-graph-protocol
   → Execution immutable plan/runtime
 ```
 
+- `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
 - `graph/catalog`、`graph/registry`：built-in descriptors、localized catalog 与 registry。

@@ -12,6 +12,7 @@ rust-version.workspace = true
 resolver = "3"
 members = [
     ".",
+    "crates/yss-canonical-hash",
     "crates/yss-data-contract",
     "crates/yss-database-contract",
     "crates/yss-diagnostics",
@@ -62,6 +63,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }

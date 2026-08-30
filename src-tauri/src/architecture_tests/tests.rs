@@ -245,6 +245,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-canonical-hash"
+                && root.target == "yss_canonical_hash"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-data-contract"
                 && root.target == "yss_data_contract"
                 && root.kind == ProductionRootKind::Library)
@@ -334,6 +342,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-sci"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_canonical_hash"
+                    && alias.member_package == "yss-canonical-hash"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-canonical-hash"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -563,6 +589,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-data-contract/src/lib.rs"),
     };
+    let canonical_hash_root = ProductionRoot {
+        package_id: "canonical-hash-package".to_owned(),
+        package: "yss-canonical-hash".to_owned(),
+        target: "yss_canonical_hash".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-canonical-hash/src/lib.rs"),
+    };
     let database_contract_root = ProductionRoot {
         package_id: "database-contract-package".to_owned(),
         package: "yss-database-contract".to_owned(),
@@ -628,6 +661,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let roots = vec![
         runtime_root.clone(),
+        canonical_hash_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
         diagnostics_root.clone(),
@@ -659,6 +693,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &runtime_root,
                 "src-tauri/src/graph/catalog/builtin.rs",
                 "fixture_lib::graph::catalog::builtin",
+            ),
+            module(
+                &canonical_hash_root,
+                "src-tauri/crates/yss-canonical-hash/src/lib.rs",
+                "yss_canonical_hash",
             ),
             module(
                 &data_contract_root,
@@ -736,6 +775,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/src/graph/catalog/builtin.rs"],
         RustLayer::BuiltinComposition
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-canonical-hash/src/lib.rs"],
+        RustLayer::PureLeaf
     );
     assert_eq!(
         classified["src-tauri/crates/yss-data-contract/src/lib.rs"],
@@ -1323,6 +1366,28 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
     assert!(
         !root.join("src-tauri/src/diagnostics").exists(),
         "the root crate must not retain a diagnostics compatibility module"
+    );
+}
+
+#[test]
+fn canonical_hash_has_one_pure_crate_owner_without_registry_duplication() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-canonical-hash/Cargo.toml",
+        "src-tauri/crates/yss-canonical-hash/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "canonical hash owner must exist at {relative}"
+        );
+    }
+
+    let registry_fingerprint =
+        std::fs::read_to_string(root.join("src-tauri/src/graph/registry/fingerprint.rs"))
+            .expect("registry fingerprint source must be readable");
+    assert!(
+        !registry_fingerprint.contains("fn sha256"),
+        "graph registry must consume yss-canonical-hash instead of retaining a SHA-256 implementation"
     );
 }
 
