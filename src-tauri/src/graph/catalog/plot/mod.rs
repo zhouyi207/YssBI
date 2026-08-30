@@ -2,9 +2,9 @@ use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
 };
 use crate::graph::catalog::Message;
-use crate::graph::protocol::*;
 use crate::graph::registry::{CategoryRegistration, RegisteredNode};
 use std::sync::Arc;
+use yss_graph_protocol::*;
 
 const CATEGORY: &str = "plot";
 

@@ -322,7 +322,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
     parameters: &ParameterValues,
     origin: &DynamicMemberLocator,
     catalog: &crate::graph::compatibility::CatalogMutationValidationSnapshot,
-) -> Result<crate::graph::protocol::TypeExpr, MutationConflict> {
+) -> Result<yss_graph_protocol::TypeExpr, MutationConflict> {
     let PortInstances::Derived { resolver } = &spec.instances else {
         return Err(invalid_editor_mutation(
             "resolved dynamic binding requires a derived port template",
@@ -335,7 +335,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
         } => {
             let target = parameters
                 .get(
-                    &crate::graph::protocol::ParameterKey::new("target")
+                    &yss_graph_protocol::ParameterKey::new("target")
                         .expect("function target is a valid parameter key"),
                 )
                 .and_then(serde_json::Value::as_str);
@@ -540,7 +540,7 @@ pub(super) fn connect_operations_prevalidated_type(
 
 fn authoritative_subgraph_port_type<'a>(
     port: &'a MutationPort<'a>,
-) -> &'a crate::graph::protocol::TypeExpr {
+) -> &'a yss_graph_protocol::TypeExpr {
     match port.binding {
         Some(DynamicPortBinding::Resolved { last_known, .. }) => last_known
             .value_type
@@ -575,8 +575,8 @@ fn validate_connection_type_exprs(
     output: &PortAddress,
     input: &PortAddress,
     kind: PortKind,
-    output_type: &crate::graph::protocol::TypeExpr,
-    input_type: &crate::graph::protocol::TypeExpr,
+    output_type: &yss_graph_protocol::TypeExpr,
+    input_type: &yss_graph_protocol::TypeExpr,
 ) -> Result<(), MutationConflict> {
     if kind != PortKind::Data {
         return Ok(());
@@ -593,12 +593,12 @@ fn validate_connection_type_exprs(
         .interface
         .type_parameters
         .as_ref();
-    if crate::graph::protocol::type_exprs_compatibility(
+    if yss_graph_protocol::type_exprs_compatibility(
         output_type,
         input_type,
         output_type_parameters,
         input_type_parameters,
-    ) == crate::graph::protocol::TypeCompatibility::Incompatible
+    ) == yss_graph_protocol::TypeCompatibility::Incompatible
     {
         Err(invalid_editor_mutation(
             "connection endpoint types are incompatible",
@@ -799,7 +799,7 @@ pub(crate) fn validate_literal_target(
 ) -> Result<(), MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     if let Some(literal) = literal {
-        crate::graph::protocol::validate_typed_literal(literal, &port.spec.value_type, registry)
+        yss_graph_protocol::validate_typed_literal(literal, &port.spec.value_type, registry)
             .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
@@ -814,7 +814,7 @@ pub(crate) fn normalize_editor_literal_target(
     let port = resolve_literal_target(document, registry, address)?;
     literal
         .map(|raw| {
-            crate::graph::protocol::normalize_json_literal(raw, &port.spec.value_type, registry)
+            yss_graph_protocol::normalize_json_literal(raw, &port.spec.value_type, registry)
                 .map(|literal| {
                     serde_json::to_value(literal).expect("protocol typed values must serialize")
                 })

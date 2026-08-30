@@ -484,7 +484,6 @@ mod tests {
         RelationalOperatorIndex, RelationalProjection, RelationalPushdownHint, RelationalRename,
         ResourceAccess, ResourceId, ResourceKind, infer_relational_pushdown_hints,
     };
-    use crate::graph::protocol::Value;
     use crate::node_system::runtime::{
         CancellationToken, ProjectResourceProvider, ProjectResourceSnapshot, RelationalBackend,
         RelationalContext, RelationalError, RelationalErrorCode, RunDeadline, RunId,
@@ -495,6 +494,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use yss_graph_protocol::Value;
 
     fn relational_test_owner(cancellation: &CancellationToken) -> RunResourceOwner {
         RunResourceOwner::new(

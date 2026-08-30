@@ -7,8 +7,6 @@ use crate::graph::catalog::{
 #[cfg(test)]
 pub use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 #[cfg(test)]
-use crate::graph::protocol::NodeTypeId;
-#[cfg(test)]
 use crate::graph::registry::NodeRegistry;
 #[cfg(test)]
 use crate::project::FunctionSignature;
@@ -23,6 +21,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 #[cfg(test)]
 use yss_database_contract::DatabaseDecl;
+#[cfg(test)]
+use yss_graph_protocol::NodeTypeId;
 use yss_variable_contract::VariableScope;
 #[cfg(test)]
 use yss_variable_contract::{VariableId, VariableInstance};

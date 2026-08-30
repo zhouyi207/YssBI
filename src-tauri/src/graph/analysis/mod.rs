@@ -4,24 +4,24 @@ use crate::graph::analysis::contracts::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
 };
-use crate::graph::protocol::{
-    ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
-    PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
-    SchemaExpr, TypeExpr,
-};
 use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
 use crate::graph_document::GraphRevision;
 use crate::graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
 use crate::graph_document::{DynamicPortBinding, PortRef};
+use yss_graph_protocol::{
+    ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
+    PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
+    SchemaExpr, TypeExpr,
+};
 
 pub(crate) mod result_category;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeFact {
     pub node_id: NodeId,
-    pub node_type: crate::graph::protocol::NodeTypeId,
+    pub node_type: yss_graph_protocol::NodeTypeId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,7 +60,7 @@ impl GraphProjectionFacts {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeProjectionFacts {
     pub node_id: NodeId,
-    pub node_type: crate::graph::protocol::NodeTypeId,
+    pub node_type: yss_graph_protocol::NodeTypeId,
     pub instance_title: Option<Box<str>>,
     pub title: Box<str>,
     pub icon_id: Option<Box<str>>,
@@ -116,7 +116,7 @@ pub struct GraphColumnFact {
 pub struct GraphFilterColumnFact {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[crate::graph::protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[yss_graph_protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[GraphFilterLiteralType]>,
 }
 
@@ -370,8 +370,8 @@ pub(crate) fn projection_facts(
 fn projection_port(
     document: &GraphDocument,
     node_id: NodeId,
-    protocol: &crate::graph::protocol::NodeProtocol,
-    spec: &crate::graph::protocol::PortSpec,
+    protocol: &yss_graph_protocol::NodeProtocol,
+    spec: &yss_graph_protocol::PortSpec,
     dynamic: Option<(&PortAddress, &DynamicPortBinding)>,
 ) -> GraphPortFact {
     let address = dynamic
@@ -461,7 +461,7 @@ fn projection_port(
             binding
                 .default_value
                 .as_ref()
-                .map(|value| crate::graph::protocol::protocol_value_to_json(&value.value))
+                .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value))
         }),
         value_type,
         schema: spec.schema.clone(),

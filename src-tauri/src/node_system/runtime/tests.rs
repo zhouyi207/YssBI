@@ -18,7 +18,7 @@ use crate::execution::plan::legacy::*;
 use crate::graph::analysis::contracts::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
-use crate::graph::protocol::{
+use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
     RetryPolicy, TypeExpr, TypeId, Value,
 };

@@ -1,9 +1,9 @@
 use super::model::*;
-use crate::graph::protocol::{
-    InputConsumption, OutputProduction, TypeCompatibility, type_exprs_compatibility,
-};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use yss_graph_protocol::{
+    InputConsumption, OutputProduction, TypeCompatibility, type_exprs_compatibility,
+};
 
 #[path = "validation/control.rs"]
 mod control;
@@ -635,7 +635,7 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
             continue;
         }
         if operation.workload != WorkloadClass::AdapterIo
-            || operation.cache_policy != crate::graph::protocol::CachePolicy::Disabled
+            || operation.cache_policy != yss_graph_protocol::CachePolicy::Disabled
             || operation.retry != PlannedRetry::default()
             || !operation.resource_dependencies.is_empty()
         {

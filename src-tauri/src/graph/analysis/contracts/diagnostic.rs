@@ -1,6 +1,6 @@
-use crate::graph::protocol::{I18nKey, ParameterKey};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use yss_graph_protocol::{I18nKey, ParameterKey};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

@@ -27,11 +27,7 @@ pub use diagnostic::{
 /// Graph localization consumes a caller-provided lookup and does not own a
 /// locale, transport DTO, or catalog delivery policy.
 pub trait LocalizationLookup {
-    fn text(
-        &self,
-        key: &crate::graph::protocol::I18nKey,
-        arguments: &DiagnosticArguments,
-    ) -> Box<str>;
+    fn text(&self, key: &yss_graph_protocol::I18nKey, arguments: &DiagnosticArguments) -> Box<str>;
 }
 pub use provenance::{CompileProvenance, GraphSessionId};
 pub use semantic::{
@@ -46,9 +42,9 @@ pub use snapshot::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::protocol::I18nKey;
     use crate::graph::registry::RegistryFingerprint;
     use std::collections::BTreeMap;
+    use yss_graph_protocol::I18nKey;
 
     type Snapshot = AnalysisSnapshot<u64, u64, String, u64, String, String, String, String>;
     type SemanticGraph = ValidatedSemanticGraph<u64, u64, String, u64, String, String, String>;

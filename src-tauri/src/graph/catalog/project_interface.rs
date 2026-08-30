@@ -2,7 +2,7 @@ use crate::graph::analysis::dynamic_interface::{
     InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverOutput,
     InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
-use crate::graph::protocol::{InterfaceResolverId, TypeExpr};
+use yss_graph_protocol::{InterfaceResolverId, TypeExpr};
 use crate::graph_document::{DynamicMemberLocator, FunctionParameterId, GraphResourcePath};
 use crate::project::FunctionDocument;
 use std::sync::Arc;

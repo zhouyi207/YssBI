@@ -1,10 +1,10 @@
 use super::KernelFragment;
-use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     RuntimeValue,
 };
 use rand::distr::Distribution;
+use yss_graph_protocol::{CanonicalDecimal, Value};
 
 #[derive(Clone, Copy)]
 enum DistributionKind {

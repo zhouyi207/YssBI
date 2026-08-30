@@ -11,8 +11,8 @@ use super::builtin::{
     assembled_parameters, iid, leaf, sid,
 };
 use crate::graph::catalog::{Aliases, Message, Text};
-use crate::graph::protocol::*;
 use crate::graph::registry::{CategoryRegistration, TypeRegistration};
+use yss_graph_protocol::*;
 
 use families::{Family, NODES, NodeSpec, Stage};
 

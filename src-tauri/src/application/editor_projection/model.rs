@@ -1,13 +1,13 @@
 use crate::graph::analysis::GraphDiagnosticLocation;
 use crate::graph::analysis::contracts::{DiagnosticArguments, ResourceVersionSet};
-use crate::graph::protocol::{
-    ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind, RelationalScalarType,
-    TypeExpr,
-};
 use crate::graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
 use yss_data_contract::DataType;
+use yss_graph_protocol::{
+    ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind, RelationalScalarType,
+    TypeExpr,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorProjectionBasis {
@@ -20,7 +20,7 @@ pub struct EditorProjectionBasis {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorNodeModel {
     pub node_id: NodeId,
-    pub node_type: crate::graph::protocol::NodeTypeId,
+    pub node_type: yss_graph_protocol::NodeTypeId,
     pub position: NodePosition,
     pub display: EditorNodeDisplay,
     pub ports: Box<[EditorPortModel]>,
@@ -202,7 +202,7 @@ pub struct EditorColumnOption {
 pub struct EditorFilterColumnOption {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[crate::graph::protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[yss_graph_protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[EditorFilterLiteralType]>,
 }
 

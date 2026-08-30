@@ -1,8 +1,8 @@
 use super::CompilationBasis;
-use crate::graph::protocol::NodeTypeId;
 use crate::graph::registry::ProtocolFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use yss_graph_protocol::NodeTypeId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatedSemanticGraph<
@@ -26,7 +26,7 @@ pub struct ValidatedSemanticGraph<
     >,
     pub dependencies: Box<[SemanticDependency<NodeId, PortAddress, ConnectionId>]>,
     #[serde(with = "super::snapshot::ordered_map_entries")]
-    pub resolved_schemas: BTreeMap<PortAddress, crate::graph::protocol::ResolvedSchemaFact>,
+    pub resolved_schemas: BTreeMap<PortAddress, yss_graph_protocol::ResolvedSchemaFact>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,7 +35,7 @@ pub struct ValidatedSemanticNode<NodeId, PortAddress, ParameterValue, ResolvedTy
     pub node_id: NodeId,
     pub node_type_id: NodeTypeId,
     pub protocol_fingerprint: ProtocolFingerprint,
-    pub normalized_parameters: BTreeMap<crate::graph::protocol::ParameterKey, ParameterValue>,
+    pub normalized_parameters: BTreeMap<yss_graph_protocol::ParameterKey, ParameterValue>,
     pub ports: Box<[ValidatedSemanticPort<PortAddress, ResolvedType, ResolvedSchema>]>,
 }
 

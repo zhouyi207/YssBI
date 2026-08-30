@@ -1,8 +1,8 @@
 use crate::graph::analysis::contracts::{DiagnosticArguments, LocalizationLookup};
-use crate::graph::protocol::{I18nKey, NodeTypeId};
 use crate::graph::registry::{I18nManifest, NodeRegistry};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_protocol::{I18nKey, NodeTypeId};
 
 const DEFAULT_LOCALE: &str = "en-US";
 
@@ -108,7 +108,7 @@ pub enum NodeCreation {
         #[serde(rename = "nodeTypeId")]
         node_type_id: NodeTypeId,
         #[serde(rename = "requiredParameters")]
-        required_parameters: Box<[crate::graph::protocol::ParameterKey]>,
+        required_parameters: Box<[yss_graph_protocol::ParameterKey]>,
     },
     #[serde(rename = "resourceBound")]
     ResourceBound {
@@ -201,7 +201,7 @@ impl std::error::Error for I18nBundleValidationError {}
 
 pub(crate) fn authoritative_static_descriptor(
     registry: &NodeRegistry,
-    protocol: &crate::graph::protocol::NodeProtocol,
+    protocol: &yss_graph_protocol::NodeProtocol,
 ) -> Option<NodeCreation> {
     if protocol.catalog.hidden || protocol.managed_role.is_some() {
         return None;
@@ -214,7 +214,7 @@ pub(crate) fn authoritative_static_descriptor(
             parameter.default_value.is_none()
                 && parameter
                     .constraints
-                    .contains(&crate::graph::protocol::ParameterConstraint::Required)
+                    .contains(&yss_graph_protocol::ParameterConstraint::Required)
         })
         .collect::<Vec<_>>();
     if required_parameters.is_empty() {
@@ -225,7 +225,7 @@ pub(crate) fn authoritative_static_descriptor(
     if !required_parameters.iter().all(|parameter| {
         matches!(
             &parameter.value_type,
-            crate::graph::protocol::TypeExpr::Concrete(type_id)
+            yss_graph_protocol::TypeExpr::Concrete(type_id)
                 if registry.has_nominal_parameter_validator(type_id)
         )
     }) {
@@ -243,11 +243,11 @@ pub(crate) fn authoritative_static_descriptor(
 impl BuiltinCatalog {
     pub(crate) fn new(
         entries: &[(&'static str, &'static str, Message)],
-    ) -> Result<Self, crate::graph::protocol::ProtocolError> {
+    ) -> Result<Self, yss_graph_protocol::ProtocolError> {
         let mut bundles = BTreeMap::<Box<str>, Bundle>::new();
         for (locale, key, message) in entries {
             let key = I18nKey::new(*key).map_err(|source| {
-                crate::graph::protocol::ProtocolError::InvalidSemanticId {
+                yss_graph_protocol::ProtocolError::InvalidSemanticId {
                     value: (*key).into(),
                     source,
                 }
@@ -411,7 +411,7 @@ impl BuiltinCatalog {
 
     fn static_item(
         &self,
-        protocol: &crate::graph::protocol::NodeProtocol,
+        protocol: &yss_graph_protocol::NodeProtocol,
         locale: &str,
         creation: NodeCreation,
     ) -> LocalizedCatalogItem {
@@ -449,7 +449,7 @@ impl BuiltinCatalog {
     fn resource_item(
         &self,
         entry: &CatalogResourceEntry,
-        protocol: &crate::graph::protocol::NodeProtocol,
+        protocol: &yss_graph_protocol::NodeProtocol,
         locale: &str,
     ) -> LocalizedCatalogItem {
         let documentation =
@@ -488,7 +488,7 @@ impl BuiltinCatalog {
         }
     }
 
-    fn project_ports(protocol: &crate::graph::protocol::NodeProtocol) -> Vec<LocalizedPort> {
+    fn project_ports(protocol: &yss_graph_protocol::NodeProtocol) -> Vec<LocalizedPort> {
         protocol
             .interface
             .ports
@@ -497,13 +497,13 @@ impl BuiltinCatalog {
                 key: port.key.as_str().into(),
                 label: port.title.clone(),
                 direction: match port.direction {
-                    crate::graph::protocol::PortDirection::Input => "input".into(),
-                    crate::graph::protocol::PortDirection::Output => "output".into(),
+                    yss_graph_protocol::PortDirection::Input => "input".into(),
+                    yss_graph_protocol::PortDirection::Output => "output".into(),
                 },
                 kind: match port.kind {
-                    crate::graph::protocol::PortKind::Data => "data".into(),
-                    crate::graph::protocol::PortKind::Control => "control".into(),
-                    crate::graph::protocol::PortKind::Effect => "effect".into(),
+                    yss_graph_protocol::PortKind::Data => "data".into(),
+                    yss_graph_protocol::PortKind::Control => "control".into(),
+                    yss_graph_protocol::PortKind::Effect => "effect".into(),
                 },
             })
             .collect()
@@ -511,7 +511,7 @@ impl BuiltinCatalog {
 
     fn localized_parameters(
         &self,
-        protocol: &crate::graph::protocol::NodeProtocol,
+        protocol: &yss_graph_protocol::NodeProtocol,
         locale: &str,
     ) -> Vec<LocalizedParameter> {
         protocol
@@ -529,7 +529,7 @@ impl BuiltinCatalog {
             .collect()
     }
 
-    fn technical_terms(&self, protocol: &crate::graph::protocol::NodeProtocol) -> Vec<Box<str>> {
+    fn technical_terms(&self, protocol: &yss_graph_protocol::NodeProtocol) -> Vec<Box<str>> {
         match protocol
             .catalog
             .aliases_key

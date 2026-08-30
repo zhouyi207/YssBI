@@ -244,9 +244,9 @@ pub(super) fn get_result_descriptor_from_state(
 
 #[cfg(all(test, any()))]
 pub(crate) fn result_value_to_json(
-    value: &crate::graph::protocol::Value,
+    value: &yss_graph_protocol::Value,
 ) -> Result<serde_json::Value, CommandError> {
-    use crate::graph::protocol::Value;
+    use yss_graph_protocol::Value;
 
     Ok(match value {
         Value::Null => serde_json::Value::Null,
@@ -279,7 +279,7 @@ pub(crate) fn result_value_to_json(
 
 #[cfg(all(test, any()))]
 fn result_values_to_json(
-    values: &[crate::graph::protocol::Value],
+    values: &[yss_graph_protocol::Value],
 ) -> Result<Box<[serde_json::Value]>, CommandError> {
     values
         .iter()

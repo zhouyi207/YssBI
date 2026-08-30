@@ -1,4 +1,4 @@
-use crate::graph::protocol::{CanonicalDecimal, RelationalScalarType};
+use crate::{CanonicalDecimal, RelationalScalarType};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
 
@@ -254,7 +254,7 @@ pub fn validate_filter_predicate_json(value: &serde_json::Value) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::protocol::CanonicalDecimal;
+    use crate::CanonicalDecimal;
     use serde_json::json;
 
     #[test]

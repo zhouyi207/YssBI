@@ -1,6 +1,6 @@
 use super::support::*;
-use crate::graph::protocol::*;
 use crate::graph::registry::StructuralNodeRole;
+use yss_graph_protocol::*;
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     register_do(fragment)?;

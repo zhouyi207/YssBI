@@ -4,7 +4,6 @@ use super::{
     StreamValue, bounded_stream_channel_with_deadline, check_terminal,
 };
 use crate::execution::plan::legacy::{MaterializationLimits, PlannedAdapter};
-use crate::graph::protocol::Value;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -12,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, mpsc};
 use std::thread::{self, JoinHandle};
+use yss_graph_protocol::Value;
 
 const DEFAULT_STREAM_CAPACITY: usize = 16;
 const DEFAULT_MATERIALIZATION_MEMORY_BYTES: u64 = 64 * 1024 * 1024;

@@ -414,7 +414,7 @@ fn protocol_value_matches_json(expected: &Value, actual: &serde_json::Value) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::protocol::{TypeConstructorId, TypeParameterId, TypedValue, Value};
+    use crate::{TypeConstructorId, TypeParameterId, TypedValue, Value};
     use std::collections::BTreeMap;
 
     struct NoNominalValidator;
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn typed_literal_rejects_nested_list_element_mismatch() {
         let list = TypeExpr::Applied {
-            constructor: crate::graph::protocol::TypeConstructorId::new("core.list").unwrap(),
+            constructor: crate::TypeConstructorId::new("core.list").unwrap(),
             arguments: vec![TypeExpr::Concrete(TypeId::new("core.int64").unwrap())],
         };
         let wire = serde_json::to_value(TypedValue {

@@ -8,13 +8,13 @@ use super::{
 use crate::graph::catalog::reroute_node_type_for_kind;
 use crate::graph::catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::compatibility::EditorMutationValidationSnapshot;
-use crate::graph::protocol::{
-    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
-    PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
-};
 use crate::graph::registry::NodeRegistry;
 #[cfg(test)]
 use crate::project::{MutationRequest, OperationId, ResourceKey, ResourceRevision};
+use yss_graph_protocol::{
+    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
+    PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
+};
 
 #[cfg(test)]
 use serde::Deserialize;
@@ -1029,7 +1029,7 @@ fn materialize_resource_descriptor(
         validate_variable_scope(graph_path, scope)?;
     }
     Ok(BTreeMap::from([(
-        crate::graph::protocol::ParameterKey::new(expected_binding)
+        yss_graph_protocol::ParameterKey::new(expected_binding)
             .expect("catalog bindings are static valid keys"),
         serde_json::Value::String(resource_path.as_str().to_owned()),
     )]))
@@ -1455,7 +1455,7 @@ pub(super) fn validate_parameters_with_registry(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {
-    let nominal = |type_id: &crate::graph::protocol::TypeId, value: &serde_json::Value| {
+    let nominal = |type_id: &yss_graph_protocol::TypeId, value: &serde_json::Value| {
         registry.validate_nominal_parameter(type_id, value)
     };
     validate_shared_parameters(protocol, parameters, &nominal)
@@ -1466,23 +1466,22 @@ pub(super) fn validate_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {
-    let nominal = |_: &crate::graph::protocol::TypeId, _: &serde_json::Value| None;
+    let nominal = |_: &yss_graph_protocol::TypeId, _: &serde_json::Value| None;
     validate_shared_parameters(protocol, parameters, &nominal)
 }
 
 fn validate_shared_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
-    nominal: &impl crate::graph::protocol::validation::NominalParameterValidator,
+    nominal: &impl yss_graph_protocol::validation::NominalParameterValidator,
 ) -> Result<(), MutationConflict> {
-    let Some(issue) =
-        crate::graph::protocol::validate_parameter_values(protocol, parameters, nominal)
-            .into_iter()
-            .next()
+    let Some(issue) = yss_graph_protocol::validate_parameter_values(protocol, parameters, nominal)
+        .into_iter()
+        .next()
     else {
         return Ok(());
     };
-    use crate::graph::protocol::ParameterIssueKind;
+    use yss_graph_protocol::ParameterIssueKind;
     let detail = match issue.kind {
         ParameterIssueKind::Unknown => format!(
             "unknown parameter '{}' for node type '{}'",

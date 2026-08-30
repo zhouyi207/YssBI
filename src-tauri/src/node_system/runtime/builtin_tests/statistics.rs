@@ -169,7 +169,7 @@ fn statistics_prediction_flows_into_plot() {
     assert_eq!(metadata.name.as_deref(), Some("prediction"));
     validate_data_series_type_expr(
         metadata,
-        &crate::graph::protocol::numeric_data_series_type(),
+        &yss_graph_protocol::numeric_data_series_type(),
     )
     .unwrap();
 

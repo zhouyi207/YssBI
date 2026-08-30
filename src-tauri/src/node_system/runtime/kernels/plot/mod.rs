@@ -1,6 +1,5 @@
 use super::KernelFragment;
 use crate::execution::plan::legacy::ResourceId;
-use crate::graph::protocol::Value;
 use crate::node_system::runtime::{
     Kernel, KernelContext, KernelError, NullPolicy, NumericSeriesView, ResourceLease, RuntimeValue,
     numeric_series, require_data_series,
@@ -11,6 +10,7 @@ use serde::Serialize;
 use statrs::distribution::{ChiSquared, ContinuousCDF, StudentsT};
 use std::any::Any;
 use std::sync::Arc;
+use yss_graph_protocol::Value;
 
 pub(crate) const PLOT_SINK: &str = "yssbi.runtime.plot_sink";
 const KDE_GRID_POINTS: usize = 256;

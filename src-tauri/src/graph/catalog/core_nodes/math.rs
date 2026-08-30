@@ -1,5 +1,5 @@
 use super::support::*;
-use crate::graph::protocol::*;
+use yss_graph_protocol::*;
 
 #[derive(Clone, Copy)]
 struct MathSpec {

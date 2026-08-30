@@ -1,11 +1,11 @@
 use super::support::{KernelFragment, expect_arity, expect_min_arity};
 use super::value::canonical_float;
-use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, ArtifactKind, DataSeriesBuilder, DataSeriesElementType, DataSeriesMetadata, Kernel,
     KernelContext, KernelError, NullPolicy, NumericSeriesView, RuntimeValue, checked_int64_to_f64,
     numeric_series, require_data_series,
 };
+use yss_graph_protocol::{CanonicalDecimal, Value};
 
 #[derive(Clone, Copy)]
 enum BinaryOperation {

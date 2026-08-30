@@ -579,3 +579,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   bounded live delivery 迁入独立 `src-tauri/crates/yss-diagnostics/`；生产构建仅单向
   依赖 `yss-tracing`，通过正式的 platform-neutral batch sink 测试而不暴露 dispatcher
   测试后门，并且不保留根兼容层。
+- [ ] 将稳定 graph node/port/type/schema/value protocol、wire validation 与 dataframe
+  nominal literals 迁入独立 `src-tauri/crates/yss-graph-protocol/` Pure Leaf；消费方直接
+  依赖 crate，catalog assembly 测试归还 Graph owner，根 crate 不保留兼容 module。

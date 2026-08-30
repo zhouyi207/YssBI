@@ -7,7 +7,7 @@ use crate::execution::plan::legacy::{
 use crate::graph::analysis::contracts::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
-use crate::graph::protocol::OutputProduction;
+use yss_graph_protocol::OutputProduction;
 use crate::graph::registry::RegistryFingerprint;
 use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::ProjectSessionId;

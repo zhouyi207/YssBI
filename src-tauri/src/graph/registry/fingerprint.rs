@@ -1,7 +1,7 @@
-use crate::graph::protocol::NodeProtocol;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
+use yss_graph_protocol::NodeProtocol;
 
 macro_rules! fingerprint {
     ($name:ident) => {

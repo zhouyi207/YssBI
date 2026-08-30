@@ -6,12 +6,12 @@ use crate::graph::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
     REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT,
 };
-use crate::graph::protocol::{
+use crate::graph::registry::{RegisteredNode, TransparentNodeRole};
+use yss_graph_protocol::{
     ConnectionsPerPort, InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId,
     OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec,
     SchemaExpr, TypeExpr, TypeParameterId,
 };
-use crate::graph::registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for kind in [PortKind::Data, PortKind::Control, PortKind::Effect] {

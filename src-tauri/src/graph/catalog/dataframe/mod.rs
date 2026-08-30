@@ -10,15 +10,15 @@ use super::builtin::{
     sid,
 };
 use crate::graph::catalog::{Aliases, Message, Text};
-use crate::graph::protocol::dataframe::{
-    FilterLiteral, FilterOperator, FilterPredicate, ProjectColumns,
-};
-use crate::graph::protocol::*;
 use crate::graph::registry::{
     CategoryRegistration, NominalValueHandle, ProviderRegistration, RegisteredNode,
     TypeRegistration,
 };
 use std::sync::Arc;
+use yss_graph_protocol::dataframe::{
+    FilterLiteral, FilterOperator, FilterPredicate, ProjectColumns,
+};
+use yss_graph_protocol::*;
 
 use families::{InterfaceKind, NODES, NodeSpec};
 
@@ -160,7 +160,7 @@ fn interface(
             })?,
             vec![nominal_parameter(
                 "columns",
-                crate::graph::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             )?],
         )),
         FilterRows => Ok((
@@ -170,7 +170,7 @@ fn interface(
             })?,
             vec![nominal_parameter(
                 "predicate",
-                crate::graph::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
+                yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             )?],
         )),
         Decompose => Ok((
@@ -630,11 +630,11 @@ fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     [
         ("tabular.dataframe", "types.dataframe.title"),
         (
-            crate::graph::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             "types.dataframe_project_columns.title",
         ),
         (
-            crate::graph::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
+            yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             "types.dataframe_filter_predicate.title",
         ),
     ]

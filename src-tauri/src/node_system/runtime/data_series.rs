@@ -1,7 +1,7 @@
 use super::{Artifact, ArtifactKind, ArtifactValueKind, KernelError, RuntimeValue};
-use crate::graph::protocol::Value;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use yss_graph_protocol::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -180,14 +180,14 @@ fn value_storage_name(value: &Value) -> &'static str {
 
 pub fn validate_data_series_type_expr(
     metadata: &DataSeriesMetadata,
-    type_expr: &crate::graph::protocol::TypeExpr,
+    type_expr: &yss_graph_protocol::TypeExpr,
 ) -> Result<(), DataSeriesContractError> {
-    use crate::graph::protocol::TypeExpr;
+    use yss_graph_protocol::TypeExpr;
     match type_expr {
         TypeExpr::Applied {
             constructor,
             arguments,
-        } if constructor.as_str() == crate::graph::protocol::DATA_SERIES_CONSTRUCTOR_ID
+        } if constructor.as_str() == yss_graph_protocol::DATA_SERIES_CONSTRUCTOR_ID
             && arguments.len() == 1 =>
         {
             validate_element_type_expr(metadata.element_type, &arguments[0])
@@ -213,9 +213,9 @@ pub fn validate_data_series_type_expr(
 
 fn validate_element_type_expr(
     actual: DataSeriesElementType,
-    type_expr: &crate::graph::protocol::TypeExpr,
+    type_expr: &yss_graph_protocol::TypeExpr,
 ) -> Result<(), DataSeriesContractError> {
-    use crate::graph::protocol::TypeExpr;
+    use yss_graph_protocol::TypeExpr;
     let expected = match type_expr {
         TypeExpr::Concrete(id) => match id.as_str() {
             "core.int64" => Some(DataSeriesElementType::Int64),

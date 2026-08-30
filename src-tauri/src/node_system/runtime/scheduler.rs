@@ -19,8 +19,8 @@ use crate::execution::plan::legacy::{
     PlannedValueKind, ResultPresentation, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::graph::analysis::contracts::ResourceVersionSet;
-use crate::graph::protocol::{CachePolicy, RetryPolicy, Value};
 use crate::node_system::runtime::RunId;
+use yss_graph_protocol::{CachePolicy, RetryPolicy, Value};
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};

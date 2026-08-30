@@ -1,7 +1,6 @@
 //! Statistical kernels over materialized protocol series and model values.
 
 use super::KernelFragment;
-use crate::graph::protocol::Value;
 use crate::node_system::runtime::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     NullPolicy, NumericSeriesView, RuntimeValue, numeric_series as read_numeric_series,
@@ -12,6 +11,7 @@ use crate::sci::api::computation::{
     MissingValuePolicy, StatisticalObservationMetadata, StatisticalSettingSource,
 };
 use std::collections::BTreeMap;
+use yss_graph_protocol::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScientificApi {

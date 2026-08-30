@@ -265,6 +265,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
                 && root.target == "yss_diagnostics"
                 && root.kind == ProductionRootKind::Library)
     );
+    assert!(
+        workspace
+            .roots
+            .iter()
+            .any(|root| root.package == "yss-graph-protocol"
+                && root.target == "yss_graph_protocol"
+                && root.kind == ProductionRootKind::Library)
+    );
     assert!(workspace.roots.iter().any(|root| root.package == "yss-math"
         && root.target == "yss_math"
         && root.kind == ProductionRootKind::Library));
@@ -372,6 +380,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-diagnostics"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_protocol"
+                    && alias.member_package == "yss-graph-protocol"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-protocol"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -525,6 +551,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
     };
+    let graph_protocol_root = ProductionRoot {
+        package_id: "graph-protocol-package".to_owned(),
+        package: "yss-graph-protocol".to_owned(),
+        target: "yss_graph_protocol".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-protocol/src/lib.rs"),
+    };
     let math_root = ProductionRoot {
         package_id: "math-package".to_owned(),
         package: "yss-math".to_owned(),
@@ -565,6 +598,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         data_contract_root.clone(),
         database_contract_root.clone(),
         diagnostics_root.clone(),
+        graph_protocol_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
@@ -616,6 +650,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &diagnostics_root,
                 "src-tauri/crates/yss-diagnostics/src/lib.rs",
                 "yss_diagnostics",
+            ),
+            module(
+                &graph_protocol_root,
+                "src-tauri/crates/yss-graph-protocol/src/lib.rs",
+                "yss_graph_protocol",
             ),
             module(
                 &math_root,
@@ -683,6 +722,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-diagnostics/src/lib.rs"],
         RustLayer::Diagnostics
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
+        RustLayer::PureLeaf
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
@@ -1257,6 +1300,33 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
     assert!(
         !root.join("src-tauri/src/diagnostics").exists(),
         "the root crate must not retain a diagnostics compatibility module"
+    );
+}
+
+#[test]
+fn graph_protocol_has_one_pure_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-protocol/Cargo.toml",
+        "src-tauri/crates/yss-graph-protocol/src/data_series.rs",
+        "src-tauri/crates/yss-graph-protocol/src/dataframe.rs",
+        "src-tauri/crates/yss-graph-protocol/src/identity.rs",
+        "src-tauri/crates/yss-graph-protocol/src/lib.rs",
+        "src-tauri/crates/yss-graph-protocol/src/model.rs",
+        "src-tauri/crates/yss-graph-protocol/src/parameter.rs",
+        "src-tauri/crates/yss-graph-protocol/src/tests.rs",
+        "src-tauri/crates/yss-graph-protocol/src/types.rs",
+        "src-tauri/crates/yss-graph-protocol/src/validation.rs",
+        "src-tauri/crates/yss-graph-protocol/src/value.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph protocol owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph/protocol").exists(),
+        "the root crate must not retain a graph protocol compatibility module"
     );
 }
 

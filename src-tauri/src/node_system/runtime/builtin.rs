@@ -3,8 +3,8 @@ use super::{
     KernelRegistry, RuntimeValue,
 };
 use crate::execution::plan::legacy::{KernelHandle, ResourceId};
-use crate::graph::protocol::{CanonicalDecimal, Value};
 use std::cmp::Ordering;
+use yss_graph_protocol::{CanonicalDecimal, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuiltinConstantParameters {

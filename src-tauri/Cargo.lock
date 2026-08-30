@@ -9125,6 +9125,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9232,6 +9240,7 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-diagnostics",
+ "yss-graph-protocol",
  "yss-math",
  "yss-sci",
  "yss-tabular-contract",

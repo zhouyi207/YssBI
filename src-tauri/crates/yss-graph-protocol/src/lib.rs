@@ -20,13 +20,13 @@ pub use identity::{
     NodeTypeId, ParameterKey, PortKey, ProviderId, SchemaResolverId, TypeClassId,
     TypeConstructorId, TypeId, TypeParameterId,
 };
-pub(crate) use model::validate_execution;
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     ExecutionSemantics, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
     NodeCatalogProtocol, NodeInstanceDisplaySpec, NodeInterfaceProtocol, NodeProtocol, NodeScope,
     OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec,
     PortSpec, ProtocolError, Purity, ResourceDisplayKind, RetryPolicy, RetryPolicyError,
+    validate_execution,
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterPresentation,

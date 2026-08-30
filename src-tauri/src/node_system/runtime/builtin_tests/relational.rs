@@ -264,7 +264,7 @@ fn dataframe_selected_series_flows_into_math_and_statistics() {
             .unwrap()
             .data_series_metadata()
             .unwrap(),
-        &crate::graph::protocol::data_series_type(TypeExpr::Concrete(
+        &yss_graph_protocol::data_series_type(TypeExpr::Concrete(
             TypeId::new("core.int64").unwrap(),
         )),
     )

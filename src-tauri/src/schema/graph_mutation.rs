@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::graph::protocol::PortKey;
 use crate::graph_document::{
     ConnectionId, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
     TypedValue,
 };
+use yss_graph_protocol::PortKey;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(

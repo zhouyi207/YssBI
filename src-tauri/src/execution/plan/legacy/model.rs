@@ -1,12 +1,12 @@
 use crate::graph::analysis::contracts::{CompileProvenance, ResourceKey};
-use crate::graph::protocol::{
-    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
-    TypeExpr, Value,
-};
 use crate::graph_document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use yss_graph_protocol::{
+    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
+    TypeExpr, Value,
+};
 
 macro_rules! index_type {
     ($name:ident) => {
@@ -154,7 +154,7 @@ impl PlannedValueContract {
         Self {
             kind: PlannedValueKind::Opaque,
             type_expr: TypeExpr::Concrete(
-                crate::graph::protocol::TypeId::new("core.object")
+                yss_graph_protocol::TypeId::new("core.object")
                     .expect("static opaque plan type is valid"),
             ),
         }
@@ -954,7 +954,7 @@ impl PlannedPublication {
 #[cfg(test)]
 mod task1_tests {
     use super::*;
-    use crate::graph::protocol::CanonicalDecimal;
+    use yss_graph_protocol::CanonicalDecimal;
 
     #[test]
     fn relational_decimal_literal_roundtrips_without_float_loss() {

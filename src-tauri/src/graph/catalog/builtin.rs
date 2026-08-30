@@ -4,8 +4,8 @@ use super::diagnostics::{
 };
 use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::graph::catalog::{Aliases, BuiltinCatalog, Message, Text};
-use crate::graph::protocol::*;
 use crate::graph::registry::*;
+use yss_graph_protocol::*;
 
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
@@ -509,18 +509,18 @@ fn register_builtin_nominal_validators(
     let parse_type_id = |value| sid(value, TypeId::new);
     let project_columns = builder
         .register_nominal_codec(
-            parse_type_id(crate::graph::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
-            parse_type_id(crate::graph::protocol::dataframe::PROJECT_COLUMNS_VALIDATOR_ID)?,
-            crate::graph::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::graph::protocol::dataframe::prepare_project_columns_json,
+            parse_type_id(yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
+            parse_type_id(yss_graph_protocol::dataframe::PROJECT_COLUMNS_VALIDATOR_ID)?,
+            yss_graph_protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            yss_graph_protocol::dataframe::prepare_project_columns_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     let filter_predicate = builder
         .register_nominal_codec(
-            parse_type_id(crate::graph::protocol::dataframe::FILTER_PREDICATE_TYPE_ID)?,
-            parse_type_id(crate::graph::protocol::dataframe::FILTER_PREDICATE_VALIDATOR_ID)?,
-            crate::graph::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::graph::protocol::dataframe::prepare_filter_predicate_json,
+            parse_type_id(yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID)?,
+            parse_type_id(yss_graph_protocol::dataframe::FILTER_PREDICATE_VALIDATOR_ID)?,
+            yss_graph_protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            yss_graph_protocol::dataframe::prepare_filter_predicate_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     Ok(super::dataframe::DataframeNominalHandles {

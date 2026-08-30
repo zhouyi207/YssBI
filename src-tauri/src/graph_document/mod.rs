@@ -19,8 +19,8 @@ mod tests {
         DocumentNode, GraphDocument, GraphResourcePath, GraphResourcePathError, NodeId,
         NodePosition, ParameterValues, TypedValue,
     };
-    use crate::graph::protocol::{NodeTypeId, ParameterKey};
     use serde_json::json;
+    use yss_graph_protocol::{NodeTypeId, ParameterKey};
 
     #[test]
     fn typed_value_wire_remains_untagged_json() {

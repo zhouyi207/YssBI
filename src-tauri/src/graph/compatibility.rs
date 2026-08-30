@@ -1,10 +1,6 @@
 use crate::graph::catalog::CatalogResourcePath;
 use crate::graph::catalog::{NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::document::{EditorMutationError, EditorMutationErrorCode};
-use crate::graph::protocol::{
-    ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
-    TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
-};
 use crate::graph::registry::NodeRegistry;
 use crate::graph_document::{
     DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision,
@@ -18,6 +14,10 @@ use crate::schema::editor_projection_types::{
 use crate::schema::graph_mutation::PortAddressDto;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
+use yss_graph_protocol::{
+    ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
+    TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
+};
 use yss_variable_contract::VariableScope;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,12 +277,12 @@ fn validate_port_types(
                 expression: target,
                 type_parameters: target_type_parameters,
             },
-        ) if crate::graph::protocol::type_exprs_compatibility(
+        ) if yss_graph_protocol::type_exprs_compatibility(
             source,
             target,
             source_type_parameters,
             target_type_parameters,
-        ) == crate::graph::protocol::TypeCompatibility::Compatible =>
+        ) == yss_graph_protocol::TypeCompatibility::Compatible =>
         {
             Ok(())
         }
@@ -661,7 +661,7 @@ fn candidate_ports(
     Ok(ports)
 }
 
-fn descriptor_node_type(descriptor: &NodeCreation) -> &crate::graph::protocol::NodeTypeId {
+fn descriptor_node_type(descriptor: &NodeCreation) -> &yss_graph_protocol::NodeTypeId {
     match descriptor {
         NodeCreation::Static { node_type_id }
         | NodeCreation::ParameterizedStatic { node_type_id, .. }
@@ -788,14 +788,14 @@ fn applied_type(constructor: &str, element: &DataType) -> Result<TypeExpr, Strin
 
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {
     let scope = if graph_path.as_str().starts_with("events/") {
-        crate::graph::protocol::NodeScope::Event
+        yss_graph_protocol::NodeScope::Event
     } else if graph_path.as_str().starts_with("functions/") {
-        crate::graph::protocol::NodeScope::Function
+        yss_graph_protocol::NodeScope::Function
     } else {
-        crate::graph::protocol::NodeScope::Any
+        yss_graph_protocol::NodeScope::Any
     };
-    if protocol.scope != crate::graph::protocol::NodeScope::Any
-        && scope != crate::graph::protocol::NodeScope::Any
+    if protocol.scope != yss_graph_protocol::NodeScope::Any
+        && scope != yss_graph_protocol::NodeScope::Any
         && protocol.scope != scope
     {
         Err(format!(
@@ -820,20 +820,20 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
         return false;
     }
     let compatibility = match source.direction {
-        PortDirection::Output => crate::graph::protocol::type_exprs_compatibility(
+        PortDirection::Output => yss_graph_protocol::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &source.type_parameters,
             &candidate.type_parameters,
         ),
-        PortDirection::Input => crate::graph::protocol::type_exprs_compatibility(
+        PortDirection::Input => yss_graph_protocol::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &source.type_parameters,
         ),
     };
-    compatibility != crate::graph::protocol::TypeCompatibility::Incompatible
+    compatibility != yss_graph_protocol::TypeCompatibility::Incompatible
 }
 
 #[cfg(test)]
@@ -860,10 +860,10 @@ mod tests {
         CatalogResourceEntry, CatalogResourcePath, build_builtin_node_system,
     };
     use crate::graph::document::{FunctionParameter, FunctionSignature};
-    use crate::graph::protocol::NodeTypeId;
     use crate::project::ResourceRevision;
     use crate::schema::editor_projection_types::PortConnectionCapabilityDto;
     use std::collections::BTreeMap;
+    use yss_graph_protocol::NodeTypeId;
 
     fn source(data_type: DataType) -> SourcePort {
         source_expr(data_type_to_type_expr(&data_type).unwrap())
@@ -1119,10 +1119,10 @@ mod tests {
 
     #[test]
     fn compatibility_uses_exact_type_expr_ids_and_compiler_source_union_semantics() {
-        let string_series = source_expr(crate::graph::protocol::data_series_type(
+        let string_series = source_expr(yss_graph_protocol::data_series_type(
             concrete_type("core.string").unwrap(),
         ));
-        let float_series = candidate(crate::graph::protocol::data_series_type(
+        let float_series = candidate(yss_graph_protocol::data_series_type(
             concrete_type("core.float64").unwrap(),
         ));
         assert!(!ports_are_compatible(&string_series, &float_series));

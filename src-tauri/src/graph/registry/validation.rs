@@ -1,6 +1,6 @@
 use super::model::*;
-use crate::graph::protocol::*;
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_protocol::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistryValidationError {
@@ -114,10 +114,10 @@ fn required_nominal_type_id(value: &str) -> Result<TypeId, RegistryValidationErr
 fn builtin_nominal_type_ids() -> Result<BuiltinNominalTypeIds, RegistryValidationError> {
     Ok(BuiltinNominalTypeIds {
         project_columns: required_nominal_type_id(
-            crate::graph::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
         )?,
         filter_predicate: required_nominal_type_id(
-            crate::graph::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
+            yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
         )?,
     })
 }
@@ -697,12 +697,12 @@ mod nominal_schema_tests {
             (
                 project,
                 project_key,
-                crate::graph::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             ),
             (
                 filter,
                 filter_key,
-                crate::graph::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
+                yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             ),
         ] {
             let wrong = parameter(key.as_str(), TypeExpr::Unknown);

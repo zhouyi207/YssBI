@@ -8,8 +8,8 @@ mod value;
 use super::builtin::{BuiltinAssemblyError, ProviderFragment};
 use support::{category, empty_classes, i18n, semantic};
 
-use crate::graph::protocol::{TypeConstructorId, TypeId};
 use crate::graph::registry::{TypeConstructorRegistration, TypeRegistration};
+use yss_graph_protocol::{TypeConstructorId, TypeId};
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut fragment = ProviderFragment::default();

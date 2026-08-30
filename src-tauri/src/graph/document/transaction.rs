@@ -1,8 +1,8 @@
 #[cfg(test)]
 use super::{ConnectionId, DocumentNode, DynamicPortBinding, InputState, NodeId, OrderKey};
 use super::{DocumentConnection, DocumentError, GraphDocument, PortAddress, TypedValue};
-use crate::graph::protocol::{PortKey, PortMemberGroupSpec};
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_protocol::{PortKey, PortMemberGroupSpec};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectiveInputBinding {

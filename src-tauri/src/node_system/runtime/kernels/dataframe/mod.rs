@@ -2,7 +2,6 @@
 
 use super::KernelFragment;
 use crate::execution::plan::legacy::ResourceId;
-use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, ArtifactKind, ArtifactValueKind, DataSeriesBuilder, DataSeriesElementType, Kernel,
     KernelContext, KernelError, NumericValue, ProjectResourceLease, RuntimeValue, numeric_equal,
@@ -10,6 +9,7 @@ use crate::node_system::runtime::{
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use yss_graph_protocol::{CanonicalDecimal, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataframeApi {

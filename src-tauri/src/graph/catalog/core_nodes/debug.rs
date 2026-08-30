@@ -1,5 +1,5 @@
 use super::support::*;
-use crate::graph::protocol::*;
+use yss_graph_protocol::*;
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     register_print(fragment)?;

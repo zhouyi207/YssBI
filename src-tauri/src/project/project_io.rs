@@ -956,7 +956,6 @@ pub fn discover_databases_from_root(
 mod tests {
     use super::*;
     use crate::graph::document::EffectiveInputBinding;
-    use crate::graph::protocol::{NodeTypeId, PortKey};
     use crate::graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
         FunctionParameterId, GraphDocument as NodeGraphDocument, InputState, NodeId, NodePosition,
@@ -964,6 +963,7 @@ mod tests {
     };
     use crate::project::{GraphResourceDocument, NumericTolerance};
     use serde_json::json;
+    use yss_graph_protocol::{NodeTypeId, PortKey};
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-production-{}", uuid::Uuid::new_v4()));

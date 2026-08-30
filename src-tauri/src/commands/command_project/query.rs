@@ -251,12 +251,12 @@ mod tests {
         EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         MutationRequest, ResourceKey,
     };
-    use crate::graph::protocol::NodeTypeId;
     use crate::graph_document::GraphResourcePath;
     use crate::graph_document::GraphRevision;
     use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectInstanceId};
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_protocol::NodeTypeId;
     use yss_variable_contract::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {

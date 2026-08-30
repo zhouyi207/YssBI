@@ -1,9 +1,9 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::graph::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
     Artifact, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     RuntimeValue, require_data_series,
 };
+use yss_graph_protocol::{CanonicalDecimal, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertTarget {

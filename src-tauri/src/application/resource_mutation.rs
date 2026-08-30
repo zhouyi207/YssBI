@@ -31,7 +31,6 @@ use crate::graph::compatibility::{
 };
 use crate::graph::document::MutationConflict;
 use crate::graph::document::{ClipboardSubgraph, EditorGraphMutation};
-use crate::graph::protocol::NodeTypeId;
 use crate::graph_document::GraphResourcePath;
 use crate::project::project_writers::ProjectSaveResult;
 use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
@@ -40,6 +39,7 @@ use crate::project::{
     ProjectInstanceId, ResourceRevision,
 };
 use std::collections::BTreeMap;
+use yss_graph_protocol::NodeTypeId;
 
 #[derive(Debug, Error)]
 pub enum ResourceMutationApplicationError {
@@ -193,7 +193,7 @@ fn build_graph_shell(
         let id = crate::graph_document::NodeId::new();
         let parameters = if kind == GraphDocumentKind::Function {
             [(
-                crate::graph::protocol::ParameterKey::new("function").map_err(|error| {
+                yss_graph_protocol::ParameterKey::new("function").map_err(|error| {
                     ResourceMutationApplicationError::Project(
                         ProjectFilesystemError::TransactionPrepareFailed {
                             message: error.to_string(),
@@ -211,15 +211,13 @@ fn build_graph_shell(
             id,
             crate::graph_document::DocumentNode {
                 id,
-                node_type: crate::graph::protocol::NodeTypeId::new(*node_type).map_err(
-                    |error| {
-                        ResourceMutationApplicationError::Project(
-                            ProjectFilesystemError::TransactionPrepareFailed {
-                                message: error.to_string(),
-                            },
-                        )
-                    },
-                )?,
+                node_type: yss_graph_protocol::NodeTypeId::new(*node_type).map_err(|error| {
+                    ResourceMutationApplicationError::Project(
+                        ProjectFilesystemError::TransactionPrepareFailed {
+                            message: error.to_string(),
+                        },
+                    )
+                })?,
                 position: crate::graph_document::NodePosition { x: *x, y: 160.0 },
                 parameters,
                 user_label: None,
@@ -235,7 +233,7 @@ fn build_graph_shell(
                 id,
                 output: crate::graph_document::PortAddress::declared(
                     *entry,
-                    crate::graph::protocol::PortKey::new("then").map_err(|error| {
+                    yss_graph_protocol::PortKey::new("then").map_err(|error| {
                         ResourceMutationApplicationError::Project(
                             ProjectFilesystemError::TransactionPrepareFailed {
                                 message: error.to_string(),
@@ -245,7 +243,7 @@ fn build_graph_shell(
                 ),
                 input: crate::graph_document::PortAddress::declared(
                     *returned,
-                    crate::graph::protocol::PortKey::new("enter").map_err(|error| {
+                    yss_graph_protocol::PortKey::new("enter").map_err(|error| {
                         ResourceMutationApplicationError::Project(
                             ProjectFilesystemError::TransactionPrepareFailed {
                                 message: error.to_string(),

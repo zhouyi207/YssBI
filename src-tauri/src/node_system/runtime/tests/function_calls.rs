@@ -127,7 +127,7 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
 fn function_call_preserves_data_series_artifact() {
     let series_contract = PlannedValueContract {
         kind: PlannedValueKind::DataSeries,
-        type_expr: crate::graph::protocol::data_series_type(TypeExpr::Concrete(
+        type_expr: yss_graph_protocol::data_series_type(TypeExpr::Concrete(
             TypeId::new("core.float64").unwrap(),
         )),
     };

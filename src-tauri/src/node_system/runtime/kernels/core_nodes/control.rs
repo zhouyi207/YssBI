@@ -1,7 +1,7 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::graph::protocol::Value;
 use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
 use std::time::Duration;
+use yss_graph_protocol::Value;
 
 const MAX_SLEEP_SECONDS: f64 = 60.0;
 

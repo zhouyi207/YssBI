@@ -213,8 +213,8 @@ fn bounded_text(text: &str) -> (Box<str>, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::protocol::PortKey;
     use crate::node_system::runtime::RunEvent;
+    use yss_graph_protocol::PortKey;
 
     #[derive(Default)]
     struct OutputEvents(std::sync::Mutex<Vec<RunOutputMessage>>);

@@ -9,7 +9,7 @@ use super::*;
 use crate::execution::plan::legacy::*;
 use crate::graph::analysis::contracts::{CompilationBasis, CompileId, CompileProvenance};
 use crate::graph::compiler::engine::{GraphCompiler, ResourceSnapshot};
-use crate::graph::protocol::{
+use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
     TypeExpr, TypeId, Value,
 };
@@ -152,7 +152,7 @@ fn compile_builtin_flow(
                 ),
                 crate::graph_document::InputState {
                     literal_override: Some(
-                        serde_json::to_value(crate::graph::protocol::TypedValue {
+                        serde_json::to_value(yss_graph_protocol::TypedValue {
                             value_type: TypeExpr::Concrete(TypeId::new(value_type).unwrap()),
                             value,
                         })

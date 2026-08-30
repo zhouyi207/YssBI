@@ -2,7 +2,6 @@ use super::{
     ArtifactValueKind, CancellationToken, DataSeriesMetadata, RunDeadline, RunError, RunPhase,
     check_terminal,
 };
-use crate::graph::protocol::Value;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -10,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use yss_graph_protocol::Value;
 
 struct SpillFile {
     path: Mutex<PathBuf>,

@@ -2,9 +2,9 @@ use super::{Artifact, RelationalError, RelationalErrorCode, RuntimeValue};
 use crate::execution::plan::legacy::{
     RelationalExpression, RelationalLiteral, RelationalProjection, RelationalRename,
 };
-use crate::graph::protocol::Value;
 use polars::prelude::{BooleanChunked, Column, DataFrame, DataType, NamedFrom};
 use std::collections::BTreeSet;
+use yss_graph_protocol::Value;
 
 pub(super) fn tabular_runtime_to_dataframe(
     value: RuntimeValue,
@@ -539,10 +539,10 @@ mod tests {
     use crate::execution::plan::legacy::{
         RelationalExpression, RelationalLiteral, RelationalProjection, RelationalRename,
     };
-    use crate::graph::protocol::{CanonicalDecimal, Value};
     use crate::node_system::runtime::{Artifact, ArtifactKind, RelationalErrorCode, RuntimeValue};
     use polars::prelude::DataType;
     use std::collections::BTreeMap;
+    use yss_graph_protocol::{CanonicalDecimal, Value};
 
     #[test]
     fn ingress_accepts_scalar_object_and_single_value_artifact() {

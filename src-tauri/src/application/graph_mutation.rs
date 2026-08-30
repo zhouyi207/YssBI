@@ -158,7 +158,6 @@ mod tests {
         ApplicationSessionSlot, ApplicationState, GraphMutationApplicationError,
         GraphMutationRequest, SessionCaptureError, plan_captured_graph_mutation,
     };
-    use crate::graph::protocol::NodeTypeId;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph_document::{DocumentNode, GraphDocument, GraphRevision, NodeId, NodePosition};
     use crate::project::project_state::graph_operation::ProjectGraphCommitError;
@@ -168,6 +167,7 @@ mod tests {
     };
     use std::collections::BTreeMap;
     use std::sync::{Arc, Barrier};
+    use yss_graph_protocol::NodeTypeId;
 
     fn empty_catalog() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(

@@ -2,15 +2,6 @@ use super::{
     TypeExpr, TypeId, TypeNormalizationError, TypeParameterId, data_series_type,
     normalize_type_expr, numeric_data_series_type,
 };
-use crate::graph::catalog::build_builtin_node_system;
-use crate::graph::registry::NodeRegistry;
-use std::sync::Arc;
-
-fn production_type_registry() -> Arc<NodeRegistry> {
-    build_builtin_node_system()
-        .expect("production built-in registry must assemble")
-        .registry
-}
 
 #[test]
 fn numeric_data_series_is_an_outer_union_of_homogeneous_series() {
@@ -55,22 +46,4 @@ fn type_normalization_preserves_unknown_and_generic_arguments() {
         normalize_type_expr(data_series_type(generic.clone())).unwrap(),
         data_series_type(generic)
     );
-}
-
-#[test]
-fn numeric_type_class_contains_only_int64_and_float64() {
-    let registry = production_type_registry();
-    let members = registry
-        .types()
-        .iter()
-        .filter(|(_, registration)| {
-            registration
-                .classes
-                .iter()
-                .any(|class| class.as_str() == "core.numeric")
-        })
-        .map(|(id, _)| id.as_str())
-        .collect::<Vec<_>>();
-
-    assert_eq!(members, ["core.float64", "core.int64"]);
 }

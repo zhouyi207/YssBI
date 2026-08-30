@@ -9,9 +9,6 @@ use crate::graph::catalog::{
     BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
 };
 use crate::graph::error::GraphMutationError;
-use crate::graph::protocol::{
-    NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
-};
 use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use crate::graph_document::{
@@ -19,6 +16,9 @@ use crate::graph_document::{
 };
 use thiserror::Error;
 use yss_data_contract::DataType;
+use yss_graph_protocol::{
+    NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);
@@ -503,7 +503,7 @@ struct PortCandidate {
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
-    type_parameters: Box<[crate::graph::protocol::TypeParameterId]>,
+    type_parameters: Box<[yss_graph_protocol::TypeParameterId]>,
 }
 
 fn ports_are_compatible(source: &PortCandidate, candidate: &PortCandidate) -> bool {
@@ -517,25 +517,25 @@ fn ports_are_compatible(source: &PortCandidate, candidate: &PortCandidate) -> bo
         return source.kind == candidate.kind && source.kind != PortKind::Data;
     }
     let compatibility = match source.direction {
-        PortDirection::Output => crate::graph::protocol::type_exprs_compatibility(
+        PortDirection::Output => yss_graph_protocol::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &source.type_parameters,
             &candidate.type_parameters,
         ),
-        PortDirection::Input => crate::graph::protocol::type_exprs_compatibility(
+        PortDirection::Input => yss_graph_protocol::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &source.type_parameters,
         ),
     };
-    compatibility != crate::graph::protocol::TypeCompatibility::Incompatible
+    compatibility != yss_graph_protocol::TypeCompatibility::Incompatible
 }
 
 fn is_unresolved(
     expression: &TypeExpr,
-    parameters: &[crate::graph::protocol::TypeParameterId],
+    parameters: &[yss_graph_protocol::TypeParameterId],
 ) -> bool {
     let declared = parameters.iter().collect::<std::collections::BTreeSet<_>>();
     match expression {

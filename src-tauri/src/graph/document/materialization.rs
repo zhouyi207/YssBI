@@ -2,9 +2,9 @@ use super::{
     DynamicMemberLocator, DynamicPortBinding, GraphResourcePath, GraphRevision,
     LastKnownPortMetadata, NodeId, OrderKey,
 };
-use crate::graph::protocol::{PortDirection, PortKey};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use yss_graph_protocol::{PortDirection, PortKey};
 
 macro_rules! string_token {
     ($name:ident) => {

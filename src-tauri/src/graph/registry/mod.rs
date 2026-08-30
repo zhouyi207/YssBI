@@ -14,12 +14,12 @@ pub use model::{
 };
 pub use validation::RegistryValidationError;
 
-use crate::graph::protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use yss_graph_protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
 
 static NEXT_NOMINAL_REGISTRATION_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -148,7 +148,7 @@ impl std::fmt::Debug for NominalParameterValidator {
     }
 }
 
-impl crate::graph::protocol::NominalParameterValidator for NodeRegistry {
+impl yss_graph_protocol::NominalParameterValidator for NodeRegistry {
     fn validate_nominal_parameter(
         &self,
         type_id: &TypeId,
@@ -190,7 +190,7 @@ impl NodeRegistry {
 #[derive(Debug, Default)]
 pub struct NodeRegistryBuilder {
     providers: Vec<ProviderRegistration>,
-    provider_ids: BTreeSet<crate::graph::protocol::ProviderId>,
+    provider_ids: BTreeSet<yss_graph_protocol::ProviderId>,
     nominal_validators: BTreeMap<TypeId, NominalParameterValidator>,
 }
 
@@ -361,7 +361,7 @@ pub fn i18n_inventory(registry: &NodeRegistry) -> Result<String, CanonicalEncodi
 
 fn canonical_registry(
     providers: &[ProviderRegistration],
-    protocols: &BTreeMap<crate::graph::protocol::NodeTypeId, ProtocolFingerprint>,
+    protocols: &BTreeMap<yss_graph_protocol::NodeTypeId, ProtocolFingerprint>,
     nominal_validators: &BTreeMap<TypeId, NominalParameterValidator>,
 ) -> serde_json::Value {
     use serde_json::{Value, json};

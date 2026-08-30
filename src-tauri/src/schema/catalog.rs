@@ -213,9 +213,7 @@ impl From<DomainCreationDescriptor> for NodeCreationDescriptorDto {
                 node_type_id: node_type_id.as_str().into(),
                 required_parameters: required_parameters
                     .into_iter()
-                    .map(|parameter: crate::graph::protocol::ParameterKey| {
-                        parameter.as_str().into()
-                    })
+                    .map(|parameter: yss_graph_protocol::ParameterKey| parameter.as_str().into())
                     .collect(),
             },
             DomainCreationDescriptor::ResourceBound {
@@ -256,11 +254,11 @@ impl TryFrom<NodeCreationDescriptorDto> for crate::graph::catalog::NodeCreation 
 
     fn try_from(value: NodeCreationDescriptorDto) -> Result<Self, Self::Error> {
         let node_type = |value: Box<str>| {
-            crate::graph::protocol::NodeTypeId::new(value)
+            yss_graph_protocol::NodeTypeId::new(value)
                 .map_err(|_| NodeCreationMappingError::InvalidNodeType)
         };
         let parameter = |value: Box<str>| {
-            crate::graph::protocol::ParameterKey::new(value)
+            yss_graph_protocol::ParameterKey::new(value)
                 .map_err(|_| NodeCreationMappingError::InvalidParameter)
         };
         Ok(match value {

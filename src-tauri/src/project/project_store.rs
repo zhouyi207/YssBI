@@ -122,13 +122,13 @@ mod tests {
             ValueRef,
         };
         use crate::graph::analysis::contracts::ResourceVersionSet;
-        use crate::graph::protocol::Value;
         use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
             ActivationId, ActivationProvenance, CancellationToken, DemandFingerprint,
             OperationMemoKey, PendingOutputDescriptor, ResultId, ResultUsage, StoredValue,
         };
+        use yss_graph_protocol::Value;
 
         let old = ProjectStore::new();
         let activation_id = ActivationId::next().unwrap();

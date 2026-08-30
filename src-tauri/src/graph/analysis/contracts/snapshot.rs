@@ -1,10 +1,8 @@
 use super::{CompilationBasis, DiagnosticSeverity, NodeDiagnostic, ValidatedSemanticGraph};
-use crate::graph::protocol::{
-    NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr,
-};
 use crate::graph::registry::ProtocolFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use yss_graph_protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr};
 
 pub type TypeFacts<PortAddress, TypeFact> = BTreeMap<PortAddress, TypeFact>;
 pub type SchemaFacts<PortAddress, SchemaFact> = BTreeMap<PortAddress, SchemaFact>;
@@ -40,7 +38,7 @@ pub struct AnalysisSnapshot<
     )]
     pub partial_schemas: SchemaFacts<PortAddress, SchemaFact>,
     #[serde(with = "ordered_map_entries")]
-    pub resolved_schemas: SchemaFacts<PortAddress, crate::graph::protocol::ResolvedSchemaFact>,
+    pub resolved_schemas: SchemaFacts<PortAddress, yss_graph_protocol::ResolvedSchemaFact>,
     pub diagnostics: Box<[NodeDiagnostic<NodeId, PortAddress, ConnectionId, ResourceIdentity>]>,
 }
 
@@ -136,10 +134,10 @@ impl std::error::Error for ValidationError {}
 mod tests {
     use super::*;
     use crate::graph::analysis::contracts::{ResourceVersion, ResourceVersionSet};
-    use crate::graph::protocol::{SchemaExpr, TypeExpr, TypeId};
     use crate::graph::registry::RegistryFingerprint;
     use crate::graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use uuid::Uuid;
+    use yss_graph_protocol::{SchemaExpr, TypeExpr, TypeId};
 
     type TestSnapshot = AnalysisSnapshot<
         GraphRevision,
@@ -192,22 +190,22 @@ mod tests {
         let resolved_schemas = BTreeMap::from([
             (
                 second,
-                crate::graph::protocol::ResolvedSchemaFact::new(
+                yss_graph_protocol::ResolvedSchemaFact::new(
                     SchemaExpr::Input(PortKey::new("source_b").unwrap()),
-                    [crate::graph::protocol::SchemaField {
-                        name: crate::graph::protocol::SchemaColumnRef("name".into()),
-                        scalar_type: crate::graph::protocol::RelationalScalarType::String,
+                    [yss_graph_protocol::SchemaField {
+                        name: yss_graph_protocol::SchemaColumnRef("name".into()),
+                        scalar_type: yss_graph_protocol::RelationalScalarType::String,
                         lineage: None,
                     }],
                 ),
             ),
             (
                 first,
-                crate::graph::protocol::ResolvedSchemaFact::new(
+                yss_graph_protocol::ResolvedSchemaFact::new(
                     SchemaExpr::Input(PortKey::new("source_a").unwrap()),
-                    [crate::graph::protocol::SchemaField {
-                        name: crate::graph::protocol::SchemaColumnRef("amount".into()),
-                        scalar_type: crate::graph::protocol::RelationalScalarType::Float64,
+                    [yss_graph_protocol::SchemaField {
+                        name: yss_graph_protocol::SchemaColumnRef("amount".into()),
+                        scalar_type: yss_graph_protocol::RelationalScalarType::Float64,
                         lineage: None,
                     }],
                 ),
@@ -339,7 +337,7 @@ mod tests {
             .get_mut(&address(1, "first"))
             .unwrap()
             .fields[0]
-            .scalar_type = crate::graph::protocol::RelationalScalarType::Int64;
+            .scalar_type = yss_graph_protocol::RelationalScalarType::Int64;
         let changed_semantic = TestSemantic {
             basis: changed.basis.clone(),
             nodes: Box::new([]),

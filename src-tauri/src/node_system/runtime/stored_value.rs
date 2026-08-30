@@ -1,9 +1,9 @@
 use super::{
     Artifact, ArtifactKind, ArtifactValueKind, DataSeriesMetadata, RunError, RuntimeValue,
 };
-use crate::graph::protocol::Value;
 use std::fmt;
 use std::sync::Arc;
+use yss_graph_protocol::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoredValueKind {

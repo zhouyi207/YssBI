@@ -581,9 +581,9 @@ mod tests {
     use crate::execution::plan::legacy::{
         GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
     };
-    use crate::graph::protocol::{PortKey, Value};
     use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::runtime::{ArtifactValueKind, ResultUsage, StoredValueKind};
+    use yss_graph_protocol::{PortKey, Value};
 
     fn test_output(port_key: &str, value: u32) -> PendingOutputDescriptor {
         PendingOutputDescriptor {

@@ -1,13 +1,13 @@
 use super::{ProtocolFingerprint, RegistryFingerprint};
-use crate::graph::protocol::{
-    I18nKey, InterfaceResolverId, NodeCategoryId, NodeProtocol, NodeTypeId, ProviderId,
-    SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
-};
 use serde::Serialize;
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
+use yss_graph_protocol::{
+    I18nKey, InterfaceResolverId, NodeCategoryId, NodeProtocol, NodeTypeId, ProviderId,
+    SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
+};
 
 /// Closed capability categories understood by registry validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -254,7 +254,7 @@ pub struct NodeRegistry {
     pub(super) category_index: CategoryRegistry,
     pub(super) catalog_manifest: CatalogManifest,
     pub(super) nominal_validators:
-        BTreeMap<crate::graph::protocol::TypeId, super::NominalParameterValidator>,
+        BTreeMap<yss_graph_protocol::TypeId, super::NominalParameterValidator>,
     pub(super) fingerprint: RegistryFingerprint,
 }
 

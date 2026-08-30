@@ -20,13 +20,13 @@ mod tests {
     use crate::graph::analysis::contracts::{
         CompilationBasis, CompileId, CompileProvenance, ResourceVersionSet,
     };
-    use crate::graph::protocol::{
-        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,
-        TypeExpr, TypeId, Value, data_series_type,
-    };
     use crate::graph::registry::RegistryFingerprint;
     use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::project::ProjectSessionId;
+    use yss_graph_protocol::{
+        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,
+        TypeExpr, TypeId, Value, data_series_type,
+    };
 
     fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
         constructor(value.into()).unwrap()
@@ -1517,7 +1517,7 @@ mod tests {
         external.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(8),
             contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
-            consumption: crate::graph::protocol::InputConsumption::FullyMaterialized,
+            consumption: yss_graph_protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
         external.value_dependencies = Box::new([]);
@@ -1527,7 +1527,7 @@ mod tests {
         control_produced.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(5),
             contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
-            consumption: crate::graph::protocol::InputConsumption::FullyMaterialized,
+            consumption: yss_graph_protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
         control_produced.value_dependencies = Box::new([]);
@@ -1748,7 +1748,7 @@ mod tests {
         plan.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(9),
             contract: crate::execution::plan::legacy::PlannedValueContract::opaque(),
-            consumption: crate::graph::protocol::InputConsumption::FullyMaterialized,
+            consumption: yss_graph_protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
         plan.value_dependencies = Box::new([ValueDependency {

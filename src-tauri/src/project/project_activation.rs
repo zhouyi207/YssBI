@@ -242,7 +242,6 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use crate::graph::document::DocumentError;
-    use crate::graph::protocol::PortKey;
     use crate::graph_document::GraphResourcePath;
     use crate::graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
@@ -254,6 +253,7 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_protocol::PortKey;
     use yss_variable_contract::VariableScope;
 
     fn project_root(label: &str) -> std::path::PathBuf {

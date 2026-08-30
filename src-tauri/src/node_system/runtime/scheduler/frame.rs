@@ -173,7 +173,7 @@ mod result_id_frame_tests {
             graph_path: graph_path.clone(),
             port: crate::graph_document::PortAddress::declared(
                 node_id,
-                crate::graph::protocol::PortKey::new("result").unwrap(),
+                yss_graph_protocol::PortKey::new("result").unwrap(),
             ),
         };
         let descriptor = PendingOutputDescriptor {

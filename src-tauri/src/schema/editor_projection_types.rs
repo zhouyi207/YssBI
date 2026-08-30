@@ -1,9 +1,9 @@
 use crate::graph::analysis::contracts::ResourceVersionSet;
-use crate::graph::protocol::{ParameterPresentation, TypeExpr};
 use crate::graph::registry::RegistryFingerprint;
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::{Deserialize, Serialize};
 use yss_data_contract::DataType;
+use yss_graph_protocol::{ParameterPresentation, TypeExpr};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -352,7 +352,7 @@ pub struct DataframeColumnOptionDto {
 pub struct FilterColumnOptionDto {
     pub name: Box<str>,
     pub data_type: RelationalScalarTypeDto,
-    pub operators: Vec<crate::graph::protocol::dataframe::FilterOperator>,
+    pub operators: Vec<yss_graph_protocol::dataframe::FilterOperator>,
     pub literal_types: Vec<FilterLiteralTypeDto>,
 }
 

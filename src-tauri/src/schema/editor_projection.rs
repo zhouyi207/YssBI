@@ -120,13 +120,13 @@ fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingE
             instance_label: port.display.instance_label.clone(),
         },
         direction: match port.direction {
-            crate::graph::protocol::PortDirection::Input => PortDirectionDto::Input,
-            crate::graph::protocol::PortDirection::Output => PortDirectionDto::Output,
+            yss_graph_protocol::PortDirection::Input => PortDirectionDto::Input,
+            yss_graph_protocol::PortDirection::Output => PortDirectionDto::Output,
         },
         kind: match port.kind {
-            crate::graph::protocol::PortKind::Data => PortKindDto::Data,
-            crate::graph::protocol::PortKind::Control => PortKindDto::Control,
-            crate::graph::protocol::PortKind::Effect => PortKindDto::Effect,
+            yss_graph_protocol::PortKind::Data => PortKindDto::Data,
+            yss_graph_protocol::PortKind::Control => PortKindDto::Control,
+            yss_graph_protocol::PortKind::Effect => PortKindDto::Effect,
         },
         instance_kind: match port.instance_kind {
             EditorPortInstanceKind::Declared => PortInstanceKindDto::Declared,
@@ -289,12 +289,12 @@ mod tests {
     use crate::graph::analysis::contracts::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };
-    use crate::graph::protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
     use crate::graph_document::{
         ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
+    use yss_graph_protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
 
     #[test]
     fn application_model_preserves_existing_camel_case_wire_and_safe_diagnostics() {

@@ -5,10 +5,10 @@ use crate::graph::analysis::{
     GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
-use crate::graph::protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 use crate::graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
+use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 
 pub fn build_editor_projection(
     input: EditorProjectionInput<'_>,
@@ -368,16 +368,16 @@ fn project_type_summary(value: &TypeExpr) -> EditorTypeSummary {
 }
 
 fn project_schema_summary(
-    expression: &crate::graph::protocol::SchemaExpr,
-    resolved: Option<&crate::graph::protocol::ResolvedSchemaFact>,
+    expression: &yss_graph_protocol::SchemaExpr,
+    resolved: Option<&yss_graph_protocol::ResolvedSchemaFact>,
 ) -> EditorSchemaSummary {
     let kind = match expression {
-        crate::graph::protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
-        crate::graph::protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
-        crate::graph::protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
-        crate::graph::protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
-        crate::graph::protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
-        crate::graph::protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
+        yss_graph_protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
+        yss_graph_protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
+        yss_graph_protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
+        yss_graph_protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
+        yss_graph_protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
+        yss_graph_protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
     };
     let fields = resolved
         .into_iter()

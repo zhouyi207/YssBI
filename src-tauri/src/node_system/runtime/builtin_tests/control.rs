@@ -266,7 +266,7 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
     let print_id = NodeId::from_uuid(uuid::Uuid::from_u128(202));
     let mut constant_parameters = ParameterValues::new();
     constant_parameters.insert(
-        crate::graph::protocol::ParameterKey::new("value").unwrap(),
+        yss_graph_protocol::ParameterKey::new("value").unwrap(),
         serde_json::json!("Connected message"),
     );
     let mut graph = GraphDocument::default();
@@ -380,7 +380,7 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
 #[test]
 fn print_protocol_has_default_and_ordered_chain_contract() {
     use crate::graph::catalog::build_builtin_node_system;
-    use crate::graph::protocol::{EffectSemantics, PortKey, Purity};
+    use yss_graph_protocol::{EffectSemantics, PortKey, Purity};
 
     let system = build_builtin_node_system().unwrap();
     let print = system

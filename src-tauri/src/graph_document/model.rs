@@ -1,8 +1,8 @@
 use super::{ConnectionId, GraphResourcePath, GraphRevision, NodeId, PortInstanceId};
-use crate::graph::protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
+use yss_graph_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 
 /// Existing untagged JSON value embedded in persisted graph documents.
 pub type TypedValue = serde_json::Value;

@@ -728,8 +728,8 @@ fn graph_signature(signature: crate::project::FunctionSignature) -> Result<Funct
 
 fn node_type(
     value: &'static str,
-) -> Result<crate::graph::protocol::NodeTypeId, ProjectCatalogReadSource> {
-    crate::graph::protocol::NodeTypeId::new(value)
+) -> Result<yss_graph_protocol::NodeTypeId, ProjectCatalogReadSource> {
+    yss_graph_protocol::NodeTypeId::new(value)
         .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())
 }
 

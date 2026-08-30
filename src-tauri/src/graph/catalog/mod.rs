@@ -31,9 +31,9 @@ pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub(crate) use core_nodes::reroute::validate_reroute_protocol_contract;
 pub use dataframe::DATAFRAME_RESOURCE_SCHEMA_RESOLVER;
 pub(crate) fn reroute_node_type_for_kind(
-    kind: crate::graph::protocol::PortKind,
-) -> crate::graph::protocol::NodeTypeId {
-    crate::graph::protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
+    kind: yss_graph_protocol::PortKind,
+) -> yss_graph_protocol::NodeTypeId {
+    yss_graph_protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
         .expect("built-in reroute protocol identifiers are valid")
 }
 
@@ -49,3 +49,28 @@ pub use localization::{
     LocalizedCatalog, LocalizedCatalogItem, LocalizedCategory, LocalizedParameter, LocalizedPort,
     NodeCreation, ResourceBoundCreateArgs,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::build_builtin_node_system;
+
+    #[test]
+    fn numeric_type_class_contains_only_int64_and_float64() {
+        let registry = build_builtin_node_system()
+            .expect("production built-in registry must assemble")
+            .registry;
+        let members = registry
+            .types()
+            .iter()
+            .filter(|(_, registration)| {
+                registration
+                    .classes
+                    .iter()
+                    .any(|class| class.as_str() == "core.numeric")
+            })
+            .map(|(id, _)| id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(members, ["core.float64", "core.int64"]);
+    }
+}

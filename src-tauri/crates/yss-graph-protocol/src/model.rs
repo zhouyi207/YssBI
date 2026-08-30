@@ -396,13 +396,12 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
         min,
         max: Some(max),
     } = port.instances
+        && min > max
     {
-        if min > max {
-            return Err(invalid_port(
-                &port.key,
-                "user-created port minimum exceeds maximum",
-            ));
-        }
+        return Err(invalid_port(
+            &port.key,
+            "user-created port minimum exceeds maximum",
+        ));
     }
     if let ConnectionsPerPort::Multiple { max: Some(0), .. } = port.connections {
         return Err(invalid_port(
@@ -450,19 +449,19 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
                 "a forbidden literal policy cannot carry a default",
             ));
         }
-        if let Some(default) = &binding.default_value {
-            if default.value_type != port.value_type {
-                return Err(invalid_port(
-                    &port.key,
-                    "typed default does not match the port value type",
-                ));
-            }
+        if let Some(default) = &binding.default_value
+            && default.value_type != port.value_type
+        {
+            return Err(invalid_port(
+                &port.key,
+                "typed default does not match the port value type",
+            ));
         }
     }
     Ok(())
 }
 
-pub(crate) fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
+pub fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
     if execution.idempotent != execution.retry.is_some() {
         return Err(ProtocolError::InvalidExecutionSemantics(
             "retry policy and idempotence must be declared together",
@@ -501,7 +500,7 @@ pub(crate) fn validate_execution(execution: ExecutionSemantics) -> Result<(), Pr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::protocol::{TypeId, Value};
+    use crate::{TypeId, Value};
 
     fn key(value: &str) -> PortKey {
         PortKey::new(value).unwrap()

@@ -495,7 +495,6 @@ mod tests {
     use crate::graph::document::{
         GraphDocumentOperation, GraphDocumentPatch, MutationRequest, ResourceKey,
     };
-    use crate::graph::protocol::NodeTypeId;
     use crate::graph_document::GraphResourcePath;
     use crate::graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use crate::project::{
@@ -505,6 +504,7 @@ mod tests {
     use crate::project::{OperationId, ResourceRevision};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_protocol::NodeTypeId;
     use yss_variable_contract::VariableScope;
 
     fn root(label: &str) -> PathBuf {

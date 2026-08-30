@@ -610,7 +610,7 @@ fn bounded_materialization_limit_failure_rolls_back_memory_for_next_allocation()
 
 #[test]
 fn spill_typed_fidelity_covers_all_value_variants_and_nested_data() {
-    use crate::graph::protocol::CanonicalDecimal;
+    use yss_graph_protocol::CanonicalDecimal;
 
     let values = vec![
         Value::Null,

@@ -1,4 +1,4 @@
-use crate::graph::protocol::NodeTypeId;
+use yss_graph_protocol::NodeTypeId;
 
 #[derive(Clone, Copy)]
 struct Documentation {
