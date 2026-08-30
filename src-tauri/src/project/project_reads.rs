@@ -1,8 +1,6 @@
 #[cfg(test)]
 use crate::database::DatabaseInstance;
 #[cfg(test)]
-use crate::database_contract::DatabaseDecl;
-#[cfg(test)]
 use crate::graph::catalog::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
 };
@@ -26,6 +24,8 @@ use crate::variable::{VariableId, VariableInstance};
 use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+#[cfg(test)]
+use yss_database_contract::DatabaseDecl;
 
 #[cfg(test)]
 #[derive(Clone)]
@@ -985,7 +985,7 @@ mod tests {
             let mut data = changed_state.project_data.write().unwrap();
             let mut revisions = changed_state.database_authority_revisions.write().unwrap();
             let database = data.databases.get_mut("sales").unwrap();
-            database.engine = crate::database_contract::DatabaseEngine::DuckDb {
+            database.engine = yss_database_contract::DatabaseEngine::DuckDb {
                 path: "database/coherent.duckdb".into(),
                 table: "sales_after".into(),
             };
@@ -1034,7 +1034,7 @@ mod tests {
             )
         };
         let before = (
-            crate::database_contract::DatabaseEngine::InMemory {
+            yss_database_contract::DatabaseEngine::InMemory {
                 name: "sales".into(),
             },
             1,
@@ -1043,7 +1043,7 @@ mod tests {
             0,
         );
         let after = (
-            crate::database_contract::DatabaseEngine::DuckDb {
+            yss_database_contract::DatabaseEngine::DuckDb {
                 path: "database/coherent.duckdb".into(),
                 table: "sales_after".into(),
             },
@@ -1273,9 +1273,9 @@ mod tests {
             .insert(loaded_variable_id, loaded_variable);
         authoritative.databases.insert(
             "sales".into(),
-            crate::database_contract::DatabaseDecl {
-                id: crate::database_contract::DatabaseId::from_existing("sales".into()),
-                engine: crate::database_contract::DatabaseEngine::InMemory {
+            yss_database_contract::DatabaseDecl {
+                id: yss_database_contract::DatabaseId::from_existing("sales".into()),
+                engine: yss_database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,

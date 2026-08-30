@@ -9100,6 +9100,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-database-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "yss-sci"
 version = "0.1.0"
 dependencies = [
@@ -9166,6 +9176,7 @@ dependencies = [
  "uuid",
  "windows-sys 0.61.2",
  "yss-data-contract",
+ "yss-database-contract",
  "yss-sci",
  "yss-tracing",
 ]

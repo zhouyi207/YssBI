@@ -1,12 +1,12 @@
 use super::ProjectState;
 #[cfg(test)]
 use crate::database::*;
-use crate::database_contract::DatabaseDecl;
-#[cfg(test)]
-use crate::database_contract::DatabaseId;
 #[cfg(test)]
 use crate::project::ProjectFilesystemLeaseSet;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectSession};
+use yss_database_contract::DatabaseDecl;
+#[cfg(test)]
+use yss_database_contract::DatabaseId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectDatabaseError {
@@ -836,7 +836,7 @@ mod tests {
             "sales".into(),
             DatabaseDecl {
                 id: DatabaseId::from_existing("sales".into()),
-                engine: crate::database_contract::DatabaseEngine::InMemory {
+                engine: yss_database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,
@@ -851,7 +851,7 @@ mod tests {
             "sales".into(),
             DatabaseDecl {
                 id: DatabaseId::from_existing("sales".into()),
-                engine: crate::database_contract::DatabaseEngine::InMemory {
+                engine: yss_database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,
@@ -884,7 +884,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: DatabaseId::from_existing(database_id.into()),
-                    engine: crate::database_contract::DatabaseEngine::InMemory {
+                    engine: yss_database_contract::DatabaseEngine::InMemory {
                         name: "writer".into(),
                     },
                     schema_version: 1,
@@ -994,7 +994,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: DatabaseId::from_existing(database_id.into()),
-                    engine: crate::database_contract::DatabaseEngine::InMemory {
+                    engine: yss_database_contract::DatabaseEngine::InMemory {
                         name: "snapshot".into(),
                     },
                     schema_version: 1,
@@ -1191,7 +1191,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: DatabaseId::from_existing(id.into()),
-                    engine: crate::database_contract::DatabaseEngine::InMemory { name: id.into() },
+                    engine: yss_database_contract::DatabaseEngine::InMemory { name: id.into() },
                     schema_version: 1,
                     required: false,
                     name: name.into(),
@@ -1529,7 +1529,7 @@ mod tests {
                 DatabaseInstance {
                     decl: DatabaseDecl {
                         id: DatabaseId::from_existing(database_id.into()),
-                        engine: crate::database_contract::DatabaseEngine::InMemory {
+                        engine: yss_database_contract::DatabaseEngine::InMemory {
                             name: database_id.into(),
                         },
                         schema_version: 1,
@@ -1692,7 +1692,7 @@ mod tests {
             "replacement".into(),
             DatabaseDecl {
                 id: DatabaseId::from_existing("replacement".into()),
-                engine: crate::database_contract::DatabaseEngine::InMemory {
+                engine: yss_database_contract::DatabaseEngine::InMemory {
                     name: "replacement".into(),
                 },
                 schema_version: 1,

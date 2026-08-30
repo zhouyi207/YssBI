@@ -17,10 +17,6 @@ use crate::database::session_api::{
 };
 #[cfg(test)]
 use crate::database::tabular_io::read_ipc_dataframe;
-use crate::database_contract::{
-    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
-};
 use crate::error::new_diagnostic_incident_id;
 use crate::sci::api::bayes::worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult, BayesWorkerError, BayesWorkerPort,
@@ -44,6 +40,10 @@ use crate::sci::api::bayes::{
     BayesProgressCallback, PlaceholderBayesBackend, validate_bayes_input_table,
 };
 use crate::sci::api::control::{AbsoluteDeadline, ExecutionControl, SciCancellationSource};
+use yss_database_contract::{
+    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
 
 use super::execution::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,

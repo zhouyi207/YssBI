@@ -30,6 +30,17 @@ pub struct DatabaseSessionOpenRequest {
     observations: DatabaseDeclarationObservationSet,
 }
 
+/// Validated, owned values consumed by a database runtime adapter.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct DatabaseSessionOpenRequestParts {
+    pub identity: DatabaseSessionIdentity,
+    pub generation: NonZeroU64,
+    pub root: Option<PathBuf>,
+    pub declarations: Arc<[DatabaseDecl]>,
+    pub observations: DatabaseDeclarationObservationSet,
+}
+
 impl DatabaseSessionOpenRequest {
     pub fn new(
         identity: DatabaseSessionIdentity,
@@ -60,11 +71,7 @@ impl DatabaseSessionOpenRequest {
                 ));
             }
 
-            let Some((_, observation)) = self
-                .observations
-                .iter()
-                .find(|(id, _)| *id == &declaration.id)
-            else {
+            let Some(observation) = self.observations.get(&declaration.id) else {
                 return Err(DatabaseSessionOpenRequestError::MissingObservation(
                     declaration.id.clone(),
                 ));
@@ -89,22 +96,17 @@ impl DatabaseSessionOpenRequest {
         Ok(())
     }
 
-    pub(crate) fn into_parts(
+    pub fn into_validated_parts(
         self,
-    ) -> (
-        DatabaseSessionIdentity,
-        NonZeroU64,
-        Option<PathBuf>,
-        Arc<[DatabaseDecl]>,
-        DatabaseDeclarationObservationSet,
-    ) {
-        (
-            self.identity,
-            self.generation,
-            self.root,
-            self.declarations,
-            self.observations,
-        )
+    ) -> Result<DatabaseSessionOpenRequestParts, DatabaseSessionOpenRequestError> {
+        self.validate()?;
+        Ok(DatabaseSessionOpenRequestParts {
+            identity: self.identity,
+            generation: self.generation,
+            root: self.root,
+            declarations: self.declarations,
+            observations: self.observations,
+        })
     }
 }
 

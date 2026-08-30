@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct DatabaseId(Box<str>);
 
 impl DatabaseId {
+    #[must_use]
     pub fn from_existing(value: Box<str>) -> Self {
         Self(value)
     }
@@ -33,10 +34,11 @@ impl DatabaseDeclarationRevision {
 
 /// Opaque deterministic fingerprint of one complete database declaration.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct DatabaseDeclarationFingerprint(Box<[u8]>);
+pub struct DatabaseDeclarationFingerprint([u8; 32]);
 
 impl DatabaseDeclarationFingerprint {
+    #[must_use]
     pub fn from_decl(declaration: &DatabaseDecl) -> Self {
-        Self(fingerprint_declaration(declaration).into_boxed_slice())
+        Self(fingerprint_declaration(declaration))
     }
 }

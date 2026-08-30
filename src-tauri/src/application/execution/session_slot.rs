@@ -1201,10 +1201,6 @@ impl ApplicationState {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database_contract::{
-        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
-        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-    };
     use crate::execution::identity::ExecutionSessionId;
     use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
@@ -1214,6 +1210,10 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::{Duration, Instant};
+    use yss_database_contract::{
+        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
+        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+    };
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

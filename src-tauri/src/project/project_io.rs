@@ -11,7 +11,7 @@ use super::{
     ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
     scan_graph_resource_index,
 };
-use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
 use crate::graph_document::GraphDocument as NodeGraphDocument;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -144,7 +144,7 @@ pub struct ProjectDatabaseIndexEntry {
     pub id: String,
     pub resource_path: ProjectResourcePath,
     pub revision: crate::project::ResourceRevision,
-    pub engine: crate::database_contract::DatabaseEngine,
+    pub engine: yss_database_contract::DatabaseEngine,
     pub schema_version: u32,
     pub required: bool,
     pub name: Option<String>,

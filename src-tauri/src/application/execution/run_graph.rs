@@ -775,10 +775,6 @@ mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database_contract::{
-        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
-        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-    };
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
@@ -791,6 +787,10 @@ mod tests {
     use crate::project::ProjectState;
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
+    use yss_database_contract::{
+        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
+        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+    };
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

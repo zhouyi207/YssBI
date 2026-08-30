@@ -4,10 +4,6 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
-    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-};
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
@@ -25,6 +21,10 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
 use std::thread;
+use yss_database_contract::{
+    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
+    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+};
 
 struct TestProject {
     root: PathBuf,

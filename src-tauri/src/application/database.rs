@@ -33,7 +33,6 @@ use crate::database::{
     DatabaseExportFormat, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
     ingest_parquet_to_duckdb, sql_reader, write_display_name,
 };
-use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
 use crate::project::ProjectDatabaseError;
 use crate::project::{
     OperationId, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
@@ -41,6 +40,7 @@ use crate::project::{
 };
 use crate::tabular::contract::TabularSnapshot;
 use uuid::Uuid;
+use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
 
 #[cfg(test)]
 static DATABASE_EXTERNAL_IO_TEST_HOOK: std::sync::Mutex<
@@ -1145,9 +1145,9 @@ fn apply_database_mutation_in_session(
                 "database revision exhausted",
             ))
         })?;
-    let next_observation = crate::database_contract::DatabaseDeclarationObservation::new(
-        crate::database_contract::DatabaseDeclarationRevision::from_existing(next_revision),
-        crate::database_contract::DatabaseDeclarationFingerprint::from_decl(&after),
+    let next_observation = yss_database_contract::DatabaseDeclarationObservation::new(
+        yss_database_contract::DatabaseDeclarationRevision::from_existing(next_revision),
+        yss_database_contract::DatabaseDeclarationFingerprint::from_decl(&after),
     );
     let runtime_request = RuntimeDatabaseMutationRequest::new(
         database,
@@ -2232,7 +2232,7 @@ mod tests {
     fn install_loaded_database(state: &ProjectState) -> ProjectInstanceId {
         let mut project = ProjectData::new();
         let decl = DatabaseDecl {
-            id: crate::database_contract::DatabaseId::from_existing("sales".into()),
+            id: yss_database_contract::DatabaseId::from_existing("sales".into()),
             engine: DatabaseEngine::InMemory {
                 name: "sales".into(),
             },

@@ -1,6 +1,6 @@
 # Database module
 
-`src-tauri/src/database_contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
+`src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
 `DatabaseEngineSql` contracts. `src-tauri/src/database/` owns `DatabaseInstance` semantics、
 DuckDB storage、runtime binding、schema metadata、query/edit/history、overview 与 export。
 Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于

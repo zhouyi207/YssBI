@@ -7,10 +7,6 @@ use thiserror::Error;
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
 use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::database_contract::{
-    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
-};
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::plan::PlanProjectSessionId;
 use crate::execution::ports::scientific::ScientificBackend;
@@ -20,6 +16,10 @@ use crate::graph::catalog::build_builtin_node_system;
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use yss_database_contract::{
+    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
+};
 
 /// Composition-root supplied construction for one session-bound resource factory.
 ///
@@ -147,9 +147,7 @@ pub(crate) enum ProjectSessionCandidateError {
     #[error("project snapshot could not be captured for the application session")]
     ProjectSnapshot(#[source] ProjectFilesystemError),
     #[error("project database declaration observations could not be captured")]
-    DatabaseObservations(
-        #[source] crate::database_contract::DatabaseDeclarationObservationSetError,
-    ),
+    DatabaseObservations(#[source] yss_database_contract::DatabaseDeclarationObservationSetError),
     #[error("database session could not be opened for the application session")]
     DatabaseSession(#[source] super::super::database_session::DatabaseSessionApplicationError),
     #[error("application session generation is exhausted")]
@@ -250,7 +248,7 @@ pub(crate) fn build_current_project_candidate(
                 .filter(|instance| instance.decl == *declaration)
                 .cloned()
                 .unwrap_or_else(|| match &declaration.engine {
-                    crate::database_contract::DatabaseEngine::DuckDb { .. } => {
+                    yss_database_contract::DatabaseEngine::DuckDb { .. } => {
                         bind_duckdb_instance(declaration, root.as_ref().map(|root| root.as_path()))
                     }
                     _ => DatabaseInstance {
@@ -345,10 +343,6 @@ pub(crate) fn build_current_project_candidate(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database_contract::{
-        DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
-        DatabaseSessionOpenRequest,
-    };
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::plan::PlanProjectSessionId;
     use crate::execution::resource_preparation::ResourceProviderFactory;
@@ -363,6 +357,10 @@ mod tests {
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::Arc;
+    use yss_database_contract::{
+        DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
+        DatabaseSessionOpenRequest,
+    };
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())

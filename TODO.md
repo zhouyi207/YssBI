@@ -560,3 +560,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 persisted data contract 迁入独立 `src-tauri/crates/yss-data-contract/` Pure Leaf，
   由该 crate 唯一拥有 `DataType`、`DataValue` 与 wire compatibility tests，并移除主 crate
   中的兼容 re-export。
+- [ ] 将 persisted database contract 迁入独立 `src-tauri/crates/yss-database-contract/`
+  Pure Leaf，由该 crate 唯一拥有 declaration、engine/session identity、observation 与
+  fingerprint；消费方直接依赖该 crate，不保留主 crate 兼容 re-export。

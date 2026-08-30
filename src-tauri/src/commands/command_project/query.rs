@@ -611,9 +611,9 @@ mod tests {
         let mut data = ProjectData::new();
         data.databases.insert(
             "shared".into(),
-            crate::database_contract::DatabaseDecl {
-                id: crate::database_contract::DatabaseId::from_existing("shared".into()),
-                engine: crate::database_contract::DatabaseEngine::InMemory {
+            yss_database_contract::DatabaseDecl {
+                id: yss_database_contract::DatabaseId::from_existing("shared".into()),
+                engine: yss_database_contract::DatabaseEngine::InMemory {
                     name: format!("{label} engine"),
                 },
                 schema_version: 1,

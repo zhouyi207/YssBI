@@ -2,12 +2,12 @@ use super::{
     GraphDocumentKind, GraphResourcePath, ProjectComputationSettings, ProjectError,
     ProjectMetadata, WorksheetDocument, WorksheetResourcePath,
 };
-use crate::database_contract::DatabaseDecl;
 use crate::graph_document::GraphDocument;
 use crate::project::{FunctionDocument, FunctionSignature};
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use yss_database_contract::DatabaseDecl;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

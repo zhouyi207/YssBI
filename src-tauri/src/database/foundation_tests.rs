@@ -3,14 +3,14 @@ use crate::database::runtime::{
     DatabaseAdmissionCloseOutcome, DatabaseDrainDeadline, DatabaseDrainOutcome,
     DatabaseOutstandingWork, DatabaseRuntimeRegistry, DatabaseSessionDrainControl,
 };
-use crate::database_contract::{
+use std::num::NonZeroU64;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
-use std::num::NonZeroU64;
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 fn declaration(id: &str, name: &str) -> DatabaseDecl {
     DatabaseDecl {
@@ -46,80 +46,6 @@ fn request(
         declarations.into(),
         observations,
     )
-}
-
-#[test]
-fn database_declaration_wire_bytes_are_preserved_with_opaque_identity() {
-    let declaration = declaration("sales", "Sales");
-
-    let bytes = serde_json::to_vec(&declaration).unwrap();
-    assert_eq!(
-        bytes,
-        br#"{"id":"sales","engine":{"inMemory":{"name":"sales"}},"schemaVersion":1,"required":false,"name":"Sales"}"#
-    );
-    assert_eq!(
-        serde_json::from_slice::<DatabaseDecl>(&bytes).unwrap(),
-        declaration
-    );
-}
-
-#[test]
-fn database_declaration_fingerprint_is_deterministic_and_decl_specific() {
-    let original = declaration("sales", "Sales");
-    let same = declaration("sales", "Sales");
-    let renamed = declaration("sales", "Renamed");
-
-    assert_eq!(
-        DatabaseDeclarationFingerprint::from_decl(&original),
-        DatabaseDeclarationFingerprint::from_decl(&same)
-    );
-    assert_ne!(
-        DatabaseDeclarationFingerprint::from_decl(&original),
-        DatabaseDeclarationFingerprint::from_decl(&renamed)
-    );
-}
-
-#[test]
-fn duplicate_database_observations_are_rejected_before_set_creation() {
-    let id = DatabaseId::from_existing("sales".into());
-    let declaration = declaration("sales", "Sales");
-    let observation = DatabaseDeclarationObservation::new(
-        DatabaseDeclarationRevision::from_existing(1),
-        DatabaseDeclarationFingerprint::from_decl(&declaration),
-    );
-
-    let error = DatabaseDeclarationObservationSet::try_from_iter([
-        (id.clone(), observation.clone()),
-        (id, observation),
-    ])
-    .unwrap_err();
-
-    assert!(matches!(
-        error,
-        crate::database_contract::DatabaseDeclarationObservationSetError::DuplicateId(id)
-            if id.as_str() == "sales"
-    ));
-}
-
-#[test]
-fn open_request_rejects_declaration_observation_fingerprint_mismatch() {
-    let declarations = vec![declaration("sales", "Sales")];
-    let other = declaration("sales", "Other");
-    let observations = DatabaseDeclarationObservationSet::try_from_iter([(
-        DatabaseId::from_existing("sales".into()),
-        DatabaseDeclarationObservation::new(
-            DatabaseDeclarationRevision::from_existing(4),
-            DatabaseDeclarationFingerprint::from_decl(&other),
-        ),
-    )])
-    .unwrap();
-
-    let error = request(declarations, observations).validate().unwrap_err();
-    assert!(matches!(
-        error,
-        crate::database_contract::DatabaseSessionOpenRequestError::FingerprintMismatch(id)
-            if id.as_str() == "sales"
-    ));
 }
 
 #[test]

@@ -4,10 +4,6 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::database_contract::{
-    DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
-};
 use crate::graph::catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
@@ -16,6 +12,10 @@ use crate::graph::resource_catalog::{FunctionSignature, GraphResourceId, Variabl
 use crate::graph::runtime_state::GraphRuntimeCatalogError;
 use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
+use yss_database_contract::{
+    DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,

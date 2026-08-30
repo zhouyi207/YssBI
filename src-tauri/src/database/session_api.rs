@@ -11,12 +11,12 @@ use crate::database::runtime::{
 use crate::database::schema_snapshot::{
     DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
 };
-use crate::database_contract::{
+use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
+use yss_data_contract::DataType;
+use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
-use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
-use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {
@@ -937,11 +937,11 @@ mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
-    use crate::database_contract::{
+    use std::time::Instant;
+    use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionOpenRequest,
     };
-    use std::time::Instant;
 
     fn declaration(id: &str) -> DatabaseDecl {
         DatabaseDecl {
@@ -1195,7 +1195,7 @@ mod tests {
         let session = session();
         let expected = session.observations().iter().next().unwrap().1.clone();
         let next = DatabaseDeclarationObservation::new(
-            crate::database_contract::DatabaseDeclarationRevision::from_existing(2),
+            yss_database_contract::DatabaseDeclarationRevision::from_existing(2),
             expected.fingerprint().clone(),
         );
         let first = commit_database_runtime_change(
@@ -1223,7 +1223,7 @@ mod tests {
 
         let newest_expected = session.observations().iter().next().unwrap().1.clone();
         let newest = DatabaseDeclarationObservation::new(
-            crate::database_contract::DatabaseDeclarationRevision::from_existing(3),
+            yss_database_contract::DatabaseDeclarationRevision::from_existing(3),
             newest_expected.fingerprint().clone(),
         );
         let second = commit_database_runtime_change(

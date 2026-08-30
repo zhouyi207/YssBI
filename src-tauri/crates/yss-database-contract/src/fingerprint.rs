@@ -1,9 +1,10 @@
 use super::declaration::DatabaseDecl;
 use super::engine::{DatabaseEngine, DatabaseEngineSql};
+use sha2::{Digest, Sha256};
 
 const FINGERPRINT_VERSION: &[u8] = b"yssbi.database-declaration.fingerprint.v1";
 
-pub(super) fn fingerprint_declaration(declaration: &DatabaseDecl) -> Vec<u8> {
+pub(super) fn fingerprint_declaration(declaration: &DatabaseDecl) -> [u8; 32] {
     let mut encoding = Vec::new();
     write_bytes(&mut encoding, FINGERPRINT_VERSION);
     write_field(&mut encoding, 0x01, |field| {
@@ -21,7 +22,10 @@ pub(super) fn fingerprint_declaration(declaration: &DatabaseDecl) -> Vec<u8> {
     write_field(&mut encoding, 0x05, |field| {
         write_bytes(field, declaration.name.as_bytes());
     });
-    sha256(&encoding).to_vec()
+    let digest = Sha256::digest(&encoding);
+    let mut fingerprint = [0; 32];
+    fingerprint.copy_from_slice(&digest);
+    fingerprint
 }
 
 fn encode_engine(output: &mut Vec<u8>, engine: &DatabaseEngine) {
@@ -139,97 +143,30 @@ fn write_u64(output: &mut Vec<u8>, value: u64) {
     output.extend_from_slice(&value.to_be_bytes());
 }
 
-fn sha256(input: &[u8]) -> [u8; 32] {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66b, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
-    ];
-    let mut state = [
-        0x6a09e667u32,
-        0xbb67ae85,
-        0x3c6ef372,
-        0xa54ff53a,
-        0x510e527f,
-        0x9b05688c,
-        0x1f83d9ab,
-        0x5be0cd19,
-    ];
-    let bit_len = (input.len() as u64).wrapping_mul(8);
-    let mut padded = input.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
-    }
-    padded.extend_from_slice(&bit_len.to_be_bytes());
+#[cfg(test)]
+mod tests {
+    use super::fingerprint_declaration;
+    use crate::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
-    for chunk in padded.chunks_exact(64) {
-        let mut schedule = [0u32; 64];
-        for (index, word) in schedule[..16].iter_mut().enumerate() {
-            let offset = index * 4;
-            *word = u32::from_be_bytes([
-                chunk[offset],
-                chunk[offset + 1],
-                chunk[offset + 2],
-                chunk[offset + 3],
-            ]);
-        }
-        for index in 16..64 {
-            let s0 = schedule[index - 15].rotate_right(7)
-                ^ schedule[index - 15].rotate_right(18)
-                ^ (schedule[index - 15] >> 3);
-            let s1 = schedule[index - 2].rotate_right(17)
-                ^ schedule[index - 2].rotate_right(19)
-                ^ (schedule[index - 2] >> 10);
-            schedule[index] = schedule[index - 16]
-                .wrapping_add(s0)
-                .wrapping_add(schedule[index - 7])
-                .wrapping_add(s1);
-        }
+    #[test]
+    fn declaration_fingerprint_preserves_the_version_one_digest() {
+        let declaration = DatabaseDecl {
+            id: DatabaseId::from_existing("sales".into()),
+            engine: DatabaseEngine::InMemory {
+                name: "sales".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: "Sales".into(),
+        };
 
-        let mut working = state;
-        for index in 0..64 {
-            let s1 = working[4].rotate_right(6)
-                ^ working[4].rotate_right(11)
-                ^ working[4].rotate_right(25);
-            let choice = (working[4] & working[5]) ^ (!working[4] & working[6]);
-            let temp1 = working[7]
-                .wrapping_add(s1)
-                .wrapping_add(choice)
-                .wrapping_add(K[index])
-                .wrapping_add(schedule[index]);
-            let s0 = working[0].rotate_right(2)
-                ^ working[0].rotate_right(13)
-                ^ working[0].rotate_right(22);
-            let majority =
-                (working[0] & working[1]) ^ (working[0] & working[2]) ^ (working[1] & working[2]);
-            let temp2 = s0.wrapping_add(majority);
-            working = [
-                temp1.wrapping_add(temp2),
-                working[0],
-                working[1],
-                working[2],
-                working[3].wrapping_add(temp1),
-                working[4],
-                working[5],
-                working[6],
-            ];
-        }
-        for index in 0..8 {
-            state[index] = state[index].wrapping_add(working[index]);
-        }
+        assert_eq!(
+            fingerprint_declaration(&declaration),
+            [
+                0x4d, 0x1c, 0x0e, 0xd8, 0x25, 0xa7, 0xbc, 0x7f, 0xfe, 0x6e, 0xb8, 0x57, 0x90, 0xa8,
+                0xa3, 0xeb, 0x30, 0x86, 0x50, 0x1f, 0xc2, 0xc2, 0x33, 0x04, 0x67, 0x8e, 0x4f, 0x79,
+                0x67, 0x91, 0x05, 0x3f,
+            ]
+        );
     }
-
-    let mut output = [0; 32];
-    for (index, word) in state.iter().enumerate() {
-        output[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
-    }
-    output
 }

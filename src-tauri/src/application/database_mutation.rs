@@ -18,7 +18,7 @@ use crate::database::session_api::{
     DatabaseMutationRequest as RuntimeDatabaseMutationRequest, DatabaseRuntimeChangeOutcome,
     commit_database_runtime_change, prepare_database_runtime_change,
 };
-use crate::database_contract::{DatabaseDeclarationObservation, DatabaseId};
+use yss_database_contract::{DatabaseDeclarationObservation, DatabaseId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DatabaseMutationRequest {
@@ -467,11 +467,11 @@ mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
-    use crate::database_contract::{
+    use std::num::NonZeroU64;
+    use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
-    use std::num::NonZeroU64;
 
     struct RejectingProject;
 
@@ -507,7 +507,7 @@ mod tests {
             name: "Sales".into(),
         };
         let observations =
-            crate::database_contract::DatabaseDeclarationObservationSet::try_from_iter([(
+            yss_database_contract::DatabaseDeclarationObservationSet::try_from_iter([(
                 declaration.id.clone(),
                 DatabaseDeclarationObservation::new(
                     DatabaseDeclarationRevision::from_existing(1),

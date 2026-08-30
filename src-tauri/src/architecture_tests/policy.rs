@@ -181,18 +181,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ("src-tauri/src/tabular/mod.rs", RustLayer::PureLeaf),
     ("src-tauri/src/tabular/contract.rs", RustLayer::PureLeaf),
     (
-        "src-tauri/src/database_contract/mod.rs",
-        RustLayer::PureLeaf,
-    ),
-    (
-        "src-tauri/src/database_contract/declaration.rs",
-        RustLayer::PureLeaf,
-    ),
-    (
-        "src-tauri/src/database_contract/engine.rs",
-        RustLayer::PureLeaf,
-    ),
-    (
         "src-tauri/src/database/runtime/mod.rs",
         RustLayer::DatabaseCore,
     ),
@@ -1782,7 +1770,7 @@ fn non_build_memberships(
         .map(|(_, namespace)| namespace)
         .unwrap_or_default();
     let exact_layer = exact_source_layer(source_file);
-    if package == "yss-data-contract" {
+    if matches!(package, "yss-data-contract" | "yss-database-contract") {
         layers.insert(RustLayer::PureLeaf);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
@@ -1822,7 +1810,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "graph" => Some(RustLayer::Graph),
         "graph_document" | "tabular" | "variable" => Some(RustLayer::PureLeaf),
         "backend_adapters" => Some(RustLayer::BackendAdapter),
-        "database_contract" => Some(RustLayer::PureLeaf),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,
     }

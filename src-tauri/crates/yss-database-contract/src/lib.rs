@@ -16,4 +16,5 @@ pub use observation::{
 };
 pub use session::{
     DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestError,
+    DatabaseSessionOpenRequestParts,
 };

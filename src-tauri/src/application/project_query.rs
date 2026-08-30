@@ -6,13 +6,13 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::database::schema_snapshot::DatabaseSchemaFact;
-use crate::database_contract::DatabaseDecl;
 use crate::project::{
     ProjectError, ProjectFilesystemError, ProjectIndex, ProjectInstanceId,
     RevealProjectResourceRequest, format_path_for_user_path, normalize_existing_path,
     resolve_reveal_path,
 };
 use crate::variable::VariableInstance;
+use yss_database_contract::DatabaseDecl;
 
 #[derive(Debug, Error)]
 pub enum ProjectQueryApplicationError {

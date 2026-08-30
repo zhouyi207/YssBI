@@ -90,7 +90,7 @@ impl PreparedProjectActivation {
         #[cfg(test)]
         {
             use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-            use crate::database_contract::DatabaseEngine;
+            use yss_database_contract::DatabaseEngine;
 
             for (id, declaration) in &data.databases {
                 let instance = if matches!(declaration.engine, DatabaseEngine::DuckDb { .. }) {
@@ -1045,11 +1045,11 @@ mod tests {
                 &database_session.instance_id,
                 crate::project::OperationId::new(),
                 crate::database::DatabaseInstance {
-                    decl: crate::database_contract::DatabaseDecl {
-                        id: crate::database_contract::DatabaseId::from_existing(
+                    decl: yss_database_contract::DatabaseDecl {
+                        id: yss_database_contract::DatabaseId::from_existing(
                             database_id.clone().into(),
                         ),
-                        engine: crate::database_contract::DatabaseEngine::InMemory {
+                        engine: yss_database_contract::DatabaseEngine::InMemory {
                             name: "generation".into(),
                         },
                         schema_version: 1,

@@ -9,10 +9,10 @@ use crate::database::database_state::DatabaseState;
 use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
 use crate::database::schema_snapshot::{DatabaseColumnFact, DatabaseSchemaFact};
 use crate::database::session_api::DatabaseMutationOperation;
-use crate::database_contract::{DatabaseDecl, DatabaseId};
 use crate::tabular::contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot,
 };
+use yss_database_contract::{DatabaseDecl, DatabaseId};
 
 pub(crate) struct DatabaseRuntimeDataSnapshot {
     pub(crate) columns: Box<[DatabaseColumnFact]>,

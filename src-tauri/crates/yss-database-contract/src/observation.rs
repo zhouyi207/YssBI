@@ -9,6 +9,7 @@ pub struct DatabaseDeclarationObservation {
 }
 
 impl DatabaseDeclarationObservation {
+    #[must_use]
     pub fn new(
         revision: DatabaseDeclarationRevision,
         fingerprint: DatabaseDeclarationFingerprint,
@@ -48,6 +49,10 @@ impl DatabaseDeclarationObservationSet {
 
     pub fn iter(&self) -> impl Iterator<Item = (&DatabaseId, &DatabaseDeclarationObservation)> {
         self.0.iter()
+    }
+
+    pub(crate) fn get(&self, id: &DatabaseId) -> Option<&DatabaseDeclarationObservation> {
+        self.0.get(id)
     }
 }
 

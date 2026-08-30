@@ -262,8 +262,8 @@ fn database_rows_to_transport(
 
 fn database_engine_from_import(
     source: DatabaseImportSourceDTO,
-) -> Result<crate::database_contract::DatabaseEngine, CommandError> {
-    crate::database_contract::DatabaseEngine::try_from(DatabaseEngineDTO::from(source))
+) -> Result<yss_database_contract::DatabaseEngine, CommandError> {
+    yss_database_contract::DatabaseEngine::try_from(DatabaseEngineDTO::from(source))
         .map_err(|_| CommandError::expected("invalid_database_engine"))
 }
 
@@ -850,10 +850,10 @@ pub fn get_edit_state(
 mod tests {
     use super::*;
     use crate::database::DatabaseState;
-    use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
     use crate::project::{OperationId, ResourceRevision};
+    use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
     struct FailingSerialize;
 

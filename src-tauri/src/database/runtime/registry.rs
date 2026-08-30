@@ -1,11 +1,11 @@
 use super::{DatabaseDrainOutcome, DatabaseOperationLease, DatabaseOutstandingWork};
 use crate::database::error::{DatabaseError, DatabaseOperation};
-use crate::database_contract::{
+use std::collections::BTreeMap;
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseId,
 };
-use std::collections::BTreeMap;
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DatabaseRuntimeRevisions {

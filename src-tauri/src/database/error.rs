@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::database_contract::DatabaseId;
+use yss_database_contract::DatabaseId;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum DatabaseErrorCode {

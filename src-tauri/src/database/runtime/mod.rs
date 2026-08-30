@@ -3,10 +3,6 @@ mod registry;
 
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
-use crate::database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
-    DatabaseSessionOpenRequest,
-};
 pub(crate) use physical::PreparedDatabasePhysicalMutation;
 use physical::{
     DatabaseRuntimeDataSnapshot, DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot,
@@ -18,6 +14,10 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use yss_database_contract::{
+    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
+    DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
+};
 
 pub(crate) use registry::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
@@ -193,10 +193,16 @@ impl DatabaseRuntimeRegistry {
         request: DatabaseSessionOpenRequest,
         instances: impl IntoIterator<Item = crate::database::database_instance::DatabaseInstance>,
     ) -> Result<DatabaseRuntimeSession, DatabaseError> {
-        request
-            .validate()
+        let DatabaseSessionOpenRequestParts {
+            identity,
+            generation,
+            root,
+            declarations,
+            observations,
+            ..
+        } = request
+            .into_validated_parts()
             .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
-        let (identity, generation, root, declarations, observations) = request.into_parts();
         let physical = DatabaseRuntimePhysicalState::from_instances(&declarations, instances)?;
         Ok(DatabaseRuntimeSession {
             runtime: DatabaseSessionRuntime::new(&declarations, observations),
@@ -215,10 +221,16 @@ impl DatabaseRuntimeRegistry {
         request: DatabaseSessionOpenRequest,
         physical: Arc<DatabaseRuntimePhysicalState>,
     ) -> Result<DatabaseRuntimeSession, DatabaseError> {
-        request
-            .validate()
+        let DatabaseSessionOpenRequestParts {
+            identity,
+            generation,
+            root,
+            declarations,
+            observations,
+            ..
+        } = request
+            .into_validated_parts()
             .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
-        let (identity, generation, root, declarations, observations) = request.into_parts();
         Ok(DatabaseRuntimeSession {
             runtime: DatabaseSessionRuntime::new(&declarations, observations),
             physical,
@@ -279,8 +291,8 @@ impl DatabaseRuntimeSession {
         registration: DatabasePreparedRegistration,
         database: DatabaseId,
         expected_runtime_revision: u64,
-        expected_observation: crate::database_contract::DatabaseDeclarationObservation,
-        next_observation: crate::database_contract::DatabaseDeclarationObservation,
+        expected_observation: yss_database_contract::DatabaseDeclarationObservation,
+        next_observation: yss_database_contract::DatabaseDeclarationObservation,
         schema_changed: bool,
     ) -> Result<DatabaseRuntimeCommittedChange, DatabaseError> {
         self.runtime.commit_prepared(
@@ -419,7 +431,7 @@ impl DatabaseRuntimeSession {
     pub(crate) fn claim_runtime_recovery(
         &self,
         recovery_id: u64,
-        current_authority: &crate::database_contract::DatabaseDeclarationObservation,
+        current_authority: &yss_database_contract::DatabaseDeclarationObservation,
     ) -> Result<DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError> {
         self.runtime.claim_recovery(recovery_id, current_authority)
     }

@@ -374,7 +374,7 @@ pub fn get_plot_column_pair(
     let result = state
         .query_worksheet_plot(WorksheetPlotQuery {
             project_instance_id,
-            database_id: crate::database_contract::DatabaseId::from_existing(database_id.into()),
+            database_id: yss_database_contract::DatabaseId::from_existing(database_id.into()),
             x_column,
             y_column,
             max_points,
@@ -455,9 +455,9 @@ fn plot_axis_format(format: crate::application::worksheet_plot::PlotAxisFormat) 
 mod tests {
     use super::*;
     use crate::database::{DatabaseState, EditHistory};
-    use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
+    use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
     fn install_plot_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
         let mut project = ProjectData::new();

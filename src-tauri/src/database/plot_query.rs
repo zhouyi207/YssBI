@@ -11,9 +11,9 @@ use crate::database::schema_snapshot::DatabaseColumnFact;
 use crate::database::session_api::{
     self, DatabaseColumnSelection, DatabaseDataSnapshotRequest, DatabaseQueryBasis,
 };
-use crate::database_contract::DatabaseId;
 use crate::tabular::contract::{TabularColumn, TabularColumnName, TabularScalar};
 use yss_data_contract::DataType;
+use yss_database_contract::DatabaseId;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {
@@ -378,14 +378,14 @@ mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
-    use crate::database_contract::{
+    use polars::prelude::{AnyValue, Column, DataFrame, TimeUnit};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
+    use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
-    use polars::prelude::{AnyValue, Column, DataFrame, TimeUnit};
-    use std::num::NonZeroU64;
-    use std::sync::Arc;
 
     fn session_with_loaded_data(identity: &str) -> DatabaseRuntimeSession {
         let declaration = DatabaseDecl {

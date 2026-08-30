@@ -4,10 +4,6 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
-    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-};
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
@@ -28,6 +24,10 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
 use std::thread;
+use yss_database_contract::{
+    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
+    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+};
 
 struct TestProject {
     root: PathBuf,
@@ -322,7 +322,7 @@ fn replacement_after_catalog_compute_returns_stale_and_publishes_nothing() {
 fn localized_catalog_rejects_a_project_database_schema_mismatch() {
     let database = DatabaseDecl {
         id: DatabaseId::from_existing("sales".into()),
-        engine: crate::database_contract::DatabaseEngine::InMemory {
+        engine: yss_database_contract::DatabaseEngine::InMemory {
             name: "sales".into(),
         },
         schema_version: 1,

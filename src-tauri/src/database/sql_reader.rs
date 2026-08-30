@@ -5,7 +5,7 @@ use polars::prelude::*;
 use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
 use std::future::Future;
 
-use crate::database_contract::DatabaseEngineSql;
+use yss_database_contract::DatabaseEngineSql;
 
 fn block_on<F: Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()

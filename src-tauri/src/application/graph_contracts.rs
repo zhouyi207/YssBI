@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::database::session_api::DatabaseCatalogSnapshot;
-use crate::database_contract::{DatabaseDecl, DatabaseId};
 use crate::execution::plan::{
     CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
     CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
@@ -29,6 +28,7 @@ use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
+use yss_database_contract::{DatabaseDecl, DatabaseId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectGraphResourceSnapshot {
@@ -467,13 +467,13 @@ mod tests {
     use crate::database::session_api::{
         DatabaseCatalogSnapshotFixtureSchema, database_catalog_snapshot_fixture,
     };
-    use crate::database_contract::{
-        DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
-    };
     use crate::graph::resource_catalog::VariableValueContract;
     use std::num::NonZeroU64;
     use yss_data_contract::DataType;
+    use yss_database_contract::{
+        DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
+    };
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {

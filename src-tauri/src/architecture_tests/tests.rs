@@ -253,6 +253,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-database-contract"
+                && root.target == "yss_database_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-tracing"
                 && root.target == "yss_tracing"
                 && root.kind == ProductionRootKind::Library)
@@ -293,6 +301,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-data-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_database_contract"
+                    && alias.member_package == "yss-database-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-database-contract"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -360,6 +386,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-data-contract/src/lib.rs"),
     };
+    let database_contract_root = ProductionRoot {
+        package_id: "database-contract-package".to_owned(),
+        package: "yss-database-contract".to_owned(),
+        target: "yss_database_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-database-contract/src/lib.rs"),
+    };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
         package: "fixture".to_owned(),
@@ -370,6 +403,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     let roots = vec![
         runtime_root.clone(),
         data_contract_root.clone(),
+        database_contract_root.clone(),
         build_root.clone(),
     ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
@@ -409,6 +443,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_data_contract::data_value",
             ),
             module(
+                &database_contract_root,
+                "src-tauri/crates/yss-database-contract/src/lib.rs",
+                "yss_database_contract",
+            ),
+            module(
                 &runtime_root,
                 "src-tauri/src/graph/value/type_system.rs",
                 "fixture_lib::graph::value::type_system",
@@ -445,6 +484,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-data-contract/src/data_value.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-database-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -926,12 +969,16 @@ fn rust_graph_project_revision_conversions_are_explicit() {
 }
 
 #[test]
-fn database_contract_has_one_pure_owner_without_legacy_declaration_files() {
+fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
     let root = repository_root();
     let contract_files = [
-        "src-tauri/src/database_contract/mod.rs",
-        "src-tauri/src/database_contract/declaration.rs",
-        "src-tauri/src/database_contract/engine.rs",
+        "src-tauri/crates/yss-database-contract/src/lib.rs",
+        "src-tauri/crates/yss-database-contract/src/declaration.rs",
+        "src-tauri/crates/yss-database-contract/src/engine.rs",
+        "src-tauri/crates/yss-database-contract/src/fingerprint.rs",
+        "src-tauri/crates/yss-database-contract/src/identity.rs",
+        "src-tauri/crates/yss-database-contract/src/observation.rs",
+        "src-tauri/crates/yss-database-contract/src/session.rs",
     ];
     for relative in contract_files {
         assert!(
@@ -941,6 +988,7 @@ fn database_contract_has_one_pure_owner_without_legacy_declaration_files() {
     }
 
     for relative in [
+        "src-tauri/src/database_contract",
         "src-tauri/src/database/database_decl.rs",
         "src-tauri/src/database/database_engine.rs",
         "src-tauri/src/database/database_engine_sql.rs",

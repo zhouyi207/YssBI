@@ -314,10 +314,6 @@ mod tests {
         ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
     };
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database_contract::{
-        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
-        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-    };
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
@@ -331,6 +327,10 @@ mod tests {
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
     use std::sync::Arc;
+    use yss_database_contract::{
+        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
+        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+    };
 
     fn application_with_function() -> (
         crate::project::fixtures::TempProject,
