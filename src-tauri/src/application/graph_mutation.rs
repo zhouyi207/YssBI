@@ -7,13 +7,13 @@ use crate::application::execution::{
 };
 use crate::graph::error::GraphMutationError;
 use crate::graph::mutation::{GraphMutation, PlannedGraphMutation, plan_graph_mutation};
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::project::project_state::graph_operation::{
     GraphCommitReceipt, GraphInvalidationSet, GraphOperationCapture, ProjectGraphCommitError,
     ProjectGraphOperationError, ProjectHistoryStatus,
 };
 use crate::project::{OperationId, ProjectGraphHistoryChange, ProjectInstanceId};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 #[derive(Clone, Debug)]
 pub struct GraphMutationRequest {
@@ -158,7 +158,6 @@ mod tests {
         ApplicationSessionSlot, ApplicationState, GraphMutationApplicationError,
         GraphMutationRequest, SessionCaptureError, plan_captured_graph_mutation,
     };
-    use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::project::project_state::graph_operation::ProjectGraphCommitError;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, OperationId, ProjectData, ProjectInstanceId,
@@ -168,6 +167,7 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use yss_graph_document::{DocumentNode, GraphDocument, GraphRevision, NodeId, NodePosition};
     use yss_graph_protocol::NodeTypeId;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn empty_catalog() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(

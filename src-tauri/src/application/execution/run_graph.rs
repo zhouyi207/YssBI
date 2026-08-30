@@ -775,7 +775,6 @@ mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     };
@@ -791,6 +790,7 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

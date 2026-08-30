@@ -6,7 +6,6 @@ use std::sync::{Barrier, Mutex};
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
 use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
-use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use thiserror::Error;
 use yss_data_contract::DataType;
 use yss_graph_analysis_contract::CompilationBasis;
@@ -20,6 +19,7 @@ use yss_graph_protocol::{
     NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
 };
 use yss_graph_registry::NodeRegistry;
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);

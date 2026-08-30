@@ -1199,7 +1199,6 @@ impl ApplicationState {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{GraphRuntimeComponents, GraphRuntimeEpoch};
     use std::collections::BTreeMap;
     use std::num::NonZeroU64;
@@ -1212,6 +1211,7 @@ mod tests {
     };
     use yss_execution::identity::ExecutionSessionId;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

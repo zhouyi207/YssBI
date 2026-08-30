@@ -302,14 +302,12 @@ pub(crate) fn build_current_project_candidate(
         crate::graph::runtime_state::GraphRuntimeComponents {
             registry: builtin.registry,
             catalog: builtin.catalog,
-            resource_catalog: Arc::new(
-                crate::graph::resource_catalog::ResourceCatalogSnapshot::new(
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                    crate::graph::resource_catalog::ResourceCatalogFingerprint::from_bytes([0; 32]),
-                ),
-            ),
+            resource_catalog: Arc::new(yss_graph_resource_contract::ResourceCatalogSnapshot::new(
+                BTreeMap::new(),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
+            )),
         },
     ));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
@@ -343,7 +341,6 @@ pub(crate) fn build_current_project_candidate(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     };
@@ -361,6 +358,7 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())

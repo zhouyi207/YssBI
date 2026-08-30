@@ -6,11 +6,6 @@ use crate::graph::compiler::{
     GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
     GraphParameterValue, GraphSourceIdentity,
 };
-use crate::graph::resource_catalog::{
-    FunctionCatalogEntry, FunctionSignature, GraphResourceId, ResourceCatalogFingerprint,
-    ResourceCatalogSnapshot, VariableValueContract,
-};
-use crate::graph::schema::{ColumnSchema, DataSchema};
 use crate::graph::settings::GraphCompileSettings;
 use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
@@ -29,6 +24,10 @@ use yss_graph_analysis_contract::{
     ResourceVersion as GraphResourceVersion,
 };
 use yss_graph_document::{GraphResourcePath, GraphRevision};
+use yss_graph_resource_contract::{
+    ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
+    ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectGraphResourceSnapshot {
@@ -467,13 +466,13 @@ mod tests {
     use crate::database::session_api::{
         DatabaseCatalogSnapshotFixtureSchema, database_catalog_snapshot_fixture,
     };
-    use crate::graph::resource_catalog::VariableValueContract;
     use std::num::NonZeroU64;
     use yss_data_contract::DataType;
     use yss_database_contract::{
         DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
     };
+    use yss_graph_resource_contract::VariableValueContract;
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {

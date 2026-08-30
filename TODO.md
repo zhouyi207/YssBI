@@ -609,3 +609,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将唯一生产 execution runtime、plan、ports、result store 与 lifecycle state 迁入
   `src-tauri/crates/yss-execution/`；根 crate 直接消费该 crate 而不保留兼容 module，测试构造器通过
   `test-support` feature 隔离，并删除从未读取或构造的 candidate/resource effect 镜像链。
+- [ ] 将 Graph 编译资源标识、函数/变量 contract、数据库 schema 与 immutable resource catalog
+  snapshot 迁入 `src-tauri/crates/yss-graph-resource-contract/` Pure Leaf；根 crate 不保留兼容
+  module，并以显式文档和架构门禁防止其与 built-in `yss-graph-catalog` 漂移成重复事实源。

@@ -7,10 +7,10 @@ use crate::graph::compiler::package::{
     GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
 use crate::graph::error::GraphCompileError;
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
 use yss_graph_analysis_contract::{CompilationBasis, CompileId};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 

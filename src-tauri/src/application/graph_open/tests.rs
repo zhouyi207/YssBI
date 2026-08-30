@@ -5,7 +5,6 @@ use crate::application::execution::{
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
 use crate::graph::error::GraphMutationError;
-use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
@@ -25,6 +24,7 @@ use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
+use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 struct TestProject {
     root: PathBuf,

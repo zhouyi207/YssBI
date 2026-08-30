@@ -1,4 +1,4 @@
-use super::schema::DataSchema;
+use crate::DataSchema;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
@@ -138,7 +138,7 @@ mod tests {
         FunctionCatalogEntry, FunctionSignature, GraphResourceId, ResourceCatalogFingerprint,
         ResourceCatalogSnapshot, VariableValueContract,
     };
-    use crate::graph::schema::{ColumnSchema, DataSchema};
+    use crate::{ColumnSchema, DataSchema};
     use std::collections::BTreeMap;
     use yss_data_contract::DataType;
     use yss_graph_document::GraphResourcePath;

@@ -1,0 +1,11 @@
+[package]
+name = "yss-graph-resource-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-graph-document = { path = "../yss-graph-document" }

@@ -9207,6 +9207,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-resource-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "yss-data-contract",
+ "yss-graph-document",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9322,6 +9331,7 @@ dependencies = [
  "yss-graph-document",
  "yss-graph-protocol",
  "yss-graph-registry",
+ "yss-graph-resource-contract",
  "yss-math",
  "yss-sci",
  "yss-tabular-contract",

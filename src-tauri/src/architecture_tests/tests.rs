@@ -325,6 +325,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-resource-contract"
+                && root.target == "yss_graph_resource_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-registry"
                 && root.target == "yss_graph_registry"
                 && root.kind == ProductionRootKind::Library)
@@ -573,6 +581,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_resource_contract"
+                    && alias.member_package == "yss-graph-resource-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-resource-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_graph_registry"
                     && alias.member_package == "yss-graph-registry"
             })
@@ -782,6 +808,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-protocol/src/lib.rs"),
     };
+    let graph_resource_contract_root = ProductionRoot {
+        package_id: "graph-resource-contract-package".to_owned(),
+        package: "yss-graph-resource-contract".to_owned(),
+        target: "yss_graph_resource_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-resource-contract/src/lib.rs"),
+    };
     let graph_registry_root = ProductionRoot {
         package_id: "graph-registry-package".to_owned(),
         package: "yss-graph-registry".to_owned(),
@@ -836,6 +869,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_compiler_diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
+        graph_resource_contract_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
@@ -918,6 +952,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_protocol_root,
                 "src-tauri/crates/yss-graph-protocol/src/lib.rs",
                 "yss_graph_protocol",
+            ),
+            module(
+                &graph_resource_contract_root,
+                "src-tauri/crates/yss-graph-resource-contract/src/lib.rs",
+                "yss_graph_resource_contract",
             ),
             module(
                 &graph_registry_root,
@@ -1008,6 +1047,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-resource-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1569,6 +1612,40 @@ fn execution_has_one_crate_owner_without_compatibility_or_dead_effect_mirrors() 
             "execution must not restore dead effect/test machinery '{removed}'"
         );
     }
+}
+
+#[test]
+fn graph_resource_contract_has_one_owner_distinct_from_builtin_catalog() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-resource-contract/Cargo.toml",
+        "src-tauri/crates/yss-graph-resource-contract/src/lib.rs",
+        "src-tauri/crates/yss-graph-resource-contract/src/catalog.rs",
+        "src-tauri/crates/yss-graph-resource-contract/src/schema.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph resource contract owner must exist at {relative}"
+        );
+    }
+    for removed in [
+        "src-tauri/src/graph/resource_catalog.rs",
+        "src-tauri/src/graph/schema.rs",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "the root crate must not retain graph resource contract mirror {removed}"
+        );
+    }
+
+    let source = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-graph-resource-contract/src/lib.rs"),
+    )
+    .expect("graph resource contract root must be readable");
+    assert!(
+        source.contains("The built-in node catalog remains owned by `yss-graph-catalog`"),
+        "resource snapshots and the built-in node catalog must remain distinct authorities"
+    );
 }
 
 #[test]

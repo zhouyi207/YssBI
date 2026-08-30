@@ -1787,6 +1787,7 @@ fn non_build_memberships(
             | "yss-database-contract"
             | "yss-graph-document"
             | "yss-graph-protocol"
+            | "yss-graph-resource-contract"
             | "yss-math"
             | "yss-tabular-contract"
             | "yss-variable-contract"

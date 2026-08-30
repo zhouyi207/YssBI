@@ -1,4 +1,3 @@
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
 use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
@@ -13,6 +12,7 @@ use yss_graph_protocol::{
     SchemaExpr, TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 pub(crate) mod result_category;
 
@@ -500,7 +500,7 @@ mod tests {
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
-            crate::graph::resource_catalog::ResourceCatalogFingerprint::from_bytes([3; 32]),
+            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([3; 32]),
         );
         let settings = GraphCompileSettings {
             absolute_tolerance: 1e-12,

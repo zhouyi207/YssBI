@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::graph::error::GraphMutationError;
-use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use yss_graph_document::{GraphDocument, GraphRevision};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 #[derive(Clone, Debug)]
 pub enum GraphMutation {
@@ -58,7 +58,7 @@ mod tests {
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
-            crate::graph::resource_catalog::ResourceCatalogFingerprint::from_bytes([1; 32]),
+            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([1; 32]),
         );
         let planned = plan_graph_mutation(
             &document,

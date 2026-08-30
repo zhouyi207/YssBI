@@ -4,7 +4,6 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
@@ -28,6 +27,7 @@ use yss_graph_document::{
     DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
 };
 use yss_graph_protocol::{NodeTypeId, PortKey};
+use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 struct TestProject {
     root: PathBuf,
