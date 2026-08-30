@@ -33,7 +33,7 @@ fn persist_global_variables_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     expected_revisions: std::collections::BTreeMap<
-        crate::graph::document::ResourceKey,
+        yss_project_history::ResourceKey,
         yss_project_identity::ResourceRevision,
     >,
     operation_id: OperationId,
@@ -433,11 +433,9 @@ fn map_session_capture_error(
 mod tests {
     use super::*;
     use crate::event::{Event, EventProject};
-    use crate::graph::document::{
-        HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey,
-    };
     use crate::project::ProjectData;
     use std::collections::BTreeMap;
+    use yss_project_history::{HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
 
     fn active_state(label: &str) -> (std::path::PathBuf, ProjectState, ProjectInstanceId) {
@@ -827,7 +825,7 @@ mod tests {
         let updated_result = updated.result.as_ref().unwrap();
         assert_eq!(updated_result.publication_revision, 2);
         let patch = match &updated_result.deltas[0].payload {
-            crate::graph::document::ResourceDocumentPatch::Variable(patch) => patch,
+            yss_project_history::ResourceDocumentPatch::Variable(patch) => patch,
             payload => panic!("unexpected variable payload: {payload:?}"),
         };
         assert_eq!(patch.before.as_ref().unwrap()["name"], "global");

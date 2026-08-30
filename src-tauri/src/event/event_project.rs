@@ -103,20 +103,20 @@ mod tests {
     fn resource_lifecycle_delta_serializes_explicit_optional_states() {
         let operation_id =
             yss_project_identity::OperationId::from_uuid(uuid::Uuid::from_u128(0x780));
-        let delta = crate::project::ResourceDeltaEvent {
-            resource: crate::project::ResourceKey::Graph(
+        let delta = yss_project_history::ResourceDeltaEvent {
+            resource: yss_project_history::ResourceKey::Graph(
                 yss_graph_document::GraphResourcePath::new("events/Created.yssbi-event").unwrap(),
             ),
             from_revision: yss_project_identity::ResourceRevision::INITIAL,
             to_revision: yss_project_identity::ResourceRevision::new(1),
             caused_by: Some(operation_id),
-            payload: crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
-                crate::project::ResourceLifecyclePatch {
+            payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                yss_project_history::ResourceLifecyclePatch {
                     before: None,
-                    after: Some(crate::project::ResourceLifecycleState {
+                    after: Some(yss_project_history::ResourceLifecycleState {
                         revision: yss_project_identity::ResourceRevision::INITIAL,
                         path: "events/Created.yssbi-event".into(),
-                        kind: crate::project::ResourceLifecycleKind::Event,
+                        kind: yss_project_history::ResourceLifecycleKind::Event,
                         name: "Created".into(),
                     }),
                 },
@@ -150,16 +150,18 @@ mod tests {
     fn worksheet_document_delta_uses_common_resource_delta_wire() {
         let operation_id =
             yss_project_identity::OperationId::from_uuid(uuid::Uuid::from_u128(0x781));
-        let delta = crate::project::ResourceDeltaEvent {
-            resource: crate::project::ResourceKey::Worksheet(crate::project::WorksheetResourceKey(
-                "worksheets/Sales Report.yssbi-worksheet".into(),
-            )),
+        let delta = yss_project_history::ResourceDeltaEvent {
+            resource: yss_project_history::ResourceKey::Worksheet(
+                yss_project_history::WorksheetResourceKey(
+                    "worksheets/Sales Report.yssbi-worksheet".into(),
+                ),
+            ),
             from_revision: yss_project_identity::ResourceRevision::new(4),
             to_revision: yss_project_identity::ResourceRevision::new(5),
             caused_by: Some(operation_id),
-            payload: crate::project::history::ResourceDocumentPatch::Worksheet(
-                crate::project::WorksheetDocumentPatch {
-                    before: crate::project::WorksheetDocumentState {
+            payload: yss_project_history::ResourceDocumentPatch::Worksheet(
+                yss_project_history::WorksheetDocumentPatch {
+                    before: yss_project_history::WorksheetDocumentState {
                         database_id: "database-before".into(),
                         chart_type: "histogram".into(),
                         encodings: yss_worksheet_document::WorksheetEncodings {
@@ -167,7 +169,7 @@ mod tests {
                             y: None,
                         },
                     },
-                    after: crate::project::WorksheetDocumentState {
+                    after: yss_project_history::WorksheetDocumentState {
                         database_id: "database-after".into(),
                         chart_type: "scatter".into(),
                         encodings: yss_worksheet_document::WorksheetEncodings {
@@ -212,20 +214,22 @@ mod tests {
     fn worksheet_lifecycle_delta_carries_rust_derived_name() {
         let operation_id =
             yss_project_identity::OperationId::from_uuid(uuid::Uuid::from_u128(0x782));
-        let delta = crate::project::ResourceDeltaEvent {
-            resource: crate::project::ResourceKey::Worksheet(crate::project::WorksheetResourceKey(
-                "worksheets/Sales Report.yssbi-worksheet".into(),
-            )),
+        let delta = yss_project_history::ResourceDeltaEvent {
+            resource: yss_project_history::ResourceKey::Worksheet(
+                yss_project_history::WorksheetResourceKey(
+                    "worksheets/Sales Report.yssbi-worksheet".into(),
+                ),
+            ),
             from_revision: yss_project_identity::ResourceRevision::INITIAL,
             to_revision: yss_project_identity::ResourceRevision::new(1),
             caused_by: Some(operation_id),
-            payload: crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
-                crate::project::ResourceLifecyclePatch {
+            payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                yss_project_history::ResourceLifecyclePatch {
                     before: None,
-                    after: Some(crate::project::ResourceLifecycleState {
+                    after: Some(yss_project_history::ResourceLifecycleState {
                         revision: yss_project_identity::ResourceRevision::INITIAL,
                         path: "worksheets/Sales Report.yssbi-worksheet".into(),
-                        kind: crate::project::ResourceLifecycleKind::Worksheet,
+                        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
                         name: "Sales Report".into(),
                     }),
                 },
@@ -258,18 +262,20 @@ mod tests {
             moves: vec![ResourceMoveDto {
                 from: "worksheets/Old.yssbi-worksheet".into(),
                 to: "worksheets/New.yssbi-worksheet".into(),
-                kind: crate::project::ResourceLifecycleKind::Worksheet,
+                kind: yss_project_history::ResourceLifecycleKind::Worksheet,
                 name: "New".into(),
             }],
-            deltas: vec![crate::project::ResourceDeltaEvent {
-                resource: crate::project::ResourceKey::Worksheet(
-                    crate::project::WorksheetResourceKey("worksheets/New.yssbi-worksheet".into()),
+            deltas: vec![yss_project_history::ResourceDeltaEvent {
+                resource: yss_project_history::ResourceKey::Worksheet(
+                    yss_project_history::WorksheetResourceKey(
+                        "worksheets/New.yssbi-worksheet".into(),
+                    ),
                 ),
                 from_revision: yss_project_identity::ResourceRevision::new(2),
                 to_revision: yss_project_identity::ResourceRevision::new(3),
                 caused_by: None,
-                payload: crate::project::history::ResourceDocumentPatch::ResourceMove(
-                    crate::project::ResourcePathMovePatch {
+                payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
+                    yss_project_history::ResourcePathMovePatch {
                         from: "worksheets/Old.yssbi-worksheet".into(),
                         to: "worksheets/New.yssbi-worksheet".into(),
                     },
@@ -318,7 +324,7 @@ mod tests {
             moves: vec![ResourceMoveDto {
                 from: "events/Old.yssbi-event".into(),
                 to: "events/New.yssbi-event".into(),
-                kind: crate::project::ResourceLifecycleKind::Event,
+                kind: yss_project_history::ResourceLifecycleKind::Event,
                 name: "New".into(),
             }],
             deltas: Vec::new(),
@@ -357,7 +363,7 @@ mod tests {
                     "functions/Observable.yssbi-function".into(),
                 ],
             },
-            history: crate::project::HistoryStatusDto {
+            history: yss_project_history::HistoryStatusDto {
                 can_undo: true,
                 can_redo: false,
             },

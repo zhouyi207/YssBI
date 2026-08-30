@@ -21,7 +21,6 @@ use super::graph_contracts::{
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
 use crate::project::project_writers::ProjectSaveResult;
-use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectFilesystemError};
 use std::collections::BTreeMap;
 use yss_execution::plan::{
@@ -34,6 +33,7 @@ use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
+use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Debug, Error)]
@@ -45,7 +45,7 @@ pub enum ResourceMutationApplicationError {
     #[error("graph resource mutation conflicted")]
     Mutation(#[source] MutationConflict),
     #[error("project history mutation conflicted")]
-    History(#[source] crate::project::ProjectHistoryMutationError),
+    History(#[source] yss_project_history::ProjectHistoryMutationError),
     #[error("graph operation capture failed")]
     GraphOperation(
         #[source] crate::project::project_state::graph_operation::ProjectGraphOperationError,

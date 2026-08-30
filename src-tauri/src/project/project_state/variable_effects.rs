@@ -77,7 +77,7 @@ pub(in crate::project) fn variable_history_scope(
     } else {
         &snapshots.before
     };
-    let key = crate::project::VariableResourceKey(format!("variables/{id}").into());
+    let key = yss_project_history::VariableResourceKey(format!("variables/{id}").into());
     let snapshot = opposite
         .get(&key)
         .and_then(Option::as_ref)

@@ -1,7 +1,7 @@
 use crate::application::editor_projection::EditorProjectionModel;
 use crate::project::FunctionEditorProjection;
-use crate::project::{ResourceDeltaEvent, ResourceLifecycleKind};
 use yss_graph_document::GraphResourcePath;
+use yss_project_history::{ResourceDeltaEvent, ResourceLifecycleKind};
 use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_registry_contract::ProjectRecord;
 

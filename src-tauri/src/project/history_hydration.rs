@@ -1,12 +1,15 @@
 use crate::project::{
-    GraphDocumentKind, HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectData,
-    ProjectDocumentState, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectHistory,
-    ProjectHistoryMutationError, ProjectHistoryTransaction, ProjectSession, ResourceKey,
-    VariableDocument, VariableResourceKey, WorksheetResourceKey,
+    GraphDocumentKind, ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet,
+    ProjectSession,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_graph_document::GraphResourcePath;
+use yss_project_history::{
+    HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectDocumentState,
+    ProjectHistory, ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
+    VariableDocument, VariableResourceKey, WorksheetResourceKey,
+};
 use yss_project_identity::{HistoryEntryId, ResourceRevision};
 use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEET_EXTENSION};
 use yss_variable_contract::{VariableInstance, VariableScope};
@@ -148,8 +151,8 @@ pub(super) fn discover_touched_resources(
             .before
             .as_ref()
             .or(lifecycle.forward.after.as_ref());
-        if let Some(state) =
-            state.filter(|state| state.kind == crate::project::ResourceLifecycleKind::Worksheet)
+        if let Some(state) = state
+            .filter(|state| state.kind == yss_project_history::ResourceLifecycleKind::Worksheet)
         {
             touched
                 .worksheets
@@ -466,7 +469,7 @@ fn hydrate_graph_document(
     );
     if let Some(function) = disk.function {
         snapshot.documents.functions.insert(
-            crate::project::FunctionResourceKey(graph_path.as_str().into()),
+            yss_project_history::FunctionResourceKey(graph_path.as_str().into()),
             function,
         );
     }
@@ -610,7 +613,7 @@ fn install_touched_worksheet_tombstone(
     let Some(lifecycle) = &snapshot.transaction.resource_lifecycle else {
         return Ok(());
     };
-    let crate::project::ResourceLifecycleHistoryPayload::Worksheet { document } =
+    let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { document } =
         &lifecycle.payload
     else {
         return Ok(());
@@ -623,7 +626,7 @@ fn install_touched_worksheet_tombstone(
         .ok_or_else(|| {
             ProjectHistoryMutationError::History("resource lifecycle patch is empty".into())
         })?;
-    if state.kind != crate::project::ResourceLifecycleKind::Worksheet {
+    if state.kind != yss_project_history::ResourceLifecycleKind::Worksheet {
         return Err(ProjectHistoryMutationError::History(
             "worksheet lifecycle payload has a non-worksheet kind".into(),
         ));
@@ -732,7 +735,8 @@ pub(super) fn durable_filesystem_mutations(
         push_worksheet_filesystem_mutation(&mut mutations, &prepared.after, key)?;
     }
     if let Some(lifecycle) = &prepared.transaction.resource_lifecycle {
-        if let crate::project::ResourceLifecycleHistoryPayload::Worksheet { .. } = lifecycle.payload
+        if let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. } =
+            lifecycle.payload
         {
             let state = lifecycle
                 .forward
@@ -883,7 +887,7 @@ fn insert_graph_residency(
 fn authoritative_or_patched_variable(
     data: &ProjectData,
     key: &VariableResourceKey,
-    change: &crate::project::ResourcePatch,
+    change: &yss_project_history::ResourcePatch,
     undo: bool,
 ) -> Result<VariableInstance, String> {
     let id_text = key
@@ -897,7 +901,7 @@ fn authoritative_or_patched_variable(
         return Ok(variable.clone());
     }
 
-    let crate::project::history::ResourceDocumentPatch::Variable(patch) = &change.forward else {
+    let yss_project_history::ResourceDocumentPatch::Variable(patch) = &change.forward else {
         return Err(format!("Variable '{}' has no scoped document patch", key.0));
     };
     let present_side = if undo {
@@ -943,16 +947,14 @@ fn insert_local_variable_owner(
 #[cfg(test)]
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
-    use crate::project::{
-        FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentKind,
-        GraphResourceDocument, ProjectData, ProjectHistoryTransaction, ResourcePatch,
-        VariableDocumentPatch, VariableResourceKey,
-    };
+    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
     use std::collections::{BTreeMap, BTreeSet};
     use yss_data_contract::{DataType, DataValue};
-    use yss_graph_document::GraphResourcePath as DocumentGraphResourcePath;
     use yss_graph_document::GraphResourcePath;
-    use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
+    use yss_project_history::{
+        FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, ProjectHistoryTransaction,
+        ResourcePatch, VariableDocumentPatch, VariableResourceKey,
+    };
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
@@ -966,10 +968,6 @@ mod tests {
 
     fn function_path() -> GraphResourcePath {
         GraphResourcePath::new(FUNCTION_PATH).unwrap()
-    }
-
-    fn document_graph_path(path: &GraphResourcePath) -> DocumentGraphResourcePath {
-        path.clone()
     }
 
     fn variable_id() -> VariableId {
@@ -1011,18 +1009,13 @@ mod tests {
     }
 
     #[test]
-    fn resolves_graph_function_and_local_variable_to_exact_opaque_graph_paths() {
+    fn resolves_function_and_local_variable_to_exact_opaque_graph_paths() {
         let local = variable(VariableScope::Event {
             event_path: EVENT_PATH.into(),
         });
         let transaction = ProjectHistoryTransaction::new(
             OperationId::new(),
             vec![
-                ResourcePatch::graph(
-                    document_graph_path(&event_path()),
-                    yss_graph_document::GraphRevision::INITIAL,
-                    GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
-                ),
                 ResourcePatch::function(
                     FunctionResourceKey(FUNCTION_PATH.into()),
                     ResourceRevision::INITIAL,
@@ -1080,18 +1073,13 @@ mod tests {
     }
 
     #[test]
-    fn deduplicates_graph_touched_by_graph_function_and_local_variable_patches() {
+    fn deduplicates_graph_touched_by_function_and_local_variable_patches() {
         let local = variable(VariableScope::Function {
             function_path: FUNCTION_PATH.into(),
         });
         let transaction = ProjectHistoryTransaction::new(
             OperationId::new(),
             vec![
-                ResourcePatch::graph(
-                    document_graph_path(&function_path()),
-                    yss_graph_document::GraphRevision::INITIAL,
-                    GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
-                ),
                 ResourcePatch::function(
                     FunctionResourceKey(FUNCTION_PATH.into()),
                     ResourceRevision::INITIAL,

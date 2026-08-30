@@ -1,12 +1,7 @@
 use crate::project::resource_patch::ResourceDocumentPatch;
-use crate::project::{FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey};
 use crate::project::{
     GraphDocument, ProjectData, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectSession, ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
-};
-use crate::project::{
-    HistoryStatusDto, ResourceDeltaEvent, ResourceLifecycleKind, ResourceLifecyclePatch,
-    ResourceLifecycleState, ResourcePathMovePatch, WorksheetDocumentPatch, WorksheetDocumentState,
 };
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
@@ -14,6 +9,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
+use yss_project_history::{
+    FunctionResourceKey, HistoryStatusDto, ResourceDeltaEvent, ResourceKey, ResourceLifecycleKind,
+    ResourceLifecyclePatch, ResourceLifecycleState, ResourcePathMovePatch, VariableResourceKey,
+    WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
+};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
@@ -88,7 +88,7 @@ pub(crate) struct ProjectResourceMutationFacts {
     project_instance_id: ProjectInstanceId,
     publication_revision: u64,
     moves: Box<[ProjectResourceMove]>,
-    deltas: Box<[crate::project::ResourceDeltaEvent]>,
+    deltas: Box<[yss_project_history::ResourceDeltaEvent]>,
     projection_status: ProjectProjectionStatus,
     history: ProjectHistoryStatus,
 }
@@ -99,7 +99,7 @@ impl ProjectResourceMutationFacts {
         project_instance_id: ProjectInstanceId,
         publication_revision: u64,
         moves: impl Into<Box<[ProjectResourceMove]>>,
-        deltas: impl Into<Box<[crate::project::ResourceDeltaEvent]>>,
+        deltas: impl Into<Box<[yss_project_history::ResourceDeltaEvent]>>,
         projection_status: ProjectProjectionStatus,
         history: ProjectHistoryStatus,
     ) -> Self {
@@ -119,7 +119,7 @@ impl ProjectResourceMutationFacts {
 pub(crate) struct ProjectResourceMove {
     pub(crate) from: Box<str>,
     pub(crate) to: Box<str>,
-    pub(crate) kind: crate::project::ResourceLifecycleKind,
+    pub(crate) kind: yss_project_history::ResourceLifecycleKind,
     pub(crate) name: Box<str>,
 }
 
@@ -147,7 +147,7 @@ impl ProjectResourceMutationFacts {
         ProjectInstanceId,
         u64,
         Box<[ProjectResourceMove]>,
-        Box<[crate::project::ResourceDeltaEvent]>,
+        Box<[yss_project_history::ResourceDeltaEvent]>,
         ProjectProjectionStatus,
         ProjectHistoryStatus,
     ) {
@@ -203,7 +203,7 @@ impl ProjectResourceMutationFacts {
                         .collect(),
                 },
             },
-            history: crate::project::HistoryStatusDto {
+            history: yss_project_history::HistoryStatusDto {
                 can_undo: self.history.can_undo,
                 can_redo: self.history.can_redo,
             },
@@ -224,8 +224,8 @@ impl GlobalVariableMutationResult {
 
 fn worksheet_document_state(
     document: &WorksheetDocument,
-) -> crate::project::WorksheetDocumentState {
-    crate::project::WorksheetDocumentState {
+) -> yss_project_history::WorksheetDocumentState {
+    yss_project_history::WorksheetDocumentState {
         database_id: document.database_id.clone(),
         chart_type: document.chart_type.clone(),
         encodings: document.encodings.clone(),
@@ -235,11 +235,11 @@ fn worksheet_document_state(
 fn worksheet_lifecycle_state(
     path: &WorksheetResourcePath,
     revision: ResourceRevision,
-) -> crate::project::ResourceLifecycleState {
-    crate::project::ResourceLifecycleState {
+) -> yss_project_history::ResourceLifecycleState {
+    yss_project_history::ResourceLifecycleState {
         revision,
         path: path.as_str().into(),
-        kind: crate::project::ResourceLifecycleKind::Worksheet,
+        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
         name: path.display_name().as_str().to_string(),
     }
 }
@@ -250,14 +250,14 @@ fn worksheet_move_delta(
     operation_id: OperationId,
     from_revision: ResourceRevision,
     to_revision: ResourceRevision,
-) -> crate::project::ResourceDeltaEvent {
-    crate::project::ResourceDeltaEvent {
+) -> yss_project_history::ResourceDeltaEvent {
+    yss_project_history::ResourceDeltaEvent {
         resource: worksheet_key(to),
         from_revision,
         to_revision,
         caused_by: Some(operation_id),
-        payload: crate::project::history::ResourceDocumentPatch::ResourceMove(
-            crate::project::ResourcePathMovePatch {
+        payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
+            yss_project_history::ResourcePathMovePatch {
                 from: from.as_str().into(),
                 to: to.as_str().into(),
             },
@@ -271,13 +271,13 @@ fn worksheet_resource_delta(
     retained_revision: Option<ResourceRevision>,
     before: Option<&WorksheetDocument>,
     after: Option<&WorksheetDocument>,
-) -> Result<crate::project::ResourceDeltaEvent, ProjectFilesystemError> {
+) -> Result<yss_project_history::ResourceDeltaEvent, ProjectFilesystemError> {
     let (from_revision, to_revision, payload) = match (before, after) {
         (Some(before), Some(after)) => (
             before.revision,
             after.revision,
-            crate::project::history::ResourceDocumentPatch::Worksheet(
-                crate::project::WorksheetDocumentPatch {
+            yss_project_history::ResourceDocumentPatch::Worksheet(
+                yss_project_history::WorksheetDocumentPatch {
                     before: worksheet_document_state(before),
                     after: worksheet_document_state(after),
                 },
@@ -286,8 +286,8 @@ fn worksheet_resource_delta(
         (None, Some(after)) => (
             retained_revision.unwrap_or(after.revision),
             after.revision,
-            crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
-                crate::project::ResourceLifecyclePatch {
+            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                yss_project_history::ResourceLifecyclePatch {
                     before: None,
                     after: Some(worksheet_lifecycle_state(path, after.revision)),
                 },
@@ -296,8 +296,8 @@ fn worksheet_resource_delta(
         (Some(before), None) => (
             before.revision,
             super::project_state::checked_resource_revision(path.as_str(), before.revision)?,
-            crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
-                crate::project::ResourceLifecyclePatch {
+            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                yss_project_history::ResourceLifecyclePatch {
                     before: Some(worksheet_lifecycle_state(path, before.revision)),
                     after: None,
                 },
@@ -305,7 +305,7 @@ fn worksheet_resource_delta(
         ),
         (None, None) => unreachable!("a worksheet resource delta must change a document"),
     };
-    Ok(crate::project::ResourceDeltaEvent {
+    Ok(yss_project_history::ResourceDeltaEvent {
         resource: worksheet_key(path),
         from_revision,
         to_revision,
@@ -360,17 +360,17 @@ enum GlobalVariableMutation {
 enum StagedGlobalVariableMutation {
     Create {
         variable: VariableInstance,
-        history_patch: crate::project::ResourcePatch,
+        history_patch: yss_project_history::ResourcePatch,
     },
     Update {
         variable: VariableInstance,
         expected_revision: ResourceRevision,
-        history_patch: crate::project::ResourcePatch,
+        history_patch: yss_project_history::ResourcePatch,
     },
     Delete {
         variable: VariableInstance,
         expected_revision: ResourceRevision,
-        history_patch: crate::project::ResourcePatch,
+        history_patch: yss_project_history::ResourcePatch,
     },
 }
 
@@ -395,7 +395,7 @@ impl StagedGlobalVariableMutation {
         }
     }
 
-    fn history_patch(&self) -> &crate::project::ResourcePatch {
+    fn history_patch(&self) -> &yss_project_history::ResourcePatch {
         match self {
             Self::Create { history_patch, .. }
             | Self::Update { history_patch, .. }
@@ -620,7 +620,6 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use super::set_writer_snapshot_test_hook;
-    use crate::graph::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
         ProjectFilesystemFaultPoint, ProjectState, fixtures,
@@ -629,6 +628,7 @@ mod tests {
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
+    use yss_project_history::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEETS_DIR};
     use yss_resource_naming::ResourceName;
@@ -994,7 +994,7 @@ mod tests {
         assert_eq!(result.moves[0].name, "Renamed");
         assert_eq!(
             result.moves[0].kind,
-            crate::project::ResourceLifecycleKind::Worksheet
+            yss_project_history::ResourceLifecycleKind::Worksheet
         );
         assert_eq!(result.deltas.len(), 1);
         assert_eq!(result.deltas[0].resource, super::worksheet_key(&target));
@@ -1003,7 +1003,7 @@ mod tests {
         assert_eq!(result.deltas[0].caused_by, Some(operation_id));
         assert_eq!(
             result.history,
-            crate::project::HistoryStatusDto {
+            yss_project_history::HistoryStatusDto {
                 can_undo: true,
                 can_redo: false,
             }
@@ -1216,8 +1216,7 @@ mod tests {
         result: &crate::schema::application_event::ResourceMutationResultDto,
     ) -> WorksheetResourcePath {
         let delta = result.deltas.first().expect("worksheet lifecycle delta");
-        let crate::project::history::ResourceDocumentPatch::ResourceLifecycle(patch) =
-            &delta.payload
+        let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(patch) = &delta.payload
         else {
             panic!("expected worksheet lifecycle delta");
         };
@@ -1254,7 +1253,7 @@ mod tests {
         assert_eq!(result.operation_id, operation_id);
         assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
         assert_eq!(result.deltas[0].to_revision, ResourceRevision::INITIAL);
-        let crate::project::history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+        let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
             &result.deltas[0].payload
         else {
             panic!("expected worksheet lifecycle delta");
@@ -1339,10 +1338,10 @@ mod tests {
         assert_eq!(result.operation_id, operation_id);
         assert!(matches!(
             result.deltas.as_slice(),
-            [crate::project::ResourceDeltaEvent {
+            [yss_project_history::ResourceDeltaEvent {
                 from_revision,
                 to_revision,
-                payload: crate::project::history::ResourceDocumentPatch::Worksheet(_),
+                payload: yss_project_history::ResourceDocumentPatch::Worksheet(_),
                 ..
             }] if *from_revision == ResourceRevision::INITIAL
                 && *to_revision == ResourceRevision::new(1)
@@ -1381,7 +1380,7 @@ mod tests {
         assert_eq!(result.operation_id, operation_id);
         assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
         assert_eq!(result.deltas[0].to_revision, ResourceRevision::new(1));
-        let crate::project::history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+        let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
             &result.deltas[0].payload
         else {
             panic!("expected worksheet lifecycle delta");
@@ -1431,7 +1430,7 @@ mod tests {
         assert_eq!(worksheet_path_from_lifecycle_result(&recreated), path);
         assert_eq!(recreated.deltas[0].from_revision, ResourceRevision::new(1));
         assert_eq!(recreated.deltas[0].to_revision, ResourceRevision::new(2));
-        let crate::project::history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+        let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
             &recreated.deltas[0].payload
         else {
             panic!("expected worksheet lifecycle delta");

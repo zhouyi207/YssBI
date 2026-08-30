@@ -181,7 +181,7 @@ impl ProjectState {
                     graph_path.as_str(),
                     target.as_str(),
                 );
-                let key = ResourceKey::Variable(crate::project::VariableResourceKey(
+                let key = ResourceKey::Variable(yss_project_history::VariableResourceKey(
                     format!("variables/{id}").into(),
                 ));
                 affected_resources.push(key.clone());

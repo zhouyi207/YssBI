@@ -1011,15 +1011,15 @@ impl ProjectState {
                         to: target.as_str().to_owned().into(),
                         kind: match source.kind {
                             crate::project::GraphDocumentKind::Event => {
-                                crate::project::ResourceLifecycleKind::Event
+                                yss_project_history::ResourceLifecycleKind::Event
                             }
                             crate::project::GraphDocumentKind::Function => {
-                                crate::project::ResourceLifecycleKind::Function
+                                yss_project_history::ResourceLifecycleKind::Function
                             }
                         },
                         name: source.name.into_boxed_str(),
                     }],
-                    Vec::<crate::project::ResourceDeltaEvent>::new(),
+                    Vec::<yss_project_history::ResourceDeltaEvent>::new(),
                     ProjectProjectionStatus::Incomplete {
                         invalidated_graph_paths: invalidated
                             .into_iter()
@@ -1311,7 +1311,7 @@ fn resource_lifecycle_result(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .resource_revision,
         Vec::<ProjectResourceMove>::new(),
-        Vec::<crate::project::ResourceDeltaEvent>::new(),
+        Vec::<yss_project_history::ResourceDeltaEvent>::new(),
         ProjectProjectionStatus::Incomplete {
             invalidated_graph_paths: resident
                 .then(|| vec![path.clone()])
@@ -1339,7 +1339,7 @@ fn resource_removal_result(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .resource_revision,
         Vec::<ProjectResourceMove>::new(),
-        Vec::<crate::project::ResourceDeltaEvent>::new(),
+        Vec::<yss_project_history::ResourceDeltaEvent>::new(),
         ProjectProjectionStatus::Incomplete {
             invalidated_graph_paths: vec![path.clone()].into_boxed_slice(),
         },

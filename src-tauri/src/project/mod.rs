@@ -4,7 +4,6 @@ pub mod execution_authority;
 pub mod filesystem;
 pub mod function_editor_projection;
 pub mod graph_resource_index;
-pub mod history;
 mod history_hydration;
 pub mod path_format;
 pub mod project_change;
@@ -37,18 +36,6 @@ pub mod worksheet_io;
 pub use filesystem::*;
 pub use function_editor_projection::*;
 pub use graph_resource_index::*;
-pub use history::{
-    DatabaseDocumentPatch, DatabaseResourceKey, FunctionDocument, FunctionDocumentPatch,
-    FunctionParameter, FunctionResourceKey, FunctionSignature, HistoryError, HistoryMutation,
-    HistoryPersistencePolicy, HistoryStatusDto, MutationRequest, ProjectDocumentState,
-    ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency, ProjectHistory,
-    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceDeltaEvent, ResourceKey,
-    ResourceKind, ResourceLifecycleHistoryPatch, ResourceLifecycleHistoryPayload,
-    ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState,
-    ResourceMoveHistoryPatch, ResourceMoveHistoryPayload, ResourcePatch, ResourcePathMovePatch,
-    VariableDocument, VariableDocumentPatch, VariableEffectHistorySnapshots, VariableResourceKey,
-    WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
-};
 pub use path_format::*;
 pub use project_change::*;
 pub use project_data::*;

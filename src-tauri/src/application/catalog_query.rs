@@ -666,7 +666,9 @@ fn map_graph_catalog_error(_: GraphRuntimeCatalogError) -> CatalogQueryApplicati
     GraphCatalogQueryError::CompatibleSourceInvalid.into()
 }
 
-fn graph_signature(signature: crate::project::FunctionSignature) -> Result<FunctionSignature, ()> {
+fn graph_signature(
+    signature: yss_project_history::FunctionSignature,
+) -> Result<FunctionSignature, ()> {
     let parameters = signature
         .parameters
         .iter()

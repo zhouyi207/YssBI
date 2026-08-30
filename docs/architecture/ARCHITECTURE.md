@@ -121,6 +121,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
 | `src-tauri/crates/yss-project-identity/` | 独立 Pure Leaf：project instance/registration/session/root/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior |
+| `src-tauri/crates/yss-project-history/` | 独立 Project 层：mutation envelope、resource/document patch、undo/redo transaction 与内存 document state machine 的唯一 owner；不持有 filesystem、publication、transport 或 Graph edit adapter |
 | `src-tauri/crates/yss-project-layout/` | 独立且无依赖的 Pure Leaf：project 磁盘目录、文件名、扩展名与 index-input 相对路径分类的唯一 canonical owner；不持有 I/O、schema、watcher 或 workflow |
 | `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
 | `src-tauri/crates/yss-project-registry-contract/` | 独立 Pure Leaf：project registration record、root identity state 与异步 persistence port/error 的唯一 canonical owner；registry workflow 留在 Project，SQLite 实现留在 Backend Adapter |
@@ -354,6 +355,8 @@ yss-resource-naming
   → yss-graph-document
 yss-project-identity
   → yss-project-registry-contract → Project/Application/Transport/Backend Adapter
+yss-project-identity + yss-graph-document + yss-worksheet-document + yss-database-contract
+  → yss-project-history → Project hydration/authority → Application/Commands/Transport
 yss-display-naming
   → Project/Application database and variable display-name allocation
 yss-project-progress
@@ -368,6 +371,7 @@ yss-resource-naming + yss-project-identity
 - `yss-computation-settings`：统一拥有持久化 numeric tolerance、missing-value policy、校验错误和 settings mutation envelopes。Project manifest 读取显式执行 fail-closed validation，嵌套 settings wire 拒绝未知字段；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
 - `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
 - `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Worksheet 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
+- `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
 - `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire 与资源路径；`worksheets/*.yssbi-worksheet` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。

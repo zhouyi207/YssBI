@@ -5,7 +5,6 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::MutationRequest;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
 use crate::schema::ProjectSaveResultDto;
@@ -13,6 +12,7 @@ use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 #[cfg(all(test, any()))]
 use yss_graph_document::GraphResourcePath;
+use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -285,7 +285,7 @@ pub(super) fn update_function_signature_with_emitter<R: EmitOutcome>(
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: &str,
-    request: MutationRequest<crate::project::FunctionDocumentPatch>,
+    request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
     mut emit: impl FnMut(Event) -> R,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let path = parse_graph_path(function_path)?;
@@ -307,7 +307,7 @@ pub fn update_function_signature(
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: String,
-    request: MutationRequest<crate::project::FunctionDocumentPatch>,
+    request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
         .update_function_signature(

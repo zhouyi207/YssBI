@@ -77,7 +77,7 @@ impl ProjectState {
         .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         if applied.history_id != history_id {
             return Err(ProjectHistoryMutationError::History(
-                crate::project::HistoryError::HistoryHeadChanged
+                yss_project_history::HistoryError::HistoryHeadChanged
                     .to_string()
                     .into(),
             ));
@@ -172,7 +172,7 @@ impl ProjectState {
             };
             if current_head.map(|entry| &entry.history_id) != Some(&history_id) {
                 return Err(ProjectHistoryMutationError::History(
-                    crate::project::HistoryError::HistoryHeadChanged
+                    yss_project_history::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -189,7 +189,7 @@ impl ProjectState {
             .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
             if applied.history_id != history_id {
                 return Err(ProjectHistoryMutationError::History(
-                    crate::project::HistoryError::HistoryHeadChanged
+                    yss_project_history::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -206,7 +206,7 @@ impl ProjectState {
             let deltas = transaction
                 .changes
                 .iter()
-                .map(|change| crate::project::ResourceDeltaEvent {
+                .map(|change| yss_project_history::ResourceDeltaEvent {
                     resource: change.resource.clone(),
                     from_revision: project_document_revision(&before, &change.resource),
                     to_revision: project_document_revision(&current_documents, &change.resource),
@@ -273,12 +273,13 @@ impl ProjectState {
         let move_patch = transaction.resource_move.ok_or_else(|| {
             ProjectHistoryMutationError::History("resource move history patch is missing".into())
         })?;
-        if move_patch.kind != crate::project::ResourceLifecycleKind::Worksheet {
+        if move_patch.kind != yss_project_history::ResourceLifecycleKind::Worksheet {
             return Err(ProjectHistoryMutationError::History(
                 "worksheet move history has a non-worksheet kind".into(),
             ));
         }
-        let crate::project::ResourceMoveHistoryPayload::Worksheet { document } = move_patch.payload
+        let yss_project_history::ResourceMoveHistoryPayload::Worksheet { document } =
+            move_patch.payload
         else {
             return Err(ProjectHistoryMutationError::History(
                 "worksheet move history has a non-worksheet payload".into(),
@@ -333,8 +334,9 @@ impl ProjectState {
                     format!("worksheet '{}' has no revision authority", source.as_str()).into(),
                 )
             })?;
-        let expected_resource =
-            ResourceKey::Worksheet(crate::project::WorksheetResourceKey(source.as_str().into()));
+        let expected_resource = ResourceKey::Worksheet(yss_project_history::WorksheetResourceKey(
+            source.as_str().into(),
+        ));
         if request.resource != expected_resource {
             return Err(ProjectHistoryMutationError::ResourceMismatch {
                 requested: format!("{:?}", request.resource).into(),
@@ -354,10 +356,10 @@ impl ProjectState {
             session,
             operation_id: request.operation_id,
             affected_resources: vec![ResourceKey::Worksheet(
-                crate::project::WorksheetResourceKey(source.as_str().into()),
+                yss_project_history::WorksheetResourceKey(source.as_str().into()),
             )],
             expected_revisions: [(
-                ResourceKey::Worksheet(crate::project::WorksheetResourceKey(
+                ResourceKey::Worksheet(yss_project_history::WorksheetResourceKey(
                     source.as_str().into(),
                 )),
                 current_revision,
@@ -365,7 +367,7 @@ impl ProjectState {
             .into_iter()
             .collect(),
             expected_absent_resources: [ResourceKey::Worksheet(
-                crate::project::WorksheetResourceKey(target.as_str().into()),
+                yss_project_history::WorksheetResourceKey(target.as_str().into()),
             )]
             .into_iter()
             .collect(),
@@ -418,7 +420,7 @@ impl ProjectState {
         let move_patch = transaction.resource_move.ok_or_else(|| {
             ProjectHistoryMutationError::History("resource move history patch is missing".into())
         })?;
-        let crate::project::ResourceMoveHistoryPayload::Graph {
+        let yss_project_history::ResourceMoveHistoryPayload::Graph {
             persisted_move_payload,
         } = move_patch.payload
         else {
@@ -547,7 +549,7 @@ impl ProjectState {
                 let Some(current) = data.variables.get(&id) else {
                     continue;
                 };
-                let key = ResourceKey::Variable(crate::project::VariableResourceKey(
+                let key = ResourceKey::Variable(yss_project_history::VariableResourceKey(
                     format!("variables/{id}").into(),
                 ));
                 affected_resources.push(key.clone());

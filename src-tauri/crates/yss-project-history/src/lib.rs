@@ -3,8 +3,6 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision};
-#[cfg(test)]
-use yss_graph_document_edit::{DocumentError, GraphDocumentPatch};
 use yss_project_identity::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
 use yss_worksheet_document::{WorksheetDocument, WorksheetEncodings};
 
@@ -261,8 +259,6 @@ impl DatabaseDocumentPatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
-    #[cfg(test)]
-    Graph(GraphDocumentPatch),
     Function(FunctionDocumentPatch),
     Worksheet(WorksheetDocumentPatch),
     ResourceLifecycle(ResourceLifecyclePatch),
@@ -275,11 +271,6 @@ pub enum ResourceDocumentPatch {
 impl ResourceDocumentPatch {
     pub const fn kind(&self) -> ResourceKind {
         match self {
-            #[cfg(test)]
-            Self::Graph(_) | Self::ResourceLifecycle(_) | Self::ResourceMove(_) => {
-                ResourceKind::Graph
-            }
-            #[cfg(not(test))]
             Self::ResourceLifecycle(_) | Self::ResourceMove(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
             Self::Worksheet(_) => ResourceKind::Worksheet,
@@ -290,8 +281,6 @@ impl ResourceDocumentPatch {
 
     pub fn inverse(&self) -> Self {
         match self {
-            #[cfg(test)]
-            Self::Graph(patch) => Self::Graph(patch.inverse()),
             Self::Function(patch) => Self::Function(patch.inverse()),
             Self::Worksheet(patch) => Self::Worksheet(patch.inverse()),
             Self::ResourceLifecycle(patch) => Self::ResourceLifecycle(patch.inverse()),
@@ -317,23 +306,6 @@ fn candidate_after_revision(before: ResourceRevision) -> ResourceRevision {
 }
 
 impl ResourcePatch {
-    #[cfg(test)]
-    pub fn graph(
-        graph_path: GraphResourcePath,
-        before_revision: GraphRevision,
-        forward: GraphDocumentPatch,
-    ) -> Self {
-        let inverse = forward.inverse();
-        let before_revision = ResourceRevision::from_graph_revision(before_revision);
-        Self {
-            resource: ResourceKey::Graph(graph_path),
-            before_revision,
-            after_revision: candidate_after_revision(before_revision),
-            forward: ResourceDocumentPatch::Graph(forward),
-            inverse: ResourceDocumentPatch::Graph(inverse),
-        }
-    }
-
     pub fn function(
         function_key: FunctionResourceKey,
         before_revision: ResourceRevision,
@@ -469,19 +441,6 @@ impl ProjectHistoryTransaction {
             resource_lifecycle: None,
             resource_move: None,
         }
-    }
-
-    #[cfg(test)]
-    pub fn graph(
-        caused_by: OperationId,
-        graph_path: GraphResourcePath,
-        before_revision: GraphRevision,
-        forward: GraphDocumentPatch,
-    ) -> Self {
-        Self::new(
-            caused_by,
-            vec![ResourcePatch::graph(graph_path, before_revision, forward)],
-        )
     }
 
     pub fn graph_change(caused_by: OperationId, change: ProjectGraphHistoryChange) -> Self {
@@ -649,11 +608,6 @@ pub enum HistoryError {
         retained: u64,
     },
     InvalidInverse(ResourceKey),
-    #[cfg(test)]
-    Patch {
-        resource: ResourceKey,
-        source: DocumentError,
-    },
     NothingToUndo,
     NothingToRedo,
     HistoryHeadChanged,
@@ -742,10 +696,6 @@ impl fmt::Display for HistoryError {
                     formatter,
                     "resource {resource:?} has an invalid inverse patch"
                 )
-            }
-            #[cfg(test)]
-            Self::Patch { resource, source } => {
-                write!(formatter, "resource {resource:?} patch failed: {source}")
             }
             Self::NothingToUndo => formatter.write_str("there is no transaction to undo"),
             Self::NothingToRedo => formatter.write_str("there is no transaction to redo"),
@@ -1141,16 +1091,6 @@ fn apply_resource_patch(
     }
 
     match (resource, patch) {
-        #[cfg(all(test, any()))]
-        (ResourceKey::Graph(path), ResourceDocumentPatch::Graph(patch)) => state
-            .graphs
-            .get_mut(path)
-            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
-            .apply_patch(patch)
-            .map_err(|retained| HistoryError::RevisionExhausted {
-                resource: Some(resource.clone()),
-                retained,
-            }),
         (ResourceKey::Function(key), ResourceDocumentPatch::Function(patch)) => state
             .functions
             .get_mut(key)
@@ -1264,34 +1204,31 @@ mod wire_tests {
     use super::*;
     use serde_json::json;
     use uuid::Uuid;
-    use yss_graph_document::GraphResourcePath;
 
     #[test]
     fn resource_delta_wire_is_camel_case() {
         let caused_by = OperationId::from_uuid(Uuid::from_u128(905));
         let delta = ResourceDeltaEvent {
-            resource: ResourceKey::Graph(
-                GraphResourcePath::new("events/Main.yssbi-event").unwrap(),
-            ),
+            resource: ResourceKey::Variable(VariableResourceKey("variables/main".into())),
             from_revision: ResourceRevision::new(4),
             to_revision: ResourceRevision::new(5),
             caused_by: Some(caused_by),
-            payload: ResourceDocumentPatch::Graph(GraphDocumentPatch::new([])),
+            payload: ResourceDocumentPatch::Variable(VariableDocumentPatch::default()),
         };
 
         assert_eq!(
             serde_json::to_value(delta).unwrap(),
             json!({
                 "resource": {
-                    "kind": "graph",
-                    "key": "events/Main.yssbi-event"
+                    "kind": "variable",
+                    "key": "variables/main"
                 },
                 "fromRevision": 4,
                 "toRevision": 5,
                 "causedBy": "00000000-0000-0000-0000-000000000389",
                 "payload": {
-                    "kind": "graph",
-                    "patch": { "operations": [] }
+                    "kind": "variable",
+                    "patch": { "before": null, "after": null }
                 }
             })
         );

@@ -663,13 +663,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::mutation::MutationConflict::ReferencedResourceUnavailable",
             "yss_graph_editor::mutation::MutationConflict::Document",
             "yss_graph_editor::mutation::MutationConflict::Editor",
-            "yssbi_lib::project::history::ProjectHistoryMutationError",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::History",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::Projection",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::RecoveryRequired",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::ResourceMismatch",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::StaleProjectLifecycle",
-            "yssbi_lib::project::history::ProjectHistoryMutationError::StaleRevision",
+            "yss_project_history::ProjectHistoryMutationError",
+            "yss_project_history::ProjectHistoryMutationError::History",
+            "yss_project_history::ProjectHistoryMutationError::Projection",
+            "yss_project_history::ProjectHistoryMutationError::RecoveryRequired",
+            "yss_project_history::ProjectHistoryMutationError::ResourceMismatch",
+            "yss_project_history::ProjectHistoryMutationError::StaleProjectLifecycle",
+            "yss_project_history::ProjectHistoryMutationError::StaleRevision",
             "yssbi_lib::project::project_state::graph_operation::ProjectGraphOperationError",
             "yssbi_lib::project::project_state::graph_operation::ProjectGraphOperationError::GraphUnavailable",
             "yssbi_lib::project::project_state::graph_operation::ProjectGraphOperationError::ProjectIdentityMismatch",
@@ -718,7 +718,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::EditorGraphMutation",
             "yss_graph_editor::mutation::EditorGraphMutation",
             "yss_graph_document::NodeId",
-            "yssbi_lib::project::history::MutationRequest",
+            "yss_project_history::MutationRequest",
             "yssbi_lib::schema::application_event::GraphMutationResultDto",
             "yssbi_lib::schema::catalog::NodeCreationDescriptorDto",
             "yssbi_lib::schema::editor_projection::map_editor_projection",
@@ -794,9 +794,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::event_project::EventProject::ResourceMutationCommitted",
             "yssbi_lib::schema::application_event::resource_mutation_to_transport",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
-            "yssbi_lib::project::history::HistoryMutation",
-            "yssbi_lib::project::history::HistoryStatusDto",
-            "yssbi_lib::project::history::MutationRequest",
+            "yss_project_history::HistoryMutation",
+            "yss_project_history::HistoryStatusDto",
+            "yss_project_history::MutationRequest",
         ],
     },
     InternalDependencyCapability {
@@ -816,7 +816,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event_result",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::project::history::MutationRequest",
+            "yss_project_history::MutationRequest",
             "yssbi_lib::project::project_writers::ProjectSaveResult",
             "yssbi_lib::project::project_io::GraphDocumentKind",
             "yssbi_lib::project::project_io::GraphDocumentKind::Event",
@@ -824,7 +824,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
             "yssbi_lib::schema::application_event::resource_mutation_to_transport",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
-            "yssbi_lib::project::history::FunctionDocumentPatch",
+            "yss_project_history::FunctionDocumentPatch",
         ],
     },
     InternalDependencyCapability {
@@ -1287,11 +1287,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::project_query::ProjectActivation",
             "yss_graph_document_edit::GraphDocumentPatch",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yssbi_lib::project::history::ResourceRevision",
-            "yssbi_lib::project::history::HistoryStatusDto",
-            "yssbi_lib::project::history::ResourceDeltaEvent",
-            "yssbi_lib::project::history::ResourceKey",
-            "yssbi_lib::project::history::ResourceLifecycleKind",
+            "yss_project_history::HistoryStatusDto",
+            "yss_project_history::ResourceDeltaEvent",
+            "yss_project_history::ResourceKey",
+            "yss_project_history::ResourceLifecycleKind",
         ],
     },
     InternalDependencyCapability {
@@ -1463,8 +1462,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/schema/project.rs",
         fully_qualified_owner: "yssbi_lib::schema::project",
         canonical_origin_targets: &[
-            "yssbi_lib::project::history::HistoryStatusDto",
-            "yssbi_lib::project::history::ResourceKey",
+            "yss_project_history::HistoryStatusDto",
+            "yss_project_history::ResourceKey",
             "yssbi_lib::project::project_writers::ProjectSaveResult",
         ],
     },
@@ -1734,6 +1733,8 @@ fn non_build_memberships(
             | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
+    } else if package == "yss-project-history" {
+        layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {
         layers.insert(exact_layer.unwrap_or(RustLayer::Graph));
     } else if matches!(

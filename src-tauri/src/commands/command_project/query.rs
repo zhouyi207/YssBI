@@ -249,15 +249,15 @@ fn map_project_query_error(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::graph::document::{
-        EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
-        MutationRequest, ResourceKey,
-    };
     use crate::project::ProjectData;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document::GraphRevision;
+    use yss_graph_editor::EditorGraphMutation;
     use yss_graph_protocol::NodeTypeId;
+    use yss_project_history::{
+        FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, MutationRequest, ResourceKey,
+    };
     use yss_project_identity::OperationId;
     use yss_project_identity::ProjectInstanceId;
     use yss_variable_contract::VariableScope;
@@ -427,7 +427,7 @@ mod tests {
                     signature.deltas[0].resource.clone(),
                     signature.deltas[0].to_revision,
                     OperationId::new(),
-                    crate::graph::document::HistoryMutation {},
+                    yss_project_history::HistoryMutation {},
                 ),
                 {
                     let observed = std::sync::Arc::clone(&observed);
@@ -444,7 +444,7 @@ mod tests {
                     undo.deltas[0].resource.clone(),
                     undo.deltas[0].to_revision,
                     OperationId::new(),
-                    crate::graph::document::HistoryMutation {},
+                    yss_project_history::HistoryMutation {},
                 ),
                 {
                     let observed = std::sync::Arc::clone(&observed);

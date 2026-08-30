@@ -109,7 +109,7 @@ pub struct GraphMutationResultDto {
     pub project_instance_id: String,
     pub delta: GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch>,
     pub projection_replacement: GraphProjectionReplacementDto,
-    pub history: crate::project::HistoryStatusDto,
+    pub history: yss_project_history::HistoryStatusDto,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +132,7 @@ pub enum ProjectionStatusDto {
 pub struct ResourceMoveDto {
     pub from: String,
     pub to: String,
-    pub kind: crate::project::ResourceLifecycleKind,
+    pub kind: yss_project_history::ResourceLifecycleKind,
     pub name: String,
 }
 
@@ -150,10 +150,10 @@ pub struct ResourceMutationResultDto {
     pub project_instance_id: String,
     pub publication_revision: u64,
     pub moves: Vec<ResourceMoveDto>,
-    pub deltas: Vec<crate::project::ResourceDeltaEvent>,
+    pub deltas: Vec<yss_project_history::ResourceDeltaEvent>,
     pub projection_replacements: Vec<GraphProjectionReplacementDto>,
     pub projection_status: ProjectionStatusDto,
-    pub history: crate::project::HistoryStatusDto,
+    pub history: yss_project_history::HistoryStatusDto,
 }
 
 pub type ApplicationEventDto = EventProject;
@@ -186,7 +186,7 @@ pub fn graph_mutation_to_transport(
                 .as_ref()
                 .map(crate::schema::editor_projection_types::FunctionEditorProjectionDto::from),
         },
-        history: crate::project::HistoryStatusDto {
+        history: yss_project_history::HistoryStatusDto {
             can_undo: result.history.can_undo,
             can_redo: result.history.can_redo,
         },
@@ -315,7 +315,7 @@ pub(crate) fn resource_mutation_to_transport(
         deltas: mutation.deltas.clone(),
         projection_replacements: Vec::new(),
         projection_status: projection_status_to_transport(&mutation.projection_status),
-        history: crate::project::HistoryStatusDto {
+        history: yss_project_history::HistoryStatusDto {
             can_undo: mutation.history.can_undo,
             can_redo: mutation.history.can_redo,
         },
@@ -352,9 +352,9 @@ mod tests {
         ProjectLifecycleKind, ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove,
         ResourceProjectionStatus,
     };
-    use crate::project::ResourceLifecycleKind;
     use crate::schema::application_event::ResourceMutationResultDto;
     use serde_json::json;
+    use yss_project_history::ResourceLifecycleKind;
     use yss_project_identity::{OperationId, ProjectInstanceId};
 
     #[test]

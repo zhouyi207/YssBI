@@ -674,3 +674,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   唯一 owner，删除 `project_io`、registry、graph/worksheet document 与 watcher 中的布局镜像，
   并拒绝空路径、绝对路径及含 parent/root/prefix component 的不安全分类输入；I/O、schema、
   watcher delivery 与 workflow 继续留在各自层。
+- [ ] 将 project mutation envelope、resource/document patch、undo/redo transaction 与内存文档状态机迁入
+  `src-tauri/crates/yss-project-history/` Project 层；所有消费者直接依赖唯一 owner，删除根
+  `project/history.rs` 与兼容 re-export，并移除仅测试可构造、生产永远无法应用的旧 Graph patch 分支；
+  filesystem hydration、durable transaction、publication 与 transport mapping 继续留在原有层。

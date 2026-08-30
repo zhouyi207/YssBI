@@ -97,24 +97,24 @@ pub(super) fn resource_mutation_to_command_error(
             mutation_conflict_to_command_error(error)
         }
         ResourceMutationApplicationError::History(error) => match error {
-            crate::project::ProjectHistoryMutationError::StaleProjectLifecycle(_) => {
+            yss_project_history::ProjectHistoryMutationError::StaleProjectLifecycle(_) => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::project::ProjectHistoryMutationError::RecoveryRequired(_) => {
+            yss_project_history::ProjectHistoryMutationError::RecoveryRequired(_) => {
                 CommandError::expected("project_recovery_required").with_details(
                     RecoveryRequiredDetails {
                         recovery_required: true,
                     },
                 )
             }
-            crate::project::ProjectHistoryMutationError::StaleRevision { .. } => {
+            yss_project_history::ProjectHistoryMutationError::StaleRevision { .. } => {
                 CommandError::expected(revision_conflict_code)
             }
-            crate::project::ProjectHistoryMutationError::ResourceMismatch { .. } => {
+            yss_project_history::ProjectHistoryMutationError::ResourceMismatch { .. } => {
                 CommandError::expected("history_resource_mismatch")
             }
-            crate::project::ProjectHistoryMutationError::Projection(_)
-            | crate::project::ProjectHistoryMutationError::History(_) => {
+            yss_project_history::ProjectHistoryMutationError::Projection(_)
+            | yss_project_history::ProjectHistoryMutationError::History(_) => {
                 CommandError::diagnosed("history_mutation_failed", error)
             }
         },

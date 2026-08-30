@@ -1,7 +1,7 @@
 use crate::project::NormalizedProjectRoot;
-use crate::project::ResourceKey;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
+use yss_project_history::ResourceKey;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

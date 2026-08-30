@@ -134,10 +134,10 @@ impl ProjectState {
                     tags,
                 };
                 let variable = Self::stage_variable(variable)?;
-                let history_patch = crate::project::ResourcePatch::variable(
+                let history_patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         None,
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -195,10 +195,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let history_patch = crate::project::ResourcePatch::variable(
+                let history_patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&before).map_err(prepare_error)?),
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -231,10 +231,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let history_patch = crate::project::ResourcePatch::variable(
+                let history_patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                         None,
                     ),
@@ -392,7 +392,7 @@ impl ProjectState {
         }
         let patch = staged.history_patch().clone();
         {
-            let crate::project::history::ResourceDocumentPatch::Variable(document_patch) =
+            let yss_project_history::ResourceDocumentPatch::Variable(document_patch) =
                 &patch.forward
             else {
                 unreachable!("global variable mutation records a variable patch")
@@ -404,10 +404,10 @@ impl ProjectState {
             let before = document_patch.before.clone();
             let after = document_patch.after.clone();
             history.record_committed_transaction(
-                crate::project::ProjectHistoryTransaction::durable_variable_effects(
+                yss_project_history::ProjectHistoryTransaction::durable_variable_effects(
                     context.operation_id,
                     vec![patch],
-                    crate::project::VariableEffectHistorySnapshots {
+                    yss_project_history::VariableEffectHistorySnapshots {
                         before: BTreeMap::from([(variable_key.clone(), before)]),
                         after: BTreeMap::from([(variable_key, after)]),
                     },
@@ -424,7 +424,7 @@ impl ProjectState {
             ),
             publication_revision,
             moves: Box::new([]),
-            deltas: vec![crate::project::ResourceDeltaEvent {
+            deltas: vec![yss_project_history::ResourceDeltaEvent {
                 resource: history_patch.resource.clone(),
                 from_revision: history_patch.before_revision,
                 to_revision: history_patch.after_revision,
@@ -510,10 +510,10 @@ impl ProjectState {
                     tags,
                 };
                 let variable = Self::stage_variable(variable)?;
-                let patch = crate::project::ResourcePatch::variable(
+                let patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         None,
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -572,10 +572,10 @@ impl ProjectState {
                 if let Some(tags) = tags {
                     variable.tags = tags;
                 }
-                let patch = crate::project::ResourcePatch::variable(
+                let patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&before).map_err(prepare_error)?),
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
@@ -609,10 +609,10 @@ impl ProjectState {
                         ),
                     });
                 }
-                let patch = crate::project::ResourcePatch::variable(
+                let patch = yss_project_history::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{id}").into()),
                     expected_revision,
-                    crate::project::VariableDocumentPatch::new(
+                    yss_project_history::VariableDocumentPatch::new(
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                         None,
                     ),

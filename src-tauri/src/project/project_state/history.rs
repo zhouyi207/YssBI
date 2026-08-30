@@ -48,7 +48,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         locale: &str,
-        request: MutationRequest<crate::project::FunctionDocumentPatch>,
+        request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
         observe: impl FnOnce(&crate::schema::application_event::ResourceMutationResultDto),
     ) -> Result<crate::schema::application_event::ResourceMutationResultDto, MutationConflict> {
         let session = self
@@ -76,7 +76,7 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        request: MutationRequest<crate::project::FunctionDocumentPatch>,
+        request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
     ) -> Result<
         crate::project::project_writers::ProjectResourceMutationFacts,
         ProjectHistoryMutationError,
@@ -102,10 +102,10 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        request: MutationRequest<crate::project::FunctionDocumentPatch>,
+        request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
     ) -> Result<CommittedResourceMutation, ProjectHistoryMutationError> {
         self.ensure_mutation_operational()?;
-        let function_key = crate::project::FunctionResourceKey(graph_path.as_str().into());
+        let function_key = yss_project_history::FunctionResourceKey(graph_path.as_str().into());
         let expected_resource = ResourceKey::Function(function_key.clone());
         if request.resource != expected_resource {
             return Err(ProjectHistoryMutationError::ResourceMismatch {
@@ -165,9 +165,9 @@ impl ProjectState {
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         let mut documents = project_documents(&data, &revisions);
-        let transaction = crate::project::ProjectHistoryTransaction::new(
+        let transaction = yss_project_history::ProjectHistoryTransaction::new(
             request.operation_id,
-            vec![crate::project::ResourcePatch::function(
+            vec![yss_project_history::ResourcePatch::function(
                 function_key,
                 from_revision,
                 request.payload.clone(),
@@ -189,12 +189,12 @@ impl ProjectState {
             .document
             .revision = to_revision.to_graph_revision();
         graph_revisions.insert(graph_path.clone(), to_revision.to_graph_revision());
-        let deltas = vec![crate::project::ResourceDeltaEvent {
+        let deltas = vec![yss_project_history::ResourceDeltaEvent {
             resource: expected_resource,
             from_revision,
             to_revision,
             caused_by: Some(request.operation_id),
-            payload: crate::project::history::ResourceDocumentPatch::Function(request.payload),
+            payload: yss_project_history::ResourceDocumentPatch::Function(request.payload),
         }];
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
         let publication_revision = publication.commit_prepared(publication_advance);
@@ -287,7 +287,7 @@ impl ProjectState {
         undo: bool,
         request: &MutationRequest<HistoryMutation>,
         expected_history_id: &HistoryEntryId,
-        expected_persistence: crate::project::HistoryPersistencePolicy,
+        expected_persistence: yss_project_history::HistoryPersistencePolicy,
     ) -> Result<
         crate::project::history_hydration::PreparedHistoryDocuments,
         ProjectHistoryMutationError,
@@ -331,7 +331,7 @@ impl ProjectState {
                 || transaction.persistence != expected_persistence
             {
                 return Err(ProjectHistoryMutationError::History(
-                    crate::project::HistoryError::HistoryHeadChanged
+                    yss_project_history::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -448,20 +448,20 @@ impl ProjectState {
             )
         })?;
         match transaction.persistence {
-            crate::project::HistoryPersistencePolicy::DurableResourceMove => {
+            yss_project_history::HistoryPersistencePolicy::DurableResourceMove => {
                 return match transaction
                     .resource_move
                     .as_ref()
                     .map(|patch| &patch.payload)
                 {
-                    Some(crate::project::ResourceMoveHistoryPayload::Graph { .. }) => self
+                    Some(yss_project_history::ResourceMoveHistoryPayload::Graph { .. }) => self
                         .commit_graph_move_history_direction(
                             project_instance_id,
                             undo,
                             request,
                             transaction,
                         ),
-                    Some(crate::project::ResourceMoveHistoryPayload::Worksheet { .. }) => self
+                    Some(yss_project_history::ResourceMoveHistoryPayload::Worksheet { .. }) => self
                         .commit_worksheet_move_history_direction(
                             project_instance_id,
                             undo,
@@ -473,7 +473,7 @@ impl ProjectState {
                     )),
                 };
             }
-            crate::project::HistoryPersistencePolicy::DurableVariableEffects => {
+            yss_project_history::HistoryPersistencePolicy::DurableVariableEffects => {
                 return self.commit_variable_effect_history_direction(
                     project_instance_id,
                     undo,
@@ -481,22 +481,19 @@ impl ProjectState {
                     transaction,
                 );
             }
-            crate::project::HistoryPersistencePolicy::InMemoryUntilSave => {
+            yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave => {
                 self.run_history_after_routing_test_hook();
-                let touches_worksheet =
-                    transaction
-                        .resource_lifecycle
-                        .as_ref()
-                        .is_some_and(|patch| {
-                            matches!(
-                                patch.payload,
-                                crate::project::ResourceLifecycleHistoryPayload::Worksheet { .. }
-                            )
-                        })
-                        || transaction
-                            .changes
-                            .iter()
-                            .any(|change| matches!(change.resource, ResourceKey::Worksheet(_)));
+                let touches_worksheet = transaction.resource_lifecycle.as_ref().is_some_and(
+                    |patch| {
+                        matches!(
+                            patch.payload,
+                            yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. }
+                        )
+                    },
+                ) || transaction
+                    .changes
+                    .iter()
+                    .any(|change| matches!(change.resource, ResourceKey::Worksheet(_)));
                 if touches_worksheet
                     || self.history_transaction_contains_unloaded_graph(&transaction, undo)?
                 {
@@ -558,12 +555,12 @@ impl ProjectState {
         } else {
             history.next_redo()
         };
-        if routed_persistence != crate::project::HistoryPersistencePolicy::InMemoryUntilSave
+        if routed_persistence != yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave
             || live_head.map(|entry| (&entry.history_id, entry.persistence))
                 != Some((&routed_history_id, routed_persistence))
         {
             return Err(ProjectHistoryMutationError::History(
-                crate::project::HistoryError::HistoryHeadChanged
+                yss_project_history::HistoryError::HistoryHeadChanged
                     .to_string()
                     .into(),
             ));
@@ -581,7 +578,7 @@ impl ProjectState {
         let deltas = transaction
             .changes
             .iter()
-            .map(|change| crate::project::ResourceDeltaEvent {
+            .map(|change| yss_project_history::ResourceDeltaEvent {
                 resource: change.resource.clone(),
                 from_revision: project_document_revision(&before, &change.resource),
                 to_revision: project_document_revision(&documents, &change.resource),
@@ -632,9 +629,9 @@ impl ProjectState {
         request: MutationRequest<HistoryMutation>,
     ) -> Result<CommittedResourceMutation, ProjectHistoryMutationError> {
         if prepared.transaction.persistence
-            != crate::project::HistoryPersistencePolicy::InMemoryUntilSave
+            != yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave
             || prepared.basis.persistence
-                != crate::project::HistoryPersistencePolicy::InMemoryUntilSave
+                != yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave
         {
             return Err(ProjectHistoryMutationError::History(
                 "durable graph hydration requires InMemoryUntilSave History policy".into(),
@@ -661,7 +658,7 @@ impl ProjectState {
             .transaction
             .changes
             .iter()
-            .map(|change| crate::project::ResourceDeltaEvent {
+            .map(|change| yss_project_history::ResourceDeltaEvent {
                 resource: change.resource.clone(),
                 from_revision: project_document_revision(&prepared.before, &change.resource),
                 to_revision: project_document_revision(&prepared.after, &change.resource),
@@ -674,7 +671,7 @@ impl ProjectState {
             })
             .collect::<Vec<_>>();
         if let Some(lifecycle) = &prepared.transaction.resource_lifecycle {
-            if let crate::project::ResourceLifecycleHistoryPayload::Worksheet { .. } =
+            if let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. } =
                 lifecycle.payload
             {
                 let mut forward = if prepared.basis.undo {
@@ -687,7 +684,7 @@ impl ProjectState {
                     .as_ref()
                     .or(forward.after.as_ref())
                     .expect("validated lifecycle History has one state");
-                let worksheet_key = crate::project::WorksheetResourceKey(state.path.clone());
+                let worksheet_key = yss_project_history::WorksheetResourceKey(state.path.clone());
                 let resource = ResourceKey::Worksheet(worksheet_key.clone());
                 let from_revision = prepared.before.worksheet_revisions[&worksheet_key];
                 let to_revision = prepared.after.worksheet_revisions[&worksheet_key];
@@ -697,14 +694,12 @@ impl ProjectState {
                 if let Some(after) = forward.after.as_mut() {
                     after.revision = to_revision;
                 }
-                deltas.push(crate::project::ResourceDeltaEvent {
+                deltas.push(yss_project_history::ResourceDeltaEvent {
                     from_revision,
                     to_revision,
                     resource,
                     caused_by: Some(request.operation_id),
-                    payload: crate::project::history::ResourceDocumentPatch::ResourceLifecycle(
-                        forward,
-                    ),
+                    payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(forward),
                 });
             }
         }
@@ -781,7 +776,7 @@ impl ProjectState {
                 != Some((&prepared.basis.history_id, prepared.basis.persistence))
             {
                 return Err(ProjectHistoryMutationError::History(
-                    crate::project::HistoryError::HistoryHeadChanged
+                    yss_project_history::HistoryError::HistoryHeadChanged
                         .to_string()
                         .into(),
                 ));
@@ -943,7 +938,7 @@ pub(in crate::project) fn project_documents(
             .filter_map(|(path, graph)| {
                 graph.function.clone().map(|function| {
                     (
-                        crate::project::FunctionResourceKey(path.as_str().into()),
+                        yss_project_history::FunctionResourceKey(path.as_str().into()),
                         function,
                     )
                 })
@@ -961,8 +956,8 @@ pub(in crate::project) fn project_documents(
                     None
                 };
                 Some((
-                    crate::project::VariableResourceKey(format!("variables/{id}").into()),
-                    crate::project::VariableDocument {
+                    yss_project_history::VariableResourceKey(format!("variables/{id}").into()),
+                    yss_project_history::VariableDocument {
                         revision: entry.revision,
                         value,
                     },
@@ -975,7 +970,7 @@ pub(in crate::project) fn project_documents(
         .iter()
         .map(|(path, document)| {
             (
-                crate::project::WorksheetResourceKey(path.as_str().into()),
+                yss_project_history::WorksheetResourceKey(path.as_str().into()),
                 document.clone(),
             )
         })
@@ -1034,7 +1029,7 @@ pub(in crate::project) fn replace_project_documents(
         if let Some(document) = documents.graphs.remove(&key) {
             graph.document = document;
         }
-        let function_key = crate::project::FunctionResourceKey(path.as_str().into());
+        let function_key = yss_project_history::FunctionResourceKey(path.as_str().into());
         if let Some(function) = documents.functions.remove(&function_key) {
             graph.function = Some(function);
         }

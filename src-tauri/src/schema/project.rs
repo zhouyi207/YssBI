@@ -9,9 +9,9 @@ pub struct ProjectSaveResultDto {
     pub project_instance_id: String,
     pub operation_id: yss_project_identity::OperationId,
     pub publication_revision: u64,
-    pub affected_resources: Vec<crate::project::ResourceKey>,
+    pub affected_resources: Vec<yss_project_history::ResourceKey>,
     pub index_invalidated: bool,
-    pub history: crate::project::HistoryStatusDto,
+    pub history: yss_project_history::HistoryStatusDto,
 }
 
 impl From<ProjectSaveResult> for ProjectSaveResultDto {
@@ -30,7 +30,7 @@ impl From<ProjectSaveResult> for ProjectSaveResultDto {
             publication_revision,
             affected_resources: affected_resources.into_vec(),
             index_invalidated,
-            history: crate::project::HistoryStatusDto {
+            history: yss_project_history::HistoryStatusDto {
                 can_undo: history.can_undo,
                 can_redo: history.can_redo,
             },

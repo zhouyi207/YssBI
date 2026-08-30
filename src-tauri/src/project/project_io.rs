@@ -74,7 +74,7 @@ pub struct GraphDocument {
     #[serde(default)]
     pub revision: yss_project_identity::ResourceRevision,
     pub document: NodeGraphDocument,
-    pub function: Option<crate::project::FunctionDocument>,
+    pub function: Option<yss_project_history::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
 }
 
@@ -105,7 +105,7 @@ pub struct ProjectGraphIndexEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_revision: Option<yss_project_identity::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_signature: Option<crate::project::FunctionSignature>,
+    pub function_signature: Option<yss_project_history::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_editor_projection: Option<crate::project::FunctionEditorProjection>,
 }
@@ -168,7 +168,7 @@ pub struct ProjectIndex {
     #[serde(skip)]
     pub(crate) authority_generation: u64,
     #[serde(default)]
-    pub history: crate::project::HistoryStatusDto,
+    pub history: yss_project_history::HistoryStatusDto,
     pub project_name: String,
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
@@ -579,7 +579,7 @@ struct GraphFileHeader {
     name: String,
     #[serde(default)]
     revision: yss_project_identity::ResourceRevision,
-    function: Option<crate::project::FunctionDocument>,
+    function: Option<yss_project_history::FunctionDocument>,
 }
 
 fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> {
@@ -591,7 +591,7 @@ fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> 
 fn validate_function_shape(
     path: &Path,
     kind: GraphDocumentKind,
-    function: Option<&crate::project::FunctionDocument>,
+    function: Option<&yss_project_history::FunctionDocument>,
 ) -> Result<(), ProjectError> {
     match (kind, function) {
         (GraphDocumentKind::Function, None) => Err(ProjectError::InvalidProjectFormat(format!(
@@ -1272,9 +1272,10 @@ mod tests {
 
         let event_file = root.join(event_path.as_str());
         let mut event_value: serde_json::Value = read_json(&event_file).unwrap();
-        event_value["function"] =
-            serde_json::to_value(crate::project::FunctionDocument::new(Default::default()))
-                .unwrap();
+        event_value["function"] = serde_json::to_value(yss_project_history::FunctionDocument::new(
+            Default::default(),
+        ))
+        .unwrap();
         write_json(&event_file, &event_value).unwrap();
         let unexpected =
             load_project_graph_from_file(root.to_string_lossy().as_ref(), &event_path).unwrap_err();

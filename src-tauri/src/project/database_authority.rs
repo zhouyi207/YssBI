@@ -190,7 +190,7 @@ impl ProjectState {
         before: Option<DatabaseDecl>,
         after: Option<DatabaseDecl>,
     ) -> crate::project::project_writers::ProjectResourceMutationFacts {
-        use crate::project::history::{
+        use yss_project_history::{
             DatabaseDocumentPatch, DatabaseResourceKey, ResourceDeltaEvent, ResourceDocumentPatch,
             ResourceKey,
         };

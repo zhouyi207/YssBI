@@ -961,6 +961,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-math/src/lib.rs"),
     };
+    let project_history_root = ProductionRoot {
+        package_id: "project-history-package".to_owned(),
+        package: "yss-project-history".to_owned(),
+        target: "yss_project_history".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-project-history/src/lib.rs"),
+    };
     let tabular_contract_root = ProductionRoot {
         package_id: "tabular-contract-package".to_owned(),
         package: "yss-tabular-contract".to_owned(),
@@ -1008,6 +1015,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_type_mapping_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
+        project_history_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
         window_state_root.clone(),
@@ -1125,6 +1133,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_math",
             ),
             module(
+                &project_history_root,
+                "src-tauri/crates/yss-project-history/src/lib.rs",
+                "yss_project_history",
+            ),
+            module(
                 &tabular_contract_root,
                 "src-tauri/crates/yss-tabular-contract/src/lib.rs",
                 "yss_tabular_contract",
@@ -1232,6 +1245,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-project-history/src/lib.rs"],
+        RustLayer::Project
     );
     assert_eq!(
         classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
@@ -3215,6 +3232,120 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
 }
 
 #[test]
+fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_graph_patch() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-history/Cargo.toml",
+        "src-tauri/crates/yss-project-history/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project history owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/project/history.rs").exists(),
+        "the root crate must not retain a second project-history owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-history\"",
+        "yss-project-history = { path = \"./crates/yss-project-history\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    assert!(
+        !workspace_manifest
+            .contains("yss-project-history = { path = \"./crates/yss-project-history\", features"),
+        "project history must not restore a test-only ghost API through feature unification"
+    );
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-history/Cargo.toml"))
+            .expect("project history manifest must be readable");
+    assert!(
+        !manifest.contains("yss-graph-document-edit") && !manifest.contains("test-support"),
+        "project history must not depend on Graph editing solely to preserve a dead test API"
+    );
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-history/src/lib.rs"))
+            .expect("project history owner must be readable");
+    for contract in [
+        "pub struct MutationRequest",
+        "pub enum ResourceKey",
+        "pub struct ResourcePatch",
+        "pub struct ProjectHistoryTransaction",
+        "pub struct ProjectDocumentState",
+        "pub enum HistoryError",
+        "pub struct ProjectHistory",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project history crate must own canonical contract or behavior '{contract}'"
+        );
+    }
+    for forbidden in [
+        "std::fs",
+        "tauri",
+        "crate::project",
+        "cfg(all(test, any()))",
+        "GraphDocumentPatch",
+        "ResourceDocumentPatch::Graph",
+        "pub fn graph(",
+    ] {
+        assert!(
+            !owner.contains(forbidden),
+            "project history must not restore deprecated or adapter coupling '{forbidden}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "pub mod history;",
+        "pub use history::",
+        "pub use yss_project_history",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "Project must not restore project-history compatibility facade '{facade}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/application/resource_mutation.rs",
+        "src-tauri/src/project/history_hydration.rs",
+        "src-tauri/src/project/project_state.rs",
+        "src-tauri/src/schema/application_event.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_history"),
+            "{relative} must consume the canonical project history owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::history::"),
+            "{relative} must not restore the removed root history path"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-project-history\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "project history must be classified as Project behavior, not as a Pure Leaf"
+    );
+}
+
+#[test]
 fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     let root = repository_root();
     for relative in [
@@ -3317,7 +3448,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     for relative in [
         "src-tauri/src/application/worksheet.rs",
         "src-tauri/src/commands/command_worksheet.rs",
-        "src-tauri/src/project/history.rs",
+        "src-tauri/crates/yss-project-history/src/lib.rs",
         "src-tauri/src/project/history_hydration.rs",
         "src-tauri/src/project/project_activation.rs",
         "src-tauri/src/project/project_data.rs",

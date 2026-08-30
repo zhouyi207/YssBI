@@ -1,0 +1,18 @@
+[package]
+name = "yss-project-history"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+yss-database-contract = { path = "../yss-database-contract" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-worksheet-document = { path = "../yss-worksheet-document" }
+
+[dev-dependencies]
+uuid.workspace = true

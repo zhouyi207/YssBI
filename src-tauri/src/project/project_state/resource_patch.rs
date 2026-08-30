@@ -7,7 +7,7 @@ pub(super) struct CommittedResourceMutation {
     pub(in crate::project::project_state) publication_revision: u64,
     pub(in crate::project::project_state) moves:
         Vec<crate::project::project_writers::ProjectResourceMove>,
-    pub(in crate::project::project_state) deltas: Vec<crate::project::ResourceDeltaEvent>,
+    pub(in crate::project::project_state) deltas: Vec<yss_project_history::ResourceDeltaEvent>,
     pub(in crate::project::project_state) history:
         crate::project::project_writers::ProjectHistoryStatus,
     pub(in crate::project::project_state) expected_graph_paths: Vec<String>,
@@ -84,7 +84,7 @@ impl CommittedResourceMutation {
                 name: value.name.to_string(),
             })
             .collect();
-        let history = crate::project::HistoryStatusDto {
+        let history = yss_project_history::HistoryStatusDto {
             can_undo: history.can_undo,
             can_redo: history.can_redo,
         };
@@ -203,10 +203,10 @@ impl ProjectState {
                     to: to.as_str().into(),
                     kind: match moved.kind {
                         crate::project::GraphDocumentKind::Event => {
-                            crate::project::ResourceLifecycleKind::Event
+                            yss_project_history::ResourceLifecycleKind::Event
                         }
                         crate::project::GraphDocumentKind::Function => {
-                            crate::project::ResourceLifecycleKind::Function
+                            yss_project_history::ResourceLifecycleKind::Function
                         }
                     },
                     name: moved.name.clone().into_boxed_str(),
@@ -215,7 +215,7 @@ impl ProjectState {
                     vec![crate::project::project_writers::ProjectResourceMove {
                         from: from.as_str().into(),
                         to: to.as_str().into(),
-                        kind: crate::project::ResourceLifecycleKind::Worksheet,
+                        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
                         name: to.display_name().as_str().into(),
                     }]
                 }
@@ -232,7 +232,7 @@ impl ProjectState {
                     referenced_variables_before,
                     referenced_variables,
                     ..
-                } => Some(crate::project::ProjectHistoryTransaction::graph_move(
+                } => Some(yss_project_history::ProjectHistoryTransaction::graph_move(
                     context.operation_id,
                     from.clone(),
                     to.clone(),
@@ -471,7 +471,7 @@ impl ProjectState {
             } else if deltas.iter().any(|delta| {
                 !matches!(
                     &delta.payload,
-                    crate::project::history::ResourceDocumentPatch::ResourceLifecycle(_)
+                    yss_project_history::ResourceDocumentPatch::ResourceLifecycle(_)
                 )
             }) {
                 let changes = deltas
@@ -479,10 +479,10 @@ impl ProjectState {
                     .filter(|delta| {
                         !matches!(
                             &delta.payload,
-                            crate::project::history::ResourceDocumentPatch::ResourceLifecycle(_)
+                            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(_)
                         )
                     })
-                    .map(|delta| crate::project::ResourcePatch {
+                    .map(|delta| yss_project_history::ResourcePatch {
                         resource: delta.resource.clone(),
                         before_revision: delta.from_revision,
                         after_revision: delta.to_revision,
@@ -491,7 +491,10 @@ impl ProjectState {
                     })
                     .collect::<Vec<_>>();
                 history.record_committed_transaction(
-                    crate::project::ProjectHistoryTransaction::new(context.operation_id, changes),
+                    yss_project_history::ProjectHistoryTransaction::new(
+                        context.operation_id,
+                        changes,
+                    ),
                 );
             }
             let history = history.status();

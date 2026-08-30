@@ -7,7 +7,6 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::MutationRequest;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
 use crate::schema::application_event::GraphMutationResultDto;
@@ -19,6 +18,7 @@ use yss_graph_document::NodeId;
 #[cfg(all(test, any()))]
 use yss_graph_editor::ClipboardSubgraph;
 use yss_graph_editor::EditorGraphMutation;
+use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
 
 #[cfg(all(test, any()))]

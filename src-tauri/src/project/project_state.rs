@@ -8,10 +8,6 @@ use crate::project::{
     ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
     StagedFilesystemMutation, load_project_graph_from_file,
 };
-use crate::project::{
-    HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
-    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
-};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use yss_computation_settings::{
@@ -20,6 +16,10 @@ use yss_computation_settings::{
 };
 use yss_graph_document::GraphResourcePath;
 use yss_graph_document::NodeId;
+use yss_project_history::{
+    HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
+    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
+};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};

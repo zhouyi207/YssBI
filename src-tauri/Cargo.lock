@@ -9308,6 +9308,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-history"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "yss-database-contract",
+ "yss-graph-document",
+ "yss-project-identity",
+ "yss-worksheet-document",
+]
+
+[[package]]
 name = "yss-project-identity"
 version = "0.1.0"
 dependencies = [
@@ -9474,6 +9488,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-math",
+ "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-progress",

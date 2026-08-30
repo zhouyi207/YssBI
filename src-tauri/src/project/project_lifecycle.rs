@@ -475,7 +475,6 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::graph::document::{MutationRequest, ResourceKey};
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemFaultPoint,
         fixtures, load_project_from_file,
@@ -486,6 +485,7 @@ mod tests {
     use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
     use yss_graph_protocol::NodeTypeId;
+    use yss_project_history::{MutationRequest, ResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_variable_contract::VariableScope;
 
@@ -553,7 +553,7 @@ mod tests {
         state: &ProjectState,
         graph_path: &GraphResourcePath,
         before_data: &serde_json::Value,
-        before_history: crate::project::HistoryStatusDto,
+        before_history: yss_project_history::HistoryStatusDto,
         before_lengths: (usize, usize),
         before_head: Option<yss_project_identity::HistoryEntryId>,
         before_revisions: &(

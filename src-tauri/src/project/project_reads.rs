@@ -68,7 +68,7 @@ struct ProjectIndexAuthorityCapture {
     project_instance_id: String,
     publication_revision: u64,
     authority_generation: u64,
-    history: crate::project::HistoryStatusDto,
+    history: yss_project_history::HistoryStatusDto,
     data: ProjectData,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,

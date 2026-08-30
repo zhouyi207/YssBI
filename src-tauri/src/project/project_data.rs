@@ -1,10 +1,10 @@
 use super::{GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata};
-use crate::project::{FunctionDocument, FunctionSignature};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::GraphDocument;
+use yss_project_history::{FunctionDocument, FunctionSignature};
 use yss_variable_contract::{VariableId, VariableInstance};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
