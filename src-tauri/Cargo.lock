@@ -9246,6 +9246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-type-mapping"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-graph-protocol",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9365,6 +9374,7 @@ dependencies = [
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-resource-contract",
+ "yss-graph-type-mapping",
  "yss-math",
  "yss-sci",
  "yss-tabular-contract",

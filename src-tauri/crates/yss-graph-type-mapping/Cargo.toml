@@ -1,0 +1,11 @@
+[package]
+name = "yss-graph-type-mapping"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }

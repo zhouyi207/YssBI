@@ -621,3 +621,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Graph document invariant、atomic patch、candidate staging 与 edit error 迁入
   `src-tauri/crates/yss-graph-document-edit/`；根 crate 不保留兼容 re-export，并删除零调用的
   `address_is_complete` helper，保持 `document → document-edit → editor → runtime` 单向依赖。
+- [ ] 将 persisted `DataType` 到 Graph `TypeExpr` 的 canonical typed conversion 迁入
+  `src-tauri/crates/yss-graph-type-mapping/` Pure Leaf；editor/runtime 直接消费该 crate，并由架构
+  门禁禁止两套逐 variant 映射表回流。

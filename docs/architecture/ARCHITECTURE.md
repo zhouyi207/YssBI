@@ -114,6 +114,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
+| `src-tauri/crates/yss-graph-type-mapping/` | 独立 Pure Leaf：persisted `DataType` 到 Graph `TypeExpr` 的唯一 typed conversion owner |
 | `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
@@ -321,6 +322,8 @@ Graph 与 Execution 的依赖方向是：
 ```text
 yss-data-contract + yss-graph-document
   → yss-graph-resource-contract
+yss-data-contract + yss-graph-protocol
+  → yss-graph-type-mapping → Graph editor/runtime
 yss-graph-document + yss-graph-protocol
   → yss-graph-document-edit → Graph editor/runtime
 yss-graph-document + yss-graph-protocol + yss-canonical-hash
@@ -339,6 +342,7 @@ yss-graph-resource-contract
 - `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
+- `yss-graph-type-mapping`：持久化 `DataType` 到 Graph `TypeExpr` 的唯一 Pure Leaf 映射；editor 与 runtime 不再各自维护分支表。
 - `yss-graph-analysis`：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner；analysis input 只接收实际参与结果的 document 与 compilation basis，不保留无效 settings/catalog 参数。
 - `yss-graph-compiler`：revision 校验、neutral document lowering、Graph-owned immutable package 与 compile error 的唯一 owner；成功直接返回 package，不保留恒为 `Some` 的 report、空 diagnostics 或重复 basis。
 - `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。

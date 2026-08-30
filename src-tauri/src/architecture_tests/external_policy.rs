@@ -377,6 +377,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-graph-type-mapping",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-graph-protocol",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",

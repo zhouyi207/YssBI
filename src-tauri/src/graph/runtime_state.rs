@@ -15,11 +15,10 @@ use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
 };
 use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
-use yss_graph_protocol::{
-    NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
-};
+use yss_graph_protocol::{NodeTypeId, PortDirection, PortInstances, PortKind, TypeExpr};
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_graph_type_mapping::type_expr_from_data_type;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);
@@ -367,9 +366,9 @@ impl GraphRuntimeState {
             if let Some(resource) = node.parameters.values().find_map(serde_json::Value::as_str) {
                 let resource = GraphResourceId::new(resource.to_owned().into_boxed_str());
                 if let Some(variable) = catalog.variable_contract(&resource) {
-                    value_type = data_type_to_type_expr(variable.data_type())?;
+                    value_type = type_expr_from_data_type(variable.data_type()).ok()?;
                 } else if source_is_database(node.node_type.as_str(), &resource, catalog) {
-                    value_type = concrete_type("tabular.dataframe")?;
+                    value_type = type_expr_from_data_type(&DataType::DataFrame).ok()?;
                 }
             }
         }
@@ -418,7 +417,7 @@ impl GraphRuntimeState {
                 if let Some(variable) = catalog
                     .variable_contract(&GraphResourceId::new(resource.resource_path.as_str()))
                 {
-                    let Some(value_type) = data_type_to_type_expr(variable.data_type()) else {
+                    let Ok(value_type) = type_expr_from_data_type(variable.data_type()) else {
                         return candidates;
                     };
                     for candidate in &mut candidates {
@@ -430,7 +429,7 @@ impl GraphRuntimeState {
             }
             ResourceBoundCreateArgs::Database => {
                 if node_type.as_str() == "yssbi.dataframe.source.get" {
-                    if let Some(value_type) = concrete_type("tabular.dataframe") {
+                    if let Ok(value_type) = type_expr_from_data_type(&DataType::DataFrame) {
                         for candidate in &mut candidates {
                             if is_unresolved(&candidate.value_type, &candidate.type_parameters) {
                                 candidate.value_type = value_type.clone();
@@ -457,7 +456,7 @@ impl GraphRuntimeState {
                         Some(PortCandidate {
                             direction: arguments.direction,
                             kind: arguments.kind,
-                            value_type: data_type_to_type_expr(data_type)?,
+                            value_type: type_expr_from_data_type(data_type).ok()?,
                             type_parameters: Box::new([]),
                         })
                     }));
@@ -470,7 +469,7 @@ impl GraphRuntimeState {
                         .find(|port| port.key.as_str() == "results"),
                     signature.result(),
                 ) {
-                    if let Some(value_type) = data_type_to_type_expr(data_type) {
+                    if let Ok(value_type) = type_expr_from_data_type(data_type) {
                         candidates.push(PortCandidate {
                             direction: results.direction,
                             kind: results.kind,
@@ -539,41 +538,6 @@ fn is_unresolved(
             .any(|argument| is_unresolved(argument, parameters)),
         TypeExpr::Unknown => true,
     }
-}
-
-fn data_type_to_type_expr(data_type: &DataType) -> Option<TypeExpr> {
-    match data_type {
-        DataType::Boolean => concrete_type("core.bool"),
-        DataType::Int64 => concrete_type("core.int64"),
-        DataType::Float64 => concrete_type("core.float64"),
-        DataType::String => concrete_type("core.string"),
-        DataType::Date => concrete_type("core.date"),
-        DataType::Datetime => concrete_type("core.datetime"),
-        DataType::Time => concrete_type("core.time"),
-        DataType::Categorical => concrete_type("core.categorical"),
-        DataType::Object => concrete_type("core.object"),
-        DataType::DataFrame => concrete_type("tabular.dataframe"),
-        DataType::Struct(id) => concrete_type(id),
-        DataType::Array(element) => applied_type("core.array", element),
-        DataType::DataSeries(element) => applied_type("core.data_series", element),
-        DataType::OneOf(values) => values
-            .iter()
-            .map(data_type_to_type_expr)
-            .collect::<Option<Vec<_>>>()
-            .map(TypeExpr::Union),
-        DataType::Any => Some(TypeExpr::Unknown),
-    }
-}
-
-fn concrete_type(value: &str) -> Option<TypeExpr> {
-    TypeId::new(value).ok().map(TypeExpr::Concrete)
-}
-
-fn applied_type(constructor: &str, element: &DataType) -> Option<TypeExpr> {
-    Some(TypeExpr::Applied {
-        constructor: TypeConstructorId::new(constructor).ok()?,
-        arguments: vec![data_type_to_type_expr(element)?],
-    })
 }
 
 fn source_is_database(

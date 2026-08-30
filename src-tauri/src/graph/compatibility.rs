@@ -9,7 +9,7 @@ use yss_graph_document::{
 };
 use yss_graph_protocol::{
     ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
-    TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
+    TypeExpr, TypeParameterId,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_variable_contract::VariableScope;
@@ -346,7 +346,7 @@ pub(crate) fn refine_source_type(
     };
     match resource {
         CatalogMutationResource::Variable { data_type, .. } => {
-            if let Ok(value_type) = data_type_to_type_expr(&data_type) {
+            if let Ok(value_type) = editor_type_expr(&data_type) {
                 source.value_type = value_type;
             }
         }
@@ -583,59 +583,24 @@ fn resource_type_override(
 ) -> Result<Option<TypeExpr>, String> {
     match resource {
         Some(CatalogMutationResource::Variable { data_type, .. }) => {
-            data_type_to_type_expr(data_type).map(Some)
+            editor_type_expr(data_type).map(Some)
         }
         Some(CatalogMutationResource::Database { .. })
             if node_type == "yssbi.dataframe.source.get" =>
         {
-            Ok(Some(concrete_type("tabular.dataframe")?))
+            editor_type_expr(&DataType::DataFrame).map(Some)
         }
         _ => Ok(None),
     }
 }
 
 pub(crate) fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
-    let data_type = type_name
-        .parse::<DataType>()
-        .map_err(|error| error.to_string())?;
-    data_type_to_type_expr(&data_type)
-}
-
-pub(crate) fn data_type_to_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
-    match data_type {
-        DataType::Boolean => concrete_type("core.bool"),
-        DataType::Int64 => concrete_type("core.int64"),
-        DataType::Float64 => concrete_type("core.float64"),
-        DataType::String => concrete_type("core.string"),
-        DataType::Date => concrete_type("core.date"),
-        DataType::Datetime => concrete_type("core.datetime"),
-        DataType::Time => concrete_type("core.time"),
-        DataType::Categorical => concrete_type("core.categorical"),
-        DataType::Object => concrete_type("core.object"),
-        DataType::DataFrame => concrete_type("tabular.dataframe"),
-        DataType::Struct(semantic_id) => concrete_type(semantic_id),
-        DataType::Array(element) => applied_type("core.array", element),
-        DataType::DataSeries(element) => applied_type("core.data_series", element),
-        DataType::OneOf(values) => values
-            .iter()
-            .map(data_type_to_type_expr)
-            .collect::<Result<Vec<_>, _>>()
-            .map(TypeExpr::Union),
-        DataType::Any => Ok(TypeExpr::Unknown),
-    }
-}
-
-fn concrete_type(semantic_id: &str) -> Result<TypeExpr, String> {
-    TypeId::new(semantic_id)
-        .map(TypeExpr::Concrete)
+    yss_graph_type_mapping::type_expr_from_data_type_name(type_name)
         .map_err(|error| error.to_string())
 }
 
-fn applied_type(constructor: &str, element: &DataType) -> Result<TypeExpr, String> {
-    Ok(TypeExpr::Applied {
-        constructor: TypeConstructorId::new(constructor).map_err(|error| error.to_string())?,
-        arguments: vec![data_type_to_type_expr(element)?],
-    })
+fn editor_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
+    yss_graph_type_mapping::type_expr_from_data_type(data_type).map_err(|error| error.to_string())
 }
 
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {

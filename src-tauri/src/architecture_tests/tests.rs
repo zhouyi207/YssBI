@@ -357,6 +357,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-type-mapping"
+                && root.target == "yss_graph_type_mapping"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-registry"
                 && root.target == "yss_graph_registry"
                 && root.kind == ProductionRootKind::Library)
@@ -677,6 +685,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_type_mapping"
+                    && alias.member_package == "yss-graph-type-mapping"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-type-mapping"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_graph_registry"
                     && alias.member_package == "yss-graph-registry"
             })
@@ -914,6 +940,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-resource-contract/src/lib.rs"),
     };
+    let graph_type_mapping_root = ProductionRoot {
+        package_id: "graph-type-mapping-package".to_owned(),
+        package: "yss-graph-type-mapping".to_owned(),
+        target: "yss_graph_type_mapping".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-type-mapping/src/lib.rs"),
+    };
     let graph_registry_root = ProductionRoot {
         package_id: "graph-registry-package".to_owned(),
         package: "yss-graph-registry".to_owned(),
@@ -972,6 +1005,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_document_edit_root.clone(),
         graph_protocol_root.clone(),
         graph_resource_contract_root.clone(),
+        graph_type_mapping_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
@@ -1074,6 +1108,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_resource_contract_root,
                 "src-tauri/crates/yss-graph-resource-contract/src/lib.rs",
                 "yss_graph_resource_contract",
+            ),
+            module(
+                &graph_type_mapping_root,
+                "src-tauri/crates/yss-graph-type-mapping/src/lib.rs",
+                "yss_graph_type_mapping",
             ),
             module(
                 &graph_registry_root,
@@ -1180,6 +1219,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-resource-contract/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-type-mapping/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1774,6 +1817,49 @@ fn graph_resource_contract_has_one_owner_distinct_from_builtin_catalog() {
     assert!(
         source.contains("The built-in node catalog remains owned by `yss-graph-catalog`"),
         "resource snapshots and the built-in node catalog must remain distinct authorities"
+    );
+}
+
+#[test]
+fn graph_type_mapping_has_one_pure_crate_owner_without_match_table_mirrors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-type-mapping/Cargo.toml",
+        "src-tauri/crates/yss-graph-type-mapping/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph type mapping owner must exist at {relative}"
+        );
+    }
+
+    let manifest = root.join("src-tauri/Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("production modules must be discoverable");
+    let duplicate_match_tables = modules
+        .iter()
+        .filter(|module| {
+            module.repository_relative_source_file
+                != "src-tauri/crates/yss-graph-type-mapping/src/lib.rs"
+        })
+        .filter_map(|module| {
+            let source = std::fs::read_to_string(
+                workspace
+                    .repository_root
+                    .join(&module.repository_relative_source_file),
+            )
+            .ok()?;
+            (source.contains("DataType::Boolean =>")
+                && source.contains("DataType::DataSeries")
+                && source.contains("TypeExpr::Unknown"))
+            .then_some(module.repository_relative_source_file.clone())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        duplicate_match_tables.is_empty(),
+        "DataType to TypeExpr mapping must have one owner: {duplicate_match_tables:#?}"
     );
 }
 
