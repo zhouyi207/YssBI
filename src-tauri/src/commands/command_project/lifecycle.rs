@@ -1,16 +1,16 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::project_lifecycle::ProjectLifecycleError;
 use crate::application::project_watcher::{
-    ApplicationProjectWatchError, ObservedProjectFileChange, ProjectFileChangeSink,
-    ProjectWatcherError, ProjectWatcherState,
+    ApplicationProjectWatchError, ObservedProjectChange, ProjectChangeSink, ProjectWatcherError,
+    ProjectWatcherState,
 };
 use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
+use crate::project::ProjectRegistry;
 #[cfg(test)]
 use crate::project::ProjectState;
-use crate::project::{ProjectDomainEvent, ProjectRegistry, ProjectWatchError};
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::{
     LifecycleMutationOutcomeDto, LifecycleMutationResultDto, ProjectActivationResultDto,
@@ -94,20 +94,21 @@ struct ProjectEventWatcherSink {
     version: Mutex<u64>,
 }
 
-impl ProjectFileChangeSink for ProjectEventWatcherSink {
-    fn publish(&self, change: ObservedProjectFileChange) {
-        let domain_event = match self
+impl ProjectChangeSink for ProjectEventWatcherSink {
+    fn publish(&self, change: ObservedProjectChange) {
+        let invalidation = match self
             .application
-            .reconcile_project_file_change(&self.project_instance_id, change.change)
+            .reconcile_project_change(&self.project_instance_id, change.change)
         {
-            Ok(event) => event,
-            Err(ApplicationProjectWatchError::Project(ProjectWatchError::Irrelevant)) => return,
-            Err(ApplicationProjectWatchError::Project(error)) => {
+            Ok(Some(invalidation)) => invalidation,
+            Ok(None) => return,
+            Err(ApplicationProjectWatchError::Reconciliation(error)) => {
                 tracing::warn!(
                     target: "yssbi::project::watcher",
                     diagnostic_domain = "system",
                     diagnostic_event = "projectIndexRefreshFailed",
-                    error_kind = project_watch_error_kind(&error),
+                    error_kind = "reconciliation_failed",
+                    error = %error,
                     "Failed to reconcile watched project file change"
                 );
                 return;
@@ -124,9 +125,7 @@ impl ProjectFileChangeSink for ProjectEventWatcherSink {
             }
         };
 
-        let ProjectDomainEvent::ProjectIndexInvalidated {
-            project_instance_id,
-        } = domain_event;
+        let project_instance_id = invalidation.into_project_instance_id();
         let Some(version) = next_watcher_version(&self.version) else {
             tracing::error!(
                 target: "yssbi::project::watcher",
@@ -163,18 +162,11 @@ fn watcher_error_kind(error: &ProjectWatcherError) -> &'static str {
     }
 }
 
-fn project_watch_error_kind(error: &ProjectWatchError) -> &'static str {
-    match error {
-        ProjectWatchError::Irrelevant => "irrelevant",
-        ProjectWatchError::Reconciliation(_) => "reconciliation_failed",
-    }
-}
-
 fn application_watch_error_kind(error: &ApplicationProjectWatchError) -> &'static str {
     match error {
         ApplicationProjectWatchError::SessionCapture(_) => "session_capture_failed",
         ApplicationProjectWatchError::ProjectIdentityMismatch => "stale_project_lifecycle",
-        ApplicationProjectWatchError::Project(error) => project_watch_error_kind(error),
+        ApplicationProjectWatchError::Reconciliation(_) => "reconciliation_failed",
         ApplicationProjectWatchError::SessionChanged => "session_changed",
     }
 }

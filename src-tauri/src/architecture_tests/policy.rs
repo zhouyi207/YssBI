@@ -939,16 +939,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_project::lifecycle",
         canonical_origin_targets: &[
             "yssbi_lib::application::project_watcher::ProjectWatcherError",
-            "yssbi_lib::application::project_watcher::ProjectWatcherSink",
-            "yssbi_lib::application::project_watcher::ProjectWatcherSinkError",
             "yssbi_lib::application::project_watcher::ProjectWatcherState",
             "yssbi_lib::application::project_watcher::ApplicationProjectWatchError",
-            "yssbi_lib::application::project_watcher::ObservedProjectFileChange",
-            "yssbi_lib::application::project_watcher::ProjectFileChangeSink",
+            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::ProjectIdentityMismatch",
+            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::Reconciliation",
+            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::SessionCapture",
+            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::SessionChanged",
+            "yssbi_lib::application::project_watcher::ObservedProjectChange",
+            "yssbi_lib::application::project_watcher::ProjectChangeSink",
             "yssbi_lib::event::event_resource::EventResource",
-            "yssbi_lib::project::project_change::ProjectDomainEvent",
-            "yssbi_lib::project::project_change::ProjectWatchError",
-            "yssbi_lib::project::project_change::ProjectIndexInvalidation",
             "yssbi_lib::project::project_registry::ProjectRegistry",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
             "yssbi_lib::application::project_lifecycle::ApplicationProjectLifecycleError",
@@ -966,22 +965,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/platform/project_file_watcher.rs",
         fully_qualified_owner: "yssbi_lib::platform::project_file_watcher",
         canonical_origin_targets: &[
-            "yssbi_lib::application::project_watcher::ProjectFileChangeCallback",
             "yssbi_lib::application::project_watcher::FileWatcherStartError",
-            "yssbi_lib::application::project_watcher::ObservedProjectFileChange",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcher",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcherHandle",
-            "yssbi_lib::application::project_watcher::ProjectFileChangeSink",
+            "yssbi_lib::application::project_watcher::ObservedProjectChange",
+            "yssbi_lib::application::project_watcher::ProjectChangeSink",
             "yssbi_lib::application::project_watcher::ProjectFileWatcherDrain",
             "yssbi_lib::application::project_watcher::ProjectFileWatcherDrainOutcome",
             "yssbi_lib::application::project_watcher::ProjectFileWatcherFactory",
             "yssbi_lib::application::project_watcher::ProjectFileWatcherSession",
-            "yssbi_lib::application::project_watcher::ProjectWatcherSourceError",
             "yssbi_lib::application::project_watcher::ProjectWatcherEpoch",
-            "yssbi_lib::project::project_change::ProjectFileChange",
-            "yssbi_lib::project::project_change::FileChange",
-            "yssbi_lib::project::project_change::FileChangeKind",
-            "yssbi_lib::project::project_change::ProjectRelativePath",
             "yssbi_lib::application::project_watcher::WatcherShutdownControl",
         ],
     },
@@ -1716,6 +1707,7 @@ fn non_build_memberships(
             | "yss-graph-type-mapping"
             | "yss-math"
             | "yss-path-display"
+            | "yss-project-change"
             | "yss-project-identity"
             | "yss-project-layout"
             | "yss-project-manifest"

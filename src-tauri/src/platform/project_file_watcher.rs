@@ -1,9 +1,9 @@
 use crate::application::project_watcher::{
-    FileWatcherStartError, ObservedProjectFileChange, ProjectFileChangeSink,
-    ProjectFileWatcherDrain, ProjectFileWatcherDrainOutcome, ProjectFileWatcherFactory,
-    ProjectFileWatcherSession, ProjectWatcherEpoch, WatcherShutdownControl,
+    FileWatcherStartError, ObservedProjectChange, ProjectChangeSink, ProjectFileWatcherDrain,
+    ProjectFileWatcherDrainOutcome, ProjectFileWatcherFactory, ProjectFileWatcherSession,
+    ProjectWatcherEpoch, WatcherShutdownControl,
 };
-use crate::project::{FileChange, FileChangeKind, ProjectRelativePath};
+use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::sync::Arc;
@@ -11,8 +11,9 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use thiserror::Error;
+use yss_project_change::{ProjectChange, ProjectFileChangeKind, ProjectRelativePath};
 
-const PROJECT_FILE_CHANGE_QUEUE_CAPACITY: usize = 1;
+const PROJECT_CHANGE_QUEUE_CAPACITY: usize = 1;
 const PROJECT_FILE_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);
 
 pub struct NotifyProjectFileWatcher;
@@ -34,19 +35,17 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
         &self,
         project_root: &Path,
         epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectFileChangeSink>,
+        sink: Arc<dyn ProjectChangeSink>,
     ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
-        let (sender, receiver) = mpsc::sync_channel(PROJECT_FILE_CHANGE_QUEUE_CAPACITY);
+        let (sender, receiver) = mpsc::sync_channel(PROJECT_CHANGE_QUEUE_CAPACITY);
         let callback_root = project_root.to_path_buf();
         let callback_sender = sender.clone();
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<Event>| match result {
                 Ok(event) => {
-                    if let Some(change) = file_change_from_event(callback_root.as_path(), &event) {
-                        enqueue(
-                            &callback_sender,
-                            ObservedProjectFileChange { epoch, change },
-                        );
+                    if let Some(change) = project_change_from_event(callback_root.as_path(), &event)
+                    {
+                        enqueue(&callback_sender, ObservedProjectChange { epoch, change });
                     }
                 }
                 Err(source) => {
@@ -60,9 +59,9 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
                     );
                     enqueue(
                         &callback_sender,
-                        ObservedProjectFileChange {
+                        ObservedProjectChange {
                             epoch,
-                            change: FileChange::watcher_error(),
+                            change: ProjectChange::rescan_required(),
                         },
                     );
                 }
@@ -86,40 +85,37 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
     }
 }
 
-fn enqueue(sender: &SyncSender<ObservedProjectFileChange>, change: ObservedProjectFileChange) {
+fn enqueue(sender: &SyncSender<ObservedProjectChange>, change: ObservedProjectChange) {
     let _ = sender.try_send(change);
 }
 
-fn file_change_from_event(root: &Path, event: &Event) -> Option<FileChange> {
-    if !event
-        .paths
-        .iter()
-        .all(|path| path.strip_prefix(root).is_ok())
-    {
-        return None;
-    }
-
-    let kind = file_change_kind(&event.kind);
+fn project_change_from_event(root: &Path, event: &Event) -> Option<ProjectChange> {
+    let kind = project_file_change_kind(&event.kind)?;
     event.paths.iter().find_map(|path| {
         let relative = path.strip_prefix(root).ok()?.to_path_buf();
-        let relative = ProjectRelativePath::from_observed(relative)?;
-        let change = FileChange::new(relative, kind);
-        change.is_relevant().then_some(change)
+        let relative = ProjectRelativePath::try_new(relative).ok()?;
+        let change = ProjectChange::file(relative, kind);
+        change.affects_project_index().then_some(change)
     })
 }
 
-fn file_change_kind(kind: &EventKind) -> FileChangeKind {
+fn project_file_change_kind(kind: &EventKind) -> Option<ProjectFileChangeKind> {
     match kind {
-        EventKind::Create(_) => FileChangeKind::Created,
-        EventKind::Modify(_) => FileChangeKind::Modified,
-        EventKind::Remove(_) => FileChangeKind::Removed,
-        EventKind::Access(_) | EventKind::Other | EventKind::Any => FileChangeKind::Modified,
+        EventKind::Create(_) => Some(ProjectFileChangeKind::Created),
+        EventKind::Modify(ModifyKind::Name(_)) => Some(ProjectFileChangeKind::Renamed),
+        EventKind::Modify(_) => Some(ProjectFileChangeKind::Modified),
+        EventKind::Remove(_) => Some(ProjectFileChangeKind::Removed),
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
+            Some(ProjectFileChangeKind::Modified)
+        }
+        EventKind::Access(_) => None,
+        EventKind::Other | EventKind::Any => Some(ProjectFileChangeKind::Modified),
     }
 }
 
 fn spawn_worker(
-    receiver: Receiver<ObservedProjectFileChange>,
-    sink: Arc<dyn ProjectFileChangeSink>,
+    receiver: Receiver<ObservedProjectChange>,
+    sink: Arc<dyn ProjectChangeSink>,
     completion: SyncSender<WorkerTerminal>,
 ) -> Result<JoinHandle<()>, std::io::Error> {
     thread::Builder::new()
@@ -152,7 +148,7 @@ enum WorkerTerminal {
 }
 
 struct NotifyProjectFileWatcherSession {
-    sender: Option<SyncSender<ObservedProjectFileChange>>,
+    sender: Option<SyncSender<ObservedProjectChange>>,
     watcher: Option<RecommendedWatcher>,
     completion: Option<Receiver<WorkerTerminal>>,
     worker: Option<JoinHandle<()>>,
@@ -263,7 +259,7 @@ fn report_start_error(error: NotifyProjectFileWatcherError) -> FileWatcherStartE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notify::event::{EventAttributes, ModifyKind};
+    use notify::event::{EventAttributes, RenameMode};
     use std::path::PathBuf;
 
     fn path_event(root: &Path, relative: &str) -> Event {
@@ -280,12 +276,14 @@ mod tests {
         let unrelated = path_event(root.as_path(), "README.md");
         let relevant = path_event(root.as_path(), "events/foo.yssbi-event");
 
-        assert!(file_change_from_event(root.as_path(), &unrelated).is_none());
+        assert!(project_change_from_event(root.as_path(), &unrelated).is_none());
+        let ProjectChange::File(change) = project_change_from_event(root.as_path(), &relevant)
+            .expect("relevant event is retained")
+        else {
+            panic!("filesystem events must produce a file change");
+        };
         assert_eq!(
-            file_change_from_event(root.as_path(), &relevant)
-                .expect("relevant event is retained")
-                .relative_path
-                .as_path(),
+            change.relative_path().as_path(),
             Path::new("events/foo.yssbi-event")
         );
     }
@@ -295,6 +293,50 @@ mod tests {
         let root = PathBuf::from(r"C:\project");
         let outside = path_event(root.as_path(), r"..\other\metadata.yssbi");
 
-        assert!(file_change_from_event(root.as_path(), &outside).is_none());
+        assert!(project_change_from_event(root.as_path(), &outside).is_none());
+    }
+
+    #[test]
+    fn read_access_is_ignored_while_write_close_and_rename_are_retained() {
+        let root = PathBuf::from(r"C:\project");
+        let access = Event {
+            kind: EventKind::Access(AccessKind::Read),
+            paths: vec![root.join("metadata.yssbi")],
+            attrs: EventAttributes::default(),
+        };
+        let rename = Event {
+            kind: EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
+            paths: vec![root.join("metadata.yssbi")],
+            attrs: EventAttributes::default(),
+        };
+        let write_closed = Event {
+            kind: EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            paths: vec![root.join("metadata.yssbi")],
+            attrs: EventAttributes::default(),
+        };
+
+        assert!(project_change_from_event(root.as_path(), &access).is_none());
+        assert!(project_change_from_event(root.as_path(), &write_closed).is_some());
+        let ProjectChange::File(change) = project_change_from_event(root.as_path(), &rename)
+            .expect("rename events invalidate the project index")
+        else {
+            panic!("rename events must produce a file change");
+        };
+        assert_eq!(change.kind(), ProjectFileChangeKind::Renamed);
+    }
+
+    #[test]
+    fn mixed_boundary_event_keeps_a_relevant_in_root_path() {
+        let root = PathBuf::from(r"C:\project");
+        let event = Event {
+            kind: EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
+            paths: vec![
+                root.join(r"..\other\metadata.yssbi"),
+                root.join("metadata.yssbi"),
+            ],
+            attrs: EventAttributes::default(),
+        };
+
+        assert!(project_change_from_event(root.as_path(), &event).is_some());
     }
 }

@@ -3549,7 +3549,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
         "src-tauri/crates/yss-worksheet-document/src/lib.rs",
         "src-tauri/src/project/graph_resource_index.rs",
-        "src-tauri/src/project/project_change.rs",
+        "src-tauri/crates/yss-project-change/src/lib.rs",
         "src-tauri/src/project/project_io.rs",
         "src-tauri/src/project/project_lifecycle.rs",
         "src-tauri/src/project/project_registry.rs",
@@ -3573,7 +3573,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
             "pub const GLOBAL_VARIABLES_FILE",
         ),
         (
-            "src-tauri/src/project/project_change.rs",
+            "src-tauri/crates/yss-project-change/src/lib.rs",
             "pub fn is_relevant_project_path",
         ),
         (
@@ -3605,6 +3605,146 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
     assert!(
         policy.contains("| \"yss-project-layout\""),
         "project layout must be classified as a Pure Leaf"
+    );
+}
+
+#[test]
+fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-change/Cargo.toml",
+        "src-tauri/crates/yss-project-change/src/lib.rs",
+        "src-tauri/src/project/project_change_reconciliation.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project change boundary must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/project_change.rs")
+            .exists(),
+        "the root crate must not retain a project-change contract owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-change\"",
+        "yss-project-change = { path = \"./crates/yss-project-change\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-change/Cargo.toml"))
+            .expect("project change manifest must be readable");
+    for dependency in [
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+        "yss-project-layout = { path = \"../yss-project-layout\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project change must declare its canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["serde", "thiserror", "notify", "tauri"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project change must remain a Pure Leaf without external concern '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-change/src/lib.rs"))
+            .expect("project change owner must be readable");
+    for contract in [
+        "pub enum ProjectRelativePathError",
+        "pub struct ProjectRelativePath",
+        "pub enum ProjectFileChangeKind",
+        "pub struct ProjectFileChange",
+        "pub enum ProjectChange",
+        "RescanRequired",
+        "pub struct ProjectIndexInvalidation",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project change crate must own canonical contract '{contract}'"
+        );
+    }
+    for fake_file_encoding in ["WatcherError", "PROJECT_METADATA_FILE", "watcher_error()"] {
+        assert!(
+            !owner.contains(fake_file_encoding),
+            "source uncertainty must not be encoded as fake file fact '{fake_file_encoding}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in ["pub mod project_change;", "pub use yss_project_change"] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore project-change facade '{facade}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_change_reconciliation.rs",
+        "src-tauri/src/application/project_watcher.rs",
+        "src-tauri/src/platform/project_file_watcher.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_change"),
+            "{relative} must consume the project-change owner directly"
+        );
+    }
+
+    let reconciliation = std::fs::read_to_string(
+        root.join("src-tauri/src/project/project_change_reconciliation.rs"),
+    )
+    .expect("project change reconciliation must be readable");
+    assert!(
+        reconciliation.contains("return Ok(None)"),
+        "irrelevant changes must be modeled as a no-op instead of an error"
+    );
+    for duplicate in [
+        "pub struct ProjectRelativePath(",
+        "pub struct ProjectFileChange {",
+        "pub enum ProjectChange {",
+        "pub struct ProjectIndexInvalidation {",
+    ] {
+        assert!(
+            !reconciliation.contains(duplicate),
+            "Project reconciliation must not mirror contract '{duplicate}'"
+        );
+    }
+
+    let platform =
+        std::fs::read_to_string(root.join("src-tauri/src/platform/project_file_watcher.rs"))
+            .expect("project watcher platform adapter must be readable");
+    for required in [
+        "ProjectChange::rescan_required()",
+        "AccessKind::Close(AccessMode::Write)",
+        "EventKind::Access(_) => None",
+        "ModifyKind::Name(_)",
+    ] {
+        assert!(
+            platform.contains(required),
+            "watcher adapter must preserve canonical behavior '{required}'"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-project-change\""),
+        "project change must be classified as a Pure Leaf"
     );
 }
 

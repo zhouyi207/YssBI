@@ -1,11 +1,11 @@
 use super::*;
-use crate::project::{FileChange, FileChangeKind, ProjectRelativePath};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
+use yss_project_change::{ProjectChange, ProjectFileChangeKind, ProjectRelativePath};
 
 #[derive(Default)]
 struct FakeFactory {
@@ -14,14 +14,14 @@ struct FakeFactory {
 
 struct FakeSessionControl {
     epoch: ProjectWatcherEpoch,
-    sink: Arc<dyn ProjectFileChangeSink>,
+    sink: Arc<dyn ProjectChangeSink>,
 }
 
 impl FakeFactory {
     fn emit_after_barrier(
         &self,
         session_index: usize,
-        change: FileChange,
+        change: ProjectChange,
         ready: Arc<Barrier>,
         release: Arc<Barrier>,
     ) -> JoinHandle<()> {
@@ -35,14 +35,14 @@ impl FakeFactory {
         thread::spawn(move || {
             ready.wait();
             release.wait();
-            control.sink.publish(ObservedProjectFileChange {
+            control.sink.publish(ObservedProjectChange {
                 epoch: control.epoch,
                 change,
             });
         })
     }
 
-    fn emit(&self, session_index: usize, change: FileChange) {
+    fn emit(&self, session_index: usize, change: ProjectChange) {
         let control = self
             .sessions
             .lock()
@@ -50,7 +50,7 @@ impl FakeFactory {
             .get(session_index)
             .cloned()
             .expect("test watcher session exists");
-        control.sink.publish(ObservedProjectFileChange {
+        control.sink.publish(ObservedProjectChange {
             epoch: control.epoch,
             change,
         });
@@ -62,7 +62,7 @@ impl ProjectFileWatcherFactory for FakeFactory {
         &self,
         _project_root: &Path,
         epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectFileChangeSink>,
+        sink: Arc<dyn ProjectChangeSink>,
     ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
         self.sessions
             .lock()
@@ -89,7 +89,7 @@ impl ProjectFileWatcherDrain for ImmediateDrain {
 }
 
 struct RecordingSink {
-    changes: Mutex<Vec<FileChange>>,
+    changes: Mutex<Vec<ProjectChange>>,
 }
 
 impl RecordingSink {
@@ -100,16 +100,16 @@ impl RecordingSink {
     }
 }
 
-impl ProjectFileChangeSink for RecordingSink {
-    fn publish(&self, change: ObservedProjectFileChange) {
+impl ProjectChangeSink for RecordingSink {
+    fn publish(&self, change: ObservedProjectChange) {
         self.changes.lock().unwrap().push(change.change);
     }
 }
 
-fn relevant_change() -> FileChange {
-    FileChange::new(
-        ProjectRelativePath::new("events/changed.yssbi-event"),
-        FileChangeKind::Modified,
+fn relevant_change() -> ProjectChange {
+    ProjectChange::file(
+        ProjectRelativePath::try_new("events/changed.yssbi-event").unwrap(),
+        ProjectFileChangeKind::Modified,
     )
 }
 

@@ -19,7 +19,8 @@ const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/crates/yss-graph-document/src/mode
 const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/crates/yss-graph-document/src/";
 
 const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
-    "src-tauri/src/project/project_change.rs",
+    "src-tauri/crates/yss-project-change/src/lib.rs",
+    "src-tauri/src/project/project_change_reconciliation.rs",
     "src-tauri/src/application/project_watcher.rs",
 ];
 const PROJECT_WATCHER_PLATFORM_FILES: &[&str] = &[

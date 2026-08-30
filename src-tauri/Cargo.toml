@@ -35,6 +35,7 @@ members = [
     "crates/yss-graph-type-mapping",
     "crates/yss-math",
     "crates/yss-path-display",
+    "crates/yss-project-change",
     "crates/yss-project-discovery",
     "crates/yss-project-history",
     "crates/yss-project-identity",
@@ -114,6 +115,7 @@ yss-graph-runtime = { path = "./crates/yss-graph-runtime" }
 yss-graph-type-mapping = { path = "./crates/yss-graph-type-mapping" }
 yss-math = { path = "./crates/yss-math" }
 yss-path-display = { path = "./crates/yss-path-display" }
+yss-project-change = { path = "./crates/yss-project-change" }
 yss-project-discovery = { path = "./crates/yss-project-discovery" }
 yss-project-history = { path = "./crates/yss-project-history" }
 yss-project-identity = { path = "./crates/yss-project-identity" }

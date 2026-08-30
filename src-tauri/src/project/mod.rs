@@ -4,7 +4,7 @@ pub mod execution_authority;
 pub mod filesystem;
 pub mod graph_resource_index;
 mod history_hydration;
-pub mod project_change;
+pub(crate) mod project_change_reconciliation;
 pub mod project_error;
 pub mod resource_lifecycle;
 
@@ -28,7 +28,6 @@ pub mod worksheet_io;
 
 pub use filesystem::*;
 pub use graph_resource_index::*;
-pub use project_change::*;
 pub use project_error::*;
 pub use resource_lifecycle::*;
 

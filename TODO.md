@@ -703,3 +703,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-function-editor-projection/` Project 层；以 `ResourceRevision` 替代内部裸
   `u64`，让 Project index 与 mutation event 复用同一个严格 camelCase wire，并删除根
   `function_editor_projection.rs`、三处 parameter/signature 展开逻辑及 Transport 同构 DTO 镜像。
+- [ ] 将安全 project-relative path、文件 change kind、显式重扫请求与 index invalidation 结果迁入
+  `src-tauri/crates/yss-project-change/` Pure Leaf；删除根 `project_change.rs` contract owner，避免将
+  watcher 故障伪造为 metadata 文件变更，并将无关路径从 error control flow 改为 no-op；notify adapter
+  忽略普通 read/open access 但保留 `Close(Write)`，同时保留 rename 语义及跨边界事件中的安全根内路径；
+  ProjectState 重读协调继续留在 Project 层。

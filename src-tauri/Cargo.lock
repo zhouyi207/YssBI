@@ -9325,6 +9325,14 @@ name = "yss-path-display"
 version = "0.1.0"
 
 [[package]]
+name = "yss-project-change"
+version = "0.1.0"
+dependencies = [
+ "yss-project-identity",
+ "yss-project-layout",
+]
+
+[[package]]
 name = "yss-project-discovery"
 version = "0.1.0"
 dependencies = [
@@ -9551,6 +9559,7 @@ dependencies = [
  "yss-graph-type-mapping",
  "yss-math",
  "yss-path-display",
+ "yss-project-change",
  "yss-project-discovery",
  "yss-project-history",
  "yss-project-identity",

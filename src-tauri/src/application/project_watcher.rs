@@ -1,5 +1,4 @@
-use crate::project::{FileChange, project_root_from_path};
-use crate::project::{ProjectDomainEvent, ProjectWatchError};
+use crate::project::{ProjectFilesystemError, project_root_from_path};
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -7,6 +6,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
 use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{ApplicationState, SessionCaptureError};
@@ -17,25 +17,29 @@ pub enum ApplicationProjectWatchError {
     SessionCapture(#[from] SessionCaptureError),
     #[error("watched project identity is stale")]
     ProjectIdentityMismatch,
-    #[error(transparent)]
-    Project(#[from] ProjectWatchError),
+    #[error("project index reconciliation failed")]
+    Reconciliation(
+        #[source]
+        #[from]
+        ProjectFilesystemError,
+    ),
     #[error("captured application session changed during watcher reconciliation")]
     SessionChanged,
 }
 
 impl ApplicationState {
-    pub fn reconcile_project_file_change(
+    pub fn reconcile_project_change(
         &self,
         project_instance_id: &ProjectInstanceId,
-        change: FileChange,
-    ) -> Result<ProjectDomainEvent, ApplicationProjectWatchError> {
+        change: ProjectChange,
+    ) -> Result<Option<ProjectIndexInvalidation>, ApplicationProjectWatchError> {
         let captured = self.capture_session()?;
         if captured.project_instance_id() != project_instance_id {
             return Err(ApplicationProjectWatchError::ProjectIdentityMismatch);
         }
         let event = captured
             .project()
-            .reconcile_file_change(project_instance_id, change)?;
+            .reconcile_project_change(project_instance_id, change)?;
         self.revalidate_captured_session(&captured)
             .map_err(|_| ApplicationProjectWatchError::SessionChanged)?;
         Ok(event)
@@ -56,9 +60,9 @@ impl ProjectWatcherEpoch {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ObservedProjectFileChange {
+pub struct ObservedProjectChange {
     pub epoch: ProjectWatcherEpoch,
-    pub change: FileChange,
+    pub change: ProjectChange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,8 +91,8 @@ pub enum FileWatcherStartError {
     StartFailed,
 }
 
-pub trait ProjectFileChangeSink: Send + Sync {
-    fn publish(&self, change: ObservedProjectFileChange);
+pub trait ProjectChangeSink: Send + Sync {
+    fn publish(&self, change: ObservedProjectChange);
 }
 
 pub trait ProjectFileWatcherSession: Send {
@@ -122,7 +126,7 @@ pub trait ProjectFileWatcherFactory: Send + Sync {
         &self,
         project_root: &Path,
         epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectFileChangeSink>,
+        sink: Arc<dyn ProjectChangeSink>,
     ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError>;
 }
 
@@ -199,11 +203,11 @@ impl Drop for EpochPermit {
 
 struct EpochFilteringSink {
     admission: Arc<EpochAdmission>,
-    sink: Arc<dyn ProjectFileChangeSink>,
+    sink: Arc<dyn ProjectChangeSink>,
 }
 
-impl ProjectFileChangeSink for EpochFilteringSink {
-    fn publish(&self, change: ObservedProjectFileChange) {
+impl ProjectChangeSink for EpochFilteringSink {
+    fn publish(&self, change: ObservedProjectChange) {
         let Some(_permit) = self.admission.admit(change.epoch) else {
             return;
         };
@@ -277,7 +281,7 @@ impl ProjectWatcherState {
     pub fn watch_project(
         &self,
         metadata_path: &str,
-        sink: Arc<dyn ProjectFileChangeSink>,
+        sink: Arc<dyn ProjectChangeSink>,
     ) -> Result<(), ProjectWatcherError> {
         self.retire_active(WatcherShutdownControl::after(self.shutdown_timeout))?;
 
