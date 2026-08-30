@@ -1,3 +1,5 @@
+//! Platform-neutral progress contract for project discovery and cleanup.
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectProgress {
     Scan(ProjectScanProgress),
@@ -17,6 +19,7 @@ pub enum ProjectCleanupProgress {
     Removing { removed: usize, total: usize },
 }
 
+/// Output port implemented by delivery adapters such as a bounded IPC queue.
 pub trait ProjectProgressSink: Send + Sync {
     fn publish(&self, progress: ProjectProgress);
 }

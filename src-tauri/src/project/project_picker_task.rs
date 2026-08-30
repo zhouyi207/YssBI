@@ -62,10 +62,3 @@ impl Default for ProjectPickerTaskCancelRegistry {
         Self::new()
     }
 }
-
-#[derive(Clone, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ProjectCleanupProgressEvent {
-    Checking { current: usize, total: usize },
-    Removing { removed: usize, total: usize },
-}

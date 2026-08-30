@@ -2812,6 +2812,109 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
 }
 
 #[test]
+fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-progress/Cargo.toml",
+        "src-tauri/crates/yss-project-progress/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project progress owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/project_progress.rs")
+            .exists(),
+        "the root crate must not retain a project progress owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-progress\"",
+        "yss-project-progress = { path = \"./crates/yss-project-progress\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod project_progress",
+        "pub use project_progress",
+        "pub use yss_project_progress",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore progress facade '{facade}'"
+        );
+    }
+
+    let progress_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-progress/src/lib.rs"))
+            .expect("project progress owner must be readable");
+    for contract in [
+        "pub enum ProjectProgress",
+        "pub enum ProjectScanProgress",
+        "pub enum ProjectCleanupProgress",
+        "pub trait ProjectProgressSink",
+    ] {
+        assert!(
+            progress_owner.contains(contract),
+            "project progress crate must own {contract}"
+        );
+    }
+    for platform_dependency in ["serde", "tauri"] {
+        assert!(
+            !progress_owner.contains(platform_dependency),
+            "project progress contract must remain platform-neutral and not depend on {platform_dependency}"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/src/commands/command_project/progress.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("use yss_project_progress::"),
+            "{relative} must consume the project progress owner directly"
+        );
+        assert!(
+            !consumer.contains("project::project_progress"),
+            "{relative} must not restore the removed root progress path"
+        );
+    }
+
+    let scan = std::fs::read_to_string(root.join("src-tauri/src/project/project_scan.rs"))
+        .expect("project scan source must be readable");
+    assert!(
+        !scan.contains("ProjectScanProgressEvent"),
+        "project scan must not restore the zero-caller duplicate progress DTO"
+    );
+    let picker = std::fs::read_to_string(root.join("src-tauri/src/project/project_picker_task.rs"))
+        .expect("project picker task source must be readable");
+    assert!(
+        !picker.contains("ProjectCleanupProgressEvent"),
+        "project picker task must not restore the zero-caller duplicate progress DTO"
+    );
+
+    let command_adapter =
+        std::fs::read_to_string(root.join("src-tauri/src/commands/command_project/progress.rs"))
+            .expect("project progress command adapter must be readable");
+    assert!(
+        command_adapter.contains("pub enum ProjectProgressDto"),
+        "the Tauri wire projection must remain command-owned"
+    );
+}
+
+#[test]
 fn variable_contract_has_one_pure_crate_owner_without_compatibility_module() {
     let root = repository_root();
     for relative in [

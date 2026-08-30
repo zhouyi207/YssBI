@@ -1096,10 +1096,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_project::progress",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::project::project_progress::ProjectCleanupProgress",
-            "yssbi_lib::project::project_progress::ProjectProgress",
-            "yssbi_lib::project::project_progress::ProjectProgressSink",
-            "yssbi_lib::project::project_progress::ProjectScanProgress",
+            "yss_project_progress::ProjectCleanupProgress",
+            "yss_project_progress::ProjectProgress",
+            "yss_project_progress::ProjectProgressSink",
+            "yss_project_progress::ProjectScanProgress",
         ],
     },
     InternalDependencyCapability {
@@ -1744,6 +1744,7 @@ fn non_build_memberships(
             | "yss-graph-type-mapping"
             | "yss-math"
             | "yss-project-identity"
+            | "yss-project-progress"
             | "yss-resource-naming"
             | "yss-tabular-contract"
             | "yss-variable-contract"

@@ -11,14 +11,6 @@ pub struct ScanProjectsResult {
     pub projects: Vec<super::ProjectRecord>,
 }
 
-#[derive(Clone, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ProjectScanProgressEvent {
-    Scanning,
-    Discovered { count: usize },
-    Registering { current: usize, total: usize },
-}
-
 const SKIP_DIR_NAMES: &[&str] = &[
     ".git",
     "node_modules",

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::ipc::Channel;
 
-use crate::project::{
+use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
 };
 

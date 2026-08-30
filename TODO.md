@@ -646,3 +646,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   迁入 `src-tauri/crates/yss-project-identity/` Pure Leaf；删除根 `project` identity owner 与兼容
   re-export，所有消费方直接依赖新 crate；保留 Project/Graph revision 的显式命名转换，并以
   `test-support` feature 隔离测试专用 revision advancement。
+- [ ] 将 project discovery/cleanup 的平台无关进度事件与输出 port 迁入
+  `src-tauri/crates/yss-project-progress/` Pure Leaf；Project registry 与 command adapter 直接依赖
+  唯一 owner，Tauri 有界队列、Channel 和 wire DTO 留在 Commands，并删除两个零调用的重复事件
+  DTO，避免根 facade、幽灵 API 与多事实源回流。

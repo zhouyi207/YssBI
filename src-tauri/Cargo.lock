@@ -9308,6 +9308,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-progress"
+version = "0.1.0"
+
+[[package]]
 name = "yss-resource-naming"
 version = "0.1.0"
 dependencies = [
@@ -9434,6 +9438,7 @@ dependencies = [
  "yss-graph-type-mapping",
  "yss-math",
  "yss-project-identity",
+ "yss-project-progress",
  "yss-resource-naming",
  "yss-sci",
  "yss-tabular-contract",
