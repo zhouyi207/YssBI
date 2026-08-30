@@ -1,11 +1,8 @@
-mod operation_ledger;
 #[cfg(test)]
 mod rename_operations;
 #[cfg(test)]
 mod test_support;
 
-pub(crate) use operation_ledger::ResourceOperationLedger;
-pub(crate) use operation_ledger::ResourceOperationReservation;
 #[cfg(test)]
 pub(crate) use rename_operations::{remap_graph_document_references, remap_variable_scope_path};
 

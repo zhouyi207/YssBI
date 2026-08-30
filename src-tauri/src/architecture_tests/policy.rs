@@ -1724,6 +1724,7 @@ fn non_build_memberships(
         package,
         "yss-project-discovery" | "yss-project-history" | "yss-project-model"
     ) || package == "yss-function-editor-projection"
+        || package == "yss-project-operation"
     {
         layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {

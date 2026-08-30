@@ -715,3 +715,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `project/resource_patch.rs` 与 facade，并与 `yss-project-history::ResourceDocumentPatch` 的持久化历史
   payload 明确分名，避免两个不同语义继续共享 `ResourceDocumentPatch` 名称；ProjectState 保留锁、事务、
   I/O、history 转换与 publication authority。
+- [ ] 将 project/session 绑定的 operation admission、防重放集合与 RAII reservation 状态机迁入
+  `src-tauri/crates/yss-project-operation/` Stateful Project 层；删除根 `resource_mutations/operation_ledger.rs`
+  与兼容 re-export，并以 canonical `ProjectSessionId` 替代 ledger 自建 UUID epoch，消除第二会话事实源；
+  ProjectState 继续拥有 publication 线性化、跨状态锁顺序与现有 filesystem error 分类映射。

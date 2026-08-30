@@ -1,0 +1,10 @@
+[package]
+name = "yss-project-operation"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+yss-project-identity = { path = "../yss-project-identity" }

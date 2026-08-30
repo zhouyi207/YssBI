@@ -9394,6 +9394,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-operation"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-project-identity",
+]
+
+[[package]]
 name = "yss-project-progress"
 version = "0.1.0"
 
@@ -9567,6 +9575,7 @@ dependencies = [
  "yss-project-layout",
  "yss-project-manifest",
  "yss-project-model",
+ "yss-project-operation",
  "yss-project-progress",
  "yss-project-registry-contract",
  "yss-resource-naming",

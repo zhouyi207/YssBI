@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::project::resource_mutations::ResourceOperationReservation;
 use crate::project::{ProjectFilesystemError, ProjectSession};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use yss_project_history::{
@@ -8,6 +7,7 @@ use yss_project_history::{
     ProjectHistoryTransaction,
 };
 use yss_project_identity::ProjectInstanceId;
+use yss_project_operation::ProjectOperationReservation;
 
 use super::state::ProjectState;
 
@@ -35,7 +35,7 @@ pub(crate) struct GraphOperationAuthority {
     revision: GraphRevision,
     authority_generation: u64,
     operation_id: yss_project_identity::OperationId,
-    reservation: ResourceOperationReservation,
+    reservation: ProjectOperationReservation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

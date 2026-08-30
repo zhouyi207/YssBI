@@ -59,10 +59,7 @@ impl ProjectState {
         &self,
         project_instance_id: &yss_project_identity::ProjectInstanceId,
         operation_id: yss_project_identity::OperationId,
-    ) -> Result<
-        crate::project::resource_mutations::ResourceOperationReservation,
-        ProjectDatabaseError,
-    > {
+    ) -> Result<yss_project_operation::ProjectOperationReservation, ProjectDatabaseError> {
         self.ensure_project_operational()?;
         self.reserve_resource_operation(project_instance_id, operation_id)
             .map_err(Into::into)

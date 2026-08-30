@@ -4262,6 +4262,144 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
 }
 
 #[test]
+fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-operation/Cargo.toml",
+        "src-tauri/crates/yss-project-operation/src/lib.rs",
+        "src-tauri/src/project/project_operation_admission.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project operation boundary must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/resource_mutations/operation_ledger.rs")
+            .exists(),
+        "the root crate must not retain the project operation ledger owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-operation\"",
+        "yss-project-operation = { path = \"./crates/yss-project-operation\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-operation/Cargo.toml"))
+            .expect("project operation manifest must be readable");
+    for dependency in [
+        "thiserror.workspace = true",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project operation must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["uuid", "tauri", "sqlx", "polars"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project operation must not absorb runtime concern '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-operation/src/lib.rs"))
+            .expect("project operation owner must be readable");
+    for invariant in [
+        "pub struct ProjectOperationLedger",
+        "pub struct ProjectOperationReservation",
+        "pub enum ProjectOperationAdmissionError",
+        "project_session_id: ProjectSessionId",
+        "pub fn reset_for_project(",
+        "in_flight: HashSet<OperationId>",
+        "completed: HashSet<OperationId>",
+        "impl Drop for ProjectOperationReservation",
+        "pub fn complete(mut self)",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "project operation crate must own state-machine invariant '{invariant}'"
+        );
+    }
+    for misplaced in [
+        "session_epoch",
+        "uuid::",
+        "ProjectState",
+        "ProjectFilesystemError",
+        "crate::project",
+    ] {
+        assert!(
+            !owner.contains(misplaced),
+            "project operation must not restore duplicate or root concern '{misplaced}'"
+        );
+    }
+
+    let bridge =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_operation_admission.rs"))
+            .expect("project operation admission bridge must be readable");
+    for behavior in [
+        "self.mutation_publication.lock().unwrap()",
+        "ProjectOperationLedger::reserve(",
+        "ProjectOperationAdmissionError::StaleProject { .. }",
+        "ProjectFilesystemError::StaleProjectLifecycle { message }",
+        "ProjectOperationAdmissionError::DuplicateOperation { .. }",
+        "ProjectFilesystemError::DuplicateOperation { message }",
+    ] {
+        assert!(
+            bridge.contains(behavior),
+            "root admission bridge must retain behavior '{behavior}'"
+        );
+    }
+
+    let resource_mutations =
+        std::fs::read_to_string(root.join("src-tauri/src/project/resource_mutations.rs"))
+            .expect("resource mutation module must be readable");
+    for facade in [
+        "mod operation_ledger",
+        "ResourceOperationLedger",
+        "ResourceOperationReservation",
+    ] {
+        assert!(
+            !resource_mutations.contains(facade),
+            "root resource mutations must not restore ledger facade '{facade}'"
+        );
+    }
+
+    let project_state =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/state.rs"))
+            .expect("project state must be readable");
+    assert!(
+        project_state.contains("Arc<Mutex<yss_project_operation::ProjectOperationLedger>>"),
+        "ProjectState must hold the extracted operation owner directly"
+    );
+    let activation =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/activation.rs"))
+            .expect("project activation must be readable");
+    assert!(
+        activation.contains("next_identity.project_session_id.clone()"),
+        "activation must reset operation state with the canonical project session identity"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-project-operation\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "project operation must be classified as stateful Project behavior"
+    );
+}
+
+#[test]
 fn function_editor_projection_has_one_project_owner_without_root_or_transport_mirror() {
     let root = repository_root();
     for relative in [

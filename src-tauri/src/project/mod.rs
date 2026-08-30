@@ -12,6 +12,7 @@ pub mod database_authority;
 pub mod project_activation;
 pub mod project_io;
 pub mod project_lifecycle;
+mod project_operation_admission;
 pub mod project_reads;
 pub mod project_registry;
 pub mod project_session;

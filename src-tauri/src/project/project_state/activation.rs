@@ -187,7 +187,10 @@ impl ProjectState {
                 .flatten();
 
             if precommit_panic.is_none() {
-                resource_operations.reset_for_project(next_instance_id.clone());
+                resource_operations.reset_for_project(
+                    next_instance_id.clone(),
+                    next_identity.project_session_id.clone(),
+                );
                 let previous_publication_id = publication.reset_to(next_publication_id);
                 garbage = Some(ActivationGarbage {
                     _publication_project_instance_id: previous_publication_id,
