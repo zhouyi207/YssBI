@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::project::{
-    ProjectFilesystemError, ProjectState, ResourceLifecycleIntent, ResourceLifecycleOperation,
-    StagedFilesystemMutation,
+    ProjectFilesystemError, ProjectState, ResourceLifecycleOperation, StagedFilesystemMutation,
 };
 
 use yss_graph_document::{
@@ -11,6 +10,7 @@ use yss_graph_document::{
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::GraphResourceDocument;
+use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use super::VariableRevisionEntry;
@@ -493,7 +493,7 @@ impl ProjectState {
         }
 
         let mut lifecycle_guard = self.resource_lifecycle.register(
-            &session,
+            &session.instance_id,
             graph_path,
             lifecycle_token,
             ResourceLifecycleIntent::Load,
@@ -509,6 +509,7 @@ impl ProjectState {
             message: error.to_string(),
         })?;
         drop(filesystem_lease);
+        self.run_graph_load_after_read_test_hook();
         self.validate_resource_lifecycle_operation(&operation)?;
 
         let mut graph = loaded.document;
@@ -587,7 +588,7 @@ impl ProjectState {
             });
         }
         let mut guard = self.resource_lifecycle.register(
-            &session,
+            &session.instance_id,
             graph_path,
             token,
             ResourceLifecycleIntent::Unload,
@@ -726,7 +727,7 @@ impl ProjectState {
     ) -> Result<u64, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         let guard = self.resource_lifecycle.allocate_and_register(
-            &session,
+            &session.instance_id,
             graph_path,
             ResourceLifecycleIntent::Unload,
         )?;
@@ -738,7 +739,7 @@ impl ProjectState {
     pub(in crate::project) fn acquire_resource_rename_ownership(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        resource_path: crate::project::LifecycleResourcePath,
+        resource_path: LifecycleResourcePath,
         lifecycle_token: u64,
     ) -> Result<crate::project::ResourceRenameOwnershipLease, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
@@ -748,7 +749,7 @@ impl ProjectState {
             });
         }
         let guard = self.resource_lifecycle.register(
-            &session,
+            &session.instance_id,
             resource_path,
             lifecycle_token,
             ResourceLifecycleIntent::Rename,
@@ -764,7 +765,7 @@ impl ProjectState {
         operation: &ResourceLifecycleOperation,
     ) -> Result<(), ProjectFilesystemError> {
         self.validate_project_session(&operation.session)?;
-        self.resource_lifecycle.validate(&operation.owner)
+        Ok(self.resource_lifecycle.validate(&operation.owner)?)
     }
 
     pub(crate) fn rename_graph_resource_transaction_impl(
@@ -784,7 +785,7 @@ impl ProjectState {
             });
         }
         let mut lifecycle_guard = self.resource_lifecycle.register(
-            &session,
+            &session.instance_id,
             graph_path,
             lifecycle_token,
             ResourceLifecycleIntent::Rename,

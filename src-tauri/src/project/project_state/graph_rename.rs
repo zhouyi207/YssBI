@@ -530,7 +530,7 @@ impl ProjectState {
     ) -> Result<ResourceRenameOwnershipLease, ProjectFilesystemError> {
         self.acquire_resource_rename_ownership(
             expected_project_instance_id,
-            crate::project::LifecycleResourcePath::Graph(graph_path.clone()),
+            yss_resource_lifecycle::LifecycleResourcePath::Graph(graph_path.clone()),
             lifecycle_token,
         )
     }

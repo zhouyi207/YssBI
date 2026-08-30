@@ -719,3 +719,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-project-operation/` Stateful Project 层；删除根 `resource_mutations/operation_ledger.rs`
   与兼容 re-export，并以 canonical `ProjectSessionId` 替代 ledger 自建 UUID epoch，消除第二会话事实源；
   ProjectState 继续拥有 publication 线性化、跨状态锁顺序与现有 filesystem error 分类映射。
+- [ ] 将 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、
+  predecessor chain 与 RAII guard 状态机迁入 `src-tauri/crates/yss-resource-lifecycle/` Stateful Project 层；
+  删除根 `project/resource_lifecycle.rs` owner 与兼容 facade，核心 API 仅依赖 canonical `ProjectInstanceId`；
+  恢复原先被永久关闭的 17 个状态机测试，并删除零调用的 panic getter/测试探针；跨状态 session 校验、
+  activation publication 锁顺序与 filesystem error 分类映射继续留在根 Project 层。

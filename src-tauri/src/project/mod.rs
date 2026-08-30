@@ -6,7 +6,7 @@ pub mod graph_resource_index;
 mod history_hydration;
 pub(crate) mod project_change_reconciliation;
 pub mod project_error;
-pub mod resource_lifecycle;
+mod resource_lifecycle_operation;
 
 pub mod database_authority;
 pub mod project_activation;
@@ -29,7 +29,9 @@ pub mod worksheet_io;
 pub use filesystem::*;
 pub use graph_resource_index::*;
 pub use project_error::*;
-pub use resource_lifecycle::*;
+pub(crate) use resource_lifecycle_operation::{
+    ResourceLifecycleOperation, ResourceRenameOwnershipLease,
+};
 
 pub use database_authority::ProjectDatabaseError;
 pub use project_activation::*;

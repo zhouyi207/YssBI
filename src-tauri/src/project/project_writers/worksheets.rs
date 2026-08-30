@@ -313,7 +313,7 @@ impl ProjectState {
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let mut ownership = self.acquire_resource_rename_ownership(
             expected_project_instance_id,
-            crate::project::LifecycleResourcePath::Worksheet(worksheet_path.clone()),
+            yss_resource_lifecycle::LifecycleResourcePath::Worksheet(worksheet_path.clone()),
             lifecycle_token,
         )?;
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;

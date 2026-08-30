@@ -9416,6 +9416,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-resource-lifecycle"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-graph-document",
+ "yss-project-identity",
+ "yss-worksheet-document",
+]
+
+[[package]]
 name = "yss-resource-naming"
 version = "0.1.0"
 dependencies = [
@@ -9578,6 +9588,7 @@ dependencies = [
  "yss-project-operation",
  "yss-project-progress",
  "yss-project-registry-contract",
+ "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",
  "yss-tabular-contract",

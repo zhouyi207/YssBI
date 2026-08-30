@@ -105,6 +105,19 @@ impl ProjectFilesystemError {
     }
 }
 
+impl From<yss_resource_lifecycle::ResourceLifecycleError> for ProjectFilesystemError {
+    fn from(error: yss_resource_lifecycle::ResourceLifecycleError) -> Self {
+        match error {
+            yss_resource_lifecycle::ResourceLifecycleError::TransactionBusy { message } => {
+                Self::FilesystemTransactionBusy { message }
+            }
+            yss_resource_lifecycle::ResourceLifecycleError::StaleLifecycle { message } => {
+                Self::StaleResourceLifecycle { message }
+            }
+        }
+    }
+}
+
 const fn resource_name_error_code(error: &ResourceNameValidationError) -> &'static str {
     match error {
         ResourceNameValidationError::NotNfc => "resource_name_not_normalized",
@@ -146,6 +159,7 @@ impl From<yss_graph_document::GraphResourcePathError> for ProjectError {
 #[cfg(test)]
 mod tests {
     use super::ProjectFilesystemError;
+    use yss_resource_lifecycle::ResourceLifecycleError;
     use yss_resource_naming::ResourceNameValidationError;
     use yss_worksheet_document::WorksheetResourcePathError;
 
@@ -192,5 +206,26 @@ mod tests {
 
         assert_eq!(not_normalized.code(), "resource_name_not_normalized");
         assert_eq!(structurally_invalid.code(), "invalid_resource_name");
+    }
+
+    #[test]
+    fn resource_lifecycle_errors_preserve_filesystem_error_categories() {
+        let busy = ProjectFilesystemError::from(ResourceLifecycleError::TransactionBusy {
+            message: "rename is active".into(),
+        });
+        let stale = ProjectFilesystemError::from(ResourceLifecycleError::StaleLifecycle {
+            message: "token was superseded".into(),
+        });
+
+        assert!(matches!(
+            busy,
+            ProjectFilesystemError::FilesystemTransactionBusy { .. }
+        ));
+        assert_eq!(busy.code(), "filesystem_transaction_busy");
+        assert!(matches!(
+            stale,
+            ProjectFilesystemError::StaleResourceLifecycle { .. }
+        ));
+        assert_eq!(stale.code(), "stale_resource_lifecycle");
     }
 }

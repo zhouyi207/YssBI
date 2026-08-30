@@ -3,7 +3,7 @@ use super::*;
 struct ActivationGarbage {
     _publication_project_instance_id: String,
     _path: Option<String>,
-    _lifecycle: crate::project::resource_lifecycle::ResourceLifecycleState,
+    _lifecycle: yss_resource_lifecycle::ResourceLifecycleState,
     _data: ProjectData,
     _store: ProjectStore,
     _graph_revisions:

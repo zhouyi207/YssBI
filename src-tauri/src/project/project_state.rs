@@ -3,8 +3,7 @@
 use crate::project::{
     NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemCoordinator,
     ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession, ProjectStore,
-    ProjectTransactionContext, ResourceLifecycleIntent, ResourceLifecycleOperation,
-    ResourceLifecycleRegistry, ResourceRenameOwnershipLease, StagedFilesystemMutation,
+    ProjectTransactionContext, ResourceRenameOwnershipLease, StagedFilesystemMutation,
     load_project_graph_from_file,
 };
 use std::collections::BTreeMap;
@@ -23,6 +22,7 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
 use yss_project_manifest::ProjectManifest;
 use yss_project_model::{GraphResourceDocument, ProjectData};
+use yss_resource_lifecycle::ResourceLifecycleRegistry;
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 mod activation;
@@ -74,8 +74,8 @@ use test_support::ProjectStateTestHooks;
 use test_support::{
     ActivationPublicationTestHook, CommittedResourceCompletionTestHook, CompilePublicationTestHook,
     ComputationSettingsPublicationTestHook, DurableHistoryTestHook, ExecutionTestHook,
-    LifecycleLockTestHook, MutationPublicationTestHook, ProjectionEnvironmentCaptureTestHook,
-    ProjectionTestHook, VariableStagingTestHook,
+    GraphLoadAfterReadTestHook, LifecycleLockTestHook, MutationPublicationTestHook,
+    ProjectionEnvironmentCaptureTestHook, VariableStagingTestHook,
 };
 
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
@@ -476,9 +476,29 @@ impl ProjectState {
     pub(super) fn run_activation_preparation_after_read_test_hook(&self) {}
 
     #[cfg(test)]
-    pub(crate) fn set_projection_test_hook(&self, hook: ProjectionTestHook) {
-        *self.test_hooks.projection_test_hook.write().unwrap() = Some(hook);
+    pub(crate) fn set_graph_load_after_read_test_hook(&self, hook: GraphLoadAfterReadTestHook) {
+        *self
+            .test_hooks
+            .graph_load_after_read_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
+
+    #[cfg(test)]
+    pub(super) fn run_graph_load_after_read_test_hook(&self) {
+        if let Some(hook) = self
+            .test_hooks
+            .graph_load_after_read_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_graph_load_after_read_test_hook(&self) {}
 
     #[cfg(test)]
     pub(super) fn set_committed_resource_completion_test_hook(
@@ -929,26 +949,6 @@ impl ProjectState {
             .project_session_id
             .clone();
         (runtime, identity)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn resource_lifecycle_entry_count(&self) -> usize {
-        self.resource_lifecycle.entry_count()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn activation_publication_guards_are_available_for_test(&self) -> bool {
-        self.mutation_publication.try_lock().is_ok()
-            && self.project_path.try_write().is_ok()
-            && self.resource_lifecycle.boundary_is_available()
-            && self.project_data.try_write().is_ok()
-            && self.project_store.try_write().is_ok()
-            && self.graph_revisions.try_write().is_ok()
-            && self.variable_revisions.try_write().is_ok()
-            && self.worksheet_revisions.try_write().is_ok()
-            && self.activation_identity.try_write().is_ok()
-            && self.recovery_marker.boundary_is_available()
-            && self.history.try_write().is_ok()
     }
 
     #[cfg(test)]

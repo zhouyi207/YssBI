@@ -1725,6 +1725,7 @@ fn non_build_memberships(
         "yss-project-discovery" | "yss-project-history" | "yss-project-model"
     ) || package == "yss-function-editor-projection"
         || package == "yss-project-operation"
+        || package == "yss-resource-lifecycle"
     {
         layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {

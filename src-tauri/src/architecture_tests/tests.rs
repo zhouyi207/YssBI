@@ -4400,6 +4400,246 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
 }
 
 #[test]
+fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tests() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-resource-lifecycle/Cargo.toml",
+        "src-tauri/crates/yss-resource-lifecycle/src/lib.rs",
+        "src-tauri/src/project/resource_lifecycle_operation.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "resource lifecycle boundary must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/resource_lifecycle.rs")
+            .exists(),
+        "the root crate must not retain the resource lifecycle state-machine owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-resource-lifecycle\"",
+        "yss-resource-lifecycle = { path = \"./crates/yss-resource-lifecycle\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-resource-lifecycle/Cargo.toml"))
+            .expect("resource lifecycle manifest must be readable");
+    for dependency in [
+        "thiserror.workspace = true",
+        "yss-graph-document = { path = \"../yss-graph-document\" }",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+        "yss-worksheet-document = { path = \"../yss-worksheet-document\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "resource lifecycle must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["uuid", "tauri", "sqlx", "polars"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "resource lifecycle must not absorb runtime concern '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-resource-lifecycle/src/lib.rs"))
+            .expect("resource lifecycle owner must be readable");
+    for invariant in [
+        "pub enum LifecycleResourcePath",
+        "pub enum ResourceLifecycleIntent",
+        "pub struct ResourceLifecycleOwner",
+        "pub struct ResourceLifecycleRegistry",
+        "pub struct ResourceLifecycleBoundary",
+        "pub struct ResourceLifecycleState",
+        "pub struct ResourceLifecycleGuard",
+        "pub enum ResourceLifecycleError",
+        "state: Arc<Mutex<ResourceLifecycleState>>",
+        "predecessor: Option<u64>",
+        "ResourceLifecycleRegistrationState::Abandoned",
+        "impl Drop for ResourceLifecycleGuard",
+        "project_instance_id: &ProjectInstanceId",
+        "pub fn boundary_recovering(",
+        "pub fn take_state(",
+        "pub fn clear_poison(",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "resource lifecycle crate must own state-machine invariant '{invariant}'"
+        );
+    }
+    assert_eq!(
+        owner.matches("#[test]").count(),
+        17,
+        "all formerly disabled resource lifecycle state-machine tests must remain active"
+    );
+    for misplaced in [
+        "ProjectSession",
+        "ProjectFilesystemError",
+        "crate::project",
+        "uuid::",
+        "#[cfg(all(test, any()))]",
+        "unreachable!",
+        "fn graph_path(",
+    ] {
+        assert!(
+            !owner.contains(misplaced),
+            "resource lifecycle must not restore root, disabled, or dead concern '{misplaced}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("project module must be readable");
+    for facade in [
+        "pub mod resource_lifecycle",
+        "pub use resource_lifecycle",
+        "pub use yss_resource_lifecycle",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "root Project must not restore resource lifecycle facade '{facade}'"
+        );
+    }
+
+    let bridge =
+        std::fs::read_to_string(root.join("src-tauri/src/project/resource_lifecycle_operation.rs"))
+            .expect("resource lifecycle operation bridge must be readable");
+    for behavior in [
+        "pub(crate) struct ResourceLifecycleOperation",
+        "pub(crate) session: ProjectSession",
+        "pub(crate) struct ResourceRenameOwnershipLease",
+        "ProjectFilesystemError::from",
+        "ResourceLifecycleIntent::Unload",
+        "load_rejects_owned_document_after_project_replacement",
+        "ProjectFilesystemError::StaleProjectLifecycle { .. }",
+    ] {
+        assert!(
+            bridge.contains(behavior),
+            "root bridge must retain cross-state behavior '{behavior}'"
+        );
+    }
+
+    let project_error =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_error.rs"))
+            .expect("project filesystem error owner must be readable");
+    for mapping in [
+        "impl From<yss_resource_lifecycle::ResourceLifecycleError>",
+        "Self::FilesystemTransactionBusy { message }",
+        "Self::StaleResourceLifecycle { message }",
+    ] {
+        assert!(
+            project_error.contains(mapping),
+            "root error boundary must retain mapping '{mapping}'"
+        );
+    }
+
+    let project_state =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_state.rs"))
+            .expect("project state module must be readable");
+    assert!(
+        project_state.contains("use yss_resource_lifecycle::ResourceLifecycleRegistry;")
+            && !project_state.contains("resource_lifecycle_entry_count")
+            && !project_state.contains("activation_publication_guards_are_available_for_test"),
+        "ProjectState must consume the crate directly without dead lifecycle probes"
+    );
+
+    let graph_lifecycle = std::fs::read_to_string(
+        root.join("src-tauri/src/project/project_state/graph_lifecycle_application.rs"),
+    )
+    .expect("graph lifecycle application must be readable");
+    assert!(
+        graph_lifecycle.contains("self.run_graph_load_after_read_test_hook();")
+            && graph_lifecycle.contains("self.validate_resource_lifecycle_operation(&operation)?;"),
+        "graph load must retain an exercised replacement seam before lifecycle revalidation"
+    );
+
+    let activation =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/activation.rs"))
+            .expect("project activation must be readable");
+    for behavior in [
+        "_lifecycle: yss_resource_lifecycle::ResourceLifecycleState",
+        "self.resource_lifecycle.boundary_recovering()",
+        "_lifecycle: lifecycle.take_state()",
+        "self.resource_lifecycle.clear_poison()",
+    ] {
+        assert!(
+            activation.contains(behavior),
+            "activation must preserve lifecycle publication behavior '{behavior}'"
+        );
+    }
+    let activation_commit = activation
+        .split_once("let mut garbage = None;")
+        .expect("activation commit boundary must remain explicit")
+        .1;
+    let publication_lock = activation_commit
+        .find("self.mutation_publication.lock()")
+        .expect("activation must acquire publication authority");
+    let operation_lock = activation_commit
+        .find("self.resource_operations.lock()")
+        .expect("activation must acquire operation authority");
+    let path_lock = activation_commit
+        .find("self.project_path.write()")
+        .expect("activation must acquire project path authority");
+    let lifecycle_lock = activation_commit
+        .find("self.resource_lifecycle.boundary_recovering()")
+        .expect("activation must acquire resource lifecycle authority");
+    let data_lock = activation_commit
+        .find("self.project_data.write()")
+        .expect("activation must acquire project data authority");
+    assert!(
+        publication_lock < operation_lock
+            && operation_lock < path_lock
+            && path_lock < lifecycle_lock
+            && lifecycle_lock < data_lock,
+        "resource lifecycle extraction must preserve activation lock order"
+    );
+
+    for (relative, direct_dependency) in [
+        (
+            "src-tauri/src/project/project_state/graph_lifecycle_application.rs",
+            "use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};",
+        ),
+        (
+            "src-tauri/src/project/project_state/graph_rename.rs",
+            "yss_resource_lifecycle::LifecycleResourcePath::Graph",
+        ),
+        (
+            "src-tauri/src/project/project_writers/worksheets.rs",
+            "yss_resource_lifecycle::LifecycleResourcePath::Worksheet",
+        ),
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains(direct_dependency),
+            "{relative} must consume the resource lifecycle owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::LifecycleResourcePath"),
+            "{relative} must not consume a root lifecycle facade"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-resource-lifecycle\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "resource lifecycle must be classified as stateful Project behavior"
+    );
+}
+
+#[test]
 fn function_editor_projection_has_one_project_owner_without_root_or_transport_mirror() {
     let root = repository_root();
     for relative in [
@@ -4805,7 +5045,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/src/project/project_reads.rs",
         "src-tauri/src/project/project_state.rs",
         "src-tauri/src/project/project_writers.rs",
-        "src-tauri/src/project/resource_lifecycle.rs",
+        "src-tauri/crates/yss-resource-lifecycle/src/lib.rs",
         "src-tauri/crates/yss-project-model/src/patch.rs",
         "src-tauri/src/project/resource_reveal.rs",
         "src-tauri/src/project/worksheet_io.rs",

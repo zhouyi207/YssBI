@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) type ProjectionTestHook = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
+pub(super) type GraphLoadAfterReadTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type CommittedResourceCompletionTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type ProjectionEnvironmentCaptureTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type MutationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -19,7 +19,8 @@ pub(in crate::project) struct ProjectStateTestHooks {
         Arc<RwLock<Option<Arc<dyn Fn() + Send + Sync>>>>,
     pub(in crate::project) graph_move_history_io_checkpoint:
         Arc<RwLock<Option<Arc<dyn Fn() + Send + Sync>>>>,
-    pub(in crate::project) projection_test_hook: Arc<RwLock<Option<ProjectionTestHook>>>,
+    pub(in crate::project) graph_load_after_read_test_hook:
+        Arc<RwLock<Option<GraphLoadAfterReadTestHook>>>,
     pub(in crate::project) committed_resource_completion_test_hook:
         Arc<RwLock<Option<CommittedResourceCompletionTestHook>>>,
     pub(in crate::project) projection_environment_capture_test_hook:
