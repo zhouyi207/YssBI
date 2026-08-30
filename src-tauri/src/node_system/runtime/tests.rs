@@ -23,7 +23,7 @@ use yss_graph_protocol::{
     RetryPolicy, TypeExpr, TypeId, Value,
 };
 use crate::graph::registry::RegistryFingerprint;
-use crate::graph_document::{
+use yss_graph_document::{
     FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
 };
 use crate::project::ProjectSessionId;

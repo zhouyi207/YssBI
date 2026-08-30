@@ -289,11 +289,11 @@ mod tests {
     use crate::graph::analysis::contracts::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };
-    use crate::graph_document::{
-        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
-    };
     use serde_json::json;
     use std::collections::BTreeMap;
+    use yss_graph_document::{
+        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
+    };
     use yss_graph_protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
 
     #[test]

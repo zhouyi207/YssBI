@@ -2,10 +2,10 @@ use super::{ActivationId, StoredValue};
 use crate::execution::plan::legacy::{
     GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
 };
-use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::runtime::RunId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

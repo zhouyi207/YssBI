@@ -1,6 +1,6 @@
-use crate::graph_document::FunctionParameterId;
 use serde::{Deserialize, Serialize};
 use yss_data_contract::{DataType, DataTypeParseError};
+use yss_graph_document::FunctionParameterId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

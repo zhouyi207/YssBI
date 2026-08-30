@@ -3,7 +3,7 @@ use crate::graph::analysis::dynamic_interface::{
     InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
 use yss_graph_protocol::{InterfaceResolverId, TypeExpr};
-use crate::graph_document::{DynamicMemberLocator, FunctionParameterId, GraphResourcePath};
+use yss_graph_document::{DynamicMemberLocator, FunctionParameterId, GraphResourcePath};
 use crate::project::FunctionDocument;
 use std::sync::Arc;
 
@@ -114,7 +114,7 @@ fn function_path(
 
 fn parameter_members(
     basis: &crate::graph::analysis::contracts::CompilationBasis<
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
     function: &GraphResourcePath,
     document: &FunctionDocument,
@@ -141,7 +141,7 @@ fn parameter_members(
 
 fn result_members(
     basis: &crate::graph::analysis::contracts::CompilationBasis<
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
     function: &GraphResourcePath,
     document: &FunctionDocument,

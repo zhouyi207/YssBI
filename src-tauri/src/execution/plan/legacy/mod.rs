@@ -21,8 +21,8 @@ mod tests {
         CompilationBasis, CompileId, CompileProvenance, ResourceVersionSet,
     };
     use crate::graph::registry::RegistryFingerprint;
-    use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::project::ProjectSessionId;
+    use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use yss_graph_protocol::{
         CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,
         TypeExpr, TypeId, Value, data_series_type,

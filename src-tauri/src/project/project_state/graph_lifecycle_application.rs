@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::graph_document::{
-    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
-    NodeId, PortAddress, PortInstanceId, PortRef,
-};
 use crate::project::{
     GraphResourceDocument, ProjectFilesystemError, ProjectInstanceId, ProjectState,
     ResourceLifecycleIntent, ResourceLifecycleOperation, ResourceName, ResourceRevision,
     StagedFilesystemMutation,
+};
+use yss_graph_document::{
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
+    NodeId, PortAddress, PortInstanceId, PortRef,
 };
 
 use super::VariableRevisionEntry;
@@ -49,7 +49,7 @@ impl ProjectState {
         )?;
         let mut resource = resource;
         resource.name = unique_name.clone();
-        resource.document.revision = crate::graph_document::GraphRevision::INITIAL;
+        resource.document.revision = yss_graph_document::GraphRevision::INITIAL;
         if let Some(function) = resource.function.as_mut() {
             function.revision = ResourceRevision::INITIAL;
         }
@@ -164,7 +164,7 @@ impl ProjectState {
         )?;
         let mut duplicate = source.clone();
         duplicate.name = unique_name;
-        duplicate.document.revision = crate::graph_document::GraphRevision::INITIAL;
+        duplicate.document.revision = yss_graph_document::GraphRevision::INITIAL;
         duplicate.document = duplicate_document(&duplicate.document, source_path, &target);
         if let Some(function) = duplicate.function.as_mut() {
             function.revision = ResourceRevision::INITIAL;
@@ -1059,7 +1059,7 @@ impl ProjectState {
         _excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
         _known_revisions: &std::collections::HashMap<
             GraphResourcePath,
-            crate::graph_document::GraphRevision,
+            yss_graph_document::GraphRevision,
         >,
     ) -> Result<GraphRenameDiskPlan, String> {
         Err(format!(

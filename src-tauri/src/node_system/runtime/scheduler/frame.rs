@@ -167,11 +167,11 @@ mod result_id_frame_tests {
     fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
         let store = ResultStore::new();
         let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/test.yssbi-event").unwrap();
-        let node_id = crate::graph_document::NodeId::new();
+            yss_graph_document::GraphResourcePath::new("events/test.yssbi-event").unwrap();
+        let node_id = yss_graph_document::NodeId::new();
         let output = GraphOutputRef {
             graph_path: graph_path.clone(),
-            port: crate::graph_document::PortAddress::declared(
+            port: yss_graph_document::PortAddress::declared(
                 node_id,
                 yss_graph_protocol::PortKey::new("result").unwrap(),
             ),
@@ -190,7 +190,7 @@ mod result_id_frame_tests {
                         run_id: RunId::new(1),
                         activation_id,
                         graph_path: graph_path.clone(),
-                        graph_revision: crate::graph_document::GraphRevision::new(1),
+                        graph_revision: yss_graph_document::GraphRevision::new(1),
                         node_id,
                         created_at_ms: activation_id.get(),
                         usage: ResultUsage::Produced,

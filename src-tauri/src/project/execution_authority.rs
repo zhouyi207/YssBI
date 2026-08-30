@@ -7,11 +7,11 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::{
     MutationPublication, NormalizedProjectRoot, ProjectComputationSettings, ProjectData,
     ProjectInstanceId, ProjectSession, ProjectState, ResourceRevision,
 };
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use yss_variable_contract::{VariableId, VariableInstance};
 
 /// Project-owned identity used when a plan names a resource.

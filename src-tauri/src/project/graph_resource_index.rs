@@ -5,7 +5,7 @@ use super::project_error::ProjectError;
 use super::{
     EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind, ResourceName,
 };
-use crate::graph_document::{GraphResourcePath, normalize_graph_resource_path};
+use yss_graph_document::{GraphResourcePath, normalize_graph_resource_path};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScannedGraphEntry {

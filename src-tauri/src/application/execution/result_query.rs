@@ -5,7 +5,7 @@ use thiserror::Error;
 use super::session_slot::{ApplicationState, SessionCaptureError};
 use crate::execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use crate::execution::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId};
-use crate::graph_document::{GraphResourcePath, PortAddress};
+use yss_graph_document::{GraphResourcePath, PortAddress};
 
 pub struct ResultPinQuery {
     graph_path: GraphResourcePath,
@@ -62,7 +62,7 @@ mod tests {
         let graph =
             GraphResourcePath::new("events/main.yssbi-event").expect("test graph path is valid");
         let address = PortAddress::declared(
-            crate::graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
+            yss_graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
             yss_graph_protocol::PortKey::new("result").expect("valid port key"),
         );
         let query = ResultPinQuery::new(graph, address.clone());

@@ -1,4 +1,3 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::ResourceRevision;
 use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::project::{
@@ -8,6 +7,7 @@ use crate::project::{
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use yss_graph_document::GraphResourcePath;
 use yss_variable_contract::VariableId;
 
 #[derive(Clone, Default)]
@@ -73,7 +73,7 @@ pub struct PreparedProjectActivation {
     pub store: ProjectStore,
     pub(crate) variable_revisions:
         HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
-    pub(crate) graph_revisions: HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+    pub(crate) graph_revisions: HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
     pub(crate) worksheet_revisions: HashMap<WorksheetResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
@@ -242,8 +242,6 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use crate::graph::document::DocumentError;
-    use crate::graph_document::GraphResourcePath;
-    use crate::graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState, fixtures,
@@ -253,6 +251,8 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourcePath;
+    use yss_graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
     use yss_graph_protocol::PortKey;
     use yss_variable_contract::VariableScope;
 

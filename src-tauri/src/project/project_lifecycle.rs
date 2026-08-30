@@ -495,8 +495,6 @@ mod tests {
     use crate::graph::document::{
         GraphDocumentOperation, GraphDocumentPatch, MutationRequest, ResourceKey,
     };
-    use crate::graph_document::GraphResourcePath;
-    use crate::graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemFaultPoint,
         fixtures, load_project_from_file,
@@ -504,6 +502,8 @@ mod tests {
     use crate::project::{OperationId, ResourceRevision};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourcePath;
+    use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use yss_graph_protocol::NodeTypeId;
     use yss_variable_contract::VariableScope;
 
@@ -575,7 +575,7 @@ mod tests {
         before_lengths: (usize, usize),
         before_head: Option<crate::project::HistoryEntryId>,
         before_revisions: &(
-            std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+            std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
             std::collections::HashMap<yss_variable_contract::VariableId, ResourceRevision>,
             std::collections::HashMap<crate::project::WorksheetResourcePath, ResourceRevision>,
         ),
@@ -630,7 +630,7 @@ mod tests {
         assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
         assert_eq!(
             state.revision_state_for_test().0.get(&graph_path),
-            Some(&crate::graph_document::GraphRevision::new(1))
+            Some(&yss_graph_document::GraphRevision::new(1))
         );
 
         let _ = std::fs::remove_dir_all(root);

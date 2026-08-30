@@ -2,7 +2,7 @@ use super::*;
 use crate::project::resource_patch::ResourceDocumentPatch;
 
 pub(super) fn graph_document_references_path(
-    document: &crate::graph_document::GraphDocument,
+    document: &yss_graph_document::GraphDocument,
     target: &str,
 ) -> bool {
     document.nodes.values().any(|node| {
@@ -34,7 +34,7 @@ pub(in crate::project) fn validate_context_revisions(
     data: &ProjectData,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
     variable_revisions: &std::collections::HashMap<
         yss_variable_contract::VariableId,
@@ -161,8 +161,8 @@ pub(in crate::project) fn checked_resource_revision(
 
 pub(in crate::project::project_state) fn checked_graph_revision(
     resource: &str,
-    retained: crate::graph_document::GraphRevision,
-) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
+    retained: yss_graph_document::GraphRevision,
+) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
     retained
         .checked_next()
         .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
@@ -173,9 +173,9 @@ pub(in crate::project::project_state) fn checked_graph_revision(
 
 pub(super) fn authoritative_function_revision(
     path: &GraphResourcePath,
-    incoming: crate::graph_document::GraphRevision,
-    retained: Option<crate::graph_document::GraphRevision>,
-) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
+    incoming: yss_graph_document::GraphRevision,
+    retained: Option<yss_graph_document::GraphRevision>,
+) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
     let Some(retained) = retained else {
         return Ok(incoming);
     };
@@ -186,8 +186,8 @@ pub(super) fn authoritative_function_revision(
 pub(super) fn normalize_loaded_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
-    retained: Option<crate::graph_document::GraphRevision>,
-) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
+    retained: Option<yss_graph_document::GraphRevision>,
+) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
     if resource.kind != crate::project::GraphDocumentKind::Function {
         return Ok(resource.document.revision);
     }
@@ -208,8 +208,8 @@ pub(super) fn normalize_loaded_function_resource_revision(
 pub(in crate::project) fn normalize_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
-    retained: Option<crate::graph_document::GraphRevision>,
-) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
+    retained: Option<yss_graph_document::GraphRevision>,
+) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
     if resource.kind != crate::project::GraphDocumentKind::Function {
         return Ok(resource.document.revision);
     }
@@ -226,7 +226,7 @@ pub(super) fn normalize_function_patch_revisions(
     data: &ProjectData,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
     match patch {
@@ -238,7 +238,7 @@ pub(super) fn normalize_function_patch_revisions(
             )?;
         }
         ResourceDocumentPatch::DeclareGraph { path, revision } => {
-            if path.kind() == crate::graph_document::GraphResourceKind::Function {
+            if path.kind() == yss_graph_document::GraphResourceKind::Function {
                 let canonical = authoritative_function_revision(
                     path,
                     revision.to_graph_revision(),
@@ -447,7 +447,7 @@ pub(super) fn canonical_resource_lifecycle_events(
     patch: &ResourceDocumentPatch,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
 ) -> Result<Vec<crate::project::ResourceDeltaEvent>, ProjectFilesystemError> {
     let graph_key = |path: &GraphResourcePath| ResourceKey::Graph(path.clone());
@@ -456,10 +456,10 @@ pub(super) fn canonical_resource_lifecycle_events(
             revision,
             path: path.as_str().into(),
             kind: match path.kind() {
-                crate::graph_document::GraphResourceKind::Event => {
+                yss_graph_document::GraphResourceKind::Event => {
                     crate::project::ResourceLifecycleKind::Event
                 }
-                crate::graph_document::GraphResourceKind::Function => {
+                yss_graph_document::GraphResourceKind::Function => {
                     crate::project::ResourceLifecycleKind::Function
                 }
             },

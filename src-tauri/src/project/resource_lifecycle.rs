@@ -1,9 +1,9 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, ProjectSession, WorksheetResourcePath,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
+use yss_graph_document::GraphResourcePath;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum LifecycleResourcePath {
@@ -492,12 +492,12 @@ fn stale_owner_error(owner: &ResourceLifecycleOwner) -> ProjectFilesystemError {
 
 #[cfg(all(test, any()))]
 mod tests {
-    use crate::graph_document::GraphResourcePath;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, NormalizedProjectRoot, ProjectData,
         ProjectInstanceId, ProjectSession, ProjectState, WorksheetResourcePath, fixtures,
     };
     use std::sync::Arc;
+    use yss_graph_document::GraphResourcePath;
 
     fn session(label: &str) -> ProjectSession {
         ProjectSession {
@@ -1202,7 +1202,7 @@ mod tests {
             .get_mut(&graph_path)
             .unwrap()
             .document
-            .revision = crate::graph_document::GraphRevision::new(42);
+            .revision = yss_graph_document::GraphRevision::new(42);
         let replacement_state = state.clone();
         state.set_projection_test_hook(Arc::new(move || {
             replacement_state.activate_project_fixture("project-b".into(), project_b.clone());

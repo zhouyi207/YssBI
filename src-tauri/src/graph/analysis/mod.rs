@@ -7,9 +7,9 @@ use crate::graph::analysis::contracts::{
 use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
-use crate::graph_document::GraphRevision;
-use crate::graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
-use crate::graph_document::{DynamicPortBinding, PortRef};
+use yss_graph_document::GraphRevision;
+use yss_graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
+use yss_graph_document::{DynamicPortBinding, PortRef};
 use yss_graph_protocol::{
     ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
     PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,

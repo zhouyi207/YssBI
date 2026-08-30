@@ -1,6 +1,6 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::{GraphResourceDocument, WorksheetDocument, WorksheetResourcePath};
 use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_document::GraphResourcePath;
 use yss_variable_contract::{VariableId, VariableInstance};
 
 #[derive(Clone, Debug)]

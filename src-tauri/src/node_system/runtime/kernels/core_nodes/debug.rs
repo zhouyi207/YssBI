@@ -1,6 +1,6 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::graph_document::PortAddress;
 use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
+use yss_graph_document::PortAddress;
 use yss_graph_protocol::{PortKey, Value};
 
 pub(super) fn register(fragment: &mut KernelFragment) {

@@ -13,7 +13,7 @@ use super::{
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
-use crate::graph_document::GraphDocument as NodeGraphDocument;
+use yss_graph_document::GraphDocument as NodeGraphDocument;
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 3;
@@ -76,11 +76,11 @@ pub enum GraphDocumentKind {
     Function,
 }
 
-impl From<crate::graph_document::GraphResourceKind> for GraphDocumentKind {
-    fn from(kind: crate::graph_document::GraphResourceKind) -> Self {
+impl From<yss_graph_document::GraphResourceKind> for GraphDocumentKind {
+    fn from(kind: yss_graph_document::GraphResourceKind) -> Self {
         match kind {
-            crate::graph_document::GraphResourceKind::Event => Self::Event,
-            crate::graph_document::GraphResourceKind::Function => Self::Function,
+            yss_graph_document::GraphResourceKind::Event => Self::Event,
+            yss_graph_document::GraphResourceKind::Function => Self::Function,
         }
     }
 }
@@ -956,13 +956,13 @@ pub fn discover_databases_from_root(
 mod tests {
     use super::*;
     use crate::graph::document::EffectiveInputBinding;
-    use crate::graph_document::{
+    use crate::project::{GraphResourceDocument, NumericTolerance};
+    use serde_json::json;
+    use yss_graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
         FunctionParameterId, GraphDocument as NodeGraphDocument, InputState, NodeId, NodePosition,
         OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
-    use crate::project::{GraphResourceDocument, NumericTolerance};
-    use serde_json::json;
     use yss_graph_protocol::{NodeTypeId, PortKey};
 
     fn temp_project_dir() -> PathBuf {
@@ -1124,7 +1124,7 @@ mod tests {
         let mut document = NodeGraphDocument::default();
         document.nodes.insert(source, node(source));
         document.nodes.insert(target, node(target));
-        let connection = crate::graph_document::ConnectionId::new();
+        let connection = yss_graph_document::ConnectionId::new();
         document.connections.insert(
             connection,
             DocumentConnection {
@@ -1199,7 +1199,7 @@ mod tests {
         let mut envelope: GraphDocument = read_json(&graph_file).unwrap();
         let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x100));
         let connection_id =
-            crate::graph_document::ConnectionId::from_uuid(uuid::Uuid::from_u128(0x101));
+            yss_graph_document::ConnectionId::from_uuid(uuid::Uuid::from_u128(0x101));
         let existing_node_id = *envelope.document.nodes.keys().next().unwrap();
         envelope.document.connections.insert(
             connection_id,
@@ -1441,10 +1441,8 @@ mod tests {
             port_instance_id,
         );
         let locator = DynamicMemberLocator::FunctionParameter {
-            function: crate::graph_document::GraphResourcePath::new(
-                "functions/stable.yssbi-function",
-            )
-            .unwrap(),
+            function: yss_graph_document::GraphResourcePath::new("functions/stable.yssbi-function")
+                .unwrap(),
             parameter: FunctionParameterId::new("stable-parameter"),
         };
         let mut document = NodeGraphDocument::default();
@@ -1463,7 +1461,7 @@ mod tests {
             DynamicPortBinding::Resolved {
                 origin: locator.clone(),
                 order: OrderKey::new("stable-order"),
-                last_known: crate::graph_document::LastKnownPortMetadata::default(),
+                last_known: yss_graph_document::LastKnownPortMetadata::default(),
             },
         );
         document.connections.insert(

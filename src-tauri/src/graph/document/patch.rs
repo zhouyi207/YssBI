@@ -38,7 +38,7 @@ impl GraphDocumentPatch {
         for operation in &self.operations {
             operation.apply(document)?;
         }
-        document.validate()
+        super::validate_graph_document(document)
     }
 }
 
@@ -259,18 +259,70 @@ fn set_input_state(
     Ok(())
 }
 
-impl GraphDocument {
-    pub fn apply_patch(&mut self, patch: &GraphDocumentPatch) -> Result<(), DocumentError> {
-        let next_revision =
-            self.revision
-                .checked_next()
-                .map_err(|error| DocumentError::RevisionExhausted {
-                    retained: error.retained,
-                })?;
-        let mut staged = self.clone();
-        patch.apply_without_revision(&mut staged)?;
-        staged.revision = next_revision;
-        *self = staged;
-        Ok(())
+pub(crate) fn apply_graph_document_patch(
+    document: &mut GraphDocument,
+    patch: &GraphDocumentPatch,
+) -> Result<(), DocumentError> {
+    let next_revision =
+        document
+            .revision
+            .checked_next()
+            .map_err(|error| DocumentError::RevisionExhausted {
+                retained: error.retained,
+            })?;
+    let mut staged = document.clone();
+    patch.apply_without_revision(&mut staged)?;
+    staged.revision = next_revision;
+    *document = staged;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
+    };
+    use yss_graph_document::{
+        DocumentNode, DynamicPortBinding, GraphDocument, GraphRevision, NodeId, NodePosition,
+        OrderKey, ParameterValues, PortAddress,
+    };
+    use yss_graph_protocol::{NodeTypeId, PortKey};
+
+    #[test]
+    fn revisioned_patch_commit_is_atomic() {
+        let node_id = NodeId::new();
+        let node = DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.test.patch").unwrap(),
+            position: NodePosition { x: 1.0, y: 2.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut document = GraphDocument::default();
+
+        apply_graph_document_patch(
+            &mut document,
+            &GraphDocumentPatch::new([GraphDocumentOperation::InsertNode { node }]),
+        )
+        .unwrap();
+
+        assert_eq!(document.revision, GraphRevision::new(1));
+        assert!(document.nodes.contains_key(&node_id));
+
+        let before_invalid_patch = document.clone();
+        let declared_port = PortAddress::declared(node_id, PortKey::new("input").unwrap());
+        let error = apply_graph_document_patch(
+            &mut document,
+            &GraphDocumentPatch::new([GraphDocumentOperation::InsertPortBinding {
+                address: declared_port.clone(),
+                binding: DynamicPortBinding::UserCreated {
+                    order: OrderKey::new("rank-a"),
+                },
+            }]),
+        )
+        .unwrap_err();
+
+        assert_eq!(error, DocumentError::UnexpectedPortBinding(declared_port));
+        assert_eq!(document, before_invalid_patch);
     }
 }

@@ -582,3 +582,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将稳定 graph node/port/type/schema/value protocol、wire validation 与 dataframe
   nominal literals 迁入独立 `src-tauri/crates/yss-graph-protocol/` Pure Leaf；消费方直接
   依赖 crate，catalog assembly 测试归还 Graph owner，根 crate 不保留兼容 module。
+- [ ] 将 persisted graph document、entity identity、resource path 与 resource-name validation
+  迁入独立 `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 Project
+  直接消费 canonical validation error 与名称长度上限，避免镜像错误类型和重复规则事实源。

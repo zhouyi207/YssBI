@@ -135,8 +135,8 @@ mod tests {
     use super::*;
     use crate::graph::analysis::contracts::{ResourceVersion, ResourceVersionSet};
     use crate::graph::registry::RegistryFingerprint;
-    use crate::graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use uuid::Uuid;
+    use yss_graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use yss_graph_protocol::{SchemaExpr, TypeExpr, TypeId};
 
     type TestSnapshot = AnalysisSnapshot<

@@ -10,7 +10,6 @@ use crate::event::{Event, EventProject, emit_project_event_result};
 #[cfg(all(test, any()))]
 use crate::graph::document::ClipboardSubgraph;
 use crate::graph::document::EditorGraphMutation;
-use crate::graph_document::NodeId;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
 use crate::project::{MutationRequest, ProjectInstanceId};
@@ -19,6 +18,7 @@ use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
 use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::{AppHandle, State};
+use yss_graph_document::NodeId;
 
 #[cfg(all(test, any()))]
 pub(super) fn hydrate_editor_graph_from_state(

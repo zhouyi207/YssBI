@@ -860,7 +860,7 @@ impl<'a> RunExecutor<'a> {
         run_id: RunId,
         activation_id: ActivationId,
         plan: &ExecutionPlan,
-        node_id: crate::graph_document::NodeId,
+        node_id: yss_graph_document::NodeId,
     ) -> ActivationProvenance {
         ActivationProvenance {
             run_id,
@@ -877,7 +877,7 @@ impl<'a> RunExecutor<'a> {
         &self,
         run_id: RunId,
         plan: &ExecutionPlan,
-        node_id: crate::graph_document::NodeId,
+        node_id: yss_graph_document::NodeId,
         value_ref: ValueRef,
         contract: PlannedValueContract,
         value: Value,
@@ -910,7 +910,7 @@ impl<'a> RunExecutor<'a> {
             let result_id = self.create_internal_ready_result(
                 run_id,
                 plan,
-                crate::graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
+                yss_graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
                 *value_ref,
                 plan.value_contracts
                     .get(value_ref)

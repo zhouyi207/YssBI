@@ -110,6 +110,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/execution/` | immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
+| `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity、resource path 与 resource-name validation 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
@@ -314,14 +315,15 @@ ProjectState 在 project identity、resource revision 和 authority generation �
 Graph 与 Execution 的依赖方向是：
 
 ```text
-graph_document + protocol
+yss-graph-document + yss-graph-protocol
   → graph registry + catalog
   → graph analysis + neutral compiler
   → Application graph package mapping
   → Execution immutable plan/runtime
 ```
 
-- `graph/document`：Graph document 行为、mutation 与 materialization；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
+- `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
+- `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
 - `graph/catalog`、`graph/registry`：built-in descriptors、localized catalog 与 registry。
 - `graph/analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。

@@ -29,9 +29,8 @@ use crate::graph::compatibility::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot,
 };
-use crate::graph::document::MutationConflict;
 use crate::graph::document::{ClipboardSubgraph, EditorGraphMutation};
-use crate::graph_document::GraphResourcePath;
+use crate::graph::document::{MutationConflict, apply_graph_document_patch};
 use crate::project::project_writers::ProjectSaveResult;
 use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use crate::project::{
@@ -39,6 +38,7 @@ use crate::project::{
     ProjectInstanceId, ResourceRevision,
 };
 use std::collections::BTreeMap;
+use yss_graph_document::GraphResourcePath;
 use yss_graph_protocol::NodeTypeId;
 
 #[derive(Debug, Error)]
@@ -190,7 +190,7 @@ fn build_graph_shell(
     };
     let mut shell_nodes = Vec::new();
     for (node_type, x) in shell_types {
-        let id = crate::graph_document::NodeId::new();
+        let id = yss_graph_document::NodeId::new();
         let parameters = if kind == GraphDocumentKind::Function {
             [(
                 yss_graph_protocol::ParameterKey::new("function").map_err(|error| {
@@ -209,7 +209,7 @@ fn build_graph_shell(
         };
         resource.document.nodes.insert(
             id,
-            crate::graph_document::DocumentNode {
+            yss_graph_document::DocumentNode {
                 id,
                 node_type: yss_graph_protocol::NodeTypeId::new(*node_type).map_err(|error| {
                     ResourceMutationApplicationError::Project(
@@ -218,7 +218,7 @@ fn build_graph_shell(
                         },
                     )
                 })?,
-                position: crate::graph_document::NodePosition { x: *x, y: 160.0 },
+                position: yss_graph_document::NodePosition { x: *x, y: 160.0 },
                 parameters,
                 user_label: None,
             },
@@ -226,12 +226,12 @@ fn build_graph_shell(
         shell_nodes.push(id);
     }
     if let [entry, returned] = shell_nodes.as_slice() {
-        let id = crate::graph_document::ConnectionId::new();
+        let id = yss_graph_document::ConnectionId::new();
         resource.document.connections.insert(
             id,
-            crate::graph_document::DocumentConnection {
+            yss_graph_document::DocumentConnection {
                 id,
-                output: crate::graph_document::PortAddress::declared(
+                output: yss_graph_document::PortAddress::declared(
                     *entry,
                     yss_graph_protocol::PortKey::new("then").map_err(|error| {
                         ResourceMutationApplicationError::Project(
@@ -241,7 +241,7 @@ fn build_graph_shell(
                         )
                     })?,
                 ),
-                input: crate::graph_document::PortAddress::declared(
+                input: yss_graph_document::PortAddress::declared(
                     *returned,
                     yss_graph_protocol::PortKey::new("enter").map_err(|error| {
                         ResourceMutationApplicationError::Project(
@@ -261,7 +261,7 @@ fn build_graph_shell(
 fn build_graph_projection_replacement(
     captured: &ApplicationSession,
     graph_path: &GraphResourcePath,
-    document: &crate::graph_document::GraphDocument,
+    document: &yss_graph_document::GraphDocument,
     locale: &str,
 ) -> Result<GraphProjectionReplacement, ResourceMutationApplicationError> {
     let project = capture_localized_project_facts(captured)
@@ -337,7 +337,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        node_ids: Vec<crate::graph_document::NodeId>,
+        node_ids: Vec<yss_graph_document::NodeId>,
     ) -> Result<ClipboardSubgraph, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let catalog = build_catalog_mutation_validation_snapshot(&captured)?;
@@ -394,7 +394,7 @@ impl ApplicationState {
             )
             .map_err(ResourceMutationApplicationError::Mutation)?;
         let mut candidate = capture.document.as_ref().clone();
-        candidate.apply_patch(&patch).map_err(|error| {
+        apply_graph_document_patch(&mut candidate, &patch).map_err(|error| {
             ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
         })?;
         let receipt = commit_captured_graph_candidate(

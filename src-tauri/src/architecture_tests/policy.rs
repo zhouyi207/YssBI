@@ -163,16 +163,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
         RustLayer::BackendAdapter,
     ),
-    ("src-tauri/src/graph_document/mod.rs", RustLayer::PureLeaf),
-    (
-        "src-tauri/src/graph_document/identity.rs",
-        RustLayer::PureLeaf,
-    ),
-    ("src-tauri/src/graph_document/model.rs", RustLayer::PureLeaf),
-    (
-        "src-tauri/src/graph_document/resource_path.rs",
-        RustLayer::PureLeaf,
-    ),
     (
         "src-tauri/src/graph/catalog/builtin.rs",
         RustLayer::BuiltinComposition,
@@ -357,8 +347,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::PureLeaf,
-        repository_relative_source_file: "src-tauri/src/graph_document/model.rs",
-        fully_qualified_owner: "yssbi_lib::graph_document::model",
+        repository_relative_source_file: "src-tauri/crates/yss-graph-document/src/model.rs",
+        fully_qualified_owner: "yss_graph_document::model",
         canonical_origin_targets: &[
             "yss_graph_protocol::identity::NodeTypeId",
             "yss_graph_protocol::identity::ParameterKey",
@@ -726,7 +716,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::schema::application_event::graph_mutation_to_transport",
             "yssbi_lib::graph::document::EditorGraphMutation",
             "yssbi_lib::graph::document::mutation::EditorGraphMutation",
-            "yssbi_lib::graph_document::NodeId",
+            "yss_graph_document::NodeId",
             "yssbi_lib::project::history::MutationRequest",
             "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::schema::application_event::GraphMutationResultDto",
@@ -1772,6 +1762,7 @@ fn non_build_memberships(
         package,
         "yss-data-contract"
             | "yss-database-contract"
+            | "yss-graph-document"
             | "yss-graph-protocol"
             | "yss-math"
             | "yss-tabular-contract"
@@ -1815,7 +1806,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "event" | "schema" | "error" => Some(RustLayer::Transport),
         "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
-        "graph_document" => Some(RustLayer::PureLeaf),
         "backend_adapters" => Some(RustLayer::BackendAdapter),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,

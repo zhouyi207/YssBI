@@ -15,8 +15,8 @@ use syn::{Expr, ImplItem, Item, Token, TraitItem, Type, UseTree, Visibility};
 pub(super) const PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE: &str = "rust.pure-leaf.graph-document-json";
 pub(super) const TABULAR_CONTRACT_RULE: &str = "rust.tabular.contract";
 pub(super) const PROJECT_WATCHER_BOUNDARY_RULE: &str = "rust.project-watcher.boundary";
-const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/src/graph_document/model.rs";
-const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/src/graph_document/";
+const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/crates/yss-graph-document/src/model.rs";
+const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/crates/yss-graph-document/src/";
 
 const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
     "src-tauri/src/project/project_change.rs",
@@ -308,10 +308,10 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
         .unwrap_or_else(|error| panic!("failed to read {mutation_path}: {error}"));
     let mut violations = Vec::new();
     for forbidden in [
-        "impl From<crate::graph_document::GraphRevision> for ResourceRevision",
-        "impl From<ResourceRevision> for crate::graph_document::GraphRevision",
-        "impl PartialEq<crate::graph_document::GraphRevision> for ResourceRevision",
-        "impl PartialEq<ResourceRevision> for crate::graph_document::GraphRevision",
+        "impl From<yss_graph_document::GraphRevision> for ResourceRevision",
+        "impl From<ResourceRevision> for yss_graph_document::GraphRevision",
+        "impl PartialEq<yss_graph_document::GraphRevision> for ResourceRevision",
+        "impl PartialEq<ResourceRevision> for yss_graph_document::GraphRevision",
     ] {
         if identity.contains(forbidden) {
             violations.push(format!(

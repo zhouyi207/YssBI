@@ -3,13 +3,13 @@ use std::fmt;
 use std::sync::LazyLock;
 use unicode_normalization::UnicodeNormalization;
 
-const MAX_RESOURCE_NAME_CHARACTERS: usize = 80;
+pub const MAX_RESOURCE_NAME_CHARACTERS: usize = 80;
 static LETTER_OR_NUMBER: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[\p{L}\p{N}]$").expect("resource-name Unicode category regex is valid")
 });
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ResourceNameValidationError {
+pub enum ResourceNameValidationError {
     Empty,
     NotNfc,
     ForbiddenCharacter(char),
@@ -41,7 +41,7 @@ impl fmt::Display for ResourceNameValidationError {
 
 impl std::error::Error for ResourceNameValidationError {}
 
-pub(crate) fn validate_resource_name(input: &str) -> Result<(), ResourceNameValidationError> {
+pub fn validate_resource_name(input: &str) -> Result<(), ResourceNameValidationError> {
     if input.is_empty() {
         return Err(ResourceNameValidationError::Empty);
     }

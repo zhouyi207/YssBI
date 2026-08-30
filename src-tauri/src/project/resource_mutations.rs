@@ -15,7 +15,7 @@ pub(crate) use test_support::{ResourceMutationTestHook, ResourceMutationTestPoin
 #[cfg(test)]
 fn fixture_result_path(
     result: &crate::schema::application_event::ResourceMutationResultDto,
-) -> Option<crate::graph_document::GraphResourcePath> {
+) -> Option<yss_graph_document::GraphResourcePath> {
     let paths = match &result.projection_status {
         crate::schema::application_event::ProjectionStatusDto::Complete {
             expected_graph_paths,
@@ -27,5 +27,5 @@ fn fixture_result_path(
     paths
         .iter()
         .find(|path| path.starts_with("events/") || path.starts_with("functions/"))
-        .and_then(|path| crate::graph_document::GraphResourcePath::new(path.clone()).ok())
+        .and_then(|path| yss_graph_document::GraphResourcePath::new(path.clone()).ok())
 }

@@ -898,7 +898,7 @@ mod tests {
         )
         .unwrap();
         let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/DatabaseWriter.yssbi-event")
+            yss_graph_document::GraphResourcePath::new("events/DatabaseWriter.yssbi-event")
                 .unwrap();
         state
             .insert_graph(
@@ -1008,7 +1008,7 @@ mod tests {
         )
         .unwrap();
         let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event")
+            yss_graph_document::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event")
                 .unwrap();
         state
             .insert_graph(
@@ -1217,8 +1217,7 @@ mod tests {
 
         state
             .insert_graph(
-                crate::graph_document::GraphResourcePath::new("events/Unrelated.yssbi-event")
-                    .unwrap(),
+                yss_graph_document::GraphResourcePath::new("events/Unrelated.yssbi-event").unwrap(),
                 crate::project::GraphResourceDocument::new(
                     "Unrelated",
                     crate::project::GraphDocumentKind::Event,
@@ -1308,7 +1307,7 @@ mod tests {
             .unwrap();
         state
             .insert_graph(
-                crate::graph_document::GraphResourcePath::new("events/UnrelatedRename.yssbi-event")
+                yss_graph_document::GraphResourcePath::new("events/UnrelatedRename.yssbi-event")
                     .unwrap(),
                 crate::project::GraphResourceDocument::new(
                     "Unrelated Rename",

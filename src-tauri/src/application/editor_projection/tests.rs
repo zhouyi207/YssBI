@@ -7,11 +7,11 @@ use crate::graph::analysis::{
 use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::settings::GraphCompileSettings;
-use crate::graph_document::{
+use std::collections::BTreeMap;
+use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
 };
-use std::collections::BTreeMap;
 use yss_graph_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
     PortKind, TypeExpr, TypeId,
@@ -149,7 +149,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             position: NodePosition { x: 120.5, y: -32.0 },
             parameters: ParameterValues::from([(
                 ParameterKey::new("value").expect("test parameter key is valid"),
-                crate::graph_document::TypedValue::Bool(true),
+                yss_graph_document::TypedValue::Bool(true),
             )]),
             user_label: Some("Contract Boolean".to_owned()),
         },
@@ -224,7 +224,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(
         model.nodes[0].parameters[0].value,
-        Some(crate::graph_document::TypedValue::Bool(true))
+        Some(yss_graph_document::TypedValue::Bool(true))
     );
     assert_eq!(
         model.nodes[0].display.user_label.as_deref(),

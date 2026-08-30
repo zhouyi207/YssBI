@@ -4,10 +4,10 @@ use crate::application::execution::run_graph::{
 use crate::execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use crate::execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
 use crate::execution::value::RuntimeValue;
-use crate::graph_document::GraphResourcePath;
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
+use yss_graph_document::GraphResourcePath;
 
 const MAX_SAFE_PREVIEW_GENERATION: u64 = 9_007_199_254_740_991;
 
@@ -19,7 +19,7 @@ pub struct GraphOutputRefDto {
 }
 
 fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
-    let port: crate::graph_document::PortAddress = value.port.try_into().map_err(|_| ())?;
+    let port: yss_graph_document::PortAddress = value.port.try_into().map_err(|_| ())?;
     let graph = GraphResourcePath::new(value.graph_path).map_err(|_| ())?;
     let graph = PlanGraphId::new(graph.as_str().to_owned().into_boxed_str()).map_err(|_| ())?;
     let port = PlanPortAddress::new(port.to_string().into_boxed_str()).map_err(|_| ())?;

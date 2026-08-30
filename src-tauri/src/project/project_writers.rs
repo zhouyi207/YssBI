@@ -1,4 +1,3 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey};
 use crate::project::{
@@ -17,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_data_contract::{DataType, DataValue};
+use yss_graph_document::GraphResourcePath;
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 #[path = "project_writers/graph.rs"]
@@ -619,7 +619,6 @@ impl ProjectState {
 mod tests {
     use super::set_writer_snapshot_test_hook;
     use crate::graph::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
-    use crate::graph_document::GraphResourcePath;
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
         ProjectFilesystemFaultPoint, ProjectState, ResourceName, WorksheetDocument,
@@ -629,6 +628,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourcePath;
     use yss_variable_contract::VariableScope;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
@@ -720,7 +720,7 @@ mod tests {
             let mut authority = state.project_data.write().unwrap();
             let graph = authority.graphs.get_mut(&path).unwrap();
             graph.name = "After".into();
-            graph.document.revision = crate::graph_document::GraphRevision::new(1);
+            graph.document.revision = yss_graph_document::GraphRevision::new(1);
         }
         drop(lease);
 
@@ -857,7 +857,7 @@ mod tests {
         let project = TestProject::new("function-revision");
         let path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
         let mut function = GraphResourceDocument::new("Shared", GraphDocumentKind::Function);
-        function.document.revision = crate::graph_document::GraphRevision::new(4);
+        function.document.revision = yss_graph_document::GraphRevision::new(4);
         function.function.as_mut().unwrap().revision = ResourceRevision::new(4);
         let mut data = ProjectData::new();
         data.graphs.insert(path.clone(), function);

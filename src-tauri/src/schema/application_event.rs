@@ -432,7 +432,7 @@ mod tests {
             deltas: Vec::new(),
             projection_status: ResourceProjectionStatus::Complete {
                 expected_graph_paths: vec![
-                    crate::graph_document::GraphResourcePath::new("events/After.yssbi-event")
+                    yss_graph_document::GraphResourcePath::new("events/After.yssbi-event")
                         .expect("fixture graph path is valid"),
                 ],
             },

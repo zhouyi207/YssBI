@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::graph::error::GraphMutationError;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
-use crate::graph_document::{GraphDocument, GraphRevision};
+use yss_graph_document::{GraphDocument, GraphRevision};
 
 #[derive(Clone, Debug)]
 pub enum GraphMutation {

@@ -40,7 +40,7 @@ impl CommittedResourceMutation {
             crate::project::project_writers::ProjectProjectionStatus::Incomplete {
                 invalidated_graph_paths: expected_graph_paths
                     .into_iter()
-                    .filter_map(|path| crate::graph_document::GraphResourcePath::new(path).ok())
+                    .filter_map(|path| yss_graph_document::GraphResourcePath::new(path).ok())
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             },
@@ -290,7 +290,7 @@ impl ProjectState {
                             .or_else(|| existing.map(|resource| resource.document.revision));
                         let incoming = existing
                             .map(|resource| resource.document.revision)
-                            .unwrap_or(crate::graph_document::GraphRevision::INITIAL);
+                            .unwrap_or(yss_graph_document::GraphRevision::INITIAL);
                         Some(authoritative_function_revision(&path, incoming, retained)?)
                     } else {
                         None
@@ -350,7 +350,7 @@ impl ProjectState {
                                 .or_else(|| existing.map(|resource| resource.document.revision));
                             let incoming = existing
                                 .map(|resource| resource.document.revision)
-                                .unwrap_or(crate::graph_document::GraphRevision::INITIAL);
+                                .unwrap_or(yss_graph_document::GraphRevision::INITIAL);
                             Some(authoritative_function_revision(&from, incoming, retained)?)
                         } else {
                             None

@@ -10,7 +10,7 @@ use crate::graph::compiler::package::{
 use crate::graph::error::GraphCompileError;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
@@ -177,7 +177,7 @@ fn lower_parameters(
 fn node_value_refs(
     document: &GraphDocument,
     graph_path: &GraphResourcePath,
-) -> Result<BTreeMap<crate::graph_document::NodeId, GraphValueRef>, GraphCompileError> {
+) -> Result<BTreeMap<yss_graph_document::NodeId, GraphValueRef>, GraphCompileError> {
     document
         .nodes
         .keys()
@@ -192,9 +192,9 @@ fn node_value_refs(
 }
 
 fn lower_input_bindings(
-    node_id: crate::graph_document::NodeId,
+    node_id: yss_graph_document::NodeId,
     document: &GraphDocument,
-    value_refs: &BTreeMap<crate::graph_document::NodeId, GraphValueRef>,
+    value_refs: &BTreeMap<yss_graph_document::NodeId, GraphValueRef>,
     graph_path: &GraphResourcePath,
 ) -> Result<Box<[GraphInputBinding]>, GraphCompileError> {
     let mut bindings = Vec::new();
@@ -233,7 +233,7 @@ fn lower_input_bindings(
 }
 
 fn node_parameter_handle(
-    node_id: crate::graph_document::NodeId,
+    node_id: yss_graph_document::NodeId,
     parameter: &str,
 ) -> GraphParameterHandle {
     GraphParameterHandle::new(format!("node/{node_id}/{parameter}"))
@@ -250,7 +250,7 @@ enum ParameterLoweringError {
 }
 
 fn lower_parameter_value(
-    value: &crate::graph_document::TypedValue,
+    value: &yss_graph_document::TypedValue,
 ) -> Result<GraphParameterValue, ParameterLoweringError> {
     if value.is_null() {
         return Ok(GraphParameterValue::Scalar(GraphParameterScalar::Null));

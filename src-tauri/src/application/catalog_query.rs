@@ -10,12 +10,12 @@ use crate::graph::catalog::{
 use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{FunctionSignature, GraphResourceId, VariableValueContract};
 use crate::graph::runtime_state::GraphRuntimeCatalogError;
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
@@ -106,7 +106,7 @@ enum ProjectCatalogReadSourceKind {
     #[error("project filesystem read failed")]
     Filesystem(#[source] ProjectFilesystemError),
     #[error("project graph declaration path is invalid")]
-    InvalidGraphPath(#[source] crate::graph_document::GraphResourcePathError),
+    InvalidGraphPath(#[source] yss_graph_document::GraphResourcePathError),
     #[error("project function declaration type is invalid")]
     InvalidFunctionType,
     #[error("project catalog declaration facts are invalid")]
@@ -120,7 +120,7 @@ impl ProjectCatalogReadSource {
         }
     }
 
-    fn invalid_graph_path(error: crate::graph_document::GraphResourcePathError) -> Self {
+    fn invalid_graph_path(error: yss_graph_document::GraphResourcePathError) -> Self {
         Self {
             reason: ProjectCatalogReadSourceKind::InvalidGraphPath(error),
         }

@@ -2,8 +2,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use yss_graph_document::ResourceNameValidationError;
 
-use super::{ResourceName, ResourceNameError, WORKSHEET_EXTENSION, WORKSHEETS_DIR};
+use super::{ResourceName, WORKSHEET_EXTENSION, WORKSHEETS_DIR};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WorksheetResourcePathError {
@@ -14,7 +15,7 @@ pub enum WorksheetResourcePathError {
     #[error("worksheet resource path must use the .yssbi-worksheet extension")]
     WrongExtension,
     #[error("worksheet resource path has an invalid name")]
-    InvalidName(#[source] ResourceNameError),
+    InvalidName(#[source] ResourceNameValidationError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -83,7 +84,8 @@ mod tests {
     use std::path::Path;
 
     use super::{WorksheetResourcePath, WorksheetResourcePathError};
-    use crate::project::{ResourceName, ResourceNameError};
+    use crate::project::ResourceName;
+    use yss_graph_document::ResourceNameValidationError;
 
     #[test]
     fn worksheet_path_round_trips_canonical_resource_identity() {
@@ -122,7 +124,7 @@ mod tests {
         assert_eq!(
             WorksheetResourcePath::parse("worksheets/Sales?.yssbi-worksheet"),
             Err(WorksheetResourcePathError::InvalidName(
-                ResourceNameError::ForbiddenCharacter('?')
+                ResourceNameValidationError::ForbiddenCharacter('?')
             ))
         );
     }

@@ -1,8 +1,8 @@
 use crate::application::editor_projection::EditorProjectionModel;
-use crate::graph_document::GraphResourcePath;
 use crate::project::FunctionEditorProjection;
 use crate::project::{OperationId, ProjectInstanceId, ProjectRecord};
 use crate::project::{ResourceDeltaEvent, ResourceLifecycleKind};
+use yss_graph_document::GraphResourcePath;
 
 /// Low-rate cross-owner facts owned by Application.
 ///

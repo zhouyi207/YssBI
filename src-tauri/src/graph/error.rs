@@ -1,6 +1,6 @@
 use super::resource_catalog::GraphResourceId;
-use crate::graph_document::GraphResourcePath;
 use thiserror::Error;
+use yss_graph_document::GraphResourcePath;
 
 #[derive(Debug, Error)]
 pub enum GraphCatalogError {

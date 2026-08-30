@@ -352,7 +352,7 @@ impl ProjectState {
         excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
         known_revisions: &std::collections::HashMap<
             GraphResourcePath,
-            crate::graph_document::GraphRevision,
+            yss_graph_document::GraphRevision,
         >,
     ) -> Result<GraphRenameDiskPlan, String> {
         let mut plan = GraphRenameDiskPlan {

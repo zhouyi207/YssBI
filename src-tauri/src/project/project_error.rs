@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 use thiserror::Error;
+use yss_graph_document::ResourceNameValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
     #[error("invalid resource name: {0}")]
-    InvalidResourceName(#[from] super::ResourceNameError),
+    InvalidResourceName(#[from] ResourceNameValidationError),
     #[error("invalid worksheet resource path: {0}")]
     InvalidWorksheetResourcePath(#[from] super::WorksheetResourcePathError),
     #[error("invalid project root '{}': {message}", path.display())]
@@ -105,14 +106,14 @@ impl ProjectFilesystemError {
     }
 }
 
-const fn resource_name_error_code(error: &super::ResourceNameError) -> &'static str {
+const fn resource_name_error_code(error: &ResourceNameValidationError) -> &'static str {
     match error {
-        super::ResourceNameError::NotNfc => "resource_name_not_normalized",
-        super::ResourceNameError::Reserved => "resource_name_reserved",
-        super::ResourceNameError::TooLong => "resource_name_too_long",
-        super::ResourceNameError::Empty
-        | super::ResourceNameError::ForbiddenCharacter(_)
-        | super::ResourceNameError::InvalidSpacing => "invalid_resource_name",
+        ResourceNameValidationError::NotNfc => "resource_name_not_normalized",
+        ResourceNameValidationError::Reserved => "resource_name_reserved",
+        ResourceNameValidationError::TooLong => "resource_name_too_long",
+        ResourceNameValidationError::Empty
+        | ResourceNameValidationError::ForbiddenCharacter(_)
+        | ResourceNameValidationError::InvalidSpacing => "invalid_resource_name",
     }
 }
 
@@ -137,8 +138,8 @@ pub enum ProjectError {
     InvalidGraphDocument { path: PathBuf, message: String },
 }
 
-impl From<crate::graph_document::GraphResourcePathError> for ProjectError {
-    fn from(source: crate::graph_document::GraphResourcePathError) -> Self {
+impl From<yss_graph_document::GraphResourcePathError> for ProjectError {
+    fn from(source: yss_graph_document::GraphResourcePathError) -> Self {
         Self::InvalidProjectFormat(source.to_string())
     }
 }
@@ -146,20 +147,33 @@ impl From<crate::graph_document::GraphResourcePathError> for ProjectError {
 #[cfg(test)]
 mod tests {
     use super::ProjectFilesystemError;
-    use crate::project::{ResourceNameError, WorksheetResourcePathError};
+    use crate::project::WorksheetResourcePathError;
+    use yss_graph_document::ResourceNameValidationError;
 
     #[test]
     fn resource_name_errors_have_stable_ipc_codes() {
         for (source, code) in [
-            (ResourceNameError::Empty, "invalid_resource_name"),
+            (ResourceNameValidationError::Empty, "invalid_resource_name"),
             (
-                ResourceNameError::ForbiddenCharacter('?'),
+                ResourceNameValidationError::ForbiddenCharacter('?'),
                 "invalid_resource_name",
             ),
-            (ResourceNameError::InvalidSpacing, "invalid_resource_name"),
-            (ResourceNameError::NotNfc, "resource_name_not_normalized"),
-            (ResourceNameError::Reserved, "resource_name_reserved"),
-            (ResourceNameError::TooLong, "resource_name_too_long"),
+            (
+                ResourceNameValidationError::InvalidSpacing,
+                "invalid_resource_name",
+            ),
+            (
+                ResourceNameValidationError::NotNfc,
+                "resource_name_not_normalized",
+            ),
+            (
+                ResourceNameValidationError::Reserved,
+                "resource_name_reserved",
+            ),
+            (
+                ResourceNameValidationError::TooLong,
+                "resource_name_too_long",
+            ),
         ] {
             assert_eq!(
                 ProjectFilesystemError::InvalidResourceName(source).code(),
@@ -171,7 +185,7 @@ mod tests {
     #[test]
     fn resource_path_errors_preserve_name_error_ipc_codes() {
         let not_normalized = ProjectFilesystemError::InvalidWorksheetResourcePath(
-            WorksheetResourcePathError::InvalidName(ResourceNameError::NotNfc),
+            WorksheetResourcePathError::InvalidName(ResourceNameValidationError::NotNfc),
         );
         let structurally_invalid = ProjectFilesystemError::InvalidWorksheetResourcePath(
             WorksheetResourcePathError::WrongDirectory,

@@ -1,8 +1,8 @@
 use crate::error::{CommandError, GraphMutationErrorDetailsDto};
 use crate::event::{Event, EventProject};
-use crate::graph_document::GraphResourcePath;
 use crate::schema::application_event::ResourceMutationResultDto;
 use serde::Serialize;
+use yss_graph_document::GraphResourcePath;
 
 pub(super) fn parse_graph_path(value: String) -> Result<GraphResourcePath, CommandError> {
     GraphResourcePath::new(value).map_err(|_| CommandError::expected("invalid_project_format"))

@@ -16,7 +16,7 @@ pub struct ProjectState {
     pub(in crate::project) activation_generation: Arc<std::sync::atomic::AtomicU64>,
     pub(in crate::project) activation_identity: Arc<RwLock<ProjectAuthorityExpectation>>,
     pub(in crate::project) graph_revisions: Arc<
-        RwLock<std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>>,
+        RwLock<std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>>,
     >,
     pub(in crate::project) variable_revisions: Arc<
         RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,

@@ -14,7 +14,7 @@ use yss_graph_protocol::{
     TypeExpr, TypeId, Value,
 };
 use crate::graph::registry::RegistryFingerprint;
-use crate::graph_document::{
+use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
 };
@@ -150,7 +150,7 @@ fn compile_builtin_flow(
                     NodeId::from_uuid(uuid::Uuid::from_u128(node)),
                     PortKey::new(port).unwrap(),
                 ),
-                crate::graph_document::InputState {
+                yss_graph_document::InputState {
                     literal_override: Some(
                         serde_json::to_value(yss_graph_protocol::TypedValue {
                             value_type: TypeExpr::Concrete(TypeId::new(value_type).unwrap()),
@@ -169,12 +169,12 @@ fn compile_builtin_flow(
             let address = PortAddress::instance(
                 target_node,
                 PortKey::new(*target_port).unwrap(),
-                crate::graph_document::PortInstanceId::from_uuid(id.as_uuid()),
+                yss_graph_document::PortInstanceId::from_uuid(id.as_uuid()),
             );
             graph.port_bindings.insert(
                 address.clone(),
-                crate::graph_document::DynamicPortBinding::UserCreated {
-                    order: crate::graph_document::OrderKey::new("00000"),
+                yss_graph_document::DynamicPortBinding::UserCreated {
+                    order: yss_graph_document::OrderKey::new("00000"),
                 },
             );
             address

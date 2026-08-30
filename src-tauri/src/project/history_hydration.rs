@@ -1,4 +1,3 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::{
     GraphDocumentKind, HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectData,
     ProjectDocumentState, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectHistory,
@@ -8,6 +7,7 @@ use crate::project::{
 use crate::project::{HistoryEntryId, ResourceRevision};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use yss_graph_document::GraphResourcePath;
 use yss_variable_contract::{VariableInstance, VariableScope};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24,7 +24,7 @@ pub(super) struct HistoryPreparationBasis {
     pub persistence: HistoryPersistencePolicy,
     pub undo: bool,
     pub expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
-    pub expected_graph_revisions: BTreeMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+    pub expected_graph_revisions: BTreeMap<GraphResourcePath, yss_graph_document::GraphRevision>,
     pub residency: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
 }
 
@@ -53,7 +53,7 @@ pub(super) struct HistoryPreparationSnapshot {
     undo: bool,
     transaction: ProjectHistoryTransaction,
     graph_revisions:
-        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
@@ -96,7 +96,7 @@ pub(super) fn discover_touched_resources(
             ResourceKey::Function(key) => {
                 let path = GraphResourcePath::new(key.0.as_ref())
                     .map_err(|error| format!("invalid Function owner graph: {error}"))?;
-                if path.kind() != crate::graph_document::GraphResourceKind::Function
+                if path.kind() != yss_graph_document::GraphResourceKind::Function
                     || !known_graphs.contains(&path)
                 {
                     return Err(format!(
@@ -168,7 +168,7 @@ pub(super) fn capture_history_preparation_snapshot(
     data: ProjectData,
     graph_revisions: std::collections::HashMap<
         GraphResourcePath,
-        crate::graph_document::GraphRevision,
+        yss_graph_document::GraphRevision,
     >,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
@@ -942,8 +942,6 @@ fn insert_local_variable_owner(
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
     use crate::graph::document::{GraphDocumentOperation, GraphDocumentPatch};
-    use crate::graph_document::GraphResourcePath as DocumentGraphResourcePath;
-    use crate::graph_document::GraphResourcePath;
     use crate::project::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentKind,
         GraphResourceDocument, ProjectData, ProjectHistoryTransaction, ResourcePatch,
@@ -952,6 +950,8 @@ mod tests {
     use crate::project::{OperationId, ResourceRevision};
     use std::collections::{BTreeMap, BTreeSet};
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourcePath as DocumentGraphResourcePath;
+    use yss_graph_document::GraphResourcePath;
     use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
     const EVENT_PATH: &str = "events/Stable.yssbi-event";
@@ -1018,7 +1018,7 @@ mod tests {
             vec![
                 ResourcePatch::graph(
                     document_graph_path(&event_path()),
-                    crate::graph_document::GraphRevision::INITIAL,
+                    yss_graph_document::GraphRevision::INITIAL,
                     GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
                 ),
                 ResourcePatch::function(
@@ -1087,7 +1087,7 @@ mod tests {
             vec![
                 ResourcePatch::graph(
                     document_graph_path(&function_path()),
-                    crate::graph_document::GraphRevision::INITIAL,
+                    yss_graph_document::GraphRevision::INITIAL,
                     GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
                 ),
                 ResourcePatch::function(

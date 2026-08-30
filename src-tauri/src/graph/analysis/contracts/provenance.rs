@@ -1,6 +1,6 @@
 use super::{CompilationBasis, CompileId};
-use crate::graph_document::{GraphResourcePath, GraphRevision};
 use serde::{Deserialize, Serialize};
+use yss_graph_document::{GraphResourcePath, GraphRevision};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]

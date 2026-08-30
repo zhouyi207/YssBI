@@ -3,13 +3,13 @@ use super::{
     RunOutputSink, RunOutputStream, RunPhase, RunResourceOwner, RunResourceSet, RuntimeValue,
 };
 use crate::execution::plan::legacy::{CompiledParameterHandle, KernelHandle};
-use crate::graph_document::{GraphResourcePath, NodeId, PortAddress};
 use crate::project::{NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KernelErrorKind {

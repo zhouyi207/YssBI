@@ -102,8 +102,7 @@ mod tests {
         let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x780));
         let delta = crate::project::ResourceDeltaEvent {
             resource: crate::project::ResourceKey::Graph(
-                crate::graph_document::GraphResourcePath::new("events/Created.yssbi-event")
-                    .unwrap(),
+                yss_graph_document::GraphResourcePath::new("events/Created.yssbi-event").unwrap(),
             ),
             from_revision: crate::project::ResourceRevision::INITIAL,
             to_revision: crate::project::ResourceRevision::new(1),
@@ -387,7 +386,7 @@ mod tests {
     #[test]
     fn graph_delta_event_carries_project_identity() {
         let delta = crate::application::events::GraphDeltaEvent {
-            graph_path: crate::graph_document::GraphResourcePath::new("events/Main.yssbi-event")
+            graph_path: yss_graph_document::GraphResourcePath::new("events/Main.yssbi-event")
                 .unwrap(),
             from_revision: crate::project::ResourceRevision::INITIAL,
             to_revision: crate::project::ResourceRevision::new(1),

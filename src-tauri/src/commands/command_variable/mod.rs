@@ -976,14 +976,14 @@ mod tests {
         std::path::PathBuf,
         ProjectState,
         ProjectInstanceId,
-        crate::graph_document::GraphResourcePath,
+        yss_graph_document::GraphResourcePath,
     ) {
         let root = std::env::temp_dir().join(format!(
             "yssbi-local-history-{label}-{}",
             uuid::Uuid::new_v4()
         ));
         let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/Local.yssbi-event").unwrap();
+            yss_graph_document::GraphResourcePath::new("events/Local.yssbi-event").unwrap();
         let mut data = ProjectData::new();
         data.graphs.insert(
             graph_path.clone(),
@@ -1004,7 +1004,7 @@ mod tests {
 
     fn disk_local_variables(
         root: &std::path::Path,
-        graph_path: &crate::graph_document::GraphResourcePath,
+        graph_path: &yss_graph_document::GraphResourcePath,
     ) -> std::collections::HashMap<VariableId, yss_variable_contract::VariableInstance> {
         let document: crate::project::project_io::GraphDocument =
             serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap())

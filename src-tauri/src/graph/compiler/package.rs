@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::graph::analysis::contracts::{CompilationBasis, CompileId};
 use crate::graph::analysis::result_category::GraphResultCategory;
-use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+use yss_graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
 
 /// Graph-owned value reference used while lowering a document.  Application
 /// maps it to the execution package only after the Graph compilation result

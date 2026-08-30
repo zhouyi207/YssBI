@@ -28,7 +28,6 @@ use crate::execution::state::{
     ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
 };
 use crate::graph::compiler::{GraphCompilationInput, compile};
-use crate::graph_document::GraphResourcePath;
 use crate::project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
@@ -36,6 +35,7 @@ use crate::project::execution_authority::{
     ProjectResourceRequirement,
 };
 use crate::project::{ProjectData, ProjectFilesystemError, ProjectInstanceId};
+use yss_graph_document::GraphResourcePath;
 
 /// A run demand is an Application-owned interpretation of the graph execution
 /// request. It contains only Pure Leaf graph/plan identities, never transport
@@ -638,7 +638,7 @@ fn collect_resource_requirements(
 
 fn plan_basis(
     captured: &ApplicationSession,
-    graph_revision: crate::graph_document::GraphRevision,
+    graph_revision: yss_graph_document::GraphRevision,
     grants: &[ProjectResourceGrant],
 ) -> Result<crate::execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
     let mut versions = BTreeMap::new();

@@ -3,12 +3,12 @@ use super::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
 use crate::graph::document::DocumentError;
 #[cfg(test)]
 use crate::graph::document::GraphDocumentPatch;
-use crate::graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::worksheet_io::{WorksheetDocument, WorksheetEncodings};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision};
 
 fn checked_document_revision(revision: ResourceRevision) -> Result<ResourceRevision, u64> {
     revision.checked_next().map_err(|error| error.retained)
@@ -1265,9 +1265,9 @@ impl ProjectGraphHistoryChange {
 mod wire_tests {
     use super::*;
     use crate::graph::document::GraphDocumentPatch;
-    use crate::graph_document::GraphResourcePath;
     use serde_json::json;
     use uuid::Uuid;
+    use yss_graph_document::GraphResourcePath;
 
     #[test]
     fn resource_delta_wire_is_camel_case() {

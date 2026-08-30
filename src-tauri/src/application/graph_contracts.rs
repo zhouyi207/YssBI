@@ -24,11 +24,11 @@ use crate::graph::resource_catalog::{
 };
 use crate::graph::schema::{ColumnSchema, DataSchema};
 use crate::graph::settings::GraphCompileSettings;
-use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
+use yss_graph_document::{GraphResourcePath, GraphRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectGraphResourceSnapshot {

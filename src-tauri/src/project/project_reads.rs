@@ -113,8 +113,8 @@ impl ProjectState {
     pub fn loaded_graph_document_for_catalog(
         &self,
         snapshot: &CatalogProjectSnapshot,
-        graph_path: &crate::graph_document::GraphResourcePath,
-    ) -> Result<Option<crate::graph_document::GraphDocument>, ProjectFilesystemError> {
+        graph_path: &yss_graph_document::GraphResourcePath,
+    ) -> Result<Option<yss_graph_document::GraphDocument>, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != snapshot.project_instance_id.as_str()
@@ -618,14 +618,14 @@ fn validate_project_index_authority(
 
 fn variable_owner_graph_path(
     scope: &yss_variable_contract::VariableScope,
-) -> Option<crate::graph_document::GraphResourcePath> {
+) -> Option<yss_graph_document::GraphResourcePath> {
     match scope {
         yss_variable_contract::VariableScope::Global => None,
         yss_variable_contract::VariableScope::Event { event_path } => {
-            crate::graph_document::GraphResourcePath::new(event_path).ok()
+            yss_graph_document::GraphResourcePath::new(event_path).ok()
         }
         yss_variable_contract::VariableScope::Function { function_path } => {
-            crate::graph_document::GraphResourcePath::new(function_path).ok()
+            yss_graph_document::GraphResourcePath::new(function_path).ok()
         }
     }
 }
@@ -714,7 +714,7 @@ fn overlay_authoritative_project_index(
         .worksheets
         .sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     for entry in &mut index.graphs {
-        let Ok(path) = crate::graph_document::GraphResourcePath::new(&entry.path) else {
+        let Ok(path) = yss_graph_document::GraphResourcePath::new(&entry.path) else {
             continue;
         };
         let Some(resource) = data.graphs.get(&path) else {
@@ -756,13 +756,13 @@ fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
 #[cfg(all(test, any()))]
 mod tests {
     use crate::graph::document::{FunctionParameter, FunctionSignature};
-    use crate::graph_document::FunctionParameterId;
-    use crate::graph_document::GraphResourcePath;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemError,
         ProjectState, fixtures, read_project_index as read_project_index_from_disk,
     };
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::FunctionParameterId;
+    use yss_graph_document::GraphResourcePath;
     use yss_variable_contract::VariableScope;
 
     use std::time::Duration;

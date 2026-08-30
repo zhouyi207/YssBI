@@ -2,10 +2,6 @@ use crate::graph::catalog::CatalogResourcePath;
 use crate::graph::catalog::{NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::document::{EditorMutationError, EditorMutationErrorCode};
 use crate::graph::registry::NodeRegistry;
-use crate::graph_document::{
-    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision,
-    LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
-};
 #[cfg(test)]
 use crate::schema::editor_projection_types::{
     EditorGraphProjectionDto, PortDirectionDto, PortKindDto, ResolvedPortDto,
@@ -14,6 +10,10 @@ use crate::schema::editor_projection_types::{
 use crate::schema::graph_mutation::PortAddressDto;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
+use yss_graph_document::{
+    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision,
+    LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
+};
 use yss_graph_protocol::{
     ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
     TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
@@ -28,7 +28,7 @@ pub struct CatalogMutationValidationSnapshot {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CatalogFunctionParameter {
-    pub(crate) id: crate::graph_document::FunctionParameterId,
+    pub(crate) id: yss_graph_document::FunctionParameterId,
     pub(crate) name: String,
     pub(crate) type_name: String,
 }
@@ -466,9 +466,9 @@ pub(crate) fn refine_source_type(
                 return;
             };
             let origin = match binding {
-                crate::graph_document::DynamicPortBinding::Resolved { origin, .. }
-                | crate::graph_document::DynamicPortBinding::Orphan { origin, .. } => origin,
-                crate::graph_document::DynamicPortBinding::UserCreated { .. } => return,
+                yss_graph_document::DynamicPortBinding::Resolved { origin, .. }
+                | yss_graph_document::DynamicPortBinding::Orphan { origin, .. } => origin,
+                yss_graph_document::DynamicPortBinding::UserCreated { .. } => return,
             };
             let DynamicMemberLocator::FunctionParameter { parameter, .. } = origin else {
                 return;
@@ -872,7 +872,7 @@ mod tests {
     fn source_expr(value_type: TypeExpr) -> SourcePort {
         SourcePort {
             address: PortAddress::declared(
-                crate::graph_document::NodeId::new(),
+                yss_graph_document::NodeId::new(),
                 PortKey::new("value").unwrap(),
             ),
             direction: PortDirection::Output,
@@ -919,7 +919,7 @@ mod tests {
         orphan: bool,
         connections: PortConnectionCapabilityDto,
     ) -> (EditorGraphProjectionDto, PortAddressDto) {
-        let node_id = crate::graph_document::NodeId::new();
+        let node_id = yss_graph_document::NodeId::new();
         let address = PortAddressDto::Declared {
             node_id: node_id.to_string().into(),
             port_key: "value".into(),
@@ -1049,7 +1049,7 @@ mod tests {
     #[test]
     fn phase1_connection_capability_create_candidate_uses_owning_type_parameters() {
         let address = PortAddress::declared(
-            crate::graph_document::NodeId::new(),
+            yss_graph_document::NodeId::new(),
             PortKey::new("value").unwrap(),
         );
         let snapshot = EditorMutationValidationSnapshot {

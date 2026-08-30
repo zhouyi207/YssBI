@@ -1,32 +1,17 @@
 use std::collections::HashSet;
 
-use thiserror::Error;
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
-
-const MAX_RESOURCE_NAME_CHARACTERS: usize = 80;
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ResourceNameError {
-    #[error("resource name cannot be empty")]
-    Empty,
-    #[error("resource name must be in Unicode NFC form")]
-    NotNfc,
-    #[error("resource name contains forbidden character '{0}'")]
-    ForbiddenCharacter(char),
-    #[error("resource name cannot have leading, trailing, or consecutive spaces")]
-    InvalidSpacing,
-    #[error("resource name is reserved")]
-    Reserved,
-    #[error("resource name cannot exceed 80 Unicode characters")]
-    TooLong,
-}
+use yss_graph_document::{
+    MAX_RESOURCE_NAME_CHARACTERS, ResourceNameValidationError, validate_resource_name,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ResourceName(String);
 
 impl ResourceName {
-    pub fn parse(input: &str) -> Result<Self, ResourceNameError> {
-        crate::graph_document::validate_resource_name(input).map_err(ResourceNameError::from)?;
+    pub fn parse(input: &str) -> Result<Self, ResourceNameValidationError> {
+        validate_resource_name(input)?;
         Ok(Self(input.to_owned()))
     }
 
@@ -36,23 +21,6 @@ impl ResourceName {
 
     pub fn portable_key(&self) -> String {
         self.0.case_fold().nfc().collect()
-    }
-}
-
-impl From<crate::graph_document::ResourceNameValidationError> for ResourceNameError {
-    fn from(source: crate::graph_document::ResourceNameValidationError) -> Self {
-        match source {
-            crate::graph_document::ResourceNameValidationError::Empty => Self::Empty,
-            crate::graph_document::ResourceNameValidationError::NotNfc => Self::NotNfc,
-            crate::graph_document::ResourceNameValidationError::ForbiddenCharacter(character) => {
-                Self::ForbiddenCharacter(character)
-            }
-            crate::graph_document::ResourceNameValidationError::InvalidSpacing => {
-                Self::InvalidSpacing
-            }
-            crate::graph_document::ResourceNameValidationError::Reserved => Self::Reserved,
-            crate::graph_document::ResourceNameValidationError::TooLong => Self::TooLong,
-        }
     }
 }
 
@@ -88,7 +56,8 @@ pub fn allocate_unique_resource_name<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ResourceName, ResourceNameError, allocate_unique_resource_name};
+    use super::{ResourceName, allocate_unique_resource_name};
+    use yss_graph_document::ResourceNameValidationError;
 
     #[test]
     fn resource_name_accepts_portable_unicode_names() {
@@ -116,7 +85,7 @@ mod tests {
         ] {
             assert_eq!(
                 ResourceName::parse(value),
-                Err(ResourceNameError::ForbiddenCharacter(character))
+                Err(ResourceNameValidationError::ForbiddenCharacter(character))
             );
         }
     }
@@ -126,7 +95,7 @@ mod tests {
         for value in [" Sales", "Sales ", "Sales  Report"] {
             assert_eq!(
                 ResourceName::parse(value),
-                Err(ResourceNameError::InvalidSpacing)
+                Err(ResourceNameValidationError::InvalidSpacing)
             );
         }
 
@@ -138,7 +107,7 @@ mod tests {
         ] {
             assert_eq!(
                 ResourceName::parse(value),
-                Err(ResourceNameError::ForbiddenCharacter(character))
+                Err(ResourceNameValidationError::ForbiddenCharacter(character))
             );
         }
     }
@@ -147,19 +116,22 @@ mod tests {
     fn resource_name_rejects_non_nfc_reserved_and_overlong_names() {
         assert_eq!(
             ResourceName::parse("Re\u{301}sume\u{301}"),
-            Err(ResourceNameError::NotNfc)
+            Err(ResourceNameValidationError::NotNfc)
         );
 
         for value in [
             ".", "..", "con", "PRN", "Aux", "nul", "COM1", "com9", "LPT1", "lpt9",
         ] {
-            assert_eq!(ResourceName::parse(value), Err(ResourceNameError::Reserved));
+            assert_eq!(
+                ResourceName::parse(value),
+                Err(ResourceNameValidationError::Reserved)
+            );
         }
 
         let overlong = "界".repeat(81);
         assert_eq!(
             ResourceName::parse(&overlong),
-            Err(ResourceNameError::TooLong)
+            Err(ResourceNameValidationError::TooLong)
         );
     }
 

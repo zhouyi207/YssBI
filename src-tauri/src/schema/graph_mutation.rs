@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::graph_document::{
+use yss_graph_document::{
     ConnectionId, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
     TypedValue,
 };
@@ -38,11 +38,11 @@ pub enum PortAddressMappingError {
 impl From<&PortAddress> for PortAddressDto {
     fn from(address: &PortAddress) -> Self {
         match &address.port {
-            crate::graph_document::PortRef::Declared { key } => Self::Declared {
+            yss_graph_document::PortRef::Declared { key } => Self::Declared {
                 node_id: address.node_id.to_string().into_boxed_str(),
                 port_key: key.as_str().into(),
             },
-            crate::graph_document::PortRef::Instance {
+            yss_graph_document::PortRef::Instance {
                 template,
                 instance_id,
             } => Self::Instance {

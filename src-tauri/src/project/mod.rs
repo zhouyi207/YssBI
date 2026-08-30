@@ -96,7 +96,7 @@ pub use resource_reveal::*;
 pub use worksheet_io::*;
 pub use worksheet_resource_path::*;
 
-use crate::graph_document::GraphResourcePath;
+use yss_graph_document::GraphResourcePath;
 
 #[cfg(test)]
 pub(crate) mod fixtures {

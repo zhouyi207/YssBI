@@ -1,9 +1,9 @@
 use super::run_output::RunOutputMessage;
 use super::{RelationalErrorCode, ResultId, RunError, RunId, RunPhase};
 use crate::execution::plan::legacy::GraphOutputRef;
-use crate::graph_document::GraphResourcePath;
 use crate::project::ProjectSessionId;
 use serde::{Deserialize, Serialize};
+use yss_graph_document::GraphResourcePath;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -317,9 +317,9 @@ pub static NOOP_RUN_EVENT_SINK: NoopRunEventSink = NoopRunEventSink;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph_document::GraphResourcePath;
     use crate::node_system::runtime::RunId;
     use crate::project::ProjectSessionId;
+    use yss_graph_document::GraphResourcePath;
 
     #[test]
     fn events_carry_only_graph_run_identity_and_kind() {

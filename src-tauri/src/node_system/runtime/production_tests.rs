@@ -9,7 +9,7 @@ use crate::graph::analysis::contracts::{
 };
 use yss_graph_protocol::OutputProduction;
 use crate::graph::registry::RegistryFingerprint;
-use crate::graph_document::{GraphResourcePath, GraphRevision};
+use yss_graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::ProjectSessionId;
 use polars::prelude::{Column, DataFrame};
 use std::collections::BTreeMap;
@@ -408,7 +408,7 @@ fn function_plan_generation_rejects_stale_abi_provenance() {
 
 #[test]
 fn function_plan_generation_rejects_aliased_abi_members() {
-    use crate::graph_document::FunctionParameterId;
+    use yss_graph_document::FunctionParameterId;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -462,7 +462,7 @@ fn function_plan_generation_rejects_aliased_abi_members() {
 #[test]
 fn function_plan_generation_requires_exact_result_production_keys() {
     use crate::execution::plan::legacy::PlanValueSource;
-    use crate::graph_document::FunctionParameterId;
+    use yss_graph_document::FunctionParameterId;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -521,7 +521,7 @@ fn function_plan_generation_requires_exact_result_production_keys() {
 #[test]
 fn function_plan_generation_rejects_stale_result_production_contract() {
     use crate::execution::plan::legacy::PlanValueSource;
-    use crate::graph_document::FunctionParameterId;
+    use yss_graph_document::FunctionParameterId;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -569,7 +569,7 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
 #[test]
 fn function_plan_generation_requires_initializable_parameters_and_sourced_results() {
     use crate::execution::plan::legacy::PlanValueSource;
-    use crate::graph_document::FunctionParameterId;
+    use yss_graph_document::FunctionParameterId;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);

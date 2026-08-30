@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::resource_mutations::ResourceOperationReservation;
 use crate::project::{
     ProjectFilesystemError, ProjectGraphHistoryChange, ProjectGraphHistoryState,
     ProjectGraphResidency, ProjectHistoryTransaction, ProjectInstanceId, ProjectSession,
 };
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 use super::state::ProjectState;
 

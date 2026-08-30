@@ -13,9 +13,6 @@ use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
 };
-use crate::graph_document::{
-    DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
-};
 use crate::project::ProjectSessionId;
 use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState};
 use std::collections::BTreeMap;
@@ -26,6 +23,9 @@ use std::thread;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+};
+use yss_graph_document::{
+    DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
 };
 use yss_graph_protocol::{NodeTypeId, PortKey};
 
@@ -139,16 +139,16 @@ fn staged_session(
 
 fn compatible_project(path: &GraphResourcePath, source_node: NodeId) -> ProjectData {
     let mut graph = GraphResourceDocument::new("Main", GraphDocumentKind::Event);
-    graph
-        .document
-        .create_node(DocumentNode {
+    graph.document.nodes.insert(
+        source_node,
+        DocumentNode {
             id: source_node,
             node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
             position: NodePosition { x: 0.0, y: 0.0 },
             parameters: ParameterValues::new(),
             user_label: None,
-        })
-        .unwrap();
+        },
+    );
     let mut project = ProjectData::new();
     project.graphs.insert(path.clone(), graph);
     project

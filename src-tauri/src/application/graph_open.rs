@@ -8,8 +8,8 @@ use crate::execution::plan::{
 };
 use crate::graph::analysis::GraphAnalysis;
 use crate::graph::error::GraphMutationError;
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId};
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 use super::catalog_query::revalidate_project_catalog_facts;
 use super::catalog_query::{ProjectCatalogReadError, capture_localized_project_facts};

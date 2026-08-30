@@ -121,7 +121,7 @@ pub fn get_pin_result_history(
     graph_path: String,
     output: crate::schema::graph_mutation::PortAddressDto,
 ) -> Result<Box<[PinResultEntryDto]>, CommandError> {
-    let graph_path = crate::graph_document::GraphResourcePath::new(graph_path)
+    let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?;
     let output = output
         .try_into()
@@ -394,7 +394,7 @@ pub(super) fn get_pin_result_history_from_state(
         .try_into()
         .map_err(|_| CommandError::expected("invalid_output"))?;
     let output = crate::execution::plan::legacy::GraphOutputRef {
-        graph_path: crate::graph_document::GraphResourcePath::new(graph_path)
+        graph_path: yss_graph_document::GraphResourcePath::new(graph_path)
             .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?,
         port,
     };

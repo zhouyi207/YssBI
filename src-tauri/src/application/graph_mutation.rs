@@ -8,12 +8,12 @@ use crate::application::execution::{
 use crate::graph::error::GraphMutationError;
 use crate::graph::mutation::{GraphMutation, PlannedGraphMutation, plan_graph_mutation};
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
-use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use crate::project::project_state::graph_operation::{
     GraphCommitReceipt, GraphInvalidationSet, GraphOperationCapture, ProjectGraphCommitError,
     ProjectGraphOperationError, ProjectHistoryStatus,
 };
 use crate::project::{OperationId, ProjectGraphHistoryChange, ProjectInstanceId};
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 #[derive(Clone, Debug)]
 pub struct GraphMutationRequest {
@@ -159,7 +159,6 @@ mod tests {
         GraphMutationRequest, SessionCaptureError, plan_captured_graph_mutation,
     };
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
-    use crate::graph_document::{DocumentNode, GraphDocument, GraphRevision, NodeId, NodePosition};
     use crate::project::project_state::graph_operation::ProjectGraphCommitError;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, OperationId, ProjectData, ProjectInstanceId,
@@ -167,6 +166,7 @@ mod tests {
     };
     use std::collections::BTreeMap;
     use std::sync::{Arc, Barrier};
+    use yss_graph_document::{DocumentNode, GraphDocument, GraphRevision, NodeId, NodePosition};
     use yss_graph_protocol::NodeTypeId;
 
     fn empty_catalog() -> ResourceCatalogSnapshot {
@@ -183,7 +183,7 @@ mod tests {
         let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
         let request = GraphMutationRequest::new(
             ProjectInstanceId::new(),
-            crate::graph_document::GraphResourcePath::new("events/Inactive.yssbi-event")
+            yss_graph_document::GraphResourcePath::new("events/Inactive.yssbi-event")
                 .expect("fixture path is valid"),
             GraphRevision::INITIAL,
             OperationId::new(),
@@ -200,9 +200,8 @@ mod tests {
 
     #[test]
     fn graph_commit_publishes_project_facts_after_candidate_handoff() {
-        let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/Committed.yssbi-event")
-                .expect("fixture path is valid");
+        let graph_path = yss_graph_document::GraphResourcePath::new("events/Committed.yssbi-event")
+            .expect("fixture path is valid");
         let mut project = ProjectData::new();
         project.graphs.insert(
             graph_path.clone(),
@@ -266,9 +265,8 @@ mod tests {
 
     #[test]
     fn graph_commit_rejects_authority_changed_at_barrier_without_candidate_effects() {
-        let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/Barrier.yssbi-event")
-                .expect("fixture path is valid");
+        let graph_path = yss_graph_document::GraphResourcePath::new("events/Barrier.yssbi-event")
+            .expect("fixture path is valid");
         let mut project = ProjectData::new();
         project.graphs.insert(
             graph_path.clone(),

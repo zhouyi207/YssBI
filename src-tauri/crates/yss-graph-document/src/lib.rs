@@ -9,9 +9,10 @@ pub use model::{
     FunctionParameterId, GraphDocument, InputState, LastKnownPortMetadata, NodePosition, OrderKey,
     ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
-pub(crate) use name::{ResourceNameValidationError, validate_resource_name};
-pub(crate) use resource_path::normalize_graph_resource_path;
-pub use resource_path::{GraphResourceKind, GraphResourcePath, GraphResourcePathError};
+pub use name::{MAX_RESOURCE_NAME_CHARACTERS, ResourceNameValidationError, validate_resource_name};
+pub use resource_path::{
+    GraphResourceKind, GraphResourcePath, GraphResourcePathError, normalize_graph_resource_path,
+};
 
 #[cfg(test)]
 mod tests {

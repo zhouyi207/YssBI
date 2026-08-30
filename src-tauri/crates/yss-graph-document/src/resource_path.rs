@@ -117,7 +117,7 @@ impl AsRef<str> for GraphResourcePath {
     }
 }
 
-pub(crate) fn normalize_graph_resource_path(path: &str) -> String {
+pub fn normalize_graph_resource_path(path: &str) -> String {
     path.replace('\\', "/")
         .trim_matches('/')
         .split('/')

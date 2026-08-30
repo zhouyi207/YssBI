@@ -148,7 +148,7 @@ pub fn load_project_graph(
     lifecycle_token: u64,
 ) -> Result<EditorGraphProjectionDto, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
-    let graph_path = crate::graph_document::GraphResourcePath::new(graph_path)
+    let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_project_format"))?;
     let receipt = state
         .open_graph(OpenGraphRequest::new(
@@ -251,11 +251,11 @@ mod tests {
         EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         MutationRequest, ResourceKey,
     };
-    use crate::graph_document::GraphResourcePath;
-    use crate::graph_document::GraphRevision;
     use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectInstanceId};
     use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::GraphResourcePath;
+    use yss_graph_document::GraphRevision;
     use yss_graph_protocol::NodeTypeId;
     use yss_variable_contract::VariableScope;
 
@@ -291,7 +291,7 @@ mod tests {
                 descriptor: crate::graph::catalog::NodeCreation::Static {
                     node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
                 },
-                position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
+                position: yss_graph_document::NodePosition { x: 10.0, y: 20.0 },
                 user_label: None,
                 connect_from: None,
             },
@@ -331,7 +331,7 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let function_path =
-            crate::graph_document::GraphResourcePath::new("functions/Recovery.yssbi-function")
+            yss_graph_document::GraphResourcePath::new("functions/Recovery.yssbi-function")
                 .unwrap();
         state
             .insert_graph(
@@ -390,8 +390,7 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let function_path =
-            crate::graph_document::GraphResourcePath::new("functions/History.yssbi-function")
-                .unwrap();
+            yss_graph_document::GraphResourcePath::new("functions/History.yssbi-function").unwrap();
         state
             .insert_graph(
                 function_path.clone(),
@@ -482,9 +481,9 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let graph_path =
-            crate::graph_document::GraphResourcePath::new("events/GraphOnly.yssbi-event").unwrap();
+            yss_graph_document::GraphResourcePath::new("events/GraphOnly.yssbi-event").unwrap();
         let function_path =
-            crate::graph_document::GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
+            yss_graph_document::GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
         state
             .insert_graph(
                 graph_path.clone(),

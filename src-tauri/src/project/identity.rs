@@ -160,12 +160,12 @@ impl ProjectTransactionRevision {
 }
 
 impl ResourceRevision {
-    pub const fn from_graph_revision(revision: crate::graph_document::GraphRevision) -> Self {
+    pub const fn from_graph_revision(revision: yss_graph_document::GraphRevision) -> Self {
         Self::new(revision.get())
     }
 
-    pub const fn to_graph_revision(self) -> crate::graph_document::GraphRevision {
-        crate::graph_document::GraphRevision::new(self.get())
+    pub const fn to_graph_revision(self) -> yss_graph_document::GraphRevision {
+        yss_graph_document::GraphRevision::new(self.get())
     }
 }
 

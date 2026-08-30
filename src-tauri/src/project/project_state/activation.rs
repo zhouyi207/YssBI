@@ -7,7 +7,7 @@ struct ActivationGarbage {
     _data: ProjectData,
     _store: ProjectStore,
     _graph_revisions:
-        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
     _variable_revisions:
         std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     _worksheet_revisions:

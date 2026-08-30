@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::graph_document::GraphResourcePath;
 use crate::project::WorksheetResourcePath;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
+use yss_graph_document::GraphResourcePath;
 
 use super::{ProjectError, ProjectState};
 

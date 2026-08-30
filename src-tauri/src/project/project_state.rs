@@ -1,7 +1,5 @@
 //! Authoritative project state for normalized node-system graph documents.
 
-use crate::graph_document::GraphResourcePath;
-use crate::graph_document::NodeId;
 use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
     GraphResourceDocument, NormalizedProjectRoot, PreparedProjectActivation, ProjectData,
@@ -18,6 +16,8 @@ use crate::project::{
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
+use yss_graph_document::GraphResourcePath;
+use yss_graph_document::NodeId;
 
 mod activation;
 mod authority;
@@ -794,7 +794,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn append_history_head_for_test(&self) {
         let path =
-            crate::graph_document::GraphResourcePath::new("events/ConcurrentHistory.yssbi-event")
+            yss_graph_document::GraphResourcePath::new("events/ConcurrentHistory.yssbi-event")
                 .unwrap();
         self.history.write().unwrap().record_committed_transaction(
             ProjectHistoryTransaction::graph_move(
@@ -945,7 +945,7 @@ impl ProjectState {
     pub(crate) fn revision_state_for_test(
         &self,
     ) -> (
-        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
         std::collections::HashMap<
             yss_variable_contract::VariableId,
             crate::project::ResourceRevision,

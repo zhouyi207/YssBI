@@ -881,13 +881,13 @@ const fn registration(
 mod tests {
     use super::*;
     use crate::execution::plan::legacy::{CompiledParameterHandle, CompiledResourceRequirement};
-    use crate::graph_document::{GraphResourcePath, NodeId};
     use crate::node_system::runtime::RunId;
     use crate::node_system::runtime::{
         ActivationId, CancellationToken, EffectiveComputationSettings, FrameId, KernelErrorKind,
         NOOP_RUN_OUTPUT_SINK, ResourceError, ResourceLease, ResourceProvider, RunResourceBudgets,
         RunResourceOwner, RunResourceSet,
     };
+    use yss_graph_document::{GraphResourcePath, NodeId};
 
     struct NoResources;
 

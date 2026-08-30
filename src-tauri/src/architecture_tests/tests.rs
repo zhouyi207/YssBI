@@ -269,6 +269,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-document"
+                && root.target == "yss_graph_document"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-protocol"
                 && root.target == "yss_graph_protocol"
                 && root.kind == ProductionRootKind::Library)
@@ -380,6 +388,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-diagnostics"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_document"
+                    && alias.member_package == "yss-graph-document"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-document"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -551,6 +577,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
     };
+    let graph_document_root = ProductionRoot {
+        package_id: "graph-document-package".to_owned(),
+        package: "yss-graph-document".to_owned(),
+        target: "yss_graph_document".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-document/src/lib.rs"),
+    };
     let graph_protocol_root = ProductionRoot {
         package_id: "graph-protocol-package".to_owned(),
         package: "yss-graph-protocol".to_owned(),
@@ -598,6 +631,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         data_contract_root.clone(),
         database_contract_root.clone(),
         diagnostics_root.clone(),
+        graph_document_root.clone(),
         graph_protocol_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
@@ -650,6 +684,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &diagnostics_root,
                 "src-tauri/crates/yss-diagnostics/src/lib.rs",
                 "yss_diagnostics",
+            ),
+            module(
+                &graph_document_root,
+                "src-tauri/crates/yss-graph-document/src/lib.rs",
+                "yss_graph_document",
             ),
             module(
                 &graph_protocol_root,
@@ -722,6 +761,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-diagnostics/src/lib.rs"],
         RustLayer::Diagnostics
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-document/src/lib.rs"],
+        RustLayer::PureLeaf
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
@@ -979,10 +1022,11 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         "src-tauri/crates/yss-data-contract/src/lib.rs",
         "src-tauri/crates/yss-data-contract/src/data_type.rs",
         "src-tauri/crates/yss-data-contract/src/data_value.rs",
-        "src-tauri/src/graph_document/mod.rs",
-        "src-tauri/src/graph_document/identity.rs",
-        "src-tauri/src/graph_document/model.rs",
-        "src-tauri/src/graph_document/resource_path.rs",
+        "src-tauri/crates/yss-graph-document/src/lib.rs",
+        "src-tauri/crates/yss-graph-document/src/identity.rs",
+        "src-tauri/crates/yss-graph-document/src/model.rs",
+        "src-tauri/crates/yss-graph-document/src/name.rs",
+        "src-tauri/crates/yss-graph-document/src/resource_path.rs",
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
@@ -1136,29 +1180,24 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
             .join("target")
             .join(format!("{PREFIX}{}", uuid::Uuid::new_v4())),
     };
-    let graph_document = fixture.root.join("src-tauri/src/graph_document");
+    let graph_document = fixture.root.join("src-tauri/crates/yss-graph-document/src");
     std::fs::create_dir_all(&graph_document).expect("fixture graph_document must be created");
     std::fs::write(
-        fixture.root.join("src-tauri/src/lib.rs"),
-        "pub mod graph_document;\n",
-    )
-    .expect("fixture library root must be written");
-    std::fs::write(
-        graph_document.join("mod.rs"),
+        graph_document.join("lib.rs"),
         "mod model;\n#[cfg(test)] mod tests {}\npub type RuntimeEscape = serde_json::Value;\n",
     )
-    .expect("fixture graph_document mod must be written");
+    .expect("fixture graph_document lib must be written");
     std::fs::write(
         graph_document.join("model.rs"),
         "pub type TypedValue = serde_json::Value;\n",
     )
     .expect("fixture graph_document model must be written");
     let roots = vec![ProductionRoot {
-        package_id: "fixture-package".to_owned(),
-        package: "fixture".to_owned(),
-        target: "fixture_lib".to_owned(),
+        package_id: "graph-document-package".to_owned(),
+        package: "yss-graph-document".to_owned(),
+        target: "yss_graph_document".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: fixture.root.join("src-tauri/src/lib.rs"),
+        source_path: graph_document.join("lib.rs"),
     }];
     let modules = collect_production_modules(&fixture.root, &roots)
         .expect("fixture production modules must be discoverable");
@@ -1167,7 +1206,8 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
     let raw = collect_production_dependencies(&fixture.root, &roots)
         .expect("fixture production dependencies must be discoverable");
     assert!(raw.iter().any(|dependency| {
-        dependency.repository_relative_source_file == "src-tauri/src/graph_document/mod.rs"
+        dependency.repository_relative_source_file
+            == "src-tauri/crates/yss-graph-document/src/lib.rs"
             && dependency.written_target == "serde_json::Value"
     }));
     let dependencies = raw
@@ -1197,7 +1237,7 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
     assert!(
         violations.iter().any(
             |violation| violation.rule_id == PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE
-                && violation.source_file == "src-tauri/src/graph_document/mod.rs"
+                && violation.source_file == "src-tauri/crates/yss-graph-document/src/lib.rs"
         ),
         "production serde_json after a test module must be rejected: {violations:#?}"
     );
@@ -1301,6 +1341,41 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
         !root.join("src-tauri/src/diagnostics").exists(),
         "the root crate must not retain a diagnostics compatibility module"
     );
+}
+
+#[test]
+fn graph_document_has_one_pure_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-document/Cargo.toml",
+        "src-tauri/crates/yss-graph-document/src/identity.rs",
+        "src-tauri/crates/yss-graph-document/src/lib.rs",
+        "src-tauri/crates/yss-graph-document/src/model.rs",
+        "src-tauri/crates/yss-graph-document/src/name.rs",
+        "src-tauri/crates/yss-graph-document/src/resource_path.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph document owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph_document").exists(),
+        "the root crate must not retain a graph document compatibility module"
+    );
+
+    let project_name_source =
+        std::fs::read_to_string(root.join("src-tauri/src/project/resource_name.rs"))
+            .expect("the project resource-name allocator must be readable");
+    for duplicate in [
+        "enum ResourceNameError",
+        "const MAX_RESOURCE_NAME_CHARACTERS",
+    ] {
+        assert!(
+            !project_name_source.contains(duplicate),
+            "project must consume the canonical graph-document name rule instead of duplicating {duplicate}"
+        );
+    }
 }
 
 #[test]

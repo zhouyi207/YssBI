@@ -1,8 +1,8 @@
 use crate::graph::analysis::contracts::{CompileProvenance, ResourceKey};
-use crate::graph_document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use yss_graph_document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
     TypeExpr, Value,

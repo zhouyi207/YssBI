@@ -334,8 +334,8 @@ mod tests {
         crate::project::fixtures::TempProject,
         crate::application::execution::ApplicationState,
     ) {
-        let path = crate::graph_document::GraphResourcePath::new("functions/Opaque.yssbi-function")
-            .unwrap();
+        let path =
+            yss_graph_document::GraphResourcePath::new("functions/Opaque.yssbi-function").unwrap();
         let mut project = ProjectData::new();
         project.graphs.insert(
             path.clone(),

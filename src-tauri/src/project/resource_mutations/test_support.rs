@@ -1,7 +1,7 @@
 use super::fixture_result_path;
-use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::{GraphDocumentKind, ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use crate::project::{OperationId, ResourceRevision};
+use yss_graph_document::{GraphResourcePath, GraphRevision};
 
 #[cfg(test)]
 pub(crate) struct GraphRenameFixtureResult {
@@ -172,9 +172,7 @@ pub(crate) enum ResourceMutationTestPoint {
 
 #[cfg(test)]
 pub(crate) type ResourceMutationTestHook = std::sync::Arc<
-    dyn Fn(ResourceMutationTestPoint, Option<&crate::graph_document::GraphResourcePath>)
-        + Send
-        + Sync,
+    dyn Fn(ResourceMutationTestPoint, Option<&yss_graph_document::GraphResourcePath>) + Send + Sync,
 >;
 
 #[cfg(test)]
@@ -186,7 +184,7 @@ impl ProjectState {
     pub(crate) fn run_resource_mutation_test_hook(
         &self,
         point: ResourceMutationTestPoint,
-        path: Option<&crate::graph_document::GraphResourcePath>,
+        path: Option<&yss_graph_document::GraphResourcePath>,
     ) {
         let hook = self
             .test_hooks

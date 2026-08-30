@@ -4,11 +4,11 @@ use crate::execution::plan::legacy::{
 };
 use crate::graph::analysis::contracts::{ResourceKey, ResourceVersion, ResourceVersionSet};
 use crate::graph::registry::RegistryFingerprint;
-use crate::graph_document::GraphResourcePath;
 use crate::project::ProjectSessionId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
+use yss_graph_document::GraphResourcePath;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct FunctionPlanKey {

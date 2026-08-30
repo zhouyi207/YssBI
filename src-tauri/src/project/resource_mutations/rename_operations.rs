@@ -1,6 +1,6 @@
-use crate::graph_document::GraphResourcePath;
 use crate::project::{OperationId, ResourceRevision};
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use yss_graph_document::GraphResourcePath;
 
 pub(crate) fn remap_variable_scope_path(
     scope: &mut yss_variable_contract::VariableScope,
@@ -29,7 +29,7 @@ pub(crate) fn remap_variable_scope_path(
 }
 
 pub(crate) fn remap_graph_document_references(
-    document: &mut crate::graph_document::GraphDocument,
+    document: &mut yss_graph_document::GraphDocument,
     from: &str,
     to: &str,
 ) -> bool {

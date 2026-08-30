@@ -5,9 +5,9 @@ use crate::graph::analysis::{
     GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
-use crate::graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
+use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 
 pub fn build_editor_projection(
@@ -117,7 +117,7 @@ fn validate_facts(
 }
 
 fn project_node(
-    node: &crate::graph_document::DocumentNode,
+    node: &yss_graph_document::DocumentNode,
     facts: &GraphNodeProjectionFacts,
     diagnostics: &[GraphDiagnosticFact],
     document: &GraphDocument,

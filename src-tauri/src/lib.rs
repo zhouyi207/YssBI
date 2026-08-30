@@ -11,7 +11,6 @@ pub mod event;
 pub mod execution;
 
 mod graph;
-pub mod graph_document;
 pub mod julia;
 #[cfg(test)]
 pub mod node_system;

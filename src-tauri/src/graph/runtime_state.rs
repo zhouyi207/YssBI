@@ -8,14 +8,15 @@ use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
 use crate::graph::catalog::{
     BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
 };
+use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
 use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
-use crate::graph_document::{
-    DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
-};
 use thiserror::Error;
 use yss_data_contract::DataType;
+use yss_graph_document::{
+    DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
+};
 use yss_graph_protocol::{
     NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
 };
@@ -181,7 +182,7 @@ impl GraphRuntimeState {
 
     pub fn accepts_basis(
         &self,
-        basis: &CompilationBasis<crate::graph_document::GraphRevision>,
+        basis: &CompilationBasis<yss_graph_document::GraphRevision>,
     ) -> bool {
         *basis.registry_fingerprint.as_bytes() == *self.components.registry.fingerprint().as_bytes()
     }
@@ -236,7 +237,7 @@ impl GraphRuntimeState {
         document: &GraphDocument,
         catalog: &ResourceCatalogSnapshot,
         settings: &crate::graph::settings::GraphCompileSettings,
-        basis: &CompilationBasis<crate::graph_document::GraphRevision>,
+        basis: &CompilationBasis<yss_graph_document::GraphRevision>,
     ) -> GraphAnalysis {
         let analysis = crate::graph::analysis::analyze(GraphAnalysisInput {
             document,
@@ -261,7 +262,7 @@ impl GraphRuntimeState {
         &self,
         document: &GraphDocument,
     ) -> Result<Arc<GraphDocument>, GraphMutationError> {
-        document.validate().map_err(|_| {
+        validate_graph_document(document).map_err(|_| {
             GraphMutationError::Internal(crate::graph::error::GraphMutationSource::invariant())
         })?;
         let candidate = Arc::new(document.clone());

@@ -15,6 +15,7 @@ members = [
     "crates/yss-data-contract",
     "crates/yss-database-contract",
     "crates/yss-diagnostics",
+    "crates/yss-graph-document",
     "crates/yss-graph-protocol",
     "crates/yss-math",
     "crates/yss-sci",
@@ -45,6 +46,7 @@ thiserror = "2.0.18"
 regex = "1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+unicode-normalization = "0.1.24"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem"] }
 
@@ -63,6 +65,7 @@ tauri-build = { version = "2", features = [] }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
+yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
 yss-math = { path = "./crates/yss-math" }
 yss-sci = { path = "./crates/yss-sci" }
@@ -97,7 +100,7 @@ calamine = "0.36"
 rand = "0.10"
 duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
 notify = "8.2.0"
-unicode-normalization = "0.1.24"
+unicode-normalization.workspace = true
 unicode-casefold = "0.2.0"
 tracing.workspace = true
 trash = "5.2"

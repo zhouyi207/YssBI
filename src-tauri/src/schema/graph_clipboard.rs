@@ -12,7 +12,7 @@ use crate::graph::document::{
     ClipboardPortAddress, ClipboardPortBinding, ClipboardPortRef, ClipboardSubgraph,
     MAX_CLIPBOARD_SERIALIZED_BYTES,
 };
-use crate::graph_document::{NodePosition, TypedValue};
+use yss_graph_document::{NodePosition, TypedValue};
 use yss_graph_protocol::{ParameterValues, TypeExpr};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

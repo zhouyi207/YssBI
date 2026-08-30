@@ -1,9 +1,9 @@
 use crate::graph::analysis::GraphDiagnosticLocation;
 use crate::graph::analysis::contracts::{DiagnosticArguments, ResourceVersionSet};
-use crate::graph_document::{
+use yss_data_contract::DataType;
+use yss_graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
-use yss_data_contract::DataType;
 use yss_graph_protocol::{
     ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind, RelationalScalarType,
     TypeExpr,
@@ -289,7 +289,7 @@ pub enum EditorProjectionError {
 
 pub struct EditorProjectionInput<'a> {
     pub graph_path: &'a GraphResourcePath,
-    pub document: &'a crate::graph_document::GraphDocument,
+    pub document: &'a yss_graph_document::GraphDocument,
     pub analysis: &'a crate::graph::analysis::GraphAnalysis,
     pub registry_fingerprint: [u8; 32],
 }

@@ -566,8 +566,8 @@ mod tests {
         let compiler =
             crate::graph::compiler::engine::GraphCompiler::new(node_registry.as_ref(), &resources);
         let snapshot = compiler.snapshot(
-            crate::graph_document::GraphResourcePath::new("events/cancelled.yssbi-event").unwrap(),
-            &crate::graph_document::GraphDocument::default(),
+            yss_graph_document::GraphResourcePath::new("events/cancelled.yssbi-event").unwrap(),
+            &yss_graph_document::GraphDocument::default(),
         );
         assert!(
             compiler

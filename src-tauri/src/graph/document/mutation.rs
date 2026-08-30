@@ -3,7 +3,8 @@ use super::{
     ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicMemberLocator,
     DynamicPortBinding, GraphDocument, GraphDocumentOperation, GraphDocumentPatch,
     GraphResourcePath, MaterializationAuthorization, NodeId, NodePosition, OrderKey,
-    ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue, port_member_group_state,
+    ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue, apply_graph_document_patch,
+    port_member_group_state,
 };
 use crate::graph::catalog::reroute_node_type_for_kind;
 use crate::graph::catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
@@ -1041,7 +1042,7 @@ fn validate_resource_path(
 ) -> Result<(), MutationConflict> {
     let path = resource_path.as_str();
     let valid = match create_args {
-        ResourceBoundCreateArgs::Function => crate::graph_document::GraphResourcePath::new(path)
+        ResourceBoundCreateArgs::Function => yss_graph_document::GraphResourcePath::new(path)
             .is_ok_and(|canonical| {
                 canonical.as_str() == path && canonical.as_str().starts_with("functions/")
             }),
@@ -1261,7 +1262,7 @@ fn insert_reroute_operations_with_allocators(
         },
     ];
     let mut staged = document.clone();
-    staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
+    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
     Ok(operations)
 }
 
@@ -1380,7 +1381,7 @@ fn append_atomic_connection(
         ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. } => None,
     };
     let mut staged = document.clone();
-    staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
+    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
     operations.extend(connect_operations_prevalidated_type(
         &staged, registry, output, input, order,
     )?);
@@ -1895,7 +1896,7 @@ impl RevisionedGraphStore {
         let patch = request
             .payload
             .into_patch(&self.graph_path, &self.document)?;
-        self.document.apply_patch(&patch)?;
+        apply_graph_document_patch(&mut self.document, &patch)?;
 
         Ok(crate::application::events::GraphDeltaEvent {
             graph_path: self.graph_path.clone(),

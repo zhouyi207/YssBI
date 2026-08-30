@@ -1,11 +1,11 @@
 use crate::graph::analysis::contracts::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
 };
-use crate::graph_document::{ConnectionId, NodeId, PortAddress};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
+use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 use yss_graph_protocol::{I18nKey, ManagedNodeRole, NodeScope, PortKind};
 
 pub(crate) type CompilerDiagnosticLocation =

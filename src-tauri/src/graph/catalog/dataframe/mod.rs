@@ -725,7 +725,7 @@ mod legacy_lowerers {
         LoweringError, LoweringInvariant, NodeImplementation, NodeLowerer, RelationalInputBinding,
         RelationalNodeFragment,
     };
-    use crate::graph_document::PortRef;
+    use yss_graph_document::PortRef;
 
     fn lowering_parameter_key(value: &'static str) -> Result<ParameterKey, LoweringError> {
         ParameterKey::new(value)

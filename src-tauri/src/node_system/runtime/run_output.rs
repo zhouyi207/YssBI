@@ -1,7 +1,7 @@
 use super::RunId;
 use super::execution_event::RunEventSink;
-use crate::graph_document::{GraphResourcePath, NodeId, PortAddress};
 use std::sync::Mutex;
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
 
 pub const RUN_OUTPUT_TEXT_MAX_BYTES: usize = 8 * 1024;
 pub const RUN_OUTPUT_EVENT_MAX_COUNT: usize = 256;
