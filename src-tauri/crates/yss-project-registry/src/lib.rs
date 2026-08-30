@@ -1,3 +1,8 @@
+//! Project registration workflows and path validation.
+//!
+//! Persistence records and the storage port live in
+//! `yss-project-registry-contract`; concrete stores remain backend adapters.
+
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -77,40 +82,15 @@ pub enum ProjectRegistryError {
 pub struct ProjectRegistry {
     store: Arc<dyn ProjectRegistryStore>,
     path: PathBuf,
-    #[cfg(test)]
-    fail_remove: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ProjectRegistry {
     pub fn new(store: Arc<dyn ProjectRegistryStore>, path: PathBuf) -> Self {
-        Self {
-            store,
-            path,
-            #[cfg(test)]
-            fail_remove: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        }
-    }
-
-    #[cfg(test)]
-    pub async fn init(app_dir: PathBuf) -> Result<Self, ProjectRegistryError> {
-        let store =
-            crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
-                app_dir,
-            )
-            .await
-            .map_err(|_| ProjectRegistryError::Store(ProjectRegistryStoreError::StorageFailed))?;
-        let path = store.path().to_path_buf();
-        Ok(Self::new(Arc::new(store), path))
+        Self { store, path }
     }
 
     pub fn path(&self) -> &Path {
         &self.path
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn fail_project_remove_for_test(&self) {
-        self.fail_remove
-            .store(true, std::sync::atomic::Ordering::Release);
     }
 
     pub async fn list_projects(&self) -> Result<Vec<ProjectRecord>, ProjectRegistryError> {
@@ -205,12 +185,6 @@ impl ProjectRegistry {
     }
 
     pub async fn remove_project(&self, id: &str) -> Result<(), ProjectRegistryError> {
-        #[cfg(test)]
-        if self.fail_remove.load(std::sync::atomic::Ordering::Acquire) {
-            return Err(ProjectRegistryError::Store(
-                ProjectRegistryStoreError::StorageFailed,
-            ));
-        }
         let registration = ProjectRegistrationId::from_existing(id.to_owned());
         self.store
             .remove(&registration)
@@ -399,10 +373,6 @@ fn directory_has_entries(path: &Path) -> bool {
     std::fs::read_dir(path).map_or(true, |mut entries| entries.next().is_some())
 }
 
-pub fn is_registered_project_valid(path: &str) -> bool {
-    normalize_existing_path(path).is_ok()
-}
-
 pub fn normalize_existing_path(path: &str) -> Result<String, String> {
     let path = path.trim();
     if path.is_empty() {
@@ -430,4 +400,253 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
     std::fs::canonicalize(&pb)
         .map(|path| format_path_for_user_path(&path))
         .map_err(|error| format!("无法解析项目路径: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ProjectPathValidationError, ProjectRegistry, ProjectRegistryError, normalize_existing_path,
+        validate_new_project_path,
+    };
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Mutex};
+    use yss_project_identity::{ProjectRegistrationId, ProjectRootIdentity};
+    use yss_project_layout::PROJECT_METADATA_FILE;
+    use yss_project_progress::ProjectTaskCancellationRegistry;
+    use yss_project_registry_contract::{
+        ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
+        ProjectRootIdentityState,
+    };
+
+    #[derive(Default)]
+    struct MemoryProjectRegistryStore {
+        records: Mutex<Vec<ProjectRecord>>,
+    }
+
+    impl MemoryProjectRegistryStore {
+        fn with_records(records: Vec<ProjectRecord>) -> Self {
+            Self {
+                records: Mutex::new(records),
+            }
+        }
+    }
+
+    impl ProjectRegistryStore for MemoryProjectRegistryStore {
+        fn load(
+            &self,
+        ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>
+        {
+            Box::pin(async move {
+                Ok(self
+                    .records
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+                    .into_boxed_slice())
+            })
+        }
+
+        fn upsert(
+            &self,
+            record: &ProjectRecord,
+        ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
+            let record = record.clone();
+            Box::pin(async move {
+                let mut records = self
+                    .records
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if let Some(existing) = records.iter_mut().find(|item| item.id == record.id) {
+                    *existing = record;
+                } else {
+                    records.push(record);
+                }
+                Ok(())
+            })
+        }
+
+        fn remove(
+            &self,
+            registration: &ProjectRegistrationId,
+        ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
+            let registration = registration.clone();
+            Box::pin(async move {
+                let mut records = self
+                    .records
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let Some(index) = records.iter().position(|item| item.id == registration) else {
+                    return Err(ProjectRegistryStoreError::Unavailable);
+                };
+                records.remove(index);
+                Ok(())
+            })
+        }
+    }
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new(label: &str) -> Self {
+            static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "yss-project-registry-{label}-{}-{id}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("create test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+
+        fn child(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn record(id: &str, name: &str, favorite: bool, last_opened_at: Option<&str>) -> ProjectRecord {
+        ProjectRecord {
+            id: ProjectRegistrationId::from_existing(id.into()),
+            name: name.into(),
+            path: format!("/projects/{id}/{PROJECT_METADATA_FILE}"),
+            created_at: "1".into(),
+            last_opened_at: last_opened_at.map(Into::into),
+            is_favorite: favorite,
+            root_identity: ProjectRootIdentity::from_canonical(format!("root-{id}")),
+            root_identity_state: ProjectRootIdentityState::Valid,
+        }
+    }
+
+    fn registry(records: Vec<ProjectRecord>) -> ProjectRegistry {
+        ProjectRegistry::new(
+            Arc::new(MemoryProjectRegistryStore::with_records(records)),
+            PathBuf::from("memory://project-registry"),
+        )
+    }
+
+    #[tokio::test]
+    async fn list_orders_favorites_then_recent_projects_then_names() {
+        let registry = registry(vec![
+            record("plain", "Zulu", false, Some("99")),
+            record("old", "bravo", true, Some("10")),
+            record("new", "Alpha", true, Some("20")),
+        ]);
+
+        let records = registry.list_projects().await.expect("list projects");
+        let ids = records
+            .iter()
+            .map(|record| record.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, ["new", "old", "plain"]);
+    }
+
+    #[tokio::test]
+    async fn toggle_and_remove_use_the_canonical_store_record() {
+        let registry = registry(vec![record("one", "One", false, None)]);
+
+        assert!(registry.toggle_favorite("one").await.expect("toggle"));
+        assert!(
+            registry
+                .fetch_by_id("one")
+                .await
+                .expect("fetch")
+                .expect("record")
+                .is_favorite
+        );
+        registry.remove_project("one").await.expect("remove");
+        assert!(registry.fetch_by_id("one").await.expect("fetch").is_none());
+        assert!(matches!(
+            registry.remove_project("missing").await,
+            Err(ProjectRegistryError::NotFound)
+        ));
+    }
+
+    #[tokio::test]
+    async fn registering_an_existing_project_is_idempotent_by_root_identity() {
+        let directory = TestDirectory::new("register");
+        let root = directory.child("project");
+        std::fs::create_dir_all(&root).expect("create project root");
+        std::fs::write(root.join(PROJECT_METADATA_FILE), b"{}").expect("write metadata");
+        let registry = registry(Vec::new());
+
+        let created = registry
+            .register_project("  Example  ", root.to_string_lossy().as_ref())
+            .await
+            .expect("register project");
+        let reopened = registry
+            .register_project("Ignored replacement", root.to_string_lossy().as_ref())
+            .await
+            .expect("re-register project");
+
+        assert_eq!(created.id, reopened.id);
+        assert_eq!(reopened.name, "Example");
+        assert_eq!(
+            reopened.path,
+            normalize_existing_path(root.to_string_lossy().as_ref()).expect("normalized path")
+        );
+        assert_eq!(registry.list_projects().await.expect("list").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelled_scan_preserves_the_typed_cancelled_outcome() {
+        let registry = registry(Vec::new());
+        let cancellations = ProjectTaskCancellationRegistry::new();
+        let cancellation = cancellations.begin();
+        cancellations.cancel_active();
+
+        assert!(matches!(
+            registry.scan_directory("ignored", None, cancellation).await,
+            Err(ProjectRegistryError::Cancelled)
+        ));
+    }
+
+    #[test]
+    fn new_project_path_validation_distinguishes_conflict_kinds() {
+        let directory = TestDirectory::new("path-validation");
+        let target = directory.child("target");
+        std::fs::create_dir_all(&target).expect("create empty target");
+
+        assert_eq!(
+            validate_new_project_path(""),
+            Err(ProjectPathValidationError::Empty)
+        );
+        assert_eq!(
+            validate_new_project_path(target.to_string_lossy().as_ref()),
+            Ok(())
+        );
+
+        std::fs::write(target.join("occupied.txt"), b"occupied").expect("occupy target");
+        assert_eq!(
+            validate_new_project_path(target.to_string_lossy().as_ref()),
+            Err(ProjectPathValidationError::NotEmpty)
+        );
+        std::fs::remove_file(target.join("occupied.txt")).expect("clear target");
+        std::fs::write(target.join(PROJECT_METADATA_FILE), b"{}").expect("write metadata");
+        assert_eq!(
+            validate_new_project_path(target.to_string_lossy().as_ref()),
+            Err(ProjectPathValidationError::AlreadyContainsProject)
+        );
+
+        let future = directory.child("future");
+        assert_eq!(
+            validate_new_project_path(future.to_string_lossy().as_ref()),
+            Ok(())
+        );
+        let unavailable = directory.child("missing-parent").join("future");
+        assert_eq!(
+            validate_new_project_path(unavailable.to_string_lossy().as_ref()),
+            Err(ProjectPathValidationError::ParentUnavailable)
+        );
+        assert!(directory.path().is_dir());
+    }
 }

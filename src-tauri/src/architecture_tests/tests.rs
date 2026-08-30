@@ -2284,7 +2284,7 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
 
     for relative in [
         "src-tauri/src/application/project_query.rs",
-        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3212,10 +3212,12 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     for relative in [
         "src-tauri/crates/yss-project-registry-contract/Cargo.toml",
         "src-tauri/crates/yss-project-registry-contract/src/lib.rs",
+        "src-tauri/crates/yss-project-registry/Cargo.toml",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
-            "project registry contract owner must exist at {relative}"
+            "project registry owner must exist at {relative}"
         );
     }
     assert!(
@@ -3224,11 +3226,19 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
             .exists(),
         "the root crate must not retain a mirrored project registry storage model"
     );
+    assert!(
+        !root
+            .join("src-tauri/src/project/project_registry.rs")
+            .exists(),
+        "the root crate must not retain the extracted project registry workflow"
+    );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
+        "\"crates/yss-project-registry\"",
         "\"crates/yss-project-registry-contract\"",
+        "yss-project-registry = { path = \"./crates/yss-project-registry\" }",
         "yss-project-registry-contract = { path = \"./crates/yss-project-registry-contract\" }",
     ] {
         assert!(
@@ -3264,8 +3274,22 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "the registry store contract must not retain an error variant no adapter can produce"
     );
 
-    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
-        .expect("project registry workflow must be readable");
+    let registry =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-registry/src/lib.rs"))
+            .expect("project registry workflow must be readable");
+    for workflow in [
+        "pub struct ProjectRegistry",
+        "pub enum ProjectRegistryError",
+        "pub fn validate_new_project_path",
+        "pub fn normalize_existing_path",
+        "pub async fn scan_directory",
+        "pub async fn cleanup_invalid_projects",
+    ] {
+        assert!(
+            registry.contains(workflow),
+            "project registry crate must own workflow '{workflow}'"
+        );
+    }
     for removed_mirror in [
         "pub struct ProjectRecord",
         "pub enum ProjectRootIdentityState",
@@ -3279,9 +3303,22 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
             "project registry workflow must not restore mirror or conflated identity '{removed_mirror}'"
         );
     }
+    for misplaced_concern in [
+        "crate::backend_adapters",
+        "sqlx::",
+        "tauri::",
+        "ProjectState",
+        "fail_project_remove_for_test",
+        "is_registered_project_valid",
+    ] {
+        assert!(
+            !registry.contains(misplaced_concern),
+            "project registry crate must not absorb or retain '{misplaced_concern}'"
+        );
+    }
 
     for relative in [
-        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
         "src-tauri/src/application/events.rs",
         "src-tauri/src/application/project_lifecycle/mod.rs",
         "src-tauri/src/commands/command_project/registry.rs",
@@ -3340,6 +3377,9 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
         .expect("the root project module must be readable");
     for facade in [
+        "pub mod project_registry",
+        "pub use project_registry",
+        "pub use yss_project_registry",
         "project_registry_store",
         "pub use yss_project_registry_contract",
         "pub use yss_project_identity::ProjectRootIdentity",
@@ -3355,6 +3395,10 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     assert!(
         policy.contains("| \"yss-project-registry-contract\""),
         "project registry contract must be classified as a Pure Leaf"
+    );
+    assert!(
+        policy.contains("|| package == \"yss-project-registry\""),
+        "project registry workflow must be classified in the Project layer"
     );
     for removed_capability in [
         "project_registry_store::ProjectRegistry",
@@ -3552,7 +3596,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "src-tauri/crates/yss-project-change/src/lib.rs",
         "src-tauri/src/project/project_io.rs",
         "src-tauri/src/project/project_lifecycle.rs",
-        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
         "src-tauri/src/project/worksheet_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -3565,7 +3609,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
 
     for (relative, removed_owner) in [
         (
-            "src-tauri/src/project/project_registry.rs",
+            "src-tauri/crates/yss-project-registry/src/lib.rs",
             "pub const PROJECT_METADATA_FILE",
         ),
         (
@@ -3841,7 +3885,7 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
 
     for relative in [
         "src-tauri/src/project/project_lifecycle.rs",
-        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3855,8 +3899,9 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
         );
     }
 
-    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
-        .expect("project registry workflow must be readable");
+    let registry =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-registry/src/lib.rs"))
+            .expect("project registry workflow must be readable");
     assert!(
         registry.contains("pub struct ScanProjectsResult"),
         "registration scan outcome must remain with the registry workflow"
@@ -5320,7 +5365,7 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
 
     for relative in [
         "src-tauri/src/lib.rs",
-        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/crates/yss-project-registry/src/lib.rs",
         "src-tauri/crates/yss-project-discovery/src/lib.rs",
         "src-tauri/src/commands/command_project/registry.rs",
         "src-tauri/src/commands/command_project/progress.rs",
@@ -5355,8 +5400,9 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         );
     }
 
-    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
-        .expect("project registry source must be readable");
+    let registry =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-registry/src/lib.rs"))
+            .expect("project registry source must be readable");
     assert!(
         registry.contains("ProjectDiscoveryError::Cancelled => ProjectRegistryError::Cancelled"),
         "scan cancellation must remain cancellation instead of drifting into ScanFailed"

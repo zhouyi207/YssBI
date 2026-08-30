@@ -45,6 +45,7 @@ members = [
     "crates/yss-project-model",
     "crates/yss-project-operation",
     "crates/yss-project-progress",
+    "crates/yss-project-registry",
     "crates/yss-project-registry-contract",
     "crates/yss-resource-lifecycle",
     "crates/yss-resource-naming",
@@ -128,6 +129,7 @@ yss-project-manifest = { path = "./crates/yss-project-manifest" }
 yss-project-model = { path = "./crates/yss-project-model" }
 yss-project-operation = { path = "./crates/yss-project-operation" }
 yss-project-progress = { path = "./crates/yss-project-progress" }
+yss-project-registry = { path = "./crates/yss-project-registry" }
 yss-project-registry-contract = { path = "./crates/yss-project-registry-contract" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }

@@ -6,10 +6,41 @@ use std::sync::{Arc, Mutex};
 use yss_data_contract::{DataType, DataValue};
 use yss_project_filesystem::ProjectRootBinding;
 use yss_project_model::ProjectData;
-use yss_project_registry_contract::{ProjectRecord, ProjectRootIdentityState};
+use yss_project_registry::ProjectRegistry;
+use yss_project_registry_contract::{
+    ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
+    ProjectRootIdentityState,
+};
 use yss_variable_contract::VariableScope;
 
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+struct FailingRemoveProjectRegistryStore {
+    inner: crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore,
+}
+
+impl ProjectRegistryStore for FailingRemoveProjectRegistryStore {
+    fn load(
+        &self,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>
+    {
+        self.inner.load()
+    }
+
+    fn upsert(
+        &self,
+        record: &ProjectRecord,
+    ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
+        self.inner.upsert(record)
+    }
+
+    fn remove(
+        &self,
+        _registration: &yss_project_identity::ProjectRegistrationId,
+    ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
+        Box::pin(async { Err(ProjectRegistryStoreError::StorageFailed) })
+    }
+}
 
 struct TestDirectory {
     root: PathBuf,
@@ -58,9 +89,28 @@ fn activate_named_project(root: &Path, name: &str) -> ProjectState {
 }
 
 async fn initialize_registry(directory: &TestDirectory) -> ProjectRegistry {
-    ProjectRegistry::init(directory.child("registry"))
+    let store =
+        crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
+            directory.child("registry"),
+        )
         .await
-        .unwrap()
+        .unwrap();
+    let path = store.path().to_path_buf();
+    ProjectRegistry::new(Arc::new(store), path)
+}
+
+async fn initialize_registry_with_remove_failure(directory: &TestDirectory) -> ProjectRegistry {
+    let store =
+        crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
+            directory.child("registry"),
+        )
+        .await
+        .unwrap();
+    let path = store.path().to_path_buf();
+    ProjectRegistry::new(
+        Arc::new(FailingRemoveProjectRegistryStore { inner: store }),
+        path,
+    )
 }
 
 async fn register_root(registry: &ProjectRegistry, root: &Path, name: &str) -> ProjectRecord {
@@ -520,7 +570,7 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
     let _reset = DeleteHookReset;
     tauri::async_runtime::block_on(async {
         let directory = TestDirectory::new("delete-application-registry-failure");
-        let registry = initialize_registry(&directory).await;
+        let registry = initialize_registry_with_remove_failure(&directory).await;
         let root = directory.child("project");
         let state = activate_named_project(&root, "Registered");
         let session = state.capture_project_session().unwrap();
@@ -529,8 +579,6 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
             .unwrap()
             .normalized()
             .clone();
-        registry.fail_project_remove_for_test().await;
-
         let result = delete_registered_project(
             &state,
             &registry,

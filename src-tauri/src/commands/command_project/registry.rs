@@ -3,13 +3,13 @@ use super::progress::{
     bounded_project_progress_adapter, reap_project_progress_worker,
 };
 use crate::error::CommandError;
-use crate::project::{CleanupInvalidProjectsResult, ProjectRegistry, ScanProjectsResult};
 use crate::schema::application_event::LifecycleMutationResultDto;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_progress::ProjectTaskCancellationRegistry;
+use yss_project_registry::{CleanupInvalidProjectsResult, ProjectRegistry, ScanProjectsResult};
 use yss_project_registry_contract::ProjectRecord;
 
 #[tauri::command]

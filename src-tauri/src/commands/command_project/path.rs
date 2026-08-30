@@ -1,5 +1,5 @@
 use crate::error::CommandError;
-use crate::project::{
+use yss_project_registry::{
     default_project_parent_directory as default_project_parent_directory_impl,
     validate_new_project_path as validate_new_project_path_impl,
 };

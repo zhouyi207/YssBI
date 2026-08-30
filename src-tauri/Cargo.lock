@@ -9424,6 +9424,22 @@ name = "yss-project-progress"
 version = "0.1.0"
 
 [[package]]
+name = "yss-project-registry"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "yss-path-display",
+ "yss-project-discovery",
+ "yss-project-filesystem",
+ "yss-project-identity",
+ "yss-project-layout",
+ "yss-project-progress",
+ "yss-project-registry-contract",
+]
+
+[[package]]
 name = "yss-project-registry-contract"
 version = "0.1.0"
 dependencies = [
@@ -9606,6 +9622,7 @@ dependencies = [
  "yss-project-model",
  "yss-project-operation",
  "yss-project-progress",
+ "yss-project-registry",
  "yss-project-registry-contract",
  "yss-resource-lifecycle",
  "yss-resource-naming",

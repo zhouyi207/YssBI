@@ -1,14 +1,15 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
+use crate::project::ProjectIndex;
 #[cfg(test)]
 use crate::project::ProjectState;
-use crate::project::{ProjectIndex, normalize_existing_path};
 use crate::schema::application_event::ProjectActivationResultDto;
 use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 use serde::Serialize;
 use tauri::State;
+use yss_project_registry::normalize_existing_path;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -432,7 +432,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
             "yssbi_lib::julia::worker::JuliaWorkerManager::new",
             "yssbi_lib::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect",
-            "yssbi_lib::project::project_registry::ProjectRegistry::new",
+            "yss_project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::application::project_watcher::ProjectWatcherState::new",
             "yssbi_lib::application::execution::session_factory::ProjectSessionCandidateError",
@@ -957,7 +957,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::project_watcher::ObservedProjectChange",
             "yssbi_lib::application::project_watcher::ProjectChangeSink",
             "yssbi_lib::event::event_resource::EventResource",
-            "yssbi_lib::project::project_registry::ProjectRegistry",
+            "yss_project_registry::ProjectRegistry",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
             "yssbi_lib::application::project_lifecycle::ApplicationProjectLifecycleError",
             "yssbi_lib::application::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle",
@@ -991,8 +991,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_project::path",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::project::project_registry::default_project_parent_directory",
-            "yssbi_lib::project::project_registry::validate_new_project_path",
+            "yss_project_registry::default_project_parent_directory",
+            "yss_project_registry::validate_new_project_path",
         ],
     },
     InternalDependencyCapability {
@@ -1011,7 +1011,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::error::CommandError",
             "yssbi_lib::project::ProjectIndex",
             "yssbi_lib::project::project_io::ProjectIndex",
-            "yssbi_lib::project::project_registry::normalize_existing_path",
+            "yss_project_registry::normalize_existing_path",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::project::resource_reveal::RevealProjectResourceRequest",
             "yssbi_lib::project::resource_reveal::resolve_reveal_path",
@@ -1031,9 +1031,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yssbi_lib::application::project_lifecycle::delete_registered_project",
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::project::project_registry::CleanupInvalidProjectsResult",
-            "yssbi_lib::project::project_registry::ProjectRegistry",
-            "yssbi_lib::project::project_registry::ScanProjectsResult",
+            "yss_project_registry::CleanupInvalidProjectsResult",
+            "yss_project_registry::ProjectRegistry",
+            "yss_project_registry::ScanProjectsResult",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::schema::application_event::LifecycleMutationResultDto",
             "yssbi_lib::application::execution::session_slot::ApplicationState",
@@ -1733,6 +1733,7 @@ fn non_build_memberships(
     ) || package == "yss-function-editor-projection"
         || package == "yss-project-filesystem"
         || package == "yss-project-operation"
+        || package == "yss-project-registry"
         || package == "yss-resource-lifecycle"
     {
         layers.insert(RustLayer::Project);

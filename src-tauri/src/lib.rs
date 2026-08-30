@@ -118,8 +118,10 @@ pub fn run() {
                 ),
             )?;
             let registry_path = registry_store.path().to_path_buf();
-            let project_registry =
-                project::ProjectRegistry::new(std::sync::Arc::new(registry_store), registry_path);
+            let project_registry = yss_project_registry::ProjectRegistry::new(
+                std::sync::Arc::new(registry_store),
+                registry_path,
+            );
             app.manage(project_registry);
             let bayes_adapter = julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new(
                 app_dir.clone(),

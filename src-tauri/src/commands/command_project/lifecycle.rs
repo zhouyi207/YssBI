@@ -8,7 +8,6 @@ use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
-use crate::project::ProjectRegistry;
 #[cfg(test)]
 use crate::project::ProjectState;
 use crate::schema::ProjectSaveResultDto;
@@ -20,6 +19,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
+use yss_project_registry::ProjectRegistry;
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));

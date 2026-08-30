@@ -669,6 +669,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   Project、Application、Commands、Transport 与 SQLite adapter 直接依赖唯一 contract owner；
   重新启用 8 个 application lifecycle 测试，并修复 registry 写入失败时恢复动作从
   `registerDestination` 漂移成 `removeRegistryRecord` 的语义错误。
+- [ ] 将 project registration、favorite、cleanup、scan 与路径校验工作流迁入
+  `src-tauri/crates/yss-project-registry/` Stateful Project 层；删除根 `project_registry` owner 与兼容
+  facade，行为层仅依赖 registry contract、discovery、progress、filesystem identity 等下层 crate，
+  SQLite 继续作为 Backend Adapter；删除零调用的 validity wrapper，并以测试侧失败 store 替代生产类型中的
+  remove-failure 开关，避免测试后门成为公开 API。
 - [ ] 将 project 根文件名、内容目录、资源扩展名与 index-input 相对路径分类收归
   `src-tauri/crates/yss-project-layout/` 无依赖 Pure Leaf；Graph/Worksheet/Project/Watcher 直接消费
   唯一 owner，删除 `project_io`、registry、graph/worksheet document 与 watcher 中的布局镜像，
