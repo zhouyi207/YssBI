@@ -575,3 +575,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将窗口 kind/default、后端权威几何缓存、主窗口恢复与原子 JSON 持久化迁入
   `src-tauri/crates/yss-window-state/` Platform Adapter；移除根 `window_state` owner，
   并以 typed error 保留持久化主错误与临时文件清理失败。
+- [ ] 将 sanitized Rust log projection、frontend ingestion、recent ring、sequence 与
+  bounded live delivery 迁入独立 `src-tauri/crates/yss-diagnostics/`；生产构建仅单向
+  依赖 `yss-tracing`，通过正式的 platform-neutral batch sink 测试而不暴露 dispatcher
+  测试后门，并且不保留根兼容层。

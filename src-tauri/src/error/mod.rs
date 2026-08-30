@@ -183,8 +183,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::{CommandError, GraphMutationErrorDetailsDto};
-    use crate::diagnostics::dispatcher::DiagnosticsHub;
-    use crate::diagnostics::recent_layer::RecentDiagnosticsLayer;
+    use yss_diagnostics::DiagnosticsRuntime;
+    use yss_tracing::LogLayer;
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -235,14 +235,14 @@ mod tests {
 
     #[test]
     fn internal_error_logs_incident_and_full_diagnostic_fields() {
-        let (hub, _guard) = DiagnosticsHub::start();
+        let diagnostics = DiagnosticsRuntime::initialize().expect("initialize diagnostics");
         let subscriber =
-            tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
+            tracing_subscriber::registry().with(LogLayer::new(diagnostics.rust_log_sink()));
         let error = tracing::subscriber::with_default(subscriber, || {
             CommandError::internal("full internal diagnostic")
         });
 
-        let subscription = hub.subscribe(|_| true).unwrap();
+        let subscription = diagnostics.subscribe_batches(|_| true).unwrap();
         let record = subscription.entries.last().unwrap();
         assert_eq!(record.target, "yssbi::command_error");
         assert_eq!(record.event.as_deref(), Some("commandError"));
@@ -250,7 +250,9 @@ mod tests {
         assert_eq!(record.fields["incident_id"], error.incident_id().unwrap());
         assert_eq!(record.fields["error"], "full internal diagnostic");
         assert_eq!(record.fields["error_debug"], "\"full internal diagnostic\"");
-        hub.unsubscribe(subscription.subscription_id).unwrap();
+        diagnostics
+            .unsubscribe(subscription.subscription_id)
+            .unwrap();
     }
 
     #[test]

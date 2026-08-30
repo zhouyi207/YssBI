@@ -257,6 +257,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
                 && root.target == "yss_database_contract"
                 && root.kind == ProductionRootKind::Library)
     );
+    assert!(
+        workspace
+            .roots
+            .iter()
+            .any(|root| root.package == "yss-diagnostics"
+                && root.target == "yss_diagnostics"
+                && root.kind == ProductionRootKind::Library)
+    );
     assert!(workspace.roots.iter().any(|root| root.package == "yss-math"
         && root.target == "yss_math"
         && root.kind == ProductionRootKind::Library));
@@ -346,6 +354,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-database-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_diagnostics"
+                    && alias.member_package == "yss-diagnostics"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-diagnostics"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -492,6 +518,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-database-contract/src/lib.rs"),
     };
+    let diagnostics_root = ProductionRoot {
+        package_id: "diagnostics-package".to_owned(),
+        package: "yss-diagnostics".to_owned(),
+        target: "yss_diagnostics".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
+    };
     let math_root = ProductionRoot {
         package_id: "math-package".to_owned(),
         package: "yss-math".to_owned(),
@@ -531,6 +564,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         runtime_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
+        diagnostics_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
@@ -577,6 +611,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &database_contract_root,
                 "src-tauri/crates/yss-database-contract/src/lib.rs",
                 "yss_database_contract",
+            ),
+            module(
+                &diagnostics_root,
+                "src-tauri/crates/yss-diagnostics/src/lib.rs",
+                "yss_diagnostics",
             ),
             module(
                 &math_root,
@@ -640,6 +679,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-database-contract/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-diagnostics/src/lib.rs"],
+        RustLayer::Diagnostics
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
@@ -1188,6 +1231,32 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn diagnostics_has_one_crate_owner_separate_from_logging() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-diagnostics/Cargo.toml",
+        "src-tauri/crates/yss-diagnostics/src/lib.rs",
+        "src-tauri/crates/yss-diagnostics/src/dispatcher.rs",
+        "src-tauri/crates/yss-diagnostics/src/dto.rs",
+        "src-tauri/crates/yss-diagnostics/src/runtime.rs",
+        "src-tauri/crates/yss-diagnostics/src/rust_projection.rs",
+        "src-tauri/crates/yss-diagnostics/src/tests.rs",
+        "src-tauri/crates/yss-diagnostics/src/validation.rs",
+        "src-tauri/crates/yss-diagnostics/src/worker.rs",
+        "src-tauri/crates/yss-tracing/Cargo.toml",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "diagnostics/logging owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/diagnostics").exists(),
+        "the root crate must not retain a diagnostics compatibility module"
     );
 }
 

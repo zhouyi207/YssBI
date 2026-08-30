@@ -23,7 +23,7 @@ pub struct DiagnosticsRuntime {
 }
 
 impl DiagnosticsRuntime {
-    pub(crate) fn initialize() -> Result<Self, DiagnosticsInitializationError> {
+    pub fn initialize() -> Result<Self, DiagnosticsInitializationError> {
         let (hub, dispatcher_guard) = DiagnosticsHub::start_production()?;
         Ok(Self {
             hub,
@@ -31,11 +31,11 @@ impl DiagnosticsRuntime {
         })
     }
 
-    pub(crate) fn rust_log_sink(&self) -> LogRecordSink {
+    pub fn rust_log_sink(&self) -> LogRecordSink {
         log_record_sink(self.hub.clone())
     }
 
-    pub(crate) fn submit_frontend(
+    pub fn submit_frontend(
         &self,
         entries: Vec<FrontendDiagnosticEntryDto>,
     ) -> Result<(), SubmitFrontendDiagnosticsError> {
@@ -45,30 +45,42 @@ impl DiagnosticsRuntime {
         Ok(())
     }
 
-    pub(crate) fn subscribe(
+    pub fn subscribe(
         &self,
         on_records: Channel<DiagnosticBatchDto>,
     ) -> Result<DiagnosticSubscriptionDto, DiagnosticsUnavailable> {
-        self.hub
-            .subscribe(move |batch| on_records.send(batch).is_ok())
+        self.subscribe_batches(move |batch| on_records.send(batch).is_ok())
     }
 
-    pub(crate) fn unsubscribe(
+    /// Subscribes a platform-neutral bounded batch sink and returns the
+    /// current recent snapshot at the same ordered stream boundary.
+    pub fn subscribe_batches(
         &self,
-        subscription_id: String,
-    ) -> Result<(), DiagnosticsUnavailable> {
+        on_records: impl Fn(DiagnosticBatchDto) -> bool + Send + 'static,
+    ) -> Result<DiagnosticSubscriptionDto, DiagnosticsUnavailable> {
+        self.hub.subscribe(on_records)
+    }
+
+    pub fn unsubscribe(&self, subscription_id: String) -> Result<(), DiagnosticsUnavailable> {
         self.hub.unsubscribe(subscription_id)
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum DiagnosticsInitializationError {
-    #[error(transparent)]
-    Dispatcher(#[from] DiagnosticsDispatcherStartError),
+#[error("failed to initialize diagnostics runtime")]
+pub struct DiagnosticsInitializationError {
+    #[source]
+    source: DiagnosticsDispatcherStartError,
+}
+
+impl From<DiagnosticsDispatcherStartError> for DiagnosticsInitializationError {
+    fn from(source: DiagnosticsDispatcherStartError) -> Self {
+        Self { source }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum SubmitFrontendDiagnosticsError {
+pub enum SubmitFrontendDiagnosticsError {
     #[error(transparent)]
     Validation(#[from] FrontendDiagnosticValidationError),
     #[error(transparent)]
@@ -76,7 +88,7 @@ pub(crate) enum SubmitFrontendDiagnosticsError {
 }
 
 impl SubmitFrontendDiagnosticsError {
-    pub(crate) const fn code(&self) -> &'static str {
+    pub const fn code(&self) -> &'static str {
         match self {
             Self::Validation(_) => "invalid_frontend_diagnostics",
             Self::Unavailable(_) => "diagnostics_unavailable",
@@ -105,10 +117,8 @@ mod tests {
     use serde_json::json;
 
     use super::DiagnosticsRuntime;
-    use crate::diagnostics::dispatcher::DiagnosticsHub;
-    use crate::diagnostics::{
-        DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, FrontendDiagnosticEntryDto,
-    };
+    use crate::dispatcher::DiagnosticsHub;
+    use crate::{DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, FrontendDiagnosticEntryDto};
 
     #[test]
     fn frontend_submission_assigns_stream_metadata_and_frontend_origin() {
@@ -129,7 +139,7 @@ mod tests {
             }])
             .unwrap();
 
-        let subscription = runtime.hub.subscribe(|_| true).unwrap();
+        let subscription = runtime.subscribe_batches(|_| true).unwrap();
         assert_eq!(subscription.latest_sequence, 1);
         let record = &subscription.entries[0];
         assert_eq!(record.sequence, 1);
@@ -137,10 +147,7 @@ mod tests {
         assert_eq!(record.domain, DiagnosticDomain::Ui);
         assert_eq!(record.fields["selectedCount"], 2);
         assert!(chrono::DateTime::parse_from_rfc3339(&record.timestamp).is_ok());
-        runtime
-            .hub
-            .unsubscribe(subscription.subscription_id)
-            .unwrap();
+        runtime.unsubscribe(subscription.subscription_id).unwrap();
 
         let error = runtime.submit_frontend(Vec::new()).unwrap_err();
         assert_eq!(error.code(), "invalid_frontend_diagnostics");

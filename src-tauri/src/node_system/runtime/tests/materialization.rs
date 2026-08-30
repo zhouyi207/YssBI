@@ -1059,9 +1059,9 @@ fn bounded_materialization_panic_cleanup_failure_is_diagnosed_without_replacing_
         Arc::new(SessionMemoization::new()),
     )
     .with_test_spill_root(root.clone());
-    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize().unwrap();
     let subscriber = tracing_subscriber::registry()
-        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
+        .with(yss_tracing::LogLayer::new(diagnostics.rust_log_sink()));
 
     let panic = tracing::subscriber::with_default(subscriber, || {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1074,7 +1074,7 @@ fn bounded_materialization_panic_cleanup_failure_is_diagnosed_without_replacing_
         payload.downcast_ref::<&str>().copied(),
         Some(PRIMARY_PANIC_PAYLOAD)
     );
-    let subscription = diagnostics.subscribe(|_| true).unwrap();
+    let subscription = diagnostics.subscribe_batches(|_| true).unwrap();
     let cleanup_diagnostics = subscription
         .entries
         .iter()
@@ -1082,10 +1082,10 @@ fn bounded_materialization_panic_cleanup_failure_is_diagnosed_without_replacing_
         .collect::<Vec<_>>();
     assert_eq!(cleanup_diagnostics.len(), 1);
     let cleanup = cleanup_diagnostics[0];
-    assert_eq!(cleanup.level, crate::diagnostics::DiagnosticLevel::Warn);
+    assert_eq!(cleanup.level, yss_diagnostics::DiagnosticLevel::Warn);
     assert_eq!(
         cleanup.domain,
-        crate::diagnostics::DiagnosticDomain::Execution
+        yss_diagnostics::DiagnosticDomain::Execution
     );
     assert_eq!(cleanup.target, "yssbi::node_system::runtime::cleanup");
     assert_eq!(cleanup.message, "Runtime resource cleanup failed");

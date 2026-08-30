@@ -1850,9 +1850,9 @@ mod tests {
     use tracing_subscriber::layer::SubscriberExt;
     use uuid::Uuid;
 
-    use crate::diagnostics::dispatcher::DiagnosticsHub;
-    use crate::diagnostics::recent_layer::RecentDiagnosticsLayer;
     use crate::julia::worker::JuliaWorkerTaskDirectory;
+    use yss_diagnostics::DiagnosticsRuntime;
+    use yss_tracing::LogLayer;
 
     use crate::sci::api::bayes::{
         BayesBackend, BayesBackendError, BayesBackendRequest, BayesModelDraft, BinaryOp,
@@ -2229,9 +2229,9 @@ mod tests {
 
     #[test]
     fn failed_task_logs_internal_diagnostics_and_returns_safe_error() {
-        let (hub, _guard) = DiagnosticsHub::start();
+        let diagnostics = DiagnosticsRuntime::initialize().expect("initialize diagnostics");
         let subscriber =
-            tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
+            tracing_subscriber::registry().with(LogLayer::new(diagnostics.rust_log_sink()));
         let task = tracing::subscriber::with_default(subscriber, || {
             failed_task(
                 "task-1".to_string(),
@@ -2285,7 +2285,9 @@ mod tests {
         assert!(!wire.to_string().contains("private backend message"));
         assert!(!wire.to_string().contains("private backend detail"));
 
-        let subscription = hub.subscribe(|_| true).expect("diagnostic subscription");
+        let subscription = diagnostics
+            .subscribe_batches(|_| true)
+            .expect("diagnostic subscription");
         let record = subscription
             .entries
             .iter()
@@ -2296,7 +2298,8 @@ mod tests {
         assert_eq!(record.fields["incident_id"], incident_id);
         assert!(record.fields.get("backend_message").is_none());
         assert!(record.fields.get("backend_detail").is_none());
-        hub.unsubscribe(subscription.subscription_id)
+        diagnostics
+            .unsubscribe(subscription.subscription_id)
             .expect("unsubscribe diagnostics");
     }
 

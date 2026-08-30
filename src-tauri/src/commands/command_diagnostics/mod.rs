@@ -1,10 +1,10 @@
 use tauri::State;
 use tauri::ipc::Channel;
 
-use crate::diagnostics::{
+use crate::error::CommandError;
+use yss_diagnostics::{
     DiagnosticBatchDto, DiagnosticSubscriptionDto, DiagnosticsRuntime, FrontendDiagnosticEntryDto,
 };
-use crate::error::CommandError;
 
 #[tauri::command]
 pub fn submit_frontend_diagnostics(

@@ -6,7 +6,6 @@ pub mod application;
 pub mod backend_adapters;
 pub mod commands;
 pub mod database;
-pub mod diagnostics;
 pub mod error;
 pub mod event;
 pub mod execution;
@@ -93,7 +92,7 @@ pub fn run() {
         .manage(julia_worker)
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
-            let diagnostics = diagnostics::DiagnosticsRuntime::initialize()
+            let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize()
                 .map_err(Box::<dyn std::error::Error>::from)?;
             let logging = yss_tracing::LoggingRuntime::initialize(
                 log_dir.as_ref().ok().cloned(),

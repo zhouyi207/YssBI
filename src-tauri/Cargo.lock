@@ -9110,6 +9110,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.20",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "yss-tracing",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9216,6 +9231,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "yss-data-contract",
  "yss-database-contract",
+ "yss-diagnostics",
  "yss-math",
  "yss-sci",
  "yss-tabular-contract",

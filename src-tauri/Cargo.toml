@@ -14,6 +14,7 @@ members = [
     ".",
     "crates/yss-data-contract",
     "crates/yss-database-contract",
+    "crates/yss-diagnostics",
     "crates/yss-math",
     "crates/yss-sci",
     "crates/yss-tabular-contract",
@@ -60,6 +61,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
+yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-math = { path = "./crates/yss-math" }
 yss-sci = { path = "./crates/yss-sci" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }

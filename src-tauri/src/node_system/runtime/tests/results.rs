@@ -68,9 +68,9 @@ fn view_data_opens_exact_input_result_without_materialization() {
     };
     use tracing_subscriber::layer::SubscriberExt;
 
-    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize().unwrap();
     let subscriber = tracing_subscriber::registry()
-        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
+        .with(yss_tracing::LogLayer::new(diagnostics.rust_log_sink()));
     let run = tracing::subscriber::with_default(subscriber, || {
         RunExecutor::new(
             &kernels,
@@ -107,7 +107,7 @@ fn view_data_opens_exact_input_result_without_materialization() {
     assert!(open_index < completion_index);
     drop(recorded);
 
-    let subscription = diagnostics.subscribe(|_| true).unwrap();
+    let subscription = diagnostics.subscribe_batches(|_| true).unwrap();
     let notify_logs = subscription
         .entries
         .iter()
@@ -115,8 +115,8 @@ fn view_data_opens_exact_input_result_without_materialization() {
         .collect::<Vec<_>>();
     assert_eq!(notify_logs.len(), 1);
     let notify = notify_logs[0];
-    assert_eq!(notify.level, crate::diagnostics::DiagnosticLevel::Info);
-    assert_eq!(notify.domain, crate::diagnostics::DiagnosticDomain::Ui);
+    assert_eq!(notify.level, yss_diagnostics::DiagnosticLevel::Info);
+    assert_eq!(notify.domain, yss_diagnostics::DiagnosticDomain::Ui);
     assert_eq!(notify.source.as_deref(), Some("yssbi.debug.view"));
     assert_eq!(notify.fields["result_id"], input_result_id.get());
     assert_eq!(notify.fields["run_id"], run.run_id.get());

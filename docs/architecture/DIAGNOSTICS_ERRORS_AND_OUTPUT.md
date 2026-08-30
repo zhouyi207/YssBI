@@ -53,10 +53,10 @@ Rust logging 统一使用 `tracing`，但 logging 与 diagnostics 是两个独�
 - `src-tauri/crates/yss-tracing/src/runtime.rs`：process-wide subscriber、过滤、console/file workers 与 rolling JSONL
 - `src-tauri/crates/yss-tracing/src/layer.rs`：`tracing::Event → LogRecord`
 - `src-tauri/crates/yss-tracing/src/sanitizer.rs`：统一脱敏与 per-record bounds
-- `src-tauri/src/diagnostics/runtime.rs`
-- `src-tauri/src/diagnostics/rust_projection.rs`
-- `src-tauri/src/diagnostics/dispatcher.rs`
-- `src-tauri/src/diagnostics/worker.rs`
+- `src-tauri/crates/yss-diagnostics/src/runtime.rs`
+- `src-tauri/crates/yss-diagnostics/src/rust_projection.rs`
+- `src-tauri/crates/yss-diagnostics/src/dispatcher.rs`
+- `src-tauri/crates/yss-diagnostics/src/worker.rs`
 
 Rust event 先在 `yss-tracing` 中形成已清理的 `LogRecord`，再并行投递到 console、rolling file 和可选 diagnostics projection。Diagnostics 不配置 subscriber，也不打开日志文件。
 

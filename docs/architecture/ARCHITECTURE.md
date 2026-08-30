@@ -120,7 +120,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
-| `src-tauri/src/diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery |
+| `src-tauri/crates/yss-diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing` |
 | `src-tauri/crates/yss-window-state/` | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner |
 
 Rust 与 React 的职责单向流动：Rust 保存 domain authority，React 只保存 UI 状态和后端投影。资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用 `databases/{database-id}`，variable 使用 `variables/{VariableId}`。
@@ -385,7 +385,7 @@ Rust `tracing` 是唯一 logging 入口。`src-tauri/crates/yss-tracing/` 安装
 
 ### 7.4 Diagnostics
 
-`src-tauri/src/diagnostics/` 不安装 tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。
+`src-tauri/crates/yss-diagnostics/` 不安装 production tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。
 
 Logging 与 Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。详细 contract 见专项文档。
 

@@ -54,9 +54,9 @@ fn do_sleep_print_and_view_scheduler_contracts() {
     assert!(started.elapsed() < std::time::Duration::from_millis(200));
     use tracing_subscriber::layer::SubscriberExt;
 
-    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize().unwrap();
     let subscriber = tracing_subscriber::registry()
-        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
+        .with(yss_tracing::LogLayer::new(diagnostics.rust_log_sink()));
     assert!(
         tracing::subscriber::with_default(subscriber, || {
             execute_kernel_direct(
@@ -69,7 +69,7 @@ fn do_sleep_print_and_view_scheduler_contracts() {
         .unwrap()
         .is_empty()
     );
-    let subscription = diagnostics.subscribe(|_| true).unwrap();
+    let subscription = diagnostics.subscribe_batches(|_| true).unwrap();
     assert!(
         subscription
             .entries

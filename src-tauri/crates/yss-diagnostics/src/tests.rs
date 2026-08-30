@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::DateTime;
 use serde_json::json;
 use tracing_subscriber::layer::SubscriberExt;
-use yss_tracing::{LogLimits as DiagnosticLimits, REDACTED_VALUE};
+use yss_tracing::{LogLayer, LogLimits as DiagnosticLimits, REDACTED_VALUE};
 
 use super::dispatcher::{
     DiagnosticsHub, LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, PendingDiagnostic,
@@ -15,7 +15,7 @@ use super::dto::{
     DiagnosticBatchDto, DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, DiagnosticRecordDto,
     DiagnosticSubscriptionDto, FrontendDiagnosticEntryDto,
 };
-use super::recent_layer::RecentDiagnosticsLayer;
+use super::rust_projection::log_record_sink;
 use super::validation::{MAX_FRONTEND_DIAGNOSTIC_BATCH, validate_frontend_batch};
 
 fn pending(message: impl Into<String>) -> PendingDiagnostic {
@@ -331,7 +331,8 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
 #[test]
 fn recent_layer_maps_structured_tracing_events_without_file_io() {
     let (hub, _guard) = DiagnosticsHub::start();
-    let subscriber = tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
+    let subscriber =
+        tracing_subscriber::registry().with(LogLayer::new(log_record_sink(hub.clone())));
 
     let long_detail = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
     tracing::subscriber::with_default(subscriber, || {

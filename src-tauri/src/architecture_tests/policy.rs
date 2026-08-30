@@ -580,10 +580,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/commands/command_diagnostics/mod.rs",
         fully_qualified_owner: "yssbi_lib::commands::command_diagnostics",
         canonical_origin_targets: &[
-            "yssbi_lib::diagnostics::dto::DiagnosticBatchDto",
-            "yssbi_lib::diagnostics::dto::DiagnosticSubscriptionDto",
-            "yssbi_lib::diagnostics::dto::FrontendDiagnosticEntryDto",
-            "yssbi_lib::diagnostics::runtime::DiagnosticsRuntime",
+            "yss_diagnostics::dto::DiagnosticBatchDto",
+            "yss_diagnostics::dto::DiagnosticSubscriptionDto",
+            "yss_diagnostics::dto::FrontendDiagnosticEntryDto",
+            "yss_diagnostics::runtime::DiagnosticsRuntime",
             "yssbi_lib::error::CommandError",
         ],
     },
@@ -1779,6 +1779,8 @@ fn non_build_memberships(
         layers.insert(RustLayer::PureLeaf);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
+    } else if package == "yss-diagnostics" {
+        layers.insert(RustLayer::Diagnostics);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
     } else if package == "yss-window-state" {
@@ -1805,7 +1807,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "commands" => Some(RustLayer::Commands),
         "project" => Some(RustLayer::Project),
         "database" => Some(RustLayer::DatabaseCore),
-        "diagnostics" => Some(RustLayer::Diagnostics),
         "execution" => Some(RustLayer::Execution),
         "sci" if namespace.starts_with("sci::backends::julia") => Some(RustLayer::BackendAdapter),
         "sci" => Some(RustLayer::SciCore),
