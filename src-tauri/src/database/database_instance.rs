@@ -1,11 +1,11 @@
-use super::DatabaseExportFormat;
 use super::DatabaseState;
-use yss_database_contract::{DatabaseDecl, DatabaseEngine};
+use super::error::DatabaseExportError;
+use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
 
 use super::{
     EditHistory, EditOperation, EditState, apply_operation, capture_column_data, capture_row_data,
-    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, export_dataframe,
-    export_duckdb_table, reverse_operation, write_display_name,
+    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, reverse_operation,
+    write_display_name,
 };
 use super::{
     PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json,
@@ -26,7 +26,9 @@ use yss_duckdb::{
     compute_all_column_distributions as compute_all_column_distributions_duckdb,
     compute_all_column_stats as compute_all_column_stats_duckdb,
     compute_dataset_overview as compute_dataset_overview_duckdb, duckdb_table_sql,
+    export_duckdb_table,
 };
+use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 use yss_tabular_polars::anyvalue_to_json;
 
 fn duckdb_profile_columns(columns: &[super::DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
@@ -122,16 +124,26 @@ impl DatabaseInstance {
             .collect())
     }
 
-    pub fn export_to_path(&self, path: &Path, format: DatabaseExportFormat) -> Result<(), String> {
+    pub fn export_to_path(
+        &self,
+        path: &Path,
+        format: DatabaseExportFormat,
+    ) -> Result<(), DatabaseExportError> {
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path, table, ..
-            } => export_duckdb_table(Path::new(duckdb_path), table, path, format),
+            } => {
+                export_duckdb_table(Path::new(duckdb_path), table, path, format).map_err(Into::into)
+            }
             DatabaseState::Loaded { dataframe, .. } => {
                 let mut dataframe = dataframe.as_ref().clone();
-                export_dataframe(&mut dataframe, path, format)
+                match format {
+                    DatabaseExportFormat::Csv => write_csv_dataframe(path, &mut dataframe),
+                    DatabaseExportFormat::Parquet => write_parquet_dataframe(path, &mut dataframe),
+                }
+                .map_err(Into::into)
             }
-            DatabaseState::Failed { error } => Err(error.clone()),
+            DatabaseState::Failed { .. } => Err(DatabaseExportError::unavailable()),
         }
     }
 

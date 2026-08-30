@@ -9,7 +9,7 @@ use crate::database::database_state::DatabaseState;
 use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
 use crate::database::schema_snapshot::{DatabaseColumnFact, DatabaseSchemaFact};
 use crate::database::session_api::DatabaseMutationOperation;
-use yss_database_contract::{DatabaseDecl, DatabaseId};
+use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
 use yss_tabular_contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot,
 };
@@ -227,7 +227,7 @@ impl DatabaseRuntimePhysicalState {
         &self,
         database: &DatabaseId,
         path: &Path,
-        format: crate::database::DatabaseExportFormat,
+        format: DatabaseExportFormat,
     ) -> Result<(), DatabaseError> {
         let instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
@@ -236,7 +236,7 @@ impl DatabaseRuntimePhysicalState {
             DatabaseError::driver(
                 DatabaseOperation::Query,
                 Some(database.clone()),
-                DatabaseDriverError::Operation(error.into_boxed_str()),
+                DatabaseDriverError::Export(error),
             )
         })
     }

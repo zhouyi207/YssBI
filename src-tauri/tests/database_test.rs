@@ -2,13 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use polars::prelude::*;
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseId};
 use yss_project_identity::OperationId;
 use yssbi_lib::database::{
-    DatabaseExportFormat, DatabaseInstance, DatabaseState, EditHistory,
-    MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, bind_duckdb_instance,
-    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
-    write_display_name,
+    DatabaseInstance, DatabaseState, EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS,
+    MAX_IN_MEMORY_EDIT_ROWS, bind_duckdb_instance, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
+    query_page_to_dataframe, read_table_meta, write_display_name,
 };
 use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 
@@ -29,6 +28,12 @@ fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
             history: EditHistory::new(),
         },
     }
+}
+
+fn test_output_path(name: String) -> PathBuf {
+    let directory = PathBuf::from("target");
+    std::fs::create_dir_all(&directory).expect("create database test output directory");
+    directory.join(name)
 }
 
 fn duckdb_instance(duckdb_path: &PathBuf, table: &str) -> DatabaseInstance {
@@ -116,8 +121,8 @@ fn polars_delete_column_undo_restores_dtype_and_data() {
 
 #[test]
 fn duckdb_edit_quotes_identifiers_separately_from_string_literals() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_quotes_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_quotes_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let table = "table\"with'quotes";
@@ -147,8 +152,8 @@ fn duckdb_edit_quotes_identifiers_separately_from_string_literals() {
 
 #[test]
 fn duckdb_force_cast_is_rejected_without_mutation() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_force_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_force_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let conn = duckdb::Connection::open(&duckdb_path).unwrap();
@@ -176,8 +181,8 @@ fn duckdb_force_cast_is_rejected_without_mutation() {
 
 #[test]
 fn duckdb_delete_column_undo_restores_dtype_and_data() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_delete_column_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_delete_column_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let table = "delete_column";
@@ -207,8 +212,8 @@ fn duckdb_delete_column_undo_restores_dtype_and_data() {
 
 #[test]
 fn duckdb_delete_column_over_snapshot_limit_is_rejected_without_history() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_delete_limit_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_delete_limit_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let table = "delete_limit";
@@ -240,8 +245,8 @@ fn duckdb_delete_column_over_snapshot_limit_is_rejected_without_history() {
 
 #[test]
 fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_export_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_export_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let table = "export\"table";
@@ -255,8 +260,8 @@ fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
     drop(conn);
 
     let database = duckdb_instance(&duckdb_path, table);
-    let csv_path = PathBuf::from(format!(
-        "target/test_database_export_'_{}.csv",
+    let csv_path = test_output_path(format!(
+        "test_database_export_'_{}.csv",
         uuid::Uuid::new_v4()
     ));
     let parquet_path = csv_path.with_extension("parquet");
@@ -292,8 +297,8 @@ fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
 
 #[test]
 fn duckdb_delete_column_failed_undo_is_atomic_and_keeps_history() {
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_database_delete_atomic_{}.duckdb",
+    let duckdb_path = test_output_path(format!(
+        "test_database_delete_atomic_{}.duckdb",
         uuid::Uuid::new_v4()
     ));
     let table = "delete_atomic";
@@ -328,10 +333,7 @@ fn duckdb_delete_column_failed_undo_is_atomic_and_keeps_history() {
 }
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
-    let project_root = PathBuf::from(format!(
-        "target/test_project_duckdb_{}",
-        uuid::Uuid::new_v4()
-    ));
+    let project_root = test_output_path(format!("test_project_duckdb_{}", uuid::Uuid::new_v4()));
     let _ = std::fs::remove_dir_all(&project_root);
     ProjectState::new()
         .create_project_transaction("Database test", &project_root, OperationId::new())
@@ -408,10 +410,7 @@ fn test_project_reload_discovers_duckdb_from_directory() {
 /// 同一 project.duckdb 可承载多张表。
 #[test]
 fn test_single_project_duckdb_multiple_tables() {
-    let project_root = PathBuf::from(format!(
-        "target/test_project_multi_{}",
-        uuid::Uuid::new_v4()
-    ));
+    let project_root = test_output_path(format!("test_project_multi_{}", uuid::Uuid::new_v4()));
     let _ = std::fs::remove_dir_all(&project_root);
     ProjectState::new()
         .create_project_transaction("Multi database test", &project_root, OperationId::new())
@@ -447,7 +446,7 @@ fn test_single_project_duckdb_multiple_tables() {
 fn test_parquet_ingest_to_duckdb() {
     use polars::prelude::*;
 
-    let parquet_path = PathBuf::from(format!("target/test_iris_{}.parquet", uuid::Uuid::new_v4()));
+    let parquet_path = test_output_path(format!("test_iris_{}.parquet", uuid::Uuid::new_v4()));
     let csv_path = PathBuf::from("tests/data/iris.csv");
     let mut df = LazyCsvReader::new(PlRefPath::new(csv_path.to_string_lossy().as_ref()))
         .with_has_header(true)
@@ -460,10 +459,7 @@ fn test_parquet_ingest_to_duckdb() {
         .finish(&mut df)
         .expect("write parquet");
 
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_parquet_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
+    let duckdb_path = test_output_path(format!("test_parquet_{}.duckdb", uuid::Uuid::new_v4()));
     let _ = std::fs::remove_file(&duckdb_path);
 
     let meta = ingest_parquet_to_duckdb(&parquet_path, &duckdb_path, "db-parquet-test", None)

@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use yss_database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
-    DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
+    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseExportFormat, DatabaseId,
+    DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
 };
 
 pub(crate) use registry::{
@@ -375,7 +375,7 @@ impl DatabaseRuntimeSession {
         &self,
         database: &DatabaseId,
         path: &std::path::Path,
-        format: crate::database::DatabaseExportFormat,
+        format: DatabaseExportFormat,
     ) -> Result<(), DatabaseError> {
         self.physical.export_to_path(database, path, format)
     }

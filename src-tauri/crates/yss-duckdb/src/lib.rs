@@ -1,8 +1,10 @@
-//! DuckDB engine primitives and physical dataset profiling.
+//! DuckDB engine primitives, physical dataset profiling, and table export.
 
+mod export;
 mod profile;
 mod sql;
 
+pub use export::{DuckDbExportError, DuckDbExportPhase, export_duckdb_table};
 pub use profile::{
     DatasetProfileColumnRef, compute_all_column_distributions, compute_all_column_stats,
     compute_dataset_overview,

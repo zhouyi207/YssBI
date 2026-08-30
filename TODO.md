@@ -562,7 +562,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   中的兼容 re-export。
 - [ ] 将 persisted database contract 迁入独立 `src-tauri/crates/yss-database-contract/`
   Pure Leaf，由该 crate 唯一拥有 declaration、engine/session identity、observation 与
-  fingerprint；消费方直接依赖该 crate，不保留主 crate 兼容 re-export。
+  fingerprint，并统一拥有 CSV/Parquet export format 与严格 parser；消费方直接依赖该 crate，
+  不保留主 crate 兼容 re-export。
 - [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-tabular-contract/` Pure Leaf，
   集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
   adapter/application owner 持有，主 crate 不保留兼容 module。
@@ -582,7 +583,9 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 建立 `src-tauri/crates/yss-duckdb/` Database Core engine crate，先迁入 DuckDB
   identifier/literal quoting、editable type allowlist 与 dataset-profile physical SQL；删除根
   `duckdb_sql`/`duckdb_analytics` owner 与 re-export，并由根 runtime 通过借用型列 metadata
-  视图直接调用；后续 reader/editing/export 继续迁入同一 crate，避免形成 DuckDB 微型 crate 群。
+  视图直接调用；typed CSV/Parquet `COPY` export 也归入同一 crate，Loaded DataFrame 直接调用
+  `yss-tabular-io`，删除混合职责的根 `database/export` owner；后续 reader/editing 继续向同一
+  crate 收敛，避免形成 DuckDB 微型 crate 群。
 - [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
   Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
   application/project 仅持有 mutation、normalization 与 authority。

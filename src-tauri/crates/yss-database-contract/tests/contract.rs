@@ -5,8 +5,8 @@ use serde_json::json;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationObservationSetError,
-    DatabaseDeclarationRevision, DatabaseEngine, DatabaseId, DatabaseSessionIdentity,
-    DatabaseSessionOpenRequest, DatabaseSessionOpenRequestError,
+    DatabaseDeclarationRevision, DatabaseEngine, DatabaseExportFormat, DatabaseId,
+    DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestError,
 };
 
 fn declaration(id: &str, name: &str) -> DatabaseDecl {
@@ -17,6 +17,13 @@ fn declaration(id: &str, name: &str) -> DatabaseDecl {
         required: false,
         name: name.into(),
     }
+}
+
+#[test]
+fn export_formats_parse_case_insensitively_and_reject_unknown_values() {
+    assert_eq!("csv".parse(), Ok(DatabaseExportFormat::Csv));
+    assert_eq!("PARQUET".parse(), Ok(DatabaseExportFormat::Parquet));
+    assert!("xlsx".parse::<DatabaseExportFormat>().is_err());
 }
 
 fn observations_for(declarations: &[DatabaseDecl]) -> DatabaseDeclarationObservationSet {

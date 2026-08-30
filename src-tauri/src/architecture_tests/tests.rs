@@ -2032,6 +2032,7 @@ fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
         "src-tauri/crates/yss-database-contract/src/lib.rs",
         "src-tauri/crates/yss-database-contract/src/declaration.rs",
         "src-tauri/crates/yss-database-contract/src/engine.rs",
+        "src-tauri/crates/yss-database-contract/src/export.rs",
         "src-tauri/crates/yss-database-contract/src/fingerprint.rs",
         "src-tauri/crates/yss-database-contract/src/identity.rs",
         "src-tauri/crates/yss-database-contract/src/observation.rs",
@@ -2041,6 +2042,20 @@ fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
         assert!(
             root.join(relative).is_file(),
             "database contract owner must exist at {relative}"
+        );
+    }
+
+    let export_contract =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-contract/src/export.rs"))
+            .expect("the database export contract must be readable");
+    for invariant in [
+        "pub enum DatabaseExportFormat",
+        "impl FromStr for DatabaseExportFormat",
+        "DatabaseExportFormatParseError",
+    ] {
+        assert!(
+            export_contract.contains(invariant),
+            "the database contract must own export invariant {invariant}"
         );
     }
 
@@ -2228,6 +2243,7 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-duckdb/Cargo.toml",
+        "src-tauri/crates/yss-duckdb/src/export.rs",
         "src-tauri/crates/yss-duckdb/src/lib.rs",
         "src-tauri/crates/yss-duckdb/src/profile.rs",
         "src-tauri/crates/yss-duckdb/src/sql.rs",
@@ -2240,6 +2256,7 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
     for removed_owner in [
         "src-tauri/src/database/duckdb_analytics.rs",
         "src-tauri/src/database/duckdb_sql.rs",
+        "src-tauri/src/database/export.rs",
     ] {
         assert!(
             !root.join(removed_owner).exists(),
@@ -2264,6 +2281,8 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
             .expect("the DuckDB engine manifest must be readable");
     for dependency in [
         "duckdb.workspace = true",
+        "thiserror.workspace = true",
+        "yss-database-contract = { path = \"../yss-database-contract\" }",
         "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
     ] {
         assert!(
@@ -2276,17 +2295,35 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         .expect("the DuckDB engine root must be readable");
     for owned_api in [
         "DatasetProfileColumnRef",
+        "DuckDbExportError",
+        "DuckDbExportPhase",
         "compute_all_column_distributions",
         "compute_all_column_stats",
         "compute_dataset_overview",
         "duckdb_table_sql",
         "editable_dtype_to_duckdb_sql",
+        "export_duckdb_table",
         "quote_duckdb_identifier",
         "quote_duckdb_string_literal",
     ] {
         assert!(
             engine.contains(owned_api),
             "the DuckDB engine crate must export {owned_api}"
+        );
+    }
+    let export = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/export.rs"))
+        .expect("the DuckDB export owner must be readable");
+    for invariant in [
+        "COPY (SELECT * FROM {table}) TO {destination} ({options});",
+        "DatabaseExportFormat::Csv",
+        "DatabaseExportFormat::Parquet",
+        "DuckDbExportPhase::Open",
+        "DuckDbExportPhase::Copy",
+        "table_exports_csv_and_parquet_without_materializing_in_polars",
+    ] {
+        assert!(
+            export.contains(invariant),
+            "the DuckDB export owner must preserve invariant {invariant}"
         );
     }
     let sql = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/sql.rs"))
@@ -2308,6 +2345,8 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
     assert!(
         !root_database.contains("duckdb_analytics")
             && !root_database.contains("duckdb_sql")
+            && !root_database.contains("mod export")
+            && !root_database.contains("pub use export")
             && !root_database.contains("pub use yss_duckdb"),
         "the root database module must not retain DuckDB compatibility facades"
     );
@@ -2316,7 +2355,6 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         "src-tauri/src/database/duckdb_column_snapshot.rs",
         "src-tauri/src/database/duckdb_editing.rs",
         "src-tauri/src/database/duckdb_reader.rs",
-        "src-tauri/src/database/export.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -2334,7 +2372,8 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
             .expect("the database instance must be readable");
     assert!(
         database_instance.contains("DatasetProfileColumnRef::new")
-            && database_instance.contains("fn duckdb_profile_columns"),
+            && database_instance.contains("fn duckdb_profile_columns")
+            && database_instance.contains("export_duckdb_table"),
         "the root runtime must map cached metadata through the borrowed adapter input"
     );
 
@@ -2568,7 +2607,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     for relative in [
         "src-tauri/src/application/bayes.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
-        "src-tauri/src/database/export.rs",
+        "src-tauri/src/database/database_instance.rs",
         "src-tauri/src/sci/backends/julia/bayes/fit.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -2592,6 +2631,76 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
             && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the tabular I/O crate must be classified in Database Core"
     );
+}
+
+#[test]
+fn database_export_uses_contract_and_engine_owners_without_root_facade() {
+    let root = repository_root();
+    assert!(
+        !root.join("src-tauri/src/database/export.rs").exists(),
+        "the root database crate must not retain a mixed export owner"
+    );
+
+    let database_module = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    assert!(
+        !database_module.contains("mod export") && !database_module.contains("pub use export"),
+        "the root database module must not retain an export compatibility facade"
+    );
+
+    let database_instance =
+        std::fs::read_to_string(root.join("src-tauri/src/database/database_instance.rs"))
+            .expect("the database instance must be readable");
+    for direct_owner in [
+        "yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat}",
+        "export_duckdb_table",
+        "yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe}",
+        "Result<(), DatabaseExportError>",
+    ] {
+        assert!(
+            database_instance.contains(direct_owner),
+            "the database runtime must consume export owner {direct_owner} directly"
+        );
+    }
+    assert!(
+        !database_instance.contains("format: DatabaseExportFormat) -> Result<(), String>"),
+        "the database instance export seam must not erase typed errors"
+    );
+
+    let database_error = std::fs::read_to_string(root.join("src-tauri/src/database/error.rs"))
+        .expect("the database error owner must be readable");
+    for typed_variant in [
+        "pub struct DatabaseExportError",
+        "enum DatabaseExportSource",
+        "impl From<yss_duckdb::DuckDbExportError> for DatabaseExportError",
+        "impl From<yss_tabular_io::TabularIoError> for DatabaseExportError",
+        "Export(#[source] DatabaseExportError)",
+    ] {
+        assert!(
+            database_error.contains(typed_variant),
+            "the database runtime must preserve typed export error {typed_variant}"
+        );
+    }
+
+    let application = std::fs::read_to_string(root.join("src-tauri/src/application/database.rs"))
+        .expect("the database application must be readable");
+    assert!(
+        application.contains("format.parse::<DatabaseExportFormat>()")
+            && !application.contains("DatabaseExportFormat::parse"),
+        "the application must parse the canonical export contract without a root helper"
+    );
+    for relative in [
+        "src-tauri/src/database/runtime/mod.rs",
+        "src-tauri/src/database/runtime/physical.rs",
+    ] {
+        let runtime = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            runtime.contains("DatabaseExportFormat")
+                && !runtime.contains("crate::database::DatabaseExportFormat"),
+            "{relative} must consume the canonical export contract directly"
+        );
+    }
 }
 
 #[test]

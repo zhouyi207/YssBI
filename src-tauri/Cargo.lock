@@ -9159,6 +9159,8 @@ name = "yss-duckdb"
 version = "0.1.0"
 dependencies = [
  "duckdb",
+ "thiserror 2.0.20",
+ "yss-database-contract",
  "yss-dataset-profile",
 ]
 

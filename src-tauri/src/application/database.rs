@@ -30,14 +30,16 @@ use crate::database::error::{DatabaseError, DatabaseErrorCode};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::session_api;
 use crate::database::{
-    DatabaseExportFormat, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
+    ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
     ingest_parquet_to_duckdb, sql_reader, write_display_name,
 };
 use crate::project::{
     ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
 use uuid::Uuid;
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
+use yss_database_contract::{
+    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
+};
 use yss_display_naming::allocate_unique_display_name;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -747,7 +749,7 @@ fn export_database_in_captured_session(
     path: &str,
     format: &str,
 ) -> Result<(), ApplicationDatabaseError> {
-    let export_format = DatabaseExportFormat::parse(format).ok_or_else(|| {
+    let export_format = format.parse::<DatabaseExportFormat>().map_err(|_| {
         DatabaseApplicationError::ExportUnsupported {
             format: format.to_owned(),
         }
