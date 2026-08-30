@@ -7,6 +7,10 @@ publish = false
 
 [dependencies]
 duckdb.workspace = true
+polars.workspace = true
+polars-arrow.workspace = true
+polars-dtype.workspace = true
 thiserror.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
+yss-tabular-io = { path = "../yss-tabular-io" }

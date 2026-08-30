@@ -8,6 +8,7 @@ use super::{
     load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_duckdb::{list_data_tables, read_display_name};
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_filesystem::project_root_from_path;
@@ -862,14 +863,13 @@ pub fn discover_databases_from_root(
 ) -> Result<HashMap<String, DatabaseDecl>, ProjectError> {
     let mut map = HashMap::new();
     let duckdb_path = project_duckdb_abs(root);
-    let tables = crate::database::list_data_tables(&duckdb_path).map_err(|e| {
+    let tables = list_data_tables(&duckdb_path).map_err(|e| {
         ProjectError::InvalidProjectFormat(format!("Failed to list DuckDB tables: {e}"))
     })?;
 
     let relative_path = relative_project_duckdb_path();
     for table in tables {
-        let display_name = crate::database::read_display_name(&duckdb_path, &table)
-            .unwrap_or_else(|| table.clone());
+        let display_name = read_display_name(&duckdb_path, &table).unwrap_or_else(|| table.clone());
         let decl = DatabaseDecl {
             id: DatabaseId::from_existing(table.clone().into()),
             engine: DatabaseEngine::DuckDb {

@@ -1,7 +1,8 @@
-//! DuckDB 项目库读写：Polars ↔ Arrow ↔ DuckDB。
+//! DuckDB table lifecycle, ingest, metadata, and DataFrame queries.
 //!
-//! Categorical 列通过 DuckDB `ENUM`（类型名 `_yssbi_enum_*`）持久化；读写 Arrow 物理类型不对称，
-//! 详见 [`README.md`](./README.md) 中「Categorical / ENUM 类型映射」一节。
+//! Categorical columns are persisted as DuckDB `ENUM` types named with the
+//! `_yssbi_enum_*` prefix. Arrow read/write physical types are intentionally
+//! asymmetric so loaded tables recover their logical categorical dtype.
 use std::path::Path;
 
 use duckdb::Connection;
@@ -18,7 +19,7 @@ use polars_arrow::ffi::{
 };
 use polars_dtype::categorical::{CatSize, FrozenCategories};
 
-use yss_duckdb::{
+use crate::sql::{
     DUCKDB_ROWID_SQL, duckdb_table_sql, quote_duckdb_identifier, quote_duckdb_string_literal,
 };
 use yss_tabular_io::export_excel_sheet_to_csv;
@@ -26,12 +27,16 @@ use yss_tabular_io::export_excel_sheet_to_csv;
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
 pub const YSSBI_ENUM_PREFIX: &str = "_yssbi_enum_";
+pub const INGEST_CHUNK_ROWS: usize = 50_000;
 
 /// Polars 列名：分页查询 `SELECT rowid, ...` 后用于提取 / drop。
 pub const DUCKDB_ROWID_COL: &str = "rowid";
 
 fn open_project_duckdb(duckdb_path: &Path) -> Result<Connection, String> {
-    if let Some(parent) = duckdb_path.parent() {
+    if let Some(parent) = duckdb_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     Connection::open(duckdb_path).map_err(|e| e.to_string())
@@ -89,7 +94,8 @@ pub fn drop_data_table(duckdb_path: &Path, table: &str) -> Result<(), String> {
         return Ok(());
     }
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
-    drop_user_table(&conn, table)?;
+    ensure_meta_table(&conn)?;
+    drop_user_table_and_enum_types(&conn, table)?;
     let meta = quote_duckdb_identifier(YSSBI_META_TABLE);
     let table_id = quote_duckdb_string_literal(table);
     conn.execute(
@@ -320,21 +326,29 @@ fn describe_table_storage_types(
         .map_err(|e| e.to_string())
 }
 
-fn drop_table_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
-    let columns = describe_table_storage_types(conn, table).unwrap_or_default();
-    for (_, storage_type) in columns {
-        if is_yssbi_enum_type(&storage_type) {
-            let type_sql = quote_duckdb_identifier(&storage_type);
-            conn.execute_batch(&format!("DROP TYPE IF EXISTS {type_sql} CASCADE;"))
-                .map_err(|e| format!("Failed to drop enum type '{storage_type}': {e}"))?;
-        }
+fn drop_user_table_and_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
+    let enum_types = describe_table_storage_types(conn, table)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(column, storage_type)| {
+            if !is_duckdb_enum_storage_type(&storage_type) {
+                return None;
+            }
+            Some(if is_yssbi_enum_type(&storage_type) {
+                storage_type
+            } else {
+                yssbi_enum_type_name(table, &column)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    drop_user_table(conn, table)?;
+    for storage_type in enum_types {
+        let type_sql = quote_duckdb_identifier(&storage_type);
+        conn.execute_batch(&format!("DROP TYPE IF EXISTS main.{type_sql};"))
+            .map_err(|e| format!("Failed to drop enum type '{storage_type}': {e}"))?;
     }
     Ok(())
-}
-
-fn drop_user_table_and_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
-    drop_table_enum_types(conn, table)?;
-    drop_user_table(conn, table)
 }
 
 fn create_enum_type(conn: &Connection, spec: &EnumColumnSpec) -> Result<(), String> {
@@ -422,13 +436,9 @@ pub fn ingest_csv_to_duckdb(
         return Err(format!("CSV file not found: {}", csv_path.display()));
     }
 
-    if let Some(parent) = duckdb_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
     let conn = open_project_duckdb(duckdb_path)?;
     ensure_meta_table(&conn)?;
-    drop_user_table(&conn, table)?;
+    drop_user_table_and_enum_types(&conn, table)?;
 
     let csv_literal = duckdb_path_literal(csv_path);
     let header = if has_header { "true" } else { "false" };
@@ -462,13 +472,9 @@ pub fn ingest_parquet_to_duckdb(
         ));
     }
 
-    if let Some(parent) = duckdb_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
     let conn = open_project_duckdb(duckdb_path)?;
     ensure_meta_table(&conn)?;
-    drop_user_table(&conn, table)?;
+    drop_user_table_and_enum_types(&conn, table)?;
 
     let parquet_literal = duckdb_path_literal(parquet_path);
     let table_sql = quote_duckdb_identifier(table);
@@ -507,16 +513,10 @@ pub fn ingest_dataframe_to_duckdb(
         return Err("Cannot ingest empty DataFrame".into());
     }
 
-    if let Some(parent) = duckdb_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
     df.rechunk_mut();
     let enum_columns = plan_enum_columns(df, table)?;
-    let enum_by_column: std::collections::HashMap<String, EnumColumnSpec> = enum_columns
-        .into_iter()
-        .map(|(name, spec)| (name, spec))
-        .collect();
+    let enum_by_column: std::collections::HashMap<String, EnumColumnSpec> =
+        enum_columns.into_iter().collect();
 
     let conn = open_project_duckdb(duckdb_path)?;
     ensure_meta_table(&conn)?;
@@ -530,7 +530,6 @@ pub fn ingest_dataframe_to_duckdb(
 
     let height = df.height();
     if height > 0 {
-        use super::duckdb_editing::INGEST_CHUNK_ROWS;
         let mut appender = conn
             .appender(table)
             .map_err(|e| format!("Failed to open DuckDB appender for '{table}': {e}"))?;
@@ -953,14 +952,26 @@ pub fn query_page_with_rowids(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_DUCKDB_PATH: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_duckdb_path(label: &str) -> PathBuf {
+        let sequence = NEXT_DUCKDB_PATH.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "yssbi-{label}-{}-{sequence}.duckdb",
+            std::process::id()
+        ))
+    }
+
+    fn iris_csv_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/iris.csv")
+    }
 
     #[test]
     fn iris_page_rowids_are_stable() {
-        let csv_path = PathBuf::from("tests/data/iris.csv");
-        let duckdb_path = PathBuf::from(format!(
-            "target/test_iris_rowids_{}.duckdb",
-            uuid::Uuid::new_v4()
-        ));
+        let csv_path = iris_csv_path();
+        let duckdb_path = temp_duckdb_path("iris-rowids");
         ingest_csv_to_duckdb(
             &csv_path,
             &duckdb_path,
@@ -980,19 +991,21 @@ mod tests {
 
     #[test]
     fn ingest_categorical_enum_roundtrip() {
-        use crate::database::cast_column;
-
         let mut df = df!(
             "city" => &["北京", "上海", "北京"],
             "value" => &[1i64, 2, 3],
         )
         .expect("df");
-        cast_column(&mut df, "city", "Categorical", true).expect("cast");
+        let city = string_series_to_categorical(
+            df.column("city").expect("city").as_materialized_series(),
+            &["北京".to_owned(), "上海".to_owned()],
+        )
+        .expect("categorical city");
+        let city_index = df.get_column_index("city").expect("city index");
+        df.replace_column(city_index, city.into())
+            .expect("replace city");
 
-        let duckdb_path = PathBuf::from(format!(
-            "target/test_duckdb_categorical_enum_{}.duckdb",
-            uuid::Uuid::new_v4()
-        ));
+        let duckdb_path = temp_duckdb_path("categorical-enum");
 
         ingest_dataframe_to_duckdb(&mut df, &duckdb_path, "test_table").expect("ingest");
 
@@ -1021,10 +1034,7 @@ mod tests {
             "value" => &[1i64, 2],
         )
         .expect("df");
-        let duckdb_path = PathBuf::from(format!(
-            "target/test_duckdb_arrow_ingest_{}.duckdb",
-            uuid::Uuid::new_v4()
-        ));
+        let duckdb_path = temp_duckdb_path("arrow-ingest");
 
         ingest_dataframe_to_duckdb(&mut df, &duckdb_path, "test_table").expect("ingest");
 
@@ -1052,6 +1062,56 @@ mod tests {
             Some("a")
         );
 
+        let _ = std::fs::remove_file(&duckdb_path);
+    }
+
+    #[test]
+    fn drop_data_table_removes_display_metadata_and_enum_types() {
+        let mut df = df!("city" => &["北京", "上海"]).expect("df");
+        let city = string_series_to_categorical(
+            df.column("city").expect("city").as_materialized_series(),
+            &["北京".to_owned(), "上海".to_owned()],
+        )
+        .expect("categorical city");
+        let city_index = df.get_column_index("city").expect("city index");
+        df.replace_column(city_index, city.into())
+            .expect("replace city");
+
+        let duckdb_path = temp_duckdb_path("drop-categorical");
+        let table = "test_table";
+        let enum_type = yssbi_enum_type_name(table, "city");
+        ingest_dataframe_to_duckdb(&mut df, &duckdb_path, table).expect("ingest");
+        write_display_name(&duckdb_path, table, "Cities").expect("display name");
+
+        drop_data_table(&duckdb_path, table).expect("drop table");
+
+        assert!(list_data_tables(&duckdb_path).expect("tables").is_empty());
+        assert_eq!(read_display_name(&duckdb_path, table), None);
+        let conn = Connection::open(&duckdb_path).expect("open DuckDB");
+        let enum_literal = quote_duckdb_string_literal(&enum_type);
+        let enum_count: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM duckdb_types() WHERE type_name = {enum_literal}"),
+                [],
+                |row| row.get(0),
+            )
+            .expect("count enum types");
+        assert_eq!(enum_count, 0, "table-owned ENUM type must be removed");
+        drop(conn);
+        let _ = std::fs::remove_file(&duckdb_path);
+    }
+
+    #[test]
+    fn drop_data_table_accepts_database_without_metadata_table() {
+        let duckdb_path = temp_duckdb_path("drop-without-metadata");
+        let conn = Connection::open(&duckdb_path).expect("open DuckDB");
+        conn.execute_batch(r#"CREATE TABLE "external_table" (value INTEGER);"#)
+            .expect("create external table");
+        drop(conn);
+
+        drop_data_table(&duckdb_path, "external_table").expect("drop external table");
+
+        assert!(list_data_tables(&duckdb_path).expect("tables").is_empty());
         let _ = std::fs::remove_file(&duckdb_path);
     }
 }

@@ -473,8 +473,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/project/project_io.rs",
         fully_qualified_owner: "yssbi_lib::project::project_io",
         canonical_origin_targets: &[
-            "yssbi_lib::database::duckdb_reader::list_data_tables",
-            "yssbi_lib::database::duckdb_reader::read_display_name",
+            "yss_duckdb::table::list_data_tables",
+            "yss_duckdb::table::read_display_name",
         ],
     },
     InternalDependencyCapability {

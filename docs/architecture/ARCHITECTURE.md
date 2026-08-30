@@ -113,7 +113,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation、fingerprint 与 CSV/Parquet export format 的唯一 canonical owner |
 | `src-tauri/crates/yss-dataset-profile/` | 独立 Database Core：dataset profile DTO、内存 Polars column stats/distribution/overview 与稳定分类、排序语义的唯一 owner；不依赖 DuckDB、root database、Application 或 Tauri |
 | `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
-| `src-tauri/crates/yss-duckdb/` | 独立 Database Core engine crate：DuckDB identifier/literal quoting、editable type allowlist、dataset-profile physical SQL 与 typed CSV/Parquet `COPY` export 的唯一 owner；根 Database 通过借用型 metadata view 调用，reader/editing 将继续向同一 crate 收敛 |
+| `src-tauri/crates/yss-duckdb/` | 独立 Database Core engine crate：DuckDB table lifecycle、CSV/Parquet/Excel/DataFrame ingest、Arrow bridge、catalog/display metadata、paged/column query、identifier/literal quoting、editable type allowlist、dataset-profile physical SQL 与 typed CSV/Parquet `COPY` export 的唯一 owner；根 Database 仅组合 runtime/edit history，editing 将继续向同一 crate 收敛 |
 | `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供，磁盘目录/扩展名由 `yss-project-layout` 提供 |
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
@@ -520,7 +520,7 @@ Logging 与 Diagnostics 都是有损、非权威观察面；`diagnostic_skip_rec
 
 IPC 只接受 `DatabaseImportSourceDTO`：`Csv`、`Parquet`、`Excel` 或 typed `Sql` engine。它不接受 runtime-only `InMemory` 或项目内部 `DuckDb` source。Command 将 import source 转换为内部 engine，再交给 `application::database`。
 
-`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 declaration authority；`DatabaseRuntimeSession` 保存 session-bound physical/query state。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
+`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实；其 table lifecycle、ingest、metadata 与 query primitive 由 `yss-duckdb` 唯一拥有。活动 session 中，`ProjectData.databases` 是 declaration authority；`DatabaseRuntimeSession` 保存 session-bound physical/query state。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
 
 ### 8.2 Query 与编辑
 

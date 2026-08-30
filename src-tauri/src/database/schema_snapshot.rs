@@ -3,7 +3,7 @@ use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
 use yss_tabular_contract::TabularColumnName;
 
-use super::DuckDbColumnMeta;
+use yss_duckdb::DuckDbColumnMeta;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct DatabaseRuntimeRevision(u64);

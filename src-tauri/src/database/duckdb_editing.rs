@@ -6,14 +6,14 @@ use std::path::Path;
 use duckdb::Connection;
 
 use super::duckdb_column_snapshot::{duckdb_storage_type, user_column_names};
-use super::{DuckDbColumnMeta, EditOperation, read_table_meta, restore_deleted_column};
+use super::{EditOperation, restore_deleted_column};
 use yss_duckdb::{
-    DUCKDB_ROWID_SQL, duckdb_table_sql, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
-    quote_duckdb_string_literal,
+    DUCKDB_ROWID_SQL, DuckDbColumnMeta, YSSBI_ENUM_PREFIX, duckdb_table_sql,
+    editable_dtype_to_duckdb_sql, quote_duckdb_identifier, quote_duckdb_string_literal,
+    read_table_meta,
 };
 
 pub const MAX_IN_MEMORY_EDIT_ROWS: usize = 50_000;
-pub const INGEST_CHUNK_ROWS: usize = 50_000;
 pub const MAX_GET_DATAFRAME_ROWS: usize = 500_000;
 
 pub fn should_use_in_memory_editing(row_count: usize) -> bool {
@@ -72,7 +72,7 @@ fn json_to_sql_literal(
     let storage = duckdb_storage_type(conn, table, col)?;
     let upper = storage.to_uppercase();
 
-    if upper.contains("ENUM") || storage.starts_with(super::YSSBI_ENUM_PREFIX) {
+    if upper.contains("ENUM") || storage.starts_with(YSSBI_ENUM_PREFIX) {
         let s = value
             .as_str()
             .ok_or_else(|| format!("ENUM column '{col}' requires string value"))?;

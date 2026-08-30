@@ -2239,7 +2239,7 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
 }
 
 #[test]
-fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades() {
+fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facades() {
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-duckdb/Cargo.toml",
@@ -2247,6 +2247,7 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         "src-tauri/crates/yss-duckdb/src/lib.rs",
         "src-tauri/crates/yss-duckdb/src/profile.rs",
         "src-tauri/crates/yss-duckdb/src/sql.rs",
+        "src-tauri/crates/yss-duckdb/src/table.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -2255,6 +2256,7 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
     }
     for removed_owner in [
         "src-tauri/src/database/duckdb_analytics.rs",
+        "src-tauri/src/database/duckdb_reader.rs",
         "src-tauri/src/database/duckdb_sql.rs",
         "src-tauri/src/database/export.rs",
     ] {
@@ -2281,9 +2283,13 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
             .expect("the DuckDB engine manifest must be readable");
     for dependency in [
         "duckdb.workspace = true",
+        "polars.workspace = true",
+        "polars-arrow.workspace = true",
+        "polars-dtype.workspace = true",
         "thiserror.workspace = true",
         "yss-database-contract = { path = \"../yss-database-contract\" }",
         "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
+        "yss-tabular-io = { path = \"../yss-tabular-io\" }",
     ] {
         assert!(
             engine_manifest.contains(dependency),
@@ -2295,14 +2301,21 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         .expect("the DuckDB engine root must be readable");
     for owned_api in [
         "DatasetProfileColumnRef",
+        "DuckDbColumnMeta",
         "DuckDbExportError",
         "DuckDbExportPhase",
+        "DuckDbTableMeta",
+        "INGEST_CHUNK_ROWS",
+        "PageQueryResult",
         "compute_all_column_distributions",
         "compute_all_column_stats",
         "compute_dataset_overview",
         "duckdb_table_sql",
         "editable_dtype_to_duckdb_sql",
         "export_duckdb_table",
+        "ingest_dataframe_to_duckdb",
+        "query_page_with_rowids",
+        "read_table_meta",
         "quote_duckdb_identifier",
         "quote_duckdb_string_literal",
     ] {
@@ -2340,10 +2353,43 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         );
     }
 
+    let table = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/table.rs"))
+        .expect("the DuckDB table storage owner must be readable");
+    for invariant in [
+        "pub fn ingest_csv_to_duckdb",
+        "pub fn ingest_dataframe_to_duckdb",
+        "pub fn query_page_with_rowids",
+        "pub fn read_table_meta",
+        "pub fn write_display_name",
+        "drop_data_table_accepts_database_without_metadata_table",
+        "drop_data_table_removes_display_metadata_and_enum_types",
+        "iris_page_rowids_are_stable",
+        "ingest_categorical_enum_roundtrip",
+        "ingest_dataframe_via_arrow_roundtrip",
+    ] {
+        assert!(
+            table.contains(invariant),
+            "the DuckDB table storage owner must preserve invariant {invariant}"
+        );
+    }
+    for forbidden in [
+        "crate::database",
+        "super::duckdb_editing",
+        "target/test_duckdb",
+        "uuid::",
+        "yssbi_lib",
+    ] {
+        assert!(
+            !table.contains(forbidden),
+            "the DuckDB table storage owner must not depend on {forbidden}"
+        );
+    }
+
     let root_database = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
         .expect("the root database module must be readable");
     assert!(
         !root_database.contains("duckdb_analytics")
+            && !root_database.contains("duckdb_reader")
             && !root_database.contains("duckdb_sql")
             && !root_database.contains("mod export")
             && !root_database.contains("pub use export")
@@ -2354,7 +2400,11 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
         "src-tauri/src/database/database_instance.rs",
         "src-tauri/src/database/duckdb_column_snapshot.rs",
         "src-tauri/src/database/duckdb_editing.rs",
-        "src-tauri/src/database/duckdb_reader.rs",
+        "src-tauri/src/database/database_state.rs",
+        "src-tauri/src/database/project_storage.rs",
+        "src-tauri/src/database/schema_snapshot.rs",
+        "src-tauri/src/application/database.rs",
+        "src-tauri/src/project/project_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -2644,7 +2694,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         "src-tauri/src/application/database.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         "src-tauri/src/database/database_instance.rs",
-        "src-tauri/src/database/duckdb_reader.rs",
+        "src-tauri/crates/yss-duckdb/src/table.rs",
         "src-tauri/src/sci/backends/julia/bayes/fit.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))

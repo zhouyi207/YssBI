@@ -9159,9 +9159,13 @@ name = "yss-duckdb"
 version = "0.1.0"
 dependencies = [
  "duckdb",
+ "polars",
+ "polars-arrow",
+ "polars-dtype",
  "thiserror 2.0.20",
  "yss-database-contract",
  "yss-dataset-profile",
+ "yss-tabular-io",
 ]
 
 [[package]]
@@ -9612,7 +9616,6 @@ dependencies = [
  "ndarray",
  "notify",
  "polars",
- "polars-arrow",
  "polars-dtype",
  "proc-macro2",
  "rand 0.10.2",

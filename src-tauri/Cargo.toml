@@ -164,7 +164,6 @@ serde.workspace = true
 serde_json.workspace = true
 ndarray.workspace = true
 polars.workspace = true
-polars-arrow.workspace = true
 polars-dtype.workspace = true
 statrs.workspace = true
 chrono.workspace = true

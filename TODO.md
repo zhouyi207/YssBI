@@ -762,3 +762,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Excel workbook sheet inspection 与 Sheet→CSV bridge 迁入现有 `yss-tabular-io` Database Core；
   删除根 `database/excel_reader` owner/facade，将 `calamine` 依赖下沉到唯一 owner，并让 Application 与
   DuckDB reader 直接调用 typed `ExcelIoError` API，为 `duckdb_reader` 整体迁入 `yss-duckdb` 解除反向依赖。
+- [ ] 将根 `database/duckdb_reader.rs` 的 table lifecycle、ingest、Arrow bridge、catalog/display metadata 与
+  paged/column query 整体迁入 `yss-duckdb::table`；删除根 owner/re-export，所有 Application、Project、Database
+  和 integration test 消费方直接依赖 engine crate，并将不再属于根 package 的 `polars-arrow` 依赖一并下沉；
+  同时统一 DuckDB 父目录创建，并修复删除/覆盖表时遗留命名 ENUM type、无 metadata table 时先删表后报错的问题。

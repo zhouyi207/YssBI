@@ -29,10 +29,7 @@ use crate::database::EditState;
 use crate::database::error::{DatabaseError, DatabaseErrorCode};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::session_api;
-use crate::database::{
-    ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
-    ingest_parquet_to_duckdb, sql_reader, write_display_name,
-};
+use crate::database::sql_reader;
 use crate::project::{
     ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
@@ -41,6 +38,10 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
 };
 use yss_display_naming::allocate_unique_display_name;
+use yss_duckdb::{
+    DuckDbTableMeta, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
+    ingest_parquet_to_duckdb, write_display_name,
+};
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularSnapshot;
@@ -1066,7 +1067,7 @@ fn build_import_declaration(
     table: String,
     duckdb_abs: PathBuf,
     relative_path: String,
-    meta: crate::database::DuckDbTableMeta,
+    meta: DuckDbTableMeta,
 ) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
     let name = unique_database_name(project, &name_from_path(&source_name));
     write_display_name(&duckdb_abs, &table, &name).map_err(|error| {

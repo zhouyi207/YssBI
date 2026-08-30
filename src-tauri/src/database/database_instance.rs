@@ -5,13 +5,11 @@ use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
 use super::{
     EditHistory, EditOperation, EditState, apply_operation, capture_column_data, capture_row_data,
     cast_column as sci_cast_column, dtype_from_string, dtype_to_string, reverse_operation,
-    write_display_name,
 };
 use super::{
-    PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json,
-    fetch_row_json, ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_with_rowids,
-    query_to_dataframe_for_table, refresh_duckdb_meta, resolve_row_id_by_index,
-    resolve_row_ids_by_indices, reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row,
+    apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json, fetch_row_json,
+    refresh_duckdb_meta, resolve_row_id_by_index, resolve_row_ids_by_indices,
+    reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row,
 };
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
@@ -22,16 +20,17 @@ use yss_dataset_profile::{
     compute_all_column_stats, compute_dataset_overview,
 };
 use yss_duckdb::{
-    DatasetProfileColumnRef,
+    DatasetProfileColumnRef, DuckDbColumnMeta, PageQueryResult,
     compute_all_column_distributions as compute_all_column_distributions_duckdb,
     compute_all_column_stats as compute_all_column_stats_duckdb,
     compute_dataset_overview as compute_dataset_overview_duckdb, duckdb_table_sql,
-    export_duckdb_table,
+    export_duckdb_table, ingest_dataframe_to_duckdb, query_columns_to_dataframe,
+    query_page_with_rowids, query_to_dataframe_for_table, write_display_name,
 };
 use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 use yss_tabular_polars::anyvalue_to_json;
 
-fn duckdb_profile_columns(columns: &[super::DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
+fn duckdb_profile_columns(columns: &[DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
     columns
         .iter()
         .map(|column| DatasetProfileColumnRef::new(&column.name, &column.dtype))
@@ -462,7 +461,7 @@ impl DatabaseInstance {
                 dtype: dtype.to_string(),
             };
             apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-            columns.push(super::DuckDbColumnMeta {
+            columns.push(DuckDbColumnMeta {
                 name: name.to_string(),
                 dtype: dtype.to_string(),
             });

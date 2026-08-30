@@ -10,7 +10,6 @@ pub mod schema_snapshot;
 
 pub mod duckdb_column_snapshot;
 pub mod duckdb_editing;
-pub mod duckdb_reader; // 类型映射见 duckdb_reader 与 database/README.md
 pub mod edit_operation;
 pub mod sql_reader;
 pub mod sqlite_reader;
@@ -21,7 +20,6 @@ pub use project_storage::*;
 
 pub use duckdb_column_snapshot::*;
 pub use duckdb_editing::*;
-pub use duckdb_reader::*;
 pub use edit_operation::*;
 
 #[cfg(test)]

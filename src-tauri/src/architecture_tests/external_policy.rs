@@ -73,12 +73,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars-arrow",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "polars-dtype",
         target_condition: None,
     },
@@ -278,6 +272,24 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-duckdb",
         mode: RustDependencyMode::Runtime,
         package_name: "duckdb",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-duckdb",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-duckdb",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars-arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-duckdb",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars-dtype",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

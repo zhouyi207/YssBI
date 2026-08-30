@@ -142,13 +142,14 @@ DuckDB overview 仍准确提供：
 | `project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
 | `schema_snapshot.rs` | DuckDB/Polars metadata 到 Database-owned `DatabaseSchemaFact`/`DataType` 的 normalization |
 | `../schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
-| `duckdb_reader.rs` | Ingest、Arrow bridge、table metadata |
 | `duckdb_editing.rs` | Incremental SQL edit/undo helpers |
 | `duckdb_column_snapshot.rs` | Bounded reversible delete-column snapshot |
-| `duckdb_analytics.rs` | SQL stats/distribution/overview |
-| `duckdb_sql.rs` | Identifier/literal quoting 与 dtype allowlist |
 | `edit_operation.rs` | EditOperation、EditHistory、checked JSON/Polars conversion |
-| `export.rs` | DuckDB COPY 与 Loaded DataFrame serializers |
-| `dataset_overview.rs` | Typed overview DTO 与 in-memory calculation |
+| `../../crates/yss-duckdb/src/table.rs` | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query |
+| `../../crates/yss-duckdb/src/profile.rs` | DuckDB physical stats/distribution/overview SQL |
+| `../../crates/yss-duckdb/src/sql.rs` | Identifier/literal quoting 与 editable dtype allowlist |
+| `../../crates/yss-duckdb/src/export.rs` | Typed DuckDB CSV/Parquet `COPY` export |
+| `../../crates/yss-dataset-profile/` | Profile DTO 与 Loaded DataFrame profile calculation |
+| `../../crates/yss-tabular-io/` | Loaded DataFrame/Excel filesystem I/O |
 
 验证命令以 [`docs/development/LOCAL_WORKFLOW.md`](../../../docs/development/LOCAL_WORKFLOW.md) 为准，从 repository root 通过 `pnpm` scripts 运行。
