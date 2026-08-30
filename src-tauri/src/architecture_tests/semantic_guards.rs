@@ -1628,9 +1628,6 @@ impl<'ast> Visit<'ast> for JuliaBayesAdapterVisitor<'_> {
 
 #[test]
 fn julia_bayes_worker_adapter_is_port_only_and_production_unreachable() {
-    let staged_debt = super::debt::staged_backend_adapter_debt();
-    assert!(staged_debt.is_empty());
-
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
         .expect("the real Cargo workspace must be discoverable");
@@ -1827,9 +1824,6 @@ impl<'ast> Visit<'ast> for ScientificAdapterVisitor<'_> {
 
 #[test]
 fn scientific_backend_adapter_is_exact_port_only_and_production_unreachable() {
-    let staged_debt = super::debt::staged_backend_adapter_debt();
-    assert!(staged_debt.is_empty());
-
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
         .expect("the real Cargo workspace must be discoverable");

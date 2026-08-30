@@ -5,9 +5,6 @@ use serde_json::{Value, json};
 use syn::{Item, Type};
 
 use super::cargo_targets::rust_workspace_model_from_metadata;
-use super::debt::{
-    DebtCountDifference, DebtMismatch, compare_exact_rust_debt, rust_architecture_debt,
-};
 use super::dependency_audit::{
     collect_production_dependencies, collect_production_modules,
     resolve_canonical_dependencies_detailed,
@@ -18,10 +15,9 @@ use super::external_policy::{
     rust_external_dependency_findings,
 };
 use super::model::{
-    ArchitectureAuditError, ArchitectureFinding, CanonicalDependency, CanonicalOrigin,
-    CargoDependencyAuthority, CargoDependencyDeclaration, CargoDependencyScope, DebtKey,
-    ExternalDependencyOrigin, ProductionRoot, ProductionRootKind, RustDebtEntry,
-    RustDependencyKind, RustDependencyMode, RustLayer, RustModule,
+    ArchitectureAuditError, CanonicalDependency, CanonicalOrigin, CargoDependencyAuthority,
+    CargoDependencyDeclaration, CargoDependencyScope, ExternalDependencyOrigin, ProductionRoot,
+    ProductionRootKind, RustDependencyKind, RustDependencyMode, RustLayer, RustModule,
 };
 use super::policy::{
     InternalDependencyCapability, classify_rust_sources, rust_dependency_findings,
@@ -76,35 +72,6 @@ fn source_path(relative: &str) -> String {
         .join(relative)
         .to_string_lossy()
         .into_owned()
-}
-
-fn format_debt_mismatch(mismatch: &DebtMismatch, findings: &[ArchitectureFinding]) -> String {
-    let mut lines = Vec::new();
-    let mut append = |direction: &str, differences: &[DebtCountDifference]| {
-        for difference in differences {
-            let layers = findings
-                .iter()
-                .find(|finding| finding.key == difference.key)
-                .map(|finding| (finding.source_layer, finding.target_layer));
-            lines.push(format!(
-                "{direction}|actual={}|declared={}|source_layer={:?}|target_layer={:?}|rule={}|file={}|owner={}|kind={:?}|target={}|locations={:?}|migration={:?}",
-                difference.actual_occurrences,
-                difference.declared_occurrences,
-                layers.map(|(source, _)| source),
-                layers.and_then(|(_, target)| target),
-                difference.key.rule_id,
-                difference.key.repository_relative_source_file,
-                difference.key.fully_qualified_owner,
-                difference.key.dependency_kind,
-                difference.key.canonical_origin_target,
-                difference.actual_locations,
-                difference.owning_migration_spec,
-            ));
-        }
-    };
-    append("new-or-increased", mismatch.new_or_increased());
-    append("stale-or-decreased", mismatch.stale_or_decreased());
-    lines.join("\n")
 }
 
 fn metadata_fixture_with_all_target_kinds() -> Value {
@@ -1536,100 +1503,6 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
 }
 
 #[test]
-fn rust_exact_debt_detects_both_directions() {
-    const MIGRATION_SPEC: &str = "docs/architecture/RUST_BACKEND_ADAPTER_BOUNDARIES.md";
-    let key = DebtKey {
-        rule_id: "rust.internal.source-layer".to_owned(),
-        repository_relative_source_file: "src-tauri/src/project/project_state.rs".to_owned(),
-        fully_qualified_owner: "yssbi_lib::project::project_state".to_owned(),
-        dependency_kind: RustDependencyKind::Use,
-        canonical_origin_target: "yssbi_lib::node_system::runtime::RunState".to_owned(),
-    };
-    let finding = |line| ArchitectureFinding {
-        key: key.clone(),
-        source_layer: RustLayer::Project,
-        target_layer: Some(RustLayer::Execution),
-        line,
-        column: 1,
-    };
-    let actual = vec![finding(7), finding(19)];
-
-    let new_or_increased = compare_exact_rust_debt(
-        &actual,
-        &[RustDebtEntry {
-            key: key.clone(),
-            expected_occurrences: 1,
-            owning_migration_spec: MIGRATION_SPEC,
-        }],
-    )
-    .expect_err("actual count above the declaration must fail");
-    assert_eq!(new_or_increased.new_or_increased()[0].actual_occurrences, 2);
-    assert!(format_debt_mismatch(&new_or_increased, &actual).contains(
-        "new-or-increased|actual=2|declared=1|source_layer=Some(Project)|target_layer=Some(Execution)"
-    ));
-    assert_eq!(
-        new_or_increased.new_or_increased()[0].declared_occurrences,
-        1
-    );
-
-    let stale_or_decreased = compare_exact_rust_debt(
-        &actual,
-        &[RustDebtEntry {
-            key: key.clone(),
-            expected_occurrences: 3,
-            owning_migration_spec: MIGRATION_SPEC,
-        }],
-    )
-    .expect_err("declared count above reality must fail as stale debt");
-    assert_eq!(
-        stale_or_decreased.stale_or_decreased()[0].actual_occurrences,
-        2
-    );
-    assert_eq!(
-        stale_or_decreased.stale_or_decreased()[0].declared_occurrences,
-        3
-    );
-
-    let mut moved_key = key.clone();
-    moved_key.repository_relative_source_file =
-        "src-tauri/src/project/moved_project_state.rs".to_owned();
-    let moved = compare_exact_rust_debt(
-        &actual,
-        &[RustDebtEntry {
-            key: moved_key,
-            expected_occurrences: 2,
-            owning_migration_spec: MIGRATION_SPEC,
-        }],
-    )
-    .expect_err("a source move must create one new key and one stale key");
-    assert_eq!(moved.new_or_increased().len(), 1);
-    assert_eq!(moved.stale_or_decreased().len(), 1);
-}
-
-#[test]
-fn rust_debt_references_maintained_architecture_documents() {
-    let specs = rust_architecture_debt()
-        .into_iter()
-        .map(|entry| entry.owning_migration_spec)
-        .collect::<std::collections::BTreeSet<_>>();
-
-    assert!(
-        specs.is_empty(),
-        "the architecture cutover must have no debt"
-    );
-    for spec in specs {
-        assert!(
-            spec.starts_with("docs/architecture/"),
-            "architecture debt must reference maintained documentation: {spec}"
-        );
-        assert!(
-            repository_root().join(spec).is_file(),
-            "architecture debt document does not exist: {spec}"
-        );
-    }
-}
-
-#[test]
 fn rust_production_architecture_matches_declared_policy() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
@@ -1659,13 +1532,10 @@ fn rust_production_architecture_matches_declared_policy() {
     );
     findings.sort();
 
-    let declared_debt = rust_architecture_debt();
-    if let Err(mismatch) = compare_exact_rust_debt(&findings, &declared_debt) {
-        panic!(
-            "real Rust architecture debt differs from its literal manifest:\n{}",
-            format_debt_mismatch(&mismatch, &findings)
-        );
-    }
+    assert!(
+        findings.is_empty(),
+        "real Rust production architecture violates the declared policy:\n{findings:#?}"
+    );
 }
 
 fn external_declaration(

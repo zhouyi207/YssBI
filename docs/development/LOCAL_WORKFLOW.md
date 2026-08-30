@@ -11,20 +11,11 @@
 - Rust `stable`（由根目录 `rust-toolchain.toml` 固定）
 - Julia `1.10` 或更高版本（仅 Julia-backed operations/tests 需要）
 
-应用类型检查和架构审计都使用 TypeScript 7。架构审计通过
-`typescript/unstable/sync` 启动 tsgo 项目快照，并使用
-`typescript/unstable/ast` 遍历 AST；相关生命周期集中在测试 helper 中管理。
-
-
 ## Cargo 产物目录
 
 仓库不提供 `.cargo/` 覆盖。Cargo 和 Tauri 使用 workspace 默认的
 `src-tauri/target/`，所有 Rust scripts 都从仓库根目录运行并显式指向
 `src-tauri/Cargo.toml`。
-
-旧的根目录 `target/` 是此前配置产生的构建缓存；确认没有 Cargo 进程使用后可
-手动删除。不要同时从不同工作目录运行未带 manifest 的 Cargo 命令，以免再次产生
-多套构建产物。
 
 ## 命令分组
 
@@ -39,17 +30,6 @@
 | 写入格式化 | `pnpm format` | `pnpm format:ts`、`pnpm format:rs` |
 | 只读格式检查 | `pnpm format:check` | `pnpm format:check:ts`、`pnpm format:check:rs` |
 | 完整交付门禁 | `pnpm run ci` | — |
-
-架构与发布收口还提供以下稳定入口：
-
-| 目的 | 命令 |
-| --- | --- |
-| Frontend production architecture | `pnpm test:architecture` |
-| Rust production architecture | `pnpm rust:test:architecture` |
-| Frontend 类型检查与完整 Vitest | `pnpm verify:frontend` |
-| Rust format/check 与 architecture tests | `pnpm verify:rust` |
-| 跨栈 architecture gate | `pnpm verify` |
-| Frontend、主 Rust crate 与 yss-sci 完整回归 | `pnpm verify:full` |
 
 `dev` 和 `build` 只表示完整 Tauri 应用入口。`src-tauri/tauri.conf.json` 的
 `beforeDevCommand` 和 `beforeBuildCommand` 直接调用 Vite，不能回调这两个
@@ -66,7 +46,7 @@ Rust 测试使用 Cargo 内置 test runner。仓库不固定 build jobs 或 test
 Windows 上 Rust linking 与 production architecture audit 成本较高。增量循环优先运行
 `pnpm format:check:rs` 与 `pnpm check:rs`，在一个 coherent Rust change 完成后再运行
 受影响的 focused tests；不要为每个小改动重复执行完整 Rust suite。跨 Execution/Database/
-SCI 的 release cutover 使用一次 `pnpm verify:full` 批量验证。
+SCI 的广泛改动在交付前使用一次 `pnpm run ci` 批量验证。
 
 `pnpm run ci` 按顺序执行格式检查、TypeScript/Rust 检查、Oxlint/Clippy 和完整
 TypeScript/Rust 测试。必须保留 `run`：裸 `pnpm ci` 是 pnpm 的冻结安装命令，
@@ -89,14 +69,9 @@ pnpm test:rs --lib completed_task_has_terminal_status
 pnpm test:rs --test database_test test_duckdb_query_page_and_schema_without_full_load
 pnpm test:rs -p yss-sci test_name
 pnpm test:architecture
-pnpm rust:test:architecture
+pnpm test:rs --lib architecture_tests
 julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 ```
-
-`pnpm verify:frontend` 精确执行 TypeScript check 与完整 Vitest；完整 Vitest 已包含
-Frontend architecture tests。`pnpm verify:rust` 运行 Rust format/check 与 architecture
-tests。`pnpm verify:full` 运行 Frontend、主 Rust crate、yss-sci 与最终 `git diff --check`，
-不会启动应用或构建安装包。
 
 首次运行 Julia-backed operations/tests 前安装项目环境：
 
@@ -115,10 +90,6 @@ julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
 - **跨前后端、发布或执行引擎跨切面改动：**
   运行 `pnpm run ci`；Tauri 打包、权限、插件或构建配置改动还需运行 `pnpm build`
   并手动验证关键路径。
-- **`yss-sci` 性能敏感改动：**
-  从仓库根目录运行
-  `cargo bench --manifest-path src-tauri/Cargo.toml -p yss-sci --bench column_analytics_wide`
-  并记录与基线相比的结果。一次性专用命令不再占用 `package.json` scripts。
 
 ## 一次性 Cargo 维护命令
 

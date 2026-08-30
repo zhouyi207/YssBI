@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::{
-    ArchitectureAuditError, ArchitectureFinding, CanonicalDependency, CanonicalOrigin, DebtKey,
-    ProductionRoot, ProductionRootKind, RustLayer, RustModule,
+    ArchitectureAuditError, ArchitectureFinding, ArchitectureFindingKey, CanonicalDependency,
+    CanonicalOrigin, ProductionRoot, ProductionRootKind, RustLayer, RustModule,
 };
 
 const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
@@ -1882,7 +1882,7 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                 return None;
             }
             Some(ArchitectureFinding {
-                key: DebtKey {
+                key: ArchitectureFindingKey {
                     rule_id: "rust.internal.source-layer".to_owned(),
                     repository_relative_source_file: dependency.source_file.clone(),
                     fully_qualified_owner: dependency.owner.clone(),

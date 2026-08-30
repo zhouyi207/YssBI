@@ -7,10 +7,6 @@ import {
   auditFrontendAssetDependencies,
 } from './frontendAssetDependencyPolicy';
 import {
-  FRONTEND_ARCHITECTURE_DEBT,
-  compareExactFrontendDebt,
-} from './frontendArchitectureDebt';
-import {
   classifyFrontendSources,
 } from './frontendArchitecturePolicy';
 import {
@@ -193,6 +189,5 @@ export function auditFrontendArchitectureDependencies(
     external,
     asset,
     findings,
-    debt: compareExactFrontendDebt(findings, FRONTEND_ARCHITECTURE_DEBT),
   };
 }

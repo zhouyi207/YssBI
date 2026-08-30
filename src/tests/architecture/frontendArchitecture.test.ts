@@ -15,7 +15,6 @@ import {
   resolvedModuleDependencies,
   resolvedStylesheetDependencies,
   type RepositoryTextReader,
-  type FrontendFinding,
   type AssetDependencyPolicy,
   type ExternalDependencyPolicy,
   type ReadonlyPackageManifest,
@@ -37,10 +36,6 @@ import {
   FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
   auditFrontendExternalDependencies,
 } from './frontendExternalDependencyPolicy';
-import {
-  compareExactFrontendDebt,
-  type FrontendDebtEntry,
-} from './frontendArchitectureDebt';
 import { FRONTEND_ARCHITECTURE_POLICY } from './frontendArchitecturePolicy';
 
 class FixtureTextReader implements RepositoryTextReader {
@@ -253,24 +248,6 @@ function stylesheetAssetDependency(
     writtenSpecifier: `./${assetPath.split('/').slice(-1)[0]}`,
     line: 1,
     column: 1,
-  };
-}
-
-function architectureFinding(
-  overrides: Partial<FrontendFinding> = {},
-): FrontendFinding {
-  return {
-    ruleId: 'frontend.layer.views-target',
-    repositoryRelativeSourceFile: 'src/views/fixture.ts',
-    fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
-    dependencyKind: 'static-import',
-    canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-    sourceLayer: 'views',
-    targetLayer: 'domain',
-    importedSymbol: 'Contract',
-    line: 1,
-    column: 1,
-    ...overrides,
   };
 }
 
@@ -723,100 +700,6 @@ describe('frontend architecture model', () => {
       sourceFile: 'src/app/shared.css',
       inheritedLayers: ['app-composition', 'views'],
     }]);
-  });
-
-  it('ratchets frontend debt in both directions', () => {
-    const actual = [
-      architectureFinding({ line: 10, column: 2 }),
-      architectureFinding({ line: 20, column: 4 }),
-      architectureFinding({
-        dependencyKind: 'import-type',
-        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-      }),
-      architectureFinding({
-        dependencyKind: 'dynamic-import',
-        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-      }),
-    ];
-    const declared: FrontendDebtEntry[] = [
-      {
-        ruleId: 'frontend.layer.views-target',
-        repositoryRelativeSourceFile: 'src/views/fixture.ts',
-        fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
-        dependencyKind: 'static-import',
-        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-        expectedOccurrences: 1,
-        owningMigrationSpec: 'docs/architecture/FRONTEND_APPLICATION_BOUNDARIES.md',
-      },
-      {
-        ruleId: 'frontend.layer.views-target',
-        repositoryRelativeSourceFile: 'src/views/moved.ts',
-        fullyQualifiedOwner: 'src/views/moved.ts::<module>',
-        dependencyKind: 'static-import',
-        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-        expectedOccurrences: 3,
-        owningMigrationSpec: 'docs/architecture/PROJECT_GRAPH_OWNERSHIP_BOUNDARIES.md',
-      },
-      {
-        ruleId: 'frontend.layer.views-target',
-        repositoryRelativeSourceFile: 'src/views/fixture.ts',
-        fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
-        dependencyKind: 'dynamic-import',
-        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-        expectedOccurrences: 1,
-        owningMigrationSpec: 'docs/architecture/EXECUTION_RUNTIME_BOUNDARIES.md',
-      },
-    ];
-    expect(Object.keys(declared[0]).sort()).toEqual([
-      'canonicalOriginTarget',
-      'dependencyKind',
-      'expectedOccurrences',
-      'fullyQualifiedOwner',
-      'owningMigrationSpec',
-      'repositoryRelativeSourceFile',
-      'ruleId',
-    ]);
-
-    const mismatch = compareExactFrontendDebt(actual, declared);
-    expect(mismatch.errors).toEqual([]);
-    expect(mismatch.newOrIncreased).toContainEqual(expect.objectContaining({
-      dependencyKind: 'static-import',
-      actualOccurrences: 2,
-      expectedOccurrences: 1,
-    }));
-    expect(mismatch.newOrIncreased).toContainEqual(expect.objectContaining({
-      dependencyKind: 'import-type',
-      canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-      actualOccurrences: 1,
-      expectedOccurrences: 0,
-    }));
-    expect(mismatch.newOrIncreased).not.toContainEqual(expect.objectContaining({
-      dependencyKind: 'dynamic-import',
-      canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
-    }));
-    expect(mismatch.staleOrDecreased).toEqual([
-      expect.objectContaining({
-        repositoryRelativeSourceFile: 'src/views/moved.ts',
-        actualOccurrences: 0,
-        expectedOccurrences: 3,
-      }),
-    ]);
-
-    const duplicate = { ...declared[0] };
-    const invalid = compareExactFrontendDebt([], [
-      declared[0],
-      duplicate,
-      { ...declared[1], expectedOccurrences: 0 },
-      { ...declared[2], owningMigrationSpec: 'docs/superpowers/unapproved.md' },
-    ]);
-    expect(invalid.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'duplicate-frontend-debt-key' }),
-      expect.objectContaining({ kind: 'invalid-frontend-debt-count', expectedOccurrences: 0 }),
-      expect.objectContaining({
-        kind: 'invalid-frontend-debt-owning-spec',
-        owningMigrationSpec: 'docs/superpowers/unapproved.md',
-      }),
-    ]));
   });
 
   it('resolves every module dependency to its canonical origin', () => {

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::{
-    ArchitectureAuditError, ArchitectureFinding, CanonicalDependency, CanonicalOrigin,
-    CargoDependencyAuthority, CargoDependencyDeclaration, CargoDependencyScope, DebtKey,
+    ArchitectureAuditError, ArchitectureFinding, ArchitectureFindingKey, CanonicalDependency,
+    CanonicalOrigin, CargoDependencyAuthority, CargoDependencyDeclaration, CargoDependencyScope,
     RustDependencyMode, RustLayer,
 };
 
@@ -1077,7 +1077,7 @@ pub(super) fn rust_external_dependency_findings(
             continue;
         }
         findings.push(ArchitectureFinding {
-            key: DebtKey {
+            key: ArchitectureFindingKey {
                 rule_id: match dependency.mode {
                     RustDependencyMode::Runtime => "rust.external.runtime-source-layer",
                     RustDependencyMode::Build => "rust.external.build-source-layer",

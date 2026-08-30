@@ -11,10 +11,6 @@ import {
   FRONTEND_ASSET_DEPENDENCY_POLICY,
 } from './frontendAssetDependencyPolicy';
 import { auditFrontendArchitectureDependencies } from './frontendArchitectureAudit';
-import {
-  FRONTEND_ARCHITECTURE_DEBT,
-  compareExactFrontendDebt,
-} from './frontendArchitectureDebt';
 import type {
   FrontendArchitecturePolicy,
   ReadonlyPackageManifest,
@@ -300,25 +296,18 @@ describe('frontend semantic architecture', () => {
         FRONTEND_ARCHITECTURE_POLICY,
         { stateAuthorityManifest: FRONTEND_STATE_AUTHORITY },
       );
-      const debt = compareExactFrontendDebt(
-        [...dependencyReport.findings, ...semanticFindings],
-        FRONTEND_ARCHITECTURE_DEBT,
-      );
       expect({
         unresolvedErrors: dependencyReport.unresolvedErrors,
         classifierErrors: dependencyReport.classification.errors,
         externalErrors: dependencyReport.external.errors,
         assetErrors: dependencyReport.asset.errors,
-        debtErrors: debt.errors,
       }).toEqual({
         unresolvedErrors: [],
         classifierErrors: [],
         externalErrors: [],
         assetErrors: [],
-        debtErrors: [],
       });
-      expect(debt.newOrIncreased).toEqual([]);
-      expect(debt.staleOrDecreased).toEqual([]);
+      expect([...dependencyReport.findings, ...semanticFindings]).toEqual([]);
     });
   }, 600_000);
 });

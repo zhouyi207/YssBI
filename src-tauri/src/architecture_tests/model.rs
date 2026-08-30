@@ -141,7 +141,7 @@ pub(super) struct CanonicalDependency {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct DebtKey {
+pub(super) struct ArchitectureFindingKey {
     pub(super) rule_id: String,
     pub(super) repository_relative_source_file: String,
     pub(super) fully_qualified_owner: String,
@@ -151,18 +151,11 @@ pub(super) struct DebtKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct ArchitectureFinding {
-    pub(super) key: DebtKey,
+    pub(super) key: ArchitectureFindingKey,
     pub(super) source_layer: RustLayer,
     pub(super) target_layer: Option<RustLayer>,
     pub(super) line: usize,
     pub(super) column: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct RustDebtEntry {
-    pub(super) key: DebtKey,
-    pub(super) expected_occurrences: usize,
-    pub(super) owning_migration_spec: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -147,7 +147,7 @@ const CORE_USES = [
     ['react', [null]],
     ['i18next', [null]],
     ['react-i18next', [null]],
-    ['zustand', [null, 'react::shallow', 'vanilla']],
+    ['zustand', [null, 'react::shallow', 'traditional', 'vanilla']],
     ['@dnd-kit/core', [null]],
     ['ag-grid-community', [null]],
     ['ag-grid-react', [null]],

@@ -210,47 +210,6 @@ export interface FrontendAssetAuditContext {
   readonly stylesheetGraph: ResolvedStylesheetGraph;
 }
 
-export interface FrontendDebtKey {
-  readonly ruleId: string;
-  readonly repositoryRelativeSourceFile: string;
-  readonly fullyQualifiedOwner: string;
-  readonly dependencyKind: FrontendDependencyKind;
-  readonly canonicalOriginTarget: string;
-}
-
-export interface FrontendDebtEntry extends FrontendDebtKey {
-  readonly expectedOccurrences: number;
-  readonly owningMigrationSpec: string;
-}
-
-export type FrontendDebtDeclarationError =
-  | {
-      readonly kind: 'duplicate-frontend-debt-key';
-      readonly key: FrontendDebtKey;
-    }
-  | {
-      readonly kind: 'invalid-frontend-debt-count';
-      readonly key: FrontendDebtKey;
-      readonly expectedOccurrences: number;
-    }
-  | {
-      readonly kind: 'invalid-frontend-debt-owning-spec';
-      readonly key: FrontendDebtKey;
-      readonly owningMigrationSpec: string;
-    };
-
-export interface FrontendDebtCountMismatch extends FrontendDebtKey {
-  readonly actualOccurrences: number;
-  readonly expectedOccurrences: number;
-  readonly owningMigrationSpec: string | null;
-}
-
-export interface FrontendDebtMismatch {
-  readonly newOrIncreased: readonly FrontendDebtCountMismatch[];
-  readonly staleOrDecreased: readonly FrontendDebtCountMismatch[];
-  readonly errors: readonly FrontendDebtDeclarationError[];
-}
-
 export interface FrontendArchitectureReport {
   readonly classification: FrontendClassificationReport;
   readonly unresolvedErrors: readonly ModuleDependencyResolutionError[];
@@ -259,7 +218,6 @@ export interface FrontendArchitectureReport {
   readonly external: FrontendExternalDependencyReport;
   readonly asset: FrontendAssetDependencyReport;
   readonly findings: readonly FrontendFinding[];
-  readonly debt: FrontendDebtMismatch;
 }
 
 export type ResolvedFrontendDependency =

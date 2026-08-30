@@ -6,10 +6,6 @@
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
-- [Rust Backend Adapter 边界](./RUST_BACKEND_ADAPTER_BOUNDARIES.md)
-- [Project 与 Graph ownership 边界](./PROJECT_GRAPH_OWNERSHIP_BOUNDARIES.md)
-- [Execution Runtime 边界](./EXECUTION_RUNTIME_BOUNDARIES.md)
-- [Presentation 与 Command 边界](./PRESENTATION_COMMAND_BOUNDARIES.md)
 - [Database 实现说明](../../src-tauri/src/database/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
@@ -90,11 +86,9 @@ production import，唯一 build-only declaration 只通过其 exact build-style
 CSS `@import` 与 `url(...)` 解析成 existing repository asset 或 exact external style target；missing、
 escaping、remote、nonliteral、cyclic 与未登记 target 都 fail closed。
 
-两端 finding/debt 使用相同的 exact identity：`ruleId`、repository-relative source file、
-fully-qualified owner、dependency kind 与 canonical origin target。Debt entry 另保存
-`expectedOccurrences` 和 `owningMigrationSpec`，line/column 只用于诊断。Audit 双向比较按 key 排序的
-actual occurrences 与 declared counts；新增/增加以及已删除/减少但仍声明都会失败。Debt 不扩展
-layer 或 external allow policy，且长期文档不复制具体 entry。
+两端 finding 使用稳定 identity：`ruleId`、repository-relative source file、fully-qualified
+owner、dependency kind 与 canonical origin target；line/column 只用于诊断。当前 production
+architecture 不保留债务豁免清单，任何 finding 都直接使架构门禁失败。
 
 Import direction 之外，semantic fitness checks 还守卫 resolved command/application symbols、Tauri
 command/error shape、framework/DTO leakage、Execution plan closed parameter family、Build Script

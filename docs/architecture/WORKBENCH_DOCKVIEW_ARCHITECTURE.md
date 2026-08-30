@@ -253,18 +253,8 @@ Persistence invariant：
 | `28px` | panel toolbar | `--panel-toolbar-height` |
 | `26px` | Status Bar | `--statusbar-height` |
 
-## 10. Focused verification
+## 10. Verification
 
-当前 contract 由以下 focused tests 覆盖：
-
-- `src/views/EditorView/Layout/Workspace.editorPanel.test.tsx`：唯一 root Dockview、activation gates、root 与 Logs nested keyboard boundary；
-- `src/features/core/dockview/workbenchRuntime.test.ts`：root runtime、role-aware operations、identity、edge state、FIFO、committed removal 与 shadow transactions；
-- `src/features/core/dockview/workbenchPanelModel.test.ts`：canonical metadata validation 与 component mapping；
-- `src/features/core/dockview/workbenchLayoutPersistence.test.ts`：semantic key、exact envelope、session-only stripping、project scrub 与七-domain Logs validation；
-- `src/features/core/dockview/logsRuntime.test.ts`：main Logs binding、snapshot 与 reset lifecycle；
-- `src/views/LogView/LogWorkspaceDockview.test.tsx`：七个 bounded domain panels、main binding 与 ephemeral default；
-- `src/features/application/layout/workbenchLayoutController.test.ts`：startup hydration、root `fromJSON` 限制、persistence flush 与 project generations；
-- `src/features/application/layout/workbenchLayoutActions.test.ts`：home、reveal、bottom collapse 与 deterministic reset；
-- `src/features/application/editor/workbenchPanelClose.test.ts`：batch close、dirty confirmation、commit currentness 与 finalization；
-- `src/features/application/editor/editorCommandFocus.test.ts`：physical editor focus 与 shortcut-consumer gate；
-- `src/features/application/project/projectWorkbenchLifecycle.test.ts`：project-scoped panel cleanup 与 lifecycle currentness。
+验证命令以 [本地开发工作流](../development/LOCAL_WORKFLOW.md) 为准。工作台改动期间运行
+受影响的 `pnpm test:ts <path>`；交付前按改动范围运行 TypeScript check、完整 Frontend
+tests 与 Frontend architecture gate，不在本文维护易漂移的测试文件库存。
