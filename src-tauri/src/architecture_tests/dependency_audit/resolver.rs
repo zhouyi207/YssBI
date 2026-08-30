@@ -77,7 +77,7 @@ fn canonical_origin_target(origin: &CanonicalOrigin) -> String {
 
 struct Resolver<'a> {
     workspace: &'a RustWorkspaceModel,
-    declarations: BTreeMap<(String, String), CargoDependencyDeclaration>,
+    declarations: BTreeMap<(String, String), Vec<CargoDependencyDeclaration>>,
     active_targets: BTreeSet<RepositoryTargetKey>,
     resolved_targets: BTreeMap<RepositoryTargetKey, CanonicalOrigin>,
     unresolved_targets: BTreeSet<RepositoryTargetKey>,
@@ -106,20 +106,16 @@ enum ImportVisibility {
 
 impl<'a> Resolver<'a> {
     fn new(workspace: &'a RustWorkspaceModel) -> Self {
-        let declarations = workspace
-            .dependency_declarations
-            .iter()
-            .cloned()
-            .map(|declaration| {
-                (
-                    (
-                        declaration.owning_package.clone(),
-                        declaration.declared_name.clone(),
-                    ),
-                    declaration,
-                )
-            })
-            .collect();
+        let mut declarations = BTreeMap::<_, Vec<_>>::new();
+        for declaration in workspace.dependency_declarations.iter().cloned() {
+            declarations
+                .entry((
+                    declaration.owning_package.clone(),
+                    declaration.declared_name.clone(),
+                ))
+                .or_default()
+                .push(declaration);
+        }
         Self {
             workspace,
             declarations,
@@ -293,12 +289,11 @@ impl<'a> Resolver<'a> {
                 mode,
             );
         }
-        if let Some(declaration) = self
+        if let Some(declarations) = self
             .declarations
             .get(&(owning_package.to_owned(), first.clone()))
-            .cloned()
         {
-            self.validate_scope(&declaration, &segments.join("::"), mode)?;
+            let declaration = Self::declaration_for_mode(declarations, &segments.join("::"), mode)?;
             return match declaration.authority {
                 CargoDependencyAuthority::WorkspaceMember { .. } => {
                     let alias = self
@@ -646,7 +641,6 @@ impl<'a> Resolver<'a> {
     }
 
     fn validate_scope(
-        &self,
         declaration: &CargoDependencyDeclaration,
         target: &str,
         mode: RustDependencyMode,
@@ -664,6 +658,38 @@ impl<'a> Resolver<'a> {
                 target: target.to_owned(),
             }),
         }
+    }
+
+    fn declaration_for_mode(
+        declarations: &[CargoDependencyDeclaration],
+        target: &str,
+        mode: RustDependencyMode,
+    ) -> Result<CargoDependencyDeclaration, ArchitectureAuditError> {
+        let expected_scope = match mode {
+            RustDependencyMode::Runtime => CargoDependencyScope::Runtime,
+            RustDependencyMode::Build => CargoDependencyScope::Build,
+        };
+        if let Some(declaration) = declarations
+            .iter()
+            .find(|declaration| {
+                declaration.scope == expected_scope && declaration.target_condition.is_none()
+            })
+            .or_else(|| {
+                declarations
+                    .iter()
+                    .find(|declaration| declaration.scope == expected_scope)
+            })
+        {
+            return Ok(declaration.clone());
+        }
+
+        let fallback = declarations
+            .iter()
+            .find(|declaration| declaration.scope == CargoDependencyScope::Development)
+            .or_else(|| declarations.first())
+            .expect("a declaration group must never be empty");
+        Self::validate_scope(fallback, target, mode)?;
+        unreachable!("a declaration with the requested scope must have returned above")
     }
 
     fn resolve_repository_target(

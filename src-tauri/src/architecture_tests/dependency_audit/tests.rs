@@ -551,6 +551,17 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
             CargoDependencyDeclaration {
                 owning_package_id: "fixture-package".to_owned(),
                 owning_package: "fixture".to_owned(),
+                declared_name: "science_api".to_owned(),
+                package_name: "yss-sci".to_owned(),
+                authority: CargoDependencyAuthority::WorkspaceMember {
+                    member_package_id: "sci-package".to_owned(),
+                },
+                scope: CargoDependencyScope::Development,
+                target_condition: None,
+            },
+            CargoDependencyDeclaration {
+                owning_package_id: "fixture-package".to_owned(),
+                owning_package: "fixture".to_owned(),
                 declared_name: "polars".to_owned(),
                 package_name: "polars".to_owned(),
                 authority: CargoDependencyAuthority::External,
