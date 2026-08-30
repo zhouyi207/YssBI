@@ -2182,7 +2182,7 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
         "the database instance must consume in-memory profiling directly"
     );
     let duckdb_profile =
-        std::fs::read_to_string(root.join("src-tauri/src/database/duckdb_analytics.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/profile.rs"))
             .expect("the DuckDB physical profile must be readable");
     for invariant in [
         "use yss_dataset_profile::{",
@@ -2220,6 +2220,130 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
         policy.contains("package == \"yss-dataset-profile\"")
             && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the dataset profile crate must be classified in Database Core"
+    );
+}
+
+#[test]
+fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-duckdb/Cargo.toml",
+        "src-tauri/crates/yss-duckdb/src/lib.rs",
+        "src-tauri/crates/yss-duckdb/src/profile.rs",
+        "src-tauri/crates/yss-duckdb/src/sql.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "DuckDB engine owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/database/duckdb_analytics.rs",
+        "src-tauri/src/database/duckdb_sql.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root crate must not retain DuckDB engine owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-duckdb\"",
+        "yss-duckdb = { path = \"./crates/yss-duckdb\" }",
+        "duckdb.workspace = true",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    let engine_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/Cargo.toml"))
+            .expect("the DuckDB engine manifest must be readable");
+    for dependency in [
+        "duckdb.workspace = true",
+        "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
+    ] {
+        assert!(
+            engine_manifest.contains(dependency),
+            "the DuckDB engine crate must declare {dependency}"
+        );
+    }
+
+    let engine = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/lib.rs"))
+        .expect("the DuckDB engine root must be readable");
+    for owned_api in [
+        "DatasetProfileColumnRef",
+        "compute_all_column_distributions",
+        "compute_all_column_stats",
+        "compute_dataset_overview",
+        "duckdb_table_sql",
+        "editable_dtype_to_duckdb_sql",
+        "quote_duckdb_identifier",
+        "quote_duckdb_string_literal",
+    ] {
+        assert!(
+            engine.contains(owned_api),
+            "the DuckDB engine crate must export {owned_api}"
+        );
+    }
+    let sql = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/sql.rs"))
+        .expect("the DuckDB SQL owner must be readable");
+    for invariant in [
+        "identifier.replace",
+        "value.replace",
+        "identifiers_and_literals_escape_their_own_delimiters",
+        "editable_types_are_allowlisted",
+    ] {
+        assert!(
+            sql.contains(invariant),
+            "the DuckDB SQL owner must preserve invariant {invariant}"
+        );
+    }
+
+    let root_database = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    assert!(
+        !root_database.contains("duckdb_analytics")
+            && !root_database.contains("duckdb_sql")
+            && !root_database.contains("pub use yss_duckdb"),
+        "the root database module must not retain DuckDB compatibility facades"
+    );
+    for relative in [
+        "src-tauri/src/database/database_instance.rs",
+        "src-tauri/src/database/duckdb_column_snapshot.rs",
+        "src-tauri/src/database/duckdb_editing.rs",
+        "src-tauri/src/database/duckdb_reader.rs",
+        "src-tauri/src/database/export.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_duckdb"),
+            "{relative} must consume the DuckDB engine crate directly"
+        );
+        assert!(
+            !consumer.contains("super::duckdb_sql"),
+            "{relative} must not use the removed root DuckDB SQL owner"
+        );
+    }
+    let database_instance =
+        std::fs::read_to_string(root.join("src-tauri/src/database/database_instance.rs"))
+            .expect("the database instance must be readable");
+    assert!(
+        database_instance.contains("DatasetProfileColumnRef::new")
+            && database_instance.contains("fn duckdb_profile_columns"),
+        "the root runtime must map cached metadata through the borrowed adapter input"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-dataset-profile\" || package == \"yss-duckdb\"")
+            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        "the DuckDB engine crate must be classified in Database Core"
     );
 }
 

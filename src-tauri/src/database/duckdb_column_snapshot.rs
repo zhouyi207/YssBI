@@ -3,11 +3,10 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use super::duckdb_sql::{
-    DUCKDB_ROWID_SQL, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
+use yss_duckdb::{
+    DUCKDB_ROWID_SQL, duckdb_table_sql, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
     quote_duckdb_string_literal,
 };
-use super::duckdb_table_sql;
 
 pub const MAX_DELETE_COLUMN_SNAPSHOT_ROWS: usize = 50_000;
 pub const MAX_DELETE_COLUMN_SNAPSHOT_BYTES: usize = 16 * 1024 * 1024;

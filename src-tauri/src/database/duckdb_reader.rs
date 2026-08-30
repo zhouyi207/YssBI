@@ -18,7 +18,9 @@ use polars_arrow::ffi::{
 };
 use polars_dtype::categorical::{CatSize, FrozenCategories};
 
-use super::{quote_duckdb_identifier, quote_duckdb_string_literal};
+use yss_duckdb::{
+    DUCKDB_ROWID_SQL, duckdb_table_sql, quote_duckdb_identifier, quote_duckdb_string_literal,
+};
 
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
@@ -864,10 +866,6 @@ fn arrow_rs_array_to_series(name: &str, array: &dyn Array) -> Result<Series, Str
         .map_err(|e| e.to_string())
 }
 
-pub fn duckdb_table_sql(table: &str) -> String {
-    quote_duckdb_identifier(table)
-}
-
 pub fn query_columns_to_dataframe(
     duckdb_path: &Path,
     table: &str,
@@ -911,8 +909,6 @@ pub fn query_page_with_rowids(
     offset: usize,
     limit: usize,
 ) -> Result<PageQueryResult, String> {
-    use super::duckdb_sql::DUCKDB_ROWID_SQL;
-
     let meta = read_table_meta(duckdb_path, table)?;
     let user_cols = meta
         .columns

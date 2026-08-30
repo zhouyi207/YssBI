@@ -9155,6 +9155,14 @@ name = "yss-display-naming"
 version = "0.1.0"
 
 [[package]]
+name = "yss-duckdb"
+version = "0.1.0"
+dependencies = [
+ "duckdb",
+ "yss-dataset-profile",
+]
+
+[[package]]
 name = "yss-execution"
 version = "0.1.0"
 dependencies = [
@@ -9625,6 +9633,7 @@ dependencies = [
  "yss-dataset-profile",
  "yss-diagnostics",
  "yss-display-naming",
+ "yss-duckdb",
  "yss-execution",
  "yss-function-editor-projection",
  "yss-graph-analysis",

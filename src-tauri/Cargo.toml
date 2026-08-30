@@ -19,6 +19,7 @@ members = [
     "crates/yss-dataset-profile",
     "crates/yss-diagnostics",
     "crates/yss-display-naming",
+    "crates/yss-duckdb",
     "crates/yss-execution",
     "crates/yss-function-editor-projection",
     "crates/yss-graph-analysis",
@@ -66,6 +67,7 @@ rust-version = "1.94"
 
 [workspace.dependencies]
 chrono = "0.4.41"
+duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
 faer = "0.24.0"
 mathlex = "=0.4.2"
 ndarray = "0.17.2"
@@ -108,6 +110,7 @@ yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-dataset-profile = { path = "./crates/yss-dataset-profile" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-display-naming = { path = "./crates/yss-display-naming" }
+yss-duckdb = { path = "./crates/yss-duckdb" }
 yss-execution = { path = "./crates/yss-execution" }
 yss-function-editor-projection = { path = "./crates/yss-function-editor-projection" }
 yss-graph-analysis = { path = "./crates/yss-graph-analysis" }
@@ -171,7 +174,7 @@ thiserror.workspace = true
 sqlx.workspace = true
 calamine = "0.36"
 rand = "0.10"
-duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
+duckdb.workspace = true
 notify = "8.2.0"
 unicode-normalization.workspace = true
 unicode-casefold.workspace = true

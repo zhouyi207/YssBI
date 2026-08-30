@@ -2,7 +2,7 @@ use std::path::Path;
 
 use duckdb::{Connection, OptionalExt};
 
-use super::{DuckDbColumnMeta, duckdb_table_sql};
+use crate::{duckdb_table_sql, quote_duckdb_identifier};
 use yss_dataset_profile::{
     CategoryCount, ColumnDistribution, ColumnStats, DEFAULT_HISTOGRAM_BIN_COUNT,
     DEFAULT_TOP_CATEGORY_COUNT, DataCompleteness, DatasetOverview, HistogramBin,
@@ -11,18 +11,26 @@ use yss_dataset_profile::{
     profile_column_kind_from_name,
 };
 
-fn quote_column(name: &str) -> String {
-    super::quote_duckdb_identifier(name)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DatasetProfileColumnRef<'a> {
+    name: &'a str,
+    data_type: &'a str,
+}
+
+impl<'a> DatasetProfileColumnRef<'a> {
+    pub const fn new(name: &'a str, data_type: &'a str) -> Self {
+        Self { name, data_type }
+    }
 }
 
 fn open_conn(duckdb_path: &Path) -> Result<Connection, String> {
     Connection::open(duckdb_path).map_err(|e| e.to_string())
 }
 
-pub fn compute_all_column_stats_duckdb(
+pub fn compute_all_column_stats(
     duckdb_path: &Path,
     table: &str,
-    columns: &[DuckDbColumnMeta],
+    columns: &[DatasetProfileColumnRef<'_>],
 ) -> Result<Vec<ColumnStats>, String> {
     let conn = open_conn(duckdb_path)?;
     let table_sql = duckdb_table_sql(table);
@@ -30,7 +38,7 @@ pub fn compute_all_column_stats_duckdb(
     columns
         .iter()
         .map(|col| {
-            if profile_column_kind_from_name(&col.dtype) == ProfileColumnKind::Numeric {
+            if profile_column_kind_from_name(col.data_type) == ProfileColumnKind::Numeric {
                 numeric_column_stats(&conn, &table_sql, col)
             } else {
                 string_column_stats(&conn, &table_sql, col)
@@ -42,9 +50,9 @@ pub fn compute_all_column_stats_duckdb(
 fn numeric_column_stats(
     conn: &Connection,
     table_sql: &str,
-    col: &DuckDbColumnMeta,
+    col: &DatasetProfileColumnRef<'_>,
 ) -> Result<ColumnStats, String> {
-    let col_sql = quote_column(&col.name);
+    let col_sql = quote_duckdb_identifier(col.name);
     let sql = format!(
         r#"SELECT
             COUNT(*) AS total,
@@ -71,8 +79,8 @@ fn numeric_column_stats(
         let variance = std_val.map(|s| s * s);
 
         Ok(ColumnStats::Numeric(NumericColumnStats {
-            column_name: col.name.clone(),
-            column_type: col.dtype.clone(),
+            column_name: col.name.to_owned(),
+            column_type: col.data_type.to_owned(),
             kind: "numeric",
             count: total.max(0) as usize,
             null_count,
@@ -90,9 +98,9 @@ fn numeric_column_stats(
 fn string_column_stats(
     conn: &Connection,
     table_sql: &str,
-    col: &DuckDbColumnMeta,
+    col: &DatasetProfileColumnRef<'_>,
 ) -> Result<ColumnStats, String> {
-    let col_sql = quote_column(&col.name);
+    let col_sql = quote_duckdb_identifier(col.name);
     let summary_sql = format!(
         r#"SELECT
             COUNT(*) AS total,
@@ -147,8 +155,8 @@ fn string_column_stats(
         .unwrap_or((None, 0));
 
     Ok(ColumnStats::String(StringColumnStats {
-        column_name: col.name.clone(),
-        column_type: col.dtype.clone(),
+        column_name: col.name.to_owned(),
+        column_type: col.data_type.to_owned(),
         kind: "string",
         count,
         null_count,
@@ -160,10 +168,10 @@ fn string_column_stats(
     }))
 }
 
-pub fn compute_all_column_distributions_duckdb(
+pub fn compute_all_column_distributions(
     duckdb_path: &Path,
     table: &str,
-    columns: &[DuckDbColumnMeta],
+    columns: &[DatasetProfileColumnRef<'_>],
 ) -> Result<Vec<ColumnDistribution>, String> {
     let conn = open_conn(duckdb_path)?;
     let table_sql = duckdb_table_sql(table);
@@ -171,7 +179,7 @@ pub fn compute_all_column_distributions_duckdb(
     columns
         .iter()
         .map(|col| {
-            if profile_column_kind_from_name(&col.dtype) == ProfileColumnKind::Numeric {
+            if profile_column_kind_from_name(col.data_type) == ProfileColumnKind::Numeric {
                 numeric_column_distribution(&conn, &table_sql, col)
             } else {
                 string_column_distribution(&conn, &table_sql, col)
@@ -183,9 +191,9 @@ pub fn compute_all_column_distributions_duckdb(
 fn numeric_column_distribution(
     conn: &Connection,
     table_sql: &str,
-    col: &DuckDbColumnMeta,
+    col: &DatasetProfileColumnRef<'_>,
 ) -> Result<ColumnDistribution, String> {
-    let col_sql = quote_column(&col.name);
+    let col_sql = quote_duckdb_identifier(col.name);
     let bounds_sql = format!(
         r#"SELECT
             MIN(CAST({col} AS DOUBLE)) AS lo,
@@ -202,7 +210,7 @@ fn numeric_column_distribution(
 
     let (Some(lo), Some(hi)) = (lo, hi) else {
         return Ok(ColumnDistribution::Numeric(NumericDistribution {
-            column_name: col.name.clone(),
+            column_name: col.name.to_owned(),
             kind: "numeric",
             bins: vec![],
         }));
@@ -221,7 +229,7 @@ fn numeric_column_distribution(
                 format!("Failed to count finite values for '{}': {error}", col.name)
             })?;
         return Ok(ColumnDistribution::Numeric(NumericDistribution {
-            column_name: col.name.clone(),
+            column_name: col.name.to_owned(),
             kind: "numeric",
             bins: vec![HistogramBin {
                 label: format!("{:.2}", lo),
@@ -282,7 +290,7 @@ fn numeric_column_distribution(
         .collect();
 
     Ok(ColumnDistribution::Numeric(NumericDistribution {
-        column_name: col.name.clone(),
+        column_name: col.name.to_owned(),
         kind: "numeric",
         bins: histogram,
     }))
@@ -291,9 +299,9 @@ fn numeric_column_distribution(
 fn string_column_distribution(
     conn: &Connection,
     table_sql: &str,
-    col: &DuckDbColumnMeta,
+    col: &DatasetProfileColumnRef<'_>,
 ) -> Result<ColumnDistribution, String> {
-    let col_sql = quote_column(&col.name);
+    let col_sql = quote_duckdb_identifier(col.name);
     let top_sql = format!(
         r#"SELECT CAST({col} AS VARCHAR) AS label, COUNT(*) AS cnt
         FROM {table}
@@ -344,17 +352,17 @@ fn string_column_distribution(
     }
 
     Ok(ColumnDistribution::String(StringDistribution {
-        column_name: col.name.clone(),
+        column_name: col.name.to_owned(),
         kind: "string",
         categories,
         other_count: (total - top_sum).max(0) as usize,
     }))
 }
 
-pub fn compute_dataset_overview_duckdb(
+pub fn compute_dataset_overview(
     duckdb_path: &Path,
     table: &str,
-    columns: &[DuckDbColumnMeta],
+    columns: &[DatasetProfileColumnRef<'_>],
     row_count: usize,
 ) -> Result<DatasetOverview, String> {
     let conn = open_conn(duckdb_path)?;
@@ -368,7 +376,7 @@ pub fn compute_dataset_overview_duckdb(
     let mut bool_cols = 0usize;
 
     for col in columns {
-        match profile_column_kind_from_name(&col.dtype) {
+        match profile_column_kind_from_name(col.data_type) {
             ProfileColumnKind::Numeric => numeric_cols += 1,
             ProfileColumnKind::Categorical => categorical_cols += 1,
             ProfileColumnKind::String => string_cols += 1,
@@ -379,7 +387,10 @@ pub fn compute_dataset_overview_duckdb(
 
     let mut null_parts = Vec::new();
     for col in columns {
-        null_parts.push(format!("COUNT(*) - COUNT({})", quote_column(&col.name)));
+        null_parts.push(format!(
+            "COUNT(*) - COUNT({})",
+            quote_duckdb_identifier(col.name)
+        ));
     }
     let null_sql = format!("SELECT {} FROM {}", null_parts.join(", "), table_sql);
 
@@ -414,7 +425,7 @@ pub fn compute_dataset_overview_duckdb(
     } else {
         let predicates: Vec<String> = columns
             .iter()
-            .map(|col| format!("{} IS NULL", quote_column(&col.name)))
+            .map(|col| format!("{} IS NULL", quote_duckdb_identifier(col.name)))
             .collect();
         let rows_sql = format!(
             "SELECT COUNT(*) FROM {} WHERE {}",
@@ -452,16 +463,25 @@ pub fn compute_dataset_overview_duckdb(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
 
     struct TestDatabase(PathBuf);
 
+    static NEXT_TEST_DATABASE: AtomicU64 = AtomicU64::new(0);
+
     impl TestDatabase {
         fn create() -> Self {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or_default();
+            let sequence = NEXT_TEST_DATABASE.fetch_add(1, Ordering::Relaxed);
             Self(std::env::temp_dir().join(format!(
-                "yssbi-dataset-profile-{}.duckdb",
-                uuid::Uuid::new_v4()
+                "yssbi-duckdb-profile-{}-{timestamp}-{sequence}.duckdb",
+                std::process::id()
             )))
         }
     }
@@ -494,16 +514,10 @@ mod tests {
         drop(connection);
 
         let columns = [
-            DuckDbColumnMeta {
-                name: "value".to_owned(),
-                dtype: "Float64".to_owned(),
-            },
-            DuckDbColumnMeta {
-                name: "label".to_owned(),
-                dtype: "String".to_owned(),
-            },
+            DatasetProfileColumnRef::new("value", "Float64"),
+            DatasetProfileColumnRef::new("label", "String"),
         ];
-        let stats = compute_all_column_stats_duckdb(&database.0, "profile_test", &columns)
+        let stats = compute_all_column_stats(&database.0, "profile_test", &columns)
             .expect("physical stats should succeed");
         let ColumnStats::Numeric(numeric) = &stats[0] else {
             panic!("numeric metadata must select numeric stats");
@@ -519,9 +533,8 @@ mod tests {
         assert_eq!(labels.mode.as_deref(), Some("alpha"));
         assert_eq!(labels.mode_count, 2);
 
-        let distributions =
-            compute_all_column_distributions_duckdb(&database.0, "profile_test", &columns)
-                .expect("physical distributions should succeed");
+        let distributions = compute_all_column_distributions(&database.0, "profile_test", &columns)
+            .expect("physical distributions should succeed");
         let ColumnDistribution::Numeric(numeric) = &distributions[0] else {
             panic!("numeric metadata must select a numeric distribution");
         };
@@ -548,13 +561,9 @@ mod tests {
         assert_eq!(labels.categories[0].label, "alpha");
         assert_eq!(labels.categories[1].label, "beta");
 
-        let empty_columns = [DuckDbColumnMeta {
-            name: "label".to_owned(),
-            dtype: "String".to_owned(),
-        }];
-        let empty_stats =
-            compute_all_column_stats_duckdb(&database.0, "empty_profile", &empty_columns)
-                .expect("empty physical stats should succeed");
+        let empty_columns = [DatasetProfileColumnRef::new("label", "String")];
+        let empty_stats = compute_all_column_stats(&database.0, "empty_profile", &empty_columns)
+            .expect("empty physical stats should succeed");
         let ColumnStats::String(empty) = &empty_stats[0] else {
             panic!("empty string metadata must select string stats");
         };

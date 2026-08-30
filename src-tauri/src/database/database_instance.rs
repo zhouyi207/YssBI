@@ -8,15 +8,10 @@ use super::{
     export_duckdb_table, reverse_operation, write_display_name,
 };
 use super::{
-    PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, duckdb_table_sql,
-    fetch_cell_json, fetch_row_json, ingest_dataframe_to_duckdb, query_columns_to_dataframe,
-    query_page_with_rowids, query_to_dataframe_for_table, refresh_duckdb_meta,
-    resolve_row_id_by_index, resolve_row_ids_by_indices, reverse_edit_on_duckdb,
-    should_use_in_memory_editing, sql_add_row,
-};
-use super::{
-    compute_all_column_distributions_duckdb, compute_all_column_stats_duckdb,
-    compute_dataset_overview_duckdb,
+    PageQueryResult, apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json,
+    fetch_row_json, ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_with_rowids,
+    query_to_dataframe_for_table, refresh_duckdb_meta, resolve_row_id_by_index,
+    resolve_row_ids_by_indices, reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row,
 };
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
@@ -26,7 +21,20 @@ use yss_dataset_profile::{
     ColumnDistribution, ColumnStats, DatasetOverview, compute_all_column_distributions,
     compute_all_column_stats, compute_dataset_overview,
 };
+use yss_duckdb::{
+    DatasetProfileColumnRef,
+    compute_all_column_distributions as compute_all_column_distributions_duckdb,
+    compute_all_column_stats as compute_all_column_stats_duckdb,
+    compute_dataset_overview as compute_dataset_overview_duckdb, duckdb_table_sql,
+};
 use yss_tabular_polars::anyvalue_to_json;
+
+fn duckdb_profile_columns(columns: &[super::DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
+    columns
+        .iter()
+        .map(|column| DatasetProfileColumnRef::new(&column.name, &column.dtype))
+        .collect()
+}
 
 #[derive(Clone)]
 pub struct DatabaseInstance {
@@ -146,8 +154,11 @@ impl DatabaseInstance {
                 table,
                 columns,
                 ..
-            } => compute_all_column_stats_duckdb(Path::new(duckdb_path), table, columns)
-                .map_err(|e| PolarsError::ComputeError(e.into())),
+            } => {
+                let columns = duckdb_profile_columns(columns);
+                compute_all_column_stats_duckdb(Path::new(duckdb_path), table, &columns)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))
+            }
             DatabaseState::Loaded { dataframe, .. } => Ok(compute_all_column_stats(dataframe)),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
@@ -161,8 +172,11 @@ impl DatabaseInstance {
                 table,
                 columns,
                 ..
-            } => compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, columns)
-                .map_err(|e| PolarsError::ComputeError(e.into())),
+            } => {
+                let columns = duckdb_profile_columns(columns);
+                compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, &columns)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))
+            }
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(compute_all_column_distributions(dataframe))
             }
@@ -180,7 +194,8 @@ impl DatabaseInstance {
                 row_count,
                 ..
             } => {
-                compute_dataset_overview_duckdb(Path::new(duckdb_path), table, columns, *row_count)
+                let columns = duckdb_profile_columns(columns);
+                compute_dataset_overview_duckdb(Path::new(duckdb_path), table, &columns, *row_count)
                     .map_err(|e| PolarsError::ComputeError(e.into()))
             }
             DatabaseState::Loaded { dataframe, .. } => Ok(compute_dataset_overview(dataframe)),

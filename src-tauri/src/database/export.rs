@@ -5,7 +5,7 @@ use polars::prelude::DataFrame;
 
 use crate::database::tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 
-use super::{quote_duckdb_identifier, quote_duckdb_string_literal};
+use yss_duckdb::{quote_duckdb_identifier, quote_duckdb_string_literal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseExportFormat {

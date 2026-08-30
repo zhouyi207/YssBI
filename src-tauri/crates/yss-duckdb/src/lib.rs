@@ -1,0 +1,13 @@
+//! DuckDB engine primitives and physical dataset profiling.
+
+mod profile;
+mod sql;
+
+pub use profile::{
+    DatasetProfileColumnRef, compute_all_column_distributions, compute_all_column_stats,
+    compute_dataset_overview,
+};
+pub use sql::{
+    DUCKDB_ROWID_SQL, duckdb_table_sql, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
+    quote_duckdb_string_literal,
+};
