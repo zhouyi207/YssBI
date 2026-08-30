@@ -9,10 +9,10 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use crate::execution::finalization::ExecutionFinalizationHandoff;
-use crate::execution::plan::{PlanGraphId, PlanProjectSessionId, PlanSourceIdentity};
-use crate::execution::result_store::ResultId;
-use crate::execution::run_registry::RunId;
+use yss_execution::finalization::ExecutionFinalizationHandoff;
+use yss_execution::plan::{PlanGraphId, PlanProjectSessionId, PlanSourceIdentity};
+use yss_execution::result_store::ResultId;
+use yss_execution::run_registry::RunId;
 
 /// The outer identity used by the same run's start and terminal records.
 ///
@@ -41,7 +41,7 @@ impl RunPresentationContext {
 
 /// One neutral inspection request mapped from an intent retained by the
 /// committed handoff. The requester is an opaque identity value; no result,
-/// effect, or grant owner is copied into this projection.
+/// grant owner is copied into this projection.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct ResultInspectionRequested {
     result_id: ResultId,
@@ -96,7 +96,7 @@ impl CommittedRunOutcome {
         &self.handoff
     }
 
-    pub(crate) fn results(&self) -> &[crate::execution::finalization::ReadyResult] {
+    pub(crate) fn results(&self) -> &[yss_execution::finalization::ReadyResult] {
         self.handoff.results()
     }
 
@@ -171,8 +171,8 @@ fn validate_handoff(handoff: &ExecutionFinalizationHandoff) -> Result<(), Finali
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::finalization::test_support;
-    use crate::execution::plan::PlanGraphId;
+    use yss_execution::finalization::test_support;
+    use yss_execution::plan::PlanGraphId;
 
     #[test]
     fn committed_explicit_inspect_maps_once_and_ordinary_result_maps_nothing() {

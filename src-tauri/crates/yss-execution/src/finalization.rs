@@ -4,11 +4,11 @@
 //! Application can consume the one-way handoff, but it cannot construct a
 //! candidate, replace one of its results, or detach its grant evidence.
 
-use crate::execution::plan::{
+use crate::plan::{
     PlanCompileId, PlanResourceId, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
     ResourceKind,
 };
-use crate::execution::result_store::{ResultId, StoredResult};
+use crate::result_store::{ResultId, StoredResult};
 
 /// A result that became ready during one Execution run.
 #[derive(Debug, PartialEq)]
@@ -18,10 +18,10 @@ pub struct ReadyResult {
 }
 
 impl ReadyResult {
-    pub(in crate::execution) fn from_scheduler(
+    pub(crate) fn from_scheduler(
         result_id: ResultId,
         value: StoredResult,
-        category: crate::execution::plan::ResultCategory,
+        category: crate::plan::ResultCategory,
     ) -> Self {
         Self {
             result_id,
@@ -37,30 +37,9 @@ impl ReadyResult {
         &self.value
     }
 
-    pub fn category(&self) -> crate::execution::plan::ResultCategory {
+    pub fn category(&self) -> crate::plan::ResultCategory {
         self.value.category()
     }
-}
-
-/// A safe, neutral view of a candidate effect.
-#[derive(Debug, Eq, PartialEq)]
-pub struct CandidateEffectProjection {
-    resource: PlanResourceId,
-}
-
-impl CandidateEffectProjection {
-    pub(in crate::execution) fn from_resource(resource: PlanResourceId) -> Self {
-        Self { resource }
-    }
-
-    pub fn resource(&self) -> &PlanResourceId {
-        &self.resource
-    }
-}
-
-#[derive(Debug)]
-struct CandidateExecutionEffects {
-    projections: Box<[CandidateEffectProjection]>,
 }
 
 /// Execution-private evidence that a candidate was checked against the
@@ -70,7 +49,7 @@ struct CandidateExecutionEffects {
     dead_code,
     reason = "grant evidence is retained by the sealed candidate until finalization"
 )]
-pub(in crate::execution) struct SealedCandidateGrant {
+pub(crate) struct SealedCandidateGrant {
     compile_id: PlanCompileId,
     resource: PlanResourceId,
     version: PlanResourceVersion,
@@ -79,7 +58,7 @@ pub(in crate::execution) struct SealedCandidateGrant {
 }
 
 impl SealedCandidateGrant {
-    pub(in crate::execution) fn new(
+    pub(crate) fn new(
         compile_id: PlanCompileId,
         resource: PlanResourceId,
         version: PlanResourceVersion,
@@ -101,12 +80,12 @@ impl SealedCandidateGrant {
     dead_code,
     reason = "grant evidence is retained by the sealed candidate until finalization"
 )]
-pub(in crate::execution) struct SealedCandidateGrantSet {
+pub(crate) struct SealedCandidateGrantSet {
     grants: Box<[SealedCandidateGrant]>,
 }
 
 impl SealedCandidateGrantSet {
-    pub(in crate::execution) fn new(grants: Box<[SealedCandidateGrant]>) -> Self {
+    pub(crate) fn new(grants: Box<[SealedCandidateGrant]>) -> Self {
         Self { grants }
     }
 }
@@ -130,7 +109,6 @@ pub struct ResultObservationIntent {
 #[derive(Debug)]
 pub struct SuccessfulExecutionCandidate {
     results: Box<[ReadyResult]>,
-    effects: CandidateExecutionEffects,
     observation_intents: Box<[ResultObservationIntent]>,
     #[allow(
         dead_code,
@@ -142,17 +120,13 @@ pub struct SuccessfulExecutionCandidate {
 impl SuccessfulExecutionCandidate {
     /// Build a candidate from Execution-owned scheduler output and sealed
     /// resource evidence. The visibility deliberately excludes Application.
-    pub(in crate::execution) fn from_scheduler(
+    pub(crate) fn from_scheduler(
         results: Box<[ReadyResult]>,
-        effects: Box<[CandidateEffectProjection]>,
         observation_intents: Box<[ResultObservationIntent]>,
         resource_grants: SealedCandidateGrantSet,
     ) -> Self {
         Self {
             results,
-            effects: CandidateExecutionEffects {
-                projections: effects,
-            },
             observation_intents,
             resource_grants,
         }
@@ -160,10 +134,6 @@ impl SuccessfulExecutionCandidate {
 
     pub fn results(&self) -> &[ReadyResult] {
         &self.results
-    }
-
-    pub fn effect_projections(&self) -> &[CandidateEffectProjection] {
-        &self.effects.projections
     }
 
     pub fn observation_intents(&self) -> &[ResultObservationIntent] {
@@ -180,7 +150,7 @@ impl SuccessfulExecutionCandidate {
 /// The one-way handoff accepted by Application finalization.
 ///
 /// It owns the original candidate, so later finalization cannot rebuild a
-/// result, effect, grant, or observation-intent collection independently.
+/// result, grant, or observation-intent collection independently.
 #[must_use = "a finalization handoff must be committed or rejected"]
 #[derive(Debug)]
 pub struct ExecutionFinalizationHandoff {
@@ -192,22 +162,18 @@ impl ExecutionFinalizationHandoff {
         self.candidate.results()
     }
 
-    pub fn effect_projections(&self) -> &[CandidateEffectProjection] {
-        self.candidate.effect_projections()
-    }
-
     pub fn observation_intents(&self) -> &[ResultObservationIntent] {
         self.candidate.observation_intents()
     }
 }
 
-#[cfg(test)]
-pub(crate) mod test_support {
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support {
     use super::*;
-    use crate::execution::plan::{PlanGraphId, PlanSourceIdentity};
+    use crate::plan::{PlanGraphId, PlanSourceIdentity};
 
     /// Test-only owner fixture. Production code has no equivalent constructor.
-    pub(crate) fn candidate(
+    pub fn candidate(
         result_id: ResultId,
         requester: PlanSourceIdentity,
         explicit_inspection: bool,
@@ -225,12 +191,8 @@ pub(crate) mod test_support {
             vec![ReadyResult::from_scheduler(
                 result_id,
                 StoredResult::Scalar(3.5),
-                crate::execution::plan::ResultCategory::Value,
+                crate::plan::ResultCategory::Value,
             )]
-            .into_boxed_slice(),
-            vec![CandidateEffectProjection {
-                resource: PlanResourceId::from_existing("variables/answer".into()),
-            }]
             .into_boxed_slice(),
             observation_intents.into_boxed_slice(),
             SealedCandidateGrantSet {
@@ -239,10 +201,10 @@ pub(crate) mod test_support {
         )
     }
 
-    pub(crate) fn requester() -> PlanSourceIdentity {
+    pub fn requester() -> PlanSourceIdentity {
         PlanSourceIdentity::new(
             PlanGraphId::from_existing("functions/Inspect.yssbi-function".into()),
-            Some(crate::execution::plan::PlanNodeId::from_existing(
+            Some(crate::plan::PlanNodeId::from_existing(
                 "00000000-0000-0000-0000-000000000009".into(),
             )),
             None,

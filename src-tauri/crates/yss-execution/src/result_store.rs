@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-use crate::execution::plan::PlanOutputRef;
+use crate::plan::PlanOutputRef;
 
-use crate::execution::result::{
-    ExecutionResultQueryError, PinResultEntry, PinResultHistorySnapshot,
-};
-pub use crate::execution::result::{ResultId, StoredResult};
+use crate::result::{ExecutionResultQueryError, PinResultEntry, PinResultHistorySnapshot};
+pub use crate::result::{ResultId, StoredResult};
 
 #[derive(Default)]
 struct ResultStoreRegistry {
@@ -44,6 +42,7 @@ impl ResultStore {
             .cloned()
     }
 
+    #[cfg(test)]
     pub(crate) fn publish_for_output(
         &self,
         output: PlanOutputRef,
@@ -105,9 +104,9 @@ impl Default for ResultStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::plan::{PlanGraphId, PlanGraphRevision, PlanOutputRef, PlanPortAddress};
-    use crate::execution::result::{ActivationId, PinResultEntry, ResultUsage};
-    use crate::execution::run_registry::RunId;
+    use crate::plan::{PlanGraphId, PlanGraphRevision, PlanOutputRef, PlanPortAddress};
+    use crate::result::{ActivationId, PinResultEntry, ResultUsage};
+    use crate::run_registry::RunId;
 
     fn output() -> PlanOutputRef {
         PlanOutputRef::new(

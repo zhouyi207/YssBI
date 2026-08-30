@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use serde_json::Value;
 
-use crate::execution::settings::ExecutionSettings;
+use crate::settings::ExecutionSettings;
 
 #[derive(Clone, Default)]
 pub struct BackendCancellationToken {
@@ -41,7 +41,7 @@ pub struct BackendExecutionControl {
 }
 
 impl BackendExecutionControl {
-    pub(crate) fn from_shared(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
+    pub fn from_shared(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
         Self {
             cancellation: BackendCancellationToken::from_shared(cancellation),
             deadline,

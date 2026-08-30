@@ -1,5 +1,5 @@
-use crate::execution::plan::identity::PlanProjectSessionId;
-use crate::execution::resource_preparation::ResourceProviderFactory;
+use yss_execution::plan::identity::PlanProjectSessionId;
+use yss_execution::resource_preparation::ResourceProviderFactory;
 
 pub(crate) fn database_resource_provider_factory(
     project_session: PlanProjectSessionId,

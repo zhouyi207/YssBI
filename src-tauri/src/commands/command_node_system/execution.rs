@@ -149,9 +149,9 @@ fn project_preparation_command_code(
 }
 
 fn prepared_execution_command_code(
-    error: &crate::execution::state::ExecutePreparedError,
+    error: &yss_execution::state::ExecutePreparedError,
 ) -> &'static str {
-    use crate::execution::state::ExecutePreparedError;
+    use yss_execution::state::ExecutePreparedError;
 
     match error {
         ExecutePreparedError::RuntimeGenerationMismatch { .. } => "stale_project_lifecycle",
@@ -185,7 +185,7 @@ pub fn cancel_graph_run(
     let run_id = parse_opaque_u64("runId", &run_id)?;
     let outcome = crate::application::execution::run_graph::cancel_run(
         state.inner(),
-        crate::execution::run_registry::RunId::from_existing(run_id),
+        yss_execution::run_registry::RunId::from_existing(run_id),
     )
     .map_err(map_application_execution_error)?;
     Ok(matches!(

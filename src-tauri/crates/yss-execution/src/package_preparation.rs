@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use crate::execution::identity::RuntimeGeneration;
-use crate::execution::plan::{
+use crate::identity::RuntimeGeneration;
+use crate::plan::{
     CompiledExecutionPackage, CompiledFunctionPlan, CompiledParameterHandle, PlanParameterFieldId,
     PlanParameterPayload, PlanParameterValue, PlanResourceId, PlanResourceVersion,
     PlanValidationError,
@@ -91,8 +91,8 @@ impl PreparedExecutionPlan {
     }
 }
 
-impl crate::execution::state::ExecutionRuntimeState {
-    pub(crate) fn prepare_compiled_package(
+impl crate::state::ExecutionRuntimeState {
+    pub fn prepare_compiled_package(
         &self,
         package: CompiledExecutionPackage,
         expected_generation: RuntimeGeneration,
@@ -247,8 +247,8 @@ fn validate_parameter_value(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::identity::ExecutionSessionId;
-    use crate::execution::plan::{
+    use crate::identity::ExecutionSessionId;
+    use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan,
         CompiledParameterBundleBuilder, ExecutionPlan, FunctionPlanAbi, PlanCompilationBasis,
         PlanCompileId, PlanGraphRevision, PlanProjectSessionId, PlanProvenance,
@@ -272,7 +272,7 @@ mod tests {
             parameters,
             PlanProvenance::new(
                 PlanSourceIdentity::new(
-                    crate::execution::plan::PlanGraphId::from_existing("graph".into()),
+                    crate::plan::PlanGraphId::from_existing("graph".into()),
                     None,
                     None,
                 ),
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn prepared_package_remains_bound_to_runtime_generation() {
-        let state = crate::execution::state::ExecutionRuntimeState::new(
+        let state = crate::state::ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::from_existing(3),
         );
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_function_resource_version_before_minting() {
-        let state = crate::execution::state::ExecutionRuntimeState::new(
+        let state = crate::state::ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::from_existing(3),
         );

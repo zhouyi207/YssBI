@@ -1,14 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::database::session_api::DatabaseCatalogSnapshot;
-use crate::execution::plan::{
-    CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
-    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
-    PlanInputBinding, PlanInputSource, PlanNodeId, PlanObservationIntent, PlanOperation,
-    PlanOperationKind, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
-    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
-    ValueRef,
-};
 use crate::graph::analysis::result_category::GraphResultCategory;
 use crate::graph::compiler::{
     GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
@@ -24,6 +16,14 @@ use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
+use yss_execution::plan::{
+    CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
+    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
+    PlanInputBinding, PlanInputSource, PlanNodeId, PlanObservationIntent, PlanOperation,
+    PlanOperationKind, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
+    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
+    ValueRef,
+};
 use yss_graph_analysis_contract::{
     CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
     ResourceVersion as GraphResourceVersion,
@@ -177,7 +177,7 @@ pub fn graph_compile_settings(settings: &ProjectComputationSettings) -> GraphCom
 /// consumed by analysis and lowering.  The conversion is deliberately kept in
 /// Application: neither Graph nor Execution imports the other's package model.
 pub fn graph_compilation_basis(
-    basis: &crate::execution::plan::PlanCompilationBasis,
+    basis: &yss_execution::plan::PlanCompilationBasis,
 ) -> CompilationBasis<GraphRevision> {
     CompilationBasis {
         graph_revision: GraphRevision::new(basis.graph_revision().get()),
@@ -199,10 +199,10 @@ pub fn graph_compilation_basis(
             .iter()
             .map(|(key, observed)| {
                 let state = match observed {
-                    crate::execution::plan::PlanResourceObservedState::Present(version) => {
+                    yss_execution::plan::PlanResourceObservedState::Present(version) => {
                         ResourceObservedState::Present(GraphResourceVersion::new(version.as_str()))
                     }
-                    crate::execution::plan::PlanResourceObservedState::Absent(version) => {
+                    yss_execution::plan::PlanResourceObservedState::Absent(version) => {
                         ResourceObservedState::Absent(
                             version
                                 .as_ref()
@@ -219,22 +219,22 @@ pub fn graph_compilation_basis(
 #[derive(Debug, Error)]
 pub enum GraphPackageMappingError {
     #[error("graph package identity is invalid")]
-    Identity(#[source] crate::execution::plan::InvalidPlanIdentity),
+    Identity(#[source] yss_execution::plan::InvalidPlanIdentity),
     #[error("graph package parameter identity is invalid")]
-    ParameterIdentity(#[source] crate::execution::plan::InvalidPlanParameterId),
+    ParameterIdentity(#[source] yss_execution::plan::InvalidPlanParameterId),
     #[error("graph package contains a non-finite decimal")]
-    Decimal(#[source] crate::execution::plan::CanonicalDecimalError),
+    Decimal(#[source] yss_execution::plan::CanonicalDecimalError),
     #[error("graph package contains an invalid operation kind")]
-    OperationKind(#[source] crate::execution::plan::InvalidPlanIdentity),
+    OperationKind(#[source] yss_execution::plan::InvalidPlanIdentity),
     #[error("graph package parameter handle is duplicated")]
-    DuplicateParameter(#[source] crate::execution::plan::CompiledParameterBundleError),
+    DuplicateParameter(#[source] yss_execution::plan::CompiledParameterBundleError),
 }
 
 /// Map the Graph-owned lowered package into the Execution-owned immutable
 /// package at the Application boundary.
 pub fn execution_package_from_graph(
     package: GraphCompiledPackage,
-    basis: crate::execution::plan::PlanCompilationBasis,
+    basis: yss_execution::plan::PlanCompilationBasis,
 ) -> Result<CompiledExecutionPackage, GraphPackageMappingError> {
     let operations = package
         .operations()
@@ -322,7 +322,7 @@ pub fn execution_package_from_graph(
     let provenance = PlanProvenance::new(
         PlanSourceIdentity::new(graph, None, None),
         basis.clone(),
-        crate::execution::plan::PlanCompileId::from_existing(package.compile_id().get()),
+        yss_execution::plan::PlanCompileId::from_existing(package.compile_id().get()),
     );
     Ok(CompiledExecutionPackage::new(
         std::sync::Arc::new(ExecutionPlan::new(operations.into_boxed_slice())),
@@ -369,7 +369,7 @@ fn map_parameter_value(
             GraphParameterScalar::String(value) => PlanParameterScalar::String(value.clone()),
         }),
         GraphParameterValue::Resource(resource) => PlanParameterValue::Resource(
-            crate::execution::plan::PlanResourceId::new(resource.clone())
+            yss_execution::plan::PlanResourceId::new(resource.clone())
                 .map_err(GraphPackageMappingError::Identity)?,
         ),
         GraphParameterValue::List(values) => PlanParameterValue::List(
@@ -392,8 +392,8 @@ fn map_parameter_value(
     })
 }
 
-fn map_result_category(category: GraphResultCategory) -> crate::execution::plan::ResultCategory {
-    use crate::execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
+fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::ResultCategory {
+    use yss_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
     match category {
         GraphResultCategory::Value => ResultCategory::Value,
         GraphResultCategory::PlotData(kind) => ResultCategory::PlotData(match kind {

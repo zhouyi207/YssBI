@@ -1,15 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
-use crate::execution::finalization::{
-    CandidateEffectProjection, SealedCandidateGrant, SealedCandidateGrantSet,
-};
-use crate::execution::package_preparation::PreparedExecutionPlan;
-use crate::execution::plan::{
+use crate::finalization::{SealedCandidateGrant, SealedCandidateGrantSet};
+use crate::package_preparation::PreparedExecutionPlan;
+use crate::plan::{
     PlanProjectSessionId, PlanResourceId, PlanResourceObservedState, PlanResourceRequirement,
     PlanResourceVersion, ResourceAccess, ResourceKind,
 };
-use crate::execution::value::RuntimeValue;
+use crate::value::RuntimeValue;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum ResourcePreparationError {
@@ -54,14 +52,14 @@ pub enum ResourcePreparationError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RunResourceBinding {
+pub struct RunResourceBinding {
     requirement: PlanResourceRequirement,
     version: PlanResourceVersion,
     value: RuntimeValue,
 }
 
 impl RunResourceBinding {
-    pub(crate) fn new(
+    pub fn new(
         requirement: PlanResourceRequirement,
         version: PlanResourceVersion,
         value: RuntimeValue,
@@ -91,14 +89,14 @@ impl RunResourceBinding {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RunResourceBindings {
+pub struct RunResourceBindings {
     project_session: PlanProjectSessionId,
     requirements: Box<[PlanResourceRequirement]>,
     bindings: Box<[RunResourceBinding]>,
 }
 
 impl RunResourceBindings {
-    pub(crate) fn new(
+    pub fn new(
         project_session: PlanProjectSessionId,
         requirements: impl IntoIterator<Item = PlanResourceRequirement>,
         bindings: impl IntoIterator<Item = RunResourceBinding>,
@@ -123,13 +121,13 @@ impl RunResourceBindings {
     }
 }
 
-pub(in crate::execution) struct RunResourceRequest<'a> {
+pub(crate) struct RunResourceRequest<'a> {
     plan: &'a PreparedExecutionPlan,
     bindings: &'a RunResourceBindings,
 }
 
 impl<'a> RunResourceRequest<'a> {
-    pub(in crate::execution) const fn new(
+    pub(crate) const fn new(
         plan: &'a PreparedExecutionPlan,
         bindings: &'a RunResourceBindings,
     ) -> Self {
@@ -147,50 +145,25 @@ struct SealedResourceGrant {
 }
 
 #[derive(Debug)]
-pub(in crate::execution) struct PreparedRunResources {
-    compile_id: crate::execution::plan::PlanCompileId,
+pub(crate) struct PreparedRunResources {
+    compile_id: crate::plan::PlanCompileId,
     grants: Box<[SealedResourceGrant]>,
-    effect_buffer: ExecutionEffectBuffer,
-}
-
-#[derive(Debug, Default)]
-struct ExecutionEffectBuffer {
-    effects: Vec<ExecutionEffect>,
-}
-
-#[derive(Debug)]
-enum ExecutionEffect {
-    VariableWrite { resource: PlanResourceId },
-    PlotCandidate { resource: PlanResourceId },
 }
 
 impl PreparedRunResources {
-    fn new(
-        compile_id: crate::execution::plan::PlanCompileId,
-        grants: Box<[SealedResourceGrant]>,
-    ) -> Self {
-        Self {
-            compile_id,
-            grants,
-            effect_buffer: ExecutionEffectBuffer::default(),
-        }
+    fn new(compile_id: crate::plan::PlanCompileId, grants: Box<[SealedResourceGrant]>) -> Self {
+        Self { compile_id, grants }
     }
 
-    pub(in crate::execution) fn value(&self, resource: &PlanResourceId) -> Option<&RuntimeValue> {
+    pub(crate) fn value(&self, resource: &PlanResourceId) -> Option<&RuntimeValue> {
         self.grants
             .iter()
             .find(|grant| &grant.resource == resource)
             .map(|grant| &grant.value)
     }
 
-    pub(in crate::execution) fn finish(
-        self,
-    ) -> (Box<[CandidateEffectProjection]>, SealedCandidateGrantSet) {
-        let Self {
-            compile_id,
-            grants,
-            effect_buffer,
-        } = self;
+    pub(crate) fn finish(self) -> SealedCandidateGrantSet {
+        let Self { compile_id, grants } = self;
         let candidate_grants = grants
             .into_vec()
             .into_iter()
@@ -205,10 +178,7 @@ impl PreparedRunResources {
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        (
-            effect_buffer.finish(),
-            SealedCandidateGrantSet::new(candidate_grants),
-        )
+        SealedCandidateGrantSet::new(candidate_grants)
     }
 }
 
@@ -221,12 +191,12 @@ impl ResourceProviderFactory {
     /// Test-only constructor for an empty factory. Production composition must
     /// use the composition-injected session identity; concrete database
     /// handles stay outside the Execution package.
-    #[cfg(test)]
-    pub(crate) fn new(session_identity: Box<str>) -> Self {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn new(session_identity: Box<str>) -> Self {
         Self { session_identity }
     }
 
-    pub(crate) fn from_project_session(session_identity: Box<str>) -> Self {
+    pub fn from_project_session(session_identity: Box<str>) -> Self {
         Self { session_identity }
     }
 
@@ -234,7 +204,7 @@ impl ResourceProviderFactory {
         PlanProjectSessionId::from_existing(self.session_identity.clone())
     }
 
-    pub(in crate::execution) fn prepare(
+    pub(crate) fn prepare(
         &self,
         request: &RunResourceRequest<'_>,
     ) -> Result<PreparedRunResources, ResourcePreparationError> {
@@ -342,33 +312,19 @@ impl ResourceProviderFactory {
     }
 }
 
-impl ExecutionEffectBuffer {
-    fn finish(self) -> Box<[CandidateEffectProjection]> {
-        self.effects
-            .into_iter()
-            .map(|effect| match effect {
-                ExecutionEffect::VariableWrite { resource }
-                | ExecutionEffect::PlotCandidate { resource } => {
-                    CandidateEffectProjection::from_resource(resource)
-                }
-            })
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-    use crate::execution::package_preparation::PreparedExecutionPlan;
-    use crate::execution::plan::{
+    use crate::identity::{ExecutionSessionId, RuntimeGeneration};
+    use crate::package_preparation::PreparedExecutionPlan;
+    use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
         ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanGraphRevision,
         PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
         PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
         PlanSourceIdentity, ResourceAccess, ResourceKind,
     };
-    use crate::execution::state::ExecutionRuntimeState;
+    use crate::state::ExecutionRuntimeState;
     use std::collections::BTreeMap;
     use std::sync::Arc;
 

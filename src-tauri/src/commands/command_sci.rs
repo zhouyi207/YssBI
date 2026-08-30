@@ -19,7 +19,7 @@ pub fn compute_acf_pacf(
 }
 
 fn acf_pacf_response(
-    result: crate::execution::ports::scientific::AcfPacfResult,
+    result: yss_execution::ports::scientific::AcfPacfResult,
 ) -> AcfPacfResponseDto {
     AcfPacfResponseDto {
         acf: result.acf,
@@ -42,19 +42,19 @@ fn acf_pacf_command_error(error: AcfPacfApplicationError) -> CommandError {
             }
         },
         AcfPacfApplicationError::Backend(error) => match error {
-            crate::execution::ports::scientific::ScientificBackendError::InvalidInput {
-                ..
-            } => CommandError::expected("invalid_acf_pacf_input"),
-            crate::execution::ports::scientific::ScientificBackendError::Cancelled => {
+            yss_execution::ports::scientific::ScientificBackendError::InvalidInput { .. } => {
+                CommandError::expected("invalid_acf_pacf_input")
+            }
+            yss_execution::ports::scientific::ScientificBackendError::Cancelled => {
                 CommandError::expected("operation_cancelled")
             }
-            crate::execution::ports::scientific::ScientificBackendError::DeadlineExceeded => {
+            yss_execution::ports::scientific::ScientificBackendError::DeadlineExceeded => {
                 CommandError::expected("operation_deadline_exceeded")
             }
-            crate::execution::ports::scientific::ScientificBackendError::Unavailable => {
+            yss_execution::ports::scientific::ScientificBackendError::Unavailable => {
                 CommandError::expected("scientific_backend_unavailable")
             }
-            crate::execution::ports::scientific::ScientificBackendError::ComputationFailed => {
+            yss_execution::ports::scientific::ScientificBackendError::ComputationFailed => {
                 CommandError::expected("scientific_computation_failed")
             }
         },

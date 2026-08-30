@@ -1,0 +1,18 @@
+[package]
+name = "yss-execution"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }

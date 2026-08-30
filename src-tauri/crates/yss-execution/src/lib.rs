@@ -1,4 +1,6 @@
-//! Execution-owned contracts staged for the final runtime cutover.
+//! Authoritative execution plans, ports, runtime state, and result lifecycle.
+
+#![deny(unused_must_use)]
 
 pub mod canonical;
 pub mod error;

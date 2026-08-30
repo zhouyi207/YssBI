@@ -4,9 +4,6 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use crate::execution::resource_preparation::ResourceProviderFactory;
-use crate::execution::state::ExecutionRuntimeState;
 use crate::graph::error::GraphMutationError;
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::runtime_state::{
@@ -24,6 +21,9 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
+use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_execution::resource_preparation::ResourceProviderFactory;
+use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 
 struct TestProject {

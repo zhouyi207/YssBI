@@ -1,9 +1,6 @@
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::execution::settings::{
-    ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
-};
 use crate::project::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
     ComputationSettingsSnapshot, ProjectFilesystemError, ProjectInstanceId,
@@ -12,6 +9,9 @@ use crate::project::{
     ComputationSettingsValidationError, ProjectComputationSettings, StatisticalMissingValuePolicy,
 };
 use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComputationSettings};
+use yss_execution::settings::{
+    ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ComputationSettingsMappingError {
@@ -126,15 +126,15 @@ fn validate(project: &ProjectComputationSettings) -> Result<(), ComputationSetti
 #[cfg(test)]
 mod tests {
     use super::{ComputationSettingsMappingError, execution_settings, sci_computation_settings};
-    use crate::execution::settings::{
-        ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
-    };
     use crate::project::{
         MissingValueSettings, NumericSettings, NumericTolerance, ProjectComputationSettings,
         StatisticalMissingValuePolicy,
     };
     use crate::sci::api::computation::{
         MissingValuePolicy, NumericTolerance as SciNumericTolerance, SciComputationSettings,
+    };
+    use yss_execution::settings::{
+        ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
     };
 
     #[test]

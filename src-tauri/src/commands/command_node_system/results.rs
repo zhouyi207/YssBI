@@ -5,10 +5,10 @@ use crate::commands::execution_dto::{
     PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
 };
 use crate::error::CommandError;
-use crate::execution::result::{ResultId, StoredResult};
-use crate::execution::value::RuntimeValue;
 use serde::Serialize;
 use tauri::State;
+use yss_execution::result::{ResultId, StoredResult};
+use yss_execution::value::RuntimeValue;
 
 pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
@@ -23,9 +23,7 @@ fn result_query_command_error(error: ResultQueryApplicationError) -> CommandErro
     match error {
         ResultQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
         ResultQueryApplicationError::Execution(
-            crate::execution::result::ExecutionResultQueryError::ResultSourceReadFailed {
-                result_id,
-            },
+            yss_execution::result::ExecutionResultQueryError::ResultSourceReadFailed { result_id },
         ) => CommandError::diagnosed("result_source_read_failed", result_id.get().to_string()),
     }
 }

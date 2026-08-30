@@ -16,17 +16,6 @@ use crate::application::graph_contracts::{
 };
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
-use crate::execution::error::RunPhase;
-use crate::execution::package_preparation::PackagePreparationError;
-use crate::execution::plan::{
-    CanonicalDecimalError, InvalidPlanIdentity, InvalidPlanParameterId, PlanGraphId, PlanOutputRef,
-    PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
-    PlanResourceVersion,
-};
-use crate::execution::run_registry::{RunId, RunState};
-use crate::execution::state::{
-    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
-};
 use crate::graph::compiler::{GraphCompilationInput, compile};
 use crate::project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
@@ -35,6 +24,17 @@ use crate::project::execution_authority::{
     ProjectResourceRequirement,
 };
 use crate::project::{ProjectData, ProjectFilesystemError, ProjectInstanceId};
+use yss_execution::error::RunPhase;
+use yss_execution::package_preparation::PackagePreparationError;
+use yss_execution::plan::{
+    CanonicalDecimalError, InvalidPlanIdentity, InvalidPlanParameterId, PlanGraphId, PlanOutputRef,
+    PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+    PlanResourceVersion,
+};
+use yss_execution::run_registry::{RunId, RunState};
+use yss_execution::state::{
+    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
+};
 use yss_graph_document::GraphResourcePath;
 
 /// A run demand is an Application-owned interpretation of the graph execution
@@ -156,11 +156,11 @@ pub(crate) enum RunApplicationEventKind {
     PinPreviewResultReady {
         output: PlanOutputRef,
         generation: u64,
-        result_id: crate::execution::result::ResultId,
+        result_id: yss_execution::result::ResultId,
     },
     ResultInspectionRequested {
-        result_id: crate::execution::result::ResultId,
-        source: crate::execution::plan::PlanSourceIdentity,
+        result_id: yss_execution::result::ResultId,
+        source: yss_execution::plan::PlanSourceIdentity,
     },
 }
 
@@ -223,7 +223,7 @@ pub(crate) enum ExecutionApplicationError {
     #[error("execution finalization failed")]
     Finalization(#[source] FinalizationError),
     #[error("execution run terminal publication failed")]
-    RunFinalization(#[source] crate::execution::run_registry::RunRegistryError),
+    RunFinalization(#[source] yss_execution::run_registry::RunRegistryError),
     #[error("captured application session is stale")]
     StaleSession(#[source] SessionRevalidationError),
 }
@@ -241,7 +241,7 @@ pub(crate) enum VariableBindingError {
     #[error("project value cannot be represented by Execution")]
     Value(#[source] CanonicalDecimalError),
     #[error("project value cannot be represented by the runtime")]
-    RuntimeValue(#[source] crate::execution::value::RuntimeValueError),
+    RuntimeValue(#[source] yss_execution::value::RuntimeValueError),
     #[error("project value contains an invalid Execution identity")]
     Identity(#[source] InvalidPlanIdentity),
     #[error("project value contains an invalid record field")]
@@ -538,7 +538,7 @@ fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplic
 }
 
 fn publish_run_failure<D>(
-    execution: &crate::execution::state::ExecutionRuntimeState,
+    execution: &yss_execution::state::ExecutionRuntimeState,
     run_id: RunId,
     identity: &RunIdentity,
     deliver: &mut D,
@@ -640,7 +640,7 @@ fn plan_basis(
     captured: &ApplicationSession,
     graph_revision: yss_graph_document::GraphRevision,
     grants: &[ProjectResourceGrant],
-) -> Result<crate::execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
+) -> Result<yss_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
     let mut versions = BTreeMap::new();
     let mut observations = BTreeMap::new();
     for grant in grants {
@@ -672,9 +672,9 @@ fn plan_basis(
             },
         );
     }
-    Ok(crate::execution::plan::PlanCompilationBasis::new(
+    Ok(yss_execution::plan::PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        crate::execution::plan::PlanGraphRevision::from_existing(graph_revision.get()),
+        yss_execution::plan::PlanGraphRevision::from_existing(graph_revision.get()),
         PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
         versions,
         observations,
@@ -685,7 +685,7 @@ fn map_project_resource_facts(
     project_session_id: &str,
     project_data: &ProjectData,
     grants: &[ProjectResourceGrant],
-) -> Result<crate::execution::resource_preparation::RunResourceBindings, VariableBindingError> {
+) -> Result<yss_execution::resource_preparation::RunResourceBindings, VariableBindingError> {
     let mut requirements = Vec::new();
     let mut bindings = Vec::new();
     for grant in grants {
@@ -693,18 +693,18 @@ fn map_project_resource_facts(
             .map_err(|_| VariableBindingError::Identity(InvalidPlanIdentity::Empty))?;
         let kind = match grant.kind() {
             ProjectResourceKind::DatabaseConnection => {
-                crate::execution::plan::ResourceKind::DatabaseConnection
+                yss_execution::plan::ResourceKind::DatabaseConnection
             }
-            ProjectResourceKind::DataFrame => crate::execution::plan::ResourceKind::DataFrame,
-            ProjectResourceKind::File => crate::execution::plan::ResourceKind::File,
-            ProjectResourceKind::Variable => crate::execution::plan::ResourceKind::Variable,
-            ProjectResourceKind::Plot => crate::execution::plan::ResourceKind::Plot,
+            ProjectResourceKind::DataFrame => yss_execution::plan::ResourceKind::DataFrame,
+            ProjectResourceKind::File => yss_execution::plan::ResourceKind::File,
+            ProjectResourceKind::Variable => yss_execution::plan::ResourceKind::Variable,
+            ProjectResourceKind::Plot => yss_execution::plan::ResourceKind::Plot,
         };
         let access = match grant.access() {
-            ProjectResourceAccess::Shared => crate::execution::plan::ResourceAccess::Shared,
-            ProjectResourceAccess::Exclusive => crate::execution::plan::ResourceAccess::Exclusive,
+            ProjectResourceAccess::Shared => yss_execution::plan::ResourceAccess::Shared,
+            ProjectResourceAccess::Exclusive => yss_execution::plan::ResourceAccess::Exclusive,
         };
-        let requirement = crate::execution::plan::PlanResourceRequirement::new(
+        let requirement = yss_execution::plan::PlanResourceRequirement::new(
             resource.clone(),
             kind,
             access,
@@ -731,13 +731,13 @@ fn map_project_resource_facts(
                     resource: grant.resource().clone(),
                 });
             }
-            crate::execution::value::RuntimeValue::try_from(&variable.data_value)
+            yss_execution::value::RuntimeValue::try_from(&variable.data_value)
                 .map_err(VariableBindingError::RuntimeValue)?
         } else {
-            crate::execution::value::RuntimeValue::Resource(resource.as_str().into())
+            yss_execution::value::RuntimeValue::Resource(resource.as_str().into())
         };
         bindings.push(
-            crate::execution::resource_preparation::RunResourceBinding::new(
+            yss_execution::resource_preparation::RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing(version.get().to_string().into()),
                 value,
@@ -745,7 +745,7 @@ fn map_project_resource_facts(
         );
     }
     Ok(
-        crate::execution::resource_preparation::RunResourceBindings::new(
+        yss_execution::resource_preparation::RunResourceBindings::new(
             PlanProjectSessionId::from_existing(project_session_id.into()),
             requirements,
             bindings,
@@ -775,9 +775,6 @@ mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-    use crate::execution::resource_preparation::ResourceProviderFactory;
-    use crate::execution::state::ExecutionRuntimeState;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
@@ -790,6 +787,9 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+    use yss_execution::resource_preparation::ResourceProviderFactory;
+    use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {

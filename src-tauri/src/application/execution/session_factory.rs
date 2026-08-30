@@ -7,11 +7,6 @@ use thiserror::Error;
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
 use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use crate::execution::plan::PlanProjectSessionId;
-use crate::execution::ports::scientific::ScientificBackend;
-use crate::execution::resource_preparation::ResourceProviderFactory;
-use crate::execution::state::ExecutionRuntimeState;
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
@@ -19,6 +14,11 @@ use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
+use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_execution::plan::PlanProjectSessionId;
+use yss_execution::ports::scientific::ScientificBackend;
+use yss_execution::resource_preparation::ResourceProviderFactory;
+use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 
 /// Composition-root supplied construction for one session-bound resource factory.
@@ -343,10 +343,6 @@ pub(crate) fn build_current_project_candidate(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-    use crate::execution::plan::PlanProjectSessionId;
-    use crate::execution::resource_preparation::ResourceProviderFactory;
-    use crate::execution::state::ExecutionRuntimeState;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
@@ -360,6 +356,10 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
         DatabaseSessionOpenRequest,
     };
+    use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+    use yss_execution::plan::PlanProjectSessionId;
+    use yss_execution::resource_preparation::ResourceProviderFactory;
+    use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {

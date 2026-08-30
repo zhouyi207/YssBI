@@ -3,8 +3,8 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::session_slot::{ApplicationState, SessionCaptureError};
-use crate::execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use crate::execution::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId};
+use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+use yss_execution::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId};
 use yss_graph_document::{GraphResourcePath, PortAddress};
 
 pub struct ResultPinQuery {
@@ -30,8 +30,7 @@ impl ApplicationState {
     pub fn query_result(
         &self,
         result_id: ResultId,
-    ) -> Result<Option<Arc<crate::execution::result::StoredResult>>, ResultQueryApplicationError>
-    {
+    ) -> Result<Option<Arc<yss_execution::result::StoredResult>>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         Ok(captured.execution().query_result(result_id))
     }
@@ -55,7 +54,7 @@ impl ApplicationState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::plan::{PlanGraphId, PlanPortAddress};
+    use yss_execution::plan::{PlanGraphId, PlanPortAddress};
 
     #[test]
     fn result_query_maps_opaque_graph_and_port_identities() {

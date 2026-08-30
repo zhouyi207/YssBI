@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::execution::ports::scientific::{
-    AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ScientificBackendError,
-};
 use crate::sci::api::time_series::serial_tests::compute_serial_tests as compute_serial_tests_api;
 use crate::sci::error::SciError;
+use yss_execution::ports::scientific::{
+    AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ScientificBackendError,
+};
 
 #[derive(Debug, Error)]
 pub enum AcfPacfApplicationError {

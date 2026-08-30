@@ -5,33 +5,32 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use crate::execution::error::RunPhase;
-use crate::execution::finalization::{
-    CandidateEffectProjection, ExecutionFinalizationHandoff, ReadyResult, ResultObservationIntent,
+use crate::error::RunPhase;
+use crate::finalization::{
+    ExecutionFinalizationHandoff, ReadyResult, ResultObservationIntent,
     SuccessfulExecutionCandidate,
 };
-use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use crate::execution::package_preparation::PreparedExecutionPlan;
-use crate::execution::ports::scientific::ScientificBackend;
-use crate::execution::resource_preparation::{
+use crate::identity::{ExecutionSessionId, RuntimeGeneration};
+use crate::package_preparation::PreparedExecutionPlan;
+use crate::ports::scientific::ScientificBackend;
+use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
-use crate::execution::result::{
-    ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResult,
-};
-use crate::execution::result_store::ResultStore;
-use crate::execution::run_registry::RunRegistry;
-use crate::execution::run_registry::{RunRegistryError, RunState};
-use crate::execution::value::RuntimeValue;
+use crate::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResult};
+use crate::result_store::ResultStore;
+use crate::run_registry::RunRegistry;
+use crate::run_registry::{RunRegistryError, RunState};
+use crate::value::RuntimeValue;
 
 #[derive(Clone)]
-pub(crate) struct RunExecutionControl {
+pub struct RunExecutionControl {
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
 }
 
 impl RunExecutionControl {
+    #[cfg(test)]
     pub(crate) fn new(deadline: Instant) -> Self {
         Self {
             cancellation: Arc::new(AtomicBool::new(false)),
@@ -39,7 +38,7 @@ impl RunExecutionControl {
         }
     }
 
-    pub(crate) fn with_cancellation(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
+    pub fn with_cancellation(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
         Self {
             cancellation,
             deadline,
@@ -58,7 +57,7 @@ impl RunExecutionControl {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum ExecutePreparedError {
+pub enum ExecutePreparedError {
     #[error("prepared execution belongs to another runtime generation")]
     RuntimeGenerationMismatch {
         expected: RuntimeGeneration,
@@ -81,7 +80,7 @@ pub(crate) enum ExecutePreparedError {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum KernelExecutionError {
+pub enum KernelExecutionError {
     #[error("prepared execution kernel was cancelled")]
     Cancelled,
     #[error("prepared execution kernel deadline was exceeded")]
@@ -93,19 +92,16 @@ pub(crate) enum KernelExecutionError {
 #[derive(Debug)]
 struct SchedulerOutput {
     results: Box<[ReadyResult]>,
-    effects: Box<[CandidateEffectProjection]>,
     observation_intents: Box<[ResultObservationIntent]>,
 }
 
 impl SchedulerOutput {
     fn new(
         results: Box<[ReadyResult]>,
-        effects: Box<[CandidateEffectProjection]>,
         observation_intents: Box<[ResultObservationIntent]>,
     ) -> Self {
         Self {
             results,
-            effects,
             observation_intents,
         }
     }
@@ -114,50 +110,50 @@ impl SchedulerOutput {
 trait PreparedPlanExecutor: Send + Sync {
     fn execute(
         &self,
-        package: &crate::execution::plan::CompiledExecutionPackage,
-        bindings: &[crate::execution::resource_preparation::RunResourceBinding],
+        package: &crate::plan::CompiledExecutionPackage,
+        bindings: &[crate::resource_preparation::RunResourceBinding],
         resources: &PreparedRunResources,
         control: &RunExecutionControl,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<SchedulerOutput, KernelExecutionError>;
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 struct UnavailableScientificBackend;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl ScientificBackend for UnavailableScientificBackend {
     fn statistics(
         &self,
-        _request: crate::execution::ports::scientific::StatisticsRequest,
-        _control: &crate::execution::ports::scientific::BackendExecutionControl,
+        _request: crate::ports::scientific::StatisticsRequest,
+        _control: &crate::ports::scientific::BackendExecutionControl,
     ) -> Result<
-        crate::execution::ports::scientific::StatisticsResult,
-        crate::execution::ports::scientific::ScientificBackendError,
+        crate::ports::scientific::StatisticsResult,
+        crate::ports::scientific::ScientificBackendError,
     > {
-        Err(crate::execution::ports::scientific::ScientificBackendError::Unavailable)
+        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
     }
 
     fn kernel_density(
         &self,
-        _request: crate::execution::ports::scientific::KernelDensityRequest,
-        _control: &crate::execution::ports::scientific::BackendExecutionControl,
+        _request: crate::ports::scientific::KernelDensityRequest,
+        _control: &crate::ports::scientific::BackendExecutionControl,
     ) -> Result<
-        crate::execution::ports::scientific::KernelDensityResult,
-        crate::execution::ports::scientific::ScientificBackendError,
+        crate::ports::scientific::KernelDensityResult,
+        crate::ports::scientific::ScientificBackendError,
     > {
-        Err(crate::execution::ports::scientific::ScientificBackendError::Unavailable)
+        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
     }
 
     fn acf_pacf(
         &self,
-        _request: crate::execution::ports::scientific::AcfPacfRequest,
-        _control: &crate::execution::ports::scientific::BackendExecutionControl,
+        _request: crate::ports::scientific::AcfPacfRequest,
+        _control: &crate::ports::scientific::BackendExecutionControl,
     ) -> Result<
-        crate::execution::ports::scientific::AcfPacfResult,
-        crate::execution::ports::scientific::ScientificBackendError,
+        crate::ports::scientific::AcfPacfResult,
+        crate::ports::scientific::ScientificBackendError,
     > {
-        Err(crate::execution::ports::scientific::ScientificBackendError::Unavailable)
+        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
     }
 }
 
@@ -167,11 +163,11 @@ struct NeutralPlanExecutor;
 impl PreparedPlanExecutor for NeutralPlanExecutor {
     fn execute(
         &self,
-        package: &crate::execution::plan::CompiledExecutionPackage,
-        _bindings: &[crate::execution::resource_preparation::RunResourceBinding],
+        package: &crate::plan::CompiledExecutionPackage,
+        _bindings: &[crate::resource_preparation::RunResourceBinding],
         resources: &PreparedRunResources,
         control: &RunExecutionControl,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<SchedulerOutput, KernelExecutionError> {
         let mut values = Vec::new();
         let mut inspected = None;
@@ -183,11 +179,11 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .inputs()
                 .iter()
                 .map(|binding| match binding.source() {
-                    crate::execution::plan::PlanInputSource::Value(reference) => values
+                    crate::plan::PlanInputSource::Value(reference) => values
                         .get(reference.index() as usize)
                         .cloned()
                         .ok_or(KernelExecutionError::Failed),
-                    crate::execution::plan::PlanInputSource::Parameter(handle) => {
+                    crate::plan::PlanInputSource::Parameter(handle) => {
                         let Some(payload) = package.parameters().entries().get(handle) else {
                             return Err(KernelExecutionError::Failed);
                         };
@@ -216,11 +212,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
         }
 
         let Some(value) = inspected.or(last_output) else {
-            return Ok(SchedulerOutput::new(
-                Box::new([]),
-                Box::new([]),
-                Box::new([]),
-            ));
+            return Ok(SchedulerOutput::new(Box::new([]), Box::new([])));
         };
         let result_id = ResultId::from_existing(
             run_id
@@ -238,7 +230,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .rev()
                 .find(|operation| operation.output().is_some())
                 .map(|operation| operation.result_category())
-                .unwrap_or(crate::execution::plan::ResultCategory::Value),
+                .unwrap_or(crate::plan::ResultCategory::Value),
         );
         let observation_intents = if package
             .plan()
@@ -264,7 +256,6 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
         };
         Ok(SchedulerOutput::new(
             vec![result].into_boxed_slice(),
-            Box::new([]),
             observation_intents,
         ))
     }
@@ -281,36 +272,30 @@ fn check_kernel_control(control: &RunExecutionControl) -> Result<(), KernelExecu
 }
 
 fn parameter_value(
-    value: &crate::execution::plan::PlanParameterValue,
+    value: &crate::plan::PlanParameterValue,
     resources: &PreparedRunResources,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     match value {
-        crate::execution::plan::PlanParameterValue::Scalar(scalar) => Ok(match scalar {
-            crate::execution::plan::PlanParameterScalar::Null => RuntimeValue::Null,
-            crate::execution::plan::PlanParameterScalar::Bool(value) => RuntimeValue::Bool(*value),
-            crate::execution::plan::PlanParameterScalar::Integer(value) => {
-                RuntimeValue::Integer(*value)
-            }
-            crate::execution::plan::PlanParameterScalar::Unsigned(value) => {
-                RuntimeValue::Unsigned(*value)
-            }
-            crate::execution::plan::PlanParameterScalar::Decimal(value) => {
+        crate::plan::PlanParameterValue::Scalar(scalar) => Ok(match scalar {
+            crate::plan::PlanParameterScalar::Null => RuntimeValue::Null,
+            crate::plan::PlanParameterScalar::Bool(value) => RuntimeValue::Bool(*value),
+            crate::plan::PlanParameterScalar::Integer(value) => RuntimeValue::Integer(*value),
+            crate::plan::PlanParameterScalar::Unsigned(value) => RuntimeValue::Unsigned(*value),
+            crate::plan::PlanParameterScalar::Decimal(value) => {
                 RuntimeValue::Decimal(value.value())
             }
-            crate::execution::plan::PlanParameterScalar::String(value) => {
-                RuntimeValue::String(value.clone())
-            }
+            crate::plan::PlanParameterScalar::String(value) => RuntimeValue::String(value.clone()),
         }),
-        crate::execution::plan::PlanParameterValue::Resource(resource) => resources
+        crate::plan::PlanParameterValue::Resource(resource) => resources
             .value(resource)
             .cloned()
             .ok_or(KernelExecutionError::Failed),
-        crate::execution::plan::PlanParameterValue::List(values) => values
+        crate::plan::PlanParameterValue::List(values) => values
             .iter()
             .map(|value| parameter_value(value, resources))
             .collect::<Result<Vec<_>, _>>()
             .map(|values| RuntimeValue::List(values.into_boxed_slice())),
-        crate::execution::plan::PlanParameterValue::Record(fields) => fields
+        crate::plan::PlanParameterValue::Record(fields) => fields
             .iter()
             .map(|(field, value)| {
                 Ok((
@@ -326,7 +311,7 @@ fn parameter_value(
 fn execute_operation(
     kind: &str,
     inputs: &[RuntimeValue],
-    parameter: Option<&crate::execution::plan::PlanParameterValue>,
+    parameter: Option<&crate::plan::PlanParameterValue>,
     resources: &PreparedRunResources,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     match kind {
@@ -338,8 +323,7 @@ fn execute_operation(
             .transpose()?
             .ok_or(KernelExecutionError::Failed),
         "yssbi.project.variable.get" => {
-            let Some(crate::execution::plan::PlanParameterValue::Resource(resource)) = parameter
-            else {
+            let Some(crate::plan::PlanParameterValue::Resource(resource)) = parameter else {
                 return Err(KernelExecutionError::Failed);
             };
             resources
@@ -454,16 +438,17 @@ fn compare_numeric(
 
 struct RunLifecycleGuard<'a> {
     registry: &'a RunRegistry,
-    run_id: crate::execution::run_registry::RunId,
+    run_id: crate::run_registry::RunId,
     terminal: bool,
 }
 
 struct ExecutedPreparedCandidate {
-    run_id: crate::execution::run_registry::RunId,
+    run_id: crate::run_registry::RunId,
     candidate: SuccessfulExecutionCandidate,
 }
 
 impl ExecutedPreparedCandidate {
+    #[cfg(test)]
     fn candidate(self) -> SuccessfulExecutionCandidate {
         self.candidate
     }
@@ -476,21 +461,21 @@ impl ExecutedPreparedCandidate {
     }
 }
 
-pub(crate) struct ExecutedPreparedRun {
-    run_id: crate::execution::run_registry::RunId,
+pub struct ExecutedPreparedRun {
+    run_id: crate::run_registry::RunId,
     handoff: ExecutionFinalizationHandoff,
 }
 
 impl ExecutedPreparedRun {
-    pub(crate) const fn run_id(&self) -> crate::execution::run_registry::RunId {
+    pub const fn run_id(&self) -> crate::run_registry::RunId {
         self.run_id
     }
 
-    pub(crate) fn handoff(&self) -> &ExecutionFinalizationHandoff {
+    pub fn handoff(&self) -> &ExecutionFinalizationHandoff {
         &self.handoff
     }
 
-    pub(crate) fn into_handoff(self) -> ExecutionFinalizationHandoff {
+    pub fn into_handoff(self) -> ExecutionFinalizationHandoff {
         self.handoff
     }
 }
@@ -498,7 +483,7 @@ impl ExecutedPreparedRun {
 impl<'a> RunLifecycleGuard<'a> {
     fn start(
         registry: &'a RunRegistry,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<Self, RunRegistryError> {
         registry.transition(run_id, RunState::Running)?;
         Ok(Self {
@@ -543,18 +528,18 @@ struct RuntimeAdmission {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub(crate) enum ExecutionAdmissionError {
+pub enum ExecutionAdmissionError {
     #[error("execution session admission is closed")]
     Closed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ExecutionDrainControl {
+pub struct ExecutionDrainControl {
     deadline: Instant,
 }
 
 impl ExecutionDrainControl {
-    pub(crate) const fn new(deadline: Instant) -> Self {
+    pub const fn new(deadline: Instant) -> Self {
         Self { deadline }
     }
 
@@ -564,8 +549,8 @@ impl ExecutionDrainControl {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct ExecutionOutstandingWork {
-    pub(crate) active: usize,
+pub struct ExecutionOutstandingWork {
+    active: usize,
 }
 
 impl ExecutionOutstandingWork {
@@ -575,7 +560,7 @@ impl ExecutionOutstandingWork {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ExecutionDrainOutcome {
+pub enum ExecutionDrainOutcome {
     Drained {
         outstanding: ExecutionOutstandingWork,
     },
@@ -585,7 +570,7 @@ pub(crate) enum ExecutionDrainOutcome {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ExecutionCancelOutcome {
+pub enum ExecutionCancelOutcome {
     NotFound,
     AlreadyCancelled,
     AlreadyTerminal,
@@ -593,7 +578,7 @@ pub(crate) enum ExecutionCancelOutcome {
 }
 
 #[must_use = "an execution work lease releases session admission when dropped"]
-pub(crate) struct ExecutionWorkLease {
+pub struct ExecutionWorkLease {
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
 }
 
@@ -607,11 +592,11 @@ pub struct ExecutionRuntimeState {
     runs: RunRegistry,
     scientific_backend: Arc<dyn ScientificBackend>,
     executor: Arc<dyn PreparedPlanExecutor>,
-    active_controls: Mutex<BTreeMap<crate::execution::run_registry::RunId, Arc<AtomicBool>>>,
+    active_controls: Mutex<BTreeMap<crate::run_registry::RunId, Arc<AtomicBool>>>,
 }
 
 impl ExecutionRuntimeState {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn new(session_id: ExecutionSessionId, generation: RuntimeGeneration) -> Self {
         Self::from_composition(
             session_id,
@@ -645,11 +630,11 @@ impl ExecutionRuntimeState {
         self.generation
     }
 
-    pub(crate) fn scientific_backend(&self) -> &dyn ScientificBackend {
+    pub fn scientific_backend(&self) -> &dyn ScientificBackend {
         self.scientific_backend.as_ref()
     }
 
-    pub(crate) fn close_admission(&self) {
+    pub fn close_admission(&self) {
         let (state, _) = &*self.admission;
         state.lock().unwrap_or_else(PoisonError::into_inner).closed = true;
     }
@@ -659,26 +644,28 @@ impl ExecutionRuntimeState {
         state.lock().unwrap_or_else(PoisonError::into_inner).closed
     }
 
+    #[cfg(test)]
     pub(crate) fn results(&self) -> &ResultStore {
         &self.results
     }
 
-    pub(crate) fn query_result(&self, result_id: ResultId) -> Option<Arc<StoredResult>> {
+    pub fn query_result(&self, result_id: ResultId) -> Option<Arc<StoredResult>> {
         self.results.get(result_id)
     }
 
-    pub(crate) fn query_pin_result_history(
+    pub fn query_pin_result_history(
         &self,
-        output: &crate::execution::plan::PlanOutputRef,
+        output: &crate::plan::PlanOutputRef,
     ) -> Result<Box<[PinResultHistorySnapshot]>, ExecutionResultQueryError> {
         self.results.query_pin_result_history(output)
     }
 
-    pub(crate) fn runs(&self) -> &RunRegistry {
+    pub fn runs(&self) -> &RunRegistry {
         &self.runs
     }
 
-    pub(crate) fn execute_prepared(
+    #[cfg(test)]
+    fn execute_prepared(
         &self,
         plan: &PreparedExecutionPlan,
         bindings: RunResourceBindings,
@@ -698,13 +685,13 @@ impl ExecutionRuntimeState {
         Ok(executed.candidate())
     }
 
-    pub(crate) fn execute_prepared_handoff(
+    pub fn execute_prepared_handoff(
         &self,
         plan: &PreparedExecutionPlan,
         bindings: RunResourceBindings,
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
-        mut on_run_started: impl FnMut(crate::execution::run_registry::RunId),
+        mut on_run_started: impl FnMut(crate::run_registry::RunId),
     ) -> Result<ExecutedPreparedRun, ExecutePreparedError> {
         self.execute_prepared_inner(
             plan,
@@ -724,7 +711,7 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
         executor: Option<&dyn PreparedPlanExecutor>,
-        mut on_run_started: Option<&mut dyn FnMut(crate::execution::run_registry::RunId)>,
+        mut on_run_started: Option<&mut dyn FnMut(crate::run_registry::RunId)>,
     ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
         let actual_generation = self.generation();
         let plan_generation = plan.generation();
@@ -815,10 +802,9 @@ impl ExecutionRuntimeState {
             return result;
         }
 
-        let (effects, grants) = prepared_resources.finish();
+        let grants = prepared_resources.finish();
         let candidate = SuccessfulExecutionCandidate::from_scheduler(
             output.results,
-            effects,
             output.observation_intents,
             grants,
         );
@@ -845,17 +831,14 @@ impl ExecutionRuntimeState {
         Ok(executed.candidate())
     }
 
-    fn remove_active_control(&self, run_id: crate::execution::run_registry::RunId) {
+    fn remove_active_control(&self, run_id: crate::run_registry::RunId) {
         self.active_controls
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .remove(&run_id);
     }
 
-    pub(crate) fn cancel_run(
-        &self,
-        run_id: crate::execution::run_registry::RunId,
-    ) -> ExecutionCancelOutcome {
+    pub fn cancel_run(&self, run_id: crate::run_registry::RunId) -> ExecutionCancelOutcome {
         match self.runs.state(run_id) {
             None => ExecutionCancelOutcome::NotFound,
             Some(RunState::Cancelled) => ExecutionCancelOutcome::AlreadyCancelled,
@@ -875,35 +858,35 @@ impl ExecutionRuntimeState {
         }
     }
 
-    pub(crate) fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) {
+    pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) {
         for result in handoff.results() {
             self.results
                 .publish(result.result_id(), result.value().clone());
         }
     }
 
-    pub(crate) fn finalize_run_success(
+    pub fn finalize_run_success(
         &self,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<(), RunRegistryError> {
         self.runs.transition(run_id, RunState::Succeeded)
     }
 
-    pub(crate) fn finalize_run_failure(
+    pub fn finalize_run_failure(
         &self,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<(), RunRegistryError> {
         self.runs.transition(run_id, RunState::Failed)
     }
 
-    pub(crate) fn finalize_run_cancelled(
+    pub fn finalize_run_cancelled(
         &self,
-        run_id: crate::execution::run_registry::RunId,
+        run_id: crate::run_registry::RunId,
     ) -> Result<(), RunRegistryError> {
         self.runs.transition(run_id, RunState::Cancelled)
     }
 
-    pub(crate) fn admit(&self) -> Result<ExecutionWorkLease, ExecutionAdmissionError> {
+    pub fn admit(&self) -> Result<ExecutionWorkLease, ExecutionAdmissionError> {
         let (state, _) = &*self.admission;
         let mut state = state.lock().unwrap_or_else(PoisonError::into_inner);
         if state.closed {
@@ -916,7 +899,7 @@ impl ExecutionRuntimeState {
         })
     }
 
-    pub(crate) fn drain(&self, control: &ExecutionDrainControl) -> ExecutionDrainOutcome {
+    pub fn drain(&self, control: &ExecutionDrainControl) -> ExecutionDrainOutcome {
         let (state, changed) = &*self.admission;
         let mut state = state.lock().unwrap_or_else(PoisonError::into_inner);
         loop {
@@ -944,10 +927,7 @@ impl ExecutionRuntimeState {
         }
     }
 
-    pub(crate) fn cancel_and_drain(
-        &self,
-        control: &ExecutionDrainControl,
-    ) -> ExecutionDrainOutcome {
+    pub fn cancel_and_drain(&self, control: &ExecutionDrainControl) -> ExecutionDrainOutcome {
         self.close_admission();
         self.drain(control)
     }
@@ -955,7 +935,7 @@ impl ExecutionRuntimeState {
 
 fn terminate_run(
     lifecycle: &mut RunLifecycleGuard<'_>,
-    run_id: crate::execution::run_registry::RunId,
+    run_id: crate::run_registry::RunId,
     error: ExecutePreparedError,
 ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
     let transition = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
@@ -982,18 +962,18 @@ impl Drop for ExecutionWorkLease {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::identity::ExecutionSessionId;
-    use crate::execution::package_preparation::PreparedExecutionPlan;
-    use crate::execution::plan::{
+    use crate::identity::ExecutionSessionId;
+    use crate::package_preparation::PreparedExecutionPlan;
+    use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
         ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanGraphRevision,
         PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
         PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
         PlanSourceIdentity, ResourceAccess, ResourceKind,
     };
-    use crate::execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
-    use crate::execution::result_store::{ResultId, StoredResult};
-    use crate::execution::run_registry::{RunId, RunState};
+    use crate::resource_preparation::{RunResourceBinding, RunResourceBindings};
+    use crate::result_store::{ResultId, StoredResult};
+    use crate::run_registry::{RunId, RunState};
     use std::collections::BTreeMap;
     use std::time::Duration;
 
@@ -1041,7 +1021,7 @@ mod tests {
             [RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing("v1".into()),
-                crate::execution::value::RuntimeValue::Integer(4),
+                crate::value::RuntimeValue::Integer(4),
             )],
         )
     }
@@ -1060,16 +1040,15 @@ mod tests {
             assert_eq!(bindings.len(), 1);
             assert_eq!(
                 resources.value(&PlanResourceId::from_existing("variables/answer".into())),
-                Some(&crate::execution::value::RuntimeValue::Integer(4))
+                Some(&crate::value::RuntimeValue::Integer(4))
             );
             Ok(SchedulerOutput::new(
                 vec![ReadyResult::from_scheduler(
                     ResultId::from_existing(1),
-                    StoredResult::Runtime(crate::execution::value::RuntimeValue::Integer(5)),
-                    crate::execution::plan::ResultCategory::Value,
+                    StoredResult::Runtime(crate::value::RuntimeValue::Integer(5)),
+                    crate::plan::ResultCategory::Value,
                 )]
                 .into_boxed_slice(),
-                Box::new([]),
                 Box::new([]),
             ))
         }
@@ -1078,7 +1057,7 @@ mod tests {
     fn state() -> ExecutionRuntimeState {
         ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
-            crate::execution::identity::RuntimeGeneration::INITIAL,
+            crate::identity::RuntimeGeneration::INITIAL,
         )
     }
 
@@ -1148,11 +1127,11 @@ mod tests {
         assert_eq!(handoff.results()[0].result_id(), ResultId::from_existing(1));
         assert_eq!(
             handoff.results()[0].value().value(),
-            &StoredResult::Runtime(crate::execution::value::RuntimeValue::Integer(5))
+            &StoredResult::Runtime(crate::value::RuntimeValue::Integer(5))
         );
         assert_eq!(
             handoff.results()[0].category(),
-            crate::execution::plan::ResultCategory::Value
+            crate::plan::ResultCategory::Value
         );
         assert_eq!(
             state.runs().state(RunId::from_existing(0)),

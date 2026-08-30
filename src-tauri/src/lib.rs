@@ -8,7 +8,6 @@ pub mod commands;
 pub mod database;
 pub mod error;
 pub mod event;
-pub mod execution;
 
 mod graph;
 pub mod julia;
@@ -46,7 +45,7 @@ enum ApplicationInitializationError {
 fn initialize_application_state(
     project_state: Arc<project::ProjectState>,
 ) -> Result<application::execution::ApplicationState, ApplicationInitializationError> {
-    let scientific_backend: Arc<dyn execution::ports::scientific::ScientificBackend> =
+    let scientific_backend: Arc<dyn yss_execution::ports::scientific::ScientificBackend> =
         Arc::new(backend_adapters::execution::scientific::SciApiScientificBackend::new());
     let builder =
         application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(

@@ -1,12 +1,12 @@
 use crate::application::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunDemand,
 };
-use crate::execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use crate::execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
-use crate::execution::value::RuntimeValue;
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
+use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+use yss_execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
+use yss_execution::value::RuntimeValue;
 use yss_graph_document::GraphResourcePath;
 
 const MAX_SAFE_PREVIEW_GENERATION: u64 = 9_007_199_254_740_991;
@@ -361,61 +361,61 @@ impl ResultDescriptorDto {
     }
 }
 
-fn result_presentation(category: crate::execution::plan::ResultCategory) -> ResultPresentationDto {
+fn result_presentation(category: yss_execution::plan::ResultCategory) -> ResultPresentationDto {
     match category {
-        crate::execution::plan::ResultCategory::Value => ResultPresentationDto::Inspector,
-        crate::execution::plan::ResultCategory::PlotData(kind) => ResultPresentationDto::Plot {
+        yss_execution::plan::ResultCategory::Value => ResultPresentationDto::Inspector,
+        yss_execution::plan::ResultCategory::PlotData(kind) => ResultPresentationDto::Plot {
             chart: match kind {
-                crate::execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
-                crate::execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
-                crate::execution::plan::PlotDataKind::Plot => ResultPlotKindDto::Plot,
-                crate::execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
-                crate::execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
-                crate::execution::plan::PlotDataKind::Histogram => ResultPlotKindDto::Histogram,
-                crate::execution::plan::PlotDataKind::Correlation => ResultPlotKindDto::Correlation,
-                crate::execution::plan::PlotDataKind::Correlogram => ResultPlotKindDto::Correlogram,
+                yss_execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
+                yss_execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
+                yss_execution::plan::PlotDataKind::Plot => ResultPlotKindDto::Plot,
+                yss_execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
+                yss_execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
+                yss_execution::plan::PlotDataKind::Histogram => ResultPlotKindDto::Histogram,
+                yss_execution::plan::PlotDataKind::Correlation => ResultPlotKindDto::Correlation,
+                yss_execution::plan::PlotDataKind::Correlogram => ResultPlotKindDto::Correlogram,
             },
         },
-        crate::execution::plan::ResultCategory::StatisticalReport(kind) => {
+        yss_execution::plan::ResultCategory::StatisticalReport(kind) => {
             ResultPresentationDto::Report {
                 report: match kind {
-                    crate::execution::plan::StatisticalReportKind::OlsSummary => {
+                    yss_execution::plan::StatisticalReportKind::OlsSummary => {
                         ResultReportKindDto::OlsSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::BinarySummary => {
+                    yss_execution::plan::StatisticalReportKind::BinarySummary => {
                         ResultReportKindDto::BinarySummary
                     }
-                    crate::execution::plan::StatisticalReportKind::Iv2slsSummary => {
+                    yss_execution::plan::StatisticalReportKind::Iv2slsSummary => {
                         ResultReportKindDto::Iv2slsSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::IvLimlSummary => {
+                    yss_execution::plan::StatisticalReportKind::IvLimlSummary => {
                         ResultReportKindDto::IvLimlSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::PraisSummary => {
+                    yss_execution::plan::StatisticalReportKind::PraisSummary => {
                         ResultReportKindDto::PraisSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::VarSummary => {
+                    yss_execution::plan::StatisticalReportKind::VarSummary => {
                         ResultReportKindDto::VarSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::VarSoc => {
+                    yss_execution::plan::StatisticalReportKind::VarSoc => {
                         ResultReportKindDto::VarSoc
                     }
-                    crate::execution::plan::StatisticalReportKind::PanelSummary => {
+                    yss_execution::plan::StatisticalReportKind::PanelSummary => {
                         ResultReportKindDto::PanelSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::PanelDid => {
+                    yss_execution::plan::StatisticalReportKind::PanelDid => {
                         ResultReportKindDto::PanelDid
                     }
-                    crate::execution::plan::StatisticalReportKind::DfAdfSummary => {
+                    yss_execution::plan::StatisticalReportKind::DfAdfSummary => {
                         ResultReportKindDto::DfAdfSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::DfAdfSummaryList => {
+                    yss_execution::plan::StatisticalReportKind::DfAdfSummaryList => {
                         ResultReportKindDto::DfAdfSummaryList
                     }
-                    crate::execution::plan::StatisticalReportKind::VecSummary => {
+                    yss_execution::plan::StatisticalReportKind::VecSummary => {
                         ResultReportKindDto::VecSummary
                     }
-                    crate::execution::plan::StatisticalReportKind::VecRankSummary => {
+                    yss_execution::plan::StatisticalReportKind::VecRankSummary => {
                         ResultReportKindDto::VecRankSummary
                     }
                 },

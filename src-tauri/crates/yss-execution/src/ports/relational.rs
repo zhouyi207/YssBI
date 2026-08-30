@@ -4,7 +4,7 @@ use std::time::Instant;
 use yss_tabular_contract::TabularSnapshot;
 
 use super::scientific::BackendCancellationToken;
-use crate::execution::plan::{ExecutionPlan, PlanResourceId};
+use crate::plan::{ExecutionPlan, PlanResourceId};
 
 #[derive(Clone)]
 pub struct RelationalExecutionControl {

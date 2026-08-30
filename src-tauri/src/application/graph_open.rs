@@ -3,12 +3,12 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::execution::plan::{
-    PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
-};
 use crate::graph::analysis::GraphAnalysis;
 use crate::graph::error::GraphMutationError;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId};
+use yss_execution::plan::{
+    PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
+};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 use super::catalog_query::revalidate_project_catalog_facts;

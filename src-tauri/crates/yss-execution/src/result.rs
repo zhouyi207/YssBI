@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::execution::plan::PlanGraphRevision;
-use crate::execution::plan::ResultCategory;
-use crate::execution::value::RuntimeValue;
+use crate::plan::PlanGraphRevision;
+use crate::plan::ResultCategory;
+use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
 
@@ -92,7 +92,8 @@ pub struct PinResultEntry {
 }
 
 impl PinResultEntry {
-    pub(in crate::execution) fn new(
+    #[cfg(test)]
+    pub(crate) fn new(
         result_id: ResultId,
         run_id: RunId,
         activation_id: ActivationId,
@@ -143,11 +144,11 @@ pub struct PinResultHistorySnapshot {
 }
 
 impl PinResultHistorySnapshot {
-    pub(in crate::execution) fn new(entry: PinResultEntry, result: Arc<StoredResult>) -> Self {
+    pub(crate) fn new(entry: PinResultEntry, result: Arc<StoredResult>) -> Self {
         Self { entry, result }
     }
 
-    pub(crate) fn into_parts(self) -> (PinResultEntry, Arc<StoredResult>) {
+    pub fn into_parts(self) -> (PinResultEntry, Arc<StoredResult>) {
         (self.entry, self.result)
     }
 }

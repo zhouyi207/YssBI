@@ -334,12 +334,12 @@ const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
     "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
 ];
 const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
-    "src-tauri/src/execution/ports/scientific.rs",
+    "src-tauri/crates/yss-execution/src/ports/scientific.rs",
     "src-tauri/src/backend_adapters/mod.rs",
     "src-tauri/src/backend_adapters/execution/mod.rs",
     "src-tauri/src/backend_adapters/execution/scientific.rs",
 ];
-const SCIENTIFIC_PORT_FILE: &str = "src-tauri/src/execution/ports/scientific.rs";
+const SCIENTIFIC_PORT_FILE: &str = "src-tauri/crates/yss-execution/src/ports/scientific.rs";
 const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/src/backend_adapters/execution/scientific.rs";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct WorkerFunction {

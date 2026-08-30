@@ -277,6 +277,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-execution"
+                && root.target == "yss_execution"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-analysis-contract"
                 && root.target == "yss_graph_analysis_contract"
                 && root.kind == ProductionRootKind::Library)
@@ -446,6 +454,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-diagnostics"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_execution"
+                    && alias.member_package == "yss-execution"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-execution"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -714,6 +740,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
     };
+    let execution_root = ProductionRoot {
+        package_id: "execution-package".to_owned(),
+        package: "yss-execution".to_owned(),
+        target: "yss_execution".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-execution/src/lib.rs"),
+    };
     let graph_analysis_contract_root = ProductionRoot {
         package_id: "graph-analysis-contract-package".to_owned(),
         package: "yss-graph-analysis-contract".to_owned(),
@@ -797,6 +830,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         data_contract_root.clone(),
         database_contract_root.clone(),
         diagnostics_root.clone(),
+        execution_root.clone(),
         graph_analysis_contract_root.clone(),
         graph_catalog_root.clone(),
         graph_compiler_diagnostics_root.clone(),
@@ -911,9 +945,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_window_state",
             ),
             module(
-                &runtime_root,
-                "src-tauri/src/execution/settings.rs",
-                "fixture_lib::execution::settings",
+                &execution_root,
+                "src-tauri/crates/yss-execution/src/settings.rs",
+                "yss_execution::settings",
             ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
@@ -997,7 +1031,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PlatformAdapter
     );
     assert_eq!(
-        classified["src-tauri/src/execution/settings.rs"],
+        classified["src-tauri/crates/yss-execution/src/settings.rs"],
         RustLayer::Execution
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
@@ -1457,6 +1491,7 @@ fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
     for relative in [
         "src-tauri/src/node_system",
         "src-tauri/src/execution/plan/legacy",
+        "src-tauri/crates/yss-execution/src/plan/legacy",
     ] {
         assert!(
             !root.join(relative).exists(),
@@ -1481,6 +1516,57 @@ fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
         assert!(
             !project_store.contains(removed_mirror),
             "ProjectStore must not restore the test-only runtime mirror '{removed_mirror}'"
+        );
+    }
+}
+
+#[test]
+fn execution_has_one_crate_owner_without_compatibility_or_dead_effect_mirrors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-execution/Cargo.toml",
+        "src-tauri/crates/yss-execution/src/lib.rs",
+        "src-tauri/crates/yss-execution/src/plan/mod.rs",
+        "src-tauri/crates/yss-execution/src/state.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "execution owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/execution").exists(),
+        "the root crate must not retain an execution compatibility module"
+    );
+
+    let manifest = std::fs::read_to_string(root.join("src-tauri/crates/yss-execution/Cargo.toml"))
+        .expect("execution manifest must be readable");
+    assert!(
+        manifest.contains("test-support = []"),
+        "execution test constructors must stay behind an explicit feature"
+    );
+
+    let sources = [
+        "src-tauri/crates/yss-execution/src/finalization.rs",
+        "src-tauri/crates/yss-execution/src/resource_preparation.rs",
+        "src-tauri/crates/yss-execution/src/state.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "CandidateEffectProjection",
+        "CandidateExecutionEffects",
+        "ExecutionEffectBuffer",
+        "enum ExecutionEffect",
+        "cfg(all(test, any()))",
+    ] {
+        assert!(
+            !sources.contains(removed),
+            "execution must not restore dead effect/test machinery '{removed}'"
         );
     }
 }

@@ -1,16 +1,16 @@
 use std::time::{Duration, Instant};
 
 use super::{SciApiScientificBackend, map_sci_error, map_settings};
-use crate::execution::ports::scientific::{
+use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComputationSettings};
+use crate::sci::error::{SciError, SciOperationCode};
+use yss_execution::ports::scientific::{
     AcfPacfRequest, BackendCancellationToken, BackendExecutionControl, ExecutionRegressionKind,
     KdePoint, KernelDensityRequest, ScientificBackend, ScientificBackendError,
     ScientificInputViolation, StatisticsOperation, StatisticsParameters, StatisticsRequest,
 };
-use crate::execution::settings::{
+use yss_execution::settings::{
     ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
 };
-use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComputationSettings};
-use crate::sci::error::{SciError, SciOperationCode};
 
 fn settings(missing_values: ExecutionMissingValuePolicy) -> ExecutionSettings {
     ExecutionSettings {

@@ -8,9 +8,7 @@ use super::{
     KernelDensityRequest, KernelDensityResult, ScientificBackend, ScientificBackendError,
     StatisticsOperation, StatisticsParameters, StatisticsRequest, StatisticsResult,
 };
-use crate::execution::settings::{
-    ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
-};
+use crate::settings::{ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RecordedControl {

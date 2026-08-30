@@ -11,15 +11,13 @@ use crate::database::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
 };
-use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use crate::execution::ports::scientific::ScientificBackend;
-use crate::execution::resource_preparation::ResourceProviderFactory;
-use crate::execution::state::{
-    ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState,
-};
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectInstanceId, ProjectState};
+use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_execution::ports::scientific::ScientificBackend;
+use yss_execution::resource_preparation::ResourceProviderFactory;
+use yss_execution::state::{ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ApplicationSessionEpoch(u64);
@@ -1201,7 +1199,6 @@ impl ApplicationState {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::execution::identity::ExecutionSessionId;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{GraphRuntimeComponents, GraphRuntimeEpoch};
     use std::collections::BTreeMap;
@@ -1213,6 +1210,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_execution::identity::ExecutionSessionId;
     use yss_graph_catalog::build_builtin_node_system;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {

@@ -1,12 +1,5 @@
 use std::time::Instant;
 
-use crate::execution::ports::scientific::{
-    AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ExecutionInstrumentalVariableKind,
-    ExecutionRegressionKind, ExecutionStatisticalTrend, KdePoint, KernelDensityRequest,
-    KernelDensityResult, ScientificBackend, ScientificBackendError, ScientificInputViolation,
-    StatisticsOperation, StatisticsParameters, StatisticsRequest, StatisticsResult,
-};
-use crate::execution::settings::{ExecutionMissingValuePolicy, ExecutionSettings};
 use crate::sci::api::computation::{
     MissingValuePolicy, NumericTolerance, SciComputationSettings, StatisticalObservationMetadata,
     StatisticalSettingSource,
@@ -23,6 +16,13 @@ use crate::sci::api::time_series::acf_pacf::{
     AcfPacfInput, compute_acf_pacf as compute_acf_pacf_api,
 };
 use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
+use yss_execution::ports::scientific::{
+    AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ExecutionInstrumentalVariableKind,
+    ExecutionRegressionKind, ExecutionStatisticalTrend, KdePoint, KernelDensityRequest,
+    KernelDensityResult, ScientificBackend, ScientificBackendError, ScientificInputViolation,
+    StatisticsOperation, StatisticsParameters, StatisticsRequest, StatisticsResult,
+};
+use yss_execution::settings::{ExecutionMissingValuePolicy, ExecutionSettings};
 
 pub struct SciApiScientificBackend;
 

@@ -606,3 +606,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 在提取 `yss-execution` 前删除仅由 `cfg(test)` 挂载的旧 `node_system` runtime 与
   `execution::plan::legacy`，同步清除 ProjectStore 中生产不存在的 database/catalog/run/result
   镜像、永久禁用旧 command/application route 及其测试，确保新 execution 成为唯一运行时事实源。
+- [ ] 将唯一生产 execution runtime、plan、ports、result store 与 lifecycle state 迁入
+  `src-tauri/crates/yss-execution/`；根 crate 直接消费该 crate 而不保留兼容 module，测试构造器通过
+  `test-support` feature 隔离，并删除从未读取或构造的 candidate/resource effect 镜像链。
