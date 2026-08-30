@@ -36,7 +36,6 @@ pub mod variable_tabular;
 
 pub mod resource_patch;
 pub mod resource_reveal;
-pub mod unique_name;
 pub mod worksheet_io;
 pub mod worksheet_resource_path;
 

@@ -35,10 +35,11 @@ use crate::database::{
 };
 use crate::project::ProjectDatabaseError;
 use crate::project::{
-    ProjectFilesystemError, ProjectSession, ProjectState, relative_project_duckdb_path, unique_name,
+    ProjectFilesystemError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
 use uuid::Uuid;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
+use yss_display_naming::allocate_unique_display_name;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularSnapshot;
 
@@ -1427,16 +1428,17 @@ fn atomic_replace_export(temporary: &Path, destination: &Path) -> std::io::Resul
 }
 
 fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
-    let existing: Vec<String> = state
+    state
         .get_data()
         .map(|data| {
-            data.databases
-                .values()
-                .map(|database| database.name.to_string())
-                .collect()
+            allocate_unique_display_name(
+                base_name,
+                data.databases
+                    .values()
+                    .map(|database| database.name.as_ref()),
+            )
         })
-        .unwrap_or_default();
-    unique_name::unique_name(base_name, existing.iter().map(|s| s.as_str()))
+        .unwrap_or_else(|_| base_name.to_owned())
 }
 
 /// Persist in-memory edits into the project's DuckDB table (`project.duckdb`).

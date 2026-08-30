@@ -1,4 +1,5 @@
 use super::*;
+use yss_display_naming::allocate_unique_display_name;
 
 impl ProjectState {
     #[cfg(test)]
@@ -124,10 +125,7 @@ impl ProjectState {
             } => {
                 let variable = VariableInstance {
                     id: VariableId::new(),
-                    name: crate::project::unique_name::unique_name(
-                        &name,
-                        names.iter().map(String::as_str).collect::<Vec<_>>(),
-                    ),
+                    name: allocate_unique_display_name(&name, names.iter().map(String::as_str)),
                     data_type,
                     data_value,
                     tabular: None,
@@ -503,10 +501,7 @@ impl ProjectState {
             } => {
                 let variable = VariableInstance {
                     id: VariableId::new(),
-                    name: crate::project::unique_name::unique_name(
-                        &name,
-                        names.iter().map(String::as_str).collect::<Vec<_>>(),
-                    ),
+                    name: allocate_unique_display_name(&name, names.iter().map(String::as_str)),
                     data_type,
                     data_value,
                     tabular: None,

@@ -109,6 +109,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
+| `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
 | `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供 |
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
@@ -345,9 +346,12 @@ yss-graph-resource-contract
 yss-resource-naming
   → yss-graph-document
   → yss-project-identity → Project/Application/Transport/Adapters
+yss-display-naming
+  → Project/Application database and variable display-name allocation
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
+- `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。

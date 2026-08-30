@@ -9134,6 +9134,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-display-naming"
+version = "0.1.0"
+
+[[package]]
 name = "yss-execution"
 version = "0.1.0"
 dependencies = [
@@ -9389,7 +9393,6 @@ dependencies = [
  "polars-dtype",
  "proc-macro2",
  "rand 0.10.2",
- "regex",
  "serde",
  "serde_json",
  "sqlx",
@@ -9414,6 +9417,7 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-diagnostics",
+ "yss-display-naming",
  "yss-execution",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",

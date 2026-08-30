@@ -2395,8 +2395,99 @@ fn resource_naming_has_one_pure_crate_owner_without_root_or_graph_facades() {
         );
     }
     assert!(
-        !owner.contains("pub fn unique_name("),
+        !owner.contains("allocate_unique_display_name"),
         "strict filesystem resource naming must stay distinct from loose display-name allocation"
+    );
+}
+
+#[test]
+fn display_naming_has_one_pure_crate_owner_without_root_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-display-naming/Cargo.toml",
+        "src-tauri/crates/yss-display-naming/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "display-name owner must exist at {relative}"
+        );
+    }
+    for obsolete in [
+        "src-tauri/src/project/unique_name.rs",
+        "src/shared/utils/getUniqueName.ts",
+    ] {
+        assert!(
+            !root.join(obsolete).exists(),
+            "obsolete display-name owner must not return at {obsolete}"
+        );
+    }
+
+    let shared_utils = std::fs::read_to_string(root.join("src/shared/utils/index.ts"))
+        .expect("shared utility exports must be readable");
+    assert!(
+        !shared_utils.contains("getUniqueName"),
+        "the unused frontend display-name compatibility export must stay removed"
+    );
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("project module must be readable");
+    assert!(
+        !project_module.contains("mod unique_name"),
+        "project must consume yss-display-naming directly without a compatibility facade"
+    );
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-display-naming/src/lib.rs"))
+            .expect("display-name owner must be readable");
+    assert!(
+        owner.contains("pub fn allocate_unique_display_name"),
+        "display-name allocation must have one explicit canonical API"
+    );
+    for forbidden in ["regex::", "ResourceName", "allocate_unique_resource_name"] {
+        assert!(
+            !owner.contains(forbidden),
+            "loose display naming must not absorb strict resource-name fact {forbidden}"
+        );
+    }
+
+    let strict_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-resource-naming/src/lib.rs"))
+            .expect("resource-name owner must be readable");
+    assert!(
+        !strict_owner.contains("allocate_unique_display_name"),
+        "strict resource naming must not duplicate loose display-name allocation"
+    );
+
+    for consumer in [
+        "src-tauri/src/application/database.rs",
+        "src-tauri/src/project/project_state_variable.rs",
+        "src-tauri/src/project/project_writers/variables.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(consumer)).unwrap_or_else(|error| {
+            panic!("display-name consumer {consumer} must be readable: {error}")
+        });
+        assert!(
+            source.contains("yss_display_naming"),
+            "display-name consumer {consumer} must depend on the canonical crate directly"
+        );
+        assert!(
+            !source.contains("project::unique_name")
+                && !source.contains("unique_name::unique_name"),
+            "display-name consumer {consumer} must not restore the root compatibility path"
+        );
+    }
+
+    let root_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("root Cargo manifest must be readable");
+    assert!(
+        root_manifest.contains("yss-display-naming = { path = \"./crates/yss-display-naming\" }"),
+        "the root crate must declare its direct display-name dependency"
+    );
+    assert!(
+        !root_manifest
+            .lines()
+            .any(|line| line.trim() == "regex.workspace = true"),
+        "the root crate must not retain regex after the display-name parser becomes dependency-free"
     );
 }
 

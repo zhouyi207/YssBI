@@ -1,9 +1,9 @@
-#[cfg(test)]
-use super::unique_name;
 use super::{ProjectFilesystemError, ProjectState};
 
 #[cfg(test)]
 use yss_data_contract::{DataType, DataValue};
+#[cfg(test)]
+use yss_display_naming::allocate_unique_display_name;
 
 use crate::project::variable_tabular::normalize_variable_tabular;
 use yss_variable_contract::VariableId;
@@ -45,7 +45,7 @@ impl ProjectState {
                 .collect::<Vec<_>>();
             let variable = VariableInstance {
                 id: VariableId::new(),
-                name: unique_name::unique_name(name, existing),
+                name: allocate_unique_display_name(name, existing),
                 data_type,
                 data_value,
                 tabular: None,

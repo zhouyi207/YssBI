@@ -1737,6 +1737,7 @@ fn non_build_memberships(
         "yss-canonical-hash"
             | "yss-data-contract"
             | "yss-database-contract"
+            | "yss-display-naming"
             | "yss-graph-document"
             | "yss-graph-protocol"
             | "yss-graph-resource-contract"

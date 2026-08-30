@@ -97,12 +97,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "regex",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
@@ -898,11 +892,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "num-traits",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Project,
-        mode: RustDependencyMode::Runtime,
-        package_name: "regex",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Graph,

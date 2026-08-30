@@ -589,6 +589,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-resource-naming/` Pure Leaf；`yss-graph-document` 与 Project 直接消费该
   crate，不保留 graph/root 兼容 re-export。宽松数据库/变量显示名的 `1`/`_1` 兼容语义保持
   独立，避免以表面去重改变持久化命名行为。
+- [ ] 将数据库/变量宽松显示名的大小写敏感冲突分配迁入
+  `src-tauri/crates/yss-display-naming/` Pure Leaf；删除根 `project/unique_name` owner 与兼容路径，
+  以无正则单遍解析保持 `base N`/`base_N` 共享编号及从 `1` 开始的既有语义，移除调用方临时集合，
+  并删除零调用的前端 `getUniqueName` 重复事实源。
 - [ ] 删除无生产调用的根 `graph/value` 层，不为 dead code 创建 `yss-graph-value`；移除两套
   漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
 - [ ] 将 canonical JSON 域分隔哈希迁入独立 `src-tauri/crates/yss-canonical-hash/` Pure Leaf；

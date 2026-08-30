@@ -16,6 +16,7 @@ members = [
     "crates/yss-data-contract",
     "crates/yss-database-contract",
     "crates/yss-diagnostics",
+    "crates/yss-display-naming",
     "crates/yss-execution",
     "crates/yss-graph-analysis",
     "crates/yss-graph-analysis-contract",
@@ -82,6 +83,7 @@ yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
+yss-display-naming = { path = "./crates/yss-display-naming" }
 yss-execution = { path = "./crates/yss-execution" }
 yss-graph-analysis = { path = "./crates/yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
@@ -125,7 +127,6 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 
 uuid.workspace = true
 thiserror.workspace = true
-regex.workspace = true
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
 calamine = "0.36"
 rand = "0.10"
