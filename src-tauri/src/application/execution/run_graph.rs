@@ -12,7 +12,6 @@ use super::session_slot::{
 use crate::application::catalog_query::capture_localized_project_facts;
 use crate::application::graph_contracts::{
     build_resource_catalog, execution_package_from_graph, graph_compilation_basis,
-    graph_compile_settings,
 };
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
@@ -313,10 +312,10 @@ where
         .map_err(ExecutionApplicationError::ProjectFacts)?;
     let database_facts = catalog_snapshot(captured.database())
         .map_err(ExecutionApplicationError::DatabaseCatalog)?;
-    let graph_catalog = build_resource_catalog(project_facts.resources().graph(), &database_facts)
-        .map_err(|error| ExecutionApplicationError::GraphContract(error))?;
+    let _validated_graph_catalog =
+        build_resource_catalog(project_facts.resources().graph(), &database_facts)
+            .map_err(ExecutionApplicationError::GraphContract)?;
     let graph_document = prepared_project.graph();
-    let settings = graph_compile_settings(prepared_project.settings());
     let basis = plan_basis(
         &captured,
         prepared_project.authority().graph_revision(),
@@ -325,8 +324,6 @@ where
     let graph_basis = graph_compilation_basis(&basis);
     let compilation = compile(GraphCompilationInput::new(
         graph_document,
-        &graph_catalog,
-        &settings,
         graph_basis,
         request.graph_path.clone(),
         yss_graph_analysis_contract::CompileId::new(

@@ -1,10 +1,9 @@
 use super::*;
-use crate::graph::analysis::{
+use std::collections::BTreeMap;
+use yss_graph_analysis::{
     GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
-use crate::graph::settings::GraphCompileSettings;
-use std::collections::BTreeMap;
 use yss_graph_analysis_contract::{CompilationBasis, ResourceKey, ResourceVersion};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
@@ -15,7 +14,6 @@ use yss_graph_protocol::{
     PortKind, TypeExpr, TypeId,
 };
 use yss_graph_registry::RegistryFingerprint;
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(uuid::Uuid::from_u128(value))
@@ -35,8 +33,8 @@ fn port(
     label: &str,
     direction: PortDirection,
     current: u32,
-) -> crate::graph::analysis::GraphPortFact {
-    crate::graph::analysis::GraphPortFact {
+) -> yss_graph_analysis::GraphPortFact {
+    yss_graph_analysis::GraphPortFact {
         address,
         template_key: PortKey::new(template_key).expect("test port key is valid"),
         label: label.into(),
@@ -64,7 +62,7 @@ fn port(
 fn node_facts(
     node_id: NodeId,
     node_type: NodeTypeId,
-    ports: Box<[crate::graph::analysis::GraphPortFact]>,
+    ports: Box<[yss_graph_analysis::GraphPortFact]>,
 ) -> GraphNodeProjectionFacts {
     GraphNodeProjectionFacts {
         node_id,
@@ -74,7 +72,7 @@ fn node_facts(
         icon_id: Some("builtin.constants".into()),
         style_id: Some("builtin.default".into()),
         managed: false,
-        parameters: Box::new([crate::graph::analysis::GraphParameterFact {
+        parameters: Box::new([yss_graph_analysis::GraphParameterFact {
             key: ParameterKey::new("value").expect("test parameter key is valid"),
             title: "Value".into(),
             description: Some("The constant value.".into()),
@@ -92,9 +90,9 @@ fn node_facts(
 
 fn analysis_with_facts(
     document: &GraphDocument,
-    path: &GraphResourcePath,
+    _path: &GraphResourcePath,
     facts: GraphProjectionFacts,
-) -> crate::graph::analysis::GraphAnalysis {
+) -> yss_graph_analysis::GraphAnalysis {
     let basis = CompilationBasis {
         graph_revision: GraphRevision::new(document.revision.get()),
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
@@ -104,21 +102,8 @@ fn analysis_with_facts(
         )]),
         resource_observations: BTreeMap::new(),
     };
-    let catalog = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([1; 32]),
-    );
-    let settings = GraphCompileSettings {
-        absolute_tolerance: 1e-12,
-        relative_tolerance: 1e-9,
-    };
-    let _ = path;
-    crate::graph::analysis::analyze(crate::graph::analysis::GraphAnalysisInput {
+    yss_graph_analysis::analyze(yss_graph_analysis::GraphAnalysisInput {
         document,
-        catalog: &catalog,
-        settings: &settings,
         basis: &basis,
     })
     .with_projection_facts(facts)
@@ -201,7 +186,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             ),
         ],
         [],
-        crate::graph::analysis::GraphCompilationOutcome::Complete,
+        yss_graph_analysis::GraphCompilationOutcome::Complete,
     );
     let analysis = analysis_with_facts(&document, &path, facts);
 
@@ -264,20 +249,8 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
-    let catalog = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([1; 32]),
-    );
-    let settings = GraphCompileSettings {
-        absolute_tolerance: 1e-12,
-        relative_tolerance: 1e-9,
-    };
-    let analysis = crate::graph::analysis::analyze(crate::graph::analysis::GraphAnalysisInput {
+    let analysis = yss_graph_analysis::analyze(yss_graph_analysis::GraphAnalysisInput {
         document: &document,
-        catalog: &catalog,
-        settings: &settings,
         basis: &basis,
     });
 

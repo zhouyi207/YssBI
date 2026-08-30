@@ -1,11 +1,11 @@
 use super::model::*;
-use crate::graph::analysis::{
+use std::collections::BTreeMap;
+use yss_data_contract::DataType;
+use yss_graph_analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
     GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
-use std::collections::BTreeMap;
-use yss_data_contract::DataType;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
@@ -79,7 +79,7 @@ pub fn build_editor_projection(
 
 fn validate_facts(
     document: &GraphDocument,
-    analysis: &crate::graph::analysis::GraphAnalysis,
+    analysis: &yss_graph_analysis::GraphAnalysis,
     facts: &GraphProjectionFacts,
 ) -> Result<(), EditorProjectionError> {
     if analysis.nodes().len() != document.nodes.len()
@@ -155,7 +155,7 @@ fn project_node(
         supports_inline_literals: facts.ports.iter().any(|port| {
             matches!(
                 port.editor,
-                crate::graph::analysis::GraphPortEditorFact::InlineLiteral
+                yss_graph_analysis::GraphPortEditorFact::InlineLiteral
             )
         }),
     };
@@ -279,12 +279,10 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         configuration: fact.configuration.as_ref().map(project_configuration),
         inherited_value: fact.inherited_value.clone(),
         value_source: fact.value_source.map(|source| match source {
-            crate::graph::analysis::GraphParameterValueSource::Project => {
+            yss_graph_analysis::GraphParameterValueSource::Project => {
                 EditorParameterValueSource::Project
             }
-            crate::graph::analysis::GraphParameterValueSource::Node => {
-                EditorParameterValueSource::Node
-            }
+            yss_graph_analysis::GraphParameterValueSource::Node => EditorParameterValueSource::Node,
         }),
         options: (!fact.options.is_empty()).then(|| fact.options.clone()),
     })
@@ -340,13 +338,13 @@ fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParame
 }
 
 fn project_filter_literal_type(
-    value: crate::graph::analysis::GraphFilterLiteralType,
+    value: yss_graph_analysis::GraphFilterLiteralType,
 ) -> EditorFilterLiteralType {
     match value {
-        crate::graph::analysis::GraphFilterLiteralType::Boolean => EditorFilterLiteralType::Boolean,
-        crate::graph::analysis::GraphFilterLiteralType::Integer => EditorFilterLiteralType::Integer,
-        crate::graph::analysis::GraphFilterLiteralType::Decimal => EditorFilterLiteralType::Decimal,
-        crate::graph::analysis::GraphFilterLiteralType::String => EditorFilterLiteralType::String,
+        yss_graph_analysis::GraphFilterLiteralType::Boolean => EditorFilterLiteralType::Boolean,
+        yss_graph_analysis::GraphFilterLiteralType::Integer => EditorFilterLiteralType::Integer,
+        yss_graph_analysis::GraphFilterLiteralType::Decimal => EditorFilterLiteralType::Decimal,
+        yss_graph_analysis::GraphFilterLiteralType::String => EditorFilterLiteralType::String,
     }
 }
 
@@ -411,10 +409,10 @@ fn project_outcome(value: &GraphCompilationOutcome) -> EditorCompilationOutcome 
             node_id,
         } => EditorCompilationOutcome::InternalFailure {
             stage: match stage {
-                crate::graph::analysis::GraphCompilationStage::Analysis => {
+                yss_graph_analysis::GraphCompilationStage::Analysis => {
                     EditorCompilationStage::Analysis
                 }
-                crate::graph::analysis::GraphCompilationStage::Lowering => {
+                yss_graph_analysis::GraphCompilationStage::Lowering => {
                     EditorCompilationStage::Lowering
                 }
             },

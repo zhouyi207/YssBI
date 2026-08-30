@@ -1,23 +1,19 @@
 use std::collections::BTreeMap;
 
-use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput, analyze};
 use crate::graph::compiler::package::{
     GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
     GraphOperation, GraphParameterHandle, GraphParameterPayload, GraphParameterScalar,
     GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
 use crate::graph::error::GraphCompileError;
-use crate::graph::settings::GraphCompileSettings;
+use yss_graph_analysis::{GraphAnalysis, GraphAnalysisInput, analyze, result_category_for_node};
 use yss_graph_analysis_contract::{CompilationBasis, CompileId};
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
-use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
 pub(crate) struct GraphCompilationInput<'a> {
     document: &'a GraphDocument,
-    catalog: &'a ResourceCatalogSnapshot,
-    settings: &'a GraphCompileSettings,
     basis: CompilationBasis<GraphRevision>,
     graph: GraphResourcePath,
     compile_id: CompileId,
@@ -26,16 +22,12 @@ pub(crate) struct GraphCompilationInput<'a> {
 impl<'a> GraphCompilationInput<'a> {
     pub(crate) fn new(
         document: &'a GraphDocument,
-        catalog: &'a ResourceCatalogSnapshot,
-        settings: &'a GraphCompileSettings,
         basis: CompilationBasis<GraphRevision>,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Self {
         Self {
             document,
-            catalog,
-            settings,
             basis,
             graph,
             compile_id,
@@ -68,8 +60,6 @@ pub(crate) fn compile(
 
     let analysis = analyze(GraphAnalysisInput {
         document: input.document,
-        catalog: input.catalog,
-        settings: input.settings,
         basis: &input.basis,
     });
     let package = lower_package(
@@ -103,9 +93,7 @@ fn lower_package(
                 .get(&node.id)
                 .copied()
                 .ok_or_else(|| lowering_error(graph_path))?;
-            let result_category = crate::graph::analysis::result_category::result_category_for_node(
-                node.node_type.as_str(),
-            );
+            let result_category = result_category_for_node(node.node_type.as_str());
             let parameter_handles = node
                 .parameters
                 .keys()

@@ -106,13 +106,14 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/application/` | 跨 module 用例编排 |
 | `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
-| `src-tauri/src/graph/` | graph behavior、catalog/registry、analysis、neutral compiler 与 graph diagnostics |
+| `src-tauri/src/graph/` | Graph editor document behavior、compatibility、neutral compiler、runtime state 与 graph errors |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity、resource path 与 resource-name validation 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
+| `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
@@ -322,21 +323,24 @@ yss-graph-document + yss-graph-protocol + yss-canonical-hash
   → yss-graph-registry → yss-graph-analysis-contract
   → yss-graph-compiler-diagnostics
   → yss-graph-catalog
-yss-graph-resource-contract + yss-graph-registry + yss-graph-analysis-contract
-  → graph analysis → neutral compiler
+yss-graph-registry + yss-graph-analysis-contract
+  → yss-graph-analysis → neutral compiler
   → Application graph package mapping
   → Execution immutable plan/runtime
+yss-graph-resource-contract
+  → Graph compatibility/runtime + Application catalog validation
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
+- `yss-graph-analysis`：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner；analysis input 只接收实际参与结果的 document 与 compilation basis，不保留无效 settings/catalog 参数。
 - `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
 - `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
 - `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
-- `graph/analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
+- `yss-graph-analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。
 - `application/graph_contracts`：唯一 Project/Graph → Execution typed mapping seam。

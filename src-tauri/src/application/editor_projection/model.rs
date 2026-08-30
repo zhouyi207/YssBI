@@ -1,5 +1,5 @@
-use crate::graph::analysis::GraphDiagnosticLocation;
 use yss_data_contract::DataType;
+use yss_graph_analysis::GraphDiagnosticLocation;
 use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
@@ -290,7 +290,7 @@ pub enum EditorProjectionError {
 pub struct EditorProjectionInput<'a> {
     pub graph_path: &'a GraphResourcePath,
     pub document: &'a yss_graph_document::GraphDocument,
-    pub analysis: &'a crate::graph::analysis::GraphAnalysis,
+    pub analysis: &'a yss_graph_analysis::GraphAnalysis,
     pub registry_fingerprint: [u8; 32],
 }
 

@@ -3,12 +3,12 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::graph::analysis::GraphAnalysis;
 use crate::graph::error::GraphMutationError;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId};
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
+use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 
 use super::catalog_query::revalidate_project_catalog_facts;
@@ -21,7 +21,6 @@ use super::execution::session_slot::{
 };
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
-    graph_compile_settings,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -283,8 +282,7 @@ pub(crate) fn open_graph_in_session(
         captured.database(),
         project.resources().database_observations(),
     )?;
-    let graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
-    let settings = graph_compile_settings(&data.computation_settings);
+    let _validated_graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
@@ -294,10 +292,7 @@ pub(crate) fn open_graph_in_session(
         Default::default(),
     );
     let graph_basis = graph_compilation_basis(&basis);
-    let analysis =
-        captured
-            .graph()
-            .analyze(&candidate_document, &graph_catalog, &settings, &graph_basis);
+    let analysis = captured.graph().analyze(&candidate_document, &graph_basis);
 
     // This is the final staged commit gate. A replacement that wins before
     // it suppresses the candidate; once it passes, the old Project load has

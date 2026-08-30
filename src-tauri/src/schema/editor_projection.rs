@@ -222,9 +222,7 @@ fn map_diagnostic(diagnostic: &EditorDiagnosticModel) -> DiagnosticDto {
     }
 }
 
-fn map_location(
-    location: &crate::graph::analysis::GraphDiagnosticLocation,
-) -> DiagnosticLocationDto {
+fn map_location(location: &yss_graph_analysis::GraphDiagnosticLocation) -> DiagnosticLocationDto {
     match location {
         yss_graph_analysis_contract::DiagnosticLocation::Graph => DiagnosticLocationDto::Graph,
         yss_graph_analysis_contract::DiagnosticLocation::Node(node_id) => {

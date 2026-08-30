@@ -65,7 +65,7 @@ pub(crate) fn result_category_for_output(
     GraphResultCategory::StatisticalReport(report)
 }
 
-pub(crate) fn result_category_for_node(node_type_id: &str) -> GraphResultCategory {
+pub fn result_category_for_node(node_type_id: &str) -> GraphResultCategory {
     let output_key = match node_type_id {
         "yssbi.statistics.ols.summary"
         | "yssbi.statistics.gls.summary"

@@ -1,13 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::database::session_api::DatabaseCatalogSnapshot;
-use crate::graph::analysis::result_category::GraphResultCategory;
 use crate::graph::compiler::{
     GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
     GraphParameterValue, GraphSourceIdentity,
 };
-use crate::graph::settings::GraphCompileSettings;
-use crate::project::ProjectComputationSettings;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
@@ -19,6 +16,7 @@ use yss_execution::plan::{
     PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
     ValueRef,
 };
+use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_analysis_contract::{
     CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
     ResourceVersion as GraphResourceVersion,
@@ -163,13 +161,6 @@ fn catalog_fingerprint(
             .copy_from_slice(&hasher.finish().to_le_bytes());
     }
     fingerprint
-}
-
-pub fn graph_compile_settings(settings: &ProjectComputationSettings) -> GraphCompileSettings {
-    GraphCompileSettings {
-        absolute_tolerance: settings.numeric.tolerance.absolute,
-        relative_tolerance: settings.numeric.tolerance.relative,
-    }
 }
 
 /// Convert the Execution-owned validation basis into the Graph-owned basis
@@ -396,64 +387,32 @@ fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::Re
     match category {
         GraphResultCategory::Value => ResultCategory::Value,
         GraphResultCategory::PlotData(kind) => ResultCategory::PlotData(match kind {
-            crate::graph::analysis::result_category::GraphPlotDataKind::Scatter => {
-                PlotDataKind::Scatter
-            }
-            crate::graph::analysis::result_category::GraphPlotDataKind::Line => PlotDataKind::Line,
-            crate::graph::analysis::result_category::GraphPlotDataKind::Plot => PlotDataKind::Plot,
-            crate::graph::analysis::result_category::GraphPlotDataKind::Ecdf => PlotDataKind::Ecdf,
-            crate::graph::analysis::result_category::GraphPlotDataKind::Kde => PlotDataKind::Kde,
-            crate::graph::analysis::result_category::GraphPlotDataKind::Histogram => {
-                PlotDataKind::Histogram
-            }
-            crate::graph::analysis::result_category::GraphPlotDataKind::Correlation => {
-                PlotDataKind::Correlation
-            }
-            crate::graph::analysis::result_category::GraphPlotDataKind::Correlogram => {
-                PlotDataKind::Correlogram
-            }
+            GraphPlotDataKind::Scatter => PlotDataKind::Scatter,
+            GraphPlotDataKind::Line => PlotDataKind::Line,
+            GraphPlotDataKind::Plot => PlotDataKind::Plot,
+            GraphPlotDataKind::Ecdf => PlotDataKind::Ecdf,
+            GraphPlotDataKind::Kde => PlotDataKind::Kde,
+            GraphPlotDataKind::Histogram => PlotDataKind::Histogram,
+            GraphPlotDataKind::Correlation => PlotDataKind::Correlation,
+            GraphPlotDataKind::Correlogram => PlotDataKind::Correlogram,
         }),
         GraphResultCategory::StatisticalReport(kind) => {
             ResultCategory::StatisticalReport(match kind {
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::OlsSummary => {
-                    StatisticalReportKind::OlsSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::BinarySummary => {
-                    StatisticalReportKind::BinarySummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::Iv2slsSummary => {
-                    StatisticalReportKind::Iv2slsSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::IvLimlSummary => {
-                    StatisticalReportKind::IvLimlSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::PraisSummary => {
-                    StatisticalReportKind::PraisSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::VarSummary => {
-                    StatisticalReportKind::VarSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::VarSoc => {
-                    StatisticalReportKind::VarSoc
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::PanelSummary => {
-                    StatisticalReportKind::PanelSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::PanelDid => {
-                    StatisticalReportKind::PanelDid
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::DfAdfSummary => {
-                    StatisticalReportKind::DfAdfSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::DfAdfSummaryList => {
+                GraphStatisticalReportKind::OlsSummary => StatisticalReportKind::OlsSummary,
+                GraphStatisticalReportKind::BinarySummary => StatisticalReportKind::BinarySummary,
+                GraphStatisticalReportKind::Iv2slsSummary => StatisticalReportKind::Iv2slsSummary,
+                GraphStatisticalReportKind::IvLimlSummary => StatisticalReportKind::IvLimlSummary,
+                GraphStatisticalReportKind::PraisSummary => StatisticalReportKind::PraisSummary,
+                GraphStatisticalReportKind::VarSummary => StatisticalReportKind::VarSummary,
+                GraphStatisticalReportKind::VarSoc => StatisticalReportKind::VarSoc,
+                GraphStatisticalReportKind::PanelSummary => StatisticalReportKind::PanelSummary,
+                GraphStatisticalReportKind::PanelDid => StatisticalReportKind::PanelDid,
+                GraphStatisticalReportKind::DfAdfSummary => StatisticalReportKind::DfAdfSummary,
+                GraphStatisticalReportKind::DfAdfSummaryList => {
                     StatisticalReportKind::DfAdfSummaryList
                 }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::VecSummary => {
-                    StatisticalReportKind::VecSummary
-                }
-                crate::graph::analysis::result_category::GraphStatisticalReportKind::VecRankSummary => {
-                    StatisticalReportKind::VecRankSummary
-                }
+                GraphStatisticalReportKind::VecSummary => StatisticalReportKind::VecSummary,
+                GraphStatisticalReportKind::VecRankSummary => StatisticalReportKind::VecRankSummary,
             })
         }
     }
@@ -535,8 +494,5 @@ mod tests {
                 .database_schema(&GraphResourceId::new("databases/sales"))
                 .is_some()
         );
-        let settings = graph_compile_settings(&ProjectComputationSettings::default());
-        assert_eq!(settings.absolute_tolerance, 1e-12);
-        assert_eq!(settings.relative_tolerance, 1e-9);
     }
 }

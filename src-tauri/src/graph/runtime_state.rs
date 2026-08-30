@@ -3,11 +3,11 @@ use std::sync::Arc;
 #[cfg(test)]
 use std::sync::{Barrier, Mutex};
 
-use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
 use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
 use thiserror::Error;
 use yss_data_contract::DataType;
+use yss_graph_analysis::{GraphAnalysis, GraphAnalysisInput, analyze, projection_facts};
 use yss_graph_analysis_contract::CompilationBasis;
 use yss_graph_catalog::{
     BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
@@ -235,17 +235,10 @@ impl GraphRuntimeState {
     pub(crate) fn analyze(
         &self,
         document: &GraphDocument,
-        catalog: &ResourceCatalogSnapshot,
-        settings: &crate::graph::settings::GraphCompileSettings,
         basis: &CompilationBasis<yss_graph_document::GraphRevision>,
     ) -> GraphAnalysis {
-        let analysis = crate::graph::analysis::analyze(GraphAnalysisInput {
-            document,
-            catalog,
-            settings,
-            basis,
-        });
-        analysis.with_projection_facts(crate::graph::analysis::projection_facts(
+        let analysis = analyze(GraphAnalysisInput { document, basis });
+        analysis.with_projection_facts(projection_facts(
             document,
             self.components.registry.as_ref(),
         ))

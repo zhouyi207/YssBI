@@ -1,4 +1,10 @@
-use crate::graph::settings::GraphCompileSettings;
+//! Graph document analysis and editor projection facts.
+//!
+//! Serializable semantic-analysis contracts remain owned by
+//! `yss-graph-analysis-contract`; this crate owns the executable analysis behavior.
+
+#![deny(unused_must_use)]
+
 use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
@@ -12,9 +18,11 @@ use yss_graph_protocol::{
     SchemaExpr, TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
-use yss_graph_resource_contract::ResourceCatalogSnapshot;
+mod result_category;
 
-pub(crate) mod result_category;
+pub use result_category::{
+    GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind, result_category_for_node,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeFact {
@@ -235,16 +243,10 @@ impl GraphAnalysis {
 
 pub struct GraphAnalysisInput<'a> {
     pub document: &'a GraphDocument,
-    pub catalog: &'a ResourceCatalogSnapshot,
-    pub settings: &'a GraphCompileSettings,
     pub basis: &'a CompilationBasis<GraphRevision>,
 }
 
 pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
-    let _ = (
-        input.catalog.fingerprint(),
-        input.settings.absolute_tolerance,
-    );
     let nodes = input
         .document
         .nodes
@@ -264,10 +266,7 @@ pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
     }
 }
 
-pub(crate) fn projection_facts(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-) -> GraphProjectionFacts {
+pub fn projection_facts(document: &GraphDocument, registry: &NodeRegistry) -> GraphProjectionFacts {
     let mut complete = true;
     let nodes = document
         .nodes
@@ -494,18 +493,8 @@ mod tests {
     use yss_graph_registry::RegistryFingerprint;
 
     #[test]
-    fn analysis_accepts_neutral_document_catalog_settings_and_basis() {
+    fn analysis_accepts_neutral_document_and_basis() {
         let document = GraphDocument::default();
-        let catalog = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            BTreeMap::new(),
-            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([3; 32]),
-        );
-        let settings = GraphCompileSettings {
-            absolute_tolerance: 1e-12,
-            relative_tolerance: 1e-9,
-        };
         let basis = CompilationBasis {
             graph_revision: GraphRevision::new(1),
             registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
@@ -514,8 +503,6 @@ mod tests {
         };
         let analysis = analyze(GraphAnalysisInput {
             document: &document,
-            catalog: &catalog,
-            settings: &settings,
             basis: &basis,
         });
         assert!(analysis.nodes().is_empty());

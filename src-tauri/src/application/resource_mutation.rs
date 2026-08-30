@@ -16,7 +16,6 @@ use super::execution::session_slot::{
 };
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
-    graph_compile_settings,
 };
 use super::graph_mutation::{GraphMutationApplicationError, commit_captured_graph_candidate};
 use crate::database::error::DatabaseError;
@@ -268,15 +267,8 @@ fn build_graph_projection_replacement(
         .map_err(ResourceMutationApplicationError::Catalog)?;
     let database = catalog_snapshot(captured.database())
         .map_err(ResourceMutationApplicationError::Database)?;
-    let graph_catalog = build_resource_catalog(project.resources().graph(), &database)
+    let _validated_graph_catalog = build_resource_catalog(project.resources().graph(), &database)
         .map_err(ResourceMutationApplicationError::Contract)?;
-    let settings = graph_compile_settings(
-        &captured
-            .project()
-            .get_data()
-            .map_err(ResourceMutationApplicationError::Project)?
-            .computation_settings,
-    );
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
@@ -286,9 +278,7 @@ fn build_graph_projection_replacement(
         Default::default(),
     );
     let graph_basis = graph_compilation_basis(&basis);
-    let analysis = captured
-        .graph()
-        .analyze(document, &graph_catalog, &settings, &graph_basis);
+    let analysis = captured.graph().analyze(document, &graph_basis);
     let model = build_editor_projection(EditorProjectionInput {
         graph_path,
         document,

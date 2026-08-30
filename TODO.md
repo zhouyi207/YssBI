@@ -612,3 +612,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Graph 编译资源标识、函数/变量 contract、数据库 schema 与 immutable resource catalog
   snapshot 迁入 `src-tauri/crates/yss-graph-resource-contract/` Pure Leaf；根 crate 不保留兼容
   module，并以显式文档和架构门禁防止其与 built-in `yss-graph-catalog` 漂移成重复事实源。
+- [ ] 将 Graph document analysis、editor projection facts 与 result category 判定迁入
+  `src-tauri/crates/yss-graph-analysis/`；根 crate 不保留兼容 module，并删除从 Project settings/
+  resource catalog 构造后仅被丢弃的 no-op analysis 输入链。

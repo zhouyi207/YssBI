@@ -84,7 +84,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-execution/src/ports/mod.rs",
         RustLayer::Execution,
     ),
-    ("src-tauri/src/graph/analysis/mod.rs", RustLayer::Graph),
+    (
+        "src-tauri/crates/yss-graph-analysis/src/lib.rs",
+        RustLayer::Graph,
+    ),
     ("src-tauri/src/graph/compiler/mod.rs", RustLayer::Graph),
     ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
     (
@@ -1424,7 +1427,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::editor_projection::model::EditorCompilationOutcome",
             "yssbi_lib::application::editor_projection::model::EditorCompilationStage",
             "yssbi_lib::application::editor_projection::model::ParameterEditorKind",
-            "yssbi_lib::graph::analysis::GraphDiagnosticLocation",
+            "yss_graph_analysis::GraphDiagnosticLocation",
             "yss_graph_analysis_contract::DiagnosticLocation",
             "yss_graph_analysis_contract::diagnostic::DiagnosticLocation",
             "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Connection",
@@ -1797,7 +1800,10 @@ fn non_build_memberships(
         layers.insert(exact_layer.unwrap_or(RustLayer::Graph));
     } else if matches!(
         package,
-        "yss-graph-analysis-contract" | "yss-graph-compiler-diagnostics" | "yss-graph-registry"
+        "yss-graph-analysis"
+            | "yss-graph-analysis-contract"
+            | "yss-graph-compiler-diagnostics"
+            | "yss-graph-registry"
     ) {
         layers.insert(RustLayer::Graph);
     } else if package == "yss-sci" {
