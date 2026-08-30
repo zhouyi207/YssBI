@@ -9450,6 +9450,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-registry-sqlite"
+version = "0.1.0"
+dependencies = [
+ "sqlx",
+ "tokio",
+ "tracing",
+ "yss-project-identity",
+ "yss-project-registry-contract",
+]
+
+[[package]]
 name = "yss-resource-lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -9624,6 +9635,7 @@ dependencies = [
  "yss-project-progress",
  "yss-project-registry",
  "yss-project-registry-contract",
+ "yss-project-registry-sqlite",
  "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",

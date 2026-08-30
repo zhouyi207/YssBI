@@ -575,6 +575,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-registry-sqlite",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-registry-sqlite",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",

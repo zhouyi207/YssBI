@@ -47,6 +47,7 @@ members = [
     "crates/yss-project-progress",
     "crates/yss-project-registry",
     "crates/yss-project-registry-contract",
+    "crates/yss-project-registry-sqlite",
     "crates/yss-resource-lifecycle",
     "crates/yss-resource-naming",
     "crates/yss-sci",
@@ -79,6 +80,8 @@ thiserror = "2.0.18"
 regex = "1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 unicode-normalization = "0.1.24"
 unicode-casefold = "0.2.0"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
@@ -131,6 +134,7 @@ yss-project-operation = { path = "./crates/yss-project-operation" }
 yss-project-progress = { path = "./crates/yss-project-progress" }
 yss-project-registry = { path = "./crates/yss-project-registry" }
 yss-project-registry-contract = { path = "./crates/yss-project-registry-contract" }
+yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
@@ -156,12 +160,12 @@ polars-dtype.workspace = true
 statrs.workspace = true
 chrono.workspace = true
 num-traits.workspace = true
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+tokio.workspace = true
 
 
 uuid.workspace = true
 thiserror.workspace = true
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
+sqlx.workspace = true
 calamine = "0.36"
 rand = "0.10"
 duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }

@@ -17,4 +17,4 @@ yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio.workspace = true

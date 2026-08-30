@@ -113,9 +113,7 @@ pub fn run() {
 
             let app_dir = app.path().app_data_dir()?;
             let registry_store = tauri::async_runtime::block_on(
-                backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
-                    app_dir.clone(),
-                ),
+                yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(app_dir.clone()),
             )?;
             let registry_path = registry_store.path().to_path_buf();
             let project_registry = yss_project_registry::ProjectRegistry::new(

@@ -1,0 +1,15 @@
+[package]
+name = "yss-project-registry-sqlite"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+sqlx.workspace = true
+tracing.workspace = true
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-registry-contract = { path = "../yss-project-registry-contract" }
+
+[dev-dependencies]
+tokio.workspace = true

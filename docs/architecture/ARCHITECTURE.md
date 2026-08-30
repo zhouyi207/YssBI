@@ -134,6 +134,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
 | `src-tauri/crates/yss-project-registry-contract/` | 独立 Pure Leaf：project registration record、root identity state 与异步 persistence port/error 的唯一 canonical owner；不持有 workflow 或具体存储实现 |
 | `src-tauri/crates/yss-project-registry/` | 独立 Stateful Project 层：registration、favorite、cleanup、scan、路径规范化/校验及 typed workflow error 的唯一 owner；SQLite 实现留在 Backend Adapter，不持有 ProjectState、Tauri 或 SQLx |
+| `src-tauri/crates/yss-project-registry-sqlite/` | 独立 Backend Adapter：`ProjectRegistryStore` 的 SQLx/SQLite schema、CRUD 与 strict row mapping 唯一 owner；不依赖 registry workflow、ProjectState 或 Tauri |
 | `src-tauri/crates/yss-resource-lifecycle/` | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量值归一化由 `yss-variable-value` 负责 |
@@ -370,6 +371,8 @@ yss-resource-naming
   → yss-graph-document
 yss-project-identity
   → yss-project-registry-contract → yss-project-registry/Application/Transport/Backend Adapter
+yss-project-identity + yss-project-registry-contract
+  → yss-project-registry-sqlite → Composition Root
 yss-project-identity + yss-graph-document + yss-worksheet-document + yss-database-contract
   → yss-project-history → Project hydration/authority → Application/Commands/Transport
 yss-data-contract + yss-project-history + yss-project-identity
@@ -431,6 +434,7 @@ yss-resource-naming + yss-project-identity
 - `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件、`ProjectProgressSink` 输出 port 与封装过的任务取消 capability/registry。新任务会取消并替换旧 active task，避免产生不可再取消的孤儿扫描；Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection。Project 不再暴露原子标志或字符串取消 sentinel，扫描中途取消会保持 typed `Cancelled` 语义而不会误报为 `ScanFailed`。
 - `yss-project-registry-contract`：统一拥有 `ProjectRecord`、`ProjectRootIdentityState` 与 `ProjectRegistryStore` persistence port；SQLite adapter 与 Project workflow 直接消费同一记录，不再通过字段完全相同的 `ProjectRegistryRecord` 镜像转换。注册表 ID 使用 `ProjectRegistrationId`，不再错误复用每次激活都会变化的 `ProjectInstanceId`；JSON 字符串 wire 保持兼容。Application lifecycle 直接断言强类型 domain event，registry 写入失败的恢复动作保持 `RegisterDestination`，只在 transport boundary 映射为既有 `registerDestination` wire 值。
 - `yss-project-registry`：统一拥有 project registration、favorite、cleanup、scan、路径规范化/校验与 `ProjectRegistryError`；根 `project_registry` owner 和 facade 已删除，Commands/Application/Composition Root 直接消费 crate。SQLite 仍通过 `ProjectRegistryStore` 留在 Backend Adapter；行为 crate 不依赖 SQLx、Tauri 或 `ProjectState`。零调用的 validity wrapper 已删除，application lifecycle 通过测试侧失败 store 验证补偿语义，生产类型不再携带 remove-failure 测试开关。
+- `yss-project-registry-sqlite`：统一实现 `ProjectRegistryStore` 的 SQLite schema、连接策略、CRUD、diagnostic logging 与 strict row mapping；根 `backend_adapters/project_registry_sqlite` owner 和 module facade 已删除，Composition Root 直接构造并注入 store。非法 root identity state 和非 0/1 favorite 值均 fail closed；SQLx/Tokio 的版本与 feature 由 workspace manifest 统一声明。
 - `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。

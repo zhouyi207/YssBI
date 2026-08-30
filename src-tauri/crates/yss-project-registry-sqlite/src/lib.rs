@@ -1,3 +1,5 @@
+//! SQLx/SQLite implementation of the project registry persistence port.
+
 use std::path::PathBuf;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -32,7 +34,7 @@ impl SqliteProjectRegistryStore {
     pub async fn connect(app_dir: PathBuf) -> Result<Self, sqlx::Error> {
         let db_path = app_dir.join("db").join("projects.sqlite");
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| sqlx::Error::Io(error))?;
+            std::fs::create_dir_all(parent).map_err(sqlx::Error::Io)?;
         }
         let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
         let options = SqliteConnectOptions::from_str(&url)?
@@ -182,14 +184,22 @@ fn row_to_record(row: ProjectRegistryRow) -> Result<ProjectRecord, ProjectRegist
         "invalid" => ProjectRootIdentityState::Invalid,
         _ => return Err(ProjectRegistryStoreError::StorageFailed),
     };
+    let favorite = match row.is_favorite {
+        0 => false,
+        1 => true,
+        _ => return Err(ProjectRegistryStoreError::StorageFailed),
+    };
     Ok(ProjectRecord {
         id: ProjectRegistrationId::from_existing(row.id),
         name: row.name,
         path: row.path,
         created_at: row.created_at,
         last_opened_at: row.last_opened_at,
-        is_favorite: row.is_favorite != 0,
+        is_favorite: favorite,
         root_identity: ProjectRootIdentity::from_canonical(row.root_identity),
         root_identity_state: state,
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -3214,6 +3214,8 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "src-tauri/crates/yss-project-registry-contract/src/lib.rs",
         "src-tauri/crates/yss-project-registry/Cargo.toml",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
+        "src-tauri/crates/yss-project-registry-sqlite/Cargo.toml",
+        "src-tauri/crates/yss-project-registry-sqlite/src/lib.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -3232,14 +3234,22 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
             .exists(),
         "the root crate must not retain the extracted project registry workflow"
     );
+    assert!(
+        !root
+            .join("src-tauri/src/backend_adapters/project_registry_sqlite.rs")
+            .exists(),
+        "the root crate must not retain the extracted SQLite registry adapter"
+    );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-registry\"",
         "\"crates/yss-project-registry-contract\"",
+        "\"crates/yss-project-registry-sqlite\"",
         "yss-project-registry = { path = \"./crates/yss-project-registry\" }",
         "yss-project-registry-contract = { path = \"./crates/yss-project-registry-contract\" }",
+        "yss-project-registry-sqlite = { path = \"./crates/yss-project-registry-sqlite\" }",
     ] {
         assert!(
             workspace_manifest.contains(declaration),
@@ -3323,7 +3333,7 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "src-tauri/src/application/project_lifecycle/mod.rs",
         "src-tauri/src/commands/command_project/registry.rs",
         "src-tauri/src/schema/application_event.rs",
-        "src-tauri/src/backend_adapters/project_registry_sqlite.rs",
+        "src-tauri/crates/yss-project-registry-sqlite/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3366,12 +3376,33 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     );
 
     let adapter = std::fs::read_to_string(
-        root.join("src-tauri/src/backend_adapters/project_registry_sqlite.rs"),
+        root.join("src-tauri/crates/yss-project-registry-sqlite/src/lib.rs"),
     )
     .expect("project registry SQLite adapter must be readable");
+    for contract in [
+        "pub struct SqliteProjectRegistryStore",
+        "impl ProjectRegistryStore for SqliteProjectRegistryStore",
+        "CREATE TABLE IF NOT EXISTS projects",
+        "ProjectRegistryStoreError::StorageFailed",
+    ] {
+        assert!(
+            adapter.contains(contract),
+            "the SQLite registry adapter must own '{contract}'"
+        );
+    }
+    for backwards_dependency in ["crate::project::", "yss_project_registry::", "tauri::"] {
+        assert!(
+            !adapter.contains(backwards_dependency),
+            "the SQLite adapter must not depend backwards on '{backwards_dependency}'"
+        );
+    }
+
+    let backend_adapters =
+        std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
+            .expect("root backend adapter module must be readable");
     assert!(
-        !adapter.contains("crate::project::"),
-        "the SQLite adapter must not depend backwards on the Project workflow layer"
+        !backend_adapters.contains("project_registry_sqlite"),
+        "the root backend adapter module must not retain a compatibility facade"
     );
 
     let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
@@ -3399,6 +3430,11 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     assert!(
         policy.contains("|| package == \"yss-project-registry\""),
         "project registry workflow must be classified in the Project layer"
+    );
+    assert!(
+        policy.contains("package == \"yss-project-registry-sqlite\"")
+            && policy.contains("layers.insert(RustLayer::BackendAdapter)"),
+        "project registry SQLite must be classified as a Backend Adapter"
     );
     for removed_capability in [
         "project_registry_store::ProjectRegistry",

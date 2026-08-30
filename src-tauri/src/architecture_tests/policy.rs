@@ -157,10 +157,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/backend_adapters/tabular/polars.rs",
         RustLayer::BackendAdapter,
     ),
-    (
-        "src-tauri/src/backend_adapters/project_registry_sqlite.rs",
-        RustLayer::BackendAdapter,
-    ),
     ("src-tauri/src/julia/mod.rs", RustLayer::BackendAdapter),
     ("src-tauri/src/julia/worker.rs", RustLayer::BackendAdapter),
     (
@@ -431,7 +427,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new",
             "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
             "yssbi_lib::julia::worker::JuliaWorkerManager::new",
-            "yssbi_lib::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect",
+            "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::application::project_watcher::ProjectWatcherState::new",
@@ -1761,6 +1757,8 @@ fn non_build_memberships(
         layers.insert(RustLayer::Logging);
     } else if package == "yss-window-state" {
         layers.insert(RustLayer::PlatformAdapter);
+    } else if package == "yss-project-registry-sqlite" {
+        layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {
         layers.insert(layer);
     }

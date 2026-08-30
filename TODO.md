@@ -674,6 +674,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   facade，行为层仅依赖 registry contract、discovery、progress、filesystem identity 等下层 crate，
   SQLite 继续作为 Backend Adapter；删除零调用的 validity wrapper，并以测试侧失败 store 替代生产类型中的
   remove-failure 开关，避免测试后门成为公开 API。
+- [ ] 将 `ProjectRegistryStore` 的 SQLx/SQLite 实现迁入
+  `src-tauri/crates/yss-project-registry-sqlite/` Backend Adapter 层；删除根 `backend_adapters` owner 与
+  兼容 module，Composition Root 直接注入 concrete store；集中 workspace 的 SQLx/Tokio 版本声明，
+  并让非法 `is_favorite`/root identity discriminant fail closed，而不是把任意非零整数静默解释为 true。
 - [ ] 将 project 根文件名、内容目录、资源扩展名与 index-input 相对路径分类收归
   `src-tauri/crates/yss-project-layout/` 无依赖 Pure Leaf；Graph/Worksheet/Project/Watcher 直接消费
   唯一 owner，删除 `project_io`、registry、graph/worksheet document 与 watcher 中的布局镜像，

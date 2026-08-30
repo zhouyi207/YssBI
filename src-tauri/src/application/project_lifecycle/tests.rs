@@ -16,7 +16,7 @@ use yss_variable_contract::VariableScope;
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct FailingRemoveProjectRegistryStore {
-    inner: crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore,
+    inner: yss_project_registry_sqlite::SqliteProjectRegistryStore,
 }
 
 impl ProjectRegistryStore for FailingRemoveProjectRegistryStore {
@@ -89,23 +89,21 @@ fn activate_named_project(root: &Path, name: &str) -> ProjectState {
 }
 
 async fn initialize_registry(directory: &TestDirectory) -> ProjectRegistry {
-    let store =
-        crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
-            directory.child("registry"),
-        )
-        .await
-        .unwrap();
+    let store = yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(
+        directory.child("registry"),
+    )
+    .await
+    .unwrap();
     let path = store.path().to_path_buf();
     ProjectRegistry::new(Arc::new(store), path)
 }
 
 async fn initialize_registry_with_remove_failure(directory: &TestDirectory) -> ProjectRegistry {
-    let store =
-        crate::backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
-            directory.child("registry"),
-        )
-        .await
-        .unwrap();
+    let store = yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(
+        directory.child("registry"),
+    )
+    .await
+    .unwrap();
     let path = store.path().to_path_buf();
     ProjectRegistry::new(
         Arc::new(FailingRemoveProjectRegistryStore { inner: store }),
