@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use thiserror::Error;
-use yss_graph_document::ResourceNameValidationError;
+use yss_resource_naming::ResourceNameValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
@@ -148,7 +148,7 @@ impl From<yss_graph_document::GraphResourcePathError> for ProjectError {
 mod tests {
     use super::ProjectFilesystemError;
     use crate::project::WorksheetResourcePathError;
-    use yss_graph_document::ResourceNameValidationError;
+    use yss_resource_naming::ResourceNameValidationError;
 
     #[test]
     fn resource_name_errors_have_stable_ipc_codes() {

@@ -4,10 +4,9 @@ use super::events::{CommittedResourceMutation, committed_resource_mutation_from_
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::{
-    ProjectFilesystemError, ResourceName, WorksheetDocument, WorksheetResourcePath,
-};
+use crate::project::{ProjectFilesystemError, WorksheetDocument, WorksheetResourcePath};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_resource_naming::ResourceName;
 
 #[derive(Debug, Error)]
 pub enum WorksheetApplicationError {

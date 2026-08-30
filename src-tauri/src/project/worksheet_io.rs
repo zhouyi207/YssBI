@@ -234,7 +234,8 @@ fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, Projec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{ResourceName, WorksheetResourcePath};
+    use crate::project::WorksheetResourcePath;
+    use yss_resource_naming::ResourceName;
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-worksheet-{}", uuid::Uuid::new_v4()));

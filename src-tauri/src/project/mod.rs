@@ -14,7 +14,6 @@ pub mod project_error;
 pub mod project_progress;
 pub mod project_registry_store;
 pub mod resource_lifecycle;
-pub mod resource_name;
 
 pub mod database_authority;
 pub mod project_activation;
@@ -64,7 +63,6 @@ pub use project_error::*;
 pub use project_progress::*;
 pub use project_registry_store::*;
 pub use resource_lifecycle::*;
-pub use resource_name::*;
 
 pub use database_authority::ProjectDatabaseError;
 pub use project_activation::*;
@@ -152,7 +150,7 @@ pub(crate) mod fixtures {
         name: &str,
         database_id: &str,
     ) -> (WorksheetResourcePath, WorksheetDocument) {
-        let name = super::ResourceName::parse(name).unwrap();
+        let name = yss_resource_naming::ResourceName::parse(name).unwrap();
         (
             WorksheetResourcePath::from_name(&name),
             WorksheetDocument::new(database_id),

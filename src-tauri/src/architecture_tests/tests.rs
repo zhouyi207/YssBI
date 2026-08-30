@@ -1480,8 +1480,8 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         "src-tauri/crates/yss-graph-document/src/lib.rs",
         "src-tauri/crates/yss-graph-document/src/identity.rs",
         "src-tauri/crates/yss-graph-document/src/model.rs",
-        "src-tauri/crates/yss-graph-document/src/name.rs",
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
+        "src-tauri/crates/yss-resource-naming/src/lib.rs",
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
@@ -2308,7 +2308,6 @@ fn graph_document_has_one_pure_crate_owner_without_compatibility_module() {
         "src-tauri/crates/yss-graph-document/src/identity.rs",
         "src-tauri/crates/yss-graph-document/src/lib.rs",
         "src-tauri/crates/yss-graph-document/src/model.rs",
-        "src-tauri/crates/yss-graph-document/src/name.rs",
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
     ] {
         assert!(
@@ -2321,18 +2320,84 @@ fn graph_document_has_one_pure_crate_owner_without_compatibility_module() {
         "the root crate must not retain a graph document compatibility module"
     );
 
-    let project_name_source =
-        std::fs::read_to_string(root.join("src-tauri/src/project/resource_name.rs"))
-            .expect("the project resource-name allocator must be readable");
-    for duplicate in [
-        "enum ResourceNameError",
-        "const MAX_RESOURCE_NAME_CHARACTERS",
-    ] {
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-document/Cargo.toml"))
+            .expect("graph document manifest must be readable");
+    assert!(
+        manifest.contains("yss-resource-naming"),
+        "graph resource paths must consume the canonical resource-name owner"
+    );
+    for obsolete_dependency in ["regex.workspace", "unicode-normalization.workspace"] {
         assert!(
-            !project_name_source.contains(duplicate),
-            "project must consume the canonical graph-document name rule instead of duplicating {duplicate}"
+            !manifest.contains(obsolete_dependency),
+            "graph document must not retain resource-name dependency {obsolete_dependency}"
         );
     }
+}
+
+#[test]
+fn resource_naming_has_one_pure_crate_owner_without_root_or_graph_facades() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-resource-naming/Cargo.toml",
+        "src-tauri/crates/yss-resource-naming/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "resource-name owner must exist at {relative}"
+        );
+    }
+    for obsolete in [
+        "src-tauri/src/project/resource_name.rs",
+        "src-tauri/crates/yss-graph-document/src/name.rs",
+    ] {
+        assert!(
+            !root.join(obsolete).exists(),
+            "obsolete resource-name owner must not return at {obsolete}"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("project module must be readable");
+    assert!(
+        !project_module.contains("mod resource_name")
+            && !project_module.contains("resource_name::*"),
+        "project must consume yss-resource-naming directly without a compatibility facade"
+    );
+
+    let graph_document =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-document/src/lib.rs"))
+            .expect("graph document root must be readable");
+    for compatibility_export in [
+        "ResourceNameValidationError",
+        "MAX_RESOURCE_NAME_CHARACTERS",
+        "validate_resource_name",
+    ] {
+        assert!(
+            !graph_document.contains(compatibility_export),
+            "graph document must not re-export resource naming API {compatibility_export}"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-resource-naming/src/lib.rs"))
+            .expect("resource-name owner must be readable");
+    for canonical_api in [
+        "pub struct ResourceName",
+        "pub enum ResourceNameValidationError",
+        "pub const MAX_RESOURCE_NAME_CHARACTERS",
+        "pub fn validate_resource_name",
+        "pub fn allocate_unique_resource_name",
+    ] {
+        assert!(
+            owner.contains(canonical_api),
+            "resource-name owner must expose canonical API {canonical_api}"
+        );
+    }
+    assert!(
+        !owner.contains("pub fn unique_name("),
+        "strict filesystem resource naming must stay distinct from loose display-name allocation"
+    );
 }
 
 #[test]

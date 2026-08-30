@@ -1,5 +1,6 @@
 use super::*;
 use crate::project::resource_patch::ResourceDocumentPatch;
+use yss_resource_naming::ResourceName;
 
 impl ProjectState {
     pub(in crate::project) fn rename_graph_resource_transaction_impl(
@@ -466,7 +467,7 @@ impl ProjectState {
         name: &str,
         kind: crate::project::GraphDocumentKind,
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
-        let requested = crate::project::ResourceName::parse(name)?;
+        let requested = ResourceName::parse(name)?;
         let root = crate::project::project_root_from_path(project_path);
         let persisted = crate::project::scan_graph_resource_index(&root)
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
@@ -484,7 +485,7 @@ impl ProjectState {
             .map(|(path, _)| path)
             .chain(persisted.iter().filter(|path| *path != source))
             .any(|path| {
-                crate::project::ResourceName::parse(path.display_name())
+                ResourceName::parse(path.display_name())
                     .expect("validated graph paths have validated display names")
                     .portable_key()
                     == requested.portable_key()

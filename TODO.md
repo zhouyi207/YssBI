@@ -582,9 +582,13 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将稳定 graph node/port/type/schema/value protocol、wire validation 与 dataframe
   nominal literals 迁入独立 `src-tauri/crates/yss-graph-protocol/` Pure Leaf；消费方直接
   依赖 crate，catalog assembly 测试归还 Graph owner，根 crate 不保留兼容 module。
-- [ ] 将 persisted graph document、entity identity、resource path 与 resource-name validation
-  迁入独立 `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 Project
-  直接消费 canonical validation error 与名称长度上限，避免镜像错误类型和重复规则事实源。
+- [ ] 将 persisted graph document、entity identity 与 graph resource path 迁入独立
+  `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 resource path 直接
+  消费独立 resource-name contract，避免镜像错误类型和重复规则事实源。
+- [ ] 将跨 graph/worksheet 的严格文件资源名校验、Unicode portable key 与冲突分配迁入
+  `src-tauri/crates/yss-resource-naming/` Pure Leaf；`yss-graph-document` 与 Project 直接消费该
+  crate，不保留 graph/root 兼容 re-export。宽松数据库/变量显示名的 `1`/`_1` 兼容语义保持
+  独立，避免以表面去重改变持久化命名行为。
 - [ ] 删除无生产调用的根 `graph/value` 层，不为 dead code 创建 `yss-graph-value`；移除两套
   漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
 - [ ] 将 canonical JSON 域分隔哈希迁入独立 `src-tauri/crates/yss-canonical-hash/` Pure Leaf；

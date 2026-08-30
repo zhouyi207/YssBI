@@ -1,6 +1,5 @@
 mod identity;
 mod model;
-mod name;
 mod resource_path;
 
 pub use identity::{ConnectionId, GraphRevision, NodeId, PortInstanceId, RevisionExhausted};
@@ -9,7 +8,6 @@ pub use model::{
     FunctionParameterId, GraphDocument, InputState, LastKnownPortMetadata, NodePosition, OrderKey,
     ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
-pub use name::{MAX_RESOURCE_NAME_CHARACTERS, ResourceNameValidationError, validate_resource_name};
 pub use resource_path::{
     GraphResourceKind, GraphResourcePath, GraphResourcePathError, normalize_graph_resource_path,
 };

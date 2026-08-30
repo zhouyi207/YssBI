@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::project::{
     GraphResourceDocument, ProjectFilesystemError, ProjectState, ResourceLifecycleIntent,
-    ResourceLifecycleOperation, ResourceName, StagedFilesystemMutation,
+    ResourceLifecycleOperation, StagedFilesystemMutation,
 };
 
 use yss_graph_document::{
@@ -10,6 +10,7 @@ use yss_graph_document::{
     NodeId, PortAddress, PortInstanceId, PortRef,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use super::VariableRevisionEntry;
 use crate::project::project_writers::{
@@ -686,7 +687,7 @@ impl ProjectState {
             .map(|path| ResourceName::parse(path.display_name()))
             .collect::<Result<Vec<_>, _>>()?;
         let requested = ResourceName::parse(name)?;
-        let allocated = crate::project::allocate_unique_resource_name(&requested, existing.iter());
+        let allocated = allocate_unique_resource_name(&requested, existing.iter());
         let (directory, extension) = match kind {
             crate::project::GraphDocumentKind::Event => {
                 (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION)

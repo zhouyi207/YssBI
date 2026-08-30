@@ -2,9 +2,8 @@ use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey};
 use crate::project::{
     GraphDocument, ProjectData, ProjectFilesystemError, ProjectFilesystemTransaction,
-    ProjectSession, ProjectState, ProjectTransactionContext, ResourceName,
-    StagedFilesystemMutation, WorksheetDocument, WorksheetResourcePath,
-    allocate_unique_resource_name,
+    ProjectSession, ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
+    WorksheetDocument, WorksheetResourcePath,
 };
 use crate::project::{
     HistoryStatusDto, ResourceDeltaEvent, ResourceLifecycleKind, ResourceLifecyclePatch,
@@ -18,6 +17,7 @@ use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
+use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 #[path = "project_writers/graph.rs"]
@@ -622,14 +622,15 @@ mod tests {
     use crate::graph::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
-        ProjectFilesystemFaultPoint, ProjectState, ResourceName, WorksheetDocument,
-        WorksheetResourcePath, fixtures,
+        ProjectFilesystemFaultPoint, ProjectState, WorksheetDocument, WorksheetResourcePath,
+        fixtures,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_resource_naming::ResourceName;
     use yss_variable_contract::VariableScope;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {

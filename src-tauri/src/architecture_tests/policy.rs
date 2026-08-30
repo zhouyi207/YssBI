@@ -1225,7 +1225,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::event_project::EventProject",
             "yssbi_lib::project::project_error::ProjectFilesystemError",
             "yssbi_lib::project::project_state::state::ProjectState",
-            "yssbi_lib::project::resource_name::ResourceName",
+            "yss_resource_naming::ResourceName",
             "yssbi_lib::project::worksheet_io::WorksheetDocument",
             "yssbi_lib::project::worksheet_resource_path::WorksheetResourcePath",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
@@ -1743,6 +1743,7 @@ fn non_build_memberships(
             | "yss-graph-type-mapping"
             | "yss-math"
             | "yss-project-identity"
+            | "yss-resource-naming"
             | "yss-tabular-contract"
             | "yss-variable-contract"
     ) {

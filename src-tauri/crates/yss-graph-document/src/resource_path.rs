@@ -1,7 +1,7 @@
-use super::validate_resource_name;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use yss_resource_naming::validate_resource_name;
 
 const EVENTS_DIR: &str = "events";
 const FUNCTIONS_DIR: &str = "functions";

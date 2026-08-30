@@ -1,0 +1,11 @@
+[package]
+name = "yss-resource-naming"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+regex.workspace = true
+unicode-casefold.workspace = true
+unicode-normalization.workspace = true

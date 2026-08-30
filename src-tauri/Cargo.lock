@@ -9201,12 +9201,11 @@ dependencies = [
 name = "yss-graph-document"
 version = "0.1.0"
 dependencies = [
- "regex",
  "serde",
  "serde_json",
- "unicode-normalization",
  "uuid",
  "yss-graph-protocol",
+ "yss-resource-naming",
 ]
 
 [[package]]
@@ -9302,6 +9301,15 @@ dependencies = [
  "serde_json",
  "uuid",
  "yss-graph-document",
+]
+
+[[package]]
+name = "yss-resource-naming"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "unicode-casefold",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -9422,6 +9430,7 @@ dependencies = [
  "yss-graph-type-mapping",
  "yss-math",
  "yss-project-identity",
+ "yss-resource-naming",
  "yss-sci",
  "yss-tabular-contract",
  "yss-tracing",

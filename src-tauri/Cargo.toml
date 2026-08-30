@@ -32,6 +32,7 @@ members = [
     "crates/yss-graph-type-mapping",
     "crates/yss-math",
     "crates/yss-project-identity",
+    "crates/yss-resource-naming",
     "crates/yss-sci",
     "crates/yss-tabular-contract",
     "crates/yss-tracing",
@@ -61,6 +62,7 @@ regex = "1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 unicode-normalization = "0.1.24"
+unicode-casefold = "0.2.0"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem"] }
 
@@ -96,6 +98,7 @@ yss-graph-runtime = { path = "./crates/yss-graph-runtime" }
 yss-graph-type-mapping = { path = "./crates/yss-graph-type-mapping" }
 yss-math = { path = "./crates/yss-math" }
 yss-project-identity = { path = "./crates/yss-project-identity" }
+yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tracing = { path = "./crates/yss-tracing" }
@@ -129,7 +132,7 @@ rand = "0.10"
 duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
 notify = "8.2.0"
 unicode-normalization.workspace = true
-unicode-casefold = "0.2.0"
+unicode-casefold.workspace = true
 tracing.workspace = true
 trash = "5.2"
 

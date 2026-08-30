@@ -2,9 +2,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use yss_graph_document::ResourceNameValidationError;
+use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
-use super::{ResourceName, WORKSHEET_EXTENSION, WORKSHEETS_DIR};
+use super::{WORKSHEET_EXTENSION, WORKSHEETS_DIR};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WorksheetResourcePathError {
@@ -84,8 +84,7 @@ mod tests {
     use std::path::Path;
 
     use super::{WorksheetResourcePath, WorksheetResourcePathError};
-    use crate::project::ResourceName;
-    use yss_graph_document::ResourceNameValidationError;
+    use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
     #[test]
     fn worksheet_path_round_trips_canonical_resource_identity() {

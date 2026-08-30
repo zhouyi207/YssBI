@@ -343,12 +343,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-graph-document",
         mode: RustDependencyMode::Runtime,
-        package_name: "regex",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-document",
-        mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
@@ -361,13 +355,25 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-graph-document",
         mode: RustDependencyMode::Runtime,
-        package_name: "unicode-normalization",
+        package_name: "uuid",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-document",
+        owning_package: "yss-resource-naming",
         mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
+        package_name: "regex",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-resource-naming",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-casefold",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-resource-naming",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-normalization",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
