@@ -3086,6 +3086,135 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
 }
 
 #[test]
+fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-layout/Cargo.toml",
+        "src-tauri/crates/yss-project-layout/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project layout owner must exist at {relative}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-layout\"",
+        "yss-project-layout = { path = \"./crates/yss-project-layout\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-layout/src/lib.rs"))
+            .expect("project layout owner must be readable");
+    for contract in [
+        "pub const PROJECT_METADATA_FILE",
+        "pub const GLOBAL_VARIABLES_FILE",
+        "pub const EVENTS_DIR",
+        "pub const EVENT_EXTENSION",
+        "pub const FUNCTIONS_DIR",
+        "pub const FUNCTION_EXTENSION",
+        "pub const WORKSHEETS_DIR",
+        "pub const WORKSHEET_EXTENSION",
+        "pub const DATABASE_DIR",
+        "pub const PROJECT_DUCKDB_FILE",
+        "pub const PROJECT_CONTENT_DIRECTORIES",
+        "pub fn is_project_index_input_path",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project layout crate must own canonical contract '{contract}'"
+        );
+    }
+    for forbidden in ["std::fs", "serde", "thiserror", "tauri"] {
+        assert!(
+            !owner.contains(forbidden),
+            "project layout must remain a dependency-free Pure Leaf without '{forbidden}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/crates/yss-graph-document/Cargo.toml",
+        "src-tauri/crates/yss-worksheet-document/Cargo.toml",
+    ] {
+        let manifest = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            manifest.contains("yss-project-layout = { path = \"../yss-project-layout\" }"),
+            "{relative} must declare the canonical project layout dependency"
+        );
+    }
+
+    for relative in [
+        "src-tauri/crates/yss-graph-document/src/resource_path.rs",
+        "src-tauri/crates/yss-worksheet-document/src/lib.rs",
+        "src-tauri/src/project/graph_resource_index.rs",
+        "src-tauri/src/project/project_change.rs",
+        "src-tauri/src/project/project_io.rs",
+        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/src/project/worksheet_io.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_layout"),
+            "{relative} must consume the canonical project layout directly"
+        );
+    }
+
+    for (relative, removed_owner) in [
+        (
+            "src-tauri/src/project/project_registry.rs",
+            "pub const PROJECT_METADATA_FILE",
+        ),
+        (
+            "src-tauri/src/project/project_io.rs",
+            "pub const GLOBAL_VARIABLES_FILE",
+        ),
+        (
+            "src-tauri/src/project/project_change.rs",
+            "pub fn is_relevant_project_path",
+        ),
+        (
+            "src-tauri/crates/yss-graph-document/src/resource_path.rs",
+            "const EVENTS_DIR",
+        ),
+        (
+            "src-tauri/crates/yss-worksheet-document/src/lib.rs",
+            "pub const WORKSHEETS_DIR",
+        ),
+    ] {
+        let source = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            !source.contains(removed_owner),
+            "{relative} must not restore mirrored layout owner '{removed_owner}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    assert!(
+        !project_module.contains("pub use yss_project_layout"),
+        "Project must not restore a project-layout compatibility facade"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-project-layout\""),
+        "project layout must be classified as a Pure Leaf"
+    );
+}
+
+#[test]
 fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     let root = repository_root();
     for relative in [
@@ -3134,8 +3263,6 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
             .expect("worksheet document owner must be readable");
     for contract in [
         "pub const CURRENT_WORKSHEET_SCHEMA_VERSION",
-        "pub const WORKSHEETS_DIR",
-        "pub const WORKSHEET_EXTENSION",
         "pub struct WorksheetDocument",
         "pub struct WorksheetEncodings",
         "pub struct WorksheetResourcePath",
@@ -3147,6 +3274,16 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
             "worksheet document crate must own canonical contract '{contract}'"
         );
     }
+    for layout_mirror in ["pub const WORKSHEETS_DIR", "pub const WORKSHEET_EXTENSION"] {
+        assert!(
+            !owner.contains(layout_mirror),
+            "worksheet document must consume project layout without restoring '{layout_mirror}'"
+        );
+    }
+    assert!(
+        owner.contains("yss_project_layout"),
+        "worksheet resource paths must consume the canonical project layout"
+    );
     assert!(
         owner.matches("deny_unknown_fields").count() >= 2,
         "worksheet document and nested encodings must both reject unknown fields"

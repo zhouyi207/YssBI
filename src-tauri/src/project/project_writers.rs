@@ -16,9 +16,10 @@ use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
+use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
-use yss_worksheet_document::{WORKSHEET_EXTENSION, WorksheetDocument, WorksheetResourcePath};
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[path = "project_writers/graph.rs"]
 mod graph;
@@ -492,7 +493,7 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
         Some(WORKSHEET_EXTENSION) => serde_json::from_slice::<WorksheetDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
-        _ if path == Path::new(crate::project::PROJECT_METADATA_FILE) => {
+        _ if path == Path::new(PROJECT_METADATA_FILE) => {
             serde_json::from_slice::<crate::project::ProjectManifest>(contents)
                 .map(|_| ())
                 .map_err(|error| error.to_string())
@@ -629,11 +630,12 @@ mod tests {
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_project_identity::{OperationId, ResourceRevision};
+    use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEETS_DIR};
     use yss_resource_naming::ResourceName;
     use yss_variable_contract::VariableScope;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
-        let worksheets = project.root.join(yss_worksheet_document::WORKSHEETS_DIR);
+        let worksheets = project.root.join(WORKSHEETS_DIR);
         let Ok(entries) = std::fs::read_dir(worksheets) else {
             return Vec::new();
         };
@@ -782,7 +784,7 @@ mod tests {
             .unwrap();
 
         let manifest: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(project.root.join(crate::project::PROJECT_METADATA_FILE)).unwrap(),
+            &std::fs::read(project.root.join(PROJECT_METADATA_FILE)).unwrap(),
         )
         .unwrap();
         assert_eq!(manifest["projectName"], "coherent-authority");
@@ -795,7 +797,7 @@ mod tests {
     #[test]
     fn global_variable_writer_cannot_be_overwritten_by_rename_rollback() {
         let project = TestProject::new("global-narrow-write");
-        let metadata = project.root.join(crate::project::PROJECT_METADATA_FILE);
+        let metadata = project.root.join(PROJECT_METADATA_FILE);
         std::fs::write(&metadata, br#"{\"sentinel\":true}"#).unwrap();
         let graph_path = GraphResourcePath::new("events/Before.yssbi-event").unwrap();
         let mut data = ProjectData::new();
@@ -843,7 +845,7 @@ mod tests {
             .unwrap();
 
         let globals: crate::project::GlobalVariablesDocument = serde_json::from_slice(
-            &std::fs::read(project.root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+            &std::fs::read(project.root.join(GLOBAL_VARIABLES_FILE)).unwrap(),
         )
         .unwrap();
         let persisted = globals.variables.get(&variable.id).unwrap();

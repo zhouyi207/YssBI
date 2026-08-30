@@ -266,7 +266,7 @@ impl ProjectState {
             filesystem_lease,
             mutations,
             |path, contents| {
-                if path == std::path::Path::new(crate::project::GLOBAL_VARIABLES_FILE) {
+                if path == std::path::Path::new(yss_project_layout::GLOBAL_VARIABLES_FILE) {
                     serde_json::from_slice::<crate::project::project_io::GlobalVariablesDocument>(
                         contents,
                     )
@@ -420,7 +420,7 @@ impl ProjectState {
                 contents: serde_json::to_vec_pretty(&after).map_err(|error| error.to_string())?,
             });
         }
-        let variables = std::path::PathBuf::from(crate::project::GLOBAL_VARIABLES_FILE);
+        let variables = std::path::PathBuf::from(yss_project_layout::GLOBAL_VARIABLES_FILE);
         match crate::project::read_secure_project_file(root, &variables) {
             Ok(contents) => {
                 let mut document: crate::project::project_io::GlobalVariablesDocument =
@@ -505,15 +505,15 @@ impl ProjectState {
         let target = match kind {
             crate::project::GraphDocumentKind::Event => GraphResourcePath::new(format!(
                 "{}/{}.{}",
-                crate::project::EVENTS_DIR,
+                yss_project_layout::EVENTS_DIR,
                 requested.as_str(),
-                crate::project::EVENT_EXTENSION
+                yss_project_layout::EVENT_EXTENSION
             )),
             crate::project::GraphDocumentKind::Function => GraphResourcePath::new(format!(
                 "{}/{}.{}",
-                crate::project::FUNCTIONS_DIR,
+                yss_project_layout::FUNCTIONS_DIR,
                 requested.as_str(),
-                crate::project::FUNCTION_EXTENSION
+                yss_project_layout::FUNCTION_EXTENSION
             )),
         }
         .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {

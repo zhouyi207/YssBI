@@ -1,6 +1,5 @@
 use crate::project::{
-    DATABASE_DIR, EVENTS_DIR, FUNCTIONS_DIR, GLOBAL_VARIABLES_FILE, NormalizedProjectRoot,
-    PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
+    NormalizedProjectRoot, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootLifecycleGuard, ProjectSession,
     ProjectState, ProjectTransactionContext, StagedFilesystemMutation, ensure_directory,
     read_project_source_tree, remove_directory_if_created, validate_deletion_root,
@@ -9,7 +8,11 @@ use crate::project::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
-use yss_worksheet_document::{WORKSHEET_EXTENSION, WORKSHEETS_DIR, WorksheetDocument};
+use yss_project_layout::{
+    GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE, WORKSHEET_EXTENSION,
+    WORKSHEETS_DIR,
+};
+use yss_worksheet_document::WorksheetDocument;
 
 pub struct PreparedProjectCopy {
     pub metadata_path: PathBuf,
@@ -354,11 +357,11 @@ fn active_session_for_deletion(
 fn new_project_mutations(
     data: &ProjectData,
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
-    Ok(vec![
-        create_directory(EVENTS_DIR),
-        create_directory(FUNCTIONS_DIR),
-        create_directory(WORKSHEETS_DIR),
-        create_directory(DATABASE_DIR),
+    let mut mutations = PROJECT_CONTENT_DIRECTORIES
+        .into_iter()
+        .map(create_directory)
+        .collect::<Vec<_>>();
+    mutations.extend([
         write_mutation(
             PROJECT_METADATA_FILE,
             crate::project::serialize_project_manifest(data).map_err(prepare_error)?,
@@ -367,7 +370,8 @@ fn new_project_mutations(
             GLOBAL_VARIABLES_FILE,
             crate::project::serialize_global_variables(data).map_err(prepare_error)?,
         ),
-    ])
+    ]);
+    Ok(mutations)
 }
 
 fn copy_mutations(
@@ -376,12 +380,7 @@ fn copy_mutations(
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
     let source_tree = read_project_source_tree(source)?;
     let mut directories = source_tree.directories;
-    directories.extend([
-        PathBuf::from(EVENTS_DIR),
-        PathBuf::from(FUNCTIONS_DIR),
-        PathBuf::from(WORKSHEETS_DIR),
-        PathBuf::from(DATABASE_DIR),
-    ]);
+    directories.extend(PROJECT_CONTENT_DIRECTORIES.map(PathBuf::from));
     let mut files = source_tree.files;
     files.remove(Path::new(PROJECT_METADATA_FILE));
     files.remove(Path::new(GLOBAL_VARIABLES_FILE));
@@ -826,7 +825,7 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.code(), "invalid_project_root");
-        assert!(target.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert!(target.join(PROJECT_METADATA_FILE).is_file());
         let _ = std::fs::remove_dir_all(redirect);
         let _ = std::fs::remove_dir_all(target);
     }
@@ -1116,7 +1115,7 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.code(), "stale_project_lifecycle");
-        assert!(root.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert!(root.join(PROJECT_METADATA_FILE).is_file());
         assert_eq!(
             state.capture_project_session().unwrap().instance_id,
             replacement_session.instance_id

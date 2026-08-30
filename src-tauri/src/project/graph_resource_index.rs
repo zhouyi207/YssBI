@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use super::GraphDocumentKind;
 use super::project_error::ProjectError;
-use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
 use yss_graph_document::{GraphResourcePath, normalize_graph_resource_path};
+use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
 use yss_resource_naming::ResourceName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -65,7 +65,7 @@ async fn register_root(registry: &ProjectRegistry, root: &Path, name: &str) -> P
     registry
         .register_project(
             name,
-            root.join(crate::project::PROJECT_METADATA_FILE)
+            root.join(yss_project_layout::PROJECT_METADATA_FILE)
                 .to_string_lossy()
                 .as_ref(),
         )
@@ -133,11 +133,15 @@ fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
         );
         assert!(
             destination
-                .join(crate::project::PROJECT_METADATA_FILE)
+                .join(yss_project_layout::PROJECT_METADATA_FILE)
                 .is_file()
         );
         assert_eq!(state.capture_project_session().unwrap(), source_session);
-        assert!(source.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert!(
+            source
+                .join(yss_project_layout::PROJECT_METADATA_FILE)
+                .is_file()
+        );
     });
 }
 
@@ -182,7 +186,7 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
             assert_eq!(result.kind, ProjectLifecycleKind::SaveAs);
             assert!(
                 destination
-                    .join(crate::project::PROJECT_METADATA_FILE)
+                    .join(yss_project_layout::PROJECT_METADATA_FILE)
                     .is_file()
             );
             assert!(result.record.is_some());
@@ -229,10 +233,10 @@ fn registry_failure_reports_preserved_created_project() {
         );
         assert!(
             destination
-                .join(crate::project::PROJECT_METADATA_FILE)
+                .join(yss_project_layout::PROJECT_METADATA_FILE)
                 .is_file()
         );
-        assert!(destination.join(crate::project::DATABASE_DIR).is_dir());
+        assert!(destination.join(yss_project_layout::DATABASE_DIR).is_dir());
     });
 }
 
@@ -271,7 +275,10 @@ fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
                 if error.code() == "transaction_commit_failed"
         ));
         assert_eq!(state.capture_project_session().unwrap(), session_before);
-        assert!(root.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert!(
+            root.join(yss_project_layout::PROJECT_METADATA_FILE)
+                .is_file()
+        );
         assert!(
             registry
                 .fetch_by_id(record.id.as_str())

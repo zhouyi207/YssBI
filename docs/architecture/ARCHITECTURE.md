@@ -111,7 +111,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
 | `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
-| `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供 |
+| `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供，磁盘目录/扩展名由 `yss-project-layout` 提供 |
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
 | `src-tauri/crates/yss-graph-protocol/` | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner |
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
@@ -121,12 +121,13 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
 | `src-tauri/crates/yss-project-identity/` | 独立 Pure Leaf：project instance/registration/session/root/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior |
+| `src-tauri/crates/yss-project-layout/` | 独立且无依赖的 Pure Leaf：project 磁盘目录、文件名、扩展名与 index-input 相对路径分类的唯一 canonical owner；不持有 I/O、schema、watcher 或 workflow |
 | `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
 | `src-tauri/crates/yss-project-registry-contract/` | 独立 Pure Leaf：project registration record、root identity state 与异步 persistence port/error 的唯一 canonical owner；registry workflow 留在 Project，SQLite 实现留在 Backend Adapter |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
-| `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本、资源路径与磁盘布局常量的唯一 canonical owner；安全扫描与事务 I/O 留在 Project |
+| `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
@@ -347,6 +348,8 @@ yss-graph-registry + yss-graph-analysis-contract
   → Execution immutable plan/runtime
 yss-graph-resource-contract
   → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
+yss-project-layout
+  → yss-graph-document + yss-worksheet-document + Project persistence/indexing + Platform watcher classification
 yss-resource-naming
   → yss-graph-document
 yss-project-identity
@@ -364,8 +367,9 @@ yss-resource-naming + yss-project-identity
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-computation-settings`：统一拥有持久化 numeric tolerance、missing-value policy、校验错误和 settings mutation envelopes。Project manifest 读取显式执行 fail-closed validation，嵌套 settings wire 拒绝未知字段；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
 - `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
+- `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Worksheet 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
-- `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire、资源路径和 `worksheets/*.yssbi-worksheet` 布局常量；Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
+- `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire 与资源路径；`worksheets/*.yssbi-worksheet` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。

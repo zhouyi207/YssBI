@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 #[cfg(test)]
-use yss_worksheet_document::WORKSHEET_EXTENSION;
-use yss_worksheet_document::{WORKSHEETS_DIR, WorksheetDocument, WorksheetResourcePath};
+use yss_project_layout::WORKSHEET_EXTENSION;
+use yss_project_layout::WORKSHEETS_DIR;
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 use super::ProjectError;
 

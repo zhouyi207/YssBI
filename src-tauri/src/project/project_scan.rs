@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use super::{PROJECT_METADATA_FILE, normalize_project_name};
+use super::normalize_project_name;
 use thiserror::Error;
+use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_progress::ProjectTaskCancellation;
 use yss_project_registry_contract::ProjectRecord;
 

@@ -689,12 +689,13 @@ impl ProjectState {
         let requested = ResourceName::parse(name)?;
         let allocated = allocate_unique_resource_name(&requested, existing.iter());
         let (directory, extension) = match kind {
-            crate::project::GraphDocumentKind::Event => {
-                (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION)
-            }
+            crate::project::GraphDocumentKind::Event => (
+                yss_project_layout::EVENTS_DIR,
+                yss_project_layout::EVENT_EXTENSION,
+            ),
             crate::project::GraphDocumentKind::Function => (
-                crate::project::FUNCTIONS_DIR,
-                crate::project::FUNCTION_EXTENSION,
+                yss_project_layout::FUNCTIONS_DIR,
+                yss_project_layout::FUNCTION_EXTENSION,
             ),
         };
         let path =
@@ -1100,12 +1101,13 @@ fn renamed_graph_path(
     kind: crate::project::GraphDocumentKind,
 ) -> Result<GraphResourcePath, ProjectFilesystemError> {
     let (directory, extension) = match kind {
-        crate::project::GraphDocumentKind::Event => {
-            (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION)
-        }
+        crate::project::GraphDocumentKind::Event => (
+            yss_project_layout::EVENTS_DIR,
+            yss_project_layout::EVENT_EXTENSION,
+        ),
         crate::project::GraphDocumentKind::Function => (
-            crate::project::FUNCTIONS_DIR,
-            crate::project::FUNCTION_EXTENSION,
+            yss_project_layout::FUNCTIONS_DIR,
+            yss_project_layout::FUNCTION_EXTENSION,
         ),
     };
     GraphResourcePath::new(format!("{directory}/{}.{extension}", name.as_str())).map_err(|error| {

@@ -2,7 +2,7 @@ use crate::project::{ProjectFilesystemError, ProjectState};
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 use yss_project_identity::ProjectInstanceId;
-use yss_worksheet_document::WORKSHEETS_DIR;
+use yss_project_layout::{PROJECT_METADATA_FILE, is_project_index_input_path};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProjectRelativePath(PathBuf);
@@ -57,27 +57,15 @@ impl FileChange {
 
     pub(crate) fn watcher_error() -> Self {
         Self::new(
-            ProjectRelativePath::new("metadata.yssbi"),
+            ProjectRelativePath::new(PROJECT_METADATA_FILE),
             FileChangeKind::WatcherError,
         )
     }
 
     pub fn is_relevant(&self) -> bool {
         self.kind == FileChangeKind::WatcherError
-            || is_relevant_project_path(self.relative_path.as_path())
+            || is_project_index_input_path(self.relative_path.as_path())
     }
-}
-
-pub fn is_relevant_project_path(path: &Path) -> bool {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    normalized.starts_with("events/")
-        || normalized.starts_with("functions/")
-        || normalized
-            .strip_prefix(WORKSHEETS_DIR)
-            .is_some_and(|suffix| suffix.starts_with('/'))
-        || normalized == "variables.yssbi-vars"
-        || normalized == "metadata.yssbi"
-        || normalized.starts_with("database/")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

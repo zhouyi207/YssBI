@@ -1281,8 +1281,13 @@ fn runtime_database_mutation(
 fn prepare_duckdb_ingest_paths(
     session: &ProjectSession,
 ) -> Result<(String, String, PathBuf, String), ProjectDatabaseError> {
-    crate::project::ensure_directory(&session.root.as_path().join(crate::project::DATABASE_DIR))
-        .map_err(ProjectDatabaseError::operation)?;
+    crate::project::ensure_directory(
+        &session
+            .root
+            .as_path()
+            .join(yss_project_layout::DATABASE_DIR),
+    )
+    .map_err(ProjectDatabaseError::operation)?;
 
     let id = format!("db-{}", Uuid::new_v4());
     let table = id.clone();

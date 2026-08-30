@@ -1,9 +1,10 @@
-use crate::project::{PROJECT_METADATA_FILE, ProjectFilesystemError, project_root_from_path};
+use crate::project::{ProjectFilesystemError, project_root_from_path};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
 use yss_project_identity::ProjectRootIdentity;
+use yss_project_layout::PROJECT_METADATA_FILE;
 
 #[cfg(test)]
 thread_local! {

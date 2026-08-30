@@ -1,9 +1,9 @@
 use crate::project::{
-    NormalizedProjectRoot, PROJECT_METADATA_FILE, ProjectFilesystemError, metadata_is_redirect,
-    read_secure_project_file,
+    NormalizedProjectRoot, ProjectFilesystemError, metadata_is_redirect, read_secure_project_file,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use yss_project_layout::PROJECT_METADATA_FILE;
 
 pub(crate) struct ProjectSourceTree {
     pub directories: BTreeSet<PathBuf>,

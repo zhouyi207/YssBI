@@ -4,27 +4,23 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectData, ProjectError, ProjectWorksheetIndexEntry, load_worksheets_from_root,
-    read_worksheet_index_entries, scan_graph_resource_index,
+    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, ProjectData, ProjectError,
+    ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
+    scan_graph_resource_index,
 };
 use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_graph_document::GraphDocument as NodeGraphDocument;
 use yss_project_identity::ProjectResourcePath;
 #[cfg(test)]
-use yss_worksheet_document::WORKSHEETS_DIR;
-
-use yss_graph_document::GraphDocument as NodeGraphDocument;
+use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
+use yss_project_layout::{
+    DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
+    GLOBAL_VARIABLES_FILE, PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
+};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 3;
-pub const EVENTS_DIR: &str = "events";
-pub const FUNCTIONS_DIR: &str = "functions";
-pub const DATABASE_DIR: &str = "database";
-pub const PROJECT_DUCKDB_FILE: &str = "project.duckdb";
-pub const GLOBAL_VARIABLES_FILE: &str = "variables.yssbi-vars";
-pub const EVENT_EXTENSION: &str = "yssbi-event";
-pub const FUNCTION_EXTENSION: &str = "yssbi-function";
 
 pub(crate) fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
@@ -308,10 +304,9 @@ fn write_loaded_graph_document(
 #[cfg(test)]
 fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<(), ProjectError> {
     std::fs::create_dir_all(root)?;
-    std::fs::create_dir_all(root.join(EVENTS_DIR))?;
-    std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
-    std::fs::create_dir_all(root.join(WORKSHEETS_DIR))?;
-    std::fs::create_dir_all(root.join(DATABASE_DIR))?;
+    for directory in PROJECT_CONTENT_DIRECTORIES {
+        std::fs::create_dir_all(root.join(directory))?;
+    }
 
     scan_graph_resource_index(root)?;
 

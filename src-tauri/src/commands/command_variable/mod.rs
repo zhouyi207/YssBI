@@ -501,7 +501,11 @@ mod tests {
         assert_eq!(error.code(), "transaction_prepare_failed", "{error:?}");
         assert_eq!(command_snapshot(&state), before);
         assert!(events.is_empty());
-        assert!(!root.join(crate::project::GLOBAL_VARIABLES_FILE).exists());
+        assert!(
+            !root
+                .join(yss_project_layout::GLOBAL_VARIABLES_FILE)
+                .exists()
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -525,7 +529,8 @@ mod tests {
                 OperationId::new(),
             )
             .unwrap();
-        let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+        let disk_before =
+            std::fs::read(root.join(yss_project_layout::GLOBAL_VARIABLES_FILE)).unwrap();
         let before = command_snapshot(&state);
         let mut events = Vec::new();
         state.set_project_filesystem_fault(Some(
@@ -551,7 +556,7 @@ mod tests {
         assert_eq!(error.code(), "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);
         assert_eq!(
-            std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+            std::fs::read(root.join(yss_project_layout::GLOBAL_VARIABLES_FILE)).unwrap(),
             disk_before
         );
         assert!(events.is_empty());
@@ -578,7 +583,8 @@ mod tests {
                 OperationId::new(),
             )
             .unwrap();
-        let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+        let disk_before =
+            std::fs::read(root.join(yss_project_layout::GLOBAL_VARIABLES_FILE)).unwrap();
         let before = command_snapshot(&state);
         let mut events = Vec::new();
         state.set_project_filesystem_fault(Some(
@@ -599,7 +605,7 @@ mod tests {
         assert_eq!(error.code(), "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);
         assert_eq!(
-            std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+            std::fs::read(root.join(yss_project_layout::GLOBAL_VARIABLES_FILE)).unwrap(),
             disk_before
         );
         assert!(events.is_empty());

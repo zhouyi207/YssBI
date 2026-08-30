@@ -2,14 +2,13 @@ use super::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemFaultPoint,
     ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
-use crate::project::{
-    PROJECT_METADATA_FILE, ProjectRecoveryMarker, ProjectSession, ProjectTransactionContext,
-};
+use crate::project::{ProjectRecoveryMarker, ProjectSession, ProjectTransactionContext};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
+use yss_project_layout::PROJECT_METADATA_FILE;
 
 struct TestDirectory {
     path: PathBuf,

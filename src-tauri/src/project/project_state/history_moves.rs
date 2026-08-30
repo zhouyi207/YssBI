@@ -602,7 +602,7 @@ impl ProjectState {
             filesystem_lease,
             mutations,
             |path, contents| {
-                if path == std::path::Path::new(crate::project::GLOBAL_VARIABLES_FILE) {
+                if path == std::path::Path::new(yss_project_layout::GLOBAL_VARIABLES_FILE) {
                     serde_json::from_slice::<crate::project::project_io::GlobalVariablesDocument>(
                         contents,
                     )

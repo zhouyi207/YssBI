@@ -3,11 +3,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use yss_project_identity::ResourceRevision;
+use yss_project_layout::{WORKSHEET_EXTENSION, WORKSHEETS_DIR};
 use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
 pub const CURRENT_WORKSHEET_SCHEMA_VERSION: u32 = 3;
-pub const WORKSHEETS_DIR: &str = "worksheets";
-pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
 
 fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where

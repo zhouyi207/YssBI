@@ -121,7 +121,7 @@ pub(in crate::project) fn variable_effect_filesystem_mutations(
             .map(|(id, variable)| (*id, variable.clone()))
             .collect();
         mutations.push(StagedFilesystemMutation::Write {
-            relative_path: crate::project::GLOBAL_VARIABLES_FILE.into(),
+            relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
             contents: serde_json::to_vec_pretty(
                 &crate::project::project_io::GlobalVariablesDocument {
                     schema_version: crate::project::project_io::SCHEMA_VERSION,
@@ -158,7 +158,7 @@ pub(in crate::project) fn validate_variable_effect_document(
     path: &std::path::Path,
     contents: &[u8],
 ) -> Result<(), String> {
-    if path == std::path::Path::new(crate::project::GLOBAL_VARIABLES_FILE) {
+    if path == std::path::Path::new(yss_project_layout::GLOBAL_VARIABLES_FILE) {
         serde_json::from_slice::<crate::project::project_io::GlobalVariablesDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string())

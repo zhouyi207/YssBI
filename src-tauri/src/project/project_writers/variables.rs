@@ -62,7 +62,7 @@ impl ProjectState {
             &snapshot,
             context,
             vec![StagedFilesystemMutation::Write {
-                relative_path: crate::project::GLOBAL_VARIABLES_FILE.into(),
+                relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
                 contents: crate::project::serialize_global_variables(&snapshot.data)
                     .map_err(prepare_error)?,
             }],
@@ -293,7 +293,7 @@ impl ProjectState {
             context.clone(),
             lease,
             vec![StagedFilesystemMutation::Write {
-                relative_path: crate::project::GLOBAL_VARIABLES_FILE.into(),
+                relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
                 contents,
             }],
             validate_document,

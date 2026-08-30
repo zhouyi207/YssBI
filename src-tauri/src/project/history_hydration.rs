@@ -8,8 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{HistoryEntryId, ResourceRevision};
+use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEET_EXTENSION};
 use yss_variable_contract::{VariableInstance, VariableScope};
-use yss_worksheet_document::{WORKSHEET_EXTENSION, WorksheetDocument, WorksheetResourcePath};
+use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HistoryGraphResidency {
@@ -761,7 +762,7 @@ pub(super) fn durable_filesystem_mutations(
         .any(|variable| matches!(variable.scope, VariableScope::Global))
     }) {
         mutations.push(crate::project::StagedFilesystemMutation::Write {
-            relative_path: super::project_io::GLOBAL_VARIABLES_FILE.into(),
+            relative_path: GLOBAL_VARIABLES_FILE.into(),
             contents: super::project_io::serialize_global_variables(&prepared.after_data)
                 .map_err(history_conflict)?,
         });
@@ -804,7 +805,7 @@ pub(super) fn validate_durable_history_document(
             .map(|_| ())
             .map_err(|error| error.to_string());
     }
-    if relative_path == Path::new(super::project_io::GLOBAL_VARIABLES_FILE) {
+    if relative_path == Path::new(GLOBAL_VARIABLES_FILE) {
         return super::project_io::parse_global_variables_document(contents)
             .map(|_| ())
             .map_err(|error| error.to_string());

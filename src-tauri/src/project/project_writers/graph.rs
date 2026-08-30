@@ -10,12 +10,12 @@ impl ProjectState {
         let mut expected = BTreeMap::new();
         let mut mutations = vec![
             StagedFilesystemMutation::Write {
-                relative_path: crate::project::PROJECT_METADATA_FILE.into(),
+                relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),
                 contents: crate::project::serialize_project_manifest(&snapshot.data)
                     .map_err(prepare_error)?,
             },
             StagedFilesystemMutation::Write {
-                relative_path: crate::project::GLOBAL_VARIABLES_FILE.into(),
+                relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
                 contents: crate::project::serialize_global_variables(&snapshot.data)
                     .map_err(prepare_error)?,
             },

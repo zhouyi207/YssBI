@@ -153,7 +153,7 @@ impl ProjectState {
             context,
             lease,
             vec![StagedFilesystemMutation::Write {
-                relative_path: crate::project::PROJECT_METADATA_FILE.into(),
+                relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),
                 contents,
             }],
             |_, staged| {

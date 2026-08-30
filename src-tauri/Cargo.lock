@@ -9218,6 +9218,7 @@ dependencies = [
  "serde_json",
  "uuid",
  "yss-graph-protocol",
+ "yss-project-layout",
  "yss-resource-naming",
 ]
 
@@ -9317,6 +9318,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-layout"
+version = "0.1.0"
+
+[[package]]
 name = "yss-project-progress"
 version = "0.1.0"
 
@@ -9409,6 +9414,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "yss-project-identity",
+ "yss-project-layout",
  "yss-resource-naming",
 ]
 
@@ -9469,6 +9475,7 @@ dependencies = [
  "yss-graph-type-mapping",
  "yss-math",
  "yss-project-identity",
+ "yss-project-layout",
  "yss-project-progress",
  "yss-project-registry-contract",
  "yss-resource-naming",

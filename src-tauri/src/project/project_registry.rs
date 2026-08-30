@@ -9,6 +9,7 @@ use super::{
 };
 
 use yss_project_identity::ProjectRegistrationId;
+use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
     ProjectTaskCancellation,
@@ -16,8 +17,6 @@ use yss_project_progress::{
 use yss_project_registry_contract::{
     ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRootIdentityState,
 };
-
-pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

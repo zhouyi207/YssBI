@@ -1,12 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
 use yss_resource_naming::validate_resource_name;
-
-const EVENTS_DIR: &str = "events";
-const FUNCTIONS_DIR: &str = "functions";
-const EVENT_EXTENSION: &str = "yssbi-event";
-const FUNCTION_EXTENSION: &str = "yssbi-function";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphResourceKind {
