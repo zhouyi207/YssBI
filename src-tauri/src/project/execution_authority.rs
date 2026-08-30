@@ -1261,11 +1261,11 @@ fn check_commit_control(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::data_contract::{DataType, DataValue};
     use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, fixtures};
     use crate::variable::VariableScope;
     use std::sync::atomic::AtomicBool;
     use std::time::Duration;
+    use yss_data_contract::{DataType, DataValue};
 
     fn project_with_graph(label: &str) -> (fixtures::TempProject, GraphResourcePath) {
         let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();

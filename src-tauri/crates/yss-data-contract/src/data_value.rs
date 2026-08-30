@@ -1,4 +1,4 @@
-use super::DataType;
+use crate::data_type::DataType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -121,7 +121,7 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum DataValue {
     Boolean(bool),
     Int64(i64),
@@ -137,11 +137,6 @@ pub enum DataValue {
         #[serde(rename = "handleId")]
         handle_id: String,
     },
+    #[default]
     Null,
-}
-
-impl Default for DataValue {
-    fn default() -> Self {
-        DataValue::Null
-    }
 }

@@ -359,7 +359,7 @@ mod tests {
                     resolved_type: Some(EditorTypeSummary {
                         display: "core.bool".into(),
                         resolved: true,
-                        data_type: Some(crate::data_contract::DataType::Boolean),
+                        data_type: Some(yss_data_contract::DataType::Boolean),
                         internal_type_expr: TypeExpr::Concrete(
                             TypeId::new("core.bool").expect("test type id is valid"),
                         ),

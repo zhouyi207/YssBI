@@ -3,7 +3,7 @@ use super::unique_name;
 use super::{ProjectFilesystemError, ProjectState};
 
 #[cfg(test)]
-use crate::data_contract::{DataType, DataValue};
+use yss_data_contract::{DataType, DataValue};
 
 use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
@@ -152,7 +152,8 @@ impl ProjectState {
             let changed = variable.data_type != dt;
             variable.data_type = dt;
             if changed && data_value.is_none() {
-                variable.data_value = variable.data_type.default_value();
+                variable.data_value =
+                    crate::project::variable_defaults::default_value_for(&variable.data_type);
             }
         }
         if let Some(dv) = data_value {
@@ -192,10 +193,10 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_contract::DataSeriesValue;
     use crate::project::ProjectData;
     use crate::project::ResourceRevision;
     use std::sync::{Arc, Mutex, mpsc};
+    use yss_data_contract::DataSeriesValue;
 
     fn add_int_variable(state: &ProjectState) -> VariableInstance {
         state

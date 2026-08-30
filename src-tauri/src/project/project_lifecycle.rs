@@ -492,7 +492,6 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::data_contract::{DataType, DataValue};
     use crate::graph::document::{
         GraphDocumentOperation, GraphDocumentPatch, MutationRequest, ResourceKey,
     };
@@ -506,6 +505,7 @@ mod tests {
     use crate::project::{OperationId, ResourceRevision};
     use crate::variable::VariableScope;
     use std::time::Duration;
+    use yss_data_contract::{DataType, DataValue};
 
     fn root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(

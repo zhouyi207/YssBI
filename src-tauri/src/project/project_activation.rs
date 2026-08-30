@@ -241,7 +241,6 @@ impl ProjectState {
 
 #[cfg(all(test, any()))]
 mod tests {
-    use crate::data_contract::{DataType, DataValue};
     use crate::graph::document::DocumentError;
     use crate::graph::protocol::PortKey;
     use crate::graph_document::GraphResourcePath;
@@ -255,6 +254,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Barrier};
     use std::time::Duration;
+    use yss_data_contract::{DataType, DataValue};
 
     fn project_root(label: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(

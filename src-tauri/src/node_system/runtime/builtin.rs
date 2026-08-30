@@ -166,7 +166,7 @@ impl Kernel for VariableKernel {
 fn variable_runtime_value(
     variable: &crate::variable::VariableInstance,
 ) -> Result<RuntimeValue, KernelError> {
-    let crate::data_contract::DataType::DataSeries(element_type) = &variable.data_type else {
+    let yss_data_contract::DataType::DataSeries(element_type) = &variable.data_type else {
         return Ok(RuntimeValue::Scalar(data_value_to_protocol(
             &variable.data_value,
         )?));
@@ -199,9 +199,9 @@ fn variable_runtime_value(
 }
 
 fn data_series_element_type(
-    data_type: &crate::data_contract::DataType,
+    data_type: &yss_data_contract::DataType,
 ) -> Result<DataSeriesElementType, KernelError> {
-    use crate::data_contract::DataType;
+    use yss_data_contract::DataType;
     match data_type {
         DataType::Int64 => Ok(DataSeriesElementType::Int64),
         DataType::Float64 => Ok(DataSeriesElementType::Float64),
@@ -266,8 +266,8 @@ fn tabular_series_value(
 fn runtime_to_variable_value(
     variable: &crate::variable::VariableInstance,
     value: &RuntimeValue,
-) -> Result<crate::data_contract::DataValue, KernelError> {
-    let crate::data_contract::DataType::DataSeries(declared_element) = &variable.data_type else {
+) -> Result<yss_data_contract::DataValue, KernelError> {
+    let yss_data_contract::DataType::DataSeries(declared_element) = &variable.data_type else {
         return protocol_to_data_value(runtime_scalar(std::slice::from_ref(value), 0)?);
     };
     let artifact = super::require_data_series(value)?;
@@ -293,8 +293,8 @@ fn runtime_to_variable_value(
         .collect::<Result<Vec<_>, _>>()?;
     let json = serde_json::to_string(&serde_json::json!({column_name: values}))
         .map_err(|error| KernelError::new(error.to_string()))?;
-    Ok(crate::data_contract::DataValue::DataSeries(
-        crate::data_contract::DataSeriesValue::with_element_type(
+    Ok(yss_data_contract::DataValue::DataSeries(
+        yss_data_contract::DataSeriesValue::with_element_type(
             json,
             declared_element.as_ref().clone(),
         ),
@@ -315,8 +315,8 @@ fn protocol_series_value_to_json(value: Value) -> Result<serde_json::Value, Kern
     }
 }
 
-fn data_value_to_protocol(value: &crate::data_contract::DataValue) -> Result<Value, KernelError> {
-    use crate::data_contract::DataValue;
+fn data_value_to_protocol(value: &yss_data_contract::DataValue) -> Result<Value, KernelError> {
+    use yss_data_contract::DataValue;
     Ok(match value {
         DataValue::Boolean(value) => Value::Bool(*value),
         DataValue::Int64(value) => Value::Integer(*value),
@@ -345,8 +345,8 @@ fn data_value_to_protocol(value: &crate::data_contract::DataValue) -> Result<Val
     })
 }
 
-fn protocol_to_data_value(value: &Value) -> Result<crate::data_contract::DataValue, KernelError> {
-    use crate::data_contract::DataValue;
+fn protocol_to_data_value(value: &Value) -> Result<yss_data_contract::DataValue, KernelError> {
+    use yss_data_contract::DataValue;
     Ok(match value {
         Value::Bool(value) => DataValue::Boolean(*value),
         Value::Integer(value) => DataValue::Int64(*value),

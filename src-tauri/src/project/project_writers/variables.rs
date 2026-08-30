@@ -170,7 +170,9 @@ impl ProjectState {
                     let changed = variable.data_type != data_type;
                     variable.data_type = data_type;
                     if changed && data_value.is_none() {
-                        variable.data_value = variable.data_type.default_value();
+                        variable.data_value = crate::project::variable_defaults::default_value_for(
+                            &variable.data_type,
+                        );
                     }
                 }
                 if let Some(data_value) = data_value {
@@ -561,7 +563,9 @@ impl ProjectState {
                     let changed = variable.data_type != data_type;
                     variable.data_type = data_type;
                     if changed && data_value.is_none() {
-                        variable.data_value = variable.data_type.default_value();
+                        variable.data_value = crate::project::variable_defaults::default_value_for(
+                            &variable.data_type,
+                        );
                     }
                 }
                 if let Some(data_value) = data_value {

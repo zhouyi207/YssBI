@@ -1,8 +1,8 @@
-use crate::data_contract::{CategoricalRole as PersistedCategoricalRole, DataValue};
 use crate::sci::api::computation::{
     CategoricalRole, StatisticalInput, StatisticalInputMappingError, StatisticalInputSource,
     StatisticalScalar, StatisticalValueKind,
 };
+use yss_data_contract::{CategoricalRole as PersistedCategoricalRole, DataValue};
 
 pub fn statistical_input(
     source: StatisticalInputSource<'_>,
@@ -65,14 +65,14 @@ fn unsupported(
 #[cfg(test)]
 mod tests {
     use super::{statistical_categorical_role, statistical_input};
-    use crate::data_contract::{
-        CategoricalRole as PersistedCategoricalRole, DataSeriesValue, DataValue,
-    };
     use crate::sci::api::computation::{
         CategoricalRole, StatisticalInputMappingError, StatisticalInputSource, StatisticalScalar,
         StatisticalValueKind,
     };
     use std::collections::HashMap;
+    use yss_data_contract::{
+        CategoricalRole as PersistedCategoricalRole, DataSeriesValue, DataValue,
+    };
 
     #[test]
     fn persisted_scalars_and_role_map_to_the_sci_input_contract() {

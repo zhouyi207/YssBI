@@ -108,6 +108,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
 | `src-tauri/src/graph/` | graph behavior、catalog/registry、analysis、neutral compiler 与 graph diagnostics |
 | `src-tauri/src/execution/` | immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports |
+| `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/src/database_contract/` | persisted database declaration、engine identity 与 DuckDB table identity contract |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |

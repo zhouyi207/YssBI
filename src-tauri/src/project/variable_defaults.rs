@@ -1,4 +1,4 @@
-use crate::data_contract::{DataType, DataValue};
+use yss_data_contract::{DataType, DataValue};
 
 pub fn default_value_for(data_type: &DataType) -> DataValue {
     match data_type {

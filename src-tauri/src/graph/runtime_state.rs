@@ -3,7 +3,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use std::sync::{Barrier, Mutex};
 
-use crate::data_contract::DataType;
 use crate::graph::analysis::contracts::CompilationBasis;
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
 use crate::graph::catalog::{
@@ -19,6 +18,7 @@ use crate::graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
 };
 use thiserror::Error;
+use yss_data_contract::DataType;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);

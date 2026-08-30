@@ -755,7 +755,6 @@ fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
 
 #[cfg(all(test, any()))]
 mod tests {
-    use crate::data_contract::{DataType, DataValue};
     use crate::graph::document::{FunctionParameter, FunctionSignature};
     use crate::graph_document::FunctionParameterId;
     use crate::graph_document::GraphResourcePath;
@@ -764,6 +763,7 @@ mod tests {
         ProjectState, fixtures, read_project_index as read_project_index_from_disk,
     };
     use crate::variable::VariableScope;
+    use yss_data_contract::{DataType, DataValue};
 
     use std::time::Duration;
 

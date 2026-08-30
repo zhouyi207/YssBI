@@ -1,4 +1,3 @@
-use crate::data_contract::DataType;
 use crate::graph::analysis::GraphDiagnosticLocation;
 use crate::graph::analysis::contracts::{DiagnosticArguments, ResourceVersionSet};
 use crate::graph::protocol::{
@@ -8,6 +7,7 @@ use crate::graph::protocol::{
 use crate::graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
+use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorProjectionBasis {

@@ -1,5 +1,4 @@
 use super::model::*;
-use crate::data_contract::DataType;
 use crate::graph::analysis::contracts::DiagnosticLocation;
 use crate::graph::analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
@@ -9,6 +8,7 @@ use crate::graph::analysis::{
 use crate::graph::protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 use crate::graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
 use std::collections::BTreeMap;
+use yss_data_contract::DataType;
 
 pub fn build_editor_projection(
     input: EditorProjectionInput<'_>,

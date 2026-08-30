@@ -9,10 +9,10 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::application::events::{ApplicationEvent, committed_resource_mutation_from_project};
-use crate::data_contract::{DataType, DataValue};
 use crate::project::project_writers::GlobalVariableMutationResult;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceRevision};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
+use yss_data_contract::{DataType, DataValue};
 
 pub enum VariableMutationRequest {
     Create {

@@ -247,7 +247,6 @@ fn map_project_query_error(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::data_contract::{DataType, DataValue};
     use crate::graph::document::{
         EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         MutationRequest, ResourceKey,
@@ -258,6 +257,7 @@ mod tests {
     use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectInstanceId};
     use crate::variable::VariableScope;
+    use yss_data_contract::{DataType, DataValue};
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
         let expected = state.capture_project_session().unwrap().instance_id;

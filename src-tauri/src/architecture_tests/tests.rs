@@ -245,6 +245,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-data-contract"
+                && root.target == "yss_data_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-tracing"
                 && root.target == "yss_tracing"
                 && root.kind == ProductionRootKind::Library)
@@ -267,6 +275,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-sci"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_data_contract"
+                    && alias.member_package == "yss-data-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-data-contract"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -327,6 +353,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/src/lib.rs"),
     };
+    let data_contract_root = ProductionRoot {
+        package_id: "data-contract-package".to_owned(),
+        package: "yss-data-contract".to_owned(),
+        target: "yss_data_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-data-contract/src/lib.rs"),
+    };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
         package: "fixture".to_owned(),
@@ -334,7 +367,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::BuildScript,
         source_path: PathBuf::from("src-tauri/build.rs"),
     };
-    let roots = vec![runtime_root.clone(), build_root.clone()];
+    let roots = vec![
+        runtime_root.clone(),
+        data_contract_root.clone(),
+        build_root.clone(),
+    ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
         root_package_id: root.package_id.clone(),
         root_target: root.target.clone(),
@@ -357,19 +394,19 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "fixture_lib::graph::catalog::builtin",
             ),
             module(
-                &runtime_root,
-                "src-tauri/src/data_contract/mod.rs",
-                "fixture_lib::data_contract",
+                &data_contract_root,
+                "src-tauri/crates/yss-data-contract/src/lib.rs",
+                "yss_data_contract",
             ),
             module(
-                &runtime_root,
-                "src-tauri/src/data_contract/data_type.rs",
-                "fixture_lib::data_contract::data_type",
+                &data_contract_root,
+                "src-tauri/crates/yss-data-contract/src/data_type.rs",
+                "yss_data_contract::data_type",
             ),
             module(
-                &runtime_root,
-                "src-tauri/src/data_contract/data_value.rs",
-                "fixture_lib::data_contract::data_value",
+                &data_contract_root,
+                "src-tauri/crates/yss-data-contract/src/data_value.rs",
+                "yss_data_contract::data_value",
             ),
             module(
                 &runtime_root,
@@ -399,15 +436,15 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::BuiltinComposition
     );
     assert_eq!(
-        classified["src-tauri/src/data_contract/mod.rs"],
+        classified["src-tauri/crates/yss-data-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/src/data_contract/data_type.rs"],
+        classified["src-tauri/crates/yss-data-contract/src/data_type.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/src/data_contract/data_value.rs"],
+        classified["src-tauri/crates/yss-data-contract/src/data_value.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -594,12 +631,11 @@ fn canonical_persisted_contract_path(ty: &Type) -> Option<(String, String)> {
         .iter()
         .map(|segment| segment.ident.to_string())
         .collect::<Vec<_>>();
-    let [crate_root, contract, symbol] = segments.as_slice() else {
+    let [crate_root, symbol] = segments.as_slice() else {
         return None;
     };
     if type_path.path.leading_colon.is_some()
-        || crate_root != "crate"
-        || contract != "data_contract"
+        || crate_root != "yss_data_contract"
         || type_path
             .path
             .segments
@@ -627,60 +663,6 @@ fn canonical_owner_origins_are_valid(
 }
 
 #[test]
-fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
-    use crate::data_contract::{
-        CategoricalRole, DataSeriesValue, DataType, DataTypeParseError, DataValue, DummyInfo,
-        TimeSeriesState,
-    };
-
-    let id_only = DataValue::DataSeries(DataSeriesValue::new("series-id"));
-    assert_eq!(
-        serde_json::to_value(&id_only).expect("id-only data series must serialize"),
-        serde_json::json!({"DataSeries": "series-id"})
-    );
-
-    let full = DataValue::DataSeries(DataSeriesValue {
-        id: "series-id".to_owned(),
-        element_type: Some(DataType::String),
-        dummy_info: Some(DummyInfo {
-            drop_category: Some("baseline".to_owned()),
-            role: CategoricalRole::Individual,
-        }),
-        time_series_state: Some(TimeSeriesState::Aligned),
-    });
-    let expected = serde_json::json!({
-        "DataSeries": {
-            "id": "series-id",
-            "elementType": {"kind": "String"},
-            "dummyInfo": {
-                "dropCategory": "baseline",
-                "role": "individual"
-            },
-            "timeSeriesState": "aligned"
-        }
-    });
-    assert_eq!(
-        serde_json::to_value(&full).expect("full data series must serialize"),
-        expected
-    );
-    assert_eq!(
-        serde_json::from_value::<DataValue>(expected)
-            .expect("persisted full data series must deserialize"),
-        full
-    );
-
-    assert_eq!("".parse::<DataType>(), Err(DataTypeParseError::Empty));
-    assert_eq!(
-        "Array<Int64".parse::<DataType>(),
-        Err(DataTypeParseError::MalformedComposite)
-    );
-    assert_eq!(
-        "Unknown".parse::<DataType>(),
-        Err(DataTypeParseError::UnknownKind)
-    );
-}
-
-#[test]
 fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexport() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
@@ -698,9 +680,9 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         .expect("every production source must classify exactly once");
 
     for source in [
-        "src-tauri/src/data_contract/mod.rs",
-        "src-tauri/src/data_contract/data_type.rs",
-        "src-tauri/src/data_contract/data_value.rs",
+        "src-tauri/crates/yss-data-contract/src/lib.rs",
+        "src-tauri/crates/yss-data-contract/src/data_type.rs",
+        "src-tauri/crates/yss-data-contract/src/data_value.rs",
         "src-tauri/src/graph_document/mod.rs",
         "src-tauri/src/graph_document/identity.rs",
         "src-tauri/src/graph_document/model.rs",
@@ -745,7 +727,7 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
                     repository_relative_declaration_file,
                     symbol,
                     ..
-                } if repository_relative_declaration_file.starts_with("src-tauri/src/data_contract/")
+                } if repository_relative_declaration_file.starts_with("src-tauri/crates/yss-data-contract/src/")
                     && (dependency.source_file.starts_with("src-tauri/src/graph/")
                         || (dependency.source_file.starts_with("src-tauri/src/sci/")
                             && symbol == "CategoricalRole"))
@@ -760,36 +742,36 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
     for expectation in [
         CanonicalOwnerExpectation {
             symbol: "DataType",
-            required_origin: "src-tauri/src/data_contract/data_type.rs",
-            allowed_origins: &["src-tauri/src/data_contract/data_type.rs"],
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_type.rs",
+            allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_type.rs"],
         },
         CanonicalOwnerExpectation {
             symbol: "DataValue",
-            required_origin: "src-tauri/src/data_contract/data_value.rs",
-            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
+            allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_value.rs"],
         },
         CanonicalOwnerExpectation {
             symbol: "DataSeriesValue",
-            required_origin: "src-tauri/src/data_contract/data_value.rs",
-            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
+            allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_value.rs"],
         },
         CanonicalOwnerExpectation {
             symbol: "CategoricalRole",
-            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
             allowed_origins: &[
-                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/crates/yss-data-contract/src/data_value.rs",
                 "src-tauri/src/sci/api/computation.rs",
             ],
         },
         CanonicalOwnerExpectation {
             symbol: "TimeSeriesState",
-            required_origin: "src-tauri/src/data_contract/data_value.rs",
-            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
+            allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_value.rs"],
         },
         CanonicalOwnerExpectation {
             symbol: "DummyInfo",
-            required_origin: "src-tauri/src/data_contract/data_value.rs",
-            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+            required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
+            allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_value.rs"],
         },
     ] {
         let origins = dependencies
@@ -1003,9 +985,9 @@ fn project_watcher_ownership_is_neutral_and_platform_only() {
 fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
     let expectation = CanonicalOwnerExpectation {
         symbol: "CategoricalRole",
-        required_origin: "src-tauri/src/data_contract/data_value.rs",
+        required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
         allowed_origins: &[
-            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/crates/yss-data-contract/src/data_value.rs",
             "src-tauri/src/sci/api/computation.rs",
         ],
     };
@@ -1013,14 +995,14 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
     assert!(canonical_owner_origins_are_valid(
         &expectation,
         &BTreeSet::from([
-            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/crates/yss-data-contract/src/data_value.rs",
             "src-tauri/src/sci/api/computation.rs",
         ]),
     ));
     assert!(!canonical_owner_origins_are_valid(
         &expectation,
         &BTreeSet::from([
-            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/crates/yss-data-contract/src/data_value.rs",
             "src-tauri/src/sci/api/arbitrary.rs",
         ]),
     ));
@@ -1088,7 +1070,7 @@ fn task1_sci_contracts_are_isolated_and_canonical() {
         (
             "CategoricalRole",
             BTreeSet::from([
-                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/crates/yss-data-contract/src/data_value.rs",
                 "src-tauri/src/sci/api/computation.rs",
             ]),
         ),
@@ -1141,7 +1123,7 @@ fn task1_sci_contracts_are_isolated_and_canonical() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         computation_data_value_origins,
-        BTreeSet::from(["src-tauri/src/data_contract/data_value.rs"]),
+        BTreeSet::from(["src-tauri/crates/yss-data-contract/src/data_value.rs"]),
         "StatisticalInputSource values must borrow the persisted DataValue owner"
     );
     let computation_persisted_role_dependencies = dependencies
@@ -1155,7 +1137,7 @@ fn task1_sci_contracts_are_isolated_and_canonical() {
                         symbol,
                         ..
                     } if repository_relative_declaration_file
-                        == "src-tauri/src/data_contract/data_value.rs"
+                        == "src-tauri/crates/yss-data-contract/src/data_value.rs"
                         && symbol == "CategoricalRole"
                 )
         })
@@ -1212,15 +1194,15 @@ fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources(
     fixture.write(
         "src-tauri/src/graph/value/aliases.rs",
         r#"
-pub type PersistedDataType = crate::data_contract::DataType;
-pub type PersistedDataValue = crate::data_contract::DataValue;
-pub type PersistedDataSeriesValue = crate::data_contract::DataSeriesValue;
-pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
-pub type PersistedTimeSeriesState = crate::data_contract::TimeSeriesState;
-pub type PersistedDummyInfo = crate::data_contract::DummyInfo;
+pub type PersistedDataType = yss_data_contract::DataType;
+pub type PersistedDataValue = yss_data_contract::DataValue;
+pub type PersistedDataSeriesValue = yss_data_contract::DataSeriesValue;
+pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
+pub type PersistedTimeSeriesState = yss_data_contract::TimeSeriesState;
+pub type PersistedDummyInfo = yss_data_contract::DummyInfo;
 
 #[cfg(test)]
-pub type TestOnlyAlias = crate::data_contract::DataType;
+pub type TestOnlyAlias = yss_data_contract::DataType;
 "#,
     );
     fixture.write("src-tauri/src/sci/mod.rs", "pub mod api;\n");
@@ -1232,7 +1214,7 @@ pub enum CategoricalRole {
     Individual,
 }
 
-pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
+pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
 "#,
     );
     let modules = collect_production_modules(
@@ -1255,13 +1237,13 @@ pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
     assert_eq!(
         aliases,
         vec![
-            "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|crate::data_contract::DataSeriesValue",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|crate::data_contract::DataType",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|crate::data_contract::DataValue",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|crate::data_contract::DummyInfo",
-            "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|crate::data_contract::TimeSeriesState",
-            "src-tauri/src/sci/api/computation.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
+            "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|yss_data_contract::DataSeriesValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|yss_data_contract::DataType",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|yss_data_contract::DataValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|yss_data_contract::DummyInfo",
+            "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|yss_data_contract::TimeSeriesState",
+            "src-tauri/src/sci/api/computation.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
         ]
     );
 }

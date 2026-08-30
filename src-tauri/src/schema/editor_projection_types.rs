@@ -1,9 +1,9 @@
-use crate::data_contract::DataType;
 use crate::graph::analysis::contracts::ResourceVersionSet;
 use crate::graph::protocol::{ParameterPresentation, TypeExpr};
 use crate::graph::registry::RegistryFingerprint;
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::{Deserialize, Serialize};
+use yss_data_contract::DataType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

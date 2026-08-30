@@ -1,4 +1,4 @@
-use crate::data_contract::{DataType, DataValue};
+use yss_data_contract::{DataType, DataValue};
 
 /// Graph-owned queries over persisted values. This module contains no
 /// persistence or runtime execution policy.

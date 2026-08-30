@@ -1,5 +1,5 @@
-use crate::data_contract::DataType;
 use serde::{Deserialize, Serialize};
+use yss_data_contract::DataType;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DataSchema {

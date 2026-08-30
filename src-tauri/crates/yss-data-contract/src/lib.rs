@@ -1,4 +1,4 @@
-//! Persisted data value and metadata contracts.
+//! Canonical persisted data value and metadata contracts.
 
 mod data_type;
 mod data_value;

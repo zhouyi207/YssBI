@@ -163,15 +163,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
         RustLayer::BackendAdapter,
     ),
-    ("src-tauri/src/data_contract/mod.rs", RustLayer::PureLeaf),
-    (
-        "src-tauri/src/data_contract/data_type.rs",
-        RustLayer::PureLeaf,
-    ),
-    (
-        "src-tauri/src/data_contract/data_value.rs",
-        RustLayer::PureLeaf,
-    ),
     ("src-tauri/src/graph_document/mod.rs", RustLayer::PureLeaf),
     (
         "src-tauri/src/graph_document/identity.rs",
@@ -1791,7 +1782,9 @@ fn non_build_memberships(
         .map(|(_, namespace)| namespace)
         .unwrap_or_default();
     let exact_layer = exact_source_layer(source_file);
-    if package == "yss-sci" {
+    if package == "yss-data-contract" {
+        layers.insert(RustLayer::PureLeaf);
+    } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);

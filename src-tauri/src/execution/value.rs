@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use crate::data_contract::{DataType, DataValue};
+use yss_data_contract::{DataType, DataValue};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {

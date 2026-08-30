@@ -557,3 +557,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Rust `tracing` 采集、过滤、脱敏及 console/rolling JSONL 输出迁入独立
   `src-tauri/crates/yss-tracing/`；Diagnostics 仅保留 sanitized Rust projection、frontend
   ingestion、recent ring、sequence 与 live delivery，并由架构审计守卫两层边界。
+- [ ] 将 persisted data contract 迁入独立 `src-tauri/crates/yss-data-contract/` Pure Leaf，
+  由该 crate 唯一拥有 `DataType`、`DataValue` 与 wire compatibility tests，并移除主 crate
+  中的兼容 re-export。

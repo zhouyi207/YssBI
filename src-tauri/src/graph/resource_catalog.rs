@@ -1,9 +1,9 @@
 use super::schema::DataSchema;
-use crate::data_contract::DataType;
 use crate::graph_document::GraphResourcePath;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+use yss_data_contract::DataType;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GraphResourceId(Box<str>);
@@ -138,10 +138,10 @@ mod tests {
         FunctionCatalogEntry, FunctionSignature, GraphResourceId, ResourceCatalogFingerprint,
         ResourceCatalogSnapshot, VariableValueContract,
     };
-    use crate::data_contract::DataType;
     use crate::graph::schema::{ColumnSchema, DataSchema};
     use crate::graph_document::GraphResourcePath;
     use std::collections::BTreeMap;
+    use yss_data_contract::DataType;
 
     #[test]
     fn resource_catalog_exposes_only_graph_compile_contracts() {

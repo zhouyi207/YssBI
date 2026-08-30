@@ -1,4 +1,3 @@
-use crate::data_contract::DataType;
 use crate::graph::catalog::CatalogResourcePath;
 use crate::graph::catalog::{NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::document::{EditorMutationError, EditorMutationErrorCode};
@@ -19,6 +18,7 @@ use crate::schema::editor_projection_types::{
 use crate::schema::graph_mutation::PortAddressDto;
 use crate::variable::VariableScope;
 use std::collections::{BTreeMap, BTreeSet};
+use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CatalogMutationValidationSnapshot {

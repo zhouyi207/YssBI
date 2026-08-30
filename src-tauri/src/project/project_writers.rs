@@ -1,4 +1,3 @@
-use crate::data_contract::{DataType, DataValue};
 use crate::graph_document::GraphResourcePath;
 use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey};
@@ -18,6 +17,7 @@ use crate::variable::{VariableId, VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use yss_data_contract::{DataType, DataValue};
 
 #[path = "project_writers/graph.rs"]
 mod graph;
@@ -618,7 +618,6 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use super::set_writer_snapshot_test_hook;
-    use crate::data_contract::{DataType, DataValue};
     use crate::graph::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use crate::graph_document::GraphResourcePath;
     use crate::project::{
@@ -630,6 +629,7 @@ mod tests {
     use crate::variable::VariableScope;
     use std::collections::BTreeMap;
     use std::sync::Arc;
+    use yss_data_contract::{DataType, DataValue};
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
         let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);

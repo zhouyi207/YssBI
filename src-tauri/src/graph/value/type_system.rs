@@ -1,7 +1,6 @@
-use crate::data_contract::{DataType, DataValue};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::ops::{Add, Div, Mul, Sub};
+use std::collections::{BTreeMap, HashSet};
+use yss_data_contract::{DataType, DataValue};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,44 +77,17 @@ fn struct_extends(source_key: &str, target_key: &str, snapshot: &TypeSystemSnaps
     false
 }
 
-fn default_array_value() -> DataValue {
-    DataValue::Array(vec![
-        DataValue::Int64(1),
-        DataValue::Int64(2),
-        DataValue::Int64(3),
-    ])
+pub trait DataTypeBehavior {
+    fn is_primitive(&self) -> bool;
+    fn is_numeric(&self) -> bool;
+    fn is_comparable(&self) -> bool;
+    fn is_iterable(&self) -> bool;
+    fn can_convert(from: &DataType, to: &DataType) -> bool;
+    fn can_accept(&self, source: &DataType) -> bool;
 }
 
-fn default_object_value() -> DataValue {
-    let mut map = HashMap::new();
-    map.insert("key_0".to_owned(), DataValue::Int64(1));
-    map.insert("key_1".to_owned(), DataValue::Int64(2));
-    DataValue::Object(map)
-}
-
-impl DataType {
-    pub fn default_value(&self) -> DataValue {
-        match self {
-            DataType::Boolean => DataValue::Boolean(false),
-            DataType::Int64 => DataValue::Int64(0),
-            DataType::Float64 => DataValue::Float64(0.0),
-            DataType::String
-            | DataType::Date
-            | DataType::Datetime
-            | DataType::Time
-            | DataType::Categorical => DataValue::String(String::new()),
-            DataType::Array(_) => default_array_value(),
-            DataType::Object => default_object_value(),
-            DataType::OneOf(types) => types
-                .first()
-                .map_or(DataValue::Null, DataType::default_value),
-            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => {
-                DataValue::Null
-            }
-        }
-    }
-
-    pub fn is_primitive(&self) -> bool {
+impl DataTypeBehavior for DataType {
+    fn is_primitive(&self) -> bool {
         match self {
             DataType::Boolean
             | DataType::Int64
@@ -125,7 +97,9 @@ impl DataType {
             | DataType::Datetime
             | DataType::Time
             | DataType::Categorical => true,
-            DataType::OneOf(types) => !types.is_empty() && types.iter().all(DataType::is_primitive),
+            DataType::OneOf(types) => {
+                !types.is_empty() && types.iter().all(DataTypeBehavior::is_primitive)
+            }
             DataType::Array(_)
             | DataType::Object
             | DataType::DataFrame
@@ -135,10 +109,12 @@ impl DataType {
         }
     }
 
-    pub fn is_numeric(&self) -> bool {
+    fn is_numeric(&self) -> bool {
         match self {
             DataType::Int64 | DataType::Float64 => true,
-            DataType::OneOf(types) => !types.is_empty() && types.iter().all(DataType::is_numeric),
+            DataType::OneOf(types) => {
+                !types.is_empty() && types.iter().all(DataTypeBehavior::is_numeric)
+            }
             DataType::Boolean
             | DataType::String
             | DataType::Date
@@ -154,7 +130,7 @@ impl DataType {
         }
     }
 
-    pub fn is_comparable(&self) -> bool {
+    fn is_comparable(&self) -> bool {
         match self {
             DataType::Boolean
             | DataType::Int64
@@ -165,7 +141,7 @@ impl DataType {
             | DataType::Time
             | DataType::Categorical => true,
             DataType::OneOf(types) => {
-                !types.is_empty() && types.iter().all(DataType::is_comparable)
+                !types.is_empty() && types.iter().all(DataTypeBehavior::is_comparable)
             }
             DataType::Array(_)
             | DataType::Object
@@ -176,10 +152,12 @@ impl DataType {
         }
     }
 
-    pub fn is_iterable(&self) -> bool {
+    fn is_iterable(&self) -> bool {
         match self {
             DataType::Array(_) | DataType::String | DataType::DataSeries(_) => true,
-            DataType::OneOf(types) => !types.is_empty() && types.iter().all(DataType::is_iterable),
+            DataType::OneOf(types) => {
+                !types.is_empty() && types.iter().all(DataTypeBehavior::is_iterable)
+            }
             DataType::Boolean
             | DataType::Int64
             | DataType::Float64
@@ -194,18 +172,18 @@ impl DataType {
         }
     }
 
-    pub fn can_convert(from: &DataType, to: &DataType) -> bool {
+    fn can_convert(from: &DataType, to: &DataType) -> bool {
         if from == to {
             return true;
         }
         match (from, to) {
             (_, DataType::Any | DataType::String) => true,
-            (_, DataType::OneOf(targets)) => targets
-                .iter()
-                .any(|target| DataType::can_convert(from, target)),
-            (DataType::OneOf(sources), _) => sources
-                .iter()
-                .any(|source| DataType::can_convert(source, to)),
+            (_, DataType::OneOf(targets)) => {
+                targets.iter().any(|target| Self::can_convert(from, target))
+            }
+            (DataType::OneOf(sources), _) => {
+                sources.iter().any(|source| Self::can_convert(source, to))
+            }
             (
                 _,
                 DataType::Boolean
@@ -227,13 +205,25 @@ impl DataType {
         }
     }
 
-    pub fn can_accept(&self, source: &DataType) -> bool {
+    fn can_accept(&self, source: &DataType) -> bool {
         TypeSystemSnapshot::empty().can_accept(self, source)
     }
 }
 
-impl DataValue {
-    pub fn value_type(&self) -> Option<DataType> {
+pub trait DataValueBehavior {
+    fn value_type(&self) -> Option<DataType>;
+    fn as_bool(&self) -> Option<bool>;
+    fn as_i64(&self) -> Option<i64>;
+    fn as_f64(&self) -> Option<f64>;
+    fn coerce_to(&self, target: &DataType) -> DataValue;
+    fn add(&self, other: &DataValue) -> Result<DataValue, String>;
+    fn sub(&self, other: &DataValue) -> Result<DataValue, String>;
+    fn mul(&self, other: &DataValue) -> Result<DataValue, String>;
+    fn div(&self, other: &DataValue) -> Result<DataValue, String>;
+}
+
+impl DataValueBehavior for DataValue {
+    fn value_type(&self) -> Option<DataType> {
         match self {
             DataValue::Boolean(_) => Some(DataType::Boolean),
             DataValue::Int64(_) => Some(DataType::Int64),
@@ -256,7 +246,7 @@ impl DataValue {
         }
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
+    fn as_bool(&self) -> Option<bool> {
         match self {
             DataValue::Boolean(value) => Some(*value),
             DataValue::Int64(value) => Some(*value != 0),
@@ -271,7 +261,7 @@ impl DataValue {
         }
     }
 
-    pub fn as_i64(&self) -> Option<i64> {
+    fn as_i64(&self) -> Option<i64> {
         match self {
             DataValue::Int64(value) => Some(*value),
             DataValue::Float64(value) => Some(*value as i64),
@@ -286,7 +276,7 @@ impl DataValue {
         }
     }
 
-    pub fn as_f64(&self) -> Option<f64> {
+    fn as_f64(&self) -> Option<f64> {
         match self {
             DataValue::Float64(value) => Some(*value),
             DataValue::Int64(value) => Some(*value as f64),
@@ -301,7 +291,7 @@ impl DataValue {
         }
     }
 
-    pub fn coerce_to(&self, target: &DataType) -> DataValue {
+    fn coerce_to(&self, target: &DataType) -> DataValue {
         if self.value_type().is_some_and(|source| source == *target) {
             return self.clone();
         }
@@ -357,112 +347,96 @@ impl DataValue {
         }
     }
 
-    pub fn add(&self, other: &DataValue) -> Result<DataValue, String> {
-        self.clone() + other.clone()
+    fn add(&self, other: &DataValue) -> Result<DataValue, String> {
+        add_values(self.clone(), other.clone())
     }
 
-    pub fn sub(&self, other: &DataValue) -> Result<DataValue, String> {
-        self.clone() - other.clone()
+    fn sub(&self, other: &DataValue) -> Result<DataValue, String> {
+        subtract_values(self.clone(), other.clone())
     }
 
-    pub fn mul(&self, other: &DataValue) -> Result<DataValue, String> {
-        self.clone() * other.clone()
+    fn mul(&self, other: &DataValue) -> Result<DataValue, String> {
+        multiply_values(self.clone(), other.clone())
     }
 
-    pub fn div(&self, other: &DataValue) -> Result<DataValue, String> {
-        self.clone() / other.clone()
-    }
-}
-
-impl Add for DataValue {
-    type Output = Result<DataValue, String>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left + right)),
-            (DataValue::Float64(left), DataValue::Float64(right)) => {
-                Ok(DataValue::Float64(left + right))
-            }
-            (DataValue::String(left), DataValue::String(right)) => {
-                Ok(DataValue::String(format!("{left}{right}")))
-            }
-            (left, right) => Err(format!(
-                "Cannot add {:?} and {:?}: incompatible types",
-                left.value_type(),
-                right.value_type()
-            )),
-        }
+    fn div(&self, other: &DataValue) -> Result<DataValue, String> {
+        divide_values(self.clone(), other.clone())
     }
 }
 
-impl Sub for DataValue {
-    type Output = Result<DataValue, String>;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left - right)),
-            (DataValue::Float64(left), DataValue::Float64(right)) => {
-                Ok(DataValue::Float64(left - right))
-            }
-            (left, right) => Err(format!(
-                "Cannot subtract {:?} from {:?}: incompatible types",
-                right.value_type(),
-                left.value_type()
-            )),
+fn add_values(left: DataValue, right: DataValue) -> Result<DataValue, String> {
+    match (left, right) {
+        (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left + right)),
+        (DataValue::Float64(left), DataValue::Float64(right)) => {
+            Ok(DataValue::Float64(left + right))
         }
+        (DataValue::String(left), DataValue::String(right)) => {
+            Ok(DataValue::String(format!("{left}{right}")))
+        }
+        (left, right) => Err(format!(
+            "Cannot add {:?} and {:?}: incompatible types",
+            left.value_type(),
+            right.value_type()
+        )),
     }
 }
 
-impl Mul for DataValue {
-    type Output = Result<DataValue, String>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left * right)),
-            (DataValue::Float64(left), DataValue::Float64(right)) => {
-                Ok(DataValue::Float64(left * right))
-            }
-            (left, right) => Err(format!(
-                "Cannot multiply {:?} and {:?}: incompatible types",
-                left.value_type(),
-                right.value_type()
-            )),
+fn subtract_values(left: DataValue, right: DataValue) -> Result<DataValue, String> {
+    match (left, right) {
+        (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left - right)),
+        (DataValue::Float64(left), DataValue::Float64(right)) => {
+            Ok(DataValue::Float64(left - right))
         }
+        (left, right) => Err(format!(
+            "Cannot subtract {:?} from {:?}: incompatible types",
+            right.value_type(),
+            left.value_type()
+        )),
     }
 }
 
-impl Div for DataValue {
-    type Output = Result<DataValue, String>;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        let is_zero = match &rhs {
-            DataValue::Int64(value) => *value == 0,
-            DataValue::Float64(value) => *value == 0.0,
-            _ => false,
-        };
-        if is_zero {
-            return Err("Division by zero".to_owned());
+fn multiply_values(left: DataValue, right: DataValue) -> Result<DataValue, String> {
+    match (left, right) {
+        (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left * right)),
+        (DataValue::Float64(left), DataValue::Float64(right)) => {
+            Ok(DataValue::Float64(left * right))
         }
+        (left, right) => Err(format!(
+            "Cannot multiply {:?} and {:?}: incompatible types",
+            left.value_type(),
+            right.value_type()
+        )),
+    }
+}
 
-        match (self, rhs) {
-            (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left / right)),
-            (DataValue::Float64(left), DataValue::Float64(right)) => {
-                Ok(DataValue::Float64(left / right))
-            }
-            (left, right) => Err(format!(
-                "Cannot divide {:?} by {:?}: incompatible types",
-                left.value_type(),
-                right.value_type()
-            )),
+fn divide_values(left: DataValue, right: DataValue) -> Result<DataValue, String> {
+    let is_zero = match &right {
+        DataValue::Int64(value) => *value == 0,
+        DataValue::Float64(value) => *value == 0.0,
+        _ => false,
+    };
+    if is_zero {
+        return Err("Division by zero".to_owned());
+    }
+
+    match (left, right) {
+        (DataValue::Int64(left), DataValue::Int64(right)) => Ok(DataValue::Int64(left / right)),
+        (DataValue::Float64(left), DataValue::Float64(right)) => {
+            Ok(DataValue::Float64(left / right))
         }
+        (left, right) => Err(format!(
+            "Cannot divide {:?} by {:?}: incompatible types",
+            left.value_type(),
+            right.value_type()
+        )),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{StructTypeMeta, TypeSystemSnapshot};
-    use crate::data_contract::DataType;
+    use super::{DataTypeBehavior, StructTypeMeta, TypeSystemSnapshot};
     use std::collections::BTreeMap;
+    use yss_data_contract::DataType;
 
     fn model_type_system() -> TypeSystemSnapshot {
         let mut struct_types = BTreeMap::new();

@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 
-use crate::data_contract::DataType;
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database::runtime::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
@@ -17,6 +16,7 @@ use crate::database_contract::{
     DatabaseSessionIdentity,
 };
 use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
+use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {

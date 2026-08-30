@@ -463,7 +463,6 @@ fn map_result_category(category: GraphResultCategory) -> crate::execution::plan:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_contract::DataType;
     use crate::database::schema_snapshot::database_column_fact_fixture;
     use crate::database::session_api::{
         DatabaseCatalogSnapshotFixtureSchema, database_catalog_snapshot_fixture,
@@ -474,6 +473,7 @@ mod tests {
     };
     use crate::graph::resource_catalog::VariableValueContract;
     use std::num::NonZeroU64;
+    use yss_data_contract::DataType;
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {

@@ -1,7 +1,7 @@
 use super::{VariableId, VariableScope};
-use crate::data_contract::{DataType, DataValue};
 use crate::tabular::contract::TabularSnapshot;
 use serde::{Deserialize, Serialize};
+use yss_data_contract::{DataType, DataValue};
 
 /// 变量定义（持久化到项目文件）
 #[derive(Debug, Clone, Serialize, Deserialize)]

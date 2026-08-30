@@ -1,5 +1,4 @@
 use super::{PlotSink, ResourceError, ResourceLease, ResourceProvider};
-use crate::data_contract::DataValue;
 use crate::execution::plan::legacy::{
     CompiledResourceRequirement, ResourceAccess, ResourceId, ResourceKind,
 };
@@ -17,6 +16,7 @@ use std::fmt;
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use yss_data_contract::DataValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectResourceVersionFingerprint(Box<str>);

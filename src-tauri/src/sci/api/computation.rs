@@ -1,5 +1,5 @@
-use crate::data_contract::DataValue;
 use serde::{Deserialize, Serialize};
+use yss_data_contract::DataValue;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

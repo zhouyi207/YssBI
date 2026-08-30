@@ -1,4 +1,3 @@
-use crate::data_contract::{DataType, DataValue};
 use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::EventProject;
@@ -13,6 +12,7 @@ use crate::schema::VariableInstanceDTO;
 use crate::schema::application_event::ResourceMutationResultDto;
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
+use yss_data_contract::{DataType, DataValue};
 
 #[cfg(all(test, any()))]
 fn ensure_command_project(

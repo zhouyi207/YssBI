@@ -209,6 +209,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-data-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-data-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",

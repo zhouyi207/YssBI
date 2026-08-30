@@ -12,6 +12,7 @@ rust-version.workspace = true
 resolver = "3"
 members = [
     ".",
+    "crates/yss-data-contract",
     "crates/yss-sci",
     "crates/yss-tracing",
 ]
@@ -47,6 +48,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-sci = { path = "./crates/yss-sci" }
 yss-tracing = { path = "./crates/yss-tracing" }
 tauri = { version = "2.11", features = [] }

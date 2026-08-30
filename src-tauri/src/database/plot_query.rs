@@ -3,7 +3,6 @@ use std::sync::Arc;
 use polars::prelude::{AnyValue, DataType as PolarsDataType, PlSmallStr, PolarsResult, Series};
 use thiserror::Error;
 
-use crate::data_contract::DataType;
 use crate::database::error::{
     DatabaseDriverError, DatabaseError, DatabaseErrorCode, DatabaseOperation,
 };
@@ -14,6 +13,7 @@ use crate::database::session_api::{
 };
 use crate::database_contract::DatabaseId;
 use crate::tabular::contract::{TabularColumn, TabularColumnName, TabularScalar};
+use yss_data_contract::DataType;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {

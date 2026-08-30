@@ -1,4 +1,3 @@
-use crate::data_contract::{DataSeriesValue, DataType, DataValue};
 use crate::tabular::contract::{
     TabularColumn, TabularContractError, TabularScalar, TabularSnapshot,
 };
@@ -7,6 +6,7 @@ use serde::Deserializer as _;
 use serde::de::{MapAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
+use yss_data_contract::{DataSeriesValue, DataType, DataValue};
 
 const VARIABLE_HANDLE_PREFIX: &str = "var:";
 

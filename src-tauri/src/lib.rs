@@ -5,7 +5,6 @@
 pub mod application;
 pub mod backend_adapters;
 pub mod commands;
-pub mod data_contract;
 pub mod database;
 pub mod database_contract;
 pub mod diagnostics;
