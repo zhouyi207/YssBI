@@ -1,26 +1,17 @@
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::{
-    ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
-    ComputationSettingsSnapshot, ProjectFilesystemError,
-};
-use crate::project::{
-    ComputationSettingsValidationError, ProjectComputationSettings, StatisticalMissingValuePolicy,
-};
+use crate::project::ProjectFilesystemError;
 use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComputationSettings};
+use yss_computation_settings::{
+    ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
+    ComputationSettingsSnapshot, ComputationSettingsValidationError, ProjectComputationSettings,
+    StatisticalMissingValuePolicy,
+};
 use yss_execution::settings::{
     ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
 };
 use yss_project_identity::ProjectInstanceId;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum ComputationSettingsMappingError {
-    #[error("numeric tolerance is invalid")]
-    InvalidTolerance,
-    #[error("numeric tolerance cannot be zero in both dimensions")]
-    ZeroTolerance,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ComputationSettingsApplicationError {
@@ -31,7 +22,7 @@ pub enum ComputationSettingsApplicationError {
     #[error(transparent)]
     Project(#[from] ProjectFilesystemError),
     #[error(transparent)]
-    Mapping(#[from] ComputationSettingsMappingError),
+    Validation(#[from] ComputationSettingsValidationError),
     #[error("captured application session changed during computation-settings operation")]
     SessionChanged(#[source] SessionRevalidationError),
     #[error("application session refresh failed")]
@@ -81,8 +72,8 @@ impl ApplicationState {
 
 pub fn sci_computation_settings(
     project: &ProjectComputationSettings,
-) -> Result<SciComputationSettings, ComputationSettingsMappingError> {
-    validate(project)?;
+) -> Result<SciComputationSettings, ComputationSettingsValidationError> {
+    project.validate()?;
     let missing_values = match project.missing_values.statistics {
         StatisticalMissingValuePolicy::Listwise => MissingValuePolicy::Listwise,
         StatisticalMissingValuePolicy::Reject => MissingValuePolicy::Reject,
@@ -98,8 +89,8 @@ pub fn sci_computation_settings(
 
 pub fn execution_settings(
     project: &ProjectComputationSettings,
-) -> Result<ExecutionSettings, ComputationSettingsMappingError> {
-    validate(project)?;
+) -> Result<ExecutionSettings, ComputationSettingsValidationError> {
+    project.validate()?;
     let statistical_missing_values = match project.missing_values.statistics {
         StatisticalMissingValuePolicy::Listwise => ExecutionMissingValuePolicy::Listwise,
         StatisticalMissingValuePolicy::Reject => ExecutionMissingValuePolicy::Reject,
@@ -113,26 +104,15 @@ pub fn execution_settings(
     })
 }
 
-fn validate(project: &ProjectComputationSettings) -> Result<(), ComputationSettingsMappingError> {
-    project.validate().map_err(|error| match error {
-        ComputationSettingsValidationError::InvalidTolerance => {
-            ComputationSettingsMappingError::InvalidTolerance
-        }
-        ComputationSettingsValidationError::ZeroTolerance => {
-            ComputationSettingsMappingError::ZeroTolerance
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ComputationSettingsMappingError, execution_settings, sci_computation_settings};
-    use crate::project::{
-        MissingValueSettings, NumericSettings, NumericTolerance, ProjectComputationSettings,
-        StatisticalMissingValuePolicy,
-    };
+    use super::{execution_settings, sci_computation_settings};
     use crate::sci::api::computation::{
         MissingValuePolicy, NumericTolerance as SciNumericTolerance, SciComputationSettings,
+    };
+    use yss_computation_settings::{
+        ComputationSettingsValidationError, MissingValueSettings, NumericSettings,
+        NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy,
     };
     use yss_execution::settings::{
         ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
@@ -182,14 +162,14 @@ mod tests {
                     absolute: f64::NAN,
                     relative: 1.0,
                 },
-                ComputationSettingsMappingError::InvalidTolerance,
+                ComputationSettingsValidationError::InvalidTolerance,
             ),
             (
                 NumericTolerance {
                     absolute: 0.0,
                     relative: 0.0,
                 },
-                ComputationSettingsMappingError::ZeroTolerance,
+                ComputationSettingsValidationError::ZeroTolerance,
             ),
         ];
 

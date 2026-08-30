@@ -1,6 +1,5 @@
 //! 项目管理模块
 
-pub mod computation_settings;
 pub mod execution_authority;
 pub mod filesystem;
 pub mod function_editor_projection;
@@ -38,7 +37,6 @@ pub mod resource_reveal;
 pub mod worksheet_io;
 pub mod worksheet_resource_path;
 
-pub use computation_settings::*;
 pub use filesystem::*;
 pub use function_editor_projection::*;
 pub use graph_resource_index::*;

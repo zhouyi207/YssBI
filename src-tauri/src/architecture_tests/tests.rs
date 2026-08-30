@@ -2812,6 +2812,115 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
 }
 
 #[test]
+fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-computation-settings/Cargo.toml",
+        "src-tauri/crates/yss-computation-settings/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "computation settings owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/computation_settings.rs")
+            .exists(),
+        "the root project crate must not retain a computation-settings owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-computation-settings\"",
+        "yss-computation-settings = { path = \"./crates/yss-computation-settings\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod computation_settings",
+        "pub use computation_settings",
+        "pub use yss_computation_settings",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore settings facade '{facade}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-computation-settings/src/lib.rs"))
+            .expect("computation settings owner must be readable");
+    for contract in [
+        "pub struct ProjectComputationSettings",
+        "pub enum ComputationSettingsValidationError",
+        "pub struct ComputationSettingsSnapshot",
+        "pub struct ComputationSettingsMutationRequest",
+        "pub struct ComputationSettingsMutationReceipt",
+        "deny_unknown_fields",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "computation settings crate must own strict contract '{contract}'"
+        );
+    }
+    assert!(
+        !owner.contains("tauri"),
+        "computation settings contract must remain platform-neutral"
+    );
+
+    for relative in [
+        "src-tauri/src/application/computation_settings.rs",
+        "src-tauri/src/commands/command_project/settings.rs",
+        "src-tauri/src/event/event_project.rs",
+        "src-tauri/src/project/execution_authority.rs",
+        "src-tauri/src/project/project_data.rs",
+        "src-tauri/src/project/project_io.rs",
+        "src-tauri/src/project/project_state.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_computation_settings"),
+            "{relative} must consume the computation settings owner directly"
+        );
+        assert!(
+            !consumer.contains("project::computation_settings"),
+            "{relative} must not restore the removed root settings path"
+        );
+    }
+
+    let application =
+        std::fs::read_to_string(root.join("src-tauri/src/application/computation_settings.rs"))
+            .expect("computation settings application adapter must be readable");
+    for duplicate in ["ComputationSettingsMappingError", "fn validate("] {
+        assert!(
+            !application.contains(duplicate),
+            "application must not restore mirrored validation logic '{duplicate}'"
+        );
+    }
+
+    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
+        .expect("project IO must be readable");
+    for validation_boundary in [
+        "deserialize_valid_computation_settings",
+        "settings.validate().map_err",
+    ] {
+        assert!(
+            project_io.contains(validation_boundary),
+            "project manifest reads must enforce '{validation_boundary}'"
+        );
+    }
+}
+
+#[test]
 fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades() {
     let root = repository_root();
     for relative in [

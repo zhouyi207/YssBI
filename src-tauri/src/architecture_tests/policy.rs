@@ -1085,9 +1085,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
             "yssbi_lib::application::execution::session_slot::ApplicationState",
-            "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
-            "yssbi_lib::project::computation_settings::ComputationSettingsMutationRequest",
-            "yssbi_lib::project::computation_settings::ComputationSettingsSnapshot",
+            "yss_computation_settings::ComputationSettingsMutationReceipt",
+            "yss_computation_settings::ComputationSettingsMutationRequest",
+            "yss_computation_settings::ComputationSettingsSnapshot",
         ],
     },
     InternalDependencyCapability {
@@ -1279,7 +1279,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_graph_document_edit::GraphDocumentPatch",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
+            "yss_computation_settings::ComputationSettingsMutationReceipt",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
         ],
     },
@@ -1735,6 +1735,7 @@ fn non_build_memberships(
     if matches!(
         package,
         "yss-canonical-hash"
+            | "yss-computation-settings"
             | "yss-data-contract"
             | "yss-database-contract"
             | "yss-display-naming"

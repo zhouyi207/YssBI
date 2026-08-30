@@ -14,6 +14,10 @@ use crate::project::{
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
+use yss_computation_settings::{
+    ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
+    ComputationSettingsSnapshot,
+};
 use yss_graph_document::GraphResourcePath;
 use yss_graph_document::NodeId;
 use yss_project_identity::ProjectInstanceId;
@@ -82,11 +86,11 @@ impl ProjectState {
 
     pub fn get_computation_settings(
         &self,
-    ) -> Result<crate::project::ComputationSettingsSnapshot, ProjectFilesystemError> {
+    ) -> Result<ComputationSettingsSnapshot, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         let data = self.project_data.read().unwrap();
-        Ok(crate::project::ComputationSettingsSnapshot {
+        Ok(ComputationSettingsSnapshot {
             project_instance_id: ProjectInstanceId::from_existing(
                 publication.project_instance_id.clone(),
             ),
@@ -98,8 +102,8 @@ impl ProjectState {
 
     pub fn update_computation_settings_transaction(
         &self,
-        request: crate::project::ComputationSettingsMutationRequest,
-    ) -> Result<crate::project::ComputationSettingsMutationReceipt, ProjectFilesystemError> {
+        request: ComputationSettingsMutationRequest,
+    ) -> Result<ComputationSettingsMutationReceipt, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         request.settings.validate().map_err(|error| {
             ProjectFilesystemError::TransactionPrepareFailed {
@@ -197,7 +201,7 @@ impl ProjectState {
             data.computation_settings = request.settings.clone();
             publication.computation_settings_revision = next_settings_revision;
             let publication_revision = publication.commit_prepared(publication_advance);
-            Ok(crate::project::ComputationSettingsMutationReceipt {
+            Ok(ComputationSettingsMutationReceipt {
                 project_instance_id: request.project_instance_id.clone(),
                 operation_id: request.operation_id,
                 settings_revision: publication.computation_settings_revision,

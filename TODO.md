@@ -650,3 +650,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-project-progress/` Pure Leaf；Project registry 与 command adapter 直接依赖
   唯一 owner，Tauri 有界队列、Channel 和 wire DTO 留在 Commands，并删除两个零调用的重复事件
   DTO，避免根 facade、幽灵 API 与多事实源回流。
+- [ ] 将 persisted computation settings、validation 与 project mutation envelopes 迁入
+  `src-tauri/crates/yss-computation-settings/` Pure Leaf；Project/Application/Commands/Event 直接消费
+  唯一 owner，manifest 读取严格拒绝非法或未知 settings 字段，并删除 Application 中完全同构的
+  mapping error 镜像与无效转换函数。

@@ -5,11 +5,11 @@ use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
 #[cfg(test)]
 use crate::project::ProjectState;
-use crate::project::{
+use tauri::{AppHandle, State};
+use yss_computation_settings::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
     ComputationSettingsSnapshot,
 };
-use tauri::{AppHandle, State};
 use yss_project_identity::ProjectInstanceId;
 
 #[tauri::command]
@@ -74,7 +74,7 @@ fn map_computation_settings_error(
             CommandError::expected("stale_project_lifecycle")
         }
         ComputationSettingsApplicationError::Project(error) => CommandError::from(error),
-        ComputationSettingsApplicationError::Mapping(error) => {
+        ComputationSettingsApplicationError::Validation(error) => {
             CommandError::diagnosed("invalid_computation_settings", error)
         }
         ComputationSettingsApplicationError::SessionChanged(error) => {

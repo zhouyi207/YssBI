@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use super::ensure_worksheets_dir;
 use super::{
     GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectComputationSettings, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
-    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
+    ProjectData, ProjectError, ProjectWorksheetIndexEntry, load_worksheets_from_root,
+    read_worksheet_index_entries, scan_graph_resource_index,
 };
+use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_project_identity::ProjectResourcePath;
 
@@ -38,6 +39,17 @@ where
     Ok(schema_version)
 }
 
+fn deserialize_valid_computation_settings<'de, D>(
+    deserializer: D,
+) -> Result<ProjectComputationSettings, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let settings = ProjectComputationSettings::deserialize(deserializer)?;
+    settings.validate().map_err(serde::de::Error::custom)?;
+    Ok(settings)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectManifest {
@@ -45,6 +57,7 @@ pub struct ProjectManifest {
     pub schema_version: u32,
     pub project_name: String,
     pub export_time: String,
+    #[serde(deserialize_with = "deserialize_valid_computation_settings")]
     pub computation_settings: ProjectComputationSettings,
 }
 
@@ -954,6 +967,54 @@ pub fn discover_databases_from_root(
     Ok(map)
 }
 
+#[cfg(test)]
+mod computation_settings_manifest_tests {
+    use super::{ProjectManifest, SCHEMA_VERSION};
+    use serde_json::json;
+    use yss_computation_settings::ProjectComputationSettings;
+
+    fn manifest_with(settings: serde_json::Value) -> serde_json::Value {
+        json!({
+            "schemaVersion": SCHEMA_VERSION,
+            "projectName": "Computation Settings",
+            "exportTime": "2026-08-30T00:00:00Z",
+            "computationSettings": settings
+        })
+    }
+
+    #[test]
+    fn project_manifest_requires_valid_strict_computation_settings() {
+        let valid = serde_json::to_value(ProjectComputationSettings::default()).unwrap();
+
+        for invalid in [
+            json!({
+                "numeric": { "tolerance": { "absolute": 0.0, "relative": 0.0 } },
+                "missingValues": { "statistics": "listwise" }
+            }),
+            json!({
+                "numeric": { "tolerance": { "absolute": -1.0, "relative": 1e-9 } },
+                "missingValues": { "statistics": "listwise" }
+            }),
+            json!({
+                "numeric": {
+                    "tolerance": { "absolute": 1e-12, "relative": 1e-9 },
+                    "legacyTolerance": 1.0
+                },
+                "missingValues": { "statistics": "listwise" }
+            }),
+        ] {
+            assert!(serde_json::from_value::<ProjectManifest>(manifest_with(invalid)).is_err());
+        }
+
+        let decoded: ProjectManifest =
+            serde_json::from_value(manifest_with(valid.clone())).unwrap();
+        assert_eq!(
+            serde_json::to_value(decoded.computation_settings).unwrap(),
+            valid
+        );
+    }
+}
+
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
@@ -980,18 +1041,6 @@ mod tests {
             .keys()
             .map(String::as_str)
             .collect()
-    }
-
-    #[test]
-    fn project_manifest_requires_computation_settings() {
-        let error = serde_json::from_value::<ProjectManifest>(json!({
-            "schemaVersion": 3,
-            "projectName": "Missing Computation Settings",
-            "exportTime": "2026-08-12T00:00:00Z"
-        }))
-        .unwrap_err();
-
-        assert!(error.to_string().contains("computationSettings"));
     }
 
     #[test]
@@ -1040,37 +1089,6 @@ mod tests {
             ProjectError::Deserialize(source)
                 if source.to_string().contains("unsupported schema version 4")
         ));
-    }
-
-    #[test]
-    fn computation_settings_reject_non_finite_or_zero_pair() {
-        assert!(
-            NumericTolerance {
-                absolute: f64::NAN,
-                relative: 1e-9,
-            }
-            .validate()
-            .is_err()
-        );
-        assert!(
-            NumericTolerance {
-                absolute: 0.0,
-                relative: 0.0,
-            }
-            .validate()
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn project_manifest_round_trips_computation_settings() {
-        let mut data = ProjectData::new();
-        data.computation_settings.numeric.tolerance.absolute = 1e-10;
-
-        let manifest = serialize_project_manifest(&data).unwrap();
-        let decoded: ProjectManifest = serde_json::from_slice(&manifest).unwrap();
-
-        assert_eq!(decoded.computation_settings, data.computation_settings);
     }
 
     #[test]

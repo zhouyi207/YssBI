@@ -8,6 +8,7 @@ use crate::schema::application_event::{
     LifecycleMutationResultDto, ProjectActivationResultDto, ResourceMutationResultDto,
 };
 use serde::{Deserialize, Serialize};
+use yss_computation_settings::ComputationSettingsMutationReceipt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -38,7 +39,7 @@ pub enum EventProject {
     },
     #[serde(rename_all = "camelCase")]
     ComputationSettingsChanged {
-        result: crate::project::ComputationSettingsMutationReceipt,
+        result: ComputationSettingsMutationReceipt,
     },
 }
 
