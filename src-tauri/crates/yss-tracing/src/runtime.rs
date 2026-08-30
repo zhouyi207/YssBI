@@ -414,7 +414,9 @@ mod tests {
         let (finished_sender, finished_receiver) = mpsc::channel();
         let sink: OutputSink = Box::new(move |_| {
             started_sender.send(()).unwrap();
-            let released = release_receiver.recv_timeout(Duration::from_secs(5)).is_ok();
+            let released = release_receiver
+                .recv_timeout(Duration::from_secs(5))
+                .is_ok();
             finished_sender.send(()).unwrap();
             released
         });
