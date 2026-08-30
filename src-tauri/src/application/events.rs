@@ -1,9 +1,9 @@
 use crate::application::editor_projection::EditorProjectionModel;
 use crate::project::FunctionEditorProjection;
-use crate::project::ProjectRecord;
 use crate::project::{ResourceDeltaEvent, ResourceLifecycleKind};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId};
+use yss_project_registry_contract::ProjectRecord;
 
 /// Low-rate cross-owner facts owned by Application.
 ///
@@ -74,6 +74,7 @@ pub struct LifecycleRecovery {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleRecoveryAction {
+    RegisterDestination,
     RemoveRegistryRecord,
     CleanupRegistry,
     ActivateDestination,

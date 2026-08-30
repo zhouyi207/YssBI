@@ -4,12 +4,11 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
 
-use crate::project::{
-    ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError,
-    ProjectRegistryStoreFuture,
+use yss_project_identity::{ProjectRegistrationId, ProjectRootIdentity};
+use yss_project_registry_contract::{
+    ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
+    ProjectRootIdentityState,
 };
-
-use yss_project_identity::ProjectInstanceId;
 
 /// The only concrete SQLx/SQLite implementation of the Project registry port.
 pub struct SqliteProjectRegistryStore {
@@ -81,10 +80,8 @@ impl SqliteProjectRegistryStore {
 impl ProjectRegistryStore for SqliteProjectRegistryStore {
     fn load(
         &self,
-    ) -> ProjectRegistryStoreFuture<
-        '_,
-        Result<Box<[ProjectRegistryRecord]>, ProjectRegistryStoreError>,
-    > {
+    ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>
+    {
         Box::pin(async move {
             let rows = sqlx::query_as::<_, ProjectRegistryRow>(
                 "SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state FROM projects",
@@ -110,16 +107,16 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
 
     fn upsert(
         &self,
-        record: &ProjectRegistryRecord,
+        record: &ProjectRecord,
     ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        let id = record.id().to_owned();
-        let name = record.name().to_owned();
-        let path = record.path().to_owned();
-        let created_at = record.created_at().to_owned();
-        let last_opened_at = record.last_opened_at().map(str::to_owned);
-        let favorite = record.is_favorite();
-        let root_identity = record.root_identity().as_str().to_owned();
-        let root_identity_state = record.root_identity_state();
+        let id = record.id.to_string();
+        let name = record.name.clone();
+        let path = record.path.clone();
+        let created_at = record.created_at.clone();
+        let last_opened_at = record.last_opened_at.clone();
+        let favorite = record.is_favorite;
+        let root_identity = record.root_identity.as_str().to_owned();
+        let root_identity_state = record.root_identity_state;
         Box::pin(async move {
             sqlx::query(
                 "INSERT INTO projects (id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path, created_at=excluded.created_at, last_opened_at=excluded.last_opened_at, is_favorite=excluded.is_favorite, root_identity=excluded.root_identity, root_identity_state=excluded.root_identity_state",
@@ -132,8 +129,8 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             .bind(i64::from(favorite))
             .bind(root_identity)
             .bind(match root_identity_state {
-                crate::project::ProjectRootIdentityState::Valid => "valid",
-                crate::project::ProjectRootIdentityState::Invalid => "invalid",
+                ProjectRootIdentityState::Valid => "valid",
+                ProjectRootIdentityState::Invalid => "invalid",
             })
             .execute(&self.pool)
             .await
@@ -153,12 +150,12 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
 
     fn remove(
         &self,
-        project: &ProjectInstanceId,
+        registration: &ProjectRegistrationId,
     ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        let project_id = project.as_str().to_owned();
+        let registration_id = registration.as_str().to_owned();
         Box::pin(async move {
             let result = sqlx::query("DELETE FROM projects WHERE id = ?")
-                .bind(project_id)
+                .bind(registration_id)
                 .execute(&self.pool)
                 .await
                 .map_err(|error| {
@@ -179,22 +176,20 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
     }
 }
 
-fn row_to_record(
-    row: ProjectRegistryRow,
-) -> Result<ProjectRegistryRecord, ProjectRegistryStoreError> {
+fn row_to_record(row: ProjectRegistryRow) -> Result<ProjectRecord, ProjectRegistryStoreError> {
     let state = match row.root_identity_state.as_str() {
-        "valid" => crate::project::ProjectRootIdentityState::Valid,
-        "invalid" => crate::project::ProjectRootIdentityState::Invalid,
+        "valid" => ProjectRootIdentityState::Valid,
+        "invalid" => ProjectRootIdentityState::Invalid,
         _ => return Err(ProjectRegistryStoreError::StorageFailed),
     };
-    Ok(ProjectRegistryRecord::new(
-        row.id.into_boxed_str(),
-        row.name.into_boxed_str(),
-        row.path.into_boxed_str(),
-        row.created_at.into_boxed_str(),
-        row.last_opened_at.map(String::into_boxed_str),
-        row.is_favorite != 0,
-        crate::project::ProjectRootIdentity::from_stored(row.root_identity),
-        state,
-    ))
+    Ok(ProjectRecord {
+        id: ProjectRegistrationId::from_existing(row.id),
+        name: row.name,
+        path: row.path,
+        created_at: row.created_at,
+        last_opened_at: row.last_opened_at,
+        is_favorite: row.is_favorite != 0,
+        root_identity: ProjectRootIdentity::from_canonical(row.root_identity),
+        root_identity_state: state,
+    })
 }

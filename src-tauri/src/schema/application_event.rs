@@ -4,6 +4,7 @@ use crate::application::events::{
 };
 use crate::event::EventProject;
 use serde::{Deserialize, Serialize};
+use yss_project_registry_contract::ProjectRecord;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,7 +77,7 @@ pub struct LifecycleMutationResultDto {
     pub new_project_instance_id: Option<String>,
     pub phase: LifecycleMutationPhaseDto,
     pub outcome: LifecycleMutationOutcomeDto,
-    pub record: Option<crate::project::ProjectRecord>,
+    pub record: Option<ProjectRecord>,
     pub path: Option<String>,
     pub recovery: Option<LifecycleRecoveryDto>,
     pub invalidation: LifecycleInvalidationDto,
@@ -283,6 +284,7 @@ fn recovery_to_transport(
     LifecycleRecoveryDto {
         required: recovery.required,
         action: match recovery.action {
+            LifecycleRecoveryAction::RegisterDestination => "registerDestination",
             LifecycleRecoveryAction::RemoveRegistryRecord => "removeRegistryRecord",
             LifecycleRecoveryAction::CleanupRegistry => "cleanupRegistry",
             LifecycleRecoveryAction::ActivateDestination => "activateDestination",
@@ -373,7 +375,7 @@ mod tests {
             path: Some("C:/projects/copy/metadata.yssbi".into()),
             recovery: Some(LifecycleRecovery {
                 required: true,
-                action: LifecycleRecoveryAction::RemoveRegistryRecord,
+                action: LifecycleRecoveryAction::RegisterDestination,
                 path: Some("C:/projects/copy/metadata.yssbi".into()),
                 identity: None,
             }),
@@ -404,7 +406,7 @@ mod tests {
                         "path": "C:/projects/copy/metadata.yssbi",
                         "recovery": {
                             "required": true,
-                            "action": "removeRegistryRecord",
+                            "action": "registerDestination",
                             "path": "C:/projects/copy/metadata.yssbi",
                             "identity": null,
                         },

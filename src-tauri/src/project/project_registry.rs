@@ -1,75 +1,23 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 
 use super::{
-    NormalizedProjectRoot, ProjectDiscoveryError, ProjectRegistryRecord, ProjectRegistryStore,
-    ProjectRegistryStoreError, ProjectRootBinding, ProjectRootIdentity, format_path_for_user,
+    NormalizedProjectRoot, ProjectDiscoveryError, ProjectRootBinding, format_path_for_user,
     format_path_for_user_path,
 };
 
-use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ProjectRegistrationId;
 use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
     ProjectTaskCancellation,
 };
+use yss_project_registry_contract::{
+    ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRootIdentityState,
+};
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ProjectRootIdentityState {
-    Valid,
-    Invalid,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectRecord {
-    pub id: String,
-    pub name: String,
-    pub path: String,
-    pub created_at: String,
-    pub last_opened_at: Option<String>,
-    pub is_favorite: bool,
-    pub root_identity: ProjectRootIdentity,
-    pub root_identity_state: ProjectRootIdentityState,
-}
-
-impl ProjectRecord {
-    pub fn deletion_identity(&self) -> Option<&ProjectRootIdentity> {
-        (self.root_identity_state == ProjectRootIdentityState::Valid
-            && !self.root_identity.as_str().is_empty())
-        .then_some(&self.root_identity)
-    }
-
-    fn to_store_record(&self) -> ProjectRegistryRecord {
-        ProjectRegistryRecord::new(
-            self.id.clone().into_boxed_str(),
-            self.name.clone().into_boxed_str(),
-            self.path.clone().into_boxed_str(),
-            self.created_at.clone().into_boxed_str(),
-            self.last_opened_at.clone().map(String::into_boxed_str),
-            self.is_favorite,
-            self.root_identity.clone(),
-            self.root_identity_state,
-        )
-    }
-
-    fn from_store_record(record: ProjectRegistryRecord) -> Self {
-        Self {
-            id: record.id().to_owned(),
-            name: record.name().to_owned(),
-            path: record.path().to_owned(),
-            created_at: record.created_at().to_owned(),
-            last_opened_at: record.last_opened_at().map(str::to_owned),
-            is_favorite: record.is_favorite(),
-            root_identity: record.root_identity().clone(),
-            root_identity_state: record.root_identity_state(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,10 +111,7 @@ impl ProjectRegistry {
             .load()
             .await
             .map_err(ProjectRegistryError::Store)?
-            .into_vec()
-            .into_iter()
-            .map(ProjectRecord::from_store_record)
-            .collect::<Vec<_>>();
+            .into_vec();
         records.sort_by(|left, right| {
             right
                 .is_favorite
@@ -189,7 +134,7 @@ impl ProjectRegistry {
             .list_projects()
             .await?
             .into_iter()
-            .find(|record| record.id == id))
+            .find(|record| record.id.as_str() == id))
     }
 
     async fn fetch_by_path(
@@ -228,14 +173,14 @@ impl ProjectRegistry {
                 ..existing
             };
             self.store
-                .upsert(&updated.to_store_record())
+                .upsert(&updated)
                 .await
                 .map_err(ProjectRegistryError::Store)?;
             return Ok(updated);
         }
 
         let record = ProjectRecord {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: ProjectRegistrationId::generate(),
             name: normalize_project_name(name),
             path,
             created_at: now_string(),
@@ -245,7 +190,7 @@ impl ProjectRegistry {
             root_identity_state: ProjectRootIdentityState::Valid,
         };
         self.store
-            .upsert(&record.to_store_record())
+            .upsert(&record)
             .await
             .map_err(ProjectRegistryError::Store)?;
         Ok(record)
@@ -258,9 +203,9 @@ impl ProjectRegistry {
                 ProjectRegistryStoreError::StorageFailed,
             ));
         }
-        let project = ProjectInstanceId::from_existing(id.to_owned());
+        let registration = ProjectRegistrationId::from_existing(id.to_owned());
         self.store
-            .remove(&project)
+            .remove(&registration)
             .await
             .map_err(|error| match error {
                 ProjectRegistryStoreError::Unavailable => ProjectRegistryError::NotFound,
@@ -275,13 +220,10 @@ impl ProjectRegistry {
             .ok_or(ProjectRegistryError::NotFound)?;
         let favorite = !record.is_favorite;
         self.store
-            .upsert(
-                &ProjectRecord {
-                    is_favorite: favorite,
-                    ..record
-                }
-                .to_store_record(),
-            )
+            .upsert(&ProjectRecord {
+                is_favorite: favorite,
+                ..record
+            })
             .await
             .map_err(ProjectRegistryError::Store)?;
         Ok(favorite)
@@ -317,7 +259,7 @@ impl ProjectRegistry {
             {
                 continue;
             }
-            self.remove_project(&project.id).await?;
+            self.remove_project(project.id.as_str()).await?;
             removed += 1;
             if let Some(sink) = progress {
                 sink.publish(ProjectProgress::Cleanup(ProjectCleanupProgress::Removing {

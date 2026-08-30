@@ -13,7 +13,7 @@ pub(crate) use lifecycle_io::{
     ensure_directory, read_project_source_tree, remove_directory_if_created,
     validate_deletion_root, validate_destination_policy,
 };
-pub use root::{NormalizedProjectRoot, ProjectRootBinding, ProjectRootIdentity};
+pub use root::{NormalizedProjectRoot, ProjectRootBinding};
 pub use transaction::{
     CommittedFilesystemMutation, PreparedProjectFilesystemTransaction,
     ProjectFilesystemTransaction, StagedFilesystemMutation,

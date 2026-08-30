@@ -1,15 +1,10 @@
 use super::*;
-use crate::project::{
-    ProjectData, ProjectRootBinding, ProjectRootIdentityState, ProjectState, fixtures,
-};
-use crate::schema::application_event::{
-    LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
-    LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
-};
+use crate::project::{ProjectData, ProjectRootBinding, ProjectState, fixtures};
 use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::{DataType, DataValue};
+use yss_project_registry_contract::{ProjectRecord, ProjectRootIdentityState};
 use yss_variable_contract::VariableScope;
 
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -123,21 +118,18 @@ fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
         .unwrap();
 
         assert_eq!(result.operation_id, operation_id);
-        assert_eq!(result.kind, LifecycleMutationKindDto::SaveAs);
+        assert_eq!(result.kind, ProjectLifecycleKind::SaveAs);
+        assert_eq!(result.phase, ProjectLifecyclePhase::DestinationCommitted);
+        assert_eq!(result.outcome, ProjectLifecycleOutcome::RegistryFailed);
         assert_eq!(
-            result.phase,
-            LifecycleMutationPhaseDto::DestinationCommitted
-        );
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryFailed);
-        assert_eq!(
-            result.old_project_instance_id.as_deref(),
-            Some(source_session.instance_id.as_str())
+            result.old_project_instance_id.as_ref(),
+            Some(&source_session.instance_id)
         );
         assert!(result.new_project_instance_id.is_none());
         assert!(result.record.is_none());
         assert_eq!(
             result.recovery.as_ref().unwrap().action,
-            "registerDestination"
+            LifecycleRecoveryAction::RegisterDestination
         );
         assert!(
             destination
@@ -187,7 +179,7 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
             .unwrap();
 
             assert_eq!(result.operation_id, operation_id);
-            assert_eq!(result.kind, LifecycleMutationKindDto::SaveAs);
+            assert_eq!(result.kind, ProjectLifecycleKind::SaveAs);
             assert!(
                 destination
                     .join(crate::project::PROJECT_METADATA_FILE)
@@ -195,19 +187,16 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
             );
             assert!(result.record.is_some());
             if fail_activation {
-                assert_eq!(result.phase, LifecycleMutationPhaseDto::RegistryCommitted);
-                assert_eq!(
-                    result.outcome,
-                    LifecycleMutationOutcomeDto::ActivationFailed
-                );
+                assert_eq!(result.phase, ProjectLifecyclePhase::RegistryCommitted);
+                assert_eq!(result.outcome, ProjectLifecycleOutcome::ActivationFailed);
                 assert_eq!(
                     result.recovery.as_ref().unwrap().action,
-                    "activateDestination"
+                    LifecycleRecoveryAction::ActivateDestination
                 );
                 assert_eq!(state.capture_project_session().unwrap(), source_session);
             } else {
-                assert_eq!(result.phase, LifecycleMutationPhaseDto::AuthorityCommitted);
-                assert_eq!(result.outcome, LifecycleMutationOutcomeDto::Committed);
+                assert_eq!(result.phase, ProjectLifecyclePhase::AuthorityCommitted);
+                assert_eq!(result.outcome, ProjectLifecycleOutcome::Committed);
                 assert!(result.recovery.is_none());
                 assert_ne!(state.capture_project_session().unwrap(), source_session);
             }
@@ -230,16 +219,13 @@ fn registry_failure_reports_preserved_created_project() {
             .unwrap();
 
         assert_eq!(result.operation_id, operation_id);
-        assert_eq!(result.kind, LifecycleMutationKindDto::Create);
-        assert_eq!(
-            result.phase,
-            LifecycleMutationPhaseDto::DestinationCommitted
-        );
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryFailed);
+        assert_eq!(result.kind, ProjectLifecycleKind::Create);
+        assert_eq!(result.phase, ProjectLifecyclePhase::DestinationCommitted);
+        assert_eq!(result.outcome, ProjectLifecycleOutcome::RegistryFailed);
         assert!(result.record.is_none());
         assert_eq!(
             result.recovery.as_ref().unwrap().action,
-            "registerDestination"
+            LifecycleRecoveryAction::RegisterDestination
         );
         assert!(
             destination
@@ -272,7 +258,7 @@ fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
         let error = delete_registered_project(
             &state,
             &registry,
-            &record.id,
+            record.id.as_str(),
             Some(session.instance_id),
             operation_id,
         )
@@ -286,7 +272,13 @@ fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
         ));
         assert_eq!(state.capture_project_session().unwrap(), session_before);
         assert!(root.join(crate::project::PROJECT_METADATA_FILE).is_file());
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
+        assert!(
+            registry
+                .fetch_by_id(record.id.as_str())
+                .await
+                .unwrap()
+                .is_some()
+        );
     });
 }
 
@@ -308,17 +300,23 @@ fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
             .normalized()
             .clone();
         let operation_id = OperationId::new();
-        let expected = LifecycleMutationResultDto {
+        let expected = ProjectLifecycleApplicationEvent {
             operation_id,
-            kind: LifecycleMutationKindDto::Delete,
-            old_project_instance_id: Some(session.instance_id.to_string()),
+            kind: ProjectLifecycleKind::Delete,
+            old_project_instance_id: Some(session.instance_id.clone()),
             new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
-            outcome: LifecycleMutationOutcomeDto::Committed,
+            phase: ProjectLifecyclePhase::AuthorityCommitted,
+            outcome: ProjectLifecycleOutcome::Committed,
             record: Some(record.clone()),
-            path: Some(normalized.as_path().to_string_lossy().into_owned()),
+            path: Some(
+                normalized
+                    .as_path()
+                    .to_string_lossy()
+                    .into_owned()
+                    .into_boxed_str(),
+            ),
             recovery: None,
-            invalidation: LifecycleInvalidationDto {
+            invalidation: LifecycleInvalidation {
                 project: true,
                 registry: true,
             },
@@ -327,7 +325,7 @@ fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
         let result = delete_registered_project(
             &state,
             &registry,
-            &record.id,
+            record.id.as_str(),
             Some(session.instance_id),
             operation_id,
         )
@@ -337,7 +335,13 @@ fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
         assert_eq!(result, expected);
         assert!(state.capture_project_session().is_err());
         assert!(!root.exists());
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_none());
+        assert!(
+            registry
+                .fetch_by_id(record.id.as_str())
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             state.filesystem().lifecycle_state_for_test(&normalized),
             (false, false, 0)
@@ -364,22 +368,28 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
             .unwrap()
             .normalized()
             .clone();
-        let expected = LifecycleMutationResultDto {
+        let expected = ProjectLifecycleApplicationEvent {
             operation_id,
-            kind: LifecycleMutationKindDto::Delete,
-            old_project_instance_id: Some(session.instance_id.to_string()),
+            kind: ProjectLifecycleKind::Delete,
+            old_project_instance_id: Some(session.instance_id.clone()),
             new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
-            outcome: LifecycleMutationOutcomeDto::RegistryPending,
+            phase: ProjectLifecyclePhase::AuthorityCommitted,
+            outcome: ProjectLifecycleOutcome::RegistryPending,
             record: Some(record.clone()),
-            path: Some(normalized.as_path().to_string_lossy().into_owned()),
-            recovery: Some(LifecycleRecoveryDto {
+            path: Some(
+                normalized
+                    .as_path()
+                    .to_string_lossy()
+                    .into_owned()
+                    .into_boxed_str(),
+            ),
+            recovery: Some(LifecycleRecovery {
                 required: true,
-                action: "removeRegistryRecord".into(),
+                action: LifecycleRecoveryAction::RemoveRegistryRecord,
                 path: None,
-                identity: Some(identity.as_str().to_owned()),
+                identity: Some(identity.as_str().to_owned().into_boxed_str()),
             }),
-            invalidation: LifecycleInvalidationDto {
+            invalidation: LifecycleInvalidation {
                 project: true,
                 registry: true,
             },
@@ -397,7 +407,7 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
         let result = delete_registered_project(
             &state,
             &registry,
-            &record.id,
+            record.id.as_str(),
             Some(session.instance_id),
             operation_id,
         )
@@ -411,7 +421,13 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
             (false, false, 0)
         );
         drop(state.filesystem().acquire(normalized).unwrap());
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
+        assert!(
+            registry
+                .fetch_by_id(record.id.as_str())
+                .await
+                .unwrap()
+                .is_some()
+        );
     });
 }
 
@@ -429,29 +445,33 @@ fn invalid_active_row_is_rejected_as_registry_cleanup_without_file_deletion() {
         std::fs::write(root.join("sentinel.txt"), b"preserve").unwrap();
         let session = state.capture_project_session().unwrap();
         let registered = register_root(&registry, &root, "Invalid").await;
-        mark_registry_record_invalid(&registry, &registered.id).await;
-        let record = registry.fetch_by_id(&registered.id).await.unwrap().unwrap();
+        mark_registry_record_invalid(&registry, registered.id.as_str()).await;
+        let record = registry
+            .fetch_by_id(registered.id.as_str())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(
             record.root_identity_state,
             ProjectRootIdentityState::Invalid
         );
         let operation_id = OperationId::new();
-        let expected = LifecycleMutationResultDto {
+        let expected = ProjectLifecycleApplicationEvent {
             operation_id,
-            kind: LifecycleMutationKindDto::RegistryCleanup,
+            kind: ProjectLifecycleKind::RegistryCleanup,
             old_project_instance_id: None,
             new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::RegistryCommitted,
-            outcome: LifecycleMutationOutcomeDto::RegistryFailed,
+            phase: ProjectLifecyclePhase::RegistryCommitted,
+            outcome: ProjectLifecycleOutcome::RegistryFailed,
             record: Some(record.clone()),
             path: None,
-            recovery: Some(LifecycleRecoveryDto {
+            recovery: Some(LifecycleRecovery {
                 required: true,
-                action: "cleanupRegistry".into(),
+                action: LifecycleRecoveryAction::CleanupRegistry,
                 path: None,
                 identity: None,
             }),
-            invalidation: LifecycleInvalidationDto {
+            invalidation: LifecycleInvalidation {
                 project: false,
                 registry: true,
             },
@@ -460,7 +480,7 @@ fn invalid_active_row_is_rejected_as_registry_cleanup_without_file_deletion() {
         let result = delete_registered_project(
             &state,
             &registry,
-            &record.id,
+            record.id.as_str(),
             Some(session.instance_id.clone()),
             operation_id,
         )
@@ -473,7 +493,13 @@ fn invalid_active_row_is_rejected_as_registry_cleanup_without_file_deletion() {
             std::fs::read(root.join("sentinel.txt")).unwrap(),
             b"preserve"
         );
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
+        assert!(
+            registry
+                .fetch_by_id(record.id.as_str())
+                .await
+                .unwrap()
+                .is_some()
+        );
     });
 }
 
@@ -499,17 +525,17 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
         let result = delete_registered_project(
             &state,
             &registry,
-            &record.id,
+            record.id.as_str(),
             Some(session.instance_id),
             OperationId::new(),
         )
         .await
         .unwrap();
 
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryPending);
+        assert_eq!(result.outcome, ProjectLifecycleOutcome::RegistryPending);
         assert_eq!(
             result.recovery.as_ref().unwrap().action,
-            "removeRegistryRecord"
+            LifecycleRecoveryAction::RemoveRegistryRecord
         );
         assert!(!root.exists());
         assert!(state.capture_project_session().is_err());
@@ -518,6 +544,12 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
             (false, false, 0)
         );
         drop(state.filesystem().acquire(normalized).unwrap());
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
+        assert!(
+            registry
+                .fetch_by_id(record.id.as_str())
+                .await
+                .unwrap()
+                .is_some()
+        );
     });
 }

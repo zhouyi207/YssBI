@@ -14,10 +14,11 @@ use crate::application::execution::session_slot::{
 };
 use crate::application::project_query::ProjectActivation;
 use crate::project::{
-    ProjectFilesystemError, ProjectRecord, ProjectRegistry, ProjectState, normalize_existing_path,
+    ProjectFilesystemError, ProjectRegistry, ProjectState, normalize_existing_path,
 };
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
+use yss_project_registry_contract::ProjectRecord;
 
 #[derive(Debug, Error)]
 pub enum ProjectLifecycleError {
@@ -263,7 +264,7 @@ pub async fn save_project_as(
                 ProjectLifecycleOutcome::RegistryFailed,
                 None,
                 metadata_path,
-                LifecycleRecoveryAction::RemoveRegistryRecord,
+                LifecycleRecoveryAction::RegisterDestination,
                 false,
             ));
         }
@@ -340,7 +341,7 @@ pub async fn create_project(
             ProjectLifecycleOutcome::RegistryFailed,
             None,
             metadata_path,
-            LifecycleRecoveryAction::RemoveRegistryRecord,
+            LifecycleRecoveryAction::RegisterDestination,
             false,
         ),
     };
@@ -387,7 +388,7 @@ pub async fn delete_registered_project(
         catch_future_unwind(async {
             #[cfg(test)]
             run_before_registry_remove_test_hook();
-            registry.remove_project(&record.id).await
+            registry.remove_project(record.id.as_str()).await
         })
         .await
         .is_ok_and(|result| result.is_ok())
@@ -438,7 +439,10 @@ async fn delete_registry_only_record(
     let remove_result = if active_delete_rejected {
         Err(())
     } else {
-        registry.remove_project(&record.id).await.map_err(|_| ())
+        registry
+            .remove_project(record.id.as_str())
+            .await
+            .map_err(|_| ())
     };
     let registry_changed = remove_result.is_ok();
 
@@ -536,5 +540,5 @@ fn run_before_registry_remove_test_hook() {
     }
 }
 
-#[cfg(all(test, any()))]
+#[cfg(test)]
 mod tests;

@@ -1,15 +1,14 @@
 use crate::project::{
     DATABASE_DIR, EVENTS_DIR, FUNCTIONS_DIR, GLOBAL_VARIABLES_FILE, NormalizedProjectRoot,
     PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootIdentity,
-    ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
-    StagedFilesystemMutation, ensure_directory, read_project_source_tree,
-    remove_directory_if_created, validate_deletion_root, validate_destination_policy,
+    ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootLifecycleGuard, ProjectSession,
+    ProjectState, ProjectTransactionContext, StagedFilesystemMutation, ensure_directory,
+    read_project_source_tree, remove_directory_if_created, validate_deletion_root,
+    validate_destination_policy,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use yss_project_identity::OperationId;
-use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_worksheet_document::{WORKSHEET_EXTENSION, WORKSHEETS_DIR, WorksheetDocument};
 
 pub struct PreparedProjectCopy {

@@ -2739,6 +2739,8 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         "src-tauri/crates/yss-project-identity/src/identity.rs",
         "src-tauri/crates/yss-project-identity/src/lib.rs",
         "src-tauri/crates/yss-project-identity/src/project_instance_id.rs",
+        "src-tauri/crates/yss-project-identity/src/project_registration_id.rs",
+        "src-tauri/crates/yss-project-identity/src/project_root_identity.rs",
         "src-tauri/crates/yss-project-identity/src/project_session_id.rs",
     ] {
         assert!(
@@ -2809,6 +2811,169 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         !session_identity.contains("pub fn unknown"),
         "project session identity must not restore the zero-caller unknown sentinel"
     );
+}
+
+#[test]
+fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirrors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-registry-contract/Cargo.toml",
+        "src-tauri/crates/yss-project-registry-contract/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project registry contract owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/project/project_registry_store.rs")
+            .exists(),
+        "the root crate must not retain a mirrored project registry storage model"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-registry-contract\"",
+        "yss-project-registry-contract = { path = \"./crates/yss-project-registry-contract\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let owner = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project-registry-contract/src/lib.rs"),
+    )
+    .expect("project registry contract owner must be readable");
+    for contract in [
+        "pub struct ProjectRecord",
+        "pub enum ProjectRootIdentityState",
+        "pub trait ProjectRegistryStore",
+        "pub enum ProjectRegistryStoreError",
+        "pub type ProjectRegistryStoreFuture",
+        "pub id: ProjectRegistrationId",
+        "deny_unknown_fields",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project registry contract must own '{contract}'"
+        );
+    }
+    assert!(
+        !owner.contains("ProjectRegistryRecord"),
+        "the persistence port must consume the canonical ProjectRecord directly"
+    );
+    assert!(
+        !owner.contains("Conflict"),
+        "the registry store contract must not retain an error variant no adapter can produce"
+    );
+
+    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
+        .expect("project registry workflow must be readable");
+    for removed_mirror in [
+        "pub struct ProjectRecord",
+        "pub enum ProjectRootIdentityState",
+        "ProjectRegistryRecord",
+        "to_store_record",
+        "from_store_record",
+        "ProjectInstanceId",
+    ] {
+        assert!(
+            !registry.contains(removed_mirror),
+            "project registry workflow must not restore mirror or conflated identity '{removed_mirror}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_registry.rs",
+        "src-tauri/src/project/project_scan.rs",
+        "src-tauri/src/application/events.rs",
+        "src-tauri/src/application/project_lifecycle/mod.rs",
+        "src-tauri/src/commands/command_project/registry.rs",
+        "src-tauri/src/schema/application_event.rs",
+        "src-tauri/src/backend_adapters/project_registry_sqlite.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_registry_contract::"),
+            "{relative} must consume the canonical registry contract directly"
+        );
+    }
+
+    let lifecycle =
+        std::fs::read_to_string(root.join("src-tauri/src/application/project_lifecycle/mod.rs"))
+            .expect("project lifecycle application must be readable");
+    assert!(
+        lifecycle.contains("#[cfg(test)]")
+            && lifecycle.contains("mod tests;")
+            && !lifecycle.contains("#[cfg(all(test, any()))]"),
+        "project registry lifecycle tests must remain executable after the contract cutover"
+    );
+    assert!(
+        lifecycle.contains("LifecycleRecoveryAction::RegisterDestination"),
+        "a committed destination with a failed registry write must request registration recovery"
+    );
+
+    let lifecycle_transport =
+        std::fs::read_to_string(root.join("src-tauri/src/schema/application_event.rs"))
+            .expect("project lifecycle transport mapper must be readable");
+    assert!(
+        lifecycle_transport
+            .contains("LifecycleRecoveryAction::RegisterDestination => \"registerDestination\"",),
+        "registration recovery must preserve the existing registerDestination wire value"
+    );
+
+    let filesystem_root =
+        std::fs::read_to_string(root.join("src-tauri/src/project/filesystem/root.rs"))
+            .expect("project filesystem root must be readable");
+    assert!(
+        filesystem_root.contains("yss_project_identity::ProjectRootIdentity")
+            && !filesystem_root.contains("pub struct ProjectRootIdentity"),
+        "the filesystem must construct the canonical root identity without owning a mirror"
+    );
+
+    let adapter = std::fs::read_to_string(
+        root.join("src-tauri/src/backend_adapters/project_registry_sqlite.rs"),
+    )
+    .expect("project registry SQLite adapter must be readable");
+    assert!(
+        !adapter.contains("crate::project::"),
+        "the SQLite adapter must not depend backwards on the Project workflow layer"
+    );
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "project_registry_store",
+        "pub use yss_project_registry_contract",
+        "pub use yss_project_identity::ProjectRootIdentity",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "Project must not restore registry compatibility facade '{facade}'"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-project-registry-contract\""),
+        "project registry contract must be classified as a Pure Leaf"
+    );
+    for removed_capability in [
+        "project_registry_store::ProjectRegistry",
+        "project::project_registry::ProjectRecord",
+        "project::filesystem::root::ProjectRootIdentity",
+    ] {
+        assert!(
+            !policy.contains(removed_capability),
+            "architecture policy must not retain removed capability '{removed_capability}'"
+        );
+    }
 }
 
 #[test]

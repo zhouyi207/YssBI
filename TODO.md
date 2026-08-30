@@ -662,3 +662,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-project-progress/` Pure Leaf，删除根 `project_picker_task` owner、字符串 sentinel
   与裸 `AtomicBool` 泄漏；使用 typed discovery error 保证递归扫描中途取消仍映射为 `Cancelled`，
   而不是错误漂移为 `ScanFailed`；新任务替换 active task 时先取消旧任务，避免孤儿扫描。
+- [ ] 将 project registry 的 canonical record、root identity state 与 persistence port 迁入
+  `src-tauri/crates/yss-project-registry-contract/` Pure Leaf，删除根 crate 中字段完全相同的
+  `ProjectRegistryRecord` 存储镜像及转换函数；将 registration/root identity 收归
+  `yss-project-identity`，避免把持久化 registration ID 错当成 runtime `ProjectInstanceId`，并让
+  Project、Application、Commands、Transport 与 SQLite adapter 直接依赖唯一 contract owner；
+  重新启用 8 个 application lifecycle 测试，并修复 registry 写入失败时恢复动作从
+  `registerDestination` 漂移成 `removeRegistryRecord` 的语义错误。

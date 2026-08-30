@@ -353,20 +353,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/backend_adapters/project_registry_sqlite.rs",
-        fully_qualified_owner: "yssbi_lib::backend_adapters::project_registry_sqlite",
-        canonical_origin_targets: &[
-            "yssbi_lib::project::filesystem::root::ProjectRootIdentity::from_stored",
-            "yssbi_lib::project::project_registry::ProjectRootIdentityState::Invalid",
-            "yssbi_lib::project::project_registry::ProjectRootIdentityState::Valid",
-            "yssbi_lib::project::project_registry_store::ProjectRegistryRecord",
-            "yssbi_lib::project::project_registry_store::ProjectRegistryStore",
-            "yssbi_lib::project::project_registry_store::ProjectRegistryStoreError",
-            "yssbi_lib::project::project_registry_store::ProjectRegistryStoreFuture",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
         repository_relative_source_file: "src-tauri/src/julia/worker/task_directory.rs",
         fully_qualified_owner: "yssbi_lib::julia::worker::task_directory",
         canonical_origin_targets: &["yssbi_lib::sci::api::bayes::result::ResultArtifactOwner"],
@@ -1054,7 +1040,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::project_lifecycle::delete_registered_project",
             "yssbi_lib::error::CommandError",
             "yssbi_lib::project::project_registry::CleanupInvalidProjectsResult",
-            "yssbi_lib::project::project_registry::ProjectRecord",
             "yssbi_lib::project::project_registry::ProjectRegistry",
             "yssbi_lib::project::project_scan::ScanProjectsResult",
             "yssbi_lib::project::project_state::state::ProjectState",
@@ -1307,7 +1292,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::history::ResourceDeltaEvent",
             "yssbi_lib::project::history::ResourceKey",
             "yssbi_lib::project::history::ResourceLifecycleKind",
-            "yssbi_lib::project::project_registry::ProjectRecord",
         ],
     },
     InternalDependencyCapability {
@@ -1742,6 +1726,7 @@ fn non_build_memberships(
             | "yss-math"
             | "yss-project-identity"
             | "yss-project-progress"
+            | "yss-project-registry-contract"
             | "yss-resource-naming"
             | "yss-tabular-contract"
             | "yss-variable-contract"

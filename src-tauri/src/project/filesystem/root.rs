@@ -1,9 +1,9 @@
 use crate::project::{PROJECT_METADATA_FILE, ProjectFilesystemError, project_root_from_path};
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
+use yss_project_identity::ProjectRootIdentity;
 
 #[cfg(test)]
 thread_local! {
@@ -17,20 +17,6 @@ use super::windows_path_identity::WindowsPathIdentity;
 type NativePathIdentity = WindowsPathIdentity;
 #[cfg(not(windows))]
 type NativePathIdentity = PathBuf;
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProjectRootIdentity(String);
-
-impl ProjectRootIdentity {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    pub fn from_stored(value: String) -> Self {
-        Self(value)
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct ProjectRootBinding {
@@ -295,7 +281,7 @@ fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFiles
             return Err(invalid_root(root, "project root is a reparse point"));
         }
         let file = ((information.nFileIndexHigh as u64) << 32) | information.nFileIndexLow as u64;
-        return Ok(ProjectRootIdentity(format!(
+        return Ok(ProjectRootIdentity::from_canonical(format!(
             "windows:{:08x}:{file:016x}",
             information.dwVolumeSerialNumber
         )));
@@ -303,7 +289,7 @@ fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFiles
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        return Ok(ProjectRootIdentity(format!(
+        return Ok(ProjectRootIdentity::from_canonical(format!(
             "unix:{:016x}:{:016x}",
             metadata.dev(),
             metadata.ino()

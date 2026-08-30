@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use super::{PROJECT_METADATA_FILE, normalize_project_name};
 use thiserror::Error;
 use yss_project_progress::ProjectTaskCancellation;
+use yss_project_registry_contract::ProjectRecord;
 
 #[derive(Debug, Error)]
 pub enum ProjectDiscoveryError {
@@ -19,7 +20,7 @@ pub enum ProjectDiscoveryError {
 pub struct ScanProjectsResult {
     pub discovered: usize,
     pub newly_registered: usize,
-    pub projects: Vec<super::ProjectRecord>,
+    pub projects: Vec<ProjectRecord>,
 }
 
 const SKIP_DIR_NAMES: &[&str] = &[
