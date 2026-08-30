@@ -4,15 +4,15 @@ use std::sync::Arc;
 use std::sync::{Barrier, Mutex};
 
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
-use crate::graph::catalog::{
-    BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
-};
 use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use thiserror::Error;
 use yss_data_contract::DataType;
 use yss_graph_analysis_contract::CompilationBasis;
+use yss_graph_catalog::{
+    BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog, ResourceBoundCreateArgs,
+};
 use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortRef,
 };
@@ -316,7 +316,7 @@ impl GraphRuntimeState {
                 return false;
             };
             let resource = item.resource_path.as_ref().and_then(
-                |path: &crate::graph::catalog::CatalogResourcePath| {
+                |path: &yss_graph_catalog::CatalogResourcePath| {
                     resources.iter().find(|entry| {
                         entry.resource_path.as_str() == path.as_str()
                             && entry.node_type_id == node_type

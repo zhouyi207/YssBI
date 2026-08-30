@@ -1,5 +1,4 @@
 pub mod analysis;
-pub mod catalog;
 pub(crate) mod compatibility;
 pub mod compiler;
 pub mod document;

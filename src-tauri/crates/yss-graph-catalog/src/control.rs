@@ -1,5 +1,5 @@
 use super::builtin::{BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, sid};
-use crate::graph::catalog::{Aliases, Message, Text};
+use crate::{Aliases, Message, Text};
 use std::sync::Arc;
 use yss_graph_protocol::*;
 use yss_graph_registry::{RegisteredNode, StructuralNodeRole};
@@ -322,7 +322,7 @@ fn member_group(
     Ok(PortMemberGroupSpec {
         templates: templates
             .iter()
-            .map(|template| sid(*template, PortKey::new))
+            .map(|template| sid(template, PortKey::new))
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice(),
         min,

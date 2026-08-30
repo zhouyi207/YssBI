@@ -12,7 +12,6 @@ use crate::execution::plan::PlanProjectSessionId;
 use crate::execution::ports::scientific::ScientificBackend;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
-use crate::graph::catalog::build_builtin_node_system;
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::project::ProjectSessionId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
@@ -20,6 +19,7 @@ use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
+use yss_graph_catalog::build_builtin_node_system;
 
 /// Composition-root supplied construction for one session-bound resource factory.
 ///
@@ -153,7 +153,7 @@ pub(crate) enum ProjectSessionCandidateError {
     #[error("application session generation is exhausted")]
     GenerationExhausted,
     #[error("graph runtime built-ins could not be constructed")]
-    GraphRuntime(#[source] crate::graph::catalog::BuiltinInitializationError),
+    GraphRuntime(#[source] yss_graph_catalog::BuiltinInitializationError),
     #[error(transparent)]
     Candidate(#[from] SessionCandidateBuildError),
 }
@@ -347,7 +347,6 @@ mod tests {
     use crate::execution::plan::PlanProjectSessionId;
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
-    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
@@ -361,6 +360,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
         DatabaseSessionOpenRequest,
     };
+    use yss_graph_catalog::build_builtin_node_system;
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())

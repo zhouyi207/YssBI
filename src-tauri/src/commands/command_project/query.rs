@@ -288,7 +288,7 @@ mod tests {
             crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
             EditorGraphMutation::CreateNode {
-                descriptor: crate::graph::catalog::NodeCreation::Static {
+                descriptor: yss_graph_catalog::NodeCreation::Static {
                     node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
                 },
                 position: yss_graph_document::NodePosition { x: 10.0, y: 20.0 },

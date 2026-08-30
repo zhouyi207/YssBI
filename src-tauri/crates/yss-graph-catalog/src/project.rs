@@ -1,16 +1,15 @@
 use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
-use crate::graph::catalog::{Aliases, Message, Text};
+use crate::{Aliases, Message, Text};
 use std::sync::Arc;
 use yss_graph_protocol::*;
 use yss_graph_registry::{RegisteredNode, StructuralNodeRole};
 
-pub(crate) const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
-pub(crate) const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
-pub(crate) const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str =
-    "yssbi.project.function.entry.parameters";
-pub(crate) const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
+pub const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
+pub const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
+pub const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.entry.parameters";
+pub const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
 
 pub(crate) fn builtin_function_interface_resolver_ids() -> Box<[InterfaceResolverId]> {
     [

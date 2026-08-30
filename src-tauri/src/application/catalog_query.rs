@@ -4,15 +4,15 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::graph::catalog::{
-    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
-};
 use crate::graph::resource_catalog::{FunctionSignature, GraphResourceId, VariableValueContract};
 use crate::graph::runtime_state::GraphRuntimeCatalogError;
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
+use yss_graph_catalog::{
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
 use yss_graph_registry::RegistryFingerprint;

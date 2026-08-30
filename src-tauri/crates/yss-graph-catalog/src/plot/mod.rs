@@ -1,10 +1,9 @@
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
 };
-use crate::graph::catalog::Message;
-use std::sync::Arc;
+use crate::Message;
 use yss_graph_protocol::*;
-use yss_graph_registry::{CategoryRegistration, RegisteredNode};
+use yss_graph_registry::CategoryRegistration;
 
 const CATEGORY: &str = "plot";
 
@@ -340,94 +339,4 @@ fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAs
 }
 fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
     Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
-}
-
-#[cfg(all(test, any()))]
-mod tests {
-    use super::*;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn every_protocol_localization_key_exists_in_both_locales() {
-        let fragment = build_provider_fragment().expect("plot fixture must assemble");
-        let localized_keys = fragment
-            .messages
-            .iter()
-            .map(|(locale, key, _)| (*locale, *key))
-            .collect::<BTreeSet<_>>();
-        for node in &fragment.nodes {
-            let protocol = node.protocol();
-            let keys = [
-                Some(&protocol.catalog.title_key),
-                protocol.catalog.documentation_key.as_ref(),
-                protocol.catalog.aliases_key.as_ref(),
-            ]
-            .into_iter()
-            .flatten();
-            for key in keys {
-                assert!(localized_keys.contains(&("en-US", key.as_str())));
-                assert!(localized_keys.contains(&("zh-CN", key.as_str())));
-            }
-        }
-    }
-
-    fn input_type(node: &NodeProtocol, key: &str) -> TypeExpr {
-        node.interface
-            .ports
-            .iter()
-            .find(|port| port.direction == PortDirection::Input && port.key.as_str() == key)
-            .unwrap()
-            .value_type
-            .clone()
-    }
-
-    #[test]
-    fn plot_protocols_use_canonical_numeric_series_and_exclude_date() {
-        let numeric = numeric_data_series_type();
-        for id in [
-            "yssbi.plot.scatter.view",
-            "yssbi.plot.line.view",
-            "yssbi.plot.ecdf.view",
-            "yssbi.plot.kde.view",
-            "yssbi.plot.histogram.view",
-        ] {
-            let spec = SPECS.iter().find(|spec| spec.id == id).unwrap();
-            let node = protocol(spec).unwrap();
-            let keys: &[&str] = if matches!(spec.inputs, PlotInputs::Pair) {
-                &["x", "y"]
-            } else {
-                &["values"]
-            };
-            for key in keys {
-                let value_type = input_type(&node, key);
-                assert_eq!(value_type, numeric);
-            }
-        }
-
-        let correlogram = protocol(
-            SPECS
-                .iter()
-                .find(|spec| spec.id == "yssbi.plot.correlogram.view")
-                .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(input_type(&correlogram, "values"), numeric);
-    }
-
-    #[test]
-    fn every_view_declares_effect_resource_and_result() {
-        for spec in SPECS {
-            let node = protocol(spec).expect("plot built-in fixture must assemble");
-            assert_eq!(node.execution.effects, EffectSemantics::Ordered);
-            assert_eq!(node.execution.purity, Purity::Effectful);
-            assert!(node.interface.ports.iter().any(
-                |port| port.key.as_str() == "result" && port.direction == PortDirection::Output
-            ));
-            let fragment = PlotLowerer {
-                kernel: spec.kernel,
-            };
-            assert_eq!(fragment.kernel, spec.kernel);
-        }
-        assert_eq!(PLOT_SINK, "yssbi.runtime.plot_sink");
-    }
 }

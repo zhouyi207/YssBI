@@ -1,8 +1,8 @@
-pub(crate) use crate::graph::catalog::builtin::BuiltinAssemblyError;
-pub(crate) use crate::graph::catalog::builtin::ProviderFragment;
-pub(crate) use crate::graph::catalog::builtin::assembled_decimal;
-use crate::graph::catalog::builtin::{assembled_interface, assembled_parameters, sid};
-use crate::graph::catalog::{Aliases, Text};
+pub(crate) use crate::builtin::BuiltinAssemblyError;
+pub(crate) use crate::builtin::ProviderFragment;
+pub(crate) use crate::builtin::assembled_decimal;
+use crate::builtin::{assembled_interface, assembled_parameters, sid};
+use crate::{Aliases, Text};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use yss_graph_protocol::*;
@@ -83,7 +83,7 @@ pub(crate) fn structural(protocol: NodeProtocol, role: StructuralNodeRole) -> Re
     RegisteredNode::structural(Arc::new(protocol), role)
 }
 
-pub(in crate::graph::catalog::core_nodes) fn transparent(
+pub(in crate::core_nodes) fn transparent(
     protocol: NodeProtocol,
     role: TransparentNodeRole,
 ) -> RegisteredNode {
@@ -288,7 +288,7 @@ pub(crate) fn i18n(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError>
 pub(crate) fn semantic<T>(
     value: &'static str,
     make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
-) -> Result<T, crate::graph::catalog::BuiltinAssemblyError> {
+) -> Result<T, crate::BuiltinAssemblyError> {
     sid(value, make)
 }
 

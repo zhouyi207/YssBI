@@ -1,10 +1,10 @@
 use crate::application::catalog_query::CatalogQueryResult;
-use crate::graph::catalog::{
+use serde::Serialize;
+use yss_graph_catalog::{
     LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
     LocalizedParameter as DomainParameter, LocalizedPort as DomainPort,
     NodeCreation as DomainCreationDescriptor, ResourceBoundCreateArgs as DomainCreateArgs,
 };
-use serde::Serialize;
 
 /// The catalog wire shape is owned by the transport schema layer.
 ///
@@ -106,8 +106,8 @@ pub enum ResourceBoundCreateArgsDto {
     Database,
 }
 
-impl From<crate::graph::catalog::LocalizedCatalog> for LocalizedCatalogDto {
-    fn from(catalog: crate::graph::catalog::LocalizedCatalog) -> Self {
+impl From<yss_graph_catalog::LocalizedCatalog> for LocalizedCatalogDto {
+    fn from(catalog: yss_graph_catalog::LocalizedCatalog) -> Self {
         Self {
             project_instance_id: Box::default(),
             registry_fingerprint: Box::default(),
@@ -139,7 +139,7 @@ impl From<CatalogQueryResult> for LocalizedCatalogDto {
     }
 }
 
-impl From<crate::graph::catalog::LocalizedCategory> for LocalizedCategoryDto {
+impl From<yss_graph_catalog::LocalizedCategory> for LocalizedCategoryDto {
     fn from(category: DomainCategory) -> Self {
         Self {
             category_id: category.category_id,
@@ -151,7 +151,7 @@ impl From<crate::graph::catalog::LocalizedCategory> for LocalizedCategoryDto {
     }
 }
 
-impl From<crate::graph::catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
+impl From<yss_graph_catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
     fn from(item: DomainCatalogItem) -> Self {
         Self {
             node_type_id: item.node_type_id,
@@ -172,7 +172,7 @@ impl From<crate::graph::catalog::LocalizedCatalogItem> for LocalizedCatalogItemD
                 .collect(),
             resource_path: item
                 .resource_path
-                .map(|path: crate::graph::catalog::CatalogResourcePath| path.as_str().into()),
+                .map(|path: yss_graph_catalog::CatalogResourcePath| path.as_str().into()),
             resource_revision: item.resource_revision,
             creation: item.creation.into(),
         }
@@ -249,7 +249,7 @@ pub enum NodeCreationMappingError {
     InvalidParameter,
 }
 
-impl TryFrom<NodeCreationDescriptorDto> for crate::graph::catalog::NodeCreation {
+impl TryFrom<NodeCreationDescriptorDto> for yss_graph_catalog::NodeCreation {
     type Error = NodeCreationMappingError;
 
     fn try_from(value: NodeCreationDescriptorDto) -> Result<Self, Self::Error> {
@@ -263,14 +263,14 @@ impl TryFrom<NodeCreationDescriptorDto> for crate::graph::catalog::NodeCreation 
         };
         Ok(match value {
             NodeCreationDescriptorDto::Static { node_type_id } => {
-                crate::graph::catalog::NodeCreation::Static {
+                yss_graph_catalog::NodeCreation::Static {
                     node_type_id: node_type(node_type_id)?,
                 }
             }
             NodeCreationDescriptorDto::ParameterizedStatic {
                 node_type_id,
                 required_parameters,
-            } => crate::graph::catalog::NodeCreation::ParameterizedStatic {
+            } => yss_graph_catalog::NodeCreation::ParameterizedStatic {
                 node_type_id: node_type(node_type_id)?,
                 required_parameters: required_parameters
                     .into_vec()
@@ -284,19 +284,19 @@ impl TryFrom<NodeCreationDescriptorDto> for crate::graph::catalog::NodeCreation 
                 resource_path,
                 resource_revision,
                 create_args,
-            } => crate::graph::catalog::NodeCreation::ResourceBound {
+            } => yss_graph_catalog::NodeCreation::ResourceBound {
                 node_type_id: node_type(node_type_id)?,
-                resource_path: crate::graph::catalog::CatalogResourcePath::new(resource_path),
+                resource_path: yss_graph_catalog::CatalogResourcePath::new(resource_path),
                 resource_revision,
                 create_args: match create_args {
                     ResourceBoundCreateArgsDto::Function => {
-                        crate::graph::catalog::ResourceBoundCreateArgs::Function
+                        yss_graph_catalog::ResourceBoundCreateArgs::Function
                     }
                     ResourceBoundCreateArgsDto::Variable => {
-                        crate::graph::catalog::ResourceBoundCreateArgs::Variable
+                        yss_graph_catalog::ResourceBoundCreateArgs::Variable
                     }
                     ResourceBoundCreateArgsDto::Database => {
-                        crate::graph::catalog::ResourceBoundCreateArgs::Database
+                        yss_graph_catalog::ResourceBoundCreateArgs::Database
                     }
                 },
             },
@@ -315,7 +315,6 @@ mod tests {
     use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::execution::resource_preparation::ResourceProviderFactory;
     use crate::execution::state::ExecutionRuntimeState;
-    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{
         GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
@@ -329,6 +328,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_graph_catalog::build_builtin_node_system;
 
     fn application_with_function() -> (
         crate::project::fixtures::TempProject,

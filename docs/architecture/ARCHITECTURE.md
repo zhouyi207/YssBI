@@ -318,7 +318,7 @@ Graph 与 Execution 的依赖方向是：
 yss-graph-document + yss-graph-protocol + yss-canonical-hash
   → yss-graph-registry → yss-graph-analysis-contract
   → yss-graph-compiler-diagnostics
-  → graph catalog
+  → yss-graph-catalog
   → graph analysis + neutral compiler
   → Application graph package mapping
   → Execution immutable plan/runtime
@@ -329,8 +329,8 @@ yss-graph-document + yss-graph-protocol + yss-canonical-hash
 - `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
 - `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
+- `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
 - `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
-- `graph/catalog`：built-in descriptors、localized catalog 与 registry composition。
 - `graph/analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。

@@ -199,7 +199,7 @@ impl std::fmt::Display for I18nBundleValidationError {
 
 impl std::error::Error for I18nBundleValidationError {}
 
-pub(crate) fn authoritative_static_descriptor(
+pub fn authoritative_static_descriptor(
     registry: &NodeRegistry,
     protocol: &yss_graph_protocol::NodeProtocol,
 ) -> Option<NodeCreation> {
@@ -258,31 +258,6 @@ impl BuiltinCatalog {
                 .insert(key, message.clone());
         }
         Ok(Self { bundles })
-    }
-
-    #[cfg(test)]
-    pub(crate) fn remove_message_for_test(&mut self, locale: &str, key: &I18nKey) {
-        if let Some(bundle) = self.bundles.get_mut(locale) {
-            bundle.remove(key);
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn replace_message_for_test(
-        &mut self,
-        locale: &str,
-        key: I18nKey,
-        message: Message,
-    ) {
-        self.bundles
-            .entry(locale.into())
-            .or_default()
-            .insert(key, message);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn replace_text_for_test(&mut self, locale: &str, key: I18nKey, text: &'static str) {
-        self.replace_message_for_test(locale, key, Message::Text(text));
     }
 
     pub fn localization(&self, locale: &str) -> BuiltinLocalizationBundle<'_> {
@@ -634,7 +609,7 @@ fn locale_chain(locale: &str) -> Vec<String> {
     chain
 }
 
-pub fn normalize_search_text(value: &str) -> Box<str> {
+fn normalize_search_text(value: &str) -> Box<str> {
     let mut output = String::with_capacity(value.len());
     let mut separated = true;
     for original in value.chars() {

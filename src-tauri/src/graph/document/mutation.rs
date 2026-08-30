@@ -6,11 +6,11 @@ use super::{
     ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue, apply_graph_document_patch,
     port_member_group_state,
 };
-use crate::graph::catalog::reroute_node_type_for_kind;
-use crate::graph::catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::compatibility::EditorMutationValidationSnapshot;
 #[cfg(test)]
 use crate::project::{MutationRequest, OperationId, ResourceKey, ResourceRevision};
+use yss_graph_catalog::reroute_node_type_for_kind;
+use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
     PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
@@ -618,10 +618,9 @@ impl EditorGraphMutation {
                                     "unknown node type '{node_type_id}'"
                                 ))
                             })?;
-                            let authoritative =
-                                crate::graph::catalog::authoritative_static_descriptor(
-                                    registry, protocol,
-                                );
+                            let authoritative = yss_graph_catalog::authoritative_static_descriptor(
+                                registry, protocol,
+                            );
                             if authoritative.as_ref() != Some(&descriptor) {
                                 return Err(catalog_descriptor_invalid(
                                     "catalog creation descriptor does not match registry authority",
@@ -1225,7 +1224,7 @@ fn insert_reroute_operations_with_allocators(
         invalid_editor_mutation(format!("unknown reroute node type '{reroute_node_type}'"))
     })?;
     let contract =
-        crate::graph::catalog::validate_reroute_protocol_contract(registered, output.spec.kind)
+        yss_graph_catalog::validate_reroute_protocol_contract(registered, output.spec.kind)
             .map_err(|detail| MutationConflict::Projection(detail.into()))?;
 
     let reroute_id = allocate_node_id();

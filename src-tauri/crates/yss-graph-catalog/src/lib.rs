@@ -5,41 +5,44 @@
 mod builtin;
 mod control;
 mod core_nodes;
-pub(crate) mod dataframe;
+mod dataframe;
 mod distribution;
 mod documentation;
 mod localization;
 mod plot;
-pub(crate) mod project;
+mod project;
 mod statistics;
 
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
-#[cfg(test)]
-pub(crate) use builtin::{
-    BuiltinAssemblyTestFault, build_builtin_node_system_with_test_fault,
-    builtin_bundle_parts_for_test, validate_builtin_bundle_for_test,
-};
+#[cfg(any(test, feature = "test-support"))]
+pub use builtin::{builtin_bundle_parts_for_test, validate_builtin_bundle_for_test};
 pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
 pub(crate) const CONTROL_REROUTE_NODE_TYPE: &str = "yssbi.reroute.control";
 pub(crate) const EFFECT_REROUTE_NODE_TYPE: &str = "yssbi.reroute.effect";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
-pub(crate) use core_nodes::reroute::validate_reroute_protocol_contract;
-pub use dataframe::DATAFRAME_RESOURCE_SCHEMA_RESOLVER;
-pub(crate) fn reroute_node_type_for_kind(
+pub use core_nodes::reroute::validate_reroute_protocol_contract;
+pub use dataframe::{
+    DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_PANEL_SCHEMA_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER,
+};
+pub use project::{
+    FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
+    FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
+};
+pub fn reroute_node_type_for_kind(
     kind: yss_graph_protocol::PortKind,
 ) -> yss_graph_protocol::NodeTypeId {
     yss_graph_protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
         .expect("built-in reroute protocol identifiers are valid")
 }
 
-pub(crate) use localization::{Aliases, Message, Text, authoritative_static_descriptor};
+pub(crate) use localization::{Aliases, Message, Text};
 pub use localization::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, I18nBundleValidationError,
     LocalizedCatalog, LocalizedCatalogItem, LocalizedCategory, LocalizedParameter, LocalizedPort,
-    NodeCreation, ResourceBoundCreateArgs,
+    NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };
 
 #[cfg(test)]

@@ -1202,7 +1202,6 @@ mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::execution::identity::ExecutionSessionId;
-    use crate::graph::catalog::build_builtin_node_system;
     use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use crate::graph::runtime_state::{GraphRuntimeComponents, GraphRuntimeEpoch};
     use std::collections::BTreeMap;
@@ -1214,6 +1213,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_graph_catalog::build_builtin_node_system;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

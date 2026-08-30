@@ -1,8 +1,8 @@
-use crate::graph::catalog::CatalogResourcePath;
-use crate::graph::catalog::{NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::document::{EditorMutationError, EditorMutationErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
+use yss_graph_catalog::CatalogResourcePath;
+use yss_graph_catalog::{NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_document::{
     DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision,
     LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
@@ -337,7 +337,7 @@ pub(crate) fn refine_source_type(
         .parameters
         .values()
         .find_map(|value| value.as_str())
-        .map(crate::graph::catalog::CatalogResourcePath::new)
+        .map(yss_graph_catalog::CatalogResourcePath::new)
     else {
         return;
     };

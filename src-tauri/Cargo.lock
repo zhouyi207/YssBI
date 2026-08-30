@@ -9147,6 +9147,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-catalog"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "yss-graph-analysis-contract",
+ "yss-graph-compiler-diagnostics",
+ "yss-graph-protocol",
+ "yss-graph-registry",
+]
+
+[[package]]
 name = "yss-graph-compiler-diagnostics"
 version = "0.1.0"
 dependencies = [
@@ -9293,6 +9304,7 @@ dependencies = [
  "yss-database-contract",
  "yss-diagnostics",
  "yss-graph-analysis-contract",
+ "yss-graph-catalog",
  "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-protocol",

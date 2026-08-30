@@ -7,7 +7,6 @@ use crate::database::runtime::DatabaseRuntimeRegistry;
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
-use crate::graph::catalog::build_builtin_node_system;
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::runtime_state::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
@@ -24,6 +23,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
+use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_document::{
     DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
 };
@@ -211,12 +211,12 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         resource
             .resource_path
             .as_ref()
-            .map(crate::graph::catalog::CatalogResourcePath::as_str),
+            .map(yss_graph_catalog::CatalogResourcePath::as_str),
         Some(function_path.as_str())
     );
     assert!(matches!(
         resource.creation,
-        crate::graph::catalog::NodeCreation::ResourceBound { .. }
+        yss_graph_catalog::NodeCreation::ResourceBound { .. }
     ));
 }
 
@@ -232,7 +232,7 @@ fn compatible_catalog_filters_against_current_analyzed_source() {
     let request = CompatibleCatalogRequest::new(
         session.session.project_instance_id().clone(),
         graph_path,
-        GraphRevision::new(1),
+        GraphRevision::INITIAL,
         PortAddress::declared(source_node, PortKey::new("value").unwrap()),
         "en-US",
     );
@@ -264,7 +264,7 @@ fn stale_graph_revision_returns_typed_compatibility_error() {
     let request = CompatibleCatalogRequest::new(
         session.session.project_instance_id().clone(),
         graph_path,
-        GraphRevision::INITIAL,
+        GraphRevision::new(1),
         PortAddress::declared(source_node, PortKey::new("value").unwrap()),
         "en-US",
     );
@@ -277,9 +277,9 @@ fn stale_graph_revision_returns_typed_compatibility_error() {
     assert!(matches!(
         error,
         CatalogQueryApplicationError::Graph(GraphCatalogQueryError::RevisionConflict {
-            expected: GraphRevision::INITIAL,
+            expected,
             current,
-        }) if current == GraphRevision::new(1)
+        }) if expected == GraphRevision::new(1) && current == GraphRevision::INITIAL
     ));
 }
 

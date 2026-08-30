@@ -10,7 +10,7 @@ use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
     assembled_parameters, iid, leaf, sid,
 };
-use crate::graph::catalog::{Aliases, Message, Text};
+use crate::{Aliases, Message, Text};
 use yss_graph_protocol::*;
 use yss_graph_registry::{CategoryRegistration, TypeRegistration};
 

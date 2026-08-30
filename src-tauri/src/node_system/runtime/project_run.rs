@@ -559,7 +559,7 @@ mod tests {
         assert!(cancellation.is_cancelled());
         assert!(drained_rx.try_recv().is_err());
 
-        let node_registry = crate::graph::catalog::build_builtin_node_system()
+        let node_registry = yss_graph_catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         let resources = EmptyResources;

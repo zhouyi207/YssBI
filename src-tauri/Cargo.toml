@@ -17,6 +17,7 @@ members = [
     "crates/yss-database-contract",
     "crates/yss-diagnostics",
     "crates/yss-graph-analysis-contract",
+    "crates/yss-graph-catalog",
     "crates/yss-graph-compiler-diagnostics",
     "crates/yss-graph-document",
     "crates/yss-graph-protocol",
@@ -71,6 +72,7 @@ yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
+yss-graph-catalog = { path = "./crates/yss-graph-catalog" }
 yss-graph-compiler-diagnostics = { path = "./crates/yss-graph-compiler-diagnostics" }
 yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
@@ -117,6 +119,7 @@ trash = "5.2"
 proc-macro2 = "1"
 syn = { version = "3", features = ["full", "visit"] }
 tracing-subscriber.workspace = true
+yss-graph-catalog = { path = "./crates/yss-graph-catalog", features = ["test-support"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

@@ -48,7 +48,7 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub fn try_new() -> Result<Self, crate::graph::catalog::BuiltinInitializationError> {
+    pub fn try_new() -> Result<Self, yss_graph_catalog::BuiltinInitializationError> {
         Self::try_with_filesystem(ProjectFilesystemCoordinator::default())
     }
 
@@ -60,7 +60,7 @@ impl ProjectState {
     #[cfg(test)]
     fn try_with_filesystem(
         filesystem: ProjectFilesystemCoordinator,
-    ) -> Result<Self, crate::graph::catalog::BuiltinInitializationError> {
+    ) -> Result<Self, yss_graph_catalog::BuiltinInitializationError> {
         let store = ProjectStore::try_new()?;
         Ok(Self::from_store_and_filesystem(store, filesystem))
     }

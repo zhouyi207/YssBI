@@ -2,7 +2,7 @@ use super::support::{
     BuiltinAssemblyError, NodeTextSpec, ProviderFragment, effectful, protocol, pure, semantic,
     transparent,
 };
-use crate::graph::catalog::{
+use crate::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
     REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT,
 };
@@ -31,12 +31,12 @@ pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RerouteProtocolContract {
-    pub(crate) input_key: PortKey,
-    pub(crate) output_key: PortKey,
+pub struct RerouteProtocolContract {
+    pub input_key: PortKey,
+    pub output_key: PortKey,
 }
 
-pub(crate) fn validate_reroute_protocol_contract(
+pub fn validate_reroute_protocol_contract(
     registered: &RegisteredNode,
     kind: PortKind,
 ) -> Result<RerouteProtocolContract, &'static str> {

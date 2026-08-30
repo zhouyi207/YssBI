@@ -1,10 +1,9 @@
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
 };
-use crate::graph::catalog::Message;
-use std::sync::Arc;
+use crate::Message;
 use yss_graph_protocol::*;
-use yss_graph_registry::{CategoryRegistration, RegisteredNode};
+use yss_graph_registry::CategoryRegistration;
 
 const CATEGORY: &str = "distribution";
 

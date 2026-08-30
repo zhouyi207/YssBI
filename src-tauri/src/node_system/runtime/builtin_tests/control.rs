@@ -260,7 +260,7 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
         }
     }
 
-    let system = crate::graph::catalog::build_builtin_node_system().unwrap();
+    let system = yss_graph_catalog::build_builtin_node_system().unwrap();
     let registry = Arc::unwrap_or_clone(system.registry);
     let constant_id = NodeId::from_uuid(uuid::Uuid::from_u128(201));
     let print_id = NodeId::from_uuid(uuid::Uuid::from_u128(202));
@@ -379,7 +379,7 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
 
 #[test]
 fn print_protocol_has_default_and_ordered_chain_contract() {
-    use crate::graph::catalog::build_builtin_node_system;
+    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_protocol::{EffectSemantics, PortKey, Purity};
 
     let system = build_builtin_node_system().unwrap();

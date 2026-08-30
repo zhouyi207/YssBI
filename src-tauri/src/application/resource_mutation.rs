@@ -24,7 +24,6 @@ use crate::database::session_api::catalog_snapshot;
 use crate::execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
-use crate::graph::catalog::CatalogResourcePath;
 use crate::graph::compatibility::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot,
@@ -38,6 +37,7 @@ use crate::project::{
     ProjectInstanceId, ResourceRevision,
 };
 use std::collections::BTreeMap;
+use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_protocol::NodeTypeId;
 

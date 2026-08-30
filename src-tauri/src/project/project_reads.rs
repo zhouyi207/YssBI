@@ -1,10 +1,6 @@
 #[cfg(test)]
 use crate::database::DatabaseInstance;
 #[cfg(test)]
-use crate::graph::catalog::{
-    BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
-};
-#[cfg(test)]
 pub use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 #[cfg(test)]
 use crate::project::FunctionSignature;
@@ -19,6 +15,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 #[cfg(test)]
 use yss_database_contract::DatabaseDecl;
+#[cfg(test)]
+use yss_graph_catalog::{
+    BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
+};
 #[cfg(test)]
 use yss_graph_protocol::NodeTypeId;
 #[cfg(test)]
@@ -1455,9 +1455,7 @@ mod tests {
                 .catalog_mutation_validation_snapshot(&expected)
                 .unwrap()
                 .resources
-                .contains_key(&crate::graph::catalog::CatalogResourcePath::new(
-                    variable_path,
-                ))
+                .contains_key(&yss_graph_catalog::CatalogResourcePath::new(variable_path))
         );
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -1591,7 +1589,7 @@ mod tests {
 
         let unloaded = snapshot
             .resources
-            .get(&crate::graph::catalog::CatalogResourcePath::new(
+            .get(&yss_graph_catalog::CatalogResourcePath::new(
                 unloaded_path.as_str(),
             ))
             .unwrap();
@@ -1611,7 +1609,7 @@ mod tests {
 
         let loaded = snapshot
             .resources
-            .get(&crate::graph::catalog::CatalogResourcePath::new(
+            .get(&yss_graph_catalog::CatalogResourcePath::new(
                 loaded_path.as_str(),
             ))
             .unwrap();
@@ -1629,7 +1627,7 @@ mod tests {
         for variable_id in [unloaded_variable_id, loaded_variable_id] {
             let variable = snapshot
                 .resources
-                .get(&crate::graph::catalog::CatalogResourcePath::new(format!(
+                .get(&yss_graph_catalog::CatalogResourcePath::new(format!(
                     "variables/{variable_id}"
                 )))
                 .unwrap();
@@ -1657,7 +1655,7 @@ mod tests {
 
         let database = snapshot
             .resources
-            .get(&crate::graph::catalog::CatalogResourcePath::new(
+            .get(&yss_graph_catalog::CatalogResourcePath::new(
                 "databases/sales",
             ))
             .unwrap();

@@ -1,5 +1,5 @@
 use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::graph::catalog::{Aliases, BuiltinCatalog, Message, Text};
+use crate::{Aliases, BuiltinCatalog, Message, Text};
 use yss_graph_compiler_diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
     validate_compiler_diagnostic_definitions,
@@ -20,7 +20,7 @@ pub struct BuiltinNodeSystem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinInitializationError {
     Assembly(BuiltinAssemblyError),
-    Localization(crate::graph::catalog::I18nBundleValidationError),
+    Localization(crate::I18nBundleValidationError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,8 +156,8 @@ impl From<NodeRegistrationError> for BuiltinInitializationError {
     }
 }
 
-impl From<crate::graph::catalog::I18nBundleValidationError> for BuiltinInitializationError {
-    fn from(error: crate::graph::catalog::I18nBundleValidationError) -> Self {
+impl From<crate::I18nBundleValidationError> for BuiltinInitializationError {
+    fn from(error: crate::I18nBundleValidationError) -> Self {
         Self::Localization(error)
     }
 }
@@ -251,13 +251,13 @@ impl ProviderFragment {
 
         let mut messages = BTreeMap::new();
         for (locale, key, message) in self.messages {
-            if let Some(existing) = messages.insert((locale, key), message.clone()) {
-                if existing != message {
-                    return Err(BuiltinAssemblyError::LocalizationConflict {
-                        locale: locale.into(),
-                        key: key.into(),
-                    });
-                }
+            if let Some(existing) = messages.insert((locale, key), message.clone())
+                && existing != message
+            {
+                return Err(BuiltinAssemblyError::LocalizationConflict {
+                    locale: locale.into(),
+                    key: key.into(),
+                });
             }
         }
         self.messages = messages
@@ -410,90 +410,14 @@ fn validate_builtin_bundle(
     })
 }
 
-#[cfg(test)]
-pub(crate) fn builtin_bundle_parts_for_test()
+#[cfg(any(test, feature = "test-support"))]
+pub fn builtin_bundle_parts_for_test()
 -> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinInitializationError> {
     assemble_builtin_parts().map_err(Into::into)
 }
 
-#[cfg(test)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BuiltinAssemblyTestFault {
-    InvalidSemanticId(&'static str),
-    InvalidProtocol(&'static str),
-    InvalidRegistryProtocol,
-    LocalizationConflict,
-    DuplicateRegistration,
-}
-
-#[cfg(test)]
-pub(crate) fn build_builtin_node_system_with_test_fault(
-    fault: BuiltinAssemblyTestFault,
-) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
-    let parts = match fault {
-        BuiltinAssemblyTestFault::InvalidSemanticId(value) => {
-            assemble_builtin_parts_with(move |fragment| {
-                fragment.nodes.push(leaf(
-                    protocol(value, "constants", Vec::new(), Vec::new(), pure())?,
-                    "test.invalid_semantic_id",
-                ));
-                Ok(())
-            })
-        }
-        BuiltinAssemblyTestFault::InvalidProtocol(node_type) => {
-            assemble_builtin_parts_with(move |_| {
-                let port = data_port("duplicate", "Duplicate", PortDirection::Input, "core.bool")?;
-                assembled_interface(
-                    node_type,
-                    vec![port.clone(), port],
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                )?;
-                Ok(())
-            })
-        }
-        BuiltinAssemblyTestFault::InvalidRegistryProtocol => {
-            let mut parts = assemble_builtin_parts()?;
-            let node = parts
-                .0
-                .nodes
-                .iter_mut()
-                .find(|node| node.protocol().type_id.as_str() == "yssbi.constant.bool")
-                .expect("built-in test fixture must contain bool constant");
-            let mut protocol = node.protocol().clone();
-            let duplicate = protocol.interface.ports[0].clone();
-            protocol.interface.ports = vec![duplicate.clone(), duplicate].into_boxed_slice();
-            *node = RegisteredNode::leaf(
-                Arc::new(protocol),
-                node.implementation()
-                    .expect("built-in bool constant must be executable")
-                    .clone(),
-            );
-            Ok(parts)
-        }
-        BuiltinAssemblyTestFault::LocalizationConflict => assemble_builtin_parts_with(|fragment| {
-            fragment.messages.extend([
-                ("en-US", "nodes.test.title", Text("First")),
-                ("en-US", "nodes.test.title", Text("Second")),
-            ]);
-            Ok(())
-        }),
-        BuiltinAssemblyTestFault::DuplicateRegistration => {
-            assemble_builtin_parts_with(|fragment| {
-                fragment.nodes.push(leaf(
-                    constant_protocol("yssbi.constant.bool", "core.bool", Value::Bool(false))?,
-                    "test.duplicate_registration",
-                ));
-                Ok(())
-            })
-        }
-    }?;
-    validate_builtin_bundle(parts.0, parts.1, parts.2)
-}
-
-#[cfg(test)]
-pub(crate) fn validate_builtin_bundle_for_test(
+#[cfg(any(test, feature = "test-support"))]
+pub fn validate_builtin_bundle_for_test(
     provider: ProviderRegistration,
     catalog: BuiltinCatalog,
     alias_keys: BTreeSet<I18nKey>,
@@ -526,12 +450,6 @@ fn register_builtin_nominal_validators(
 
 fn assemble_builtin_parts()
 -> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
-    assemble_builtin_parts_with(|_| Ok(()))
-}
-
-fn assemble_builtin_parts_with(
-    inject: impl FnOnce(&mut ProviderFragment) -> Result<(), BuiltinAssemblyError>,
-) -> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
     validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS)
         .map_err(|source| BuiltinAssemblyError::DiagnosticDefinitions { source })?;
 
@@ -692,7 +610,6 @@ fn assemble_builtin_parts_with(
     fragment.merge(statistics::build_provider_fragment()?);
     fragment.merge(distribution::build_provider_fragment()?);
     fragment.merge(plot::build_provider_fragment()?);
-    inject(&mut fragment)?;
     let fragment = fragment.finish()?;
     let (required_i18n, alias_keys) =
         i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes)?;

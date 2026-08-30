@@ -10,14 +10,14 @@ use super::{
     OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef, SchemaFieldIdentity,
     SchemaSourceIdentity,
 };
-use crate::graph::catalog::{
-    CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
-};
 use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use yss_graph_catalog::{
+    CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
+};
 use yss_graph_protocol::{
     NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, ResourceDisplayKind,
     TypeExpr,

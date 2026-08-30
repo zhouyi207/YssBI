@@ -1,12 +1,6 @@
 #[cfg(test)]
 use crate::database::DatabaseInstance;
 #[cfg(test)]
-use crate::graph::catalog::BuiltinCatalog;
-#[cfg(test)]
-use crate::graph::catalog::{
-    BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
-};
-#[cfg(test)]
 use crate::node_system::runtime::{
     CompiledParameterStore, FunctionPlanStore, KernelRegistry, ProjectRunRegistry, ResultStore,
     SessionMemoization, build_builtin_kernel_registry,
@@ -18,6 +12,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::RwLock;
+#[cfg(test)]
+use yss_graph_catalog::BuiltinCatalog;
+#[cfg(test)]
+use yss_graph_catalog::{BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system};
 #[cfg(test)]
 use yss_graph_registry::NodeRegistry;
 
@@ -273,15 +271,11 @@ mod tests {
 
         let later_constructions = AtomicUsize::new(0);
         let (mut provider, catalog, alias_keys) =
-            crate::graph::catalog::builtin_bundle_parts_for_test().unwrap();
+            yss_graph_catalog::builtin_bundle_parts_for_test().unwrap();
         provider.types[0].title_key = "missing.type.title".parse().unwrap();
 
         let result = ProjectStore::try_with_builtin_factory_and_constructor(
-            || {
-                crate::graph::catalog::validate_builtin_bundle_for_test(
-                    provider, catalog, alias_keys,
-                )
-            },
+            || yss_graph_catalog::validate_builtin_bundle_for_test(provider, catalog, alias_keys),
             |_| {
                 later_constructions.fetch_add(1, Ordering::SeqCst);
                 unreachable!("store construction must not run after registration failure")
@@ -291,7 +285,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(BuiltinInitializationError::Assembly(
-                crate::graph::catalog::BuiltinAssemblyError::Registration(_)
+                yss_graph_catalog::BuiltinAssemblyError::Registration(_)
             ))
         ));
         assert_eq!(later_constructions.load(Ordering::SeqCst), 0);

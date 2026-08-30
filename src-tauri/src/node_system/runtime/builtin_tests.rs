@@ -93,7 +93,7 @@ fn compile_builtin_flow(
         }
     }
 
-    let builtin = crate::graph::catalog::build_builtin_node_system().unwrap();
+    let builtin = yss_graph_catalog::build_builtin_node_system().unwrap();
     let mut graph = GraphDocument {
         revision: GraphRevision::INITIAL,
         nodes: BTreeMap::new(),

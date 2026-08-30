@@ -225,12 +225,12 @@ impl From<ClipboardNodeCreation> for ClipboardNodeCreationDto {
     }
 }
 
-impl From<crate::graph::catalog::ResourceBoundCreateArgs> for ClipboardResourceBoundCreateArgsDto {
-    fn from(value: crate::graph::catalog::ResourceBoundCreateArgs) -> Self {
+impl From<yss_graph_catalog::ResourceBoundCreateArgs> for ClipboardResourceBoundCreateArgsDto {
+    fn from(value: yss_graph_catalog::ResourceBoundCreateArgs) -> Self {
         match value {
-            crate::graph::catalog::ResourceBoundCreateArgs::Function => Self::Function,
-            crate::graph::catalog::ResourceBoundCreateArgs::Variable => Self::Variable,
-            crate::graph::catalog::ResourceBoundCreateArgs::Database => Self::Database,
+            yss_graph_catalog::ResourceBoundCreateArgs::Function => Self::Function,
+            yss_graph_catalog::ResourceBoundCreateArgs::Variable => Self::Variable,
+            yss_graph_catalog::ResourceBoundCreateArgs::Database => Self::Database,
         }
     }
 }

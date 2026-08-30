@@ -1,0 +1,17 @@
+[package]
+name = "yss-graph-catalog"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+serde.workspace = true
+yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
+yss-graph-compiler-diagnostics = { path = "../yss-graph-compiler-diagnostics" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }

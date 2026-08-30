@@ -285,6 +285,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-catalog"
+                && root.target == "yss_graph_catalog"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-compiler-diagnostics"
                 && root.target == "yss_graph_compiler_diagnostics"
                 && root.kind == ProductionRootKind::Library)
@@ -456,6 +464,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-graph-analysis-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_catalog"
+                    && alias.member_package == "yss-graph-catalog"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-catalog"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -695,6 +721,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"),
     };
+    let graph_catalog_root = ProductionRoot {
+        package_id: "graph-catalog-package".to_owned(),
+        package: "yss-graph-catalog".to_owned(),
+        target: "yss_graph_catalog".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-catalog/src/lib.rs"),
+    };
     let graph_compiler_diagnostics_root = ProductionRoot {
         package_id: "graph-compiler-diagnostics-package".to_owned(),
         package: "yss-graph-compiler-diagnostics".to_owned(),
@@ -765,6 +798,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         database_contract_root.clone(),
         diagnostics_root.clone(),
         graph_analysis_contract_root.clone(),
+        graph_catalog_root.clone(),
         graph_compiler_diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
@@ -792,9 +826,14 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "fixture_lib::application",
             ),
             module(
-                &runtime_root,
-                "src-tauri/src/graph/catalog/builtin.rs",
-                "fixture_lib::graph::catalog::builtin",
+                &graph_catalog_root,
+                "src-tauri/crates/yss-graph-catalog/src/lib.rs",
+                "yss_graph_catalog",
+            ),
+            module(
+                &graph_catalog_root,
+                "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
+                "yss_graph_catalog::builtin",
             ),
             module(
                 &canonical_hash_root,
@@ -890,8 +929,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Application
     );
     assert_eq!(
-        classified["src-tauri/src/graph/catalog/builtin.rs"],
+        classified["src-tauri/crates/yss-graph-catalog/src/builtin.rs"],
         RustLayer::BuiltinComposition
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-catalog/src/lib.rs"],
+        RustLayer::Graph
     );
     assert_eq!(
         classified["src-tauri/crates/yss-canonical-hash/src/lib.rs"],
@@ -1545,8 +1588,8 @@ fn graph_registry_has_one_graph_crate_owner_without_compatibility_module() {
         "src-tauri/crates/yss-graph-registry/src/lib.rs",
         "src-tauri/crates/yss-graph-registry/src/model.rs",
         "src-tauri/crates/yss-graph-registry/src/validation.rs",
-        "src-tauri/src/graph/catalog/builtin.rs",
-        "src-tauri/src/graph/catalog/dataframe/mod.rs",
+        "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
+        "src-tauri/crates/yss-graph-catalog/src/dataframe/mod.rs",
     ]
     .into_iter()
     .map(|relative| {
@@ -1681,6 +1724,72 @@ fn graph_compiler_diagnostics_has_one_graph_crate_owner_without_dead_constructor
         assert!(
             !source.contains(removed),
             "graph compiler diagnostics must not restore removed dead API '{removed}'"
+        );
+    }
+}
+
+#[test]
+fn graph_catalog_has_one_crate_owner_with_explicit_test_support_boundary() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-catalog/Cargo.toml",
+        "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
+        "src-tauri/crates/yss-graph-catalog/src/dataframe/mod.rs",
+        "src-tauri/crates/yss-graph-catalog/src/lib.rs",
+        "src-tauri/crates/yss-graph-catalog/src/localization.rs",
+        "src-tauri/crates/yss-graph-catalog/src/project.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph catalog owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph/catalog").exists(),
+        "the root crate must not retain a graph catalog compatibility module"
+    );
+    assert!(
+        !root
+            .join("src-tauri/crates/yss-graph-catalog/src/project_interface.rs")
+            .exists(),
+        "the orphan project interface duplicate must not return"
+    );
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-catalog/Cargo.toml"))
+            .expect("graph catalog manifest must be readable");
+    assert!(
+        manifest.contains("test-support = []"),
+        "graph catalog test hooks must stay behind an explicit feature"
+    );
+
+    let sources = [
+        "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
+        "src-tauri/crates/yss-graph-catalog/src/lib.rs",
+        "src-tauri/crates/yss-graph-catalog/src/localization.rs",
+        "src-tauri/crates/yss-graph-catalog/src/plot/mod.rs",
+        "src-tauri/crates/yss-graph-catalog/src/project.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "cfg(all(test, any()))",
+        "BuiltinAssemblyTestFault",
+        "assemble_builtin_parts_with",
+        "build_builtin_node_system_with_test_fault",
+        "remove_message_for_test",
+        "replace_message_for_test",
+        "replace_text_for_test",
+        "PlotLowerer",
+        "PLOT_SINK",
+    ] {
+        assert!(
+            !sources.contains(removed),
+            "graph catalog must not restore removed dead API '{removed}'"
         );
     }
 }

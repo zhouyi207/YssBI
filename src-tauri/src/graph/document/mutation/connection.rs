@@ -362,8 +362,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                 ));
             };
             let resolver_id = resolver.as_str();
-            let type_name = if resolver_id
-                == crate::graph::catalog::project::FUNCTION_CALL_ARGUMENTS_RESOLVER
+            let type_name = if resolver_id == yss_graph_catalog::FUNCTION_CALL_ARGUMENTS_RESOLVER
                 && spec.direction == PortDirection::Input
             {
                 signature
@@ -371,7 +370,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     .iter()
                     .find(|candidate| candidate.id == *parameter)
                     .map(|parameter| parameter.type_name.as_str())
-            } else if resolver_id == crate::graph::catalog::project::FUNCTION_CALL_RESULTS_RESOLVER
+            } else if resolver_id == yss_graph_catalog::FUNCTION_CALL_RESULTS_RESOLVER
                 && spec.direction == PortDirection::Output
                 && parameter.as_str() == "return"
             {
@@ -407,7 +406,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     format!("database resource '{}' is unavailable", source.as_str()).into(),
                 ));
             }
-            if resolver.as_str() != crate::graph::catalog::dataframe::DATAFRAME_COLUMNS_RESOLVER {
+            if resolver.as_str() != yss_graph_catalog::DATAFRAME_COLUMNS_RESOLVER {
                 return Err(invalid_editor_mutation(format!(
                     "schema member '{}:{}' is invalid for template '{}'",
                     source.as_str(),

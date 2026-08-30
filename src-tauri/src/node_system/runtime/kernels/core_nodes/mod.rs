@@ -42,7 +42,7 @@ mod tests {
                 )
         }
 
-        let node_system = crate::graph::catalog::build_builtin_node_system().unwrap();
+        let node_system = yss_graph_catalog::build_builtin_node_system().unwrap();
         let catalog_handles = node_system
             .registry
             .iter()
