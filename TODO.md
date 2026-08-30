@@ -569,3 +569,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
   Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
   application/project 仅持有 mutation、normalization 与 authority。
+- [ ] 将受限数学表达式 IR、plain/LaTeX parser、关系拆分与输入预算迁入独立
+  `src-tauri/crates/yss-math/` Pure Leaf；根 crate 消费方直接依赖该 crate，不保留
+  `math` 兼容 module，并收敛 `mathlex` 为单一声明与单一使用层。

@@ -9110,6 +9110,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-math"
+version = "0.1.0"
+dependencies = [
+ "mathlex",
+]
+
+[[package]]
 name = "yss-sci"
 version = "0.1.0"
 dependencies = [
@@ -9166,7 +9173,6 @@ dependencies = [
  "calamine",
  "chrono",
  "duckdb",
- "mathlex",
  "ndarray",
  "notify",
  "num-traits",
@@ -9198,6 +9204,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "yss-data-contract",
  "yss-database-contract",
+ "yss-math",
  "yss-sci",
  "yss-tabular-contract",
  "yss-tracing",

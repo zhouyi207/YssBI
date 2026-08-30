@@ -3,13 +3,13 @@
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
-use crate::math::{
-    BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
-};
 use crate::sci::api::stats::hypothesis::{
     Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
 };
 use crate::sci::engine::SciContext;
+use yss_math::{
+    BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
+};
 
 pub struct HypothesisTestInput {
     pub betas: Vec<f64>,
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn rejects_excessive_constraints_before_matrix_allocation() {
-        let input = std::iter::repeat_n("x1 = 0", crate::math::MAX_RELATIONS + 1)
+        let input = std::iter::repeat_n("x1 = 0", yss_math::MAX_RELATIONS + 1)
             .collect::<Vec<_>>()
             .join(", ");
         let error = resolve_linear_hypothesis(&input, &names()).unwrap_err();

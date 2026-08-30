@@ -1,0 +1,9 @@
+[package]
+name = "yss-math"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+mathlex.workspace = true

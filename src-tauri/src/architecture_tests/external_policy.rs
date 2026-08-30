@@ -55,12 +55,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "mathlex",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "ndarray",
         target_condition: None,
     },
@@ -236,6 +230,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-database-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-math",
+        mode: RustDependencyMode::Runtime,
+        package_name: "mathlex",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -576,21 +576,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::SciCore,
         mode: RustDependencyMode::Runtime,
         package_name: "faer",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Execution,
-        mode: RustDependencyMode::Runtime,
-        package_name: "mathlex",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::SciCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "mathlex",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
-        mode: RustDependencyMode::Runtime,
-        package_name: "mathlex",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Execution,

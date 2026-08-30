@@ -14,7 +14,6 @@ pub mod execution;
 mod graph;
 pub mod graph_document;
 pub mod julia;
-pub mod math;
 #[cfg(test)]
 pub mod node_system;
 pub mod platform;

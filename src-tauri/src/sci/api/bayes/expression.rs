@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-use crate::math::{
+use yss_math::{
     BinaryOp as MathBinaryOp, ComparisonOp, MathExpr, ParseOptions, UnaryOp as MathUnaryOp,
     parse_relations,
 };
@@ -220,14 +220,14 @@ fn collect_math_symbols(expression: &MathExpr, symbols: &mut BTreeSet<String>) {
     }
 }
 
-fn math_error(error: crate::math::MathError) -> ExpressionParseError {
+fn math_error(error: yss_math::MathError) -> ExpressionParseError {
     ExpressionParseError::new(error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::ParseOptions;
+    use yss_math::ParseOptions;
 
     fn names(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()

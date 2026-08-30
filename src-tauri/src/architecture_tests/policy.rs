@@ -1772,6 +1772,7 @@ fn non_build_memberships(
         package,
         "yss-data-contract"
             | "yss-database-contract"
+            | "yss-math"
             | "yss-tabular-contract"
             | "yss-variable-contract"
     ) {
@@ -1809,7 +1810,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "julia" => Some(RustLayer::BackendAdapter),
         "event" | "schema" | "error" => Some(RustLayer::Transport),
         "window_state" => Some(RustLayer::PlatformAdapter),
-        "math" => Some(RustLayer::PureLeaf),
         "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
         "graph_document" => Some(RustLayer::PureLeaf),

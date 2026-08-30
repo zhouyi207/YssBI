@@ -338,7 +338,7 @@ fn prepare_latex_symbols(
         }
         let ch = rest.chars().next().expect("valid character boundary");
         if ch.is_ascii_alphabetic()
-            && input[..index].chars().next_back() != Some('\\')
+            && !input[..index].ends_with('\\')
             && input[..index]
                 .chars()
                 .next_back()
@@ -585,21 +585,20 @@ fn scan_relation_parts(input: &str) -> Result<RelationParts<'_>, MathError> {
         if nesting < 0 {
             return Err(MathError::new(MathErrorKind::Parse, "括号不匹配").at(index));
         }
-        if nesting == 0 {
-            if let Some((length, op)) = relation_operator(rest) {
-                let expression = input[start..index].trim();
-                if expression.is_empty() {
-                    return Err(
-                        MathError::new(MathErrorKind::Parse, "比较运算符两侧都需要表达式")
-                            .at(index),
-                    );
-                }
-                expressions.push(expression);
-                operators.push(op);
-                index += length;
-                start = index;
-                continue;
+        if nesting == 0
+            && let Some((length, op)) = relation_operator(rest)
+        {
+            let expression = input[start..index].trim();
+            if expression.is_empty() {
+                return Err(
+                    MathError::new(MathErrorKind::Parse, "比较运算符两侧都需要表达式").at(index),
+                );
             }
+            expressions.push(expression);
+            operators.push(op);
+            index += length;
+            start = index;
+            continue;
         }
         index += ch.len_utf8();
     }

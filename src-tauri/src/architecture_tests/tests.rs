@@ -257,6 +257,9 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
                 && root.target == "yss_database_contract"
                 && root.kind == ProductionRootKind::Library)
     );
+    assert!(workspace.roots.iter().any(|root| root.package == "yss-math"
+        && root.target == "yss_math"
+        && root.kind == ProductionRootKind::Library));
     assert!(
         workspace
             .roots
@@ -335,6 +338,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-database-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_math"
+                    && alias.member_package == "yss-math"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-math"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -445,6 +466,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-database-contract/src/lib.rs"),
     };
+    let math_root = ProductionRoot {
+        package_id: "math-package".to_owned(),
+        package: "yss-math".to_owned(),
+        target: "yss_math".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-math/src/lib.rs"),
+    };
     let tabular_contract_root = ProductionRoot {
         package_id: "tabular-contract-package".to_owned(),
         package: "yss-tabular-contract".to_owned(),
@@ -470,6 +498,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         runtime_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
+        math_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
         build_root.clone(),
@@ -514,6 +543,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &database_contract_root,
                 "src-tauri/crates/yss-database-contract/src/lib.rs",
                 "yss_database_contract",
+            ),
+            module(
+                &math_root,
+                "src-tauri/crates/yss-math/src/lib.rs",
+                "yss_math",
             ),
             module(
                 &tabular_contract_root,
@@ -566,6 +600,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-database-contract/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-math/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1107,6 +1145,26 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn math_parser_has_one_pure_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-math/Cargo.toml",
+        "src-tauri/crates/yss-math/src/lib.rs",
+        "src-tauri/crates/yss-math/src/adapter.rs",
+        "src-tauri/crates/yss-math/src/ir.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "math parser owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/math").exists(),
+        "the root crate must not retain a math compatibility module"
     );
 }
 
