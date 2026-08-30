@@ -60,7 +60,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     ("src-tauri/src/execution/ports/mod.rs", RustLayer::Execution),
-    ("src-tauri/src/graph/value/semantics.rs", RustLayer::Graph),
     ("src-tauri/src/graph/analysis/mod.rs", RustLayer::Graph),
     ("src-tauri/src/graph/compiler/mod.rs", RustLayer::Graph),
     ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
@@ -167,7 +166,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/graph/catalog/builtin.rs",
         RustLayer::BuiltinComposition,
     ),
-    ("src-tauri/src/graph/value/type_system.rs", RustLayer::Graph),
     (
         "src-tauri/src/database/runtime/mod.rs",
         RustLayer::DatabaseCore,

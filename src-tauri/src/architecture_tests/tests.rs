@@ -717,11 +717,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &runtime_root,
-                "src-tauri/src/graph/value/type_system.rs",
-                "fixture_lib::graph::value::type_system",
-            ),
-            module(
-                &runtime_root,
                 "src-tauri/src/execution/settings.rs",
                 "fixture_lib::execution::settings",
             ),
@@ -785,10 +780,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-window-state/src/lib.rs"],
         RustLayer::PlatformAdapter
-    );
-    assert_eq!(
-        classified["src-tauri/src/graph/value/type_system.rs"],
-        RustLayer::Graph
     );
     assert_eq!(
         classified["src-tauri/src/execution/settings.rs"],
@@ -1030,20 +1021,12 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
-    assert_eq!(
-        classification.get("src-tauri/src/graph/value/type_system.rs"),
-        Some(&RustLayer::Graph),
-        "Graph-owned value behavior must not inherit the Pure Leaf contract classification"
-    );
     assert!(
-        modules.iter().all(|module| {
-            !matches!(
-                module.repository_relative_source_file.as_str(),
-                "src-tauri/src/graph/value/data_type.rs"
-                    | "src-tauri/src/graph/value/data_value.rs"
-            )
-        }),
-        "the old Graph value declarations must not remain production modules"
+        !workspace
+            .repository_root
+            .join("src-tauri/src/graph/value")
+            .exists(),
+        "the root crate must not retain an unused graph value compatibility module"
     );
 
     let raw_dependencies =

@@ -585,3 +585,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 persisted graph document、entity identity、resource path 与 resource-name validation
   迁入独立 `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 Project
   直接消费 canonical validation error 与名称长度上限，避免镜像错误类型和重复规则事实源。
+- [ ] 删除无生产调用的根 `graph/value` 层，不为 dead code 创建 `yss-graph-value`；移除两套
+  漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。

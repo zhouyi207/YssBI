@@ -11,4 +11,3 @@ pub mod resource_catalog;
 pub mod runtime_state;
 pub mod schema;
 pub mod settings;
-pub mod value;
