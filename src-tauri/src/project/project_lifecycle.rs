@@ -503,9 +503,9 @@ mod tests {
         fixtures, load_project_from_file,
     };
     use crate::project::{OperationId, ResourceRevision};
-    use crate::variable::VariableScope;
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     fn root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -576,7 +576,7 @@ mod tests {
         before_head: Option<crate::project::HistoryEntryId>,
         before_revisions: &(
             std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
-            std::collections::HashMap<crate::variable::VariableId, ResourceRevision>,
+            std::collections::HashMap<yss_variable_contract::VariableId, ResourceRevision>,
             std::collections::HashMap<crate::project::WorksheetResourcePath, ResourceRevision>,
         ),
         before_generation: u64,
@@ -880,8 +880,8 @@ mod tests {
             graph_path.clone(),
             GraphResourceDocument::new("Authority", GraphDocumentKind::Event),
         );
-        let variable = crate::variable::VariableInstance {
-            id: crate::variable::VariableId::new(),
+        let variable = yss_variable_contract::VariableInstance {
+            id: yss_variable_contract::VariableId::new(),
             name: "authoritative_global".into(),
             data_type: DataType::Int64,
             data_value: DataValue::Int64(42),

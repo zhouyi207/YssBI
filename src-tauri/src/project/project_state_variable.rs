@@ -6,10 +6,10 @@ use super::{ProjectFilesystemError, ProjectState};
 use yss_data_contract::{DataType, DataValue};
 
 use crate::project::variable_tabular::normalize_variable_tabular;
-use crate::variable::VariableId;
-use crate::variable::VariableInstance;
+use yss_variable_contract::VariableId;
+use yss_variable_contract::VariableInstance;
 #[cfg(test)]
-use crate::variable::VariableScope;
+use yss_variable_contract::VariableScope;
 
 impl ProjectState {
     pub(super) fn stage_variable(

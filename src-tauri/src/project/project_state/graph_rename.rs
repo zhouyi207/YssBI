@@ -346,8 +346,8 @@ impl ProjectState {
         target: &GraphResourcePath,
         moved: &GraphResourceDocument,
         moved_local_variables: std::collections::HashMap<
-            crate::variable::VariableId,
-            crate::variable::VariableInstance,
+            yss_variable_contract::VariableId,
+            yss_variable_contract::VariableInstance,
         >,
         excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
         known_revisions: &std::collections::HashMap<

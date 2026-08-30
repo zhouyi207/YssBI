@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 /// Variable 唯一标识符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct VariableId(Uuid);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -17,11 +18,13 @@ pub enum VariableIdParseError {
 
 impl VariableId {
     /// 统一 id 生成入口
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
     /// 占位 ID
+    #[must_use]
     pub fn nil() -> Self {
         Self(Uuid::nil())
     }

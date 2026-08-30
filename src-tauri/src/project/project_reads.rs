@@ -17,15 +17,15 @@ use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
     ProjectState, WorksheetDocument, WorksheetResourcePath,
 };
-use crate::variable::VariableScope;
-#[cfg(test)]
-use crate::variable::{VariableId, VariableInstance};
 #[cfg(test)]
 use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 #[cfg(test)]
 use yss_database_contract::DatabaseDecl;
+use yss_variable_contract::VariableScope;
+#[cfg(test)]
+use yss_variable_contract::{VariableId, VariableInstance};
 
 #[cfg(test)]
 #[derive(Clone)]
@@ -59,7 +59,7 @@ struct CatalogCapture {
     index: ProjectIndex,
     data: ProjectData,
     loaded_variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         crate::project::project_state::VariableRevisionEntry,
     >,
     database_authority_revisions: std::collections::HashMap<String, u64>,
@@ -366,7 +366,7 @@ fn build_catalog_snapshots(
         .filter_map(|entry| {
             let retained = uuid::Uuid::parse_str(&entry.id)
                 .ok()
-                .map(crate::variable::VariableId::from)
+                .map(yss_variable_contract::VariableId::from)
                 .and_then(|id| loaded_variable_revisions.get(&id).copied());
             let revision = match retained {
                 Some(entry) if entry.is_present() => entry.revision,
@@ -503,7 +503,7 @@ struct ProjectIndexAuthorityCapture {
     history: crate::project::HistoryStatusDto,
     data: ProjectData,
     variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         crate::project::project_state::VariableRevisionEntry,
     >,
     database_revisions: std::collections::HashMap<String, u64>,
@@ -617,14 +617,14 @@ fn validate_project_index_authority(
 }
 
 fn variable_owner_graph_path(
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
 ) -> Option<crate::graph_document::GraphResourcePath> {
     match scope {
-        crate::variable::VariableScope::Global => None,
-        crate::variable::VariableScope::Event { event_path } => {
+        yss_variable_contract::VariableScope::Global => None,
+        yss_variable_contract::VariableScope::Event { event_path } => {
             crate::graph_document::GraphResourcePath::new(event_path).ok()
         }
-        crate::variable::VariableScope::Function { function_path } => {
+        yss_variable_contract::VariableScope::Function { function_path } => {
             crate::graph_document::GraphResourcePath::new(function_path).ok()
         }
     }
@@ -633,7 +633,7 @@ fn variable_owner_graph_path(
 fn overlay_authoritative_project_index(
     data: &ProjectData,
     variable_revisions: &std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         crate::project::project_state::VariableRevisionEntry,
     >,
     database_revisions: &std::collections::HashMap<String, u64>,
@@ -641,12 +641,12 @@ fn overlay_authoritative_project_index(
 ) -> Result<(), ProjectFilesystemError> {
     let mut variables = std::collections::BTreeMap::new();
     for mut variable in std::mem::take(&mut index.variables) {
-        if matches!(variable.scope, crate::variable::VariableScope::Global) {
+        if matches!(variable.scope, yss_variable_contract::VariableScope::Global) {
             continue;
         }
         let retained = uuid::Uuid::parse_str(&variable.id)
             .ok()
-            .map(crate::variable::VariableId::from)
+            .map(yss_variable_contract::VariableId::from)
             .and_then(|id| variable_revisions.get(&id).copied());
         match retained {
             Some(entry) if entry.is_present() => variable.revision = entry.revision,
@@ -762,8 +762,8 @@ mod tests {
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemError,
         ProjectState, fixtures, read_project_index as read_project_index_from_disk,
     };
-    use crate::variable::VariableScope;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     use std::time::Duration;
 
@@ -844,8 +844,8 @@ mod tests {
         let root = project_root("coherent-index");
         let function_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
         let mut disk = ProjectData::new();
-        let disk_global = crate::variable::VariableInstance {
-            id: crate::variable::VariableId::new(),
+        let disk_global = yss_variable_contract::VariableInstance {
+            id: yss_variable_contract::VariableId::new(),
             name: "stale_disk_global".into(),
             data_type: DataType::Int64,
             data_value: DataValue::Int64(1),
@@ -1200,15 +1200,15 @@ mod tests {
         ProjectState,
         GraphResourcePath,
         GraphResourcePath,
-        crate::variable::VariableId,
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
+        yss_variable_contract::VariableId,
     ) {
         let root = project_root("catalog");
         let unloaded_path = GraphResourcePath::new("functions/A-Unloaded.yssbi-function").unwrap();
         let loaded_path = GraphResourcePath::new("functions/Z-Loaded.yssbi-function").unwrap();
-        let unloaded_variable_id = crate::variable::VariableId::new();
-        let loaded_variable_id = crate::variable::VariableId::new();
-        let unloaded_variable = crate::variable::VariableInstance {
+        let unloaded_variable_id = yss_variable_contract::VariableId::new();
+        let loaded_variable_id = yss_variable_contract::VariableId::new();
+        let unloaded_variable = yss_variable_contract::VariableInstance {
             id: unloaded_variable_id,
             name: "Unloaded local".into(),
             data_type: DataType::Int64,
@@ -1220,7 +1220,7 @@ mod tests {
             },
             tags: Vec::new(),
         };
-        let loaded_variable = crate::variable::VariableInstance {
+        let loaded_variable = yss_variable_contract::VariableInstance {
             id: loaded_variable_id,
             name: "Loaded local".into(),
             data_type: DataType::Int64,

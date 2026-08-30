@@ -6,9 +6,9 @@ use crate::project::{
     VariableDocument, VariableResourceKey, WorksheetResourceKey, WorksheetResourcePath,
 };
 use crate::project::{HistoryEntryId, ResourceRevision};
-use crate::variable::{VariableInstance, VariableScope};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use yss_variable_contract::{VariableInstance, VariableScope};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HistoryGraphResidency {
@@ -36,7 +36,7 @@ pub(super) struct PreparedHistoryDocuments {
     pub after_data: ProjectData,
     pub loaded_after_data: ProjectData,
     pub after_variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
     pub after_worksheet_revisions:
@@ -55,7 +55,7 @@ pub(super) struct HistoryPreparationSnapshot {
     graph_revisions:
         std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
     worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
@@ -171,7 +171,7 @@ pub(super) fn capture_history_preparation_snapshot(
         crate::graph_document::GraphRevision,
     >,
     variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
     worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
@@ -849,13 +849,13 @@ fn verify_variable_owner(
 
 fn variable_id_from_key(
     key: &VariableResourceKey,
-) -> Result<crate::variable::VariableId, Box<str>> {
+) -> Result<yss_variable_contract::VariableId, Box<str>> {
     let id = key
         .0
         .strip_prefix("variables/")
         .ok_or_else(|| format!("invalid Variable resource key '{}'", key.0).into_boxed_str())?;
     uuid::Uuid::parse_str(id)
-        .map(crate::variable::VariableId::from)
+        .map(yss_variable_contract::VariableId::from)
         .map_err(|error| {
             format!("invalid Variable resource key '{}': {error}", key.0).into_boxed_str()
         })
@@ -889,7 +889,7 @@ fn authoritative_or_patched_variable(
         .strip_prefix("variables/")
         .ok_or_else(|| format!("invalid Variable resource key '{}'", key.0))?;
     let id = uuid::Uuid::parse_str(id_text)
-        .map(crate::variable::VariableId::from)
+        .map(yss_variable_contract::VariableId::from)
         .map_err(|error| format!("invalid Variable resource key '{}': {error}", key.0))?;
     if let Some(variable) = data.variables.get(&id) {
         return Ok(variable.clone());
@@ -950,9 +950,9 @@ mod tests {
         VariableDocumentPatch, VariableResourceKey,
     };
     use crate::project::{OperationId, ResourceRevision};
-    use crate::variable::{VariableId, VariableInstance, VariableScope};
     use std::collections::{BTreeMap, BTreeSet};
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
     const EVENT_PATH: &str = "events/Stable.yssbi-event";
     const FUNCTION_PATH: &str = "functions/Stable.yssbi-function";

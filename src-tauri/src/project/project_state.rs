@@ -946,7 +946,10 @@ impl ProjectState {
         &self,
     ) -> (
         std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
-        std::collections::HashMap<crate::variable::VariableId, crate::project::ResourceRevision>,
+        std::collections::HashMap<
+            yss_variable_contract::VariableId,
+            crate::project::ResourceRevision,
+        >,
         std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
     ) {
         (
@@ -964,7 +967,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn variable_revision_entry_for_test(
         &self,
-        id: &crate::variable::VariableId,
+        id: &yss_variable_contract::VariableId,
     ) -> Option<VariableRevisionEntry> {
         self.variable_revisions.read().unwrap().get(id).copied()
     }

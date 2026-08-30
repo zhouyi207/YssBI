@@ -234,7 +234,7 @@ fn data_series_values(value: &RuntimeValue) -> Vec<Value> {
 
 fn execute_variable_kernel(
     kernel: &str,
-    variable: crate::variable::VariableInstance,
+    variable: yss_variable_contract::VariableInstance,
     inputs: &[RuntimeValue],
 ) -> (
     Result<Vec<RuntimeValue>, KernelError>,

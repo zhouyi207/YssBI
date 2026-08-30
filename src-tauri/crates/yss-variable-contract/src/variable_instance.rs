@@ -4,7 +4,7 @@ use yss_data_contract::{DataType, DataValue};
 use yss_tabular_contract::TabularSnapshot;
 
 /// 变量定义（持久化到项目文件）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VariableInstance {
     /// 变量 ID

@@ -256,8 +256,8 @@ mod tests {
     use crate::graph_document::GraphRevision;
     use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectInstanceId};
-    use crate::variable::VariableScope;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
         let expected = state.capture_project_session().unwrap().instance_id;
@@ -621,8 +621,8 @@ mod tests {
                 name: format!("{label} database").into(),
             },
         );
-        let variable = crate::variable::VariableInstance {
-            id: crate::variable::VariableId::new(),
+        let variable = yss_variable_contract::VariableInstance {
+            id: yss_variable_contract::VariableId::new(),
             name: format!("{label} variable"),
             data_type: DataType::Int64,
             data_value: DataValue::Int64(1),

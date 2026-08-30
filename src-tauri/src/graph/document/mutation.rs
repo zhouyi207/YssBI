@@ -1064,14 +1064,14 @@ fn validate_resource_path(
 
 fn validate_variable_scope(
     graph_path: &GraphResourcePath,
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
 ) -> Result<(), MutationConflict> {
     let in_scope = match scope {
-        crate::variable::VariableScope::Global => true,
-        crate::variable::VariableScope::Event { event_path } => {
+        yss_variable_contract::VariableScope::Global => true,
+        yss_variable_contract::VariableScope::Event { event_path } => {
             event_path.as_str() == graph_path.as_str()
         }
-        crate::variable::VariableScope::Function { function_path } => {
+        yss_variable_contract::VariableScope::Function { function_path } => {
             function_path.as_str() == graph_path.as_str()
         }
     };

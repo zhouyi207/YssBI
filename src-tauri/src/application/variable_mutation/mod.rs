@@ -11,8 +11,8 @@ use super::execution::session_slot::{
 use crate::application::events::{ApplicationEvent, committed_resource_mutation_from_project};
 use crate::project::project_writers::GlobalVariableMutationResult;
 use crate::project::{OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceRevision};
-use crate::variable::{VariableId, VariableInstance, VariableScope};
 use yss_data_contract::{DataType, DataValue};
+use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 pub enum VariableMutationRequest {
     Create {

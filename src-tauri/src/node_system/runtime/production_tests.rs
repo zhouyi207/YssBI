@@ -82,16 +82,16 @@ fn project_resource_version_fingerprint_tracks_variables_and_databases() {
 
 #[test]
 fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() {
-    let variable_id = crate::variable::VariableId::new();
+    let variable_id = yss_variable_contract::VariableId::new();
     let resource = resource_id(&format!("variables/{variable_id}"));
-    let variable = Arc::new(crate::variable::VariableInstance {
+    let variable = Arc::new(yss_variable_contract::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
         data_type: yss_data_contract::DataType::Int64,
         data_value: yss_data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     });
     let session = ProjectSessionId::new("project-a");
@@ -194,16 +194,16 @@ impl FunctionPlanProvider for NoFunctions {
 
 #[test]
 fn run_executor_classifies_resource_plan_validation_errors() {
-    let variable_id = crate::variable::VariableId::new();
+    let variable_id = yss_variable_contract::VariableId::new();
     let resource = resource_id(&format!("variables/{variable_id}"));
-    let variable = Arc::new(crate::variable::VariableInstance {
+    let variable = Arc::new(yss_variable_contract::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
         data_type: yss_data_contract::DataType::Int64,
         data_value: yss_data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     });
     let session = ProjectSessionId::new("project-a");
@@ -288,16 +288,16 @@ fn run_executor_classifies_resource_plan_validation_errors() {
 
 #[test]
 fn variable_reads_stay_on_the_snapshot() {
-    let variable_id = crate::variable::VariableId::new();
+    let variable_id = yss_variable_contract::VariableId::new();
     let resource = resource_id(&format!("variables/{variable_id}"));
-    let variable = Arc::new(crate::variable::VariableInstance {
+    let variable = Arc::new(yss_variable_contract::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
         data_type: yss_data_contract::DataType::Int64,
         data_value: yss_data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     });
     let snapshot = ProjectResourceSnapshot::new(

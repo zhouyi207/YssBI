@@ -11,8 +11,8 @@ use crate::project::{
     RevealProjectResourceRequest, format_path_for_user_path, normalize_existing_path,
     resolve_reveal_path,
 };
-use crate::variable::VariableInstance;
 use yss_database_contract::DatabaseDecl;
+use yss_variable_contract::VariableInstance;
 
 #[derive(Debug, Error)]
 pub enum ProjectQueryApplicationError {

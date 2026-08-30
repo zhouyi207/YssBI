@@ -269,6 +269,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-variable-contract"
+                && root.target == "yss_variable_contract"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-tracing"
                 && root.target == "yss_tracing"
                 && root.kind == ProductionRootKind::Library)
@@ -356,6 +364,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_variable_contract"
+                    && alias.member_package == "yss-variable-contract"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-variable-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
                     && alias.declared_name == "yss_tracing"
                     && alias.member_package == "yss-tracing"
             })
@@ -426,6 +452,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
     };
+    let variable_contract_root = ProductionRoot {
+        package_id: "variable-contract-package".to_owned(),
+        package: "yss-variable-contract".to_owned(),
+        target: "yss_variable_contract".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-variable-contract/src/lib.rs"),
+    };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
         package: "fixture".to_owned(),
@@ -438,6 +471,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         data_contract_root.clone(),
         database_contract_root.clone(),
         tabular_contract_root.clone(),
+        variable_contract_root.clone(),
         build_root.clone(),
     ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
@@ -487,6 +521,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_tabular_contract",
             ),
             module(
+                &variable_contract_root,
+                "src-tauri/crates/yss-variable-contract/src/lib.rs",
+                "yss_variable_contract",
+            ),
+            module(
                 &runtime_root,
                 "src-tauri/src/graph/value/type_system.rs",
                 "fixture_lib::graph::value::type_system",
@@ -531,6 +570,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-variable-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1064,6 +1107,27 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn variable_contract_has_one_pure_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-variable-contract/src/lib.rs",
+        "src-tauri/crates/yss-variable-contract/src/variable_id.rs",
+        "src-tauri/crates/yss-variable-contract/src/variable_instance.rs",
+        "src-tauri/crates/yss-variable-contract/src/variable_scope.rs",
+        "src-tauri/crates/yss-variable-contract/tests/wire_contract.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "variable contract owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/variable").exists(),
+        "the root crate must not retain a variable compatibility module"
     );
 }
 

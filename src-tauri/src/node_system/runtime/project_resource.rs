@@ -6,7 +6,6 @@ use crate::graph::analysis::contracts::{
     CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
 };
 use crate::project::ProjectSessionId;
-use crate::variable::VariableInstance;
 use polars::prelude::DataFrame;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -17,6 +16,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::DataValue;
+use yss_variable_contract::VariableInstance;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectResourceVersionFingerprint(Box<str>);

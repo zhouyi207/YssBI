@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn variable_data_series_materializes_artifact_without_serialized_runtime_internals() {
-    let id = crate::variable::VariableId::new();
-    let variable = crate::variable::VariableInstance {
+    let id = yss_variable_contract::VariableId::new();
+    let variable = yss_variable_contract::VariableInstance {
         id,
         name: "observations".into(),
         data_type: yss_data_contract::DataType::DataSeries(Box::new(
@@ -16,7 +16,7 @@ fn variable_data_series_materializes_artifact_without_serialized_runtime_interna
         ),
         tabular: Some(serde_json::from_str(r#"{"columns":{"observations":[1,null,3]}}"#).unwrap()),
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     };
 
@@ -42,8 +42,8 @@ fn variable_data_series_materializes_artifact_without_serialized_runtime_interna
 
 #[test]
 fn variable_data_series_set_serializes_payload_without_artifact_internals() {
-    let id = crate::variable::VariableId::new();
-    let variable = crate::variable::VariableInstance {
+    let id = yss_variable_contract::VariableId::new();
+    let variable = yss_variable_contract::VariableInstance {
         id,
         name: "observations".into(),
         data_type: yss_data_contract::DataType::DataSeries(Box::new(
@@ -52,7 +52,7 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
         data_value: yss_data_contract::DataValue::Null,
         tabular: None,
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     };
     let input = RuntimeValue::Artifact(
@@ -86,8 +86,8 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
 
 #[test]
 fn data_series_variable_get_set_flows_into_statistics() {
-    let id = crate::variable::VariableId::new();
-    let empty = crate::variable::VariableInstance {
+    let id = yss_variable_contract::VariableId::new();
+    let empty = yss_variable_contract::VariableInstance {
         id,
         name: "observations".into(),
         data_type: yss_data_contract::DataType::DataSeries(Box::new(
@@ -96,7 +96,7 @@ fn data_series_variable_get_set_flows_into_statistics() {
         data_value: yss_data_contract::DataValue::Null,
         tabular: None,
         description: String::new(),
-        scope: crate::variable::VariableScope::Global,
+        scope: yss_variable_contract::VariableScope::Global,
         tags: Vec::new(),
     };
     let assigned = RuntimeValue::Artifact(
@@ -115,7 +115,7 @@ fn data_series_variable_get_set_flows_into_statistics() {
         panic!("variable effect must persist a DataSeries payload");
     };
     let series_json = series.id.clone();
-    let persisted = crate::variable::VariableInstance {
+    let persisted = yss_variable_contract::VariableInstance {
         data_value: after,
         tabular: Some(serde_json::from_str(&format!(r#"{{"columns":{series_json}}}"#)).unwrap()),
         ..empty

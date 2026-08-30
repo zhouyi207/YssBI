@@ -16,9 +16,9 @@ use crate::schema::editor_projection_types::{
 };
 #[cfg(test)]
 use crate::schema::graph_mutation::PortAddressDto;
-use crate::variable::VariableScope;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
+use yss_variable_contract::VariableScope;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CatalogMutationValidationSnapshot {
@@ -561,9 +561,9 @@ fn candidate_ports(
     let resource = descriptor_resource(descriptor, resources)?;
     if let Some(CatalogMutationResource::Variable { scope, .. }) = resource {
         let in_scope = match scope {
-            crate::variable::VariableScope::Global => true,
-            crate::variable::VariableScope::Event { event_path }
-            | crate::variable::VariableScope::Function {
+            yss_variable_contract::VariableScope::Global => true,
+            yss_variable_contract::VariableScope::Event { event_path }
+            | yss_variable_contract::VariableScope::Function {
                 function_path: event_path,
             } => event_path.as_str() == graph_path.as_str(),
         };

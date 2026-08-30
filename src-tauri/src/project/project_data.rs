@@ -4,10 +4,10 @@ use super::{
 };
 use crate::graph_document::GraphDocument;
 use crate::project::{FunctionDocument, FunctionSignature};
-use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use yss_database_contract::DatabaseDecl;
+use yss_variable_contract::{VariableId, VariableInstance};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

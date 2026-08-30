@@ -554,7 +554,7 @@ pub struct RunResult {
     pub provenance: CompileProvenance,
     pub result_ids: BTreeMap<Box<str>, super::ResultId>,
     pub(crate) results: super::ResultStore,
-    pub committed_variable_ids: Box<[crate::variable::VariableId]>,
+    pub committed_variable_ids: Box<[yss_variable_contract::VariableId]>,
     pub resource_mutation: Option<crate::schema::application_event::ResourceMutationResultDto>,
 }
 

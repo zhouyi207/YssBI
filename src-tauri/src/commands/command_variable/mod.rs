@@ -10,9 +10,9 @@ use crate::project::{OperationId, ResourceRevision};
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::VariableInstanceDTO;
 use crate::schema::application_event::ResourceMutationResultDto;
-use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 use yss_data_contract::{DataType, DataValue};
+use yss_variable_contract::{VariableId, VariableScope};
 
 #[cfg(all(test, any()))]
 fn ensure_command_project(
@@ -64,7 +64,7 @@ fn emit_global_result(emit: &mut impl FnMut(Event), result: &ResourceMutationRes
 }
 
 fn variable_dto(
-    variable: &crate::variable::VariableInstance,
+    variable: &yss_variable_contract::VariableInstance,
 ) -> Result<VariableInstanceDTO, CommandError> {
     VariableInstanceDTO::try_from(variable)
         .map_err(|error| CommandError::diagnosed("variable_dto_mapping_failed", error))
@@ -971,7 +971,7 @@ mod tests {
 
     fn local_history_state(
         label: &str,
-        variable: Option<crate::variable::VariableInstance>,
+        variable: Option<yss_variable_contract::VariableInstance>,
     ) -> (
         std::path::PathBuf,
         ProjectState,
@@ -1005,7 +1005,7 @@ mod tests {
     fn disk_local_variables(
         root: &std::path::Path,
         graph_path: &crate::graph_document::GraphResourcePath,
-    ) -> std::collections::HashMap<VariableId, crate::variable::VariableInstance> {
+    ) -> std::collections::HashMap<VariableId, yss_variable_contract::VariableInstance> {
         let document: crate::project::project_io::GraphDocument =
             serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap())
                 .unwrap();
@@ -1074,7 +1074,7 @@ mod tests {
     #[test]
     fn local_update_delete_history_persists_graph_and_preserves_publication_continuity() {
         let variable_id = VariableId::new();
-        let variable = crate::variable::VariableInstance {
+        let variable = yss_variable_contract::VariableInstance {
             id: variable_id,
             name: "before".into(),
             data_type: DataType::Int64,

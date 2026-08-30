@@ -755,7 +755,7 @@ fn map_project_resource_facts(
 
 fn variable_id_from_resource(
     resource: &ProjectResourceId,
-) -> Result<crate::variable::VariableId, VariableBindingError> {
+) -> Result<yss_variable_contract::VariableId, VariableBindingError> {
     let value = resource
         .as_str()
         .strip_prefix("variables/")
@@ -763,7 +763,7 @@ fn variable_id_from_resource(
         .ok_or_else(|| VariableBindingError::InvalidResource {
             resource: resource.clone(),
         })?;
-    crate::variable::VariableId::try_from(value).map_err(|_| {
+    yss_variable_contract::VariableId::try_from(value).map_err(|_| {
         VariableBindingError::InvalidResource {
             resource: resource.clone(),
         }

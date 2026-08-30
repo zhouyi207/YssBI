@@ -1,10 +1,10 @@
-use crate::variable::{VariableId, VariableInstance};
 use serde::Deserializer as _;
 use serde::de::{MapAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
 use yss_data_contract::{DataSeriesValue, DataType, DataValue};
 use yss_tabular_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
+use yss_variable_contract::{VariableId, VariableInstance};
 
 const VARIABLE_HANDLE_PREFIX: &str = "var:";
 
@@ -207,8 +207,8 @@ pub fn normalize_variable_tabular(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::variable::VariableScope;
     use yss_tabular_contract::TabularColumnName;
+    use yss_variable_contract::VariableScope;
 
     #[test]
     fn normalize_enforces_current_variable_canonical_handle() {

@@ -9,7 +9,7 @@ struct ActivationGarbage {
     _graph_revisions:
         std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     _variable_revisions:
-        std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+        std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     _worksheet_revisions:
         std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,

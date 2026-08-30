@@ -164,7 +164,7 @@ impl Kernel for VariableKernel {
 }
 
 fn variable_runtime_value(
-    variable: &crate::variable::VariableInstance,
+    variable: &yss_variable_contract::VariableInstance,
 ) -> Result<RuntimeValue, KernelError> {
     let yss_data_contract::DataType::DataSeries(element_type) = &variable.data_type else {
         return Ok(RuntimeValue::Scalar(data_value_to_protocol(
@@ -264,7 +264,7 @@ fn tabular_series_value(
 }
 
 fn runtime_to_variable_value(
-    variable: &crate::variable::VariableInstance,
+    variable: &yss_variable_contract::VariableInstance,
     value: &RuntimeValue,
 ) -> Result<yss_data_contract::DataValue, KernelError> {
     let yss_data_contract::DataType::DataSeries(declared_element) = &variable.data_type else {

@@ -14,7 +14,7 @@ use super::{
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
 use crate::graph_document::GraphDocument as NodeGraphDocument;
-use crate::variable::{VariableId, VariableInstance, VariableScope};
+use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 3;
 pub const EVENTS_DIR: &str = "events";
@@ -193,8 +193,8 @@ pub fn serialize_global_variables(data: &ProjectData) -> Result<Vec<u8>, Project
 
 pub(crate) fn serialize_global_variable_map(
     variables: std::collections::HashMap<
-        crate::variable::VariableId,
-        crate::variable::VariableInstance,
+        yss_variable_contract::VariableId,
+        yss_variable_contract::VariableInstance,
     >,
 ) -> Result<Vec<u8>, ProjectError> {
     serde_json::to_vec_pretty(&GlobalVariablesDocument {

@@ -71,7 +71,7 @@ pub struct ResolvedDatabaseValue<'a> {
 #[cfg(test)]
 pub type ResolvedFunction<'a> = ResolvedResource<ResolvedFunctionValue<'a>>;
 #[cfg(test)]
-pub type ResolvedVariable<'a> = ResolvedResource<&'a crate::variable::VariableInstance>;
+pub type ResolvedVariable<'a> = ResolvedResource<&'a yss_variable_contract::VariableInstance>;
 #[cfg(test)]
 pub type ResolvedDatabase<'a> = ResolvedResource<ResolvedDatabaseValue<'a>>;
 
@@ -129,7 +129,7 @@ pub trait AnalysisResourceResolver {
 
     fn resolve_variable(
         &mut self,
-        id: &crate::variable::VariableId,
+        id: &yss_variable_contract::VariableId,
     ) -> Result<ResolvedVariable<'_>, ResourceResolutionError>;
 
     fn resolve_database(

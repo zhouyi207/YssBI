@@ -3,21 +3,21 @@ use crate::project::{OperationId, ResourceRevision};
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 
 pub(crate) fn remap_variable_scope_path(
-    scope: &mut crate::variable::VariableScope,
+    scope: &mut yss_variable_contract::VariableScope,
     from: &str,
     to: &str,
 ) -> bool {
     let from = crate::project::graph_resource_index::normalize_resource_path(from);
     let to = crate::project::graph_resource_index::normalize_resource_path(to);
     match scope {
-        crate::variable::VariableScope::Event { event_path }
+        yss_variable_contract::VariableScope::Event { event_path }
             if crate::project::graph_resource_index::normalize_resource_path(event_path)
                 == from =>
         {
             *event_path = to;
             true
         }
-        crate::variable::VariableScope::Function { function_path }
+        yss_variable_contract::VariableScope::Function { function_path }
             if crate::project::graph_resource_index::normalize_resource_path(function_path)
                 == from =>
         {

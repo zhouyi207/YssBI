@@ -1,8 +1,8 @@
 //! Variable transport mapping.
 
-use crate::variable::{VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 use yss_data_contract::{DataSeriesValue, DataType, DataValue};
+use yss_variable_contract::{VariableInstance, VariableScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VariableDtoMappingErrorCode {

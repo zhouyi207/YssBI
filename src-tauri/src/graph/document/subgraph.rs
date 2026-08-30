@@ -364,14 +364,14 @@ fn matching_resources(
 
 fn variable_in_scope(
     graph_path: &GraphResourcePath,
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
 ) -> bool {
     match scope {
-        crate::variable::VariableScope::Global => true,
-        crate::variable::VariableScope::Event { event_path } => {
+        yss_variable_contract::VariableScope::Global => true,
+        yss_variable_contract::VariableScope::Event { event_path } => {
             event_path.as_str() == graph_path.as_str()
         }
-        crate::variable::VariableScope::Function { function_path } => {
+        yss_variable_contract::VariableScope::Function { function_path } => {
             function_path.as_str() == graph_path.as_str()
         }
     }

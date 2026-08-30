@@ -15,15 +15,15 @@ pub(super) fn graph_document_references_path(
 }
 
 pub(super) fn variable_scope_references_path(
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
     target: &str,
 ) -> bool {
     match scope {
-        crate::variable::VariableScope::Global => false,
-        crate::variable::VariableScope::Event { event_path } => {
+        yss_variable_contract::VariableScope::Global => false,
+        yss_variable_contract::VariableScope::Event { event_path } => {
             crate::project::graph_resource_index::normalize_resource_path(event_path) == target
         }
-        crate::variable::VariableScope::Function { function_path } => {
+        yss_variable_contract::VariableScope::Function { function_path } => {
             crate::project::graph_resource_index::normalize_resource_path(function_path) == target
         }
     }
@@ -37,7 +37,7 @@ pub(in crate::project) fn validate_context_revisions(
         crate::graph_document::GraphRevision,
     >,
     variable_revisions: &std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         VariableRevisionEntry,
     >,
     worksheet_revisions: &std::collections::HashMap<
@@ -77,7 +77,7 @@ pub(in crate::project) fn validate_context_revisions(
                 .strip_prefix("variables/")
                 .or(Some(path.0.as_ref()))
                 .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                .map(crate::variable::VariableId::from)
+                .map(yss_variable_contract::VariableId::from)
                 .and_then(|id| variable_revisions.get(&id).map(|entry| entry.revision)),
             ResourceKey::Database(_) => None,
             ResourceKey::Worksheet(path) => WorksheetResourcePath::parse(path.0.as_ref())
@@ -110,7 +110,7 @@ pub(in crate::project) fn validate_context_revisions(
                 .strip_prefix("variables/")
                 .or(Some(path.0.as_ref()))
                 .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                .map(crate::variable::VariableId::from)
+                .map(yss_variable_contract::VariableId::from)
                 .is_some_and(|id| data.variables.contains_key(&id)),
             ResourceKey::Database(path) => path
                 .0

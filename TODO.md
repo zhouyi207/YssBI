@@ -566,3 +566,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-tabular-contract/` Pure Leaf，
   集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
   adapter/application owner 持有，主 crate 不保留兼容 module。
+- [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
+  Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
+  application/project 仅持有 mutation、normalization 与 authority。

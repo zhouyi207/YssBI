@@ -21,7 +21,6 @@ pub mod platform;
 pub mod project;
 mod schema;
 pub mod sci;
-pub mod variable;
 pub mod window_state;
 
 #[cfg(test)]

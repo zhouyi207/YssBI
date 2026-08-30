@@ -6,11 +6,11 @@ use crate::schema::application_event::{
     LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
     LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
 };
-use crate::variable::VariableScope;
 use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::{DataType, DataValue};
+use yss_variable_contract::VariableScope;
 
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
 

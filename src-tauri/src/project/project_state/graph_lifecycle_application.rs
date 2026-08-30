@@ -172,7 +172,7 @@ impl ProjectState {
         let duplicate_variables = source_variables
             .into_values()
             .map(|mut variable| {
-                let id = crate::variable::VariableId::new();
+                let id = yss_variable_contract::VariableId::new();
                 variable.id = id;
                 remap_variable_scope(&mut variable, source_path.as_str(), target.as_str());
                 (id, variable)
@@ -448,9 +448,9 @@ impl ProjectState {
         data.graphs.remove(path);
         let path_text = path.as_str();
         data.variables.retain(|_, variable| match &variable.scope {
-            crate::variable::VariableScope::Global => true,
-            crate::variable::VariableScope::Event { event_path }
-            | crate::variable::VariableScope::Function {
+            yss_variable_contract::VariableScope::Global => true,
+            yss_variable_contract::VariableScope::Event { event_path }
+            | yss_variable_contract::VariableScope::Function {
                 function_path: event_path,
             } => event_path != path_text,
         });
@@ -610,9 +610,9 @@ impl ProjectState {
         let graph_path_text = graph_path.as_str();
         let variables_before = data.variables.len();
         data.variables.retain(|_, variable| match &variable.scope {
-            crate::variable::VariableScope::Global => true,
-            crate::variable::VariableScope::Event { event_path }
-            | crate::variable::VariableScope::Function {
+            yss_variable_contract::VariableScope::Global => true,
+            yss_variable_contract::VariableScope::Event { event_path }
+            | yss_variable_contract::VariableScope::Function {
                 function_path: event_path,
             } => event_path != graph_path_text,
         });
@@ -1053,8 +1053,8 @@ impl ProjectState {
         _target: &GraphResourcePath,
         _moved: &GraphResourceDocument,
         _moved_local_variables: HashMap<
-            crate::variable::VariableId,
-            crate::variable::VariableInstance,
+            yss_variable_contract::VariableId,
+            yss_variable_contract::VariableInstance,
         >,
         _excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
         _known_revisions: &std::collections::HashMap<
@@ -1344,27 +1344,31 @@ fn resource_removal_result(
 }
 
 fn variable_scope_matches(
-    variable: &crate::variable::VariableInstance,
+    variable: &yss_variable_contract::VariableInstance,
     graph_path: &GraphResourcePath,
 ) -> bool {
     match &variable.scope {
-        crate::variable::VariableScope::Global => false,
-        crate::variable::VariableScope::Event { event_path }
-        | crate::variable::VariableScope::Function {
+        yss_variable_contract::VariableScope::Global => false,
+        yss_variable_contract::VariableScope::Event { event_path }
+        | yss_variable_contract::VariableScope::Function {
             function_path: event_path,
         } => event_path == graph_path.as_str(),
     }
 }
 
-fn remap_variable_scope(variable: &mut crate::variable::VariableInstance, from: &str, to: &str) {
+fn remap_variable_scope(
+    variable: &mut yss_variable_contract::VariableInstance,
+    from: &str,
+    to: &str,
+) {
     match &mut variable.scope {
-        crate::variable::VariableScope::Global => {}
-        crate::variable::VariableScope::Event { event_path }
-        | crate::variable::VariableScope::Function {
+        yss_variable_contract::VariableScope::Global => {}
+        yss_variable_contract::VariableScope::Event { event_path }
+        | yss_variable_contract::VariableScope::Function {
             function_path: event_path,
         } if event_path == from => *event_path = to.to_owned(),
-        crate::variable::VariableScope::Event { .. }
-        | crate::variable::VariableScope::Function { .. } => {}
+        yss_variable_contract::VariableScope::Event { .. }
+        | yss_variable_contract::VariableScope::Function { .. } => {}
     }
 }
 

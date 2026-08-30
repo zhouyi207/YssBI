@@ -1770,7 +1770,10 @@ fn non_build_memberships(
     let exact_layer = exact_source_layer(source_file);
     if matches!(
         package,
-        "yss-data-contract" | "yss-database-contract" | "yss-tabular-contract"
+        "yss-data-contract"
+            | "yss-database-contract"
+            | "yss-tabular-contract"
+            | "yss-variable-contract"
     ) {
         layers.insert(RustLayer::PureLeaf);
     } else if package == "yss-sci" {
@@ -1809,7 +1812,7 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "math" => Some(RustLayer::PureLeaf),
         "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
-        "graph_document" | "variable" => Some(RustLayer::PureLeaf),
+        "graph_document" => Some(RustLayer::PureLeaf),
         "backend_adapters" => Some(RustLayer::BackendAdapter),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,

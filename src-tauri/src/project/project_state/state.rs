@@ -18,8 +18,9 @@ pub struct ProjectState {
     pub(in crate::project) graph_revisions: Arc<
         RwLock<std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>>,
     >,
-    pub(in crate::project) variable_revisions:
-        Arc<RwLock<std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>>>,
+    pub(in crate::project) variable_revisions: Arc<
+        RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,
+    >,
     pub(in crate::project) worksheet_revisions: Arc<
         RwLock<std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>>,
     >,

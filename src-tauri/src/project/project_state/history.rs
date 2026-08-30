@@ -36,9 +36,9 @@ pub(super) struct GraphMoveHistoryPayload {
     pub(in crate::project::project_state) referenced_graphs_after:
         BTreeMap<GraphResourcePath, GraphResourceDocument>,
     pub(in crate::project::project_state) referenced_variables_before:
-        BTreeMap<crate::variable::VariableId, crate::variable::VariableInstance>,
+        BTreeMap<yss_variable_contract::VariableId, yss_variable_contract::VariableInstance>,
     pub(in crate::project::project_state) referenced_variables_after:
-        BTreeMap<crate::variable::VariableId, crate::variable::VariableInstance>,
+        BTreeMap<yss_variable_contract::VariableId, yss_variable_contract::VariableInstance>,
 }
 
 impl ProjectState {
@@ -830,7 +830,7 @@ impl ProjectState {
                         .0
                         .strip_prefix("variables/")
                         .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                        .map(crate::variable::VariableId::from)
+                        .map(yss_variable_contract::VariableId::from)
                         .and_then(|id| variable_revisions.get(&id))
                         .and_then(|entry| {
                             let expected_present = prepared
@@ -929,7 +929,7 @@ impl ProjectState {
 pub(in crate::project) fn project_documents(
     data: &ProjectData,
     variable_revisions: &std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         VariableRevisionEntry,
     >,
 ) -> ProjectDocumentState {
@@ -1024,7 +1024,7 @@ pub(super) fn project_document_revision(
 pub(in crate::project) fn replace_project_documents(
     data: &mut ProjectData,
     variable_revisions: &mut std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         VariableRevisionEntry,
     >,
     mut documents: ProjectDocumentState,
@@ -1055,7 +1055,7 @@ pub(in crate::project) fn replace_project_documents(
         let Ok(uuid) = uuid::Uuid::parse_str(id) else {
             continue;
         };
-        let variable_id = crate::variable::VariableId::from(uuid);
+        let variable_id = yss_variable_contract::VariableId::from(uuid);
         let presence = match document.value {
             Some(value) => {
                 let variable = serde_json::from_value(value)

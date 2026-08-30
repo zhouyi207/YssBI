@@ -9148,6 +9148,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-variable-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "yss-data-contract",
+ "yss-tabular-contract",
+]
+
+[[package]]
 name = "yssbi"
 version = "0.3.0"
 dependencies = [
@@ -9189,6 +9201,7 @@ dependencies = [
  "yss-sci",
  "yss-tabular-contract",
  "yss-tracing",
+ "yss-variable-contract",
 ]
 
 [[package]]

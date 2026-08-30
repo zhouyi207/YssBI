@@ -5,10 +5,10 @@ use crate::project::{
     NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
     ProjectState, ProjectStore, WorksheetResourcePath,
 };
-use crate::variable::VariableId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use yss_variable_contract::VariableId;
 
 #[derive(Clone, Default)]
 pub(crate) struct ProjectActivationCoordinator {
@@ -250,11 +250,11 @@ mod tests {
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState, fixtures,
         load_project_from_file,
     };
-    use crate::variable::VariableScope;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Barrier};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     fn project_root(label: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
@@ -331,8 +331,8 @@ mod tests {
             new_graph,
             GraphResourceDocument::new("New Session", GraphDocumentKind::Event),
         );
-        let variable = crate::variable::VariableInstance {
-            id: crate::variable::VariableId::new(),
+        let variable = yss_variable_contract::VariableInstance {
+            id: yss_variable_contract::VariableId::new(),
             name: "new_session_variable".into(),
             data_type: DataType::Int64,
             data_value: DataValue::Int64(1),

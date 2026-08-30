@@ -12,12 +12,12 @@ use crate::project::{
     ResourceLifecyclePatch, ResourceLifecycleState, ResourcePathMovePatch, ResourceRevision,
     WorksheetDocumentPatch, WorksheetDocumentState,
 };
-use crate::variable::{VariableId, VariableInstance, VariableScope};
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_data_contract::{DataType, DataValue};
+use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
 #[path = "project_writers/graph.rs"]
 mod graph;
@@ -325,7 +325,7 @@ struct WriterSnapshot {
     session: ProjectSession,
     data: ProjectData,
     variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
+        yss_variable_contract::VariableId,
         crate::project::project_state::VariableRevisionEntry,
     >,
     authority_generation: u64,
@@ -447,7 +447,7 @@ fn function_key(path: &GraphResourcePath) -> ResourceKey {
     ResourceKey::Function(FunctionResourceKey(path.as_str().into()))
 }
 
-fn variable_key(id: &crate::variable::VariableId) -> ResourceKey {
+fn variable_key(id: &yss_variable_contract::VariableId) -> ResourceKey {
     ResourceKey::Variable(VariableResourceKey(format!("variables/{id}").into()))
 }
 
@@ -626,10 +626,10 @@ mod tests {
         WorksheetResourcePath, fixtures,
     };
     use crate::project::{OperationId, ResourceRevision};
-    use crate::variable::VariableScope;
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
         let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);

@@ -12,7 +12,7 @@ use crate::project::{
     MutationPublication, NormalizedProjectRoot, ProjectComputationSettings, ProjectData,
     ProjectInstanceId, ProjectSession, ProjectState, ResourceRevision,
 };
-use crate::variable::{VariableId, VariableInstance};
+use yss_variable_contract::{VariableId, VariableInstance};
 
 /// Project-owned identity used when a plan names a resource.
 ///
@@ -1262,10 +1262,10 @@ fn check_commit_control(
 mod tests {
     use super::*;
     use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, fixtures};
-    use crate::variable::VariableScope;
     use std::sync::atomic::AtomicBool;
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::VariableScope;
 
     fn project_with_graph(label: &str) -> (fixtures::TempProject, GraphResourcePath) {
         let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();

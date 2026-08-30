@@ -18,7 +18,7 @@ type PreparedVariableEffectAuthority<'a> = Box<
 #[cfg(all(test, any()))]
 struct VariableAuthorityPriorState {
     data: ProjectData,
-    revisions: std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+    revisions: std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     history: ProjectHistory,
     publication_revision: u64,
     authority_generation: u64,
@@ -28,7 +28,7 @@ struct VariableAuthorityPriorState {
 struct VariableAuthorityInstallGuard<'a> {
     data: &'a mut ProjectData,
     revisions:
-        &'a mut std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+        &'a mut std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     history: &'a mut ProjectHistory,
     publication: &'a mut MutationPublication,
     prior: Option<VariableAuthorityPriorState>,
@@ -40,7 +40,7 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
     fn new(
         data: &'a mut ProjectData,
         revisions: &'a mut std::collections::HashMap<
-            crate::variable::VariableId,
+            yss_variable_contract::VariableId,
             VariableRevisionEntry,
         >,
         history: &'a mut ProjectHistory,
@@ -61,7 +61,7 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
         &mut self,
         next_data: ProjectData,
         next_revisions: std::collections::HashMap<
-            crate::variable::VariableId,
+            yss_variable_contract::VariableId,
             VariableRevisionEntry,
         >,
         next_history: ProjectHistory,
@@ -281,9 +281,9 @@ impl ProjectState {
             }
             expected_revisions.insert(resource_key, revision);
             match &current.scope {
-                crate::variable::VariableScope::Global => writes_globals = true,
-                crate::variable::VariableScope::Event { event_path }
-                | crate::variable::VariableScope::Function {
+                yss_variable_contract::VariableScope::Global => writes_globals = true,
+                yss_variable_contract::VariableScope::Event { event_path }
+                | yss_variable_contract::VariableScope::Function {
                     function_path: event_path,
                 } => {
                     let graph_path = GraphResourcePath::new(event_path)
@@ -387,7 +387,7 @@ impl ProjectState {
                 .variables
                 .iter()
                 .filter(|(_, variable)| {
-                    matches!(variable.scope, crate::variable::VariableScope::Global)
+                    matches!(variable.scope, yss_variable_contract::VariableScope::Global)
                 })
                 .map(|(id, variable)| (*id, variable.clone()))
                 .collect();
@@ -682,7 +682,7 @@ pub(in crate::project) fn install_variable_effect_snapshots(
     data: &mut ProjectData,
     transaction: &ProjectHistoryTransaction,
     undo: bool,
-) -> Result<Vec<crate::variable::VariableId>, String> {
+) -> Result<Vec<yss_variable_contract::VariableId>, String> {
     let snapshots = transaction
         .variable_effect_snapshots
         .as_ref()
@@ -699,10 +699,10 @@ pub(in crate::project) fn install_variable_effect_snapshots(
             .strip_prefix("variables/")
             .ok_or_else(|| format!("invalid variable history resource '{}'", key.0))
             .and_then(|value| uuid::Uuid::parse_str(value).map_err(|error| error.to_string()))
-            .map(crate::variable::VariableId::from)?;
+            .map(yss_variable_contract::VariableId::from)?;
         match snapshot {
             Some(snapshot) => {
-                let variable: crate::variable::VariableInstance =
+                let variable: yss_variable_contract::VariableInstance =
                     serde_json::from_value(snapshot.clone()).map_err(|error| error.to_string())?;
                 if variable.id != id {
                     return Err(format!(
@@ -724,7 +724,7 @@ pub(in crate::project) fn install_variable_effect_snapshots(
 #[cfg(test)]
 fn variable_effect_id(
     effect: &crate::node_system::runtime::VariableWriteEffect,
-) -> Result<crate::variable::VariableId, VariableEffectCommitError> {
+) -> Result<yss_variable_contract::VariableId, VariableEffectCommitError> {
     effect
         .resource
         .as_str()
@@ -737,7 +737,7 @@ fn variable_effect_id(
                 message: error.to_string().into(),
             })
         })
-        .map(crate::variable::VariableId::from)
+        .map(yss_variable_contract::VariableId::from)
 }
 
 #[cfg(test)]
@@ -755,12 +755,12 @@ fn variable_effect_persistence_error(error: impl ToString) -> VariableEffectComm
 }
 
 pub(in crate::project) fn variable_scope_graph_path(
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
 ) -> Result<Option<GraphResourcePath>, String> {
     match scope {
-        crate::variable::VariableScope::Global => Ok(None),
-        crate::variable::VariableScope::Event { event_path }
-        | crate::variable::VariableScope::Function {
+        yss_variable_contract::VariableScope::Global => Ok(None),
+        yss_variable_contract::VariableScope::Event { event_path }
+        | yss_variable_contract::VariableScope::Function {
             function_path: event_path,
         } => GraphResourcePath::new(event_path)
             .map(Some)
@@ -771,9 +771,9 @@ pub(in crate::project) fn variable_scope_graph_path(
 pub(in crate::project) fn variable_history_scope(
     data: &ProjectData,
     transaction: &ProjectHistoryTransaction,
-    id: crate::variable::VariableId,
+    id: yss_variable_contract::VariableId,
     undo: bool,
-) -> Result<crate::variable::VariableScope, String> {
+) -> Result<yss_variable_contract::VariableScope, String> {
     if let Some(variable) = data.variables.get(&id) {
         return Ok(variable.scope.clone());
     }
@@ -791,7 +791,7 @@ pub(in crate::project) fn variable_history_scope(
         .get(&key)
         .and_then(Option::as_ref)
         .ok_or_else(|| format!("variable history cannot recover scope for '{id}'"))?;
-    let variable: crate::variable::VariableInstance =
+    let variable: yss_variable_contract::VariableInstance =
         serde_json::from_value(snapshot.clone()).map_err(|error| error.to_string())?;
     if variable.id != id {
         return Err(format!(
@@ -803,7 +803,7 @@ pub(in crate::project) fn variable_history_scope(
 
 pub(in crate::project) fn variable_effect_filesystem_mutations(
     data: &ProjectData,
-    ids: &[crate::variable::VariableId],
+    ids: &[yss_variable_contract::VariableId],
     transaction: &ProjectHistoryTransaction,
     undo: bool,
 ) -> Result<Vec<StagedFilesystemMutation>, String> {
@@ -825,7 +825,7 @@ pub(in crate::project) fn variable_effect_filesystem_mutations(
             .variables
             .iter()
             .filter(|(_, variable)| {
-                matches!(variable.scope, crate::variable::VariableScope::Global)
+                matches!(variable.scope, yss_variable_contract::VariableScope::Global)
             })
             .map(|(id, variable)| (*id, variable.clone()))
             .collect();
@@ -879,22 +879,24 @@ pub(in crate::project) fn validate_variable_effect_document(
 }
 
 fn variable_scope_matches_graph(
-    scope: &crate::variable::VariableScope,
+    scope: &yss_variable_contract::VariableScope,
     graph_path: &GraphResourcePath,
 ) -> bool {
     match scope {
-        crate::variable::VariableScope::Event { event_path } => event_path == graph_path.as_str(),
-        crate::variable::VariableScope::Function { function_path } => {
+        yss_variable_contract::VariableScope::Event { event_path } => {
+            event_path == graph_path.as_str()
+        }
+        yss_variable_contract::VariableScope::Function { function_path } => {
             function_path == graph_path.as_str()
         }
-        crate::variable::VariableScope::Global => false,
+        yss_variable_contract::VariableScope::Global => false,
     }
 }
 
 #[cfg(test)]
 #[derive(Debug)]
 pub(in crate::project) struct VariableEffectCommitResult {
-    pub variable_ids: Box<[crate::variable::VariableId]>,
+    pub variable_ids: Box<[yss_variable_contract::VariableId]>,
     pub resource_mutation: Option<crate::schema::application_event::ResourceMutationResultDto>,
 }
 
