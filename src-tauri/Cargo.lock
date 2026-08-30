@@ -9167,6 +9167,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-window-state"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.20",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "yssbi"
 version = "0.3.0"
 dependencies = [
@@ -9209,6 +9221,7 @@ dependencies = [
  "yss-tabular-contract",
  "yss-tracing",
  "yss-variable-contract",
+ "yss-window-state",
 ]
 
 [[package]]

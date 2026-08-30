@@ -572,3 +572,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将受限数学表达式 IR、plain/LaTeX parser、关系拆分与输入预算迁入独立
   `src-tauri/crates/yss-math/` Pure Leaf；根 crate 消费方直接依赖该 crate，不保留
   `math` 兼容 module，并收敛 `mathlex` 为单一声明与单一使用层。
+- [ ] 将窗口 kind/default、后端权威几何缓存、主窗口恢复与原子 JSON 持久化迁入
+  `src-tauri/crates/yss-window-state/` Platform Adapter；移除根 `window_state` owner，
+  并以 typed error 保留持久化主错误与临时文件清理失败。

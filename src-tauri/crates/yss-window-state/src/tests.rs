@@ -1,4 +1,4 @@
-use super::{WindowKind, WindowState, WindowStateStore};
+use super::{WindowKind, WindowState, WindowStateError, WindowStateStore};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,9 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            eprintln!("failed to clean up window state test directory: {error}");
+        }
     }
 }
 
@@ -134,7 +136,7 @@ fn set_failure_preserves_last_committed_state() {
         },
     );
 
-    assert!(result.is_err());
+    assert!(matches!(result, Err(WindowStateError::Persist(_))));
     let observed = store.get(WindowKind::Main);
     assert_eq!(
         (

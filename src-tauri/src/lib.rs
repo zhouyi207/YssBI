@@ -20,7 +20,6 @@ pub mod platform;
 pub mod project;
 mod schema;
 pub mod sci;
-pub mod window_state;
 
 #[cfg(test)]
 mod test_support;
@@ -158,9 +157,10 @@ pub fn run() {
                 .path()
                 .app_config_dir()
                 .map(|p| p.join("window_state.json"))
-                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
-            let window_state_store = window_state::WindowStateStore::load(window_state_path);
-            if let Err(e) = window_state::apply_main_window_state(app.handle(), &window_state_store)
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            let window_state_store = yss_window_state::WindowStateStore::load(window_state_path);
+            if let Err(e) =
+                yss_window_state::apply_main_window_state(app.handle(), &window_state_store)
             {
                 tracing::warn!(
                     target: "yssbi::window_state",
@@ -170,7 +170,14 @@ pub fn run() {
                 );
                 // 兜底：即便恢复失败也确保主窗口显示出来
                 if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.show();
+                    if let Err(show_error) = win.show() {
+                        tracing::warn!(
+                            target: "yssbi::window_state",
+                            diagnostic_domain = "ui",
+                            error = %show_error,
+                            "Failed to show main window after state restoration failure"
+                        );
+                    }
                 }
             }
             app.manage(window_state_store);

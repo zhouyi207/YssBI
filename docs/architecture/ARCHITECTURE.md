@@ -121,7 +121,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
 | `src-tauri/src/diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery |
-| `src-tauri/src/window_state/` | 后端权威窗口几何状态与原子持久化 |
+| `src-tauri/crates/yss-window-state/` | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner |
 
 Rust 与 React 的职责单向流动：Rust 保存 domain authority，React 只保存 UI 状态和后端投影。资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用 `databases/{database-id}`，variable 使用 `variables/{VariableId}`。
 

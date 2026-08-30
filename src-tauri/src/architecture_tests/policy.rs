@@ -452,8 +452,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::project_state::state::ProjectState::new",
             "yssbi_lib::platform::NotifyProjectFileWatcher::new",
             "yssbi_lib::platform::project_file_watcher::NotifyProjectFileWatcher::new",
-            "yssbi_lib::window_state::WindowStateStore::load",
-            "yssbi_lib::window_state::apply_main_window_state",
+            "yss_window_state::WindowStateStore::load",
+            "yss_window_state::apply_main_window_state",
         ],
     },
     InternalDependencyCapability {
@@ -1201,9 +1201,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_window",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::window_state::WindowStateStore",
-            "yssbi_lib::window_state::kind::WindowKind",
-            "yssbi_lib::window_state::kind::WindowState",
+            "yss_window_state::WindowStateStore",
+            "yss_window_state::kind::WindowKind",
+            "yss_window_state::kind::WindowState",
         ],
     },
     InternalDependencyCapability {
@@ -1781,6 +1781,8 @@ fn non_build_memberships(
         layers.insert(RustLayer::SciCore);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
+    } else if package == "yss-window-state" {
+        layers.insert(RustLayer::PlatformAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {
         layers.insert(layer);
     }
@@ -1809,7 +1811,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "sci" => Some(RustLayer::SciCore),
         "julia" => Some(RustLayer::BackendAdapter),
         "event" | "schema" | "error" => Some(RustLayer::Transport),
-        "window_state" => Some(RustLayer::PlatformAdapter),
         "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
         "graph_document" => Some(RustLayer::PureLeaf),

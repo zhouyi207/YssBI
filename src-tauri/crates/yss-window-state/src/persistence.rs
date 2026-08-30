@@ -1,28 +1,34 @@
+use crate::WindowStateError;
 use serde::Serialize;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-pub(super) fn write_json_atomically<T>(destination: &Path, snapshot: &T) -> Result<(), String>
+pub(super) fn write_json_atomically<T>(
+    destination: &Path,
+    snapshot: &T,
+) -> Result<(), WindowStateError>
 where
     T: Serialize,
 {
     let parent = destination
         .parent()
-        .ok_or_else(|| "window state path has no parent directory".to_string())?;
-    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    let json = serde_json::to_vec_pretty(snapshot).map_err(|error| error.to_string())?;
+        .ok_or(WindowStateError::MissingParentDirectory)?;
+    fs::create_dir_all(parent).map_err(WindowStateError::CreateDirectory)?;
+    let json = serde_json::to_vec_pretty(snapshot).map_err(WindowStateError::Serialize)?;
     let (temporary_path, mut temporary_file) =
-        reserve_temporary_file(destination).map_err(|error| error.to_string())?;
+        reserve_temporary_file(destination).map_err(WindowStateError::ReserveTemporaryFile)?;
 
     let write_result = temporary_file
         .write_all(&json)
         .and_then(|()| temporary_file.sync_all());
     drop(temporary_file);
     let persist_result = write_result.and_then(|()| atomic_replace(&temporary_path, destination));
-    if let Err(error) = persist_result {
-        let _ = fs::remove_file(&temporary_path);
-        return Err(error.to_string());
+    if let Err(source) = persist_result {
+        return match fs::remove_file(&temporary_path) {
+            Ok(()) => Err(WindowStateError::Persist(source)),
+            Err(cleanup) => Err(WindowStateError::PersistAndCleanup { source, cleanup }),
+        };
     }
     Ok(())
 }
