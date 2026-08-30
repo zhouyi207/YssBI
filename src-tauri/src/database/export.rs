@@ -3,9 +3,8 @@ use std::path::Path;
 use duckdb::Connection;
 use polars::prelude::DataFrame;
 
-use crate::database::tabular_io::{write_csv_dataframe, write_parquet_dataframe};
-
 use yss_duckdb::{quote_duckdb_identifier, quote_duckdb_string_literal};
+use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseExportFormat {

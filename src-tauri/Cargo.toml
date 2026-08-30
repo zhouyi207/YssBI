@@ -54,6 +54,7 @@ members = [
     "crates/yss-resource-naming",
     "crates/yss-sci",
     "crates/yss-tabular-contract",
+    "crates/yss-tabular-io",
     "crates/yss-tabular-polars",
     "crates/yss-tracing",
     "crates/yss-variable-contract",
@@ -145,6 +146,7 @@ yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
+yss-tabular-io = { path = "./crates/yss-tabular-io" }
 yss-tabular-polars = { path = "./crates/yss-tabular-polars" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-variable-contract = { path = "./crates/yss-variable-contract" }

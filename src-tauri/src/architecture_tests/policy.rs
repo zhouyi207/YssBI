@@ -1752,7 +1752,10 @@ fn non_build_memberships(
             | "yss-graph-runtime"
     ) {
         layers.insert(RustLayer::Graph);
-    } else if package == "yss-dataset-profile" || package == "yss-duckdb" {
+    } else if matches!(
+        package,
+        "yss-dataset-profile" | "yss-duckdb" | "yss-tabular-io"
+    ) {
         layers.insert(RustLayer::DatabaseCore);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);

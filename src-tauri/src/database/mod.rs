@@ -16,7 +16,6 @@ pub mod excel_reader;
 pub mod export;
 pub mod sql_reader;
 pub mod sqlite_reader;
-pub mod tabular_io;
 
 pub use database_instance::*;
 pub use database_state::*;

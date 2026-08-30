@@ -5,13 +5,13 @@ use std::path::Path;
 use polars::prelude::{DataFrame, Float64Chunked};
 
 use crate::application::bayes::{BayesArtifactReadError, BayesArtifactReader};
-use crate::database::tabular_io::{read_ipc_dataframe, write_csv_dataframe};
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, AutocorrelationPoint, AutocorrelationSeries, DensityPlotData,
     DensityPoint, DensitySeries, PosteriorPredictivePage, PosteriorPredictiveRow,
     PosteriorPredictiveSummary, PosteriorSamplePage, PosteriorSampleRow, TracePlotData, TracePoint,
     TraceSeries,
 };
+use yss_tabular_io::{read_ipc_dataframe, write_csv_dataframe};
 
 pub(crate) struct PolarsBayesArtifactReader;
 

@@ -9519,6 +9519,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-tabular-io"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "yss-tabular-polars"
 version = "0.1.0"
 dependencies = [
@@ -9668,6 +9676,7 @@ dependencies = [
  "yss-resource-naming",
  "yss-sci",
  "yss-tabular-contract",
+ "yss-tabular-io",
  "yss-tabular-polars",
  "yss-tracing",
  "yss-variable-contract",

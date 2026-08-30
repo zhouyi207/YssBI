@@ -2217,7 +2217,7 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("the Rust architecture policy must be readable");
     assert!(
-        policy.contains("package == \"yss-dataset-profile\"")
+        policy.contains("\"yss-dataset-profile\" | \"yss-duckdb\" | \"yss-tabular-io\"")
             && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the dataset profile crate must be classified in Database Core"
     );
@@ -2340,9 +2340,18 @@ fn duckdb_engine_crate_owns_safe_sql_and_physical_profiles_without_root_facades(
 
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("the Rust architecture policy must be readable");
+    for database_core_package in [
+        "\"yss-dataset-profile\"",
+        "\"yss-duckdb\"",
+        "\"yss-tabular-io\"",
+    ] {
+        assert!(
+            policy.contains(database_core_package),
+            "the Database Core classifier must include {database_core_package}"
+        );
+    }
     assert!(
-        policy.contains("package == \"yss-dataset-profile\" || package == \"yss-duckdb\"")
-            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the DuckDB engine crate must be classified in Database Core"
     );
 }
@@ -2429,7 +2438,6 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
         !adapter.contains("UnsupportedColumnType"),
         "the tabular Polars adapter must not restore the unreachable error variant"
     );
-
     let database_editor =
         std::fs::read_to_string(root.join("src-tauri/src/database/edit_operation.rs"))
             .expect("the database editor must be readable");
@@ -2470,7 +2478,6 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
             "{relative} must not retain duplicate tabular-to-Polars conversion logic"
         );
     }
-
     let backend_adapters =
         std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
             .expect("the root backend adapter module must be readable");
@@ -2490,6 +2497,100 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn tabular_io_has_one_database_owner_without_root_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-tabular-io/Cargo.toml",
+        "src-tauri/crates/yss-tabular-io/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "tabular I/O owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/database/tabular_io.rs").exists(),
+        "the root database crate must not retain the tabular I/O owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-tabular-io\"",
+        "yss-tabular-io = { path = \"./crates/yss-tabular-io\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    let io_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/Cargo.toml"))
+            .expect("the tabular I/O manifest must be readable");
+    for dependency in ["polars.workspace = true", "thiserror.workspace = true"] {
+        assert!(
+            io_manifest.contains(dependency),
+            "the tabular I/O crate must declare {dependency}"
+        );
+    }
+
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/src/lib.rs"))
+        .expect("the tabular I/O owner must be readable");
+    for owned_api in [
+        "pub struct TabularIoError",
+        "pub fn read_ipc_dataframe",
+        "pub fn write_ipc_dataframe",
+        "pub fn write_csv_dataframe",
+        "pub fn write_parquet_dataframe",
+    ] {
+        assert!(
+            owner.contains(owned_api),
+            "the tabular I/O crate must own {owned_api}"
+        );
+    }
+    for forbidden in ["crate::database", "yssbi_lib", "tauri::", "uuid::"] {
+        assert!(
+            !owner.contains(forbidden),
+            "the tabular I/O crate must not depend backwards on {forbidden}"
+        );
+    }
+    assert!(
+        owner.contains("fn output_parent")
+            && owner.contains("current_directory_output_has_no_parent_to_create")
+            && !owner.contains(", String>"),
+        "the tabular I/O owner must preserve typed errors and current-directory outputs"
+    );
+
+    for relative in [
+        "src-tauri/src/application/bayes.rs",
+        "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
+        "src-tauri/src/database/export.rs",
+        "src-tauri/src/sci/backends/julia/bayes/fit.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_tabular_io") && !consumer.contains("database::tabular_io"),
+            "{relative} must consume yss-tabular-io directly"
+        );
+    }
+    let database_module = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    assert!(
+        !database_module.contains("tabular_io") && !database_module.contains("yss_tabular_io"),
+        "the root database module must not retain a tabular I/O facade"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("\"yss-dataset-profile\" | \"yss-duckdb\" | \"yss-tabular-io\"")
+            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        "the tabular I/O crate must be classified in Database Core"
     );
 }
 

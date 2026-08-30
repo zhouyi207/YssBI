@@ -203,7 +203,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         TABULAR_CONTRACT_SOURCE,
         VARIABLE_VALUE_SOURCE,
         "src-tauri/crates/yss-tabular-polars/src/lib.rs",
-        "src-tauri/src/database/tabular_io.rs",
+        "src-tauri/crates/yss-tabular-io/src/lib.rs",
     ];
     let mut violations = Vec::new();
     for relative in files {
@@ -252,7 +252,8 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         {
             violations.push(format!("{relative}: missing typed materialization error"));
         }
-        if relative == "src-tauri/src/database/tabular_io.rs" && !source.contains("TabularIoError")
+        if relative == "src-tauri/crates/yss-tabular-io/src/lib.rs"
+            && !source.contains("TabularIoError")
         {
             violations.push(format!("{relative}: missing typed I/O error"));
         }

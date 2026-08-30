@@ -6,7 +6,6 @@ use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 use super::predictor::compile_predictor;
-use crate::database::tabular_io::write_ipc_dataframe;
 use crate::julia::worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerProgressCallback,
     JuliaWorkerTask,
@@ -16,6 +15,7 @@ use crate::sci::api::bayes::{
     BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
     ResultArtifactKind, TaskErrorDetails, TaskProgress,
 };
+use yss_tabular_io::write_ipc_dataframe;
 
 #[derive(Clone)]
 pub struct JuliaBayesBackend {

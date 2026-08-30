@@ -140,6 +140,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-resource-lifecycle/` | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；变量值归一化由 `yss-variable-value` 负责 |
+| `src-tauri/crates/yss-tabular-io/` | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io` owner，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-tabular-polars/` | 独立 Backend Adapter：canonical tabular scalar/column/snapshot 的 Polars materialization 与双向 JSON value projection 唯一 owner；完整保留 `u64` 与 1970 年前时间戳，替代零调用的 root `database/row_mapping` 重复实现，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
@@ -397,6 +398,7 @@ yss-data-contract + yss-tabular-contract + yss-variable-contract
 yss-tabular-contract
   → yss-tabular-polars → Database Polars editing
 Polars DataFrame
+  → yss-tabular-io → Database/Bayes filesystem I/O
   → yss-dataset-profile → Database/Application/Commands
 yss-dataset-profile
   → yss-duckdb physical profiling → Database/Application/Commands
