@@ -1,11 +1,11 @@
 use serde_json::Value;
 use thiserror::Error;
+use yss_tracing::{
+    LogLimits as DiagnosticLimits, sanitize_event, sanitize_fields, sanitize_message,
+    sanitize_source, sanitize_target,
+};
 
 use super::dto::{DiagnosticDomain, DiagnosticFields, DiagnosticLevel, FrontendDiagnosticEntryDto};
-use super::limits::DiagnosticLimits;
-use super::sanitizer::{
-    sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
-};
 
 // This transport-level batch policy is independent from per-record collection limits.
 pub(super) const MAX_FRONTEND_DIAGNOSTIC_BATCH: usize = 256;

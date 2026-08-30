@@ -554,3 +554,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   架构审计 fixture 与维护文档中的路径。
 - [ ] 清理已完成的迁移边界文档与空债务豁免机制，让前后端架构发现项直接触发失败。
 - [ ] 收敛本地工作流与 Workbench 验证文档，移除失效命令、已删除 benchmark 和易漂移的测试文件库存。
+- [ ] 将 Rust `tracing` 采集、过滤、脱敏及 console/rolling JSONL 输出迁入独立
+  `src-tauri/crates/yss-tracing/`；Diagnostics 仅保留 sanitized Rust projection、frontend
+  ingestion、recent ring、sequence 与 live delivery，并由架构审计守卫两层边界。

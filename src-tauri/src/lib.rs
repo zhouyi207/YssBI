@@ -99,17 +99,22 @@ pub fn run() {
         .manage(julia_worker)
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
-            let diagnostics =
-                diagnostics::DiagnosticsRuntime::initialize(log_dir.as_ref().ok().cloned())
-                    .map_err(Box::<dyn std::error::Error>::from)?;
+            let diagnostics = diagnostics::DiagnosticsRuntime::initialize()
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            let logging = yss_tracing::LoggingRuntime::initialize(
+                log_dir.as_ref().ok().cloned(),
+                Some(diagnostics.rust_log_sink()),
+            )
+            .map_err(Box::<dyn std::error::Error>::from)?;
+            app.manage(logging);
             app.manage(diagnostics);
             if let Err(error) = log_dir {
                 tracing::error!(
-                    target: "yssbi::diagnostics",
+                    target: "yssbi::logging",
                     diagnostic_domain = "system",
                     diagnostic_event = "appLogDirectoryUnavailable",
                     error = %error,
-                    "Failed to resolve application log directory; file diagnostics are disabled"
+                    "Failed to resolve application log directory; file logging is disabled"
                 );
             }
 

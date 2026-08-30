@@ -1793,6 +1793,8 @@ fn non_build_memberships(
     let exact_layer = exact_source_layer(source_file);
     if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
+    } else if package == "yss-tracing" {
+        layers.insert(RustLayer::Logging);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {
         layers.insert(layer);
     }
@@ -1947,7 +1949,10 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
         (source, target),
         (
             RustLayer::CompositionRoot,
-            RustLayer::Commands | RustLayer::Diagnostics | RustLayer::PureLeaf
+            RustLayer::Commands
+                | RustLayer::Logging
+                | RustLayer::Diagnostics
+                | RustLayer::PureLeaf
         ) | (RustLayer::Commands, RustLayer::PureLeaf)
             | (
                 RustLayer::PlatformAdapter,
@@ -1981,6 +1986,9 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::Graph | RustLayer::PureLeaf,
             )
             | (RustLayer::Transport, RustLayer::PureLeaf)
-            | (RustLayer::Diagnostics, RustLayer::PureLeaf)
+            | (
+                RustLayer::Diagnostics,
+                RustLayer::Logging | RustLayer::PureLeaf
+            )
     )
 }

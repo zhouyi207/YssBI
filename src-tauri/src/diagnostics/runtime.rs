@@ -1,63 +1,38 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-
-use file_rotate::compression::Compression;
-use file_rotate::suffix::AppendCount;
-use file_rotate::{ContentLimit, FileRotate};
 use tauri::ipc::Channel;
-use tracing_subscriber::filter::{LevelFilter, Targets};
-use tracing_subscriber::layer::SubscriberExt;
+use yss_tracing::LogRecordSink;
 
 use super::dispatcher::{
     DiagnosticsDispatcherGuard, DiagnosticsDispatcherStartError, DiagnosticsHub,
-    DiagnosticsUnavailable, PendingDiagnostic, RecordSink,
+    DiagnosticsUnavailable, PendingDiagnostic,
 };
 use super::dto::{
-    DiagnosticBatchDto, DiagnosticOrigin, DiagnosticRecordDto, DiagnosticSubscriptionDto,
-    FrontendDiagnosticEntryDto,
+    DiagnosticBatchDto, DiagnosticOrigin, DiagnosticSubscriptionDto, FrontendDiagnosticEntryDto,
 };
-use super::recent_layer::RecentDiagnosticsLayer;
+use super::rust_projection::log_record_sink;
 use super::validation::{
     FrontendDiagnosticValidationError, ValidatedFrontendDiagnostic, validate_frontend_batch,
 };
 
-const LOG_FILE_NAME: &str = "diagnostics.jsonl";
-const LOG_ROTATION_BYTES: usize = 10 * 1024 * 1024;
-const LOG_ROTATION_FILES: usize = 5;
-
+/// Owns the diagnostic recent ring and live subscriber dispatcher.
+///
+/// Logging configuration and persistent outputs are intentionally owned by
+/// `yss-tracing`; this runtime only accepts its sanitized record projection.
 pub struct DiagnosticsRuntime {
     hub: DiagnosticsHub,
     _dispatcher_guard: DiagnosticsDispatcherGuard,
 }
 
 impl DiagnosticsRuntime {
-    pub(crate) fn initialize(
-        log_dir: Option<PathBuf>,
-    ) -> Result<Self, DiagnosticsInitializationError> {
-        let mut record_sinks = vec![create_console_record_sink()];
-        let file_sink_error = log_dir
-            .as_deref()
-            .and_then(|log_dir| match create_file_record_sink(log_dir) {
-                Ok(file_sink) => {
-                    record_sinks.push(file_sink);
-                    None
-                }
-                Err(error) => Some(error),
-            });
-        let (hub, dispatcher_guard, release_dispatcher) =
-            DiagnosticsHub::start_paused_with_record_sinks(record_sinks)?;
-        install_tracing(hub.clone())?;
-        release_dispatcher
-            .send(())
-            .map_err(|_| DiagnosticsInitializationError::DispatcherStartupAborted)?;
-        if let Some(error) = file_sink_error {
-            report_file_sink_unavailable(&error);
-        }
+    pub(crate) fn initialize() -> Result<Self, DiagnosticsInitializationError> {
+        let (hub, dispatcher_guard) = DiagnosticsHub::start_production()?;
         Ok(Self {
             hub,
             _dispatcher_guard: dispatcher_guard,
         })
+    }
+
+    pub(crate) fn rust_log_sink(&self) -> LogRecordSink {
+        log_record_sink(self.hub.clone())
     }
 
     pub(crate) fn submit_frontend(
@@ -90,46 +65,6 @@ impl DiagnosticsRuntime {
 pub(crate) enum DiagnosticsInitializationError {
     #[error(transparent)]
     Dispatcher(#[from] DiagnosticsDispatcherStartError),
-    #[error("failed to install diagnostics tracing subscriber")]
-    TracingSubscriber(#[source] tracing::subscriber::SetGlobalDefaultError),
-    #[error("diagnostics dispatcher stopped during initialization")]
-    DispatcherStartupAborted,
-}
-
-#[derive(Debug, thiserror::Error)]
-enum FileRecordSinkError {
-    #[error("failed to create diagnostics log directory '{}': {source}", path.display())]
-    CreateDirectory {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("failed to open diagnostics log '{}': {source}", path.display())]
-    OpenFile {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("diagnostics file sink initialization panicked for '{}'", path.display())]
-    InitializationPanicked { path: PathBuf },
-}
-
-impl FileRecordSinkError {
-    const fn stage(&self) -> &'static str {
-        match self {
-            Self::CreateDirectory { .. } => "create_directory",
-            Self::OpenFile { .. } => "open_file",
-            Self::InitializationPanicked { .. } => "initialize_rotation",
-        }
-    }
-
-    fn path(&self) -> &Path {
-        match self {
-            Self::CreateDirectory { path, .. }
-            | Self::OpenFile { path, .. }
-            | Self::InitializationPanicked { path } => path,
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -163,167 +98,20 @@ fn frontend_pending(entry: &ValidatedFrontendDiagnostic) -> PendingDiagnostic {
     }
 }
 
-fn create_console_record_sink() -> RecordSink {
-    Box::new(|record| {
-        let stdout = std::io::stdout();
-        let mut output = stdout.lock();
-        write_json_record(&mut output, record)
-    })
-}
-
-fn create_file_record_sink(log_dir: &Path) -> Result<RecordSink, FileRecordSinkError> {
-    std::fs::create_dir_all(log_dir).map_err(|source| FileRecordSinkError::CreateDirectory {
-        path: log_dir.to_path_buf(),
-        source,
-    })?;
-
-    let log_path = log_dir.join(LOG_FILE_NAME);
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|source| FileRecordSinkError::OpenFile {
-            path: log_path.clone(),
-            source,
-        })?;
-
-    let writer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        FileRotate::new(
-            log_path.clone(),
-            AppendCount::new(LOG_ROTATION_FILES),
-            ContentLimit::BytesSurpassed(LOG_ROTATION_BYTES),
-            Compression::None,
-            None,
-        )
-    }))
-    .map_err(|_| FileRecordSinkError::InitializationPanicked { path: log_path })?;
-    let mut writer = writer;
-    Ok(Box::new(move |record| {
-        write_json_record(&mut writer, record)
-    }))
-}
-
-fn report_file_sink_unavailable(error: &FileRecordSinkError) {
-    tracing::warn!(
-        target: "yssbi::diagnostics",
-        diagnostic_domain = "system",
-        diagnostic_event = "diagnosticsFileSinkUnavailable",
-        failure_stage = error.stage(),
-        path = %error.path().display(),
-        error = %error,
-        "File diagnostics are disabled"
-    );
-}
-
-fn write_json_record(writer: &mut impl Write, record: &DiagnosticRecordDto) -> bool {
-    let Ok(mut line) = serde_json::to_vec(record) else {
-        return false;
-    };
-    line.push(b'\n');
-    writer.write_all(&line).is_ok()
-}
-
-fn install_tracing(hub: DiagnosticsHub) -> Result<(), DiagnosticsInitializationError> {
-    let rust_log = std::env::var("RUST_LOG").ok();
-    let filter = diagnostics_filter(rust_log.as_deref(), cfg!(debug_assertions));
-    let subscriber = tracing_subscriber::registry()
-        .with(filter.targets)
-        .with(RecentDiagnosticsLayer::new(hub));
-
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(DiagnosticsInitializationError::TracingSubscriber)?;
-    if let Err(error) = tracing_log::LogTracer::init() {
-        tracing::warn!(
-            target: "yssbi::diagnostics",
-            diagnostic_domain = "system",
-            diagnostic_event = "logTracingBridgeUnavailable",
-            error = %error,
-            "Failed to install log-to-tracing bridge"
-        );
-    }
-    if let Some(error) = filter.parse_error {
-        tracing::warn!(
-            target: "yssbi::diagnostics",
-            diagnostic_domain = "system",
-            diagnostic_event = "rustLogFilterInvalid",
-            error = %error,
-            "Failed to parse RUST_LOG diagnostics target filter; using defaults"
-        );
-    }
-    Ok(())
-}
-
-struct DiagnosticsFilter {
-    targets: Targets,
-    parse_error: Option<String>,
-}
-
-fn diagnostics_filter(rust_log: Option<&str>, debug_build: bool) -> DiagnosticsFilter {
-    let first_party = if debug_build {
-        LevelFilter::DEBUG
-    } else {
-        LevelFilter::INFO
-    };
-    let defaults = || {
-        Targets::new()
-            .with_default(LevelFilter::OFF)
-            .with_target("yssbi", first_party)
-            .with_target("yssbi_lib", first_party)
-    };
-    let Some(directives) = rust_log.map(str::trim).filter(|value| !value.is_empty()) else {
-        return DiagnosticsFilter {
-            targets: defaults(),
-            parse_error: None,
-        };
-    };
-
-    match directives.parse::<Targets>() {
-        Ok(targets) => DiagnosticsFilter {
-            targets,
-            parse_error: None,
-        },
-        Err(error) => DiagnosticsFilter {
-            targets: defaults(),
-            parse_error: Some(error.to_string()),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::time::{Duration, Instant};
 
     use serde_json::json;
 
-    use super::{DiagnosticsRuntime, LOG_FILE_NAME, create_file_record_sink, diagnostics_filter};
-    use crate::diagnostics::dispatcher::{DiagnosticsHub, PendingDiagnostic};
-    use crate::diagnostics::limits::DiagnosticLimits;
-    use crate::diagnostics::sanitizer::REDACTED_VALUE;
+    use super::DiagnosticsRuntime;
+    use crate::diagnostics::dispatcher::DiagnosticsHub;
     use crate::diagnostics::{
         DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, FrontendDiagnosticEntryDto,
     };
 
     #[test]
-    fn file_sink_initialization_failure_is_structured() {
-        let directory =
-            std::env::temp_dir().join(format!("yssbi-diagnostics-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let file_path = directory.join("not-a-directory");
-        std::fs::write(&file_path, b"occupied").unwrap();
-
-        let error = match create_file_record_sink(&file_path) {
-            Ok(_) => panic!("invalid diagnostics log directory unexpectedly succeeded"),
-            Err(error) => error,
-        };
-        assert_eq!(error.stage(), "create_directory");
-
-        std::fs::remove_file(file_path).unwrap();
-        std::fs::remove_dir(directory).unwrap();
-    }
-
-    #[test]
-    fn frontend_submission_assigns_rust_stream_metadata_and_frontend_origin() {
+    fn frontend_submission_assigns_stream_metadata_and_frontend_origin() {
         let (hub, dispatcher_guard) = DiagnosticsHub::start();
         let runtime = DiagnosticsRuntime {
             hub,
@@ -356,84 +144,5 @@ mod tests {
 
         let error = runtime.submit_frontend(Vec::new()).unwrap_err();
         assert_eq!(error.code(), "invalid_frontend_diagnostics");
-    }
-
-    #[test]
-    fn default_filter_is_first_party_and_requires_explicit_rust_log_for_trace() {
-        let release = diagnostics_filter(None, false).targets;
-        assert!(release.would_enable("yssbi", &tracing::Level::INFO));
-        assert!(!release.would_enable("yssbi", &tracing::Level::DEBUG));
-        assert!(!release.would_enable("dependency", &tracing::Level::WARN));
-        assert!(!release.would_enable("dependency", &tracing::Level::ERROR));
-
-        let debug = diagnostics_filter(None, true).targets;
-        assert!(debug.would_enable("yssbi_lib::runtime", &tracing::Level::DEBUG));
-        assert!(!debug.would_enable("yssbi_lib", &tracing::Level::TRACE));
-
-        let explicit = diagnostics_filter(Some("yssbi=trace"), false).targets;
-        assert!(explicit.would_enable("yssbi::runtime", &tracing::Level::TRACE));
-        assert!(!explicit.would_enable("other", &tracing::Level::TRACE));
-    }
-
-    #[test]
-    fn recent_and_jsonl_file_share_redaction_and_truncation() {
-        let directory =
-            std::env::temp_dir().join(format!("yssbi-diagnostics-test-{}", uuid::Uuid::new_v4()));
-        let file_sink = create_file_record_sink(&directory).expect("test file sink");
-        let (hub, dispatcher_guard) = DiagnosticsHub::start_with_record_sinks(vec![file_sink]);
-        let secret = "never-write-this-secret";
-        hub.publish(vec![PendingDiagnostic {
-            timestamp: super::super::rfc3339_now(),
-            level: DiagnosticLevel::Error,
-            origin: DiagnosticOrigin::Rust,
-            domain: DiagnosticDomain::Data,
-            target: "yssbi::database".into(),
-            event: Some("queryFailed".into()),
-            message: "x".repeat(DiagnosticLimits::MAX_MESSAGE_BYTES + 100),
-            source: None,
-            fields: BTreeMap::from([
-                ("database_url".into(), json!(secret)),
-                ("nested".into(), json!({ "Authorization": secret })),
-            ]),
-        }])
-        .unwrap();
-
-        let subscription = hub.subscribe(|_| true).unwrap();
-        let record = subscription.entries.last().unwrap().clone();
-        assert_eq!(record.fields["database_url"], REDACTED_VALUE);
-        assert_eq!(record.fields["nested"]["Authorization"], REDACTED_VALUE);
-        assert!(record.message.len() <= DiagnosticLimits::MAX_MESSAGE_BYTES);
-        hub.unsubscribe(subscription.subscription_id).unwrap();
-
-        let log_path = directory.join(LOG_FILE_NAME);
-        let started = Instant::now();
-        let jsonl = loop {
-            if let Ok(contents) = std::fs::read_to_string(&log_path)
-                && !contents.is_empty()
-            {
-                break contents;
-            }
-            assert!(started.elapsed() < Duration::from_secs(1));
-            std::thread::sleep(Duration::from_millis(5));
-        };
-        assert!(!jsonl.contains(secret));
-        assert!(jsonl.contains(REDACTED_VALUE));
-        let file_record: crate::diagnostics::DiagnosticRecordDto =
-            serde_json::from_str(jsonl.lines().last().unwrap()).unwrap();
-        assert_eq!(file_record.fields, record.fields);
-        assert_eq!(file_record.message, record.message);
-
-        drop(dispatcher_guard);
-        let cleanup_started = Instant::now();
-        loop {
-            match std::fs::remove_dir_all(&directory) {
-                Ok(()) => break,
-                Err(error) if cleanup_started.elapsed() < Duration::from_secs(1) => {
-                    let _ = error;
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-                Err(error) => panic!("failed to clean diagnostics test directory: {error}"),
-            }
-        }
     }
 }

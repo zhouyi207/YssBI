@@ -60,9 +60,9 @@ dependencies 和递归 repository stylesheet dependencies 纳入同一审计。
 分类使用闭合集合而不是 rule priority。每个发现的 source 必须命中且只命中一层，zero/multiple
 membership 都是 hard failure：
 
-- Rust 共 15 层：Composition Root、Build Script、Commands、Platform Adapter、Application、
+- Rust 共 16 层：Composition Root、Build Script、Commands、Platform Adapter、Application、
   Project、Graph、Execution、SCI Core、Database Core、Backend Adapter、Built-in Composition、
-  Transport、Diagnostics、Pure Leaf。Custom-build root 及其 local modules 只属于 Build Script。
+  Transport、Logging、Diagnostics、Pure Leaf。Custom-build root 及其 local modules 只属于 Build Script。
 - Frontend 共 10 层：App Composition、Views、Application、Core、Domain、Services、
   Components/shared UI、Wire Schema、Diagnostics、Pure Shared。Stateful/framework-bearing shared
   files 使用 literal membership 归到真实 owner；repository assets 不伪装成 source layer。
@@ -113,10 +113,11 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
+| `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
 | `src-tauri/src/tabular/` | 变量 tabular snapshot、canonical handle 与 DataFrame I/O |
-| `src-tauri/src/diagnostics/` | 单一 `tracing` 管线、sanitization、bounded delivery 与 JSONL |
+| `src-tauri/src/diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery |
 | `src-tauri/src/window_state/` | 后端权威窗口几何状态与原子持久化 |
 
 Rust 与 React 的职责单向流动：Rust 保存 domain authority，React 只保存 UI 状态和后端投影。资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用 `databases/{database-id}`，variable 使用 `variables/{VariableId}`。
@@ -345,9 +346,9 @@ Application execution coordinates project identity, Graph package mapping, resou
 
 Execution publishes a sealed finalization handoff; Project commits variable/resource effects only after its final authority gate. Commands only adapt the ordered channel and map the typed error/result wire.
 
-## 7. Results、Run Output 与 diagnostics
+## 7. Results、Run Output、logging 与 diagnostics
 
-这三条数据流语义不同，不能互相替代。
+这四条数据流语义不同，不能互相替代。
 
 ### 7.1 Results
 
@@ -373,11 +374,17 @@ Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段�
 
 Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend Output panel 维护有界投影并检测 sequence gap。Run Output 不进入 diagnostics。
 
-### 7.3 Diagnostics
+### 7.3 Logging
 
-Rust `tracing` 是唯一 diagnostics pipeline。Recent storage、ingress、subscriber queue 和 JSONL 都是 bounded/lossy、sanitized、non-authoritative 的观察面。
+Rust `tracing` 是唯一 logging 入口。`src-tauri/crates/yss-tracing/` 安装 process-wide subscriber，拥有 `RUST_LOG` 过滤、`log` bridge、统一脱敏、bounded console worker 与 `app_log_dir()/yssbi.log.jsonl` rolling file worker。日志是 lossy、sanitized、non-authoritative 的观察数据，不驱动 workflow、domain state 或用户反馈。
 
-`diagnostics/limits.rs` 中 private `DiagnosticLimits` 是 sanitizer 与 frontend validation 共享的 per-record limit source of truth；调用方不能建立另一套公开常量。Diagnostics 不驱动 workflow、domain state 或用户反馈，详细 contract 见专项文档。
+`yss-tracing::LogLimits` 是 log collection 与 frontend diagnostic validation 共用的 per-record limit source of truth。Rust 事件先形成已清理的 `LogRecord`；console、JSONL 和可选 diagnostics projection 都只能消费该记录，不能建立 raw formatter 旁路。
+
+### 7.4 Diagnostics
+
+`src-tauri/src/diagnostics/` 不安装 tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。
+
+Logging 与 Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。详细 contract 见专项文档。
 
 ## 8. Database module
 

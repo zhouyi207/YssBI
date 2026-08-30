@@ -134,9 +134,12 @@ projections.
 
 ## Diagnostics and program output
 
-* Rust `tracing` is the single diagnostic pipeline.
-* Diagnostic storage and delivery are bounded, lossy, sanitized, and
-  non-authoritative.
+* Rust `tracing` is the single logging entry point. The `yss-tracing` crate owns
+  filtering, sanitization, and bounded console/rolling-file log outputs.
+* Diagnostics is a separate bounded, lossy, non-authoritative projection. It
+  owns the recent ring, frontend diagnostic ingestion, sequencing, and live
+  delivery, and consumes only sanitized Rust log records from `yss-tracing`.
+* Explicit frontend diagnostics never flow backward into persistent log files.
 * Logs must never drive domain state, application workflows, or user feedback.
 * Never log secrets or user payload content, including DataFrame rows or cells,
   document contents, clipboard contents, SQL text, connection strings, tokens,

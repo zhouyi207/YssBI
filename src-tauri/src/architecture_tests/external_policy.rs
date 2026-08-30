@@ -55,12 +55,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "file-rotate",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "mathlex",
         target_condition: None,
     },
@@ -187,18 +181,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "tracing-log",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing-subscriber",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "trash",
         target_condition: None,
     },
@@ -266,6 +248,60 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "statrs",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "file-rotate",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing-log",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing-subscriber",
         target_condition: None,
     },
 ];
@@ -387,32 +423,17 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "windows-sys",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::CompositionRoot,
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "file-rotate",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "file-rotate",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::CompositionRoot,
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "tracing-log",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing-log",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::CompositionRoot,
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing-subscriber",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "tracing-subscriber",
     },
@@ -602,6 +623,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "regex",
     },
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Logging,
+        mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::Project,
         mode: RustDependencyMode::Runtime,
         package_name: "unicode-casefold",
@@ -667,6 +693,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "chrono",
     },
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Logging,
+        mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",
@@ -708,6 +739,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
     },
@@ -768,6 +804,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
     },
@@ -833,6 +874,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
     },
@@ -932,7 +978,7 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "tracing",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
+        source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "tracing",
     },
@@ -990,11 +1036,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::Diagnostics,
         mode: RustDependencyMode::Runtime,
         package_name: "tauri",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "regex",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PlatformAdapter,

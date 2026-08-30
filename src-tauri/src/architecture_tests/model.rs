@@ -41,12 +41,13 @@ pub(super) enum RustLayer {
     BackendAdapter,
     BuiltinComposition,
     Transport,
+    Logging,
     Diagnostics,
     PureLeaf,
 }
 
 impl RustLayer {
-    pub(super) const ALL: [Self; 15] = [
+    pub(super) const ALL: [Self; 16] = [
         Self::CompositionRoot,
         Self::BuildScript,
         Self::Commands,
@@ -60,6 +61,7 @@ impl RustLayer {
         Self::BackendAdapter,
         Self::BuiltinComposition,
         Self::Transport,
+        Self::Logging,
         Self::Diagnostics,
         Self::PureLeaf,
     ];

@@ -1,9 +1,9 @@
 pub(crate) mod dispatcher;
 mod dto;
-mod limits;
+#[cfg(test)]
 pub(crate) mod recent_layer;
 mod runtime;
-mod sanitizer;
+mod rust_projection;
 mod validation;
 mod worker;
 

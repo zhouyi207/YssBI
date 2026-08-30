@@ -5,10 +5,11 @@ use std::time::Duration;
 use chrono::DateTime;
 use serde_json::json;
 use tracing_subscriber::layer::SubscriberExt;
+use yss_tracing::{LogLimits as DiagnosticLimits, REDACTED_VALUE};
 
 use super::dispatcher::{
     DiagnosticsHub, LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, PendingDiagnostic,
-    RECENT_DIAGNOSTIC_CAPACITY, RecordSink,
+    RECENT_DIAGNOSTIC_CAPACITY,
 };
 use super::dto::{
     DiagnosticBatchDto, DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, DiagnosticRecordDto,
@@ -172,8 +173,7 @@ fn frontend_entry_deserialization_rejects_contract_drift() {
 
 #[test]
 fn recent_ring_keeps_5000_records_with_rust_owned_monotonic_sequences() {
-    let (hub, _guard) =
-        DiagnosticsHub::start_for_test(RECENT_DIAGNOSTIC_CAPACITY + 2, 8, Vec::new());
+    let (hub, _guard) = DiagnosticsHub::start_for_test(RECENT_DIAGNOSTIC_CAPACITY + 2, 8);
     hub.publish(
         (0..=RECENT_DIAGNOSTIC_CAPACITY)
             .map(|index| pending(format!("record-{index}")))
@@ -285,14 +285,7 @@ fn live_batches_preserve_order_and_flush_by_size_or_time() {
 
 #[test]
 fn bounded_ingress_reports_exact_drop_count_on_recovery() {
-    let observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let sink_observed = observed.clone();
-    let (seen_sender, seen_receiver) = mpsc::channel();
-    let sink: RecordSink = Box::new(move |record| {
-        sink_observed.lock().unwrap().push(record.clone());
-        seen_sender.send(record.clone()).is_ok()
-    });
-    let (hub, _guard, release_dispatcher) = DiagnosticsHub::start_paused_for_test(2, vec![sink]);
+    let (hub, _guard, release_dispatcher) = DiagnosticsHub::start_paused_for_test(2);
 
     hub.publish(vec![pending("first"), pending("queued")])
         .unwrap();
@@ -302,9 +295,17 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
     assert!(overflow_started.elapsed() < Duration::from_millis(100));
     release_dispatcher.send(()).unwrap();
 
-    let first = seen_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
-    let queued = seen_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
-    let dropped = seen_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    let recovery_started = std::time::Instant::now();
+    let snapshot = loop {
+        if let Ok(snapshot) = hub.subscribe(|_| true) {
+            break snapshot;
+        }
+        assert!(recovery_started.elapsed() < Duration::from_secs(1));
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let first = &snapshot.entries[0];
+    let queued = &snapshot.entries[1];
+    let dropped = &snapshot.entries[2];
     assert_eq!(first.sequence, 1);
     assert_eq!(queued.sequence, 2);
     assert_eq!(queued.message, "queued");
@@ -315,7 +316,6 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
     );
     assert_eq!(dropped.fields["droppedCount"], 2);
 
-    let snapshot = hub.subscribe(|_| true).unwrap();
     assert_eq!(snapshot.latest_sequence, 3);
     assert_eq!(
         snapshot
@@ -325,7 +325,6 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
             .count(),
         1
     );
-    assert_eq!(observed.lock().unwrap().len(), 3);
     hub.unsubscribe(snapshot.subscription_id).unwrap();
 }
 
@@ -334,7 +333,7 @@ fn recent_layer_maps_structured_tracing_events_without_file_io() {
     let (hub, _guard) = DiagnosticsHub::start();
     let subscriber = tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
 
-    let long_detail = "x".repeat(super::limits::DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
+    let long_detail = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
     tracing::subscriber::with_default(subscriber, || {
         tracing::warn!(
             target: "yssbi::node_system::runtime::cleanup",
@@ -360,17 +359,10 @@ fn recent_layer_maps_structured_tracing_events_without_file_io() {
     assert_eq!(record.source.as_deref(), Some("run-1"));
     assert_eq!(record.message, "cleanup failed");
     assert_eq!(record.fields["retry_count"], 2);
-    assert_eq!(
-        record.fields["authorization"],
-        super::sanitizer::REDACTED_VALUE
-    );
-    assert_eq!(
-        record.fields["clipboard_content"],
-        super::sanitizer::REDACTED_VALUE
-    );
+    assert_eq!(record.fields["authorization"], REDACTED_VALUE);
+    assert_eq!(record.fields["clipboard_content"], REDACTED_VALUE);
     assert!(
-        record.fields["detail"].as_str().unwrap().len()
-            <= super::limits::DiagnosticLimits::MAX_FIELD_STRING_BYTES
+        record.fields["detail"].as_str().unwrap().len() <= DiagnosticLimits::MAX_FIELD_STRING_BYTES
     );
     let encoded = serde_json::to_string(record).unwrap();
     assert!(!encoded.contains("trace-secret"));
@@ -418,7 +410,7 @@ fn concurrent_live_delivery_is_sequence_ordered_without_duplicates() {
 
 #[test]
 fn slow_subscriber_is_removed_without_blocking_dispatcher() {
-    let (hub, _guard) = DiagnosticsHub::start_for_test(32, 1, Vec::new());
+    let (hub, _guard) = DiagnosticsHub::start_for_test(32, 1);
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed_attempts = attempts.clone();
     let (started_sender, started_receiver) = mpsc::channel();
@@ -461,28 +453,8 @@ fn slow_subscriber_is_removed_without_blocking_dispatcher() {
 }
 
 #[test]
-fn shutdown_does_not_wait_for_full_ingress_or_stuck_output() {
-    let (blocked_sender, blocked_receiver) = mpsc::channel();
-    let (release_sender, release_receiver) = mpsc::channel();
-    let sink: RecordSink = Box::new(move |_| {
-        let _ = blocked_sender.send(());
-        let _ = release_receiver.recv_timeout(Duration::from_secs(1));
-        true
-    });
-    let (hub, guard) = DiagnosticsHub::start_for_test(16, 1, vec![sink]);
-    hub.publish(vec![pending("blocked-output")]).unwrap();
-    let barrier = hub.subscribe(|_| true).unwrap();
-    blocked_receiver
-        .recv_timeout(Duration::from_secs(1))
-        .unwrap();
-
-    let started = std::time::Instant::now();
-    drop(guard);
-    assert!(started.elapsed() < Duration::from_millis(500));
-    release_sender.send(()).unwrap();
-    drop(barrier);
-
-    let (hub, guard, _release_dispatcher) = DiagnosticsHub::start_paused_for_test(1, Vec::new());
+fn shutdown_does_not_wait_for_full_ingress() {
+    let (hub, guard, _release_dispatcher) = DiagnosticsHub::start_paused_for_test(1);
     hub.publish(vec![pending("queued")]).unwrap();
     hub.publish(vec![pending("dropped")]).unwrap();
     let started = std::time::Instant::now();

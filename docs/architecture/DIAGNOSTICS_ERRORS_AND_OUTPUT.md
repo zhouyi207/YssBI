@@ -6,7 +6,8 @@
 
 | 信息 | 权威来源 | 传输 | 保留 | UI 用途 |
 | --- | --- | --- | --- | --- |
-| Diagnostic log | Rust `tracing` 管线 | bounded worker + Tauri Channel | 有损 recent ring + rolling JSONL | LogView 排障，不驱动业务状态 |
+| Logging | `yss-tracing` 的 Rust `tracing` 管线 | 独立 bounded console/file workers | rolling JSONL；队列满时有损 | 本地排障，不驱动业务状态 |
+| Diagnostics | Rust log 的 sanitized projection + 显式 frontend diagnostics | bounded dispatcher + Tauri Channel | 有损 recent ring | LogView 排障，不驱动业务状态 |
 | IPC error | Rust `CommandError` | command rejection | 不单独保留；内部错误关联 incident | React 按 `code` 本地化并选择反馈表面 |
 | User feedback | React application/view | Zustand UI state / component state | 仅按交互需要 | `Alert`、`Dialog`、字段内错误、状态变化 |
 | Results | Rust `ResultStore` | typed query commands；run events 仅公告 Preview/Open result ID | project-session logical results 与 Pin history | Result/Inspect/Preview/presentation surfaces |
@@ -22,10 +23,13 @@
 
 ```mermaid
 flowchart TD
-    RustEvent[Rust tracing event] --> Diagnostics[Diagnostics sanitizer and dispatcher]
+    RustEvent[Rust tracing event] --> Logging[yss-tracing sanitizer and log layer]
+    Logging --> Console[Console JSONL]
+    Logging --> Jsonl[Rolling yssbi.log.jsonl]
+    Logging --> Projection[Sanitized LogRecord projection]
+    Projection --> Diagnostics[Diagnostics dispatcher]
     FrontendEvent[Explicit frontend diagnostic] --> Diagnostics
     Diagnostics --> Recent[Recent ring]
-    Diagnostics --> Jsonl[Rolling JSONL]
     Diagnostics --> LogChannel[LogView Channel]
 
     CommandFailure[Command failure] --> CommandError[CommandError code details incidentId]
@@ -40,19 +44,23 @@ flowchart TD
     RunOutput --> OutputPanel[Output panel]
 ```
 
-## 2. Diagnostic logging
+## 2. Logging 与 diagnostics
 
 ### 2.1 单一入口
 
-Rust 诊断统一使用 `tracing`。核心实现位于：
+Rust logging 统一使用 `tracing`，但 logging 与 diagnostics 是两个独立 subsystem。核心实现位于：
 
+- `src-tauri/crates/yss-tracing/src/runtime.rs`：process-wide subscriber、过滤、console/file workers 与 rolling JSONL
+- `src-tauri/crates/yss-tracing/src/layer.rs`：`tracing::Event → LogRecord`
+- `src-tauri/crates/yss-tracing/src/sanitizer.rs`：统一脱敏与 per-record bounds
 - `src-tauri/src/diagnostics/runtime.rs`
-- `src-tauri/src/diagnostics/recent_layer.rs`
+- `src-tauri/src/diagnostics/rust_projection.rs`
 - `src-tauri/src/diagnostics/dispatcher.rs`
 - `src-tauri/src/diagnostics/worker.rs`
-- `src-tauri/src/diagnostics/sanitizer.rs`
 
-前端只通过显式 `logger.app/sys/exec/graph/data` 调用产生 diagnostics；`appLogger` 不替换全局 `console`。前端记录经小批量提交到 `submit_frontend_diagnostics`，随后与 Rust 记录共享同一 Rust 分配的 `streamId` 和 `sequence`。
+Rust event 先在 `yss-tracing` 中形成已清理的 `LogRecord`，再并行投递到 console、rolling file 和可选 diagnostics projection。Diagnostics 不配置 subscriber，也不打开日志文件。
+
+前端只通过显式 `logger.app/sys/exec/graph/data` 调用产生 diagnostics；`appLogger` 不替换全局 `console`。前端记录经小批量提交到 `submit_frontend_diagnostics`，随后与 Rust projection 共享同一 Rust 分配的 `streamId` 和 `sequence`。显式 frontend diagnostics 不反向进入 console 或 rolling JSONL。
 
 禁止：
 
@@ -63,6 +71,20 @@ Rust 诊断统一使用 `tracing`。核心实现位于：
 - 把已翻译的 UI 文案作为专用日志类别
 
 ### 2.2 稳定记录契约
+
+Rolling JSONL、console 和 Rust diagnostics projection 共享 `yss-tracing::LogRecord`：
+
+```ts
+interface LogRecord {
+  timestamp: string;
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  target: string;
+  message: string;
+  fields: Record<string, unknown>;
+}
+```
+
+Diagnostics 在该记录的单向 Rust projection 或显式 frontend entry 上分配自己的 stream identity：
 
 ```ts
 interface DiagnosticRecordDto {
@@ -80,37 +102,37 @@ interface DiagnosticRecordDto {
 }
 ```
 
-`streamId + sequence` 是 LogView 去重和顺序的依据。时间戳用于展示，不用于重建顺序。
+`streamId + sequence` 只属于 diagnostics，是 LogView 去重和顺序的依据。Logging JSONL 不伪造该 identity；时间戳用于展示，不用于重建顺序。
 
 ### 2.3 背压与保留
 
-当前默认边界：
+当前默认边界分属两个 subsystem：
 
-- ingress：1024 条，生产者仅使用 `try_send`，不会等待容量。
-- recent ring：5000 条。
-- live batch：最多 128 条或约 16 ms。
-- 每个订阅者：8 个 batch 的独立 bounded queue；慢订阅者会被移除。
-- console/file output：各自独立 worker，queue 容量 1024。
-- JSONL：`app_log_dir()/diagnostics.jsonl`，10 MiB 轮转，保留 5 个轮转文件。
+- Logging console/file output：各自独立 worker，queue 容量 1024；生产者仅使用 `try_send`。
+- Logging JSONL：`app_log_dir()/yssbi.log.jsonl`，10 MiB 轮转，保留 5 个轮转文件。
+- Diagnostics ingress：1024 条，生产者仅使用 `try_send`，不会等待容量。
+- Diagnostics recent ring：5000 条。
+- Diagnostics live batch：最多 128 条或约 16 ms。
+- 每个 diagnostics 订阅者：8 个 batch 的独立 bounded queue；慢订阅者会被移除。
 
 当 ingress 满时，记录允许丢弃。恢复后 dispatcher 在同一有序队列中写入一次 `diagnostics.records_dropped`，其 `droppedCount` 表示该段丢失数量。marker 不得越过导致队列满时已经接收的记录。
 
 LogView 订阅使用 snapshot + live Channel。前端会检查 sequence 连续性；snapshot 握手期间溢出或出现 gap 时自动重连一次，不能静默推进 watermark。
 
-Diagnostic logs 明确是有损、非权威数据。磁盘或 UI 消费者故障不得阻塞业务线程。
+Logging 与 diagnostics 都明确是有损、非权威数据。磁盘或 UI 消费者故障不得阻塞业务线程；一侧失败不得改变另一侧的业务行为。
 
 ### 2.4 过滤
 
 无 `RUST_LOG` 时：
 
-- release：仅第一方 `yssbi` / `yssbi_lib` 的 INFO 及以上。
-- debug：仅第一方 `yssbi` / `yssbi_lib` 的 DEBUG 及以上。
+- release：仅第一方 `yssbi` / `yssbi_lib` / `yss_tracing` 的 INFO 及以上。
+- debug：仅第一方 `yssbi` / `yssbi_lib` / `yss_tracing` 的 DEBUG 及以上。
 - 第三方 target 默认 OFF。
 - TRACE 只能通过显式 `RUST_LOG` 开启。
 
 ### 2.5 脱敏
 
-所有 recent、console、JSONL 和 live Channel 都消费同一个已清理的 `DiagnosticRecordDto`。不得存在绕过 sanitizer 的原始 formatter。
+`yss-tracing` 在任何输出或 Rust diagnostics projection 之前清理 `LogRecord`。console、JSONL 和 diagnostics projection 不得存在绕过 sanitizer 的 raw formatter。Frontend diagnostics 复用同一 sanitizer/limits，但只生成 `DiagnosticRecordDto`，不会因此成为持久日志。
 
 sanitizer 至少执行：
 
@@ -119,7 +141,7 @@ sanitizer 至少执行：
 - 内容级清理：Authorization/Cookie header、Bearer token、URI userinfo、常见 secret assignment。
 - target/event/source/message、字段字符串、字段数量、JSON 深度、数组长度和总编码大小限制。
 
-诊断调用点仍应遵循数据最小化：优先记录 ID、count、kind、digest 和稳定 code，不记录 SQL 正文、行值、文档正文或剪贴板内容。sanitizer 是最后防线，不是允许任意 `%error` / `?payload` 的理由。
+logging/diagnostic 调用点仍应遵循数据最小化：优先记录 ID、count、kind、digest 和稳定 code，不记录 SQL 正文、行值、文档正文或剪贴板内容。sanitizer 是最后防线，不是允许任意 `%error` / `?payload` 的理由。`diagnostic_skip_recent = true` 只跳过 diagnostics projection，不能关闭 console/file logging。
 
 ## 3. IPC error
 
@@ -268,8 +290,8 @@ Output 面板位于 `src/views/LogView/OutputPanel.tsx`，但它只复用 workbe
 
 新增或修改错误、日志、结果或输出路径时检查：
 
-1. 这条信息是 diagnostic、command error、user feedback、result 还是 program output？
-2. 是否错误地让日志驱动了业务状态？
+1. 这条信息是 persistent logging、recent/live diagnostic、command error、user feedback、result 还是 program output？
+2. 是否错误地让 logging 或 diagnostics 驱动了业务状态？
 3. command error 是否仍是精确三字段 wire？
 4. 用户文案是否只在 React i18n 中生成？
 5. 是否可能记录 secret、row/cell/document/clipboard content？
@@ -277,5 +299,6 @@ Output 面板位于 `src/views/LogView/OutputPanel.tsx`，但它只复用 workbe
 7. sequence gap、drop、truncate 是否显式可见？
 8. result state、payload、history、provenance 与 presentation 是否仍以 Rust `ResultStore` 为 authority、仅通过 typed queries 读取，并在 project replacement 时失效旧 ID？
 9. Preview/Open run event 是否只公告 `ResultId`，而不承载 result authority？
-10. Print/output 是否完全绕开 diagnostics？
-11. 是否增加了兼容 shim，而不是直接迁移 0.x contract？
+10. Print/output 是否完全绕开 logging 与 diagnostics？
+11. Frontend diagnostics 是否仍只进入 recent/live 流，而没有反向写入日志文件？
+12. 是否增加了兼容 shim，而不是直接迁移 0.x contract？

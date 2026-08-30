@@ -13,14 +13,13 @@ use super::dto::{
     DiagnosticBatchDto, DiagnosticDomain, DiagnosticFields, DiagnosticLevel, DiagnosticOrigin,
     DiagnosticRecordDto, DiagnosticSubscriptionDto,
 };
-use super::sanitizer::{
+use super::worker::{BoundedWorker, EnqueueResult};
+use yss_tracing::{
     sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
 };
-use super::worker::{BoundedWorker, EnqueueResult};
 
 pub const RECENT_DIAGNOSTIC_CAPACITY: usize = 5_000;
 const DIAGNOSTIC_INGRESS_CAPACITY: usize = 1_024;
-const RECORD_OUTPUT_CAPACITY: usize = 1_024;
 const SUBSCRIBER_QUEUE_CAPACITY: usize = 8;
 const DISPATCH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const DISPATCH_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -31,7 +30,6 @@ const DROPPED_EVENT: &str = "diagnostics.records_dropped";
 const DROPPED_TARGET: &str = "yssbi::diagnostics";
 
 type BatchSink = Box<dyn Fn(DiagnosticBatchDto) -> bool + Send + 'static>;
-pub(crate) type RecordSink = Box<dyn FnMut(&DiagnosticRecordDto) -> bool + Send + 'static>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct PendingDiagnostic {
@@ -114,13 +112,11 @@ struct DispatcherState {
     subscriptions: BTreeMap<String, BoundedWorker<Arc<DiagnosticBatchDto>>>,
     live_pending: Vec<DiagnosticRecordDto>,
     live_deadline: Option<Instant>,
-    record_outputs: Vec<BoundedWorker<Arc<DiagnosticRecordDto>>>,
     subscriber_queue_capacity: usize,
 }
 
 struct DispatcherConfig {
     ingress_capacity: usize,
-    record_output_capacity: usize,
     subscriber_queue_capacity: usize,
 }
 
@@ -128,7 +124,6 @@ impl DispatcherConfig {
     const fn production() -> Self {
         Self {
             ingress_capacity: DIAGNOSTIC_INGRESS_CAPACITY,
-            record_output_capacity: RECORD_OUTPUT_CAPACITY,
             subscriber_queue_capacity: SUBSCRIBER_QUEUE_CAPACITY,
         }
     }
@@ -137,34 +132,17 @@ impl DispatcherConfig {
 impl DiagnosticsHub {
     #[cfg(test)]
     pub(crate) fn start() -> (Self, DiagnosticsDispatcherGuard) {
-        Self::start_with_config(DispatcherConfig::production(), Vec::new(), None)
+        Self::start_with_config(DispatcherConfig::production(), None)
             .expect("start diagnostics dispatcher")
     }
 
-    #[cfg(test)]
-    pub(crate) fn start_with_record_sinks(
-        record_sinks: Vec<RecordSink>,
-    ) -> (Self, DiagnosticsDispatcherGuard) {
-        Self::start_with_config(DispatcherConfig::production(), record_sinks, None)
-            .expect("start diagnostics dispatcher")
-    }
-
-    pub(crate) fn start_paused_with_record_sinks(
-        record_sinks: Vec<RecordSink>,
-    ) -> Result<(Self, DiagnosticsDispatcherGuard, mpsc::Sender<()>), DiagnosticsDispatcherStartError>
-    {
-        let (release, startup_gate) = mpsc::channel();
-        let (hub, guard) = Self::start_with_config(
-            DispatcherConfig::production(),
-            record_sinks,
-            Some(startup_gate),
-        )?;
-        Ok((hub, guard, release))
+    pub(crate) fn start_production()
+    -> Result<(Self, DiagnosticsDispatcherGuard), DiagnosticsDispatcherStartError> {
+        Self::start_with_config(DispatcherConfig::production(), None)
     }
 
     fn start_with_config(
         config: DispatcherConfig,
-        record_sinks: Vec<RecordSink>,
         startup_gate: Option<Receiver<()>>,
     ) -> Result<(Self, DiagnosticsDispatcherGuard), DiagnosticsDispatcherStartError> {
         let (sender, receiver) = mpsc::sync_channel(config.ingress_capacity.max(1));
@@ -176,13 +154,7 @@ impl DiagnosticsHub {
             .name("yssbi-diagnostics".into())
             .spawn(move || {
                 wait_for_startup(startup_gate, &worker_shutdown);
-                run_dispatcher(
-                    receiver,
-                    worker_dropped_records,
-                    worker_shutdown,
-                    record_sinks,
-                    config,
-                );
+                run_dispatcher(receiver, worker_dropped_records, worker_shutdown, config);
             })
             .map_err(DiagnosticsDispatcherStartError)?;
         let hub = Self {
@@ -202,15 +174,12 @@ impl DiagnosticsHub {
     pub(crate) fn start_for_test(
         ingress_capacity: usize,
         subscriber_queue_capacity: usize,
-        record_sinks: Vec<RecordSink>,
     ) -> (Self, DiagnosticsDispatcherGuard) {
         Self::start_with_config(
             DispatcherConfig {
                 ingress_capacity,
-                record_output_capacity: RECORD_OUTPUT_CAPACITY,
                 subscriber_queue_capacity,
             },
-            record_sinks,
             None,
         )
         .expect("start diagnostics dispatcher")
@@ -219,16 +188,13 @@ impl DiagnosticsHub {
     #[cfg(test)]
     pub(crate) fn start_paused_for_test(
         ingress_capacity: usize,
-        record_sinks: Vec<RecordSink>,
     ) -> (Self, DiagnosticsDispatcherGuard, mpsc::Sender<()>) {
         let (release, startup_gate) = mpsc::channel();
         let (hub, guard) = Self::start_with_config(
             DispatcherConfig {
                 ingress_capacity,
-                record_output_capacity: RECORD_OUTPUT_CAPACITY,
                 subscriber_queue_capacity: SUBSCRIBER_QUEUE_CAPACITY,
             },
-            record_sinks,
             Some(startup_gate),
         )
         .expect("start diagnostics dispatcher");
@@ -341,29 +307,7 @@ impl Drop for DiagnosticsDispatcherGuard {
 }
 
 impl DispatcherState {
-    fn new(record_sinks: Vec<RecordSink>, config: &DispatcherConfig) -> Self {
-        let record_outputs = record_sinks
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, mut sink)| {
-                BoundedWorker::spawn(
-                    format!("yssbi-diagnostics-output-{index}"),
-                    config.record_output_capacity,
-                    move |record: Arc<DiagnosticRecordDto>| sink(record.as_ref()),
-                )
-                .map_err(|error| {
-                    tracing::warn!(
-                        target: "yssbi::diagnostics",
-                        diagnostic_domain = "system",
-                        diagnostic_event = "diagnosticsOutputWorkerUnavailable",
-                        output_index = index,
-                        error = %error,
-                        "Failed to start diagnostics output worker"
-                    );
-                })
-                .ok()
-            })
-            .collect();
+    fn new(config: &DispatcherConfig) -> Self {
         Self {
             stream_id: Uuid::new_v4().to_string(),
             latest_sequence: 0,
@@ -372,7 +316,6 @@ impl DispatcherState {
             subscriptions: BTreeMap::new(),
             live_pending: Vec::with_capacity(LIVE_BATCH_MAX_RECORDS),
             live_deadline: None,
-            record_outputs,
             subscriber_queue_capacity: config.subscriber_queue_capacity,
         }
     }
@@ -402,7 +345,6 @@ impl DispatcherState {
             self.truncated = true;
         }
         self.recent.push_back(record.clone());
-        self.fan_out_record(Arc::new(record.clone()));
 
         if self.subscriptions.is_empty() {
             return;
@@ -420,15 +362,6 @@ impl DispatcherState {
         if dropped_count > 0 {
             self.publish(PendingDiagnostic::records_dropped(dropped_count));
         }
-    }
-
-    fn fan_out_record(&mut self, record: Arc<DiagnosticRecordDto>) {
-        self.record_outputs.retain(|output| {
-            if !output.is_active() {
-                return false;
-            }
-            !matches!(output.try_enqueue(record.clone()), EnqueueResult::Closed)
-        });
     }
 
     fn flush_if_due(&mut self, now: Instant) {
@@ -518,10 +451,9 @@ fn run_dispatcher(
     receiver: Receiver<DispatcherCommand>,
     dropped_records: Arc<AtomicU64>,
     shutdown: Arc<AtomicBool>,
-    record_sinks: Vec<RecordSink>,
     config: DispatcherConfig,
 ) {
-    let mut state = DispatcherState::new(record_sinks, &config);
+    let mut state = DispatcherState::new(&config);
     loop {
         if shutdown.load(Ordering::Acquire) {
             drain_for_shutdown(&receiver, &mut state, &dropped_records);

@@ -241,6 +241,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.roots.iter().any(|root| root.package == "yss-sci"
         && root.target == "yss_sci"
         && root.kind == ProductionRootKind::Library));
+    assert!(
+        workspace
+            .roots
+            .iter()
+            .any(|root| root.package == "yss-tracing"
+                && root.target == "yss_tracing"
+                && root.kind == ProductionRootKind::Library)
+    );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.declared_name == "tauri_build"
@@ -259,6 +267,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-sci"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_tracing"
+                    && alias.member_package == "yss-tracing"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-tracing"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -449,7 +475,7 @@ fn rust_production_sources_are_classified_once() {
         RustLayer::ALL
             .iter()
             .all(|layer| classification.values().any(|actual| actual == layer)),
-        "the real production graph must exercise all fifteen Rust layers"
+        "the real production graph must exercise all sixteen Rust layers"
     );
 }
 

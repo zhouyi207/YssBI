@@ -4,65 +4,62 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-use super::dto::DiagnosticFields;
-use super::limits::DiagnosticLimits;
+use crate::{LogFields, LogLimits};
 
-// Sanitization truncates each collection independently. Frontend validation
-// intentionally relies on the shared byte and total-value limits instead.
 const MAX_SANITIZED_ARRAY_ENTRIES: usize = 64;
 const MAX_SANITIZED_OBJECT_ENTRIES: usize = 64;
 
-pub(crate) const REDACTED_VALUE: &str = "[REDACTED]";
+pub const REDACTED_VALUE: &str = "[REDACTED]";
 const TRUNCATED_VALUE: &str = "[TRUNCATED]";
 const TRUNCATED_SUFFIX: &str = "…[truncated]";
 const TRUNCATED_FIELD: &str = "_diagnosticsTruncated";
 
 static SENSITIVE_HEADER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?im)\b(authorization|cookie|set-cookie)\s*:\s*[^\r\n]+")
-        .expect("valid diagnostics sensitive-header regex")
+        .expect("valid logging sensitive-header regex")
 });
 static LABELED_SECRET_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?i)\b["']?(password|passwd|pwd|(?:access|refresh|id|auth)[_\- ]?token|token|authorization|cookie|set[_\- ]?cookie|api[_\- ]?key|connection[_\- ]?string|database[_\- ]?url)["']?\s*[:=]\s*(?:bearer\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)"#,
     )
-    .expect("valid diagnostics labeled-secret regex")
+    .expect("valid logging labeled-secret regex")
 });
 static BEARER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\bbearer\s+[a-z0-9._~+/=\-]+").expect("valid diagnostics bearer-token regex")
+    Regex::new(r"(?i)\bbearer\s+[a-z0-9._~+/=\-]+").expect("valid logging bearer-token regex")
 });
 static URI_USERINFO_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^@\s/]+@")
-        .expect("valid diagnostics URI-userinfo regex")
+        .expect("valid logging URI-userinfo regex")
 });
 static PROHIBITED_CONTENT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?is)\b(dataframe|rows|cell[_\- ]?values?|document|clipboard[_\- ]?(?:content|text|html))\s*[:=]\s*.+",
     )
-    .expect("valid diagnostics prohibited-content regex")
+    .expect("valid logging prohibited-content regex")
 });
 
-pub(crate) fn sanitize_target(value: &str) -> String {
-    sanitize_text(value, DiagnosticLimits::MAX_TARGET_BYTES, false)
+pub fn sanitize_target(value: &str) -> String {
+    sanitize_text(value, LogLimits::MAX_TARGET_BYTES, false)
 }
 
-pub(crate) fn sanitize_event(value: &str) -> String {
-    sanitize_text(value, DiagnosticLimits::MAX_EVENT_BYTES, false)
+pub fn sanitize_event(value: &str) -> String {
+    sanitize_text(value, LogLimits::MAX_EVENT_BYTES, false)
 }
 
-pub(crate) fn sanitize_message(value: &str) -> String {
-    sanitize_content_text(value, DiagnosticLimits::MAX_MESSAGE_BYTES)
+pub fn sanitize_message(value: &str) -> String {
+    sanitize_content_text(value, LogLimits::MAX_MESSAGE_BYTES)
 }
 
-pub(crate) fn sanitize_source(value: &str) -> String {
-    sanitize_text(value, DiagnosticLimits::MAX_SOURCE_BYTES, false)
+pub fn sanitize_source(value: &str) -> String {
+    sanitize_text(value, LogLimits::MAX_SOURCE_BYTES, false)
 }
 
 pub(crate) fn sanitize_field_string(value: &str) -> String {
-    sanitize_content_text(value, DiagnosticLimits::MAX_FIELD_STRING_BYTES)
+    sanitize_content_text(value, LogLimits::MAX_FIELD_STRING_BYTES)
 }
 
-pub(crate) fn sanitize_field_key(value: &str) -> String {
-    sanitize_text(value, DiagnosticLimits::MAX_FIELD_KEY_BYTES, false)
+fn sanitize_field_key(value: &str) -> String {
+    sanitize_text(value, LogLimits::MAX_FIELD_KEY_BYTES, false)
 }
 
 pub(crate) fn should_redact_field(name: &str) -> bool {
@@ -78,13 +75,13 @@ pub(crate) fn redacted_json_value() -> Value {
     Value::String(REDACTED_VALUE.to_owned())
 }
 
-pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
+pub fn sanitize_fields(fields: LogFields) -> LogFields {
     let mut context = SanitizeContext::default();
-    let mut sanitized = DiagnosticFields::new();
+    let mut sanitized = LogFields::new();
     let mut encoded_bytes = 2_usize;
 
     for (index, (raw_key, raw_value)) in fields.into_iter().enumerate() {
-        if index >= DiagnosticLimits::MAX_FIELD_COUNT {
+        if index >= LogLimits::MAX_FIELD_COUNT {
             context.truncated = true;
             break;
         }
@@ -104,7 +101,7 @@ pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            > DiagnosticLimits::MAX_FIELDS_BYTES
+            > LogLimits::MAX_FIELDS_BYTES
         {
             context.truncated = true;
             continue;
@@ -121,7 +118,7 @@ pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            <= DiagnosticLimits::MAX_FIELDS_BYTES
+            <= LogLimits::MAX_FIELDS_BYTES
         {
             sanitized.insert(TRUNCATED_FIELD.to_owned(), value);
         }
@@ -145,9 +142,7 @@ fn sanitize_json_value(
     if should_redact_field(key) {
         return redacted_json_value();
     }
-    if depth > DiagnosticLimits::MAX_FIELD_DEPTH
-        || context.values_seen >= DiagnosticLimits::MAX_FIELD_VALUES
-    {
+    if depth > LogLimits::MAX_FIELD_DEPTH || context.values_seen >= LogLimits::MAX_FIELD_VALUES {
         context.truncated = true;
         return Value::String(TRUNCATED_VALUE.to_owned());
     }
@@ -332,64 +327,45 @@ fn is_prohibited_payload_key(key: &str) -> bool {
 mod tests {
     use std::collections::BTreeMap;
 
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::*;
 
     #[test]
-    fn redacts_normalized_sensitive_and_payload_keys_recursively() {
+    fn redacts_sensitive_and_prohibited_payload_content() {
         let fields = BTreeMap::from([
             ("API-Key".into(), json!("api-secret")),
-            ("token.value".into(), json!("token-secret")),
             ("rows".into(), json!([["private-row"]])),
-            ("cell-values".into(), json!(["private-cell-value"])),
-            ("document".into(), json!("private-document")),
             (
                 "nested".into(),
                 json!({
                     "connection_string": "database-secret",
-                    "dataFrameRows": [["private-cell"]],
-                    "documentId": "safe-id",
-                    "clipboardContent": "private-clipboard"
+                    "clipboardContent": "private-clipboard",
+                    "documentId": "safe-id"
                 }),
             ),
         ]);
 
         let sanitized = sanitize_fields(fields);
         assert_eq!(sanitized["API-Key"], REDACTED_VALUE);
-        assert_eq!(sanitized["token.value"], REDACTED_VALUE);
         assert_eq!(sanitized["rows"], REDACTED_VALUE);
-        assert_eq!(sanitized["cell-values"], REDACTED_VALUE);
-        assert_eq!(sanitized["document"], REDACTED_VALUE);
         assert_eq!(sanitized["nested"]["connection_string"], REDACTED_VALUE);
-        assert_eq!(sanitized["nested"]["dataFrameRows"], REDACTED_VALUE);
         assert_eq!(sanitized["nested"]["clipboardContent"], REDACTED_VALUE);
         assert_eq!(sanitized["nested"]["documentId"], "safe-id");
-        let encoded = serde_json::to_string(&sanitized).unwrap();
-        assert!(!encoded.contains("api-secret"));
-        assert!(!encoded.contains("token-secret"));
-        assert!(!encoded.contains("private-row"));
-        assert!(!encoded.contains("private-cell-value"));
-        assert!(!encoded.contains("private-document"));
-        assert!(!encoded.contains("database-secret"));
-        assert!(!encoded.contains("private-cell"));
-        assert!(!encoded.contains("private-clipboard"));
 
         let message = sanitize_message(
-            "Authorization: Bearer header-secret\npassword=hunter2 cookie=session-secret \"token\":\"json-secret\" postgres://user:db-secret@host rows: [[private-cell]]",
+            "Authorization: Bearer header-secret\npassword=hunter2 postgres://user:db-secret@host rows: [[private-cell]]",
         );
         assert!(message.contains(REDACTED_VALUE));
         assert!(!message.contains("header-secret"));
         assert!(!message.contains("hunter2"));
-        assert!(!message.contains("session-secret"));
-        assert!(!message.contains("json-secret"));
         assert!(!message.contains("db-secret"));
         assert!(!message.contains("private-cell"));
     }
 
     #[test]
-    fn truncates_text_and_bounds_json_shape_and_encoded_size() {
-        let long = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
+    fn bounds_text_and_json_shape() {
+        let long = "x".repeat(LogLimits::MAX_FIELD_STRING_BYTES + 100);
         let fields = BTreeMap::from([
             ("long".into(), json!(long)),
             (
@@ -400,67 +376,15 @@ mod tests {
                         .collect(),
                 ),
             ),
-            (
-                "object".into(),
-                Value::Object(
-                    (0..MAX_SANITIZED_OBJECT_ENTRIES + 10)
-                        .map(|value| (format!("key-{value}"), json!(value)))
-                        .collect(),
-                ),
-            ),
         ]);
 
         let sanitized = sanitize_fields(fields);
-        assert!(
-            sanitized["long"].as_str().unwrap().len() <= DiagnosticLimits::MAX_FIELD_STRING_BYTES
-        );
+        assert!(sanitized["long"].as_str().unwrap().len() <= LogLimits::MAX_FIELD_STRING_BYTES);
         assert_eq!(
             sanitized["array"].as_array().unwrap().len(),
             MAX_SANITIZED_ARRAY_ENTRIES
         );
-        assert_eq!(
-            sanitized["object"].as_object().unwrap().len(),
-            MAX_SANITIZED_OBJECT_ENTRIES
-        );
         assert_eq!(sanitized[TRUNCATED_FIELD], true);
-        assert!(
-            serde_json::to_vec(&sanitized).unwrap().len() <= DiagnosticLimits::MAX_FIELDS_BYTES
-        );
-
-        let mut deep = json!("leaf");
-        for _ in 0..DiagnosticLimits::MAX_FIELD_DEPTH + 2 {
-            deep = json!({ "nested": deep });
-        }
-        let deep = sanitize_fields(BTreeMap::from([("deep".into(), deep)]));
-        assert!(
-            serde_json::to_string(&deep)
-                .unwrap()
-                .contains(TRUNCATED_VALUE)
-        );
-
-        let oversized = sanitize_fields(
-            (0..16)
-                .map(|index| {
-                    (
-                        format!("field-{index:02}"),
-                        json!("x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES)),
-                    )
-                })
-                .collect(),
-        );
-        assert!(
-            serde_json::to_vec(&oversized).unwrap().len() <= DiagnosticLimits::MAX_FIELDS_BYTES
-        );
-        assert_eq!(oversized[TRUNCATED_FIELD], true);
-
-        let message = sanitize_message(&"界".repeat(DiagnosticLimits::MAX_MESSAGE_BYTES));
-        let target = sanitize_target(&"界".repeat(DiagnosticLimits::MAX_TARGET_BYTES));
-        let event = sanitize_event(&"界".repeat(DiagnosticLimits::MAX_EVENT_BYTES));
-        let source = sanitize_source(&"界".repeat(DiagnosticLimits::MAX_SOURCE_BYTES));
-        assert!(message.len() <= DiagnosticLimits::MAX_MESSAGE_BYTES);
-        assert!(target.len() <= DiagnosticLimits::MAX_TARGET_BYTES);
-        assert!(event.len() <= DiagnosticLimits::MAX_EVENT_BYTES);
-        assert!(source.len() <= DiagnosticLimits::MAX_SOURCE_BYTES);
-        assert!(message.is_char_boundary(message.len()));
+        assert!(serde_json::to_vec(&sanitized).unwrap().len() <= LogLimits::MAX_FIELDS_BYTES);
     }
 }

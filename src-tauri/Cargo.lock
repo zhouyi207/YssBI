@@ -9105,13 +9105,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-tracing"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "file-rotate",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "yssbi"
 version = "0.3.0"
 dependencies = [
  "calamine",
  "chrono",
  "duckdb",
- "file-rotate",
  "mathlex",
  "ndarray",
  "notify",
@@ -9136,7 +9150,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "tracing-log",
  "tracing-subscriber",
  "trash",
  "unicode-casefold",
@@ -9144,6 +9157,7 @@ dependencies = [
  "uuid",
  "windows-sys 0.61.2",
  "yss-sci",
+ "yss-tracing",
 ]
 
 [[package]]
