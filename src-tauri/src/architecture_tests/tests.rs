@@ -285,6 +285,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
+            .any(|root| root.package == "yss-graph-compiler-diagnostics"
+                && root.target == "yss_graph_compiler_diagnostics"
+                && root.kind == ProductionRootKind::Library)
+    );
+    assert!(
+        workspace
+            .roots
+            .iter()
             .any(|root| root.package == "yss-graph-document"
                 && root.target == "yss_graph_document"
                 && root.kind == ProductionRootKind::Library)
@@ -448,6 +456,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-graph-analysis-contract"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_compiler_diagnostics"
+                    && alias.member_package == "yss-graph-compiler-diagnostics"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-compiler-diagnostics"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -669,6 +695,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"),
     };
+    let graph_compiler_diagnostics_root = ProductionRoot {
+        package_id: "graph-compiler-diagnostics-package".to_owned(),
+        package: "yss-graph-compiler-diagnostics".to_owned(),
+        target: "yss_graph_compiler_diagnostics".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs"),
+    };
     let graph_document_root = ProductionRoot {
         package_id: "graph-document-package".to_owned(),
         package: "yss-graph-document".to_owned(),
@@ -732,6 +765,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         database_contract_root.clone(),
         diagnostics_root.clone(),
         graph_analysis_contract_root.clone(),
+        graph_compiler_diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
         graph_registry_root.clone(),
@@ -796,6 +830,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_analysis_contract_root,
                 "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
                 "yss_graph_analysis_contract",
+            ),
+            module(
+                &graph_compiler_diagnostics_root,
+                "src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs",
+                "yss_graph_compiler_diagnostics",
             ),
             module(
                 &graph_document_root,
@@ -880,6 +919,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-analysis-contract/src/lib.rs"],
+        RustLayer::Graph
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs"],
         RustLayer::Graph
     );
     assert_eq!(
@@ -1588,6 +1631,56 @@ fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_modul
         assert!(
             !compatibility.contains(removed),
             "graph compatibility must not restore removed dead projection path '{removed}'"
+        );
+    }
+}
+
+#[test]
+fn graph_compiler_diagnostics_has_one_graph_crate_owner_without_dead_constructor_api() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-compiler-diagnostics/Cargo.toml",
+        "src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph compiler diagnostics owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/graph/catalog/diagnostics.rs")
+            .exists(),
+        "the root crate must not retain a graph compiler diagnostics compatibility module"
+    );
+
+    let source = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs"),
+    )
+    .expect("graph compiler diagnostics source must be readable");
+    for required in [
+        "pub const COMPILER_DIAGNOSTIC_DEFINITIONS",
+        "pub fn validate_compiler_diagnostic_definitions",
+    ] {
+        assert!(
+            source.contains(required),
+            "graph compiler diagnostics must retain authoritative API '{required}'"
+        );
+    }
+    for removed in [
+        "pub enum CompilerDiagnostic {",
+        "CompilerNodeDiagnostic",
+        "resource_resolution_failed",
+        "compare_diagnostics",
+        "managed_node_role_name",
+        "node_scope_name",
+        "port_kind_name",
+        "tracing::warn!",
+        "uuid::",
+    ] {
+        assert!(
+            !source.contains(removed),
+            "graph compiler diagnostics must not restore removed dead API '{removed}'"
         );
     }
 }

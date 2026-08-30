@@ -1,9 +1,9 @@
-use super::diagnostics::{
+use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
+use crate::graph::catalog::{Aliases, BuiltinCatalog, Message, Text};
+use yss_graph_compiler_diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
     validate_compiler_diagnostic_definitions,
 };
-use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::graph::catalog::{Aliases, BuiltinCatalog, Message, Text};
 use yss_graph_protocol::*;
 use yss_graph_registry::*;
 

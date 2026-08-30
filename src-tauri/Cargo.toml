@@ -17,6 +17,7 @@ members = [
     "crates/yss-database-contract",
     "crates/yss-diagnostics",
     "crates/yss-graph-analysis-contract",
+    "crates/yss-graph-compiler-diagnostics",
     "crates/yss-graph-document",
     "crates/yss-graph-protocol",
     "crates/yss-graph-registry",
@@ -70,6 +71,7 @@ yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
+yss-graph-compiler-diagnostics = { path = "./crates/yss-graph-compiler-diagnostics" }
 yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
 yss-graph-registry = { path = "./crates/yss-graph-registry" }

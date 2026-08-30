@@ -1255,9 +1255,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::graph::catalog::plot",
             "yssbi_lib::graph::catalog::project",
             "yssbi_lib::graph::catalog::statistics",
-            "yssbi_lib::graph::catalog::diagnostics::COMPILER_DIAGNOSTIC_DEFINITIONS",
-            "yssbi_lib::graph::catalog::diagnostics::CompilerDiagnosticDefinitionError",
-            "yssbi_lib::graph::catalog::diagnostics::validate_compiler_diagnostic_definitions",
+            "yss_graph_compiler_diagnostics::COMPILER_DIAGNOSTIC_DEFINITIONS",
+            "yss_graph_compiler_diagnostics::CompilerDiagnosticDefinitionError",
+            "yss_graph_compiler_diagnostics::validate_compiler_diagnostic_definitions",
             "yss_graph_registry::LeafImplementation",
             "yss_graph_registry::NodeRegistrationError",
             "yss_graph_registry::NodeRegistry",
@@ -1769,7 +1769,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::PureLeaf);
     } else if matches!(
         package,
-        "yss-graph-analysis-contract" | "yss-graph-registry"
+        "yss-graph-analysis-contract" | "yss-graph-compiler-diagnostics" | "yss-graph-registry"
     ) {
         layers.insert(RustLayer::Graph);
     } else if package == "yss-sci" {

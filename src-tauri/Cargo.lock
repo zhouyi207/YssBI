@@ -9147,6 +9147,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-graph-compiler-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "yss-graph-analysis-contract",
+]
+
+[[package]]
 name = "yss-graph-document"
 version = "0.1.0"
 dependencies = [
@@ -9286,6 +9293,7 @@ dependencies = [
  "yss-database-contract",
  "yss-diagnostics",
  "yss-graph-analysis-contract",
+ "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-protocol",
  "yss-graph-registry",

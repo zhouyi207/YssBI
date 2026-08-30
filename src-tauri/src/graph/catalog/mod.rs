@@ -6,7 +6,6 @@ mod builtin;
 mod control;
 mod core_nodes;
 pub(crate) mod dataframe;
-pub(crate) mod diagnostics;
 mod distribution;
 mod documentation;
 mod localization;
@@ -36,12 +35,6 @@ pub(crate) fn reroute_node_type_for_kind(
         .expect("built-in reroute protocol identifiers are valid")
 }
 
-pub(crate) use diagnostics::{
-    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnostic, CompilerDiagnosticDefinition,
-    CompilerDiagnosticDefinitionError, CompilerDiagnosticLocation, CompilerNodeDiagnostic,
-    compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
-    validate_compiler_diagnostic_definitions,
-};
 pub(crate) use localization::{Aliases, Message, Text, authoritative_static_descriptor};
 pub use localization::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, I18nBundleValidationError,

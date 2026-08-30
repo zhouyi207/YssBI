@@ -1,27 +1,21 @@
-use std::cmp::Ordering;
+//! Authoritative compiler diagnostic codes, localization templates, and definition validation.
+//!
+//! Runtime diagnostic values live in `yss-graph-analysis-contract`; this crate owns only the
+//! stable compiler vocabulary consumed while assembling the built-in catalog.
+
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-use yss_graph_analysis_contract::{
-    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
-};
-use yss_graph_document::{ConnectionId, NodeId, PortAddress};
-use yss_graph_protocol::{I18nKey, ManagedNodeRole, NodeScope, PortKind};
-
-pub(crate) type CompilerDiagnosticLocation =
-    DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>;
-
-pub(crate) type CompilerNodeDiagnostic =
-    NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>;
+use yss_graph_analysis_contract::DiagnosticSeverity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DiagnosticTemplate {
+pub struct DiagnosticTemplate {
     pub locale: &'static str,
     pub text: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CompilerDiagnosticDefinition {
+pub struct CompilerDiagnosticDefinition {
     pub code: &'static str,
     pub message_key: &'static str,
     pub default_severity: DiagnosticSeverity,
@@ -32,7 +26,7 @@ pub(crate) struct CompilerDiagnosticDefinition {
 macro_rules! define_compiler_diagnostics {
     (
         $(
-            $variant:ident { $($argument:ident),* $(,)? } => {
+            $name:ident { $($argument:ident),* $(,)? } => {
                 code: $code:literal,
                 message_key: $message_key:literal,
                 severity: $severity:ident,
@@ -41,14 +35,7 @@ macro_rules! define_compiler_diagnostics {
             }
         ),* $(,)?
     ) => {
-        #[derive(Debug, Clone, PartialEq, Eq)]
-        pub enum CompilerDiagnostic {
-            $(
-                $variant { $($argument: Box<str>),* },
-            )*
-        }
-
-        pub(crate) const COMPILER_DIAGNOSTIC_DEFINITIONS: &[CompilerDiagnosticDefinition] = &[
+        pub const COMPILER_DIAGNOSTIC_DEFINITIONS: &[CompilerDiagnosticDefinition] = &[
             $(
                 CompilerDiagnosticDefinition {
                     code: $code,
@@ -62,70 +49,6 @@ macro_rules! define_compiler_diagnostics {
                 },
             )*
         ];
-
-        impl CompilerDiagnostic {
-            fn code(&self) -> &'static str {
-                match self {
-                    $(Self::$variant { .. } => $code,)*
-                }
-            }
-
-            pub(crate) fn definition(&self) -> &'static CompilerDiagnosticDefinition {
-                let code = self.code();
-                COMPILER_DIAGNOSTIC_DEFINITIONS
-                    .iter()
-                    .find(|definition| definition.code == code)
-                    .expect("compiler diagnostic variant has a generated definition")
-            }
-
-            fn into_arguments(self) -> DiagnosticArguments {
-                match self {
-                    $(
-                        Self::$variant { $($argument),* } => {
-                            #[allow(unused_mut)]
-                            let mut arguments = DiagnosticArguments::new();
-                            $(
-                                arguments.insert(
-                                    Box::from(stringify!($argument)),
-                                    $argument,
-                                );
-                            )*
-                            arguments
-                        }
-                    ),*
-                }
-            }
-
-            pub(crate) fn into_node(
-                self,
-                primary: CompilerDiagnosticLocation,
-            ) -> CompilerNodeDiagnostic {
-                self.into_node_with_related(
-                    primary,
-                    Box::<[CompilerDiagnosticLocation]>::default(),
-                )
-            }
-
-            pub(crate) fn into_node_with_related(
-                self,
-                primary: CompilerDiagnosticLocation,
-                related: impl Into<Box<[CompilerDiagnosticLocation]>>,
-            ) -> CompilerNodeDiagnostic {
-                let definition = *self.definition();
-                let arguments = self.into_arguments();
-                let mut related = related.into().into_vec();
-                related.sort_by(compare_locations);
-                CompilerNodeDiagnostic {
-                    code: DiagnosticCode::new(definition.code),
-                    message_key: I18nKey::new(definition.message_key)
-                        .expect("generated compiler diagnostic key is valid"),
-                    arguments,
-                    severity: definition.default_severity,
-                    primary,
-                    related: related.into_boxed_slice(),
-                }
-            }
-        }
     };
 }
 
@@ -911,24 +834,6 @@ define_compiler_diagnostics! {
     },
 }
 
-impl CompilerDiagnostic {
-    pub(crate) fn resource_resolution_failed(
-        resource_key: impl Into<Box<str>>,
-        internal_reason: impl AsRef<str>,
-    ) -> Self {
-        let resource_key = resource_key.into();
-        tracing::warn!(
-            target: "yssbi::compiler",
-            diagnostic_domain = "graph",
-            diagnostic_event = "compilerResourceResolutionFailed",
-            resource_key = resource_key.as_ref(),
-            internal_reason = internal_reason.as_ref(),
-            "Compiler resource resolution failed"
-        );
-        Self::ResourceResolutionFailed { resource_key }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompilerDiagnosticDefinitionError {
     DuplicateCode {
@@ -999,7 +904,7 @@ impl fmt::Display for CompilerDiagnosticDefinitionError {
 
 impl Error for CompilerDiagnosticDefinitionError {}
 
-pub(crate) fn validate_compiler_diagnostic_definitions(
+pub fn validate_compiler_diagnostic_definitions(
     definitions: &[CompilerDiagnosticDefinition],
 ) -> Result<(), CompilerDiagnosticDefinitionError> {
     let mut codes = BTreeSet::new();
@@ -1124,105 +1029,10 @@ fn is_placeholder_name(name: &str) -> bool {
         })
 }
 
-pub(crate) const fn managed_node_role_name(role: Option<ManagedNodeRole>) -> &'static str {
-    match role {
-        Some(ManagedNodeRole::EventBegin) => "event_begin",
-        Some(ManagedNodeRole::FunctionEntry) => "function_entry",
-        Some(ManagedNodeRole::FunctionReturn) => "function_return",
-        None => "none",
-    }
-}
-
-pub(crate) const fn node_scope_name(scope: NodeScope) -> &'static str {
-    match scope {
-        NodeScope::Any => "any",
-        NodeScope::Event => "event",
-        NodeScope::Function => "function",
-    }
-}
-
-pub(crate) const fn port_kind_name(kind: PortKind) -> &'static str {
-    match kind {
-        PortKind::Data => "data",
-        PortKind::Control => "control",
-        PortKind::Effect => "effect",
-    }
-}
-
-pub(crate) fn compare_diagnostics(
-    left: &CompilerNodeDiagnostic,
-    right: &CompilerNodeDiagnostic,
-) -> Ordering {
-    compare_locations(&left.primary, &right.primary)
-        .then_with(|| left.code.cmp(&right.code))
-        .then_with(|| left.arguments.cmp(&right.arguments))
-        .then_with(|| compare_related_locations(&left.related, &right.related))
-}
-
-fn compare_related_locations(
-    left: &[CompilerDiagnosticLocation],
-    right: &[CompilerDiagnosticLocation],
-) -> Ordering {
-    let mut left = left.iter().collect::<Vec<_>>();
-    let mut right = right.iter().collect::<Vec<_>>();
-    left.sort_by(|left, right| compare_locations(left, right));
-    right.sort_by(|left, right| compare_locations(left, right));
-
-    left.iter()
-        .zip(&right)
-        .find_map(|(left, right)| {
-            let ordering = compare_locations(left, right);
-            (ordering != Ordering::Equal).then_some(ordering)
-        })
-        .unwrap_or_else(|| left.len().cmp(&right.len()))
-}
-
-fn compare_locations(
-    left: &CompilerDiagnosticLocation,
-    right: &CompilerDiagnosticLocation,
-) -> Ordering {
-    let rank = |location: &CompilerDiagnosticLocation| match location {
-        DiagnosticLocation::Graph => 0,
-        DiagnosticLocation::Node(_) => 1,
-        DiagnosticLocation::Port(_) => 2,
-        DiagnosticLocation::Connection(_) => 3,
-        DiagnosticLocation::Parameter { .. } => 4,
-        DiagnosticLocation::Resource(_) => 5,
-    };
-
-    rank(left)
-        .cmp(&rank(right))
-        .then_with(|| match (left, right) {
-            (DiagnosticLocation::Graph, DiagnosticLocation::Graph) => Ordering::Equal,
-            (DiagnosticLocation::Node(left), DiagnosticLocation::Node(right)) => left.cmp(right),
-            (DiagnosticLocation::Port(left), DiagnosticLocation::Port(right)) => left.cmp(right),
-            (DiagnosticLocation::Connection(left), DiagnosticLocation::Connection(right)) => {
-                left.cmp(right)
-            }
-            (
-                DiagnosticLocation::Parameter {
-                    node_id: left_node,
-                    key: left_key,
-                },
-                DiagnosticLocation::Parameter {
-                    node_id: right_node,
-                    key: right_key,
-                },
-            ) => left_node
-                .cmp(right_node)
-                .then_with(|| left_key.cmp(right_key)),
-            (DiagnosticLocation::Resource(left), DiagnosticLocation::Resource(right)) => {
-                left.cmp(right)
-            }
-            _ => Ordering::Equal,
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{BTreeMap, BTreeSet};
-    use uuid::Uuid;
+    use std::collections::BTreeSet;
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
@@ -1247,346 +1057,45 @@ mod tests {
         }));
     }
 
-    #[test]
-    fn resource_resolution_diagnostic_keeps_internal_reason_out_of_projection_arguments() {
-        let diagnostic = CompilerDiagnostic::resource_resolution_failed(
-            "variables/not-a-uuid",
-            "private uuid parser detail",
-        )
-        .into_node(DiagnosticLocation::Graph);
-        let definition = COMPILER_DIAGNOSTIC_DEFINITIONS
-            .iter()
-            .find(|definition| definition.code == "compiler.resource.resolution_failed")
-            .expect("resource resolution diagnostic definition");
-
-        assert_eq!(definition.argument_names, ["resource_key"]);
-        assert_eq!(
-            diagnostic.arguments.get("resource_key").map(Box::as_ref),
-            Some("variables/not-a-uuid"),
-        );
-        assert!(!diagnostic.arguments.contains_key("reason"));
-        assert!(definition.templates.iter().all(|template| {
-            !template.text.contains("{reason}")
-                && !template.text.contains("private uuid parser detail")
-        }));
-    }
-
-    #[test]
-    fn compiler_diagnostic_constructor_canonicalizes_related_locations() {
-        let forward = CompilerDiagnostic::InputUnbound {
-            port: "test/input".into(),
-        }
-        .into_node_with_related(
-            DiagnosticLocation::Graph,
-            vec![
-                DiagnosticLocation::Resource("functions/zeta".into()),
-                DiagnosticLocation::Node(NodeId::from_uuid(Uuid::from_u128(2))),
-                DiagnosticLocation::Graph,
-            ],
-        );
-        let reverse = CompilerDiagnostic::InputUnbound {
-            port: "test/input".into(),
-        }
-        .into_node_with_related(
-            DiagnosticLocation::Graph,
-            vec![
-                DiagnosticLocation::Graph,
-                DiagnosticLocation::Node(NodeId::from_uuid(Uuid::from_u128(2))),
-                DiagnosticLocation::Resource("functions/zeta".into()),
-            ],
-        );
-
-        assert_eq!(forward.related, reverse.related);
-        assert_eq!(
-            forward.related.as_ref(),
-            [
-                DiagnosticLocation::Graph,
-                DiagnosticLocation::Node(NodeId::from_uuid(Uuid::from_u128(2))),
-                DiagnosticLocation::Resource("functions/zeta".into()),
-            ]
-        );
-        assert_eq!(
-            serde_json::to_vec(&forward).unwrap(),
-            serde_json::to_vec(&reverse).unwrap()
-        );
-    }
-
-    #[test]
-    fn malformed_template_placeholders_are_typed_definition_errors() {
-        let definition = |text| CompilerDiagnosticDefinition {
+    fn test_definition(templates: &'static [DiagnosticTemplate]) -> CompilerDiagnosticDefinition {
+        CompilerDiagnosticDefinition {
             code: "compiler.test.template",
             message_key: "diagnostics.compiler.test.template",
             default_severity: DiagnosticSeverity::Error,
             argument_names: &["value"],
-            templates: Box::leak(
-                vec![DiagnosticTemplate {
-                    locale: "en-US",
-                    text,
-                }]
-                .into_boxed_slice(),
-            ),
-        };
+            templates,
+        }
+    }
+
+    #[test]
+    fn malformed_template_placeholders_are_typed_definition_errors() {
+        const UNMATCHED_OPEN: &[DiagnosticTemplate] = &[DiagnosticTemplate {
+            locale: "en-US",
+            text: "Broken {value",
+        }];
+        const UNMATCHED_CLOSE: &[DiagnosticTemplate] = &[DiagnosticTemplate {
+            locale: "en-US",
+            text: "Broken value}",
+        }];
+        const INVALID_NAME: &[DiagnosticTemplate] = &[DiagnosticTemplate {
+            locale: "en-US",
+            text: "Broken {Value}",
+        }];
 
         assert!(matches!(
-            validate_compiler_diagnostic_definitions(&[definition("Broken {value")]),
+            validate_compiler_diagnostic_definitions(&[test_definition(UNMATCHED_OPEN)]),
             Err(CompilerDiagnosticDefinitionError::UnmatchedTemplateBrace { brace: '{', .. })
         ));
         assert!(matches!(
-            validate_compiler_diagnostic_definitions(&[definition("Broken value}")]),
+            validate_compiler_diagnostic_definitions(&[test_definition(UNMATCHED_CLOSE)]),
             Err(CompilerDiagnosticDefinitionError::UnmatchedTemplateBrace { brace: '}', .. })
         ));
         assert!(matches!(
-            validate_compiler_diagnostic_definitions(&[definition("Broken {Value}")]),
+            validate_compiler_diagnostic_definitions(&[test_definition(INVALID_NAME)]),
             Err(CompilerDiagnosticDefinitionError::InvalidTemplatePlaceholder {
                 name,
                 ..
             }) if name.as_ref() == "Value"
         ));
-    }
-
-    #[test]
-    fn compiler_diagnostic_comparator_uses_only_canonical_fields() {
-        let baseline = CompilerDiagnostic::InputUnbound {
-            port: "test/input".into(),
-        }
-        .into_node(DiagnosticLocation::Graph);
-
-        let mut later_primary = baseline.clone();
-        later_primary.primary = DiagnosticLocation::Node(NodeId::from_uuid(Uuid::from_u128(1)));
-        assert_eq!(
-            compare_diagnostics(&baseline, &later_primary),
-            Ordering::Less
-        );
-
-        let mut earlier_code = baseline.clone();
-        earlier_code.code = DiagnosticCode::new("compiler.input.alpha");
-        let mut later_code = baseline.clone();
-        later_code.code = DiagnosticCode::new("compiler.input.zeta");
-        assert_eq!(
-            compare_diagnostics(&earlier_code, &later_code),
-            Ordering::Less
-        );
-
-        let mut earlier_arguments = baseline.clone();
-        earlier_arguments
-            .arguments
-            .insert("port".into(), "alpha".into());
-        let mut later_arguments = baseline.clone();
-        later_arguments
-            .arguments
-            .insert("port".into(), "zeta".into());
-        assert_eq!(
-            compare_diagnostics(&earlier_arguments, &later_arguments),
-            Ordering::Less
-        );
-
-        let mut left_related = baseline.clone();
-        left_related.related = vec![
-            DiagnosticLocation::Resource("functions/zeta".into()),
-            DiagnosticLocation::Graph,
-        ]
-        .into_boxed_slice();
-        let mut right_related = baseline.clone();
-        right_related.related = vec![
-            DiagnosticLocation::Graph,
-            DiagnosticLocation::Resource("functions/zeta".into()),
-        ]
-        .into_boxed_slice();
-        assert_eq!(
-            compare_diagnostics(&left_related, &right_related),
-            Ordering::Equal
-        );
-
-        right_related.related = vec![
-            DiagnosticLocation::Graph,
-            DiagnosticLocation::Resource("functions/omega".into()),
-        ]
-        .into_boxed_slice();
-        assert_eq!(
-            compare_diagnostics(&right_related, &left_related),
-            Ordering::Less
-        );
-
-        let mut different_presentation = baseline.clone();
-        different_presentation.message_key =
-            I18nKey::new("diagnostics.compiler.presentation.changed").unwrap();
-        different_presentation.severity = DiagnosticSeverity::Information;
-        assert_eq!(
-            compare_diagnostics(&baseline, &different_presentation),
-            Ordering::Equal
-        );
-        assert_eq!(
-            compare_diagnostics(&different_presentation, &baseline),
-            Ordering::Equal
-        );
-    }
-
-    #[test]
-    fn reviewed_compiler_diagnostics_emit_precise_named_facts() {
-        let cases = [
-            (
-                CompilerDiagnostic::ControlDataPortRequired {
-                    port_key: "condition".into(),
-                    expected_direction: "input".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("expected_direction"), Box::from("input")),
-                    (Box::from("port_key"), Box::from("condition")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::ControlControlPortRequired {
-                    port_key: "body".into(),
-                    expected_direction: "output".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("expected_direction"), Box::from("output")),
-                    (Box::from("port_key"), Box::from("body")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::FunctionAbiManagedRoleInvalid {
-                    expected_role: "function_entry".into(),
-                    actual_count: "2".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("actual_count"), Box::from("2")),
-                    (Box::from("expected_role"), Box::from("function_entry")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::ControlCallMemberMissing {
-                    member_role: "argument".into(),
-                    member_id: "customer_id".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("member_id"), Box::from("customer_id")),
-                    (Box::from("member_role"), Box::from("argument")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::ControlCallMemberUnexpected {
-                    member_role: "result".into(),
-                    member_id: "total".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("member_id"), Box::from("total")),
-                    (Box::from("member_role"), Box::from("result")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::ControlCallLocatorDuplicate {
-                    function_path: "functions/customer".into(),
-                    parameter_id: "customer_id".into(),
-                    port: "node/arguments/1".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (Box::from("function_path"), Box::from("functions/customer")),
-                    (Box::from("parameter_id"), Box::from("customer_id")),
-                    (Box::from("port"), Box::from("node/arguments/1")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::InterfaceDuplicateLocator {
-                    port_key: "fields".into(),
-                    locator: r#"{"kind":"schema_field","source":"source","field":"id"}"#.into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([
-                    (
-                        Box::from("locator"),
-                        Box::from(r#"{"kind":"schema_field","source":"source","field":"id"}"#),
-                    ),
-                    (Box::from("port_key"), Box::from("fields")),
-                ]),
-            ),
-            (
-                CompilerDiagnostic::InputUnbound {
-                    port: "node/input".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([(Box::from("port"), Box::from("node/input"))]),
-            ),
-            (
-                CompilerDiagnostic::LoweringInternalInvariant {
-                    node_type: "test.node".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([(Box::from("node_type"), Box::from("test.node"))]),
-            ),
-            (
-                CompilerDiagnostic::LoweringResultDuplicate {
-                    result_name: "summary".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([(Box::from("result_name"), Box::from("summary"))]),
-            ),
-            (
-                CompilerDiagnostic::NodeDisappeared {
-                    node_type: "test.node".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                BTreeMap::from([(Box::from("node_type"), Box::from("test.node"))]),
-            ),
-        ];
-
-        for (diagnostic, expected_arguments) in cases {
-            assert_eq!(diagnostic.arguments, expected_arguments);
-        }
-    }
-
-    #[test]
-    fn compiler_diagnostic_constructor_emits_only_declared_arguments() {
-        let cases = [
-            (
-                CompilerDiagnostic::NodeUnknown {
-                    node_type: "test.unknown".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                "compiler.node.unknown",
-                "diagnostics.compiler.node.unknown",
-                DiagnosticSeverity::Error,
-                BTreeMap::from([(Box::from("node_type"), Box::from("test.unknown"))]),
-            ),
-            (
-                CompilerDiagnostic::InputUnbound {
-                    port: "test/input".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                "compiler.input.unbound",
-                "diagnostics.compiler.input.unbound",
-                DiagnosticSeverity::Warning,
-                BTreeMap::from([(Box::from("port"), Box::from("test/input"))]),
-            ),
-            (
-                CompilerDiagnostic::TypeIncompatible {
-                    expected_type: "core.integer".into(),
-                    actual_type: "core.string".into(),
-                }
-                .into_node(DiagnosticLocation::Graph),
-                "compiler.type.incompatible",
-                "diagnostics.compiler.type.incompatible",
-                DiagnosticSeverity::Error,
-                BTreeMap::from([
-                    (Box::from("actual_type"), Box::from("core.string")),
-                    (Box::from("expected_type"), Box::from("core.integer")),
-                ]),
-            ),
-        ];
-
-        for (diagnostic, code, message_key, severity, arguments) in cases {
-            assert_eq!(diagnostic.code.as_str(), code);
-            assert_eq!(diagnostic.message_key.as_str(), message_key);
-            assert_eq!(diagnostic.severity, severity);
-            assert_eq!(diagnostic.arguments, arguments);
-            assert!(!diagnostic.arguments.contains_key("detail"));
-            assert!(diagnostic.related.is_empty());
-        }
     }
 }

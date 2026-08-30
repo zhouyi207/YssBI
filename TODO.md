@@ -596,3 +596,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-graph-analysis-contract/`；删除根兼容 module，并清除零调用的 test-only
   resource resolver、projection/alias helper、永久禁用 compatibility projection 路径与重复
   unknown/blocking API。
+- [ ] 将 compiler diagnostic code、双语模板与定义校验迁入独立
+  `src-tauri/crates/yss-graph-compiler-diagnostics/`；删除根兼容 module，并清除仅由自身测试调用的
+  diagnostic 构造、排序、role/scope helper 与 tracing/UUID 依赖。
