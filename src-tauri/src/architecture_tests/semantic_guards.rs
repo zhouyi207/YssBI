@@ -197,9 +197,10 @@ pub(super) fn pure_leaf_graph_document_json_violations(
 
 pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<String> {
     const TABULAR_CONTRACT_SOURCE: &str = "src-tauri/crates/yss-tabular-contract/src/lib.rs";
+    const VARIABLE_VALUE_SOURCE: &str = "src-tauri/crates/yss-variable-value/src/lib.rs";
     let files = [
         TABULAR_CONTRACT_SOURCE,
-        "src-tauri/src/project/variable_tabular.rs",
+        VARIABLE_VALUE_SOURCE,
         "src-tauri/src/backend_adapters/tabular/polars.rs",
         "src-tauri/src/database/tabular_io.rs",
     ];
@@ -240,7 +241,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
                 }
             }
         }
-        if relative == "src-tauri/src/project/variable_tabular.rs"
+        if relative == VARIABLE_VALUE_SOURCE
             && !source.contains("VariableTabularNormalizationError")
         {
             violations.push(format!("{relative}: missing typed normalization error"));

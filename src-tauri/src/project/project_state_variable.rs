@@ -5,19 +5,22 @@ use yss_data_contract::{DataType, DataValue};
 #[cfg(test)]
 use yss_display_naming::allocate_unique_display_name;
 
-use crate::project::variable_tabular::normalize_variable_tabular;
 use yss_variable_contract::VariableId;
 use yss_variable_contract::VariableInstance;
 #[cfg(test)]
 use yss_variable_contract::VariableScope;
+#[cfg(test)]
+use yss_variable_value::default_value_for;
+use yss_variable_value::normalize_variable_tabular;
 
 impl ProjectState {
     pub(super) fn stage_variable(
         mut variable: VariableInstance,
     ) -> Result<VariableInstance, ProjectFilesystemError> {
+        let variable_id = variable.id;
         normalize_variable_tabular(&mut variable).map_err(|error| {
-            ProjectFilesystemError::TransactionCommitFailed {
-                message: error.to_string(),
+            ProjectFilesystemError::TransactionPrepareFailed {
+                message: format!("variable '{variable_id}' is invalid: {error}"),
             }
         })?;
         Ok(variable)
@@ -152,8 +155,7 @@ impl ProjectState {
             let changed = variable.data_type != dt;
             variable.data_type = dt;
             if changed && data_value.is_none() {
-                variable.data_value =
-                    crate::project::variable_defaults::default_value_for(&variable.data_type);
+                variable.data_value = default_value_for(&variable.data_type);
             }
         }
         if let Some(dv) = data_value {
@@ -269,6 +271,17 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(same_root(label), ProjectData::new());
         state
+    }
+
+    #[test]
+    fn invalid_tabular_value_is_a_staging_error_not_a_commit_error() {
+        let variable_id = VariableId::new();
+        let mut variable = tabular_variable(variable_id, "invalid", "[1]");
+        variable.data_value = DataValue::DataFrame("not-json".into());
+
+        let error = ProjectState::stage_variable(variable).unwrap_err();
+        assert_eq!(error.code(), "transaction_prepare_failed");
+        assert!(error.to_string().contains(&variable_id.to_string()));
     }
 
     #[test]

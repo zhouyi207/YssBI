@@ -93,10 +93,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Graph,
     ),
     (
-        "src-tauri/src/project/variable_defaults.rs",
-        RustLayer::Project,
-    ),
-    (
         "src-tauri/src/project/execution_authority.rs",
         RustLayer::Project,
     ),
@@ -1731,6 +1727,7 @@ fn non_build_memberships(
             | "yss-resource-naming"
             | "yss-tabular-contract"
             | "yss-variable-contract"
+            | "yss-variable-value"
             | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);

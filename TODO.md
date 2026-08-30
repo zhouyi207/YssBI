@@ -686,3 +686,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   fail-closed validation 迁入 `src-tauri/crates/yss-project-manifest/` Pure Leaf；Project I/O 只通过
   唯一受校验构造器生成 manifest，不再拥有重复 schema/validation 定义，validated fields 不公开
   mutation seam；文件系统、运行时 `ProjectData`、时钟与 lifecycle 继续留在 Project 层。
+- [ ] 将变量默认值、稳定 `var:{id}` handle 与 tabular literal/snapshot 归一化迁入
+  `src-tauri/crates/yss-variable-value/` Pure Leaf；删除 Project 中两个旧 owner 与兼容入口，复合类型
+  默认值不得伪造示例数据，canonical handle 必须对应 snapshot，DataSeries 归一化必须保留附加 metadata；
+  Project 继续拥有状态/事务/激活，并在非法持久化变量上 fail closed 而不是静默吞错。

@@ -128,8 +128,9 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
 | `src-tauri/crates/yss-project-registry-contract/` | 独立 Pure Leaf：project registration record、root identity state 与异步 persistence port/error 的唯一 canonical owner；registry workflow 留在 Project，SQLite 实现留在 Backend Adapter |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
-| `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
+| `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量值归一化由 `yss-variable-value` 负责 |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
+| `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
@@ -363,6 +364,8 @@ yss-project-layout + yss-project-progress
   → yss-project-discovery → Project registry workflow → Commands
 yss-computation-settings
   → yss-project-manifest → Project I/O/lifecycle
+yss-data-contract + yss-tabular-contract + yss-variable-contract
+  → yss-variable-value → Project variable staging/activation
 yss-display-naming
   → Project/Application database and variable display-name allocation
 yss-project-progress
@@ -380,6 +383,7 @@ yss-resource-naming + yss-project-identity
 - `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version、manifest wire 与 computation settings 的反序列化校验；schema/settings 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
 - `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
 - `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
+- `yss-variable-value`：统一拥有变量类型变更后的 inert 默认值、`var:{id}` handle 与 tabular literal/snapshot 归一化。数组和对象默认值为空，避免伪造用户数据或违反元素类型；canonical handle 缺失 snapshot 时 fail closed，DataSeries 只替换 handle 并保留 element/dummy/time-series metadata。Project 激活不再吞掉归一化错误，状态、事务和持久化仍留在 Project。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
 - `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire 与资源路径；`worksheets/*.yssbi-worksheet` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。

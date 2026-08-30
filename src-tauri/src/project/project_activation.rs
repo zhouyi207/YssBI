@@ -1,4 +1,3 @@
-use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::project::{
     NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectSession, ProjectState,
     ProjectStore,
@@ -10,6 +9,7 @@ use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_variable_contract::VariableId;
+use yss_variable_value::normalize_variable_tabular;
 use yss_worksheet_document::WorksheetResourcePath;
 
 #[derive(Clone, Default)]
@@ -90,7 +90,12 @@ impl PreparedProjectActivation {
     ) -> Result<Self, ProjectFilesystemError> {
         let store = ProjectStore::new();
         for variable in data.variables.values_mut() {
-            let _ = normalize_variable_tabular(variable);
+            let variable_id = variable.id;
+            normalize_variable_tabular(variable).map_err(|error| {
+                ProjectFilesystemError::TransactionPrepareFailed {
+                    message: format!("variable '{variable_id}' is invalid: {error}"),
+                }
+            })?;
         }
         let graph_revisions = data
             .graphs
@@ -208,5 +213,38 @@ impl ProjectState {
             PreparedProjectActivation::from_data(Some(root), data, None, false).unwrap(),
         )
         .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_data_contract::{DataType, DataValue};
+    use yss_variable_contract::{VariableInstance, VariableScope};
+
+    #[test]
+    fn activation_rejects_invalid_tabular_value_instead_of_silently_publishing_it() {
+        let mut data = ProjectData::new();
+        let variable_id = VariableId::new();
+        data.variables.insert(
+            variable_id,
+            VariableInstance {
+                id: variable_id,
+                name: "invalid table".into(),
+                data_type: DataType::DataFrame,
+                data_value: DataValue::DataFrame("not-json".into()),
+                tabular: None,
+                description: String::new(),
+                scope: VariableScope::Global,
+                tags: Vec::new(),
+            },
+        );
+
+        let result = PreparedProjectActivation::from_data(None, data, None, false);
+        let Err(error) = result else {
+            panic!("invalid tabular state must fail activation preparation");
+        };
+        assert_eq!(error.code(), "transaction_prepare_failed");
+        assert!(error.to_string().contains(&variable_id.to_string()));
     }
 }

@@ -45,6 +45,7 @@ members = [
     "crates/yss-tabular-contract",
     "crates/yss-tracing",
     "crates/yss-variable-contract",
+    "crates/yss-variable-value",
     "crates/yss-window-state",
     "crates/yss-worksheet-document",
 ]
@@ -120,6 +121,7 @@ yss-sci = { path = "./crates/yss-sci" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-variable-contract = { path = "./crates/yss-variable-contract" }
+yss-variable-value = { path = "./crates/yss-variable-value" }
 yss-window-state = { path = "./crates/yss-window-state" }
 yss-worksheet-document = { path = "./crates/yss-worksheet-document" }
 tauri.workspace = true

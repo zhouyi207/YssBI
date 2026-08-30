@@ -9427,6 +9427,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-variable-value"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-tabular-contract",
+ "yss-variable-contract",
+]
+
+[[package]]
 name = "yss-window-state"
 version = "0.1.0"
 dependencies = [
@@ -9518,6 +9530,7 @@ dependencies = [
  "yss-tabular-contract",
  "yss-tracing",
  "yss-variable-contract",
+ "yss-variable-value",
  "yss-window-state",
  "yss-worksheet-document",
 ]

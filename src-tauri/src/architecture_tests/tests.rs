@@ -996,6 +996,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-variable-contract/src/lib.rs"),
     };
+    let variable_value_root = ProductionRoot {
+        package_id: "variable-value-package".to_owned(),
+        package: "yss-variable-value".to_owned(),
+        target: "yss_variable_value".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-variable-value/src/lib.rs"),
+    };
     let window_state_root = ProductionRoot {
         package_id: "window-state-package".to_owned(),
         package: "yss-window-state".to_owned(),
@@ -1034,6 +1041,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         project_manifest_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
+        variable_value_root.clone(),
         window_state_root.clone(),
         build_root.clone(),
     ];
@@ -1174,6 +1182,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_variable_contract",
             ),
             module(
+                &variable_value_root,
+                "src-tauri/crates/yss-variable-value/src/lib.rs",
+                "yss_variable_value",
+            ),
+            module(
                 &window_state_root,
                 "src-tauri/crates/yss-window-state/src/lib.rs",
                 "yss_window_state",
@@ -1290,6 +1303,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-variable-contract/src/lib.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-variable-value/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1975,6 +1992,143 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activation_errors() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-variable-value/Cargo.toml",
+        "src-tauri/crates/yss-variable-value/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "variable-value owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/project/variable_defaults.rs",
+        "src-tauri/src/project/variable_tabular.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "Project must not retain removed variable-value owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-variable-value\"",
+        "yss-variable-value = { path = \"./crates/yss-variable-value\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-variable-value/Cargo.toml"))
+            .expect("variable-value crate manifest must be readable");
+    for dependency in [
+        "yss-data-contract = { path = \"../yss-data-contract\" }",
+        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
+        "yss-variable-contract = { path = \"../yss-variable-contract\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "variable-value must consume canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["tauri", "sqlx", "polars", "chrono"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "variable-value must not absorb runtime dependency '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-variable-value/src/lib.rs"))
+            .expect("variable-value owner must be readable");
+    for invariant in [
+        "pub fn default_value_for",
+        "DataType::Array(_) => DataValue::Array(Vec::new())",
+        "pub enum VariableTabularNormalizationError",
+        "MissingSnapshot",
+        "pub fn variable_handle",
+        "pub fn normalize_variable_tabular",
+        "value.id = variable_handle(&variable.id)",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "variable-value crate must own invariant '{invariant}'"
+        );
+    }
+    for misplaced_concern in [
+        "std::fs",
+        "ProjectState",
+        "ProjectData",
+        "tauri::",
+        "sqlx::",
+        "polars::",
+    ] {
+        assert!(
+            !owner.contains(misplaced_concern),
+            "variable-value must not absorb runtime concern '{misplaced_concern}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "mod variable_defaults",
+        "mod variable_tabular",
+        "pub use yss_variable_value",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore compatibility facade '{facade}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_activation.rs",
+        "src-tauri/src/project/project_state_variable.rs",
+        "src-tauri/src/project/project_writers.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_variable_value"),
+            "{relative} must consume the canonical variable-value owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::variable_defaults")
+                && !consumer.contains("crate::project::variable_tabular"),
+            "{relative} must not restore removed Project variable-value paths"
+        );
+    }
+
+    let activation =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_activation.rs"))
+            .expect("project activation must be readable");
+    assert!(
+        !activation.contains("let _ = normalize_variable_tabular"),
+        "project activation must not silently discard variable normalization failures"
+    );
+    assert!(
+        activation.contains("ProjectFilesystemError::TransactionPrepareFailed"),
+        "project activation must fail closed during invalid variable preparation"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-variable-value\"")
+            && policy.contains("layers.insert(RustLayer::PureLeaf)"),
+        "variable-value must remain a Pure Leaf"
     );
 }
 
