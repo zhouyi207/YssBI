@@ -9128,6 +9128,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-dataset-profile"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "serde",
+]
+
+[[package]]
 name = "yss-diagnostics"
 version = "0.1.0"
 dependencies = [
@@ -9585,7 +9593,6 @@ dependencies = [
  "duckdb",
  "ndarray",
  "notify",
- "num-traits",
  "polars",
  "polars-arrow",
  "polars-dtype",
@@ -9615,6 +9622,7 @@ dependencies = [
  "yss-computation-settings",
  "yss-data-contract",
  "yss-database-contract",
+ "yss-dataset-profile",
  "yss-diagnostics",
  "yss-display-naming",
  "yss-execution",

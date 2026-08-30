@@ -571,6 +571,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   owner、测试 module 与兼容 facade；统一 database/Bayes 的 scalar/column conversion，保留完整
   `u64`，修复 1970 年前时间戳投影，并移除从未构造的 `UnsupportedColumnType` 分支和零调用的
   `database/row_mapping` 重复实现。
+- [ ] 将 dataset profile DTO 与内存 Polars 统计迁入独立
+  `src-tauri/crates/yss-dataset-profile/` Database Core；根 Database 仅保留 DuckDB physical
+  profiling，并直接构造同一 DTO；删除 `column_stats`、`column_distribution`、
+  `dataset_overview` 三个根 owner/facade，统一非字符串投影与同频排序，过滤非有限直方图值，
+  并用饱和运算保护总单元格计算。
 - [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
   Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
   application/project 仅持有 mutation、normalization 与 authority。

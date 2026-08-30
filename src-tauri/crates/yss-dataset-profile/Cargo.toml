@@ -1,0 +1,10 @@
+[package]
+name = "yss-dataset-profile"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+polars.workspace = true
+serde.workspace = true

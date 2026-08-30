@@ -168,7 +168,7 @@ impl DatabaseRuntimePhysicalState {
     pub(crate) fn read_column_stats(
         &self,
         database: &DatabaseId,
-    ) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
         let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })?;
@@ -184,7 +184,7 @@ impl DatabaseRuntimePhysicalState {
     pub(crate) fn read_column_distributions(
         &self,
         database: &DatabaseId,
-    ) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
         let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })?;
@@ -200,7 +200,7 @@ impl DatabaseRuntimePhysicalState {
     pub(crate) fn read_dataset_overview(
         &self,
         database: &DatabaseId,
-    ) -> Result<crate::database::DatasetOverview, DatabaseError> {
+    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
         let mut instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })?;

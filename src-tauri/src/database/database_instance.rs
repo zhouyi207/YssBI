@@ -22,6 +22,10 @@ use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use yss_dataset_profile::{
+    ColumnDistribution, ColumnStats, DatasetOverview, compute_all_column_distributions,
+    compute_all_column_stats, compute_dataset_overview,
+};
 use yss_tabular_polars::anyvalue_to_json;
 
 #[derive(Clone)]
@@ -135,27 +139,22 @@ impl DatabaseInstance {
     }
 
     /// 列统计：DuckDB 走 SQL 聚合，其它状态 fallback 到 Polars 整表。
-    pub fn compute_column_stats(&mut self) -> PolarsResult<Vec<super::ColumnStats>> {
+    pub fn compute_column_stats(&mut self) -> PolarsResult<Vec<ColumnStats>> {
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
                 table,
                 columns,
-                row_count,
                 ..
-            } => {
-                compute_all_column_stats_duckdb(Path::new(duckdb_path), table, columns, *row_count)
-                    .map_err(|e| PolarsError::ComputeError(e.into()))
-            }
-            DatabaseState::Loaded { dataframe, .. } => {
-                Ok(super::compute_all_column_stats(dataframe))
-            }
+            } => compute_all_column_stats_duckdb(Path::new(duckdb_path), table, columns)
+                .map_err(|e| PolarsError::ComputeError(e.into())),
+            DatabaseState::Loaded { dataframe, .. } => Ok(compute_all_column_stats(dataframe)),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
     /// 列分布：DuckDB 走 SQL 聚合。
-    pub fn compute_column_distributions(&mut self) -> PolarsResult<Vec<super::ColumnDistribution>> {
+    pub fn compute_column_distributions(&mut self) -> PolarsResult<Vec<ColumnDistribution>> {
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -165,14 +164,14 @@ impl DatabaseInstance {
             } => compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, columns)
                 .map_err(|e| PolarsError::ComputeError(e.into())),
             DatabaseState::Loaded { dataframe, .. } => {
-                Ok(super::compute_all_column_distributions(dataframe))
+                Ok(compute_all_column_distributions(dataframe))
             }
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
     /// 数据集概览：DuckDB 用缓存元数据 + SQL null 统计。
-    pub fn compute_dataset_overview(&mut self) -> PolarsResult<super::DatasetOverview> {
+    pub fn compute_dataset_overview(&mut self) -> PolarsResult<DatasetOverview> {
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -184,9 +183,7 @@ impl DatabaseInstance {
                 compute_dataset_overview_duckdb(Path::new(duckdb_path), table, columns, *row_count)
                     .map_err(|e| PolarsError::ComputeError(e.into()))
             }
-            DatabaseState::Loaded { dataframe, .. } => {
-                Ok(super::compute_dataset_overview(dataframe))
-            }
+            DatabaseState::Loaded { dataframe, .. } => Ok(compute_dataset_overview(dataframe)),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }

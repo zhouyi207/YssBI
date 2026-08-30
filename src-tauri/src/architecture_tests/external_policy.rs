@@ -67,12 +67,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "num-traits",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "polars",
         target_condition: None,
     },
@@ -230,6 +224,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-database-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-profile",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-profile",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

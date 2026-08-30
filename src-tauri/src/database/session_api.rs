@@ -649,7 +649,7 @@ pub(crate) fn page_snapshot(
 pub(crate) fn column_statistics(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
-) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
     if !runtime_snapshot.revisions.contains_key(&database) {
         return Err(DatabaseError::not_found(
@@ -663,7 +663,7 @@ pub(crate) fn column_statistics(
 pub(crate) fn column_distributions(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
-) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
     if !runtime_snapshot.revisions.contains_key(&database) {
         return Err(DatabaseError::not_found(
@@ -677,7 +677,7 @@ pub(crate) fn column_distributions(
 pub(crate) fn dataset_overview(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
-) -> Result<crate::database::DatasetOverview, DatabaseError> {
+) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
     if !runtime_snapshot.revisions.contains_key(&database) {
         return Err(DatabaseError::not_found(

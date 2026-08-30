@@ -2058,6 +2058,172 @@ fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
 }
 
 #[test]
+fn dataset_profile_has_one_database_owner_without_root_facades() {
+    let root = repository_root();
+    let owner_files = [
+        "src-tauri/crates/yss-dataset-profile/Cargo.toml",
+        "src-tauri/crates/yss-dataset-profile/src/lib.rs",
+        "src-tauri/crates/yss-dataset-profile/src/column_stats.rs",
+        "src-tauri/crates/yss-dataset-profile/src/column_distribution.rs",
+        "src-tauri/crates/yss-dataset-profile/src/dataset_overview.rs",
+        "src-tauri/crates/yss-dataset-profile/src/tests.rs",
+    ];
+    for relative in owner_files {
+        assert!(
+            root.join(relative).is_file(),
+            "dataset profile owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/database/column_stats.rs",
+        "src-tauri/src/database/column_distribution.rs",
+        "src-tauri/src/database/dataset_overview.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root crate must not retain dataset profile owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-dataset-profile\"",
+        "yss-dataset-profile = { path = \"./crates/yss-dataset-profile\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    let profile_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-dataset-profile/Cargo.toml"))
+            .expect("the dataset profile manifest must be readable");
+    for dependency in ["polars.workspace = true", "serde.workspace = true"] {
+        assert!(
+            profile_manifest.contains(dependency),
+            "the dataset profile crate must declare {dependency}"
+        );
+    }
+
+    let profile_source = [
+        "src-tauri/crates/yss-dataset-profile/src/lib.rs",
+        "src-tauri/crates/yss-dataset-profile/src/column_stats.rs",
+        "src-tauri/crates/yss-dataset-profile/src/column_distribution.rs",
+        "src-tauri/crates/yss-dataset-profile/src/dataset_overview.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<Vec<_>>()
+    .join("\n");
+    for owned_api in [
+        "pub struct NumericColumnStats",
+        "pub enum ColumnStats",
+        "pub struct NumericDistribution",
+        "pub enum ColumnDistribution",
+        "pub struct DatasetOverview",
+        "pub const DEFAULT_HISTOGRAM_BIN_COUNT",
+        "pub const DEFAULT_TOP_CATEGORY_COUNT",
+        "pub fn profile_column_kind_from_name",
+        "pub fn format_histogram_bin_label",
+        "pub fn compute_all_column_stats",
+        "pub fn compute_all_column_distributions",
+        "pub fn compute_dataset_overview",
+    ] {
+        assert!(
+            profile_source.contains(owned_api),
+            "the dataset profile crate must own {owned_api}"
+        );
+    }
+    for backwards_dependency in ["yssbi_lib", "duckdb", "tauri::"] {
+        assert!(
+            !profile_source.contains(backwards_dependency),
+            "the dataset profile crate must not depend backwards on {backwards_dependency}"
+        );
+    }
+    for invariant in [
+        "column.cast(&DataType::String)",
+        ".filter(|value| value.is_finite())",
+        "left.0.cmp(&right.0)",
+        "n_rows.saturating_mul(n_columns)",
+    ] {
+        assert!(
+            profile_source.contains(invariant),
+            "the dataset profile crate must preserve invariant {invariant}"
+        );
+    }
+
+    let root_database = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    for removed_facade in [
+        "mod column_stats",
+        "mod column_distribution",
+        "mod dataset_overview",
+        "pub use column_stats",
+        "pub use column_distribution",
+        "pub use dataset_overview",
+    ] {
+        assert!(
+            !root_database.contains(removed_facade),
+            "the root database module must not restore facade {removed_facade}"
+        );
+    }
+    let database_instance =
+        std::fs::read_to_string(root.join("src-tauri/src/database/database_instance.rs"))
+            .expect("the database instance must be readable");
+    assert!(
+        database_instance.contains("use yss_dataset_profile::{")
+            && database_instance.contains("compute_all_column_stats")
+            && database_instance.contains("compute_all_column_distributions")
+            && database_instance.contains("compute_dataset_overview"),
+        "the database instance must consume in-memory profiling directly"
+    );
+    let duckdb_profile =
+        std::fs::read_to_string(root.join("src-tauri/src/database/duckdb_analytics.rs"))
+            .expect("the DuckDB physical profile must be readable");
+    for invariant in [
+        "use yss_dataset_profile::{",
+        "COUNT(DISTINCT CAST({col} AS VARCHAR))",
+        "isfinite(CAST({col} AS DOUBLE))",
+        "ORDER BY cnt DESC, val ASC",
+        "ORDER BY cnt DESC, label ASC",
+        "physical_profiles_are_finite_stable_and_empty_table_safe",
+    ] {
+        assert!(
+            duckdb_profile.contains(invariant),
+            "the DuckDB physical profile must preserve invariant {invariant}"
+        );
+    }
+
+    let regression_tests =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-dataset-profile/src/tests.rs"))
+            .expect("the dataset profile regression tests must be readable");
+    for regression in [
+        "string_profiles_are_stable_and_exclude_empty_values_from_the_mode",
+        "non_string_columns_use_the_same_string_projection_as_physical_profiles",
+        "numeric_histograms_ignore_non_finite_values_and_close_the_final_bin",
+        "decimal_columns_follow_the_numeric_profile_path",
+        "overview_uses_one_dtype_classifier_and_checked_cell_arithmetic",
+    ] {
+        assert!(
+            regression_tests.contains(regression),
+            "the dataset profile crate must retain regression {regression}"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-dataset-profile\"")
+            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        "the dataset profile crate must be classified in Database Core"
+    );
+}
+
+#[test]
 fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     let root = repository_root();
     for relative in [

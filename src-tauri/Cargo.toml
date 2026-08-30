@@ -16,6 +16,7 @@ members = [
     "crates/yss-computation-settings",
     "crates/yss-data-contract",
     "crates/yss-database-contract",
+    "crates/yss-dataset-profile",
     "crates/yss-diagnostics",
     "crates/yss-display-naming",
     "crates/yss-execution",
@@ -104,6 +105,7 @@ yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-computation-settings = { path = "./crates/yss-computation-settings" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
+yss-dataset-profile = { path = "./crates/yss-dataset-profile" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-display-naming = { path = "./crates/yss-display-naming" }
 yss-execution = { path = "./crates/yss-execution" }
@@ -161,7 +163,6 @@ polars-arrow.workspace = true
 polars-dtype.workspace = true
 statrs.workspace = true
 chrono.workspace = true
-num-traits.workspace = true
 tokio.workspace = true
 
 

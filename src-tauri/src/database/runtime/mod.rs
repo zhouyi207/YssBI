@@ -346,21 +346,21 @@ impl DatabaseRuntimeSession {
     pub(crate) fn read_physical_column_stats(
         &self,
         database: &DatabaseId,
-    ) -> Result<Vec<crate::database::ColumnStats>, DatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
         self.physical.read_column_stats(database)
     }
 
     pub(crate) fn read_physical_column_distributions(
         &self,
         database: &DatabaseId,
-    ) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
         self.physical.read_column_distributions(database)
     }
 
     pub(crate) fn read_physical_dataset_overview(
         &self,
         database: &DatabaseId,
-    ) -> Result<crate::database::DatasetOverview, DatabaseError> {
+    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
         self.physical.read_dataset_overview(database)
     }
 

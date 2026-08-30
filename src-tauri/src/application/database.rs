@@ -452,7 +452,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<Vec<crate::database::ColumnStats>, ApplicationDatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, ApplicationDatabaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -485,7 +485,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<Vec<crate::database::ColumnDistribution>, ApplicationDatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, ApplicationDatabaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -518,7 +518,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<crate::database::DatasetOverview, ApplicationDatabaseError> {
+    ) -> Result<yss_dataset_profile::DatasetOverview, ApplicationDatabaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured

@@ -1752,6 +1752,8 @@ fn non_build_memberships(
             | "yss-graph-runtime"
     ) {
         layers.insert(RustLayer::Graph);
+    } else if package == "yss-dataset-profile" {
+        layers.insert(RustLayer::DatabaseCore);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
     } else if package == "yss-diagnostics" {

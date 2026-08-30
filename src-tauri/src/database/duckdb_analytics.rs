@@ -1,39 +1,15 @@
 use std::path::Path;
 
-use duckdb::Connection;
+use duckdb::{Connection, OptionalExt};
 
-use super::{
-    CategoryCount, ColumnDistribution, ColumnStats, DataCompleteness, DatasetOverview,
-    DuckDbColumnMeta, HistogramBin, NumericColumnStats, NumericDistribution, SchemaOverview,
-    SizeShape, StringColumnStats, StringDistribution, duckdb_table_sql,
+use super::{DuckDbColumnMeta, duckdb_table_sql};
+use yss_dataset_profile::{
+    CategoryCount, ColumnDistribution, ColumnStats, DEFAULT_HISTOGRAM_BIN_COUNT,
+    DEFAULT_TOP_CATEGORY_COUNT, DataCompleteness, DatasetOverview, HistogramBin,
+    NumericColumnStats, NumericDistribution, ProfileColumnKind, SchemaOverview, SizeShape,
+    StringColumnStats, StringDistribution, format_histogram_bin_label,
+    profile_column_kind_from_name,
 };
-
-const DEFAULT_BINS: usize = 20;
-const DEFAULT_TOP_N: usize = 15;
-
-fn is_numeric_dtype_str(dtype: &str) -> bool {
-    matches!(
-        dtype,
-        "Int8"
-            | "Int16"
-            | "Int32"
-            | "Int64"
-            | "UInt8"
-            | "UInt16"
-            | "UInt32"
-            | "UInt64"
-            | "Float32"
-            | "Float64"
-    )
-}
-
-fn is_bool_dtype_str(dtype: &str) -> bool {
-    dtype == "Boolean"
-}
-
-fn is_datetime_dtype_str(dtype: &str) -> bool {
-    dtype.starts_with("Datetime") || dtype == "Date" || dtype == "Time"
-}
 
 fn quote_column(name: &str) -> String {
     super::quote_duckdb_identifier(name)
@@ -47,7 +23,6 @@ pub fn compute_all_column_stats_duckdb(
     duckdb_path: &Path,
     table: &str,
     columns: &[DuckDbColumnMeta],
-    row_count: usize,
 ) -> Result<Vec<ColumnStats>, String> {
     let conn = open_conn(duckdb_path)?;
     let table_sql = duckdb_table_sql(table);
@@ -55,10 +30,10 @@ pub fn compute_all_column_stats_duckdb(
     columns
         .iter()
         .map(|col| {
-            if is_numeric_dtype_str(&col.dtype) {
-                numeric_column_stats(&conn, &table_sql, col, row_count)
+            if profile_column_kind_from_name(&col.dtype) == ProfileColumnKind::Numeric {
+                numeric_column_stats(&conn, &table_sql, col)
             } else {
-                string_column_stats(&conn, &table_sql, col, row_count)
+                string_column_stats(&conn, &table_sql, col)
             }
         })
         .collect()
@@ -68,18 +43,17 @@ fn numeric_column_stats(
     conn: &Connection,
     table_sql: &str,
     col: &DuckDbColumnMeta,
-    row_count: usize,
 ) -> Result<ColumnStats, String> {
     let col_sql = quote_column(&col.name);
     let sql = format!(
         r#"SELECT
             COUNT(*) AS total,
             COUNT({col}) AS non_null,
-            MIN(CAST({col} AS DOUBLE)) AS min_val,
-            MAX(CAST({col} AS DOUBLE)) AS max_val,
-            AVG(CAST({col} AS DOUBLE)) AS mean_val,
-            MEDIAN(CAST({col} AS DOUBLE)) AS median_val,
-            STDDEV_SAMP(CAST({col} AS DOUBLE)) AS std_val
+            MIN(CASE WHEN isfinite(CAST({col} AS DOUBLE)) THEN CAST({col} AS DOUBLE) END) AS min_val,
+            MAX(CASE WHEN isfinite(CAST({col} AS DOUBLE)) THEN CAST({col} AS DOUBLE) END) AS max_val,
+            AVG(CASE WHEN isfinite(CAST({col} AS DOUBLE)) THEN CAST({col} AS DOUBLE) END) AS mean_val,
+            MEDIAN(CASE WHEN isfinite(CAST({col} AS DOUBLE)) THEN CAST({col} AS DOUBLE) END) AS median_val,
+            STDDEV_SAMP(CASE WHEN isfinite(CAST({col} AS DOUBLE)) THEN CAST({col} AS DOUBLE) END) AS std_val
         FROM {table}"#,
         col = col_sql,
         table = table_sql
@@ -100,7 +74,7 @@ fn numeric_column_stats(
             column_name: col.name.clone(),
             column_type: col.dtype.clone(),
             kind: "numeric",
-            count: row_count.max(total.max(0) as usize),
+            count: total.max(0) as usize,
             null_count,
             min: min_val,
             max: max_val,
@@ -117,15 +91,14 @@ fn string_column_stats(
     conn: &Connection,
     table_sql: &str,
     col: &DuckDbColumnMeta,
-    row_count: usize,
 ) -> Result<ColumnStats, String> {
     let col_sql = quote_column(&col.name);
     let summary_sql = format!(
         r#"SELECT
             COUNT(*) AS total,
             COUNT({col}) AS non_null,
-            SUM(CASE WHEN CAST({col} AS VARCHAR) = '' THEN 1 ELSE 0 END) AS empty_count,
-            COUNT(DISTINCT {col}) AS unique_count
+            COUNT(*) FILTER (WHERE CAST({col} AS VARCHAR) = '') AS empty_count,
+            COUNT(DISTINCT CAST({col} AS VARCHAR)) AS unique_count
         FROM {table}"#,
         col = col_sql,
         table = table_sql
@@ -144,7 +117,7 @@ fn string_column_stats(
 
     let null_count = (total - non_null).max(0) as usize;
     let empty_count = empty_count.max(0) as usize;
-    let count = row_count.max(total.max(0) as usize);
+    let count = total.max(0) as usize;
     let valid_count = count.saturating_sub(null_count).saturating_sub(empty_count);
     let valid_ratio = if count > 0 {
         valid_count as f64 / count as f64
@@ -157,17 +130,20 @@ fn string_column_stats(
         FROM {table}
         WHERE {col} IS NOT NULL AND CAST({col} AS VARCHAR) != ''
         GROUP BY val
-        ORDER BY cnt DESC
+        ORDER BY cnt DESC, val ASC
         LIMIT 1"#,
         col = col_sql,
         table = table_sql
     );
 
-    let (mode, mode_count) = conn
+    let mode_row = conn
         .query_row(&mode_sql, [], |row| {
             Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?))
         })
-        .map(|(mode, cnt)| (mode, cnt.max(0) as usize))
+        .optional()
+        .map_err(|error| format!("Failed to compute mode for '{}': {error}", col.name))?;
+    let (mode, mode_count) = mode_row
+        .map(|(mode, count)| (mode, count.max(0) as usize))
         .unwrap_or((None, 0));
 
     Ok(ColumnStats::String(StringColumnStats {
@@ -195,7 +171,7 @@ pub fn compute_all_column_distributions_duckdb(
     columns
         .iter()
         .map(|col| {
-            if is_numeric_dtype_str(&col.dtype) {
+            if profile_column_kind_from_name(&col.dtype) == ProfileColumnKind::Numeric {
                 numeric_column_distribution(&conn, &table_sql, col)
             } else {
                 string_column_distribution(&conn, &table_sql, col)
@@ -215,7 +191,7 @@ fn numeric_column_distribution(
             MIN(CAST({col} AS DOUBLE)) AS lo,
             MAX(CAST({col} AS DOUBLE)) AS hi
         FROM {table}
-        WHERE {col} IS NOT NULL"#,
+        WHERE {col} IS NOT NULL AND isfinite(CAST({col} AS DOUBLE))"#,
         col = col_sql,
         table = table_sql
     );
@@ -234,13 +210,16 @@ fn numeric_column_distribution(
 
     if (hi - lo).abs() < f64::EPSILON {
         let count_sql = format!(
-            "SELECT COUNT(*) FROM {table} WHERE {col} IS NOT NULL",
+            "SELECT COUNT(*) FROM {table} \
+             WHERE {col} IS NOT NULL AND isfinite(CAST({col} AS DOUBLE))",
             table = table_sql,
             col = col_sql
         );
         let count: i64 = conn
             .query_row(&count_sql, [], |row| row.get(0))
-            .unwrap_or(0);
+            .map_err(|error| {
+                format!("Failed to count finite values for '{}': {error}", col.name)
+            })?;
         return Ok(ColumnDistribution::Numeric(NumericDistribution {
             column_name: col.name.clone(),
             kind: "numeric",
@@ -251,17 +230,17 @@ fn numeric_column_distribution(
         }));
     }
 
-    let bins = DEFAULT_BINS;
+    let bins = DEFAULT_HISTOGRAM_BIN_COUNT;
     let width = (hi - lo) / bins as f64;
     let hist_sql = format!(
         r#"SELECT
-            LEAST(
+            CAST(LEAST(
                 FLOOR((CAST({col} AS DOUBLE) - {lo}) / {width}),
                 {max_bin}
-            ) AS bin_idx,
+            ) AS BIGINT) AS bin_idx,
             COUNT(*) AS cnt
         FROM {table}
-        WHERE {col} IS NOT NULL
+        WHERE {col} IS NOT NULL AND isfinite(CAST({col} AS DOUBLE))
         GROUP BY bin_idx
         ORDER BY bin_idx"#,
         col = col_sql,
@@ -292,11 +271,12 @@ fn numeric_column_distribution(
         .map(|(i, count)| {
             let bin_lo = lo + i as f64 * width;
             let bin_hi = bin_lo + width;
-            let label = if precision == 1 {
-                format!("[{:.1}, {:.1}]", bin_lo, bin_hi)
-            } else {
-                format!("[{:.2}, {:.2}]", bin_lo, bin_hi)
-            };
+            let label = format_histogram_bin_label(
+                bin_lo,
+                bin_hi,
+                precision,
+                i + 1 == DEFAULT_HISTOGRAM_BIN_COUNT,
+            );
             HistogramBin { label, count }
         })
         .collect();
@@ -319,11 +299,11 @@ fn string_column_distribution(
         FROM {table}
         WHERE {col} IS NOT NULL AND CAST({col} AS VARCHAR) != ''
         GROUP BY label
-        ORDER BY cnt DESC
+        ORDER BY cnt DESC, label ASC
         LIMIT {top_n}"#,
         col = col_sql,
         table = table_sql,
-        top_n = DEFAULT_TOP_N
+        top_n = DEFAULT_TOP_CATEGORY_COUNT
     );
 
     let total_sql = format!(
@@ -334,8 +314,13 @@ fn string_column_distribution(
     );
 
     let total: i64 = conn
-        .query_row(&total_sql, [], |row| row.get(0))
-        .unwrap_or(0)
+        .query_row(&total_sql, [], |row| row.get::<_, i64>(0))
+        .map_err(|error| {
+            format!(
+                "Failed to count categorical values for '{}': {error}",
+                col.name
+            )
+        })?
         .max(0);
 
     let mut stmt = conn
@@ -383,16 +368,12 @@ pub fn compute_dataset_overview_duckdb(
     let mut bool_cols = 0usize;
 
     for col in columns {
-        if is_numeric_dtype_str(&col.dtype) {
-            numeric_cols += 1;
-        } else if is_bool_dtype_str(&col.dtype) {
-            bool_cols += 1;
-        } else if is_datetime_dtype_str(&col.dtype) {
-            datetime_cols += 1;
-        } else if col.dtype.starts_with("Categorical") || col.dtype.starts_with("Enum") {
-            categorical_cols += 1;
-        } else {
-            string_cols += 1;
+        match profile_column_kind_from_name(&col.dtype) {
+            ProfileColumnKind::Numeric => numeric_cols += 1,
+            ProfileColumnKind::Categorical => categorical_cols += 1,
+            ProfileColumnKind::String => string_cols += 1,
+            ProfileColumnKind::Temporal => datetime_cols += 1,
+            ProfileColumnKind::Boolean => bool_cols += 1,
         }
     }
 
@@ -441,7 +422,7 @@ pub fn compute_dataset_overview_duckdb(
             predicates.join(" OR ")
         );
         conn.query_row(&rows_sql, [], |row| row.get::<_, i64>(0))
-            .unwrap_or(0)
+            .map_err(|error| format!("Failed to count rows with nulls: {error}"))?
             .max(0) as usize
     };
 
@@ -466,4 +447,119 @@ pub fn compute_dataset_overview_duckdb(
             rows_with_nulls,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    struct TestDatabase(PathBuf);
+
+    impl TestDatabase {
+        fn create() -> Self {
+            Self(std::env::temp_dir().join(format!(
+                "yssbi-dataset-profile-{}.duckdb",
+                uuid::Uuid::new_v4()
+            )))
+        }
+    }
+
+    impl Drop for TestDatabase {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn physical_profiles_are_finite_stable_and_empty_table_safe() {
+        let database = TestDatabase::create();
+        let connection = Connection::open(&database.0).expect("test DuckDB should open");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE profile_test (value DOUBLE, label VARCHAR);
+                INSERT INTO profile_test VALUES
+                    (1.0, 'beta'),
+                    (2.0, 'alpha'),
+                    (CAST('NaN' AS DOUBLE), 'beta'),
+                    (CAST('Infinity' AS DOUBLE), 'alpha'),
+                    (NULL, ''),
+                    (NULL, NULL);
+                CREATE TABLE empty_profile (label VARCHAR);
+                "#,
+            )
+            .expect("test profile tables should be created");
+        drop(connection);
+
+        let columns = [
+            DuckDbColumnMeta {
+                name: "value".to_owned(),
+                dtype: "Float64".to_owned(),
+            },
+            DuckDbColumnMeta {
+                name: "label".to_owned(),
+                dtype: "String".to_owned(),
+            },
+        ];
+        let stats = compute_all_column_stats_duckdb(&database.0, "profile_test", &columns)
+            .expect("physical stats should succeed");
+        let ColumnStats::Numeric(numeric) = &stats[0] else {
+            panic!("numeric metadata must select numeric stats");
+        };
+        assert_eq!(numeric.count, 6);
+        assert_eq!(numeric.null_count, 2);
+        assert_eq!(numeric.min, Some(1.0));
+        assert_eq!(numeric.max, Some(2.0));
+        assert_eq!(numeric.mean, Some(1.5));
+        let ColumnStats::String(labels) = &stats[1] else {
+            panic!("string metadata must select string stats");
+        };
+        assert_eq!(labels.mode.as_deref(), Some("alpha"));
+        assert_eq!(labels.mode_count, 2);
+
+        let distributions =
+            compute_all_column_distributions_duckdb(&database.0, "profile_test", &columns)
+                .expect("physical distributions should succeed");
+        let ColumnDistribution::Numeric(numeric) = &distributions[0] else {
+            panic!("numeric metadata must select a numeric distribution");
+        };
+        assert_eq!(numeric.bins.iter().map(|bin| bin.count).sum::<usize>(), 2);
+        assert!(
+            numeric
+                .bins
+                .first()
+                .expect("finite values should produce bins")
+                .label
+                .ends_with(')')
+        );
+        assert!(
+            numeric
+                .bins
+                .last()
+                .expect("finite values should produce bins")
+                .label
+                .ends_with(']')
+        );
+        let ColumnDistribution::String(labels) = &distributions[1] else {
+            panic!("string metadata must select a string distribution");
+        };
+        assert_eq!(labels.categories[0].label, "alpha");
+        assert_eq!(labels.categories[1].label, "beta");
+
+        let empty_columns = [DuckDbColumnMeta {
+            name: "label".to_owned(),
+            dtype: "String".to_owned(),
+        }];
+        let empty_stats =
+            compute_all_column_stats_duckdb(&database.0, "empty_profile", &empty_columns)
+                .expect("empty physical stats should succeed");
+        let ColumnStats::String(empty) = &empty_stats[0] else {
+            panic!("empty string metadata must select string stats");
+        };
+        assert_eq!(empty.count, 0);
+        assert_eq!(empty.empty_count, 0);
+        assert_eq!(empty.mode, None);
+    }
 }

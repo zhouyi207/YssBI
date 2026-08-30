@@ -111,6 +111,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-computation-settings/` | 独立 Pure Leaf：持久化 computation settings、validation 与 project settings mutation wire contract 的唯一 canonical owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation 与 fingerprint 的唯一 canonical owner |
+| `src-tauri/crates/yss-dataset-profile/` | 独立 Database Core：dataset profile DTO、内存 Polars column stats/distribution/overview 与稳定分类、排序语义的唯一 owner；不依赖 DuckDB、root database、Application 或 Tauri |
 | `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
 | `src-tauri/crates/yss-graph-document/` | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供，磁盘目录/扩展名由 `yss-project-layout` 提供 |
 | `src-tauri/crates/yss-graph-document-edit/` | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner |
@@ -142,7 +143,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
+| `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/export primitives 与 DuckDB physical profiling |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
@@ -394,6 +395,10 @@ yss-data-contract + yss-tabular-contract + yss-variable-contract
   → yss-variable-value → Project variable staging/activation
 yss-tabular-contract
   → yss-tabular-polars → Database Polars editing
+Polars DataFrame
+  → yss-dataset-profile → Database/Application/Commands
+DuckDB physical profiling
+  → yss-dataset-profile DTO → Database/Application/Commands
 yss-display-naming
   → Project/Application database and variable display-name allocation
 yss-project-progress
@@ -536,6 +541,7 @@ SQL path 将 identifier 与 string literal 分开引用；table/column identifie
 DuckDB table 的 CSV/Parquet export 使用 DuckDB `COPY (SELECT ...) TO ...`，大表不会先完整物化为 Polars。Application module 先导出到 destination 的独占 sibling temp file，再在最终 project authority gate 下原子替换目标；失败时清理 temp。Loaded DataFrame 才使用 Polars writer。
 
 Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-backed overview 中 `estimatedDataframeMemoryBytes` 与 `duplicatedRows` 为 unavailable；row/column count、schema 分类和 null completeness 仍由缓存 metadata 与 SQL 计算。
+Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标签由 `yss-dataset-profile` 唯一拥有。Loaded DataFrame 的 stats/distribution/overview 在该 crate 内计算；根 Database 只保留 DuckDB physical SQL，并直接构造同一 DTO。两条路径均忽略统计量与直方图中的非有限数、使用稳定同频排序，且仅最后一个直方图区间闭合右边界。
 
 ## 9. SCI 与 Julia
 
