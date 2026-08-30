@@ -4,7 +4,6 @@ use crate::graph::analysis::contracts::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
 };
-use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
 use yss_graph_document::GraphRevision;
@@ -15,6 +14,7 @@ use yss_graph_protocol::{
     PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
     SchemaExpr, TypeExpr,
 };
+use yss_graph_registry::NodeRegistry;
 
 pub(crate) mod result_category;
 
@@ -492,8 +492,8 @@ fn graph_port_editor_fact(editor: &PortEditorSpec) -> GraphPortEditorFact {
 mod tests {
     use super::*;
     use crate::graph::analysis::contracts::CompilationBasis;
-    use crate::graph::registry::RegistryFingerprint;
     use std::collections::BTreeMap;
+    use yss_graph_registry::RegistryFingerprint;
 
     #[test]
     fn analysis_accepts_neutral_document_catalog_settings_and_basis() {

@@ -181,7 +181,7 @@ pub fn graph_compilation_basis(
 ) -> CompilationBasis<GraphRevision> {
     CompilationBasis {
         graph_revision: GraphRevision::new(basis.graph_revision().get()),
-        registry_fingerprint: crate::graph::registry::RegistryFingerprint::from_bytes(
+        registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
             basis.registry_fingerprint().as_bytes(),
         ),
         resource_versions: basis

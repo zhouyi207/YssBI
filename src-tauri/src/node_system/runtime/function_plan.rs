@@ -3,12 +3,12 @@ use crate::execution::plan::legacy::{
     ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle, PlanSourceFacts,
 };
 use crate::graph::analysis::contracts::{ResourceKey, ResourceVersion, ResourceVersionSet};
-use crate::graph::registry::RegistryFingerprint;
 use crate::project::ProjectSessionId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 use yss_graph_document::GraphResourcePath;
+use yss_graph_registry::RegistryFingerprint;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct FunctionPlanKey {

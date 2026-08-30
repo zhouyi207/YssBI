@@ -1,4 +1,3 @@
-use crate::graph::registry::RegistryFingerprint;
 #[cfg(test)]
 use crate::project::FunctionDocument;
 use serde::{Deserialize, Serialize};
@@ -6,6 +5,7 @@ use std::collections::BTreeMap;
 #[cfg(test)]
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{GraphResourcePath, GraphRevision};
+use yss_graph_registry::RegistryFingerprint;
 
 macro_rules! string_newtype {
     ($name:ident) => {

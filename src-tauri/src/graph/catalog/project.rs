@@ -2,9 +2,9 @@ use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
 use crate::graph::catalog::{Aliases, Message, Text};
-use crate::graph::registry::{RegisteredNode, StructuralNodeRole};
 use std::sync::Arc;
 use yss_graph_protocol::*;
+use yss_graph_registry::{RegisteredNode, StructuralNodeRole};
 
 pub(crate) const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
 pub(crate) const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";

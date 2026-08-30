@@ -1,8 +1,8 @@
 use super::{CompilationBasis, DiagnosticSeverity, NodeDiagnostic, ValidatedSemanticGraph};
-use crate::graph::registry::ProtocolFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use yss_graph_protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr};
+use yss_graph_registry::ProtocolFingerprint;
 
 pub type TypeFacts<PortAddress, TypeFact> = BTreeMap<PortAddress, TypeFact>;
 pub type SchemaFacts<PortAddress, SchemaFact> = BTreeMap<PortAddress, SchemaFact>;
@@ -134,10 +134,10 @@ impl std::error::Error for ValidationError {}
 mod tests {
     use super::*;
     use crate::graph::analysis::contracts::{ResourceVersion, ResourceVersionSet};
-    use crate::graph::registry::RegistryFingerprint;
     use uuid::Uuid;
     use yss_graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use yss_graph_protocol::{SchemaExpr, TypeExpr, TypeId};
+    use yss_graph_registry::RegistryFingerprint;
 
     type TestSnapshot = AnalysisSnapshot<
         GraphRevision,

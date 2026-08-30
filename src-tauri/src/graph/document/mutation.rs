@@ -9,13 +9,13 @@ use super::{
 use crate::graph::catalog::reroute_node_type_for_kind;
 use crate::graph::catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::compatibility::EditorMutationValidationSnapshot;
-use crate::graph::registry::NodeRegistry;
 #[cfg(test)]
 use crate::project::{MutationRequest, OperationId, ResourceKey, ResourceRevision};
 use yss_graph_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
     PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
 };
+use yss_graph_registry::NodeRegistry;
 
 #[cfg(test)]
 use serde::Deserialize;

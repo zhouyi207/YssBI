@@ -14,7 +14,6 @@ use crate::graph::catalog::{
     CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };
 use crate::graph::compatibility::{CatalogMutationResource, CatalogMutationValidationSnapshot};
-use crate::graph::registry::NodeRegistry;
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,6 +22,7 @@ use yss_graph_protocol::{
     NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, ResourceDisplayKind,
     TypeExpr,
 };
+use yss_graph_registry::NodeRegistry;
 
 #[path = "subgraph/clipboard.rs"]
 mod clipboard;

@@ -289,6 +289,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
                 && root.target == "yss_graph_protocol"
                 && root.kind == ProductionRootKind::Library)
     );
+    assert!(
+        workspace
+            .roots
+            .iter()
+            .any(|root| root.package == "yss-graph-registry"
+                && root.target == "yss_graph_registry"
+                && root.kind == ProductionRootKind::Library)
+    );
     assert!(workspace.roots.iter().any(|root| root.package == "yss-math"
         && root.target == "yss_math"
         && root.kind == ProductionRootKind::Library));
@@ -450,6 +458,24 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
             && dependency.package_name == "yss-graph-protocol"
+            && matches!(
+                dependency.authority,
+                CargoDependencyAuthority::WorkspaceMember { .. }
+            )
+    }));
+    assert!(
+        workspace
+            .workspace_member_crate_aliases
+            .iter()
+            .any(|alias| {
+                alias.owning_package == "yssbi"
+                    && alias.declared_name == "yss_graph_registry"
+                    && alias.member_package == "yss-graph-registry"
+            })
+    );
+    assert!(workspace.dependency_declarations.iter().any(|dependency| {
+        dependency.owning_package == "yssbi"
+            && dependency.package_name == "yss-graph-registry"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -624,6 +650,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-graph-protocol/src/lib.rs"),
     };
+    let graph_registry_root = ProductionRoot {
+        package_id: "graph-registry-package".to_owned(),
+        package: "yss-graph-registry".to_owned(),
+        target: "yss_graph_registry".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-registry/src/lib.rs"),
+    };
     let math_root = ProductionRoot {
         package_id: "math-package".to_owned(),
         package: "yss-math".to_owned(),
@@ -667,6 +700,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_protocol_root.clone(),
+        graph_registry_root.clone(),
         math_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
@@ -733,6 +767,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &graph_protocol_root,
                 "src-tauri/crates/yss-graph-protocol/src/lib.rs",
                 "yss_graph_protocol",
+            ),
+            module(
+                &graph_registry_root,
+                "src-tauri/crates/yss-graph-registry/src/lib.rs",
+                "yss_graph_registry",
             ),
             module(
                 &math_root,
@@ -807,6 +846,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-graph-registry/src/lib.rs"],
+        RustLayer::Graph
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
@@ -1382,13 +1425,63 @@ fn canonical_hash_has_one_pure_crate_owner_without_registry_duplication() {
         );
     }
 
-    let registry_fingerprint =
-        std::fs::read_to_string(root.join("src-tauri/src/graph/registry/fingerprint.rs"))
-            .expect("registry fingerprint source must be readable");
+    let registry_fingerprint = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-graph-registry/src/fingerprint.rs"),
+    )
+    .expect("registry fingerprint source must be readable");
     assert!(
         !registry_fingerprint.contains("fn sha256"),
         "graph registry must consume yss-canonical-hash instead of retaining a SHA-256 implementation"
     );
+}
+
+#[test]
+fn graph_registry_has_one_graph_crate_owner_without_compatibility_module() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-graph-registry/Cargo.toml",
+        "src-tauri/crates/yss-graph-registry/src/fingerprint.rs",
+        "src-tauri/crates/yss-graph-registry/src/lib.rs",
+        "src-tauri/crates/yss-graph-registry/src/model.rs",
+        "src-tauri/crates/yss-graph-registry/src/validation.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "graph registry owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/graph/registry").exists(),
+        "the root crate must not retain a graph registry compatibility module"
+    );
+
+    let sources = [
+        "src-tauri/crates/yss-graph-registry/src/lib.rs",
+        "src-tauri/crates/yss-graph-registry/src/model.rs",
+        "src-tauri/crates/yss-graph-registry/src/validation.rs",
+        "src-tauri/src/graph/catalog/builtin.rs",
+        "src-tauri/src/graph/catalog/dataframe/mod.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<String>();
+    for removed in [
+        "PreparedNominalValue",
+        "NominalValueHandle",
+        "register_nominal_codec",
+        "NodeImplementationCapability",
+        "NodeImplementation",
+        "ImplementationKind",
+        "cfg(all(test, any()))",
+    ] {
+        assert!(
+            !sources.contains(removed),
+            "graph registry/catalog must not restore removed dead API '{removed}'"
+        );
+    }
 }
 
 #[test]

@@ -1,0 +1,12 @@
+[package]
+name = "yss-graph-registry"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+yss-canonical-hash = { path = "../yss-canonical-hash" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }

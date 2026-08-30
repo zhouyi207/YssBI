@@ -1,8 +1,8 @@
 use super::builtin::{BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, sid};
 use crate::graph::catalog::{Aliases, Message, Text};
-use crate::graph::registry::{RegisteredNode, StructuralNodeRole};
 use std::sync::Arc;
 use yss_graph_protocol::*;
+use yss_graph_registry::{RegisteredNode, StructuralNodeRole};
 
 pub(super) fn register(
     nodes: &mut Vec<RegisteredNode>,

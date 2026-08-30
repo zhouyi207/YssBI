@@ -6,12 +6,12 @@ use crate::graph::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
     REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT,
 };
-use crate::graph::registry::{RegisteredNode, TransparentNodeRole};
 use yss_graph_protocol::{
     ConnectionsPerPort, InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId,
     OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec,
     SchemaExpr, TypeExpr, TypeParameterId,
 };
+use yss_graph_registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for kind in [PortKind::Data, PortKind::Control, PortKind::Effect] {
@@ -67,7 +67,7 @@ pub(crate) const fn node_type_for_kind(kind: PortKind) -> &'static str {
 
 fn build_protocol(
     kind: PortKind,
-) -> Result<crate::graph::registry::RegisteredNode, BuiltinAssemblyError> {
+) -> Result<yss_graph_registry::RegisteredNode, BuiltinAssemblyError> {
     let node_type = node_type_for_kind(kind);
     let input_key = semantic(REROUTE_INPUT_PORT, PortKey::new)?;
     let generic = semantic("t", TypeParameterId::new)?;

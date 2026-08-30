@@ -1,6 +1,5 @@
 use super::{ProtocolFingerprint, RegistryFingerprint};
 use serde::Serialize;
-use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
@@ -9,49 +8,17 @@ use yss_graph_protocol::{
     SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
 };
 
-/// Closed capability categories understood by registry validation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub enum ImplementationKind {
-    CompilerLowering,
-    Unsupported,
-}
-
-pub type NodeImplementationCapability = ImplementationKind;
-
-/// An explicitly implemented behavior capability owned by another node-system layer.
-///
-/// There is deliberately no blanket implementation: arbitrary values must not become
-/// executable node implementations merely because they are `Any + Send + Sync`.
-pub trait NodeImplementation: Any + Send + Sync {
-    fn capability(&self) -> ImplementationKind;
-    fn implementation_identity(&self) -> &str;
-    fn as_any(&self) -> &dyn Any;
-}
-
-/// A leaf behavior handle with no public arbitrary-value constructor.
+/// Stable identity of a leaf node's compiler lowering.
 #[derive(Clone)]
-pub struct LeafImplementation(Arc<dyn NodeImplementation>);
+pub struct LeafImplementation(Arc<str>);
 
 impl LeafImplementation {
-    pub(crate) fn from_arc(implementation: Arc<dyn NodeImplementation>) -> Self {
-        Self(implementation)
-    }
-
-    pub(crate) fn capability(&self) -> ImplementationKind {
-        self.0.capability()
+    pub fn new(identity: impl Into<Box<str>>) -> Self {
+        Self(Arc::from(identity.into()))
     }
 
     pub(crate) fn implementation_identity(&self) -> &str {
-        self.0.implementation_identity()
-    }
-
-    pub(crate) fn as_any(&self) -> &dyn Any {
-        self.0.as_any()
-    }
-
-    #[cfg(test)]
-    pub(super) fn new(implementation: impl NodeImplementation + 'static) -> Self {
-        Self(Arc::new(implementation))
+        &self.0
     }
 }
 
@@ -59,7 +26,6 @@ impl fmt::Debug for LeafImplementation {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("LeafImplementation")
-            .field("capability", &self.capability())
             .field("implementation_identity", &self.implementation_identity())
             .finish()
     }

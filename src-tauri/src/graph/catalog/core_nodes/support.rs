@@ -3,12 +3,12 @@ pub(crate) use crate::graph::catalog::builtin::ProviderFragment;
 pub(crate) use crate::graph::catalog::builtin::assembled_decimal;
 use crate::graph::catalog::builtin::{assembled_interface, assembled_parameters, sid};
 use crate::graph::catalog::{Aliases, Text};
-use crate::graph::registry::{
-    CategoryRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
-};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use yss_graph_protocol::*;
+use yss_graph_registry::{
+    CategoryRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
+};
 
 impl ProviderFragment {
     pub(crate) fn add_node_messages(

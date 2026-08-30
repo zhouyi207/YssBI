@@ -18,6 +18,7 @@ members = [
     "crates/yss-diagnostics",
     "crates/yss-graph-document",
     "crates/yss-graph-protocol",
+    "crates/yss-graph-registry",
     "crates/yss-math",
     "crates/yss-sci",
     "crates/yss-tabular-contract",
@@ -69,6 +70,7 @@ yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
+yss-graph-registry = { path = "./crates/yss-graph-registry" }
 yss-math = { path = "./crates/yss-math" }
 yss-sci = { path = "./crates/yss-sci" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }

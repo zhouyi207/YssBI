@@ -4,7 +4,7 @@ use crate::application::editor_projection::{
     EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionModel,
     ParameterEditorKind,
 };
-use crate::graph::registry::RegistryFingerprint;
+use yss_graph_registry::RegistryFingerprint;
 
 pub use super::editor_projection_types::*;
 

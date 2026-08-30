@@ -22,7 +22,7 @@ use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
     RetryPolicy, TypeExpr, TypeId, Value,
 };
-use crate::graph::registry::RegistryFingerprint;
+use yss_graph_registry::RegistryFingerprint;
 use yss_graph_document::{
     FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
 };

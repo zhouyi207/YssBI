@@ -1258,15 +1258,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::graph::catalog::diagnostics::COMPILER_DIAGNOSTIC_DEFINITIONS",
             "yssbi_lib::graph::catalog::diagnostics::CompilerDiagnosticDefinitionError",
             "yssbi_lib::graph::catalog::diagnostics::validate_compiler_diagnostic_definitions",
-            "yssbi_lib::graph::registry::LeafImplementation",
-            "yssbi_lib::graph::registry::NodeImplementation",
-            "yssbi_lib::graph::registry::NodeRegistrationError",
-            "yssbi_lib::graph::registry::NodeRegistry",
-            "yssbi_lib::graph::registry::NodeRegistryBuilder",
-            "yssbi_lib::graph::registry::ProviderRegistration",
-            "yssbi_lib::graph::registry::RegisteredNode",
-            "yssbi_lib::graph::registry::TypeConstructorRegistration",
-            "yssbi_lib::graph::registry::TypeRegistration",
+            "yss_graph_registry::LeafImplementation",
+            "yss_graph_registry::NodeRegistrationError",
+            "yss_graph_registry::NodeRegistry",
+            "yss_graph_registry::NodeRegistryBuilder",
+            "yss_graph_registry::ProviderRegistration",
+            "yss_graph_registry::RegisteredNode",
+            "yss_graph_registry::TypeConstructorRegistration",
+            "yss_graph_registry::TypeRegistration",
         ],
     },
     InternalDependencyCapability {
@@ -1411,7 +1410,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Parameter",
             "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Port",
             "yssbi_lib::graph::analysis::contracts::diagnostic::DiagnosticLocation::Resource",
-            "yssbi_lib::graph::registry::fingerprint::RegistryFingerprint",
+            "yss_graph_registry::fingerprint::RegistryFingerprint",
             "yss_graph_protocol::PortDirection",
             "yss_graph_protocol::PortKey",
             "yss_graph_protocol::PortKind",
@@ -1424,7 +1423,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_protocol::model::PortKind::Data",
             "yss_graph_protocol::model::PortKind::Effect",
             "yss_graph_protocol::types::TypeExpr",
-            "yssbi_lib::graph::registry::RegistryFingerprint",
+            "yss_graph_registry::RegistryFingerprint",
         ],
     },
     InternalDependencyCapability {
@@ -1438,8 +1437,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_protocol::parameter::ParameterPresentation",
             "yss_graph_protocol::types::TypeExpr",
             "yss_graph_protocol::model::ParameterPresentation",
-            "yssbi_lib::graph::registry::RegistryFingerprint",
-            "yssbi_lib::graph::registry::fingerprint::RegistryFingerprint",
+            "yss_graph_registry::RegistryFingerprint",
+            "yss_graph_registry::fingerprint::RegistryFingerprint",
             "yssbi_lib::project::function_editor_projection::FunctionEditorProjection",
         ],
     },
@@ -1768,6 +1767,8 @@ fn non_build_memberships(
             | "yss-variable-contract"
     ) {
         layers.insert(RustLayer::PureLeaf);
+    } else if package == "yss-graph-registry" {
+        layers.insert(RustLayer::Graph);
     } else if package == "yss-sci" {
         layers.insert(RustLayer::SciCore);
     } else if package == "yss-diagnostics" {

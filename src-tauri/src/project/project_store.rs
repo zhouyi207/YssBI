@@ -7,8 +7,6 @@ use crate::graph::catalog::{
     BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
 #[cfg(test)]
-use crate::graph::registry::NodeRegistry;
-#[cfg(test)]
 use crate::node_system::runtime::{
     CompiledParameterStore, FunctionPlanStore, KernelRegistry, ProjectRunRegistry, ResultStore,
     SessionMemoization, build_builtin_kernel_registry,
@@ -20,6 +18,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::RwLock;
+#[cfg(test)]
+use yss_graph_registry::NodeRegistry;
 
 pub struct ProjectStore {
     #[cfg(test)]

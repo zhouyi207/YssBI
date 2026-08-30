@@ -589,3 +589,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
 - [ ] 将 canonical JSON 域分隔哈希迁入独立 `src-tauri/crates/yss-canonical-hash/` Pure Leaf；
   registry、analysis 与 runtime 直接依赖该 crate，并删除 registry 中重复的手写 SHA-256 实现。
+- [ ] 将 provider/type/category/node registry、校验与 fingerprint 迁入独立
+  `src-tauri/crates/yss-graph-registry/`；删除根兼容 module，并清除 nominal prepared-value/no-op
+  lowerer、永久禁用 legacy lowerer、无调用 snapshot helper 与重复 capability API。

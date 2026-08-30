@@ -1,7 +1,6 @@
 use crate::graph::catalog::CatalogResourcePath;
 use crate::graph::catalog::{NodeCreation, ResourceBoundCreateArgs};
 use crate::graph::document::{EditorMutationError, EditorMutationErrorCode};
-use crate::graph::registry::NodeRegistry;
 #[cfg(test)]
 use crate::schema::editor_projection_types::{
     EditorGraphProjectionDto, PortDirectionDto, PortKindDto, ResolvedPortDto,
@@ -18,6 +17,7 @@ use yss_graph_protocol::{
     ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
     TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
 };
+use yss_graph_registry::NodeRegistry;
 use yss_variable_contract::VariableScope;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -928,9 +928,7 @@ mod tests {
             basis: crate::graph::analysis::contracts::ProjectionBasis {
                 graph_path: "events/main.yssbi-event".into(),
                 graph_revision: 0,
-                registry_fingerprint: crate::graph::registry::RegistryFingerprint::from_bytes(
-                    [0; 32],
-                ),
+                registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes([0; 32]),
                 resource_versions: BTreeMap::new(),
             },
             graph_path: "events/main.yssbi-event".into(),

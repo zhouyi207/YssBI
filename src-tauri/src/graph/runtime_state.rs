@@ -10,7 +10,6 @@ use crate::graph::catalog::{
 };
 use crate::graph::document::validate_graph_document;
 use crate::graph::error::GraphMutationError;
-use crate::graph::registry::NodeRegistry;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use thiserror::Error;
 use yss_data_contract::DataType;
@@ -20,6 +19,7 @@ use yss_graph_document::{
 use yss_graph_protocol::{
     NodeTypeId, PortDirection, PortInstances, PortKind, TypeConstructorId, TypeExpr, TypeId,
 };
+use yss_graph_registry::NodeRegistry;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);

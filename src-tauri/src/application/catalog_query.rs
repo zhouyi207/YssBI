@@ -7,7 +7,6 @@ use crate::database::session_api::{
 use crate::graph::catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
-use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{FunctionSignature, GraphResourceId, VariableValueContract};
 use crate::graph::runtime_state::GraphRuntimeCatalogError;
 use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
@@ -16,6 +15,7 @@ use yss_database_contract::{
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
+use yss_graph_registry::RegistryFingerprint;
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,

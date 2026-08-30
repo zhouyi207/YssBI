@@ -15,8 +15,6 @@ pub enum RegistryValidationError {
     DuplicateSchemaResolver(SchemaResolverId),
     DuplicateNominalValidator(TypeId),
     MissingNominalValidator(TypeId),
-    RawJsonNominalPayload(TypeId),
-    NominalRegistrationIdExhausted,
     InvalidNominalTypeId {
         value: Box<str>,
         source: InvalidSemanticId,
@@ -67,12 +65,6 @@ impl std::fmt::Display for RegistryValidationError {
             }
             MissingNominalValidator(id) => {
                 write!(f, "built-in nominal type '{id}' has no validator")
-            }
-            RawJsonNominalPayload(id) => {
-                write!(f, "nominal codec '{id}' cannot prepare raw JSON values")
-            }
-            NominalRegistrationIdExhausted => {
-                write!(f, "nominal registration ID space is exhausted")
             }
             InvalidNominalTypeId { value, source } => {
                 write!(f, "invalid built-in nominal type ID '{value}': {source}")
@@ -336,13 +328,7 @@ fn validate_node(
         node.structural_role,
         node.transparent_role,
     ) {
-        (Some(implementation), None, None)
-            if implementation.capability() == ImplementationKind::CompilerLowering => {}
-        (Some(_), None, None) => {
-            return Err(fail(
-                "leaf implementation does not provide lowerer capability".into(),
-            ));
-        }
+        (Some(_), None, None) => {}
         (None, Some(_), None) | (None, None, Some(_)) => {}
         (None, None, None) => return Err(fail("node has no executable interpretation".into())),
         (Some(_), Some(_), None) => {
@@ -422,10 +408,10 @@ fn validate_node(
     for port in &protocol.interface.ports {
         validate_type_expr(&port.value_type, types, &protocol.interface.type_parameters)
             .map_err(&fail)?;
-        if let PortInstances::Derived { resolver } = &port.instances {
-            if !interface_resolvers.contains(resolver) {
-                return Err(fail(format!("unknown interface resolver '{resolver}'")));
-            }
+        if let PortInstances::Derived { resolver } = &port.instances
+            && !interface_resolvers.contains(resolver)
+        {
+            return Err(fail(format!("unknown interface resolver '{resolver}'")));
         }
         if let Some(schema) = &port.schema {
             validate_schema(
@@ -450,13 +436,13 @@ fn validate_node(
             &protocol.interface.type_parameters,
         )
         .map_err(&fail)?;
-        if let Some(default) = &parameter.default_value {
-            if default.value_type != parameter.value_type {
-                return Err(fail(format!(
-                    "parameter '{}' default type does not match",
-                    parameter.key
-                )));
-            }
+        if let Some(default) = &parameter.default_value
+            && default.value_type != parameter.value_type
+        {
+            return Err(fail(format!(
+                "parameter '{}' default type does not match",
+                parameter.key
+            )));
         }
         validate_parameter_constraints(parameter).map_err(&fail)?;
     }
@@ -623,122 +609,6 @@ fn validate_schema_parameter_type(
     }
 }
 
-#[cfg(test)]
-mod nominal_schema_tests {
-    use super::*;
-
-    #[test]
-    fn invalid_builtin_nominal_type_id_preserves_identity_source() {
-        let error = required_nominal_type_id("Bad Nominal Type").unwrap_err();
-        assert!(matches!(
-            &error,
-            RegistryValidationError::InvalidNominalTypeId { value, source }
-                if value.as_ref() == "Bad Nominal Type"
-                    && source == &TypeId::new("Bad Nominal Type").unwrap_err()
-        ));
-        assert!(
-            std::error::Error::source(&error)
-                .and_then(|source| source.downcast_ref::<InvalidSemanticId>())
-                .is_some()
-        );
-    }
-
-    fn parameter(key: &str, value_type: TypeExpr) -> ParameterSpec {
-        ParameterSpec {
-            key: ParameterKey::new(key).unwrap(),
-            title_key: I18nKey::new(format!("parameters.{key}.title")).unwrap(),
-            description_key: None,
-            value_type,
-            default_value: None,
-            constraints: vec![ParameterConstraint::Required],
-            editor: ParameterEditorSpec::Auto,
-            presentation: ParameterPresentation::DetailPanel,
-        }
-    }
-
-    fn ports() -> BTreeMap<&'static PortKey, &'static PortSpec> {
-        let key: &'static PortKey = Box::leak(Box::new(PortKey::new("source").unwrap()));
-        let port: &'static PortSpec = Box::leak(Box::new(PortSpec {
-            key: key.clone(),
-            title: "Source".into(),
-            direction: PortDirection::Input,
-            kind: PortKind::Data,
-            value_type: TypeExpr::Unknown,
-            instances: PortInstances::Declared,
-            connections: ConnectionsPerPort::Single,
-            input_binding: None,
-            consumption: Some(InputConsumption::Streaming),
-            production: None,
-            editor: PortEditorSpec::Default,
-            schema: None,
-        }));
-        BTreeMap::from([(key, port)])
-    }
-
-    #[test]
-    fn project_and_filter_schema_require_exact_nominal_parameter_types() {
-        let source = || Box::new(SchemaExpr::Input(PortKey::new("source").unwrap()));
-        let project_key = ParameterKey::new("columns").unwrap();
-        let filter_key = ParameterKey::new("predicate").unwrap();
-        let project = SchemaExpr::Project {
-            input: source(),
-            columns: ColumnSelectionExpr::FromParameter(project_key.clone()),
-        };
-        let filter = SchemaExpr::Filter {
-            input: source(),
-            predicate: Some(filter_key.clone()),
-        };
-        let port_map = ports();
-        let interface_resolvers = BTreeSet::<InterfaceResolverId>::new();
-        let schema_resolvers = BTreeSet::<SchemaResolverId>::new();
-        let nominal_type_ids = builtin_nominal_type_ids().unwrap();
-
-        for (expression, key, expected_type) in [
-            (
-                project,
-                project_key,
-                yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
-            ),
-            (
-                filter,
-                filter_key,
-                yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
-            ),
-        ] {
-            let wrong = parameter(key.as_str(), TypeExpr::Unknown);
-            let wrong_parameters = BTreeMap::from([(&wrong.key, &wrong)]);
-            assert!(
-                validate_schema(
-                    &expression,
-                    &port_map,
-                    &wrong_parameters,
-                    &interface_resolvers,
-                    &schema_resolvers,
-                    &nominal_type_ids,
-                )
-                .is_err()
-            );
-
-            let exact = parameter(
-                key.as_str(),
-                TypeExpr::Concrete(TypeId::new(expected_type).unwrap()),
-            );
-            let exact_parameters = BTreeMap::from([(&exact.key, &exact)]);
-            assert!(
-                validate_schema(
-                    &expression,
-                    &port_map,
-                    &exact_parameters,
-                    &interface_resolvers,
-                    &schema_resolvers,
-                    &nominal_type_ids,
-                )
-                .is_ok()
-            );
-        }
-    }
-}
-
 fn validate_schema(
     expr: &SchemaExpr,
     ports: &BTreeMap<&PortKey, &PortSpec>,
@@ -883,4 +753,120 @@ fn validate_parameter_constraints(parameter: &ParameterSpec) -> Result<(), Strin
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod nominal_schema_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_builtin_nominal_type_id_preserves_identity_source() {
+        let error = required_nominal_type_id("Bad Nominal Type").unwrap_err();
+        assert!(matches!(
+            &error,
+            RegistryValidationError::InvalidNominalTypeId { value, source }
+                if value.as_ref() == "Bad Nominal Type"
+                    && source == &TypeId::new("Bad Nominal Type").unwrap_err()
+        ));
+        assert!(
+            std::error::Error::source(&error)
+                .and_then(|source| source.downcast_ref::<InvalidSemanticId>())
+                .is_some()
+        );
+    }
+
+    fn parameter(key: &str, value_type: TypeExpr) -> ParameterSpec {
+        ParameterSpec {
+            key: ParameterKey::new(key).unwrap(),
+            title_key: I18nKey::new(format!("parameters.{key}.title")).unwrap(),
+            description_key: None,
+            value_type,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Auto,
+            presentation: ParameterPresentation::DetailPanel,
+        }
+    }
+
+    fn ports() -> BTreeMap<&'static PortKey, &'static PortSpec> {
+        let key: &'static PortKey = Box::leak(Box::new(PortKey::new("source").unwrap()));
+        let port: &'static PortSpec = Box::leak(Box::new(PortSpec {
+            key: key.clone(),
+            title: "Source".into(),
+            direction: PortDirection::Input,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Declared,
+            connections: ConnectionsPerPort::Single,
+            input_binding: None,
+            consumption: Some(InputConsumption::Streaming),
+            production: None,
+            editor: PortEditorSpec::Default,
+            schema: None,
+        }));
+        BTreeMap::from([(key, port)])
+    }
+
+    #[test]
+    fn project_and_filter_schema_require_exact_nominal_parameter_types() {
+        let source = || Box::new(SchemaExpr::Input(PortKey::new("source").unwrap()));
+        let project_key = ParameterKey::new("columns").unwrap();
+        let filter_key = ParameterKey::new("predicate").unwrap();
+        let project = SchemaExpr::Project {
+            input: source(),
+            columns: ColumnSelectionExpr::FromParameter(project_key.clone()),
+        };
+        let filter = SchemaExpr::Filter {
+            input: source(),
+            predicate: Some(filter_key.clone()),
+        };
+        let port_map = ports();
+        let interface_resolvers = BTreeSet::<InterfaceResolverId>::new();
+        let schema_resolvers = BTreeSet::<SchemaResolverId>::new();
+        let nominal_type_ids = builtin_nominal_type_ids().unwrap();
+
+        for (expression, key, expected_type) in [
+            (
+                project,
+                project_key,
+                yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            ),
+            (
+                filter,
+                filter_key,
+                yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
+            ),
+        ] {
+            let wrong = parameter(key.as_str(), TypeExpr::Unknown);
+            let wrong_parameters = BTreeMap::from([(&wrong.key, &wrong)]);
+            assert!(
+                validate_schema(
+                    &expression,
+                    &port_map,
+                    &wrong_parameters,
+                    &interface_resolvers,
+                    &schema_resolvers,
+                    &nominal_type_ids,
+                )
+                .is_err()
+            );
+
+            let exact = parameter(
+                key.as_str(),
+                TypeExpr::Concrete(TypeId::new(expected_type).unwrap()),
+            );
+            let exact_parameters = BTreeMap::from([(&exact.key, &exact)]);
+            assert!(
+                validate_schema(
+                    &expression,
+                    &port_map,
+                    &exact_parameters,
+                    &interface_resolvers,
+                    &schema_resolvers,
+                    &nominal_type_ids,
+                )
+                .is_ok()
+            );
+        }
+    }
 }

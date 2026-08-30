@@ -1,8 +1,8 @@
 use super::CompilationBasis;
-use crate::graph::registry::ProtocolFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use yss_graph_protocol::NodeTypeId;
+use yss_graph_registry::ProtocolFingerprint;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatedSemanticGraph<

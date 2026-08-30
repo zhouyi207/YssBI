@@ -20,8 +20,7 @@ pub use builtin::{
 #[cfg(test)]
 pub(crate) use builtin::{
     BuiltinAssemblyTestFault, build_builtin_node_system_with_test_fault,
-    builtin_bundle_parts_for_test, register_builtin_nominal_validators_for_test,
-    validate_builtin_bundle_for_test,
+    builtin_bundle_parts_for_test, validate_builtin_bundle_for_test,
 };
 pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
 pub(crate) const CONTROL_REROUTE_NODE_TYPE: &str = "yssbi.reroute.control";

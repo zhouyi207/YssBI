@@ -4,7 +4,6 @@ use crate::graph::analysis::{
     GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
     GraphProjectionFacts,
 };
-use crate::graph::registry::RegistryFingerprint;
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::settings::GraphCompileSettings;
 use std::collections::BTreeMap;
@@ -16,6 +15,7 @@ use yss_graph_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
     PortKind, TypeExpr, TypeId,
 };
+use yss_graph_registry::RegistryFingerprint;
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(uuid::Uuid::from_u128(value))

@@ -1,8 +1,8 @@
 use crate::graph::analysis::contracts::{DiagnosticArguments, LocalizationLookup};
-use crate::graph::registry::{I18nManifest, NodeRegistry};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_protocol::{I18nKey, NodeTypeId};
+use yss_graph_registry::{I18nManifest, NodeRegistry};
 
 const DEFAULT_LOCALE: &str = "en-US";
 

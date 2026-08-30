@@ -315,8 +315,8 @@ ProjectState 在 project identity、resource revision 和 authority generation �
 Graph 与 Execution 的依赖方向是：
 
 ```text
-yss-graph-document + yss-graph-protocol
-  → graph registry + catalog
+yss-graph-document + yss-graph-protocol + yss-canonical-hash
+  → yss-graph-registry → graph catalog
   → graph analysis + neutral compiler
   → Application graph package mapping
   → Execution immutable plan/runtime
@@ -324,8 +324,9 @@ yss-graph-document + yss-graph-protocol
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-graph-document`：持久化 document、entity identity、resource path 与名称校验；稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
+- `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
 - `graph/document`：Graph document 行为、mutation 与 materialization，只消费上述 Pure Leaf contracts。
-- `graph/catalog`、`graph/registry`：built-in descriptors、localized catalog 与 registry。
+- `graph/catalog`：built-in descriptors、localized catalog 与 registry composition。
 - `graph/analysis`、`graph/compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。

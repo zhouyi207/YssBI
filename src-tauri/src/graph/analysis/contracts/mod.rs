@@ -42,9 +42,9 @@ pub use snapshot::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::registry::RegistryFingerprint;
     use std::collections::BTreeMap;
     use yss_graph_protocol::I18nKey;
+    use yss_graph_registry::RegistryFingerprint;
 
     type Snapshot = AnalysisSnapshot<u64, u64, String, u64, String, String, String, String>;
     type SemanticGraph = ValidatedSemanticGraph<u64, u64, String, u64, String, String, String>;

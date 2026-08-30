@@ -13,7 +13,7 @@ use yss_graph_protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
     TypeExpr, TypeId, Value,
 };
-use crate::graph::registry::RegistryFingerprint;
+use yss_graph_registry::RegistryFingerprint;
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,

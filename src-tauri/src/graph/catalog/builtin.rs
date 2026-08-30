@@ -4,10 +4,9 @@ use super::diagnostics::{
 };
 use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::graph::catalog::{Aliases, BuiltinCatalog, Message, Text};
-use crate::graph::registry::*;
 use yss_graph_protocol::*;
+use yss_graph_registry::*;
 
-use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -390,13 +389,12 @@ pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializ
 }
 
 fn validate_builtin_bundle(
-    mut provider: ProviderRegistration,
+    provider: ProviderRegistration,
     catalog: BuiltinCatalog,
     alias_keys: BTreeSet<I18nKey>,
 ) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
     let mut builder = NodeRegistryBuilder::new();
-    let handles = register_builtin_nominal_validators(&mut builder)?;
-    super::dataframe::bind_nominal_handles(&mut provider, handles);
+    register_builtin_nominal_validators(&mut builder)?;
     builder
         .register_provider(provider)
         .map_err(BuiltinAssemblyError::Registration)?;
@@ -505,37 +503,25 @@ pub(crate) fn validate_builtin_bundle_for_test(
 
 fn register_builtin_nominal_validators(
     builder: &mut NodeRegistryBuilder,
-) -> Result<super::dataframe::DataframeNominalHandles, BuiltinAssemblyError> {
+) -> Result<(), BuiltinAssemblyError> {
     let parse_type_id = |value| sid(value, TypeId::new);
-    let project_columns = builder
-        .register_nominal_codec(
+    builder
+        .register_nominal_validator(
             parse_type_id(yss_graph_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
             parse_type_id(yss_graph_protocol::dataframe::PROJECT_COLUMNS_VALIDATOR_ID)?,
             yss_graph_protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            yss_graph_protocol::dataframe::prepare_project_columns_json,
+            |value| yss_graph_protocol::dataframe::prepare_project_columns_json(value).map(drop),
         )
         .map_err(BuiltinAssemblyError::Registration)?;
-    let filter_predicate = builder
-        .register_nominal_codec(
+    builder
+        .register_nominal_validator(
             parse_type_id(yss_graph_protocol::dataframe::FILTER_PREDICATE_TYPE_ID)?,
             parse_type_id(yss_graph_protocol::dataframe::FILTER_PREDICATE_VALIDATOR_ID)?,
             yss_graph_protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            yss_graph_protocol::dataframe::prepare_filter_predicate_json,
+            |value| yss_graph_protocol::dataframe::prepare_filter_predicate_json(value).map(drop),
         )
         .map_err(BuiltinAssemblyError::Registration)?;
-    Ok(super::dataframe::DataframeNominalHandles {
-        project_columns,
-        filter_predicate,
-    })
-}
-
-#[cfg(test)]
-pub(crate) fn register_builtin_nominal_validators_for_test(
-    builder: &mut NodeRegistryBuilder,
-) -> Result<(), BuiltinInitializationError> {
-    register_builtin_nominal_validators(builder)
-        .map(|_| ())
-        .map_err(Into::into)
+    Ok(())
 }
 
 fn assemble_builtin_parts()
@@ -731,43 +717,15 @@ fn assemble_builtin_parts_with(
 }
 
 pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
-    RegisteredNode::leaf(Arc::new(protocol), CatalogNodeImplementation::new(kernel))
-}
-
-struct CatalogNodeImplementation {
-    identity: Box<str>,
-}
-
-impl CatalogNodeImplementation {
-    fn new(kernel: &str) -> Self {
-        Self {
-            identity: if kernel.starts_with("yssbi.") {
-                kernel.to_owned().into_boxed_str()
-            } else {
-                format!("yssbi.{kernel}").into_boxed_str()
-            },
-        }
-    }
-}
-
-impl crate::graph::registry::NodeImplementation for CatalogNodeImplementation {
-    fn capability(&self) -> crate::graph::registry::ImplementationKind {
-        crate::graph::registry::ImplementationKind::CompilerLowering
-    }
-
-    fn implementation_identity(&self) -> &str {
-        &self.identity
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl From<CatalogNodeImplementation> for crate::graph::registry::LeafImplementation {
-    fn from(value: CatalogNodeImplementation) -> Self {
-        crate::graph::registry::LeafImplementation::from_arc(Arc::new(value))
-    }
+    let identity = if kernel.starts_with("yssbi.") {
+        kernel.to_owned()
+    } else {
+        format!("yssbi.{kernel}")
+    };
+    RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new(identity.into_boxed_str()),
+    )
 }
 
 fn constant_protocol(

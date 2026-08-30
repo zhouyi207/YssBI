@@ -8,7 +8,7 @@ use crate::graph::analysis::contracts::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
 use yss_graph_protocol::OutputProduction;
-use crate::graph::registry::RegistryFingerprint;
+use yss_graph_registry::RegistryFingerprint;
 use yss_graph_document::{GraphResourcePath, GraphRevision};
 use crate::project::ProjectSessionId;
 use polars::prelude::{Column, DataFrame};
