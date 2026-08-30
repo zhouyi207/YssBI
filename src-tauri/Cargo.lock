@@ -9308,6 +9308,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-discovery"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-project-layout",
+ "yss-project-progress",
+]
+
+[[package]]
 name = "yss-project-history"
 version = "0.1.0"
 dependencies = [
@@ -9488,6 +9497,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-math",
+ "yss-project-discovery",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",

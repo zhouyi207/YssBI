@@ -7,6 +7,7 @@ use crate::project::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use yss_project_discovery::normalize_project_name;
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
     GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE, WORKSHEET_EXTENSION,
@@ -172,7 +173,7 @@ impl ProjectState {
         destination: &Path,
         operation_id: OperationId,
     ) -> Result<CreatedProject, ProjectFilesystemError> {
-        let project_name = crate::project::normalize_project_name(name);
+        let project_name = normalize_project_name(name);
         let destination_binding = ProjectRootBinding::for_destination(destination)?;
         let destination_root = destination_binding.normalized().clone();
         validate_destination_policy(destination_root.as_path())?;

@@ -1,0 +1,11 @@
+[package]
+name = "yss-project-discovery"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+yss-project-layout = { path = "../yss-project-layout" }
+yss-project-progress = { path = "../yss-project-progress" }

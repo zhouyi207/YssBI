@@ -678,3 +678,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-project-history/` Project 层；所有消费者直接依赖唯一 owner，删除根
   `project/history.rs` 与兼容 re-export，并移除仅测试可构造、生产永远无法应用的旧 Graph patch 分支；
   filesystem hydration、durable transaction、publication 与 transport mapping 继续留在原有层。
+- [ ] 将可取消的 project metadata 递归扫描、跳过目录规则与项目名规范化迁入
+  `src-tauri/crates/yss-project-discovery/` Project 层；删除根 `project_scan` owner 与兼容 re-export，
+  注册结果继续由 registry workflow 拥有；扫描拒绝进入 Unix symlink 与 Windows reparse point，
+  避免越过用户选择的 discovery root 或因目录重定向形成递归循环。

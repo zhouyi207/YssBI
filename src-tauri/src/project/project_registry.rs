@@ -4,10 +4,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::{
-    NormalizedProjectRoot, ProjectDiscoveryError, ProjectRootBinding, format_path_for_user,
-    format_path_for_user_path,
+    NormalizedProjectRoot, ProjectRootBinding, format_path_for_user, format_path_for_user_path,
 };
 
+use yss_project_discovery::{
+    ProjectDiscoveryError, discover_project_metadata_files, normalize_project_name,
+    project_name_from_metadata_path,
+};
 use yss_project_identity::ProjectRegistrationId;
 use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_progress::{
@@ -22,6 +25,14 @@ use yss_project_registry_contract::{
 #[serde(rename_all = "camelCase")]
 pub struct CleanupInvalidProjectsResult {
     pub removed: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanProjectsResult {
+    pub discovered: usize,
+    pub newly_registered: usize,
+    pub projects: Vec<ProjectRecord>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -275,7 +286,7 @@ impl ProjectRegistry {
         directory: &str,
         progress: Option<&dyn ProjectProgressSink>,
         cancellation: ProjectTaskCancellation,
-    ) -> Result<crate::project::ScanProjectsResult, ProjectRegistryError> {
+    ) -> Result<ScanProjectsResult, ProjectRegistryError> {
         if cancellation.is_cancelled() {
             return Err(ProjectRegistryError::Cancelled);
         }
@@ -283,8 +294,8 @@ impl ProjectRegistry {
             sink.publish(ProjectProgress::Scan(ProjectScanProgress::Scanning));
         }
         let root = PathBuf::from(directory.trim());
-        let metadata_files = crate::project::discover_project_metadata_files(&root, &cancellation)
-            .map_err(|error| match error {
+        let metadata_files =
+            discover_project_metadata_files(&root, &cancellation).map_err(|error| match error {
                 ProjectDiscoveryError::Cancelled => ProjectRegistryError::Cancelled,
                 ProjectDiscoveryError::InvalidRoot | ProjectDiscoveryError::Io(_) => {
                     ProjectRegistryError::ScanFailed
@@ -310,7 +321,7 @@ impl ProjectRegistry {
             let path = metadata_path.to_string_lossy().into_owned();
             let normalized =
                 normalize_existing_path(&path).map_err(|_| ProjectRegistryError::ScanFailed)?;
-            let name = crate::project::project_name_from_metadata_path(metadata_path);
+            let name = project_name_from_metadata_path(metadata_path);
             let existing = self.fetch_by_path(&normalized).await?;
             let (record, is_new) = match existing {
                 Some(record) => (record, false),
@@ -319,7 +330,7 @@ impl ProjectRegistry {
             newly_registered += usize::from(is_new);
             projects.push(record);
         }
-        Ok(crate::project::ScanProjectsResult {
+        Ok(ScanProjectsResult {
             discovered: metadata_files.len(),
             newly_registered,
             projects,
@@ -333,15 +344,6 @@ fn now_string() -> String {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     seconds.to_string()
-}
-
-pub fn normalize_project_name(name: &str) -> String {
-    let name = name.trim();
-    if name.is_empty() {
-        "未命名项目".into()
-    } else {
-        name.into()
-    }
 }
 
 pub fn default_project_parent_directory() -> Result<String, String> {

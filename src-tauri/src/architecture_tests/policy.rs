@@ -1041,7 +1041,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::error::CommandError",
             "yssbi_lib::project::project_registry::CleanupInvalidProjectsResult",
             "yssbi_lib::project::project_registry::ProjectRegistry",
-            "yssbi_lib::project::project_scan::ScanProjectsResult",
+            "yssbi_lib::project::project_registry::ScanProjectsResult",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::schema::application_event::LifecycleMutationResultDto",
             "yssbi_lib::application::execution::session_slot::ApplicationState",
@@ -1733,7 +1733,7 @@ fn non_build_memberships(
             | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
-    } else if package == "yss-project-history" {
+    } else if matches!(package, "yss-project-discovery" | "yss-project-history") {
         layers.insert(RustLayer::Project);
     } else if package == "yss-graph-catalog" {
         layers.insert(exact_layer.unwrap_or(RustLayer::Graph));

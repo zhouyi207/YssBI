@@ -961,6 +961,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-math/src/lib.rs"),
     };
+    let project_discovery_root = ProductionRoot {
+        package_id: "project-discovery-package".to_owned(),
+        package: "yss-project-discovery".to_owned(),
+        target: "yss_project_discovery".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-project-discovery/src/lib.rs"),
+    };
     let project_history_root = ProductionRoot {
         package_id: "project-history-package".to_owned(),
         package: "yss-project-history".to_owned(),
@@ -1015,6 +1022,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_type_mapping_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
+        project_discovery_root.clone(),
         project_history_root.clone(),
         tabular_contract_root.clone(),
         variable_contract_root.clone(),
@@ -1133,6 +1141,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_math",
             ),
             module(
+                &project_discovery_root,
+                "src-tauri/crates/yss-project-discovery/src/lib.rs",
+                "yss_project_discovery",
+            ),
+            module(
                 &project_history_root,
                 "src-tauri/crates/yss-project-history/src/lib.rs",
                 "yss_project_history",
@@ -1245,6 +1258,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-math/src/lib.rs"],
         RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/crates/yss-project-discovery/src/lib.rs"],
+        RustLayer::Project
     );
     assert_eq!(
         classified["src-tauri/crates/yss-project-history/src/lib.rs"],
@@ -2906,7 +2923,6 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
 
     for relative in [
         "src-tauri/src/project/project_registry.rs",
-        "src-tauri/src/project/project_scan.rs",
         "src-tauri/src/application/events.rs",
         "src-tauri/src/application/project_lifecycle/mod.rs",
         "src-tauri/src/commands/command_project/registry.rs",
@@ -3169,6 +3185,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
     }
 
     for relative in [
+        "src-tauri/crates/yss-project-discovery/src/lib.rs",
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
         "src-tauri/crates/yss-worksheet-document/src/lib.rs",
         "src-tauri/src/project/graph_resource_index.rs",
@@ -3228,6 +3245,129 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
     assert!(
         policy.contains("| \"yss-project-layout\""),
         "project layout must be classified as a Pure Leaf"
+    );
+}
+
+#[test]
+fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect_traversal() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-discovery/Cargo.toml",
+        "src-tauri/crates/yss-project-discovery/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project discovery owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root.join("src-tauri/src/project/project_scan.rs").exists(),
+        "the root crate must not retain a second project-discovery owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-discovery\"",
+        "yss-project-discovery = { path = \"./crates/yss-project-discovery\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-discovery/Cargo.toml"))
+            .expect("project discovery manifest must be readable");
+    for dependency in [
+        "yss-project-layout = { path = \"../yss-project-layout\" }",
+        "yss-project-progress = { path = \"../yss-project-progress\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project discovery must declare its canonical dependency {dependency}"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-discovery/src/lib.rs"))
+            .expect("project discovery owner must be readable");
+    for contract in [
+        "pub const DEFAULT_PROJECT_NAME",
+        "pub enum ProjectDiscoveryError",
+        "pub fn normalize_project_name",
+        "pub fn discover_project_metadata_files",
+        "pub fn project_name_from_metadata_path",
+    ] {
+        assert!(
+            owner.contains(contract),
+            "project discovery crate must own '{contract}'"
+        );
+    }
+    for redirect_guard in [
+        "file_type.is_symlink()",
+        "FILE_ATTRIBUTE_REPARSE_POINT",
+        "is_redirect(root, &root_metadata.file_type())?",
+        "is_redirect(&metadata_path, &metadata.file_type())?",
+        "is_redirect(&path, &file_type)?",
+    ] {
+        assert!(
+            owner.contains(redirect_guard),
+            "project discovery must reject redirected directory traversal via '{redirect_guard}'"
+        );
+    }
+    for misplaced_owner in [
+        "pub struct ScanProjectsResult",
+        "ProjectRegistryStore",
+        "yss_project_registry_contract",
+        "tauri",
+        "sqlx",
+    ] {
+        assert!(
+            !owner.contains(misplaced_owner),
+            "project discovery must not absorb registry/transport concern '{misplaced_owner}'"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in ["project_scan", "pub use yss_project_discovery"] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore discovery facade '{facade}'"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/src/project/project_registry.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_project_discovery::"),
+            "{relative} must consume the project discovery owner directly"
+        );
+        assert!(
+            !consumer.contains("crate::project::project_scan"),
+            "{relative} must not restore the removed root discovery path"
+        );
+    }
+
+    let registry = std::fs::read_to_string(root.join("src-tauri/src/project/project_registry.rs"))
+        .expect("project registry workflow must be readable");
+    assert!(
+        registry.contains("pub struct ScanProjectsResult"),
+        "registration scan outcome must remain with the registry workflow"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("\"yss-project-discovery\" | \"yss-project-history\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "project discovery must be classified as Project behavior, not as a Pure Leaf"
     );
 }
 
@@ -3339,7 +3479,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("Rust architecture policy must be readable");
     assert!(
-        policy.contains("package == \"yss-project-history\"")
+        policy.contains("\"yss-project-discovery\" | \"yss-project-history\"")
             && policy.contains("layers.insert(RustLayer::Project)"),
         "project history must be classified as Project behavior, not as a Pure Leaf"
     );
@@ -3575,7 +3715,7 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     for relative in [
         "src-tauri/src/lib.rs",
         "src-tauri/src/project/project_registry.rs",
-        "src-tauri/src/project/project_scan.rs",
+        "src-tauri/crates/yss-project-discovery/src/lib.rs",
         "src-tauri/src/commands/command_project/registry.rs",
         "src-tauri/src/commands/command_project/progress.rs",
     ] {
@@ -3591,8 +3731,9 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         );
     }
 
-    let scan = std::fs::read_to_string(root.join("src-tauri/src/project/project_scan.rs"))
-        .expect("project scan source must be readable");
+    let scan =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-discovery/src/lib.rs"))
+            .expect("project discovery owner must be readable");
     assert!(
         !scan.contains("ProjectScanProgressEvent"),
         "project scan must not restore the zero-caller duplicate progress DTO"
