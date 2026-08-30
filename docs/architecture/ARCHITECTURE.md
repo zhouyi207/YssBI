@@ -140,12 +140,12 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-resource-lifecycle/` | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；变量值归一化由 `yss-variable-value` 负责 |
-| `src-tauri/crates/yss-tabular-io/` | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io` owner，且不依赖 root database、Application 或 Tauri |
+| `src-tauri/crates/yss-tabular-io/` | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O、Excel workbook sheet inspection/CSV bridge 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io`、`database/excel_reader` owner，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-tabular-polars/` | 独立 Backend Adapter：canonical tabular scalar/column/snapshot 的 Polars materialization 与双向 JSON value projection 唯一 owner；完整保留 `u64` 与 1970 年前时间戳，替代零调用的 root `database/row_mapping` 重复实现，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history 与 export orchestration；export format、DuckDB `COPY` 和 Polars writer 分别由 `yss-database-contract`、`yss-duckdb`、`yss-tabular-io` 拥有 |
+| `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history 与 export orchestration；export format、DuckDB `COPY`、Polars writer 和 Excel workbook I/O 分别由 `yss-database-contract`、`yss-duckdb`、`yss-tabular-io` 拥有 |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |

@@ -44,6 +44,7 @@ use yss_display_naming::allocate_unique_display_name;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularSnapshot;
+use yss_tabular_io::list_excel_sheets as list_workbook_sheets;
 
 #[cfg(test)]
 static DATABASE_EXTERNAL_IO_TEST_HOOK: std::sync::Mutex<
@@ -1330,8 +1331,8 @@ pub fn list_sql_tables(
 }
 
 pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
-    crate::database::excel_reader::list_sheets(path).map_err(|error| {
-        DatabaseApplicationError::internal_message(DatabaseApplicationOperation::ListSheets, error)
+    list_workbook_sheets(Path::new(path)).map_err(|error| {
+        DatabaseApplicationError::internal(DatabaseApplicationOperation::ListSheets, error)
     })
 }
 

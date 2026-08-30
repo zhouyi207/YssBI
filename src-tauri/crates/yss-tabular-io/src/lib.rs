@@ -1,11 +1,15 @@
 //! Polars-backed typed tabular filesystem I/O.
 
+mod excel;
+
 use std::fs::{self, File};
 use std::path::Path;
 
 use polars::prelude::{
     CsvWriter, DataFrame, IpcReader, IpcWriter, ParquetWriter, PolarsError, SerReader, SerWriter,
 };
+
+pub use excel::{ExcelIoError, ExcelIoPhase, export_excel_sheet_to_csv, list_excel_sheets};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabularIoOperation {

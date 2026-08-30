@@ -759,3 +759,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   收窄为 root、operation id 与 recovery marker，避免 filesystem 反向依赖完整 `ProjectSession`；ProjectState
   publication、resource revision 校验与 document serialization 继续留在根 Project 层；错误码和 recovery
   分类仅通过 Application-owned failure view 进入 Commands，通用 Transport error 不依赖 Project/Application。
+- [ ] 将 Excel workbook sheet inspection 与 Sheet→CSV bridge 迁入现有 `yss-tabular-io` Database Core；
+  删除根 `database/excel_reader` owner/facade，将 `calamine` 依赖下沉到唯一 owner，并让 Application 与
+  DuckDB reader 直接调用 typed `ExcelIoError` API，为 `duckdb_reader` 整体迁入 `yss-duckdb` 解除反向依赖。

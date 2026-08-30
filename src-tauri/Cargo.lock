@@ -9524,6 +9524,7 @@ dependencies = [
 name = "yss-tabular-io"
 version = "0.1.0"
 dependencies = [
+ "calamine",
  "polars",
  "thiserror 2.0.20",
 ]
@@ -9606,7 +9607,6 @@ dependencies = [
 name = "yssbi"
 version = "0.3.0"
 dependencies = [
- "calamine",
  "chrono",
  "duckdb",
  "ndarray",

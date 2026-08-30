@@ -6,5 +6,6 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+calamine = "0.36"
 polars.workspace = true
 thiserror.workspace = true

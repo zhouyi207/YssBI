@@ -2544,6 +2544,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-tabular-io/Cargo.toml",
+        "src-tauri/crates/yss-tabular-io/src/excel.rs",
         "src-tauri/crates/yss-tabular-io/src/lib.rs",
     ] {
         assert!(
@@ -2551,10 +2552,15 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
             "tabular I/O owner must exist at {relative}"
         );
     }
-    assert!(
-        !root.join("src-tauri/src/database/tabular_io.rs").exists(),
-        "the root database crate must not retain the tabular I/O owner"
-    );
+    for removed_owner in [
+        "src-tauri/src/database/excel_reader.rs",
+        "src-tauri/src/database/tabular_io.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root database crate must not retain tabular I/O owner {removed_owner}"
+        );
+    }
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
@@ -2570,7 +2576,11 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     let io_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/Cargo.toml"))
             .expect("the tabular I/O manifest must be readable");
-    for dependency in ["polars.workspace = true", "thiserror.workspace = true"] {
+    for dependency in [
+        "calamine = \"0.36\"",
+        "polars.workspace = true",
+        "thiserror.workspace = true",
+    ] {
         assert!(
             io_manifest.contains(dependency),
             "the tabular I/O crate must declare {dependency}"
@@ -2580,6 +2590,10 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/src/lib.rs"))
         .expect("the tabular I/O owner must be readable");
     for owned_api in [
+        "ExcelIoError",
+        "ExcelIoPhase",
+        "export_excel_sheet_to_csv",
+        "list_excel_sheets",
         "pub struct TabularIoError",
         "pub fn read_ipc_dataframe",
         "pub fn write_ipc_dataframe",
@@ -2604,10 +2618,33 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         "the tabular I/O owner must preserve typed errors and current-directory outputs"
     );
 
+    let excel_owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/src/excel.rs"))
+            .expect("the Excel I/O owner must be readable");
+    for invariant in [
+        "pub struct ExcelIoError",
+        "pub enum ExcelIoPhase",
+        "pub fn export_excel_sheet_to_csv",
+        "pub fn list_excel_sheets",
+        "missing_workbook_reports_open_phase",
+        "text_cells_are_quoted_and_escape_quotes",
+    ] {
+        assert!(
+            excel_owner.contains(invariant),
+            "the Excel I/O owner must preserve invariant {invariant}"
+        );
+    }
+    assert!(
+        !excel_owner.contains(", String>"),
+        "the Excel I/O owner must expose typed errors"
+    );
+
     for relative in [
         "src-tauri/src/application/bayes.rs",
+        "src-tauri/src/application/database.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         "src-tauri/src/database/database_instance.rs",
+        "src-tauri/src/database/duckdb_reader.rs",
         "src-tauri/src/sci/backends/julia/bayes/fit.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -2620,7 +2657,9 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     let database_module = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
         .expect("the root database module must be readable");
     assert!(
-        !database_module.contains("tabular_io") && !database_module.contains("yss_tabular_io"),
+        !database_module.contains("excel_reader")
+            && !database_module.contains("tabular_io")
+            && !database_module.contains("yss_tabular_io"),
         "the root database module must not retain a tabular I/O facade"
     );
 

@@ -35,7 +35,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
+        owning_package: "yss-tabular-io",
         mode: RustDependencyMode::Runtime,
         package_name: "calamine",
         target_condition: None,
@@ -987,11 +987,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::DatabaseCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "calamine",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "calamine",
     },

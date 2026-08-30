@@ -12,7 +12,6 @@ pub mod duckdb_column_snapshot;
 pub mod duckdb_editing;
 pub mod duckdb_reader; // 类型映射见 duckdb_reader 与 database/README.md
 pub mod edit_operation;
-pub mod excel_reader;
 pub mod sql_reader;
 pub mod sqlite_reader;
 

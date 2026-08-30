@@ -174,7 +174,6 @@ tokio.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 sqlx.workspace = true
-calamine = "0.36"
 rand = "0.10"
 duckdb.workspace = true
 notify = "8.2.0"

@@ -21,6 +21,7 @@ use polars_dtype::categorical::{CatSize, FrozenCategories};
 use yss_duckdb::{
     DUCKDB_ROWID_SQL, duckdb_table_sql, quote_duckdb_identifier, quote_duckdb_string_literal,
 };
+use yss_tabular_io::export_excel_sheet_to_csv;
 
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
@@ -708,11 +709,7 @@ pub fn ingest_excel_to_duckdb(
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let temp_csv = std::env::temp_dir().join(format!("yssbi_excel_{table}_{stamp}.csv"));
-    super::excel_reader::export_sheet_to_csv(
-        excel_path.to_string_lossy().as_ref(),
-        sheet,
-        &temp_csv,
-    )?;
+    export_excel_sheet_to_csv(excel_path, sheet, &temp_csv).map_err(|error| error.to_string())?;
     let meta = ingest_csv_to_duckdb(&temp_csv, duckdb_path, table, ',', true, None);
     let _ = std::fs::remove_file(&temp_csv);
     meta
