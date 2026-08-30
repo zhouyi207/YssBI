@@ -100,7 +100,7 @@ fn collect_kind_files(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error.into()),
     };
-    if crate::project::metadata_is_redirect(&metadata) || !metadata.is_dir() {
+    if yss_project_filesystem::metadata_is_redirect(&metadata) || !metadata.is_dir() {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph directory '{}' is not a real directory",
             graph_dir.display()
@@ -109,7 +109,7 @@ fn collect_kind_files(
     for entry in std::fs::read_dir(&graph_dir)? {
         let path = entry?.path();
         let metadata = std::fs::symlink_metadata(&path)?;
-        if crate::project::metadata_is_redirect(&metadata) {
+        if yss_project_filesystem::metadata_is_redirect(&metadata) {
             return Err(ProjectError::InvalidProjectFormat(format!(
                 "graph resource path '{}' is a redirect",
                 path.display()

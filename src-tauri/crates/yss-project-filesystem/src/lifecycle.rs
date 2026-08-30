@@ -1,16 +1,16 @@
-use crate::project::{
+use crate::{
     NormalizedProjectRoot, ProjectFilesystemError, metadata_is_redirect, read_secure_project_file,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_project_layout::PROJECT_METADATA_FILE;
 
-pub(crate) struct ProjectSourceTree {
+pub struct ProjectSourceTree {
     pub directories: BTreeSet<PathBuf>,
     pub files: BTreeMap<PathBuf, Vec<u8>>,
 }
 
-pub(crate) fn ensure_directory(root: &Path) -> Result<bool, ProjectFilesystemError> {
+pub fn ensure_directory(root: &Path) -> Result<bool, ProjectFilesystemError> {
     let created = !root.exists();
     if created {
         std::fs::create_dir_all(root).map_err(prepare_error)?;
@@ -18,13 +18,13 @@ pub(crate) fn ensure_directory(root: &Path) -> Result<bool, ProjectFilesystemErr
     Ok(created)
 }
 
-pub(crate) fn remove_directory_if_created(root: &Path, created: bool) {
+pub fn remove_directory_if_created(root: &Path, created: bool) {
     if created {
         let _ = std::fs::remove_dir_all(root);
     }
 }
 
-pub(crate) fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
+pub fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
     if !root.exists() {
         let parent = root
             .parent()
@@ -49,9 +49,7 @@ pub(crate) fn validate_destination_policy(root: &Path) -> Result<(), ProjectFile
     Ok(())
 }
 
-pub(crate) fn validate_deletion_root(
-    root: &NormalizedProjectRoot,
-) -> Result<(), ProjectFilesystemError> {
+pub fn validate_deletion_root(root: &NormalizedProjectRoot) -> Result<(), ProjectFilesystemError> {
     let metadata = std::fs::symlink_metadata(root.as_path()).map_err(prepare_error)?;
     if metadata_is_redirect(&metadata) || !metadata.is_dir() {
         return Err(invalid_root(
@@ -70,7 +68,7 @@ pub(crate) fn validate_deletion_root(
     Ok(())
 }
 
-pub(crate) fn read_project_source_tree(
+pub fn read_project_source_tree(
     source_root: &Path,
 ) -> Result<ProjectSourceTree, ProjectFilesystemError> {
     let mut tree = ProjectSourceTree {

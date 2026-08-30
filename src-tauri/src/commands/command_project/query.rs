@@ -70,13 +70,13 @@ fn current_project_activation(
     let activation_revision = state.activation_revision();
     let session = state
         .capture_project_session()
-        .map_err(CommandError::from)?;
+        .map_err(crate::commands::project_failure::application_project_command_error)?;
     let path = state
         .get_path()
         .ok_or_else(|| CommandError::expected("stale_project_lifecycle"))?;
     state
         .validate_project_session(&session)
-        .map_err(CommandError::from)?;
+        .map_err(crate::commands::project_failure::application_project_command_error)?;
     if state.activation_revision() != activation_revision {
         return Err(CommandError::expected("stale_project_lifecycle"));
     }
@@ -227,7 +227,9 @@ fn map_project_query_error(
         ProjectQueryApplicationError::ProjectIdentityMismatch { .. } => {
             CommandError::expected("stale_project_lifecycle")
         }
-        ProjectQueryApplicationError::Project(error) => CommandError::from(error),
+        ProjectQueryApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         ProjectQueryApplicationError::ProjectRead(error) => {
             CommandError::diagnosed("project_query_failed", error)
         }

@@ -20,7 +20,6 @@ use super::graph_contracts::{
 };
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
-use crate::project::ProjectFilesystemError;
 use crate::project::project_writers::ProjectSaveResult;
 use std::collections::BTreeMap;
 use yss_execution::plan::{
@@ -34,6 +33,7 @@ use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_project_model::GraphResourceDocument;

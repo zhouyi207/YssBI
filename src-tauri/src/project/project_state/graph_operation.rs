@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use crate::project::{ProjectFilesystemError, ProjectSession};
+use crate::project::ProjectSession;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_history::{
     ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency,
     ProjectHistoryTransaction,

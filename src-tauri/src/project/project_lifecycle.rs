@@ -1,13 +1,15 @@
 use crate::project::{
-    NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootLifecycleGuard, ProjectSession,
-    ProjectState, ProjectTransactionContext, StagedFilesystemMutation, ensure_directory,
-    read_project_source_tree, remove_directory_if_created, validate_deletion_root,
-    validate_destination_policy,
+    PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_project_discovery::normalize_project_name;
+use yss_project_filesystem::{
+    NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemTransaction,
+    ProjectRootBinding, ProjectRootLifecycleGuard, StagedFilesystemMutation, ensure_directory,
+    read_project_source_tree, remove_directory_if_created, validate_deletion_root,
+    validate_destination_policy,
+};
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
     GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE, WORKSHEET_EXTENSION,
@@ -139,7 +141,7 @@ impl ProjectState {
             self,
         );
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.filesystem_context(),
             lease,
             mutations,
             validate_project_copy_file,
@@ -195,7 +197,7 @@ impl ProjectState {
             self,
         );
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.filesystem_context(),
             lease,
             new_project_mutations(&data)?,
             validate_project_copy_file,
@@ -482,7 +484,7 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::project::{ProjectFilesystemFaultPoint, fixtures, load_project_from_file};
+    use crate::project::{fixtures, load_project_from_file};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourceKind;
@@ -490,6 +492,7 @@ mod tests {
     use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
     use yss_graph_protocol::NodeTypeId;
+    use yss_project_filesystem::ProjectFilesystemFaultPoint;
     use yss_project_history::{MutationRequest, ResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_project_model::{GraphResourceDocument, ProjectData};

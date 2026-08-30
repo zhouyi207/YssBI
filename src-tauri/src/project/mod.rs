@@ -1,7 +1,6 @@
 //! 项目管理模块
 
 pub mod execution_authority;
-pub mod filesystem;
 pub mod graph_resource_index;
 mod history_hydration;
 pub(crate) mod project_change_reconciliation;
@@ -26,7 +25,6 @@ pub mod project_store;
 pub mod resource_reveal;
 pub mod worksheet_io;
 
-pub use filesystem::*;
 pub use graph_resource_index::*;
 pub use project_error::*;
 pub(crate) use resource_lifecycle_operation::{
@@ -89,7 +87,7 @@ pub(crate) mod fixtures {
     ) -> Result<(), ProjectError> {
         super::project_io::initialize_project_directory(
             project_data,
-            super::project_io::project_root_from_path(path).as_path(),
+            yss_project_filesystem::project_root_from_path(path).as_path(),
         )
     }
 
@@ -98,7 +96,7 @@ pub(crate) mod fixtures {
         path: &str,
         graph_path: &GraphResourcePath,
     ) -> Result<String, ProjectError> {
-        let root = super::project_io::project_root_from_path(path);
+        let root = yss_project_filesystem::project_root_from_path(path);
         std::fs::create_dir_all(&root)?;
         let (relative_path, contents) =
             super::project_io::serialize_graph_document(project_data, graph_path)?;
@@ -137,7 +135,8 @@ pub(crate) mod fixtures {
 
     pub(crate) fn flush_state(
         state: &super::ProjectState,
-    ) -> Result<crate::schema::ProjectSaveResultDto, super::ProjectFilesystemError> {
+    ) -> Result<crate::schema::ProjectSaveResultDto, yss_project_filesystem::ProjectFilesystemError>
+    {
         let session = state.capture_project_session()?;
         state
             .flush_project_documents(
@@ -150,14 +149,17 @@ pub(crate) mod fixtures {
     pub(crate) fn write_state_graph(
         state: &super::ProjectState,
         graph_path: &GraphResourcePath,
-    ) -> Result<crate::schema::ProjectSaveResultDto, super::ProjectFilesystemError> {
+    ) -> Result<crate::schema::ProjectSaveResultDto, yss_project_filesystem::ProjectFilesystemError>
+    {
         let session = state.capture_project_session()?;
         let revision = state
             .get_data()?
             .graphs
             .get(graph_path)
-            .ok_or_else(|| super::ProjectFilesystemError::TransactionPrepareFailed {
-                message: format!("graph '{}' is not loaded", graph_path),
+            .ok_or_else(|| {
+                yss_project_filesystem::ProjectFilesystemError::TransactionPrepareFailed {
+                    message: format!("graph '{}' is not loaded", graph_path),
+                }
             })?
             .document
             .revision;

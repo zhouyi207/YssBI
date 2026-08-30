@@ -92,7 +92,9 @@ pub(super) fn resource_mutation_to_command_error(
                     })
             }
         },
-        ResourceMutationApplicationError::Project(error) => CommandError::from(error),
+        ResourceMutationApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         ResourceMutationApplicationError::Mutation(error) => {
             mutation_conflict_to_command_error(error)
         }

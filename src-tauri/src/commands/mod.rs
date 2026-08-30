@@ -14,6 +14,7 @@ pub mod command_serial_tests;
 pub mod command_variable;
 pub mod command_window;
 pub mod command_worksheet;
+pub(crate) mod project_failure;
 
 pub use command_bayes::*;
 pub use command_dataframe::*;

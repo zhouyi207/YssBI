@@ -3320,7 +3320,7 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     );
 
     let filesystem_root =
-        std::fs::read_to_string(root.join("src-tauri/src/project/filesystem/root.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-filesystem/src/root.rs"))
             .expect("project filesystem root must be readable");
     assert!(
         filesystem_root.contains("yss_project_identity::ProjectRootIdentity")
@@ -4400,6 +4400,164 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
 }
 
 #[test]
+fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycle() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-filesystem/Cargo.toml",
+        "src-tauri/crates/yss-project-filesystem/src/lib.rs",
+        "src-tauri/crates/yss-project-filesystem/src/coordinator.rs",
+        "src-tauri/crates/yss-project-filesystem/src/error.rs",
+        "src-tauri/crates/yss-project-filesystem/src/recovery.rs",
+        "src-tauri/crates/yss-project-filesystem/src/root.rs",
+        "src-tauri/crates/yss-project-filesystem/src/transaction.rs",
+        "src-tauri/src/application/project_failure.rs",
+        "src-tauri/src/commands/project_failure.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project filesystem boundary must exist at {relative}"
+        );
+    }
+    for relative in [
+        "src-tauri/src/project/filesystem/mod.rs",
+        "src-tauri/src/project/filesystem/coordinator.rs",
+        "src-tauri/src/project/filesystem/root.rs",
+        "src-tauri/src/project/filesystem/transaction.rs",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "the root crate must not retain filesystem owner {relative}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-filesystem\"",
+        "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\" }",
+        "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\", features = [\"test-support\"] }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-filesystem/Cargo.toml"))
+            .expect("project filesystem manifest must be readable");
+    for dependency in [
+        "serde_json.workspace = true",
+        "thiserror.workspace = true",
+        "unicode-casefold.workspace = true",
+        "unicode-normalization.workspace = true",
+        "uuid.workspace = true",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+        "yss-project-layout = { path = \"../yss-project-layout\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project filesystem must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["tauri", "sqlx", "polars", "yssbi"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project filesystem must not absorb runtime concern '{forbidden}'"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-filesystem/src/lib.rs"))
+            .expect("project filesystem owner must be readable");
+    for invariant in [
+        "ProjectFilesystemCoordinator",
+        "ProjectRootLifecycleGuard",
+        "ProjectFilesystemTransaction",
+        "ProjectFilesystemTransactionContext",
+        "ProjectRecoveryMarker",
+        "NormalizedProjectRoot",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "project filesystem must own {invariant}"
+        );
+    }
+
+    let transaction = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project-filesystem/src/transaction.rs"),
+    )
+    .expect("project filesystem transaction must be readable");
+    assert!(
+        transaction.contains("pub struct ProjectFilesystemTransactionContext")
+            && transaction.contains("pub root: NormalizedProjectRoot")
+            && !transaction.contains("ProjectSession"),
+        "filesystem transactions must consume minimal filesystem facts, not ProjectSession"
+    );
+    assert!(
+        !transaction.contains("cfg(all(test, any()))"),
+        "project filesystem tests must remain executable"
+    );
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("root project module must be readable");
+    assert!(
+        !project_module.contains("mod filesystem")
+            && !project_module.contains("pub use yss_project_filesystem"),
+        "the root Project layer must consume the crate directly without a compatibility facade"
+    );
+    let project_error =
+        std::fs::read_to_string(root.join("src-tauri/src/project/project_error.rs"))
+            .expect("root project error module must be readable");
+    assert!(
+        !project_error.contains("enum ProjectFilesystemError"),
+        "ProjectFilesystemError must have one canonical owner"
+    );
+    let session = std::fs::read_to_string(root.join("src-tauri/src/project/project_session.rs"))
+        .expect("project session must be readable");
+    assert!(
+        session.contains("ProjectFilesystemTransactionContext")
+            && session.contains("fn filesystem_context(&self)"),
+        "Project must adapt its rich transaction context into minimal filesystem facts"
+    );
+
+    let application_failure =
+        std::fs::read_to_string(root.join("src-tauri/src/application/project_failure.rs"))
+            .expect("application project failure view must be readable");
+    assert!(
+        application_failure.contains("ProjectFilesystemError")
+            && application_failure.contains("ApplicationProjectFailure"),
+        "Application must own the explicit Project failure view"
+    );
+    let command_failure =
+        std::fs::read_to_string(root.join("src-tauri/src/commands/project_failure.rs"))
+            .expect("command project failure adapter must be readable");
+    let command_failure_production = command_failure
+        .split_once("#[cfg(test)]")
+        .map_or(command_failure.as_str(), |(production, _)| production);
+    assert!(
+        command_failure_production.contains("ApplicationProjectFailure")
+            && !command_failure_production.contains("use yss_project_filesystem"),
+        "Commands must map the Application failure view without importing Project"
+    );
+    let transport_error = std::fs::read_to_string(root.join("src-tauri/src/error/mod.rs"))
+        .expect("transport error module must be readable");
+    assert!(
+        !transport_error.contains("yss_project_filesystem")
+            && !transport_error.contains("ApplicationProjectFailure"),
+        "the generic Transport error must remain independent of Project and Application"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("Rust architecture policy must be readable");
+    assert!(
+        policy.contains("package == \"yss-project-filesystem\"")
+            && policy.contains("layers.insert(RustLayer::Project)"),
+        "project filesystem must be classified as stateful Project behavior"
+    );
+}
+
+#[test]
 fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tests() {
     let root = repository_root();
     for relative in [
@@ -4530,7 +4688,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     }
 
     let project_error =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_error.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-filesystem/src/error.rs"))
             .expect("project filesystem error owner must be readable");
     for mapping in [
         "impl From<yss_resource_lifecycle::ResourceLifecycleError>",
@@ -4539,7 +4697,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     ] {
         assert!(
             project_error.contains(mapping),
-            "root error boundary must retain mapping '{mapping}'"
+            "project filesystem error owner must retain mapping '{mapping}'"
         );
     }
 
@@ -5040,7 +5198,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/src/project/history_hydration.rs",
         "src-tauri/src/project/project_activation.rs",
         "src-tauri/crates/yss-project-model/src/lib.rs",
-        "src-tauri/src/project/project_error.rs",
+        "src-tauri/crates/yss-project-filesystem/src/error.rs",
         "src-tauri/src/project/project_lifecycle.rs",
         "src-tauri/src/project/project_reads.rs",
         "src-tauri/src/project/project_state.rs",

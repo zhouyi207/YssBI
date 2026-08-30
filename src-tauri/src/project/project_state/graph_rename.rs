@@ -262,7 +262,7 @@ impl ProjectState {
         }
         self.validate_resource_lifecycle_operation(&ownership)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             filesystem_lease,
             mutations,
             |path, contents| {
@@ -369,7 +369,7 @@ impl ProjectState {
                 continue;
             }
             let relative_path = std::path::PathBuf::from(entry.path.as_str());
-            let contents = crate::project::read_secure_project_file(root, &relative_path)
+            let contents = yss_project_filesystem::read_secure_project_file(root, &relative_path)
                 .map_err(|error| error.to_string())?;
             let before: crate::project::project_io::GraphDocument =
                 serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
@@ -421,7 +421,7 @@ impl ProjectState {
             });
         }
         let variables = std::path::PathBuf::from(yss_project_layout::GLOBAL_VARIABLES_FILE);
-        match crate::project::read_secure_project_file(root, &variables) {
+        match yss_project_filesystem::read_secure_project_file(root, &variables) {
             Ok(contents) => {
                 let mut document: crate::project::project_io::GlobalVariablesDocument =
                     serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
@@ -468,7 +468,7 @@ impl ProjectState {
         kind: yss_graph_document::GraphResourceKind,
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let requested = ResourceName::parse(name)?;
-        let root = crate::project::project_root_from_path(project_path);
+        let root = yss_project_filesystem::project_root_from_path(project_path);
         let persisted = crate::project::scan_graph_resource_index(&root)
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),

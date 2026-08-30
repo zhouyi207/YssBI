@@ -31,7 +31,7 @@ pub(crate) fn update_project_computation_settings_with_emitter(
 ) -> Result<ComputationSettingsMutationReceipt, CommandError> {
     let result = state
         .update_computation_settings_transaction(request)
-        .map_err(CommandError::from)?;
+        .map_err(crate::commands::project_failure::application_project_command_error)?;
     emit(Event::Project(EventProject::ComputationSettingsChanged {
         result: result.clone(),
     }));
@@ -73,7 +73,9 @@ fn map_computation_settings_error(
         ComputationSettingsApplicationError::ProjectIdentityMismatch { .. } => {
             CommandError::expected("stale_project_lifecycle")
         }
-        ComputationSettingsApplicationError::Project(error) => CommandError::from(error),
+        ComputationSettingsApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         ComputationSettingsApplicationError::Validation(error) => {
             CommandError::diagnosed("invalid_computation_settings", error)
         }

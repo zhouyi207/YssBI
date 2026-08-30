@@ -34,12 +34,12 @@ use crate::database::{
     ingest_parquet_to_duckdb, sql_reader, write_display_name,
 };
 use crate::project::{
-    ProjectDatabaseError, ProjectFilesystemError, ProjectSession, ProjectState,
-    relative_project_duckdb_path,
+    ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
 use uuid::Uuid;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
 use yss_display_naming::allocate_unique_display_name;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularSnapshot;
 
@@ -1281,7 +1281,7 @@ fn runtime_database_mutation(
 fn prepare_duckdb_ingest_paths(
     session: &ProjectSession,
 ) -> Result<(String, String, PathBuf, String), ProjectDatabaseError> {
-    crate::project::ensure_directory(
+    yss_project_filesystem::ensure_directory(
         &session
             .root
             .as_path()

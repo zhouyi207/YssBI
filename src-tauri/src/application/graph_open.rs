@@ -3,13 +3,13 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::project::ProjectFilesystemError;
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use yss_graph_runtime::GraphMaterializationError;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId};
 
 use super::catalog_query::revalidate_project_catalog_facts;

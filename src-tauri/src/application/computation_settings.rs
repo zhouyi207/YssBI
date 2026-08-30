@@ -1,7 +1,6 @@
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::ProjectFilesystemError;
 use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComputationSettings};
 use yss_computation_settings::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
@@ -11,6 +10,7 @@ use yss_computation_settings::{
 use yss_execution::settings::{
     ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
 };
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, thiserror::Error)]

@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::project::{ProjectDatabaseError, ProjectError, ProjectFilesystemError};
+use crate::project::{ProjectDatabaseError, ProjectError};
 
 pub(crate) fn new_diagnostic_incident_id() -> String {
     Uuid::new_v4().to_string()
@@ -95,20 +95,6 @@ impl CommandError {
             code,
             details: Value::Null,
             incident_id: Some(incident_id),
-        }
-    }
-}
-
-impl From<ProjectFilesystemError> for CommandError {
-    fn from(error: ProjectFilesystemError) -> Self {
-        let recovery_required = error.recovery_required();
-        let command_error = Self::expected(error.code());
-        if recovery_required {
-            command_error.with_details(RecoveryRequiredDetails {
-                recovery_required: true,
-            })
-        } else {
-            command_error
         }
     }
 }

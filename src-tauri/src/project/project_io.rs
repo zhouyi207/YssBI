@@ -10,6 +10,7 @@ use super::{
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
+use yss_project_filesystem::project_root_from_path;
 use yss_project_identity::ProjectResourcePath;
 #[cfg(test)]
 use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
@@ -404,23 +405,6 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
 
 fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
     scan_graph_resource_index(root)
-}
-
-pub fn project_root_from_path(path: &str) -> PathBuf {
-    let path = PathBuf::from(path.trim());
-    let is_metadata_file = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.eq_ignore_ascii_case(PROJECT_METADATA_FILE))
-        .unwrap_or(false);
-    if path.is_file() || is_metadata_file {
-        path.parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .map(Path::to_path_buf)
-            .unwrap_or(path)
-    } else {
-        path
-    }
 }
 
 fn local_variables_for_graph(

@@ -1,3 +1,5 @@
+//! Native, case-insensitive Windows path identity.
+
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::ffi::OsStrExt;

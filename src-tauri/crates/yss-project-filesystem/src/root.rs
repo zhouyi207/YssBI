@@ -1,4 +1,4 @@
-use crate::project::{ProjectFilesystemError, project_root_from_path};
+use crate::ProjectFilesystemError;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use yss_project_identity::ProjectRootIdentity;
 use yss_project_layout::PROJECT_METADATA_FILE;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static NORMALIZED_ROOT_RECONSTRUCTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -88,7 +88,7 @@ pub struct NormalizedProjectRoot {
 
 impl NormalizedProjectRoot {
     pub fn from_project_path(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         NORMALIZED_ROOT_RECONSTRUCTIONS.set(NORMALIZED_ROOT_RECONSTRUCTIONS.get() + 1);
         let original = path.as_ref().to_path_buf();
         let trimmed = trim_path(&original);
@@ -130,13 +130,13 @@ impl NormalizedProjectRoot {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn reset_normalized_root_reconstruction_count_for_test() {
+#[cfg(any(test, feature = "test-support"))]
+pub fn reset_normalized_root_reconstruction_count_for_test() {
     NORMALIZED_ROOT_RECONSTRUCTIONS.set(0);
 }
 
-#[cfg(test)]
-pub(crate) fn normalized_root_reconstruction_count_for_test() -> usize {
+#[cfg(any(test, feature = "test-support"))]
+pub fn normalized_root_reconstruction_count_for_test() -> usize {
     NORMALIZED_ROOT_RECONSTRUCTIONS.get()
 }
 
@@ -316,10 +316,8 @@ fn trim_path(path: &Path) -> PathBuf {
         .unwrap_or_else(|| path.to_path_buf())
 }
 
-fn native_project_root_from_path(path: &Path) -> PathBuf {
-    if let Some(path) = path.to_str() {
-        return project_root_from_path(path);
-    }
+pub fn project_root_from_path(path: impl AsRef<Path>) -> PathBuf {
+    let path = trim_path(path.as_ref());
     let is_metadata_file = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -328,10 +326,14 @@ fn native_project_root_from_path(path: &Path) -> PathBuf {
         path.parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .map(Path::to_path_buf)
-            .unwrap_or_else(|| path.to_path_buf())
+            .unwrap_or(path)
     } else {
-        path.to_path_buf()
+        path
     }
+}
+
+fn native_project_root_from_path(path: &Path) -> PathBuf {
+    project_root_from_path(path)
 }
 
 fn normalize_from_existing_ancestor(path: &Path) -> std::io::Result<PathBuf> {

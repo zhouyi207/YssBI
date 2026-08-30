@@ -159,7 +159,7 @@ impl ProjectState {
         &self,
         snapshot: &WriterSnapshot,
         context: ProjectTransactionContext,
-        lease: crate::project::ProjectFilesystemLeaseSet,
+        lease: yss_project_filesystem::ProjectFilesystemLeaseSet,
         worksheet_path: WorksheetResourcePath,
         before: Option<WorksheetDocument>,
         document: WorksheetDocument,
@@ -174,7 +174,7 @@ impl ProjectState {
         let (new_path, contents) = crate::project::serialize_worksheet(&worksheet_path, &document)
             .map_err(prepare_error)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: new_path,
@@ -359,7 +359,7 @@ impl ProjectState {
         );
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let prepared = ProjectFilesystemTransaction::prepare(
-            mutation_context.clone(),
+            mutation_context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::MoveFile {
                 from: worksheet_path.relative_path().to_path_buf(),
@@ -453,7 +453,7 @@ impl ProjectState {
         );
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let prepared = ProjectFilesystemTransaction::prepare(
-            mutation_context.clone(),
+            mutation_context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::RemoveFile {
                 relative_path: worksheet_path.relative_path().to_path_buf(),

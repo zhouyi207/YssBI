@@ -1,12 +1,14 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::project::{
-    ProjectFilesystemError, ProjectState, ResourceLifecycleOperation, StagedFilesystemMutation,
-};
+use crate::project::{ProjectState, ResourceLifecycleOperation};
 
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
     NodeId, PortAddress, PortInstanceId, PortRef,
+};
+use yss_project_filesystem::{
+    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
+    StagedFilesystemMutation,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::GraphResourceDocument;
@@ -73,8 +75,8 @@ impl ProjectState {
             expected_absent_resources: Default::default(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
-        let prepared = crate::project::ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context.filesystem_context(),
             filesystem_lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: path.as_str().into(),
@@ -198,8 +200,8 @@ impl ProjectState {
             expected_absent_resources: Default::default(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
-        let prepared = crate::project::ProjectFilesystemTransaction::prepare(
-            context,
+        let prepared = ProjectFilesystemTransaction::prepare(
+            context.filesystem_context(),
             filesystem_lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: target.as_str().into(),
@@ -275,8 +277,8 @@ impl ProjectState {
             expected_absent_resources: Default::default(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
-        let prepared = crate::project::ProjectFilesystemTransaction::prepare(
-            context,
+        let prepared = ProjectFilesystemTransaction::prepare(
+            context.filesystem_context(),
             filesystem_lease,
             vec![StagedFilesystemMutation::RemoveFile {
                 relative_path: graph_path.as_str().into(),
@@ -343,13 +345,10 @@ impl ProjectState {
         })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let prepared = crate::project::ProjectFilesystemTransaction::prepare(
-            crate::project::ProjectTransactionContext {
-                session,
+        let prepared = ProjectFilesystemTransaction::prepare(
+            ProjectFilesystemTransactionContext {
+                root: session.root,
                 operation_id,
-                affected_resources: Vec::new(),
-                expected_revisions: Default::default(),
-                expected_absent_resources: Default::default(),
                 recovery_marker: Some(self.project_recovery_marker()),
             },
             filesystem_lease,
@@ -664,7 +663,7 @@ impl ProjectState {
     ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let persisted = project_path
             .map(|path| {
-                let root = crate::project::project_root_from_path(path);
+                let root = yss_project_filesystem::project_root_from_path(path);
                 crate::project::scan_graph_resource_index(&root)
                     .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                         message: error.to_string(),
@@ -935,8 +934,8 @@ impl ProjectState {
                 contents: contents.clone(),
             }
         }));
-        let prepared = crate::project::ProjectFilesystemTransaction::prepare(
-            context,
+        let prepared = ProjectFilesystemTransaction::prepare(
+            context.filesystem_context(),
             filesystem_lease,
             mutations,
         )?;

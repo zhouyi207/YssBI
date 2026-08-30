@@ -913,6 +913,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
+        repository_relative_source_file: "src-tauri/src/commands/project_failure.rs",
+        fully_qualified_owner: "yssbi_lib::commands::project_failure",
+        canonical_origin_targets: &[
+            "yssbi_lib::application::project_failure::ApplicationProjectFailure",
+            "yssbi_lib::error::CommandError",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/src/commands/command_project/lifecycle.rs",
         fully_qualified_owner: "yssbi_lib::commands::command_project::lifecycle",
         canonical_origin_targets: &[
@@ -1189,7 +1198,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event_result",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::project::project_error::ProjectFilesystemError",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yss_resource_naming::ResourceName",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
@@ -1232,7 +1240,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::error",
         canonical_origin_targets: &[
             "yssbi_lib::project::project_error::ProjectError",
-            "yssbi_lib::project::project_error::ProjectFilesystemError",
             "yssbi_lib::project::database_authority::ProjectDatabaseError",
         ],
     },
@@ -1724,6 +1731,7 @@ fn non_build_memberships(
         package,
         "yss-project-discovery" | "yss-project-history" | "yss-project-model"
     ) || package == "yss-function-editor-projection"
+        || package == "yss-project-filesystem"
         || package == "yss-project-operation"
         || package == "yss-resource-lifecycle"
     {

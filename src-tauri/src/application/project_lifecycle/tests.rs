@@ -1,9 +1,10 @@
 use super::*;
-use crate::project::{ProjectRootBinding, ProjectState, fixtures};
+use crate::project::{ProjectState, fixtures};
 use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::{DataType, DataValue};
+use yss_project_filesystem::ProjectRootBinding;
 use yss_project_model::ProjectData;
 use yss_project_registry_contract::{ProjectRecord, ProjectRootIdentityState};
 use yss_variable_contract::VariableScope;

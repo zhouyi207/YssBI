@@ -1,4 +1,5 @@
-use super::{ProjectFilesystemError, ProjectState};
+use super::ProjectState;
+use yss_project_filesystem::ProjectFilesystemError;
 
 #[cfg(test)]
 use yss_data_contract::{DataType, DataValue};

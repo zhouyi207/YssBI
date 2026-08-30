@@ -32,7 +32,9 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
         ProjectLifecycleError::LoadFailed(source) => {
             CommandError::diagnosed("load_project_failed", source)
         }
-        ProjectLifecycleError::AuthorityFailed(source) => CommandError::from(source),
+        ProjectLifecycleError::AuthorityFailed(source) => {
+            crate::commands::project_failure::application_project_command_error(source)
+        }
         ProjectLifecycleError::RegistryLookupFailed(source) => CommandError::internal(source),
     }
 }
@@ -317,7 +319,7 @@ pub(crate) fn flush_project_with_emitter(
 ) -> Result<ProjectSaveResultDto, CommandError> {
     let result = state
         .flush_project_documents(&project_instance_id, operation_id)
-        .map_err(CommandError::from)?;
+        .map_err(crate::commands::project_failure::application_project_command_error)?;
     let result = ProjectSaveResultDto::from(result);
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
@@ -376,11 +378,11 @@ pub fn new_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectFilesystemError;
     use crate::schema::application_event::{
         LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
         LifecycleRecoveryDto,
     };
+    use yss_project_filesystem::ProjectFilesystemError;
     use yss_project_identity::OperationId;
     use yss_project_model::ProjectData;
 

@@ -9342,6 +9342,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-filesystem"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror 2.0.20",
+ "unicode-casefold",
+ "unicode-normalization",
+ "uuid",
+ "windows-sys 0.61.2",
+ "yss-graph-document",
+ "yss-project-identity",
+ "yss-project-layout",
+ "yss-resource-lifecycle",
+ "yss-resource-naming",
+ "yss-worksheet-document",
+]
+
+[[package]]
 name = "yss-project-history"
 version = "0.1.0"
 dependencies = [
@@ -9580,6 +9598,7 @@ dependencies = [
  "yss-path-display",
  "yss-project-change",
  "yss-project-discovery",
+ "yss-project-filesystem",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",

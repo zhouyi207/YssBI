@@ -1,6 +1,7 @@
 use super::ProjectState;
-use crate::project::{ProjectFilesystemError, ProjectSession};
+use crate::project::ProjectSession;
 use yss_database_contract::DatabaseDecl;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, thiserror::Error)]

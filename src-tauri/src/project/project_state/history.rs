@@ -738,7 +738,7 @@ impl ProjectState {
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let filesystem = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.filesystem_context(),
             prepared.lease,
             mutations,
             crate::project::history_hydration::validate_durable_history_document,

@@ -288,7 +288,7 @@ impl ProjectState {
             }
         }
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),

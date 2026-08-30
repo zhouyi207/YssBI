@@ -1,7 +1,8 @@
-use crate::project::{ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectSession};
+use crate::project::ProjectSession;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
+use yss_project_filesystem::{ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet};
 use yss_project_history::{
     HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectDocumentState,
     ProjectHistory, ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
@@ -707,13 +708,13 @@ fn document_revision(
 
 pub(super) fn durable_filesystem_mutations(
     prepared: &PreparedHistoryDocuments,
-) -> Result<Vec<crate::project::StagedFilesystemMutation>, ProjectHistoryMutationError> {
+) -> Result<Vec<yss_project_filesystem::StagedFilesystemMutation>, ProjectHistoryMutationError> {
     let mut mutations = Vec::new();
     for graph_path in &prepared.touched_graphs {
         let (relative_path, contents) =
             super::project_io::serialize_graph_document(&prepared.after_data, graph_path)
                 .map_err(history_conflict)?;
-        mutations.push(crate::project::StagedFilesystemMutation::Write {
+        mutations.push(yss_project_filesystem::StagedFilesystemMutation::Write {
             relative_path,
             contents,
         });
@@ -763,7 +764,7 @@ pub(super) fn durable_filesystem_mutations(
         .filter_map(|value| serde_json::from_value::<VariableInstance>(value.clone()).ok())
         .any(|variable| matches!(variable.scope, VariableScope::Global))
     }) {
-        mutations.push(crate::project::StagedFilesystemMutation::Write {
+        mutations.push(yss_project_filesystem::StagedFilesystemMutation::Write {
             relative_path: GLOBAL_VARIABLES_FILE.into(),
             contents: super::project_io::serialize_global_variables(&prepared.after_data)
                 .map_err(history_conflict)?,
@@ -773,7 +774,7 @@ pub(super) fn durable_filesystem_mutations(
 }
 
 fn push_worksheet_filesystem_mutation(
-    mutations: &mut Vec<crate::project::StagedFilesystemMutation>,
+    mutations: &mut Vec<yss_project_filesystem::StagedFilesystemMutation>,
     documents: &ProjectDocumentState,
     key: &WorksheetResourceKey,
 ) -> Result<(), ProjectHistoryMutationError> {
@@ -782,14 +783,16 @@ fn push_worksheet_filesystem_mutation(
     if let Some(document) = documents.worksheets.get(key) {
         let (relative_path, contents) =
             crate::project::serialize_worksheet(&path, document).map_err(history_conflict)?;
-        mutations.push(crate::project::StagedFilesystemMutation::Write {
+        mutations.push(yss_project_filesystem::StagedFilesystemMutation::Write {
             relative_path,
             contents,
         });
     } else {
-        mutations.push(crate::project::StagedFilesystemMutation::RemoveFile {
-            relative_path: path.relative_path().to_path_buf(),
-        });
+        mutations.push(
+            yss_project_filesystem::StagedFilesystemMutation::RemoveFile {
+                relative_path: path.relative_path().to_path_buf(),
+            },
+        );
     }
     Ok(())
 }

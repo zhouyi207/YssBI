@@ -1,6 +1,7 @@
-use crate::project::NormalizedProjectRoot;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use yss_project_filesystem::{
+    NormalizedProjectRoot, ProjectFilesystemTransactionContext, ProjectRecoveryMarker,
+};
 use yss_project_history::ResourceKey;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
@@ -8,55 +9,6 @@ use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 pub struct ProjectSession {
     pub instance_id: ProjectInstanceId,
     pub root: NormalizedProjectRoot,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ProjectRecoveryMarker {
-    state: Arc<Mutex<Option<String>>>,
-}
-
-impl ProjectRecoveryMarker {
-    pub fn mark(&self, message: impl Into<String>) {
-        *self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(message.into());
-    }
-
-    pub(crate) fn boundary_recovering(&self) -> (std::sync::MutexGuard<'_, Option<String>>, bool) {
-        match self.state.lock() {
-            Ok(state) => (state, false),
-            Err(error) => (error.into_inner(), true),
-        }
-    }
-
-    pub(crate) fn clear_poison(&self) {
-        self.state.clear_poison();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn boundary_is_available(&self) -> bool {
-        self.state.try_lock().is_ok()
-    }
-
-    pub fn clear(&self) {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-    }
-
-    pub fn error(&self) -> Option<crate::project::ProjectFilesystemError> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-            .map(
-                |message| crate::project::ProjectFilesystemError::ProjectRecoveryRequired {
-                    message,
-                },
-            )
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -67,4 +19,14 @@ pub struct ProjectTransactionContext {
     pub expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
     pub expected_absent_resources: BTreeSet<ResourceKey>,
     pub recovery_marker: Option<ProjectRecoveryMarker>,
+}
+
+impl ProjectTransactionContext {
+    pub(crate) fn filesystem_context(&self) -> ProjectFilesystemTransactionContext {
+        ProjectFilesystemTransactionContext {
+            root: self.session.root.clone(),
+            operation_id: self.operation_id,
+            recovery_marker: self.recovery_marker.clone(),
+        }
+    }
 }

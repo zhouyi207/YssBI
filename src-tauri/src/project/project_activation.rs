@@ -1,10 +1,9 @@
-use crate::project::{
-    NormalizedProjectRoot, ProjectFilesystemError, ProjectSession, ProjectState, ProjectStore,
-};
+use crate::project::{ProjectSession, ProjectState, ProjectStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use yss_graph_document::GraphResourcePath;
+use yss_project_filesystem::{NormalizedProjectRoot, ProjectFilesystemError};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;

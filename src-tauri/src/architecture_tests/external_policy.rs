@@ -467,6 +467,42 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-casefold",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-normalization",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+        target_condition: Some("cfg(windows)"),
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-project-model",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",

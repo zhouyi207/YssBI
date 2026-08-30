@@ -1,10 +1,8 @@
 //! Authoritative project state for normalized node-system graph documents.
 
 use crate::project::{
-    NormalizedProjectRoot, PreparedProjectActivation, ProjectFilesystemCoordinator,
-    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession, ProjectStore,
-    ProjectTransactionContext, ResourceRenameOwnershipLease, StagedFilesystemMutation,
-    load_project_graph_from_file,
+    PreparedProjectActivation, ProjectSession, ProjectStore, ProjectTransactionContext,
+    ResourceRenameOwnershipLease, load_project_graph_from_file,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -14,6 +12,10 @@ use yss_computation_settings::{
 };
 use yss_graph_document::GraphResourcePath;
 use yss_graph_document::NodeId;
+use yss_project_filesystem::{
+    NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemError,
+    ProjectFilesystemTransaction, StagedFilesystemMutation,
+};
 use yss_project_history::{
     HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
     ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
@@ -151,7 +153,7 @@ impl ProjectState {
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),

@@ -1,5 +1,6 @@
-use crate::project::{ProjectFilesystemError, ProjectState};
+use crate::project::ProjectState;
 use std::sync::Arc;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_operation::{
     ProjectOperationAdmissionError, ProjectOperationLedger, ProjectOperationReservation,

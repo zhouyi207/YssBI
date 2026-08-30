@@ -42,7 +42,9 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         ExecutionApplicationError::ProjectPreparation(error) => {
             CommandError::expected(project_preparation_command_code(&error))
         }
-        ExecutionApplicationError::ProjectSnapshot(error) => CommandError::from(error),
+        ExecutionApplicationError::ProjectSnapshot(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         ExecutionApplicationError::VariableBindings(error) => {
             CommandError::diagnosed("execution_resource_binding_failed", error)
         }

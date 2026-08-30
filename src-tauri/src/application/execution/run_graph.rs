@@ -13,7 +13,6 @@ use crate::application::catalog_query::capture_localized_project_facts;
 use crate::application::graph_contracts::{build_resource_catalog, execution_package_from_graph};
 use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
-use crate::project::ProjectFilesystemError;
 use crate::project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
@@ -33,6 +32,7 @@ use yss_execution::state::{
 };
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::GraphResourcePath;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::ProjectData;
 

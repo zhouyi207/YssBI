@@ -3,7 +3,6 @@ use crate::application::worksheet::WorksheetApplicationError;
 use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::ProjectFilesystemError;
 use crate::schema::application_event::ResourceMutationResultDto;
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -38,47 +37,12 @@ fn database_computation_error(error: impl std::fmt::Display + std::fmt::Debug) -
     CommandError::diagnosed("database_computation_failed", error)
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorksheetErrorDetails<'a> {
-    resource_kind: &'static str,
-    resource_path: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    recovery_required: Option<bool>,
-}
-
-fn worksheet_command_error(
-    worksheet_path: &WorksheetResourcePath,
-    error: ProjectFilesystemError,
-) -> CommandError {
-    let code = match &error {
-        ProjectFilesystemError::TransactionPrepareFailed { .. } => "filesystem_prepare_failed",
-        ProjectFilesystemError::TransactionCommitFailed { .. } => "filesystem_commit_failed",
-        ProjectFilesystemError::TransactionRollbackFailed { .. }
-        | ProjectFilesystemError::ProjectRecoveryRequired { .. } => "publication_recovery_required",
-        _ => error.code(),
-    };
-    let recovery_required = error.recovery_required().then_some(true);
-    let details = WorksheetErrorDetails {
-        resource_kind: "worksheet",
-        resource_path: worksheet_path.as_str(),
-        recovery_required,
-    };
-    let command_error = match error {
-        error @ (ProjectFilesystemError::TransactionPrepareFailed { .. }
-        | ProjectFilesystemError::TransactionCommitFailed { .. }
-        | ProjectFilesystemError::TransactionRollbackFailed { .. }) => {
-            CommandError::diagnosed(code, error)
-        }
-        _ => CommandError::expected(code),
-    };
-    command_error.with_details(details)
-}
-
 fn worksheet_application_command_error(error: &WorksheetApplicationError) -> CommandError {
     match error {
         WorksheetApplicationError::SessionCapture(error) => session_capture_command_error(*error),
-        WorksheetApplicationError::Project(error) => CommandError::from(error.clone()),
+        WorksheetApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error.clone())
+        }
         WorksheetApplicationError::SessionChanged(error) => {
             CommandError::diagnosed("worksheet_session_changed", error)
         }

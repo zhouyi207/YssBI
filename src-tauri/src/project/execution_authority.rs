@@ -7,7 +7,8 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use crate::project::{MutationPublication, NormalizedProjectRoot, ProjectSession, ProjectState};
+use crate::project::{MutationPublication, ProjectSession, ProjectState};
+use yss_project_filesystem::NormalizedProjectRoot;
 
 use yss_computation_settings::ProjectComputationSettings;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};

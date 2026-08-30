@@ -9,9 +9,9 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::application::events::{ApplicationEvent, committed_resource_mutation_from_project};
-use crate::project::ProjectFilesystemError;
 use crate::project::project_writers::GlobalVariableMutationResult;
 use yss_data_contract::{DataType, DataValue};
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 

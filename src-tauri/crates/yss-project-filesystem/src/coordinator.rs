@@ -1,4 +1,4 @@
-use super::{NormalizedProjectRoot, ProjectFilesystemError};
+use crate::{NormalizedProjectRoot, ProjectFilesystemError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -8,11 +8,11 @@ struct RootLeaseState {
     lifecycle_closed: BTreeSet<NormalizedProjectRoot>,
     admitted: BTreeMap<NormalizedProjectRoot, usize>,
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     next_wait_observer: Option<std::sync::mpsc::Sender<()>>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     next_lifecycle_drain_observer: Option<std::sync::mpsc::Sender<()>>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     acquire_many_observer: Option<std::sync::mpsc::Sender<Vec<NormalizedProjectRoot>>>,
 }
 
@@ -22,10 +22,10 @@ struct RootLeaseRegistry {
     available: Condvar,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 struct ProjectFilesystemTestControls {
-    fault: Mutex<Option<super::ProjectFilesystemFaultPoint>>,
+    fault: Mutex<Option<crate::ProjectFilesystemFaultPoint>>,
     rollback_fault: Mutex<bool>,
     rollback_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     before_remove_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
@@ -35,7 +35,7 @@ struct ProjectFilesystemTestControls {
 #[derive(Clone, Default)]
 pub struct ProjectFilesystemCoordinator {
     registry: Arc<RootLeaseRegistry>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     test_controls: Arc<ProjectFilesystemTestControls>,
 }
 
@@ -56,7 +56,7 @@ impl ProjectFilesystemCoordinator {
     {
         let roots = roots.into_iter().collect::<BTreeSet<_>>();
         let mut state = self.lock_state();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(observer) = state.acquire_many_observer.as_ref() {
             let _ = observer.send(roots.iter().cloned().collect());
         }
@@ -130,7 +130,7 @@ impl ProjectFilesystemCoordinator {
         roots: &BTreeSet<NormalizedProjectRoot>,
     ) -> std::sync::MutexGuard<'a, RootLeaseState> {
         while roots.iter().any(|root| state.reserved.contains(root)) {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             if let Some(observer) = state.next_wait_observer.take() {
                 let _ = observer.send(());
             }
@@ -143,40 +143,31 @@ impl ProjectFilesystemCoordinator {
         state
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_project_filesystem_fault(
-        &self,
-        fault: Option<super::ProjectFilesystemFaultPoint>,
-    ) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_project_filesystem_fault(&self, fault: Option<crate::ProjectFilesystemFaultPoint>) {
         *self.test_controls.fault.lock().unwrap() = fault;
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
         *self.test_controls.rollback_fault.lock().unwrap() = enabled;
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_project_filesystem_rollback_test_hook(
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_project_filesystem_rollback_test_hook(
         &self,
         hook: Option<Arc<dyn Fn() + Send + Sync>>,
     ) {
         *self.test_controls.rollback_hook.lock().unwrap() = hook;
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_before_remove_mutation_hook(
-        &self,
-        hook: Option<Arc<dyn Fn() + Send + Sync>>,
-    ) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_before_remove_mutation_hook(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
         *self.test_controls.before_remove_hook.lock().unwrap() = hook;
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_before_move_target_delete_hook(
-        &self,
-        hook: Option<Arc<dyn Fn() + Send + Sync>>,
-    ) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_before_move_target_delete_hook(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
         *self
             .test_controls
             .before_move_target_delete_hook
@@ -184,8 +175,8 @@ impl ProjectFilesystemCoordinator {
             .unwrap() = hook;
     }
 
-    #[cfg(test)]
-    fn take_fault(&self, point: super::ProjectFilesystemFaultPoint) -> bool {
+    #[cfg(any(test, feature = "test-support"))]
+    fn take_fault(&self, point: crate::ProjectFilesystemFaultPoint) -> bool {
         let mut fault = self.test_controls.fault.lock().unwrap();
         if *fault == Some(point) {
             *fault = None;
@@ -195,12 +186,12 @@ impl ProjectFilesystemCoordinator {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn take_rollback_fault(&self) -> bool {
         std::mem::take(&mut *self.test_controls.rollback_fault.lock().unwrap())
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn run_rollback_hook(&self) {
         let hook = self.test_controls.rollback_hook.lock().unwrap().clone();
         if let Some(hook) = hook {
@@ -208,7 +199,7 @@ impl ProjectFilesystemCoordinator {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn run_before_remove_hook(&self) {
         let hook = self.test_controls.before_remove_hook.lock().unwrap().take();
         if let Some(hook) = hook {
@@ -216,7 +207,7 @@ impl ProjectFilesystemCoordinator {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn run_before_move_target_delete_hook(&self) {
         let hook = self
             .test_controls
@@ -229,8 +220,8 @@ impl ProjectFilesystemCoordinator {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn observe_acquire_many_attempts(
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn observe_acquire_many_attempts(
         &self,
     ) -> std::sync::mpsc::Receiver<Vec<NormalizedProjectRoot>> {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -238,25 +229,22 @@ impl ProjectFilesystemCoordinator {
         receiver
     }
 
-    #[cfg(test)]
-    pub(crate) fn observe_next_wait(&self) -> std::sync::mpsc::Receiver<()> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn observe_next_wait(&self) -> std::sync::mpsc::Receiver<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
         self.lock_state().next_wait_observer = Some(sender);
         receiver
     }
 
-    #[cfg(test)]
-    pub(crate) fn observe_next_lifecycle_drain(&self) -> std::sync::mpsc::Receiver<()> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn observe_next_lifecycle_drain(&self) -> std::sync::mpsc::Receiver<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
         self.lock_state().next_lifecycle_drain_observer = Some(sender);
         receiver
     }
 
-    #[cfg(test)]
-    pub(crate) fn lifecycle_state_for_test(
-        &self,
-        root: &NormalizedProjectRoot,
-    ) -> (bool, bool, usize) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn lifecycle_state_for_test(&self, root: &NormalizedProjectRoot) -> (bool, bool, usize) {
         let state = self.lock_state();
         (
             state.lifecycle_closed.contains(root),
@@ -265,8 +253,8 @@ impl ProjectFilesystemCoordinator {
         )
     }
 
-    #[cfg(test)]
-    pub(crate) fn is_reserved_for_test(&self, root: &NormalizedProjectRoot) -> bool {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn is_reserved_for_test(&self, root: &NormalizedProjectRoot) -> bool {
         self.lock_state().reserved.contains(root)
     }
 }
@@ -278,27 +266,27 @@ pub struct ProjectFilesystemLeaseSet {
 }
 
 impl ProjectFilesystemLeaseSet {
-    #[cfg(test)]
-    pub(super) fn take_fault(&self, point: super::ProjectFilesystemFaultPoint) -> bool {
+    #[cfg(any(test, feature = "test-support"))]
+    pub(super) fn take_fault(&self, point: crate::ProjectFilesystemFaultPoint) -> bool {
         self.coordinator.take_fault(point)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn take_rollback_fault(&self) -> bool {
         self.coordinator.take_rollback_fault()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn run_rollback_hook(&self) {
         self.coordinator.run_rollback_hook();
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn run_before_remove_hook(&self) {
         self.coordinator.run_before_remove_hook();
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn run_before_move_target_delete_hook(&self) {
         self.coordinator.run_before_move_target_delete_hook();
     }
@@ -317,12 +305,12 @@ impl Drop for ProjectFilesystemLeaseSet {
         let mut state = self.coordinator.lock_state();
         for root in self.roots.iter().rev() {
             state.reserved.remove(root);
-            if self.owns_admission {
-                if let Some(count) = state.admitted.get_mut(root) {
-                    *count -= 1;
-                    if *count == 0 {
-                        state.admitted.remove(root);
-                    }
+            if self.owns_admission
+                && let Some(count) = state.admitted.get_mut(root)
+            {
+                *count -= 1;
+                if *count == 0 {
+                    state.admitted.remove(root);
                 }
             }
         }
@@ -341,7 +329,7 @@ impl ProjectRootLifecycleGuard {
     pub fn release_initial_and_drain(&mut self) {
         self.lease.take();
         let mut state = self.coordinator.lock_state();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if let Some(observer) = state.next_lifecycle_drain_observer.take() {
             let _ = observer.send(());
         }

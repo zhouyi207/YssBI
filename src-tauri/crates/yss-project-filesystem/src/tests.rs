@@ -1,13 +1,11 @@
 use super::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemFaultPoint,
-    ProjectFilesystemTransaction, StagedFilesystemMutation,
+    ProjectFilesystemTransaction, ProjectFilesystemTransactionContext, ProjectRecoveryMarker,
+    StagedFilesystemMutation,
 };
-use crate::project::{ProjectRecoveryMarker, ProjectSession, ProjectTransactionContext};
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use yss_project_identity::OperationId;
-use yss_project_identity::ProjectInstanceId;
 use yss_project_layout::PROJECT_METADATA_FILE;
 
 struct TestDirectory {
@@ -44,16 +42,10 @@ fn normalized(path: impl AsRef<Path>) -> NormalizedProjectRoot {
     NormalizedProjectRoot::from_project_path(path).unwrap()
 }
 
-fn transaction_context(root: NormalizedProjectRoot) -> ProjectTransactionContext {
-    ProjectTransactionContext {
-        session: ProjectSession {
-            instance_id: ProjectInstanceId::new(),
-            root,
-        },
+fn transaction_context(root: NormalizedProjectRoot) -> ProjectFilesystemTransactionContext {
+    ProjectFilesystemTransactionContext {
+        root,
         operation_id: OperationId::new(),
-        affected_resources: Vec::new(),
-        expected_revisions: BTreeMap::new(),
-        expected_absent_resources: Default::default(),
         recovery_marker: None,
     }
 }

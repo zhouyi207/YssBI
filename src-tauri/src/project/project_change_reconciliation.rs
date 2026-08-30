@@ -1,5 +1,6 @@
-use crate::project::{ProjectFilesystemError, ProjectState};
+use crate::project::ProjectState;
 use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 impl ProjectState {

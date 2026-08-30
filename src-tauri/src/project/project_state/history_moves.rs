@@ -128,7 +128,7 @@ impl ProjectState {
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             filesystem_lease,
             mutations,
             validate_variable_effect_document,
@@ -374,7 +374,7 @@ impl ProjectState {
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let prepared = ProjectFilesystemTransaction::prepare(
-            context.clone(),
+            context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::MoveFile {
                 from: source.relative_path().to_path_buf(),
@@ -600,7 +600,7 @@ impl ProjectState {
         };
         let mutations = disk_plan.mutations;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             filesystem_lease,
             mutations,
             |path, contents| {

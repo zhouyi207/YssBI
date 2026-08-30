@@ -11,6 +11,7 @@ pub mod graph_contracts;
 pub mod graph_open;
 pub mod hypothesis;
 pub mod pin_preview_generation;
+pub mod project_failure;
 pub mod project_lifecycle;
 pub mod project_query;
 pub mod project_watcher;

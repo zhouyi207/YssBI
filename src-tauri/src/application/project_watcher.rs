@@ -1,4 +1,3 @@
-use crate::project::{ProjectFilesystemError, project_root_from_path};
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -7,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
+use yss_project_filesystem::{ProjectFilesystemError, project_root_from_path};
 use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{ApplicationState, SessionCaptureError};

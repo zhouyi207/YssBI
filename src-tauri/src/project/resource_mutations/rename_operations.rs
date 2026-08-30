@@ -1,5 +1,6 @@
-use crate::project::{ProjectFilesystemError, ProjectState};
+use crate::project::ProjectState;
 use yss_graph_document::GraphResourcePath;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 

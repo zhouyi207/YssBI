@@ -7,12 +7,12 @@ use thiserror::Error;
 use super::execution::ApplicationSession;
 use crate::database::error::DatabaseError;
 use crate::database::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
-use crate::project::NormalizedProjectRoot;
 use yss_database_contract::DatabaseSessionOpenRequest;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
     DatabaseSessionOpenRequestError,
 };
+use yss_project_filesystem::NormalizedProjectRoot;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
 

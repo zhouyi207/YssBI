@@ -4,7 +4,7 @@ use super::events::{CommittedResourceMutation, committed_resource_mutation_from_
 use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::ProjectFilesystemError;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_resource_naming::ResourceName;
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};

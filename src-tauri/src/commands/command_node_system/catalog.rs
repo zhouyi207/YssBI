@@ -123,9 +123,9 @@ pub(super) fn get_localized_node_catalog_from_state(
     state
         .localized_catalog_snapshot(&project_instance_id, locale)
         .map_err(|error| match error {
-            crate::project::ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+            yss_project_filesystem::ProjectFilesystemError::StaleProjectLifecycle { .. } => {
                 CommandError::expected("catalog_project_stale")
             }
-            _ => CommandError::from(error),
+            _ => crate::commands::project_failure::application_project_command_error(error),
         })
 }

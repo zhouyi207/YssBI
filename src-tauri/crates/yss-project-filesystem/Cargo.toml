@@ -1,0 +1,25 @@
+[package]
+name = "yss-project-filesystem"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+test-support = []
+
+[dependencies]
+serde_json.workspace = true
+thiserror.workspace = true
+unicode-casefold.workspace = true
+unicode-normalization.workspace = true
+uuid.workspace = true
+yss-graph-document = { path = "../yss-graph-document" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-layout = { path = "../yss-project-layout" }
+yss-resource-lifecycle = { path = "../yss-resource-lifecycle" }
+yss-resource-naming = { path = "../yss-resource-naming" }
+yss-worksheet-document = { path = "../yss-worksheet-document" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

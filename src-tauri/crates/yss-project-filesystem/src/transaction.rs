@@ -1,12 +1,21 @@
-use super::ProjectFilesystemLeaseSet;
-use crate::project::{ProjectFilesystemError, ProjectTransactionContext};
+use crate::{
+    NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemLeaseSet, ProjectRecoveryMarker,
+};
 use std::collections::{BTreeSet, HashMap};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
+use yss_project_identity::OperationId;
 
 const TRANSACTION_DIRECTORY: &str = ".yssbi-transaction";
+
+#[derive(Clone, Debug)]
+pub struct ProjectFilesystemTransactionContext {
+    pub root: NormalizedProjectRoot,
+    pub operation_id: OperationId,
+    pub recovery_marker: Option<ProjectRecoveryMarker>,
+}
 
 #[derive(Clone, Debug)]
 pub enum StagedFilesystemMutation {
@@ -42,7 +51,7 @@ impl StagedFilesystemMutation {
 }
 
 pub struct ProjectFilesystemTransaction {
-    context: ProjectTransactionContext,
+    context: ProjectFilesystemTransactionContext,
     lease: ProjectFilesystemLeaseSet,
     staging_root: PathBuf,
     mutations: Vec<StagedFilesystemMutation>,
@@ -71,7 +80,7 @@ pub struct CommittedFilesystemMutation {
     journal: Vec<MutationJournal>,
     created_parent_directories: BTreeSet<PathBuf>,
     _lease: ProjectFilesystemLeaseSet,
-    recovery_marker: Option<crate::project::ProjectRecoveryMarker>,
+    recovery_marker: Option<ProjectRecoveryMarker>,
     armed: bool,
 }
 
@@ -113,7 +122,7 @@ enum BeforeImage {
 
 impl ProjectFilesystemTransaction {
     pub fn prepare(
-        context: ProjectTransactionContext,
+        context: ProjectFilesystemTransactionContext,
         lease: ProjectFilesystemLeaseSet,
         mutations: Vec<StagedFilesystemMutation>,
     ) -> Result<PreparedProjectFilesystemTransaction, ProjectFilesystemError> {
@@ -125,18 +134,18 @@ impl ProjectFilesystemTransaction {
     }
 
     pub fn prepare_with_validator(
-        context: ProjectTransactionContext,
+        context: ProjectFilesystemTransactionContext,
         lease: ProjectFilesystemLeaseSet,
         mutations: Vec<StagedFilesystemMutation>,
         mut validator: impl FnMut(&Path, &[u8]) -> Result<(), String>,
     ) -> Result<PreparedProjectFilesystemTransaction, ProjectFilesystemError> {
-        if !lease.contains(&context.session.root) {
+        if !lease.contains(&context.root) {
             return Err(ProjectFilesystemError::TransactionPrepareFailed {
                 message: "transaction lease does not own the project root".into(),
             });
         }
         validate_mutation_paths(&mutations)?;
-        let root = context.session.root.as_path().to_path_buf();
+        let root = context.root.as_path().to_path_buf();
         validate_real_directory(&root).map_err(prepare_error)?;
         for mutation in &mutations {
             for relative_path in mutation.relative_paths() {
@@ -165,7 +174,7 @@ impl ProjectFilesystemTransaction {
                 else {
                     continue;
                 };
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 if transaction
                     .lease
                     .take_fault(ProjectFilesystemFaultPoint::StagedSerialization)
@@ -220,16 +229,10 @@ impl PreparedProjectFilesystemTransaction {
     }
 
     pub fn commit(mut self) -> Result<CommittedFilesystemMutation, ProjectFilesystemError> {
-        let root = self
-            .transaction
-            .context
-            .session
-            .root
-            .as_path()
-            .to_path_buf();
+        let root = self.transaction.context.root.as_path().to_path_buf();
         let prepared_root = self.transaction.staging_root.join("prepared");
         for (index, mutation) in self.transaction.mutations.iter().enumerate() {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             {
                 let point = if index == 0 {
                     ProjectFilesystemFaultPoint::FirstLiveReplacement
@@ -355,7 +358,7 @@ impl CommittedFilesystemMutation {
 
     pub fn rollback(mut self) -> Result<(), ProjectFilesystemError> {
         self.armed = false;
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         self._lease.run_rollback_hook();
         let rollback_result = restore_before_images(
             &self.root,
@@ -525,7 +528,7 @@ fn register_portable_path(
     }
 }
 
-pub(crate) fn metadata_is_redirect(metadata: &std::fs::Metadata) -> bool {
+pub fn metadata_is_redirect(metadata: &std::fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
     }
@@ -562,7 +565,7 @@ fn validate_regular_file(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub(crate) fn read_secure_project_file(root: &Path, relative: &Path) -> std::io::Result<Vec<u8>> {
+pub fn read_secure_project_file(root: &Path, relative: &Path) -> std::io::Result<Vec<u8>> {
     if relative.as_os_str().is_empty()
         || relative.is_absolute()
         || !relative
@@ -872,7 +875,7 @@ fn apply_mutation(
             Ok(())
         }
         StagedFilesystemMutation::RemoveFile { .. } => {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             _lease.run_before_remove_hook();
             validate_secure_path(root, relative, true)?;
             let result = match std::fs::symlink_metadata(&live) {
@@ -895,7 +898,7 @@ fn apply_mutation(
                 return Ok(());
             }
             if portable_path_key(from) != portable_path_key(to) {
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 _lease.run_before_remove_hook();
                 return move_file_no_replace(&source, &target, _lease).map_err(|error| {
                     ApplyMutationError {
@@ -931,12 +934,12 @@ fn apply_mutation(
                         });
                     }
                 }
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 _lease.run_before_remove_hook();
                 match move_file_no_replace(&temporary, &target, _lease) {
                     Ok(()) => return Ok(()),
                     Err(target_error) => {
-                        #[cfg(test)]
+                        #[cfg(any(test, feature = "test-support"))]
                         if _lease.take_fault(ProjectFilesystemFaultPoint::MoveRestoration) {
                             return Err(ApplyMutationError {
                                 source: std::io::Error::other(format!(
@@ -986,7 +989,7 @@ fn apply_mutation(
             result.map_err(Into::into)
         }
         StagedFilesystemMutation::RemoveDirectoryIfEmpty { .. } => {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             _lease.run_before_remove_hook();
             validate_secure_path(root, relative, false)?;
             let result = match std::fs::symlink_metadata(&live) {
@@ -1015,12 +1018,12 @@ fn move_file_no_replace(
         recovery_required: false,
     })?;
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     let injected_cleanup_failure =
         _lease.take_fault(ProjectFilesystemFaultPoint::MoveTargetCleanup);
-    #[cfg(not(test))]
+    #[cfg(not(any(test, feature = "test-support")))]
     let injected_cleanup_failure = false;
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     let source_removal = if injected_cleanup_failure
         || _lease.take_fault(ProjectFilesystemFaultPoint::MoveSourceRemoval)
     {
@@ -1030,11 +1033,11 @@ fn move_file_no_replace(
     } else {
         std::fs::remove_file(source)
     };
-    #[cfg(not(test))]
+    #[cfg(not(any(test, feature = "test-support")))]
     let source_removal = std::fs::remove_file(source);
 
     if let Err(source_error) = source_removal {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         _lease.run_before_move_target_delete_hook();
         let preservation_reason = if injected_cleanup_failure {
             "injected move target cleanup failure"
@@ -1105,7 +1108,7 @@ fn restore_before_images(
         })
         .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     if _lease.take_rollback_fault() {
         return Err(std::io::Error::other(
             "injected rollback restore failure after move recovery copies were retained",
@@ -1306,7 +1309,7 @@ fn remove_path_if_present(path: &Path) -> std::io::Result<()> {
 }
 
 fn cleanup_staging(staging_root: &Path, _lease: &ProjectFilesystemLeaseSet) -> std::io::Result<()> {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     if _lease.take_fault(ProjectFilesystemFaultPoint::StagingCleanup) {
         return Err(std::io::Error::other("injected staging cleanup failure"));
     }
@@ -1333,10 +1336,7 @@ fn cleanup_staging(staging_root: &Path, _lease: &ProjectFilesystemLeaseSet) -> s
     Ok(())
 }
 
-fn mark_recovery(
-    marker: &Option<crate::project::ProjectRecoveryMarker>,
-    error: &ProjectFilesystemError,
-) {
+fn mark_recovery(marker: &Option<ProjectRecoveryMarker>, error: &ProjectFilesystemError) {
     if let Some(marker) = marker {
         marker.mark(error.to_string());
     }
@@ -1348,7 +1348,7 @@ fn prepare_error(error: impl std::fmt::Display) -> ProjectFilesystemError {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectFilesystemFaultPoint {
     StagedSerialization,

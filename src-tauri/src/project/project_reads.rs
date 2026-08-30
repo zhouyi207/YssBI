@@ -1,5 +1,6 @@
-use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState};
+use crate::project::{ProjectIndex, ProjectSession, ProjectState};
 use yss_function_editor_projection::FunctionEditorProjection;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;

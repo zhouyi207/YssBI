@@ -386,7 +386,9 @@ fn map_variable_mutation_error(
         VariableMutationApplicationError::VariableNotFound { .. } => {
             CommandError::expected("variable_not_found")
         }
-        VariableMutationApplicationError::Project(error) => CommandError::from(error),
+        VariableMutationApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         VariableMutationApplicationError::SessionChanged(error) => {
             CommandError::diagnosed("variable_session_changed", error)
         }
@@ -405,7 +407,9 @@ fn map_variable_query_error(
         VariableQueryApplicationError::VariableNotFound { .. } => {
             CommandError::expected("variable_not_found")
         }
-        VariableQueryApplicationError::Project(error) => CommandError::from(error),
+        VariableQueryApplicationError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
         VariableQueryApplicationError::SessionChanged(error) => {
             CommandError::diagnosed("variable_session_changed", error)
         }
@@ -477,7 +481,7 @@ mod tests {
         let before = command_snapshot(&state);
         let mut events = Vec::new();
         state.set_project_filesystem_fault(Some(
-            crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
+            yss_project_filesystem::ProjectFilesystemFaultPoint::StagedSerialization,
         ));
 
         let error = create_variable_with_emitter(
@@ -532,7 +536,7 @@ mod tests {
         let before = command_snapshot(&state);
         let mut events = Vec::new();
         state.set_project_filesystem_fault(Some(
-            crate::project::ProjectFilesystemFaultPoint::FirstLiveReplacement,
+            yss_project_filesystem::ProjectFilesystemFaultPoint::FirstLiveReplacement,
         ));
 
         let error = update_variable_with_emitter(
@@ -586,7 +590,7 @@ mod tests {
         let before = command_snapshot(&state);
         let mut events = Vec::new();
         state.set_project_filesystem_fault(Some(
-            crate::project::ProjectFilesystemFaultPoint::FirstLiveReplacement,
+            yss_project_filesystem::ProjectFilesystemFaultPoint::FirstLiveReplacement,
         ));
 
         let error = delete_variable_with_emitter(

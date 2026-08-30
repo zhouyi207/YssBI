@@ -13,9 +13,8 @@ use crate::application::execution::session_slot::{
     SessionRevalidationError,
 };
 use crate::application::project_query::ProjectActivation;
-use crate::project::{
-    ProjectFilesystemError, ProjectRegistry, ProjectState, normalize_existing_path,
-};
+use crate::project::{ProjectRegistry, ProjectState, normalize_existing_path};
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry_contract::ProjectRecord;

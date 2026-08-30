@@ -1,4 +1,5 @@
-use crate::project::{ProjectFilesystemError, ProjectSession};
+use crate::project::ProjectSession;
+use yss_project_filesystem::ProjectFilesystemError;
 use yss_resource_lifecycle::{
     ResourceLifecycleBoundary, ResourceLifecycleGuard, ResourceLifecycleIntent,
     ResourceLifecycleOwner,

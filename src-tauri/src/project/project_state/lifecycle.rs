@@ -12,7 +12,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn set_project_filesystem_fault(
         &self,
-        fault: Option<crate::project::ProjectFilesystemFaultPoint>,
+        fault: Option<yss_project_filesystem::ProjectFilesystemFaultPoint>,
     ) {
         self.filesystem.set_project_filesystem_fault(fault);
     }
@@ -23,7 +23,7 @@ impl ProjectState {
             .set_project_filesystem_rollback_fault(enabled);
     }
 
-    pub(crate) fn project_recovery_marker(&self) -> crate::project::ProjectRecoveryMarker {
+    pub(crate) fn project_recovery_marker(&self) -> yss_project_filesystem::ProjectRecoveryMarker {
         self.recovery_marker.clone()
     }
 

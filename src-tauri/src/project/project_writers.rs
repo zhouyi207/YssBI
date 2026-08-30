@@ -1,13 +1,13 @@
-use crate::project::{
-    GraphDocument, ProjectFilesystemError, ProjectFilesystemTransaction, ProjectSession,
-    ProjectState, ProjectTransactionContext, StagedFilesystemMutation,
-};
+use crate::project::{GraphDocument, ProjectSession, ProjectState, ProjectTransactionContext};
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
+use yss_project_filesystem::{
+    ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
+};
 use yss_project_history::{
     FunctionResourceKey, HistoryStatusDto, ResourceDeltaEvent, ResourceKey, ResourceLifecycleKind,
     ResourceLifecyclePatch, ResourceLifecycleState, ResourcePathMovePatch, VariableResourceKey,
@@ -598,7 +598,7 @@ impl ProjectState {
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
+            context.filesystem_context(),
             lease,
             mutations,
             validate_document,
@@ -622,12 +622,13 @@ impl ProjectState {
 #[cfg(all(test, any()))]
 mod tests {
     use super::set_writer_snapshot_test_hook;
-    use crate::project::{GraphDocument, ProjectFilesystemFaultPoint, ProjectState, fixtures};
+    use crate::project::{GraphDocument, ProjectState, fixtures};
     use std::collections::BTreeMap;
     use std::sync::Arc;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourceKind;
     use yss_graph_document::GraphResourcePath;
+    use yss_project_filesystem::ProjectFilesystemFaultPoint;
     use yss_project_history::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEETS_DIR};
