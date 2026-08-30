@@ -35,11 +35,11 @@ use crate::database::{
 };
 use crate::project::ProjectDatabaseError;
 use crate::project::{
-    OperationId, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
-    ResourceRevision, relative_project_duckdb_path, unique_name,
+    ProjectFilesystemError, ProjectSession, ProjectState, relative_project_duckdb_path, unique_name,
 };
 use uuid::Uuid;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
+use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularSnapshot;
 
 #[cfg(test)]
@@ -111,8 +111,8 @@ pub enum ApplicationDatabaseError {
 #[cfg(test)]
 #[derive(Clone, Copy)]
 struct DatabaseCreateRequest<'a> {
-    project_instance_id: &'a crate::project::ProjectInstanceId,
-    operation_id: crate::project::OperationId,
+    project_instance_id: &'a yss_project_identity::ProjectInstanceId,
+    operation_id: yss_project_identity::OperationId,
 }
 
 struct ProjectDatabaseAuthority<'a> {

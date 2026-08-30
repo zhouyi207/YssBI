@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use crate::application::database::{DatabaseApplicationError, DatabaseApplicationOperation};
 use crate::error::CommandError;
-use crate::project::ProjectInstanceId;
-use crate::project::ResourceRevision;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ResourceRevision;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

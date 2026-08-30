@@ -2,16 +2,16 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::EventProject;
 use crate::event::{Event, emit_project_event_result};
-use crate::project::ProjectInstanceId;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
-use crate::project::{OperationId, ResourceRevision};
 #[cfg(all(test, any()))]
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::VariableInstanceDTO;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 use yss_data_contract::{DataType, DataValue};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ResourceRevision};
 use yss_variable_contract::{VariableId, VariableScope};
 
 #[cfg(all(test, any()))]
@@ -34,7 +34,7 @@ fn persist_global_variables_with_emitter(
     project_instance_id: ProjectInstanceId,
     expected_revisions: std::collections::BTreeMap<
         crate::graph::document::ResourceKey,
-        crate::project::ResourceRevision,
+        yss_project_identity::ResourceRevision,
     >,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
@@ -437,8 +437,8 @@ mod tests {
         HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey,
     };
     use crate::project::ProjectData;
-    use crate::project::{OperationId, ResourceRevision};
     use std::collections::BTreeMap;
+    use yss_project_identity::{OperationId, ResourceRevision};
 
     fn active_state(label: &str) -> (std::path::PathBuf, ProjectState, ProjectInstanceId) {
         let root = std::env::temp_dir().join(format!(

@@ -300,7 +300,7 @@ pub(super) fn project_to_graph_production_edges(
 }
 
 pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -> Vec<String> {
-    let identity_path = "src-tauri/src/project/identity.rs";
+    let identity_path = "src-tauri/crates/yss-project-identity/src/identity.rs";
     let identity = std::fs::read_to_string(repository_root.join(identity_path))
         .unwrap_or_else(|error| panic!("failed to read {identity_path}: {error}"));
     let mut violations = Vec::new();

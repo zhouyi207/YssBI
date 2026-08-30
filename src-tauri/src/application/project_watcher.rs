@@ -1,5 +1,5 @@
 use crate::project::{FileChange, project_root_from_path};
-use crate::project::{ProjectDomainEvent, ProjectInstanceId, ProjectWatchError};
+use crate::project::{ProjectDomainEvent, ProjectWatchError};
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -7,6 +7,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{ApplicationState, SessionCaptureError};
 

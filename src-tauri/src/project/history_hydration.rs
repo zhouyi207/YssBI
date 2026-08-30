@@ -4,10 +4,10 @@ use crate::project::{
     ProjectHistoryMutationError, ProjectHistoryTransaction, ProjectSession, ResourceKey,
     VariableDocument, VariableResourceKey, WorksheetResourceKey, WorksheetResourcePath,
 };
-use crate::project::{HistoryEntryId, ResourceRevision};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::{HistoryEntryId, ResourceRevision};
 use yss_variable_contract::{VariableInstance, VariableScope};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -946,12 +946,12 @@ mod tests {
         GraphResourceDocument, ProjectData, ProjectHistoryTransaction, ResourcePatch,
         VariableDocumentPatch, VariableResourceKey,
     };
-    use crate::project::{OperationId, ResourceRevision};
     use std::collections::{BTreeMap, BTreeSet};
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath as DocumentGraphResourcePath;
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
+    use yss_project_identity::{OperationId, ResourceRevision};
     use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 
     const EVENT_PATH: &str = "events/Stable.yssbi-event";

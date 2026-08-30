@@ -1,8 +1,9 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::project::ResourceRevision;
-use crate::project::{ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId};
+use crate::project::{ProjectDatabaseError, ProjectFilesystemError};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ResourceRevision;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseApplicationOperation {

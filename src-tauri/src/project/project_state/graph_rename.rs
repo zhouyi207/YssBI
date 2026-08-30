@@ -6,10 +6,10 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        expected_revision: crate::project::ResourceRevision,
+        expected_revision: yss_project_identity::ResourceRevision,
         new_name: &str,
         lifecycle_token: u64,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::schema::application_event::ResourceMutationResultDto, ProjectFilesystemError>
     {
         self.ensure_project_operational()?;
@@ -189,7 +189,7 @@ impl ProjectState {
                     variable_revisions
                         .get(id)
                         .map(|entry| entry.revision)
-                        .unwrap_or(crate::project::ResourceRevision::INITIAL),
+                        .unwrap_or(yss_project_identity::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(*id, variable.clone());
                 referenced_variables.insert(*id, changed);

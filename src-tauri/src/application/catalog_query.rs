@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::database::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use crate::project::{ProjectFilesystemError, ProjectIndex, ProjectInstanceId};
+use crate::project::{ProjectFilesystemError, ProjectIndex};
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
@@ -16,6 +16,7 @@ use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAd
 use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, VariableValueContract};
 use yss_graph_runtime::GraphRuntimeCatalogError;
+use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,

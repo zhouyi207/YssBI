@@ -1,8 +1,9 @@
-use crate::project::ResourceRevision;
 use crate::project::{
-    ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
-    ProjectState, WorksheetDocument, WorksheetResourcePath,
+    ProjectData, ProjectFilesystemError, ProjectIndex, ProjectSession, ProjectState,
+    WorksheetDocument, WorksheetResourcePath,
 };
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ResourceRevision;
 
 impl ProjectState {
     pub fn read_project_index(
@@ -243,8 +244,10 @@ fn overlay_authoritative_project_index(
         .map(
             |(id, declaration)| crate::project::ProjectDatabaseIndexEntry {
                 id: id.clone(),
-                resource_path: crate::project::ProjectResourcePath::new(format!("databases/{id}")),
-                revision: crate::project::ResourceRevision::new(database_revisions[id]),
+                resource_path: yss_project_identity::ProjectResourcePath::new(format!(
+                    "databases/{id}"
+                )),
+                revision: yss_project_identity::ResourceRevision::new(database_revisions[id]),
                 engine: declaration.engine.clone(),
                 schema_version: declaration.schema_version,
                 required: declaration.required,

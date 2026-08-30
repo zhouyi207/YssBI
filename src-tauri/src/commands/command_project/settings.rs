@@ -7,9 +7,10 @@ use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::project::ProjectState;
 use crate::project::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
-    ComputationSettingsSnapshot, ProjectInstanceId,
+    ComputationSettingsSnapshot,
 };
 use tauri::{AppHandle, State};
+use yss_project_identity::ProjectInstanceId;
 
 #[tauri::command]
 pub fn get_project_computation_settings(

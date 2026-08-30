@@ -1,7 +1,8 @@
 use super::fixture_result_path;
-use crate::project::{GraphDocumentKind, ProjectFilesystemError, ProjectInstanceId, ProjectState};
-use crate::project::{OperationId, ResourceRevision};
+use crate::project::{GraphDocumentKind, ProjectFilesystemError, ProjectState};
 use yss_graph_document::{GraphResourcePath, GraphRevision};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ResourceRevision};
 
 #[cfg(test)]
 pub(crate) struct GraphRenameFixtureResult {

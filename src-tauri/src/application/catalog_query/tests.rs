@@ -4,7 +4,6 @@ use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
 use crate::database::runtime::DatabaseRuntimeRegistry;
-use crate::project::ProjectSessionId;
 use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState};
 use std::num::NonZeroU64;
 use std::path::PathBuf;
@@ -26,6 +25,7 @@ use yss_graph_runtime::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
 };
+use yss_project_identity::ProjectSessionId;
 
 struct TestProject {
     root: PathBuf,

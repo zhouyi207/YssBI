@@ -1,8 +1,9 @@
 use crate::application::editor_projection::EditorProjectionModel;
 use crate::project::FunctionEditorProjection;
-use crate::project::{OperationId, ProjectInstanceId, ProjectRecord};
+use crate::project::ProjectRecord;
 use crate::project::{ResourceDeltaEvent, ResourceLifecycleKind};
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::{OperationId, ProjectInstanceId};
 
 /// Low-rate cross-owner facts owned by Application.
 ///
@@ -18,8 +19,8 @@ pub enum ApplicationEvent {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphDeltaEvent<T> {
     pub graph_path: GraphResourcePath,
-    pub from_revision: crate::project::ResourceRevision,
-    pub to_revision: crate::project::ResourceRevision,
+    pub from_revision: yss_project_identity::ResourceRevision,
+    pub to_revision: yss_project_identity::ResourceRevision,
     pub caused_by: Option<OperationId>,
     pub payload: T,
 }

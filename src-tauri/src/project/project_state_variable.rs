@@ -70,7 +70,7 @@ impl ProjectState {
         revisions.insert(
             id,
             crate::project::project_state::VariableRevisionEntry::present(
-                crate::project::ResourceRevision::INITIAL,
+                yss_project_identity::ResourceRevision::INITIAL,
             ),
         );
         publication.advance_authority_generation();
@@ -92,7 +92,7 @@ impl ProjectState {
             let revision = revisions
                 .get(variable_id)
                 .map(|entry| entry.revision)
-                .unwrap_or(crate::project::ResourceRevision::INITIAL)
+                .unwrap_or(yss_project_identity::ResourceRevision::INITIAL)
                 .next();
             revisions.insert(
                 *variable_id,
@@ -179,7 +179,7 @@ impl ProjectState {
         let revision = revisions
             .get(variable_id)
             .map(|entry| entry.revision)
-            .unwrap_or(crate::project::ResourceRevision::INITIAL)
+            .unwrap_or(yss_project_identity::ResourceRevision::INITIAL)
             .next();
         revisions.insert(
             *variable_id,
@@ -194,9 +194,9 @@ impl ProjectState {
 mod tests {
     use super::*;
     use crate::project::ProjectData;
-    use crate::project::ResourceRevision;
     use std::sync::{Arc, Mutex, mpsc};
     use yss_data_contract::DataSeriesValue;
+    use yss_project_identity::ResourceRevision;
 
     fn add_int_variable(state: &ProjectState) -> VariableInstance {
         state

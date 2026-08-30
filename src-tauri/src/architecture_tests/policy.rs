@@ -363,7 +363,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::project_registry_store::ProjectRegistryStore",
             "yssbi_lib::project::project_registry_store::ProjectRegistryStoreError",
             "yssbi_lib::project::project_registry_store::ProjectRegistryStoreFuture",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -533,8 +532,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::database::error::DatabaseApplicationError",
             "yssbi_lib::application::database::error::DatabaseApplicationOperation",
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::project::identity::ResourceRevision",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -586,9 +583,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::schema::database::LoadDatabaseResultDto",
             "yssbi_lib::schema::database::column_info_from_schema",
             "yssbi_lib::database::edit_operation::EditState",
-            "yssbi_lib::project::identity::OperationId",
-            "yssbi_lib::project::identity::ResourceRevision",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -650,9 +644,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::execution::session_slot::SessionRevalidationError::Changed",
             "yssbi_lib::application::execution::session_slot::SessionRevalidationError::Unavailable",
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::project::identity::ResourceRevision",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
-            "yssbi_lib::project::project_session_id::ProjectInstanceId",
             "yssbi_lib::schema::catalog::LocalizedCatalogDto",
             "yssbi_lib::schema::graph_mutation::PortAddressDto",
         ],
@@ -743,7 +734,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::mutation::EditorGraphMutation",
             "yss_graph_document::NodeId",
             "yssbi_lib::project::history::MutationRequest",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::schema::application_event::GraphMutationResultDto",
             "yssbi_lib::schema::catalog::NodeCreationDescriptorDto",
             "yssbi_lib::schema::editor_projection::map_editor_projection",
@@ -776,7 +766,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::Event",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::project::execution_authority::ProjectExecutionPreparationError",
             "yssbi_lib::project::execution_authority::ProjectExecutionPreparationError::DuplicateResourceRequirement",
             "yssbi_lib::project::execution_authority::ProjectExecutionPreparationError::GraphRevisionUnavailable",
@@ -823,7 +812,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::history::HistoryMutation",
             "yssbi_lib::project::history::HistoryStatusDto",
             "yssbi_lib::project::history::MutationRequest",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -844,10 +832,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
             "yssbi_lib::project::history::MutationRequest",
-            "yssbi_lib::project::identity::OperationId",
-            "yssbi_lib::project::identity::ResourceRevision",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
-            "yssbi_lib::project::project_session::ProjectInstanceId::from_existing",
             "yssbi_lib::project::project_writers::ProjectSaveResult",
             "yssbi_lib::project::project_io::GraphDocumentKind",
             "yssbi_lib::project::project_io::GraphDocumentKind::Event",
@@ -984,12 +968,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::project_watcher::ObservedProjectFileChange",
             "yssbi_lib::application::project_watcher::ProjectFileChangeSink",
             "yssbi_lib::event::event_resource::EventResource",
-            "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::project::project_change::ProjectDomainEvent",
             "yssbi_lib::project::project_change::ProjectWatchError",
             "yssbi_lib::project::project_change::ProjectIndexInvalidation",
             "yssbi_lib::project::project_registry::ProjectRegistry",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
             "yssbi_lib::application::project_lifecycle::ApplicationProjectLifecycleError",
             "yssbi_lib::application::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle",
@@ -1053,7 +1035,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::project_io::ProjectIndex",
             "yssbi_lib::project::path_format::format_path_for_user_path",
             "yssbi_lib::project::project_registry::normalize_existing_path",
-            "yssbi_lib::project::project_session::ProjectInstanceId::from_existing",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::project::resource_reveal::RevealProjectResourceRequest",
             "yssbi_lib::project::resource_reveal::resolve_reveal_path",
@@ -1078,9 +1059,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::project_registry::ProjectRecord",
             "yssbi_lib::project::project_registry::ProjectRegistry",
             "yssbi_lib::project::project_scan::ScanProjectsResult",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::project::project_state::state::ProjectState",
-            "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::schema::application_event::LifecycleMutationResultDto",
             "yssbi_lib::application::execution::session_slot::ApplicationState",
             "yssbi_lib::schema::application_event::project_lifecycle_to_transport",
@@ -1109,7 +1088,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
             "yssbi_lib::project::computation_settings::ComputationSettingsMutationRequest",
             "yssbi_lib::project::computation_settings::ComputationSettingsSnapshot",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -1198,9 +1176,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event_result",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::project::identity::OperationId",
-            "yssbi_lib::project::identity::ResourceRevision",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::schema::application_event::ResourceMutationResultDto",
             "yssbi_lib::schema::variables::VariableInstanceDTO",
@@ -1248,11 +1223,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::event::emit_project_event_result",
             "yssbi_lib::event::emit_project_event",
             "yssbi_lib::event::event_project::EventProject",
-            "yssbi_lib::project::identity::OperationId",
-            "yssbi_lib::project::identity::ResourceRevision",
             "yssbi_lib::project::project_error::ProjectFilesystemError",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
-            "yssbi_lib::project::project_session::ProjectInstanceId::from_existing",
             "yssbi_lib::project::project_state::state::ProjectState",
             "yssbi_lib::project::resource_name::ResourceName",
             "yssbi_lib::project::worksheet_io::WorksheetDocument",
@@ -1308,19 +1279,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_graph_document_edit::GraphDocumentPatch",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/src/event/event_resource.rs",
-        fully_qualified_owner: "yssbi_lib::event::event_resource",
-        canonical_origin_targets: &[
-            "yssbi_lib::project::project_session_id::ProjectInstanceId",
-            "yssbi_lib::project::project_session::ProjectInstanceId",
         ],
     },
     InternalDependencyCapability {
@@ -1351,8 +1311,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::project::history::ResourceDeltaEvent",
             "yssbi_lib::project::history::ResourceKey",
             "yssbi_lib::project::history::ResourceLifecycleKind",
-            "yssbi_lib::project::identity::OperationId",
-            "yssbi_lib::project::identity::ResourceRevision",
             "yssbi_lib::project::project_registry::ProjectRecord",
         ],
     },
@@ -1527,7 +1485,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yssbi_lib::project::history::HistoryStatusDto",
             "yssbi_lib::project::history::ResourceKey",
-            "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::project::project_writers::ProjectSaveResult",
         ],
     },
@@ -1785,6 +1742,7 @@ fn non_build_memberships(
             | "yss-graph-resource-contract"
             | "yss-graph-type-mapping"
             | "yss-math"
+            | "yss-project-identity"
             | "yss-tabular-contract"
             | "yss-variable-contract"
     ) {

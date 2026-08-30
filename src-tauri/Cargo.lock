@@ -9295,6 +9295,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-identity"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+ "yss-graph-document",
+]
+
+[[package]]
 name = "yss-sci"
 version = "0.1.0"
 dependencies = [
@@ -9411,6 +9421,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-math",
+ "yss-project-identity",
  "yss-sci",
  "yss-tabular-contract",
  "yss-tracing",

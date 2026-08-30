@@ -7,9 +7,9 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
+use crate::project::MutationRequest;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
-use crate::project::{MutationRequest, ProjectInstanceId};
 use crate::schema::application_event::GraphMutationResultDto;
 use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
@@ -19,6 +19,7 @@ use yss_graph_document::NodeId;
 #[cfg(all(test, any()))]
 use yss_graph_editor::ClipboardSubgraph;
 use yss_graph_editor::EditorGraphMutation;
+use yss_project_identity::ProjectInstanceId;
 
 #[cfg(all(test, any()))]
 pub(super) fn hydrate_editor_graph_from_state(

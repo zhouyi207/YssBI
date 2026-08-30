@@ -634,3 +634,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   迁入 `src-tauri/crates/yss-graph-runtime/`；删除最后的根 `graph` facade、零调用 basis/catalog API、
   未读取且会形成第二事实源的 cached resource catalog，以及生产中恒为空操作的 bind hook；测试故障注入
   只通过 `test-support` feature 暴露，Application 继续唯一拥有 session capture/revalidation/commit。
+- [ ] 将 project instance/session/operation/history identity 与 project/resource revision
+  迁入 `src-tauri/crates/yss-project-identity/` Pure Leaf；删除根 `project` identity owner 与兼容
+  re-export，所有消费方直接依赖新 crate；保留 Project/Graph revision 的显式命名转换，并以
+  `test-support` feature 隔离测试专用 revision advancement。

@@ -1,6 +1,7 @@
 use super::ProjectState;
-use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectSession};
+use crate::project::{ProjectFilesystemError, ProjectSession};
 use yss_database_contract::DatabaseDecl;
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectDatabaseError {
@@ -48,7 +49,7 @@ impl ProjectDatabaseError {
 #[derive(Clone, Debug)]
 pub(crate) struct DatabaseAuthorityToken {
     project_instance_id: String,
-    project_session_id: crate::project::ProjectSessionId,
+    project_session_id: yss_project_identity::ProjectSessionId,
     database_id: String,
     database_revision: u64,
 }
@@ -56,8 +57,8 @@ pub(crate) struct DatabaseAuthorityToken {
 impl ProjectState {
     pub(crate) fn reserve_database_operation(
         &self,
-        project_instance_id: &crate::project::ProjectInstanceId,
-        operation_id: crate::project::OperationId,
+        project_instance_id: &yss_project_identity::ProjectInstanceId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<
         crate::project::resource_mutations::ResourceOperationReservation,
         ProjectDatabaseError,
@@ -98,7 +99,7 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         id: &str,
-        expected_revision: crate::project::ResourceRevision,
+        expected_revision: yss_project_identity::ResourceRevision,
     ) -> Result<DatabaseAuthorityToken, ProjectDatabaseError> {
         let session = self.validate_database_project_identity(project_instance_id)?;
         let publication = self.mutation_publication.lock().unwrap();
@@ -135,7 +136,7 @@ impl ProjectState {
         project_instance_id: &ProjectInstanceId,
         token: DatabaseAuthorityToken,
         after: DatabaseDecl,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectDatabaseError>
     {
         let session = self.validate_database_project_identity(project_instance_id)?;
@@ -145,7 +146,7 @@ impl ProjectState {
     fn validate_database_authority(
         publication: &super::project_state::MutationPublication,
         session: &ProjectSession,
-        current_session_id: &crate::project::ProjectSessionId,
+        current_session_id: &yss_project_identity::ProjectSessionId,
         revisions: &std::collections::HashMap<String, u64>,
         token: &DatabaseAuthorityToken,
         id: &str,
@@ -166,8 +167,8 @@ impl ProjectState {
 
     fn next_database_revision(
         id: &str,
-        retained: crate::project::ResourceRevision,
-    ) -> Result<crate::project::ResourceRevision, ProjectDatabaseError> {
+        retained: yss_project_identity::ResourceRevision,
+    ) -> Result<yss_project_identity::ResourceRevision, ProjectDatabaseError> {
         retained.checked_next().map_err(|error| {
             ProjectFilesystemError::ResourceRevisionOverflow {
                 resource: format!("databases/{id}"),
@@ -182,9 +183,9 @@ impl ProjectState {
         publication: &mut super::project_state::MutationPublication,
         revisions: &mut std::collections::HashMap<String, u64>,
         id: &str,
-        from_revision: crate::project::ResourceRevision,
-        to_revision: crate::project::ResourceRevision,
-        operation_id: crate::project::OperationId,
+        from_revision: yss_project_identity::ResourceRevision,
+        to_revision: yss_project_identity::ResourceRevision,
+        operation_id: yss_project_identity::OperationId,
         publication_advance: super::project_state::PreparedPublicationAdvance,
         before: Option<DatabaseDecl>,
         after: Option<DatabaseDecl>,
@@ -228,7 +229,7 @@ impl ProjectState {
         session: &ProjectSession,
         token: DatabaseAuthorityToken,
         after: DatabaseDecl,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectDatabaseError>
     {
         let id = token.database_id.as_str();
@@ -253,7 +254,7 @@ impl ProjectState {
             .cloned()
             .ok_or(ProjectDatabaseError::DatabaseNotFound)?;
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision = crate::project::ResourceRevision::new(token.database_revision);
+        let from_revision = yss_project_identity::ResourceRevision::new(token.database_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
         data.databases.insert(id.to_owned(), after.clone());
         Ok(self.publish_database_delta(
@@ -276,7 +277,7 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         after: DatabaseDecl,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectDatabaseError>
     {
         let session = self.validate_database_project_identity(project_instance_id)?;
@@ -294,7 +295,7 @@ impl ProjectState {
             return Err(ProjectDatabaseError::DatabaseAlreadyExists);
         }
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision = crate::project::ResourceRevision::INITIAL;
+        let from_revision = yss_project_identity::ResourceRevision::INITIAL;
         let to_revision = Self::next_database_revision(&id, from_revision)?;
         data.databases.insert(id.clone(), after.clone());
         Ok(self.publish_database_delta(
@@ -314,8 +315,8 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         id: &str,
-        expected_revision: crate::project::ResourceRevision,
-        operation_id: crate::project::OperationId,
+        expected_revision: yss_project_identity::ResourceRevision,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::project::project_writers::ProjectResourceMutationFacts, ProjectDatabaseError>
     {
         let session = self.validate_database_project_identity(project_instance_id)?;
@@ -340,7 +341,7 @@ impl ProjectState {
             .remove(id)
             .ok_or(ProjectDatabaseError::DatabaseNotFound)?;
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision = crate::project::ResourceRevision::new(current_revision);
+        let from_revision = yss_project_identity::ResourceRevision::new(current_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
         Ok(self.publish_database_delta(
             &mut publication,

@@ -25,7 +25,7 @@ pub struct WorksheetEncodings {
 pub struct WorksheetDocument {
     #[serde(deserialize_with = "deserialize_current_schema_version")]
     pub schema_version: u32,
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
     pub database_id: String,
     pub chart_type: String,
     pub encodings: WorksheetEncodings,
@@ -38,14 +38,14 @@ pub struct ProjectWorksheetIndexEntry {
     pub name: String,
     pub database_id: String,
     pub chart_type: String,
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
 }
 
 impl WorksheetDocument {
     pub fn new(database_id: impl Into<String>) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
-            revision: crate::project::ResourceRevision::INITIAL,
+            revision: yss_project_identity::ResourceRevision::INITIAL,
             database_id: database_id.into(),
             chart_type: "histogram".to_string(),
             encodings: WorksheetEncodings { x: None, y: None },

@@ -29,7 +29,7 @@ use yss_graph_resource_contract::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectGraphResourceSnapshot {
-    project_instance_id: crate::project::ProjectInstanceId,
+    project_instance_id: yss_project_identity::ProjectInstanceId,
     authority_generation: u64,
     functions: BTreeMap<GraphResourcePath, FunctionSignature>,
     variables: BTreeMap<GraphResourceId, VariableValueContract>,
@@ -38,7 +38,7 @@ pub struct ProjectGraphResourceSnapshot {
 
 impl ProjectGraphResourceSnapshot {
     pub fn new(
-        project_instance_id: crate::project::ProjectInstanceId,
+        project_instance_id: yss_project_identity::ProjectInstanceId,
         authority_generation: u64,
         functions: BTreeMap<GraphResourcePath, FunctionSignature>,
         variables: BTreeMap<GraphResourceId, VariableValueContract>,
@@ -53,7 +53,7 @@ impl ProjectGraphResourceSnapshot {
         }
     }
 
-    pub fn project_instance_id(&self) -> &crate::project::ProjectInstanceId {
+    pub fn project_instance_id(&self) -> &yss_project_identity::ProjectInstanceId {
         &self.project_instance_id
     }
 
@@ -467,7 +467,7 @@ mod tests {
         databases.insert(database.id.clone(), database);
 
         let project = ProjectGraphResourceSnapshot::new(
-            crate::project::ProjectInstanceId::from_existing("project".into()),
+            yss_project_identity::ProjectInstanceId::from_existing("project".into()),
             7,
             functions,
             variables,

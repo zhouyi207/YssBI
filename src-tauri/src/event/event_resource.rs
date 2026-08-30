@@ -1,5 +1,5 @@
-use crate::project::ProjectInstanceId;
 use serde::{Deserialize, Serialize};
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]

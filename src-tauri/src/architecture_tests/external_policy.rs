@@ -437,6 +437,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-identity",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-identity",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",

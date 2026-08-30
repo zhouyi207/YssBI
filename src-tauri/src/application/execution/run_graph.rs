@@ -19,7 +19,7 @@ use crate::project::execution_authority::{
     ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
     ProjectResourceRequirement,
 };
-use crate::project::{ProjectData, ProjectFilesystemError, ProjectInstanceId};
+use crate::project::{ProjectData, ProjectFilesystemError};
 use yss_execution::error::RunPhase;
 use yss_execution::package_preparation::PackagePreparationError;
 use yss_execution::plan::{
@@ -33,6 +33,7 @@ use yss_execution::state::{
 };
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::ProjectInstanceId;
 
 /// A run demand is an Application-owned interpretation of the graph execution
 /// request. It contains only Pure Leaf graph/plan identities, never transport
@@ -764,7 +765,6 @@ mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::project::ProjectSessionId;
     use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use yss_database_contract::{
@@ -776,6 +776,7 @@ mod tests {
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+    use yss_project_identity::ProjectSessionId;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));

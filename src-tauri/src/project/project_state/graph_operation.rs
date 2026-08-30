@@ -3,9 +3,10 @@ use std::sync::Arc;
 use crate::project::resource_mutations::ResourceOperationReservation;
 use crate::project::{
     ProjectFilesystemError, ProjectGraphHistoryChange, ProjectGraphHistoryState,
-    ProjectGraphResidency, ProjectHistoryTransaction, ProjectInstanceId, ProjectSession,
+    ProjectGraphResidency, ProjectHistoryTransaction, ProjectSession,
 };
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_project_identity::ProjectInstanceId;
 
 use super::state::ProjectState;
 
@@ -22,7 +23,7 @@ impl GraphOperationCapture {
         self.authority
     }
 
-    pub(crate) fn operation_id(&self) -> crate::project::OperationId {
+    pub(crate) fn operation_id(&self) -> yss_project_identity::OperationId {
         self.authority.operation_id
     }
 }
@@ -32,7 +33,7 @@ pub(crate) struct GraphOperationAuthority {
     graph_path: GraphResourcePath,
     revision: GraphRevision,
     authority_generation: u64,
-    operation_id: crate::project::OperationId,
+    operation_id: yss_project_identity::OperationId,
     reservation: ResourceOperationReservation,
 }
 
@@ -51,7 +52,7 @@ pub struct GraphInvalidationSet {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphCommitReceipt {
     pub project_instance_id: ProjectInstanceId,
-    pub operation_id: crate::project::OperationId,
+    pub operation_id: yss_project_identity::OperationId,
     pub from_revision: GraphRevision,
     pub to_revision: GraphRevision,
     pub history: ProjectHistoryStatus,
@@ -88,7 +89,7 @@ pub enum ProjectGraphOperationError {
     ResourceLifecycleChanged { graph: GraphResourcePath },
     #[error("graph operation ownership changed before planning")]
     OperationOwnershipChanged {
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     },
     #[error("project lifecycle admission is closed")]
     AdmissionClosed,
@@ -116,7 +117,7 @@ pub enum ProjectGraphCommitError {
     LifecycleChanged { graph_path: GraphResourcePath },
     #[error("graph operation ownership changed")]
     OperationOwnershipChanged {
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     },
 }
 
@@ -126,7 +127,7 @@ impl ProjectState {
         project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         expected_revision: GraphRevision,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
         self.ensure_project_operational()
             .map_err(capture_lifecycle_error)?;
@@ -222,7 +223,7 @@ impl ProjectState {
     pub(crate) fn commit_graph_candidate(
         &self,
         authority: GraphOperationAuthority,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
         candidate_document: Arc<GraphDocument>,
     ) -> Result<GraphCommitReceipt, ProjectGraphCommitError> {
         let GraphOperationAuthority {

@@ -7,14 +7,12 @@ pub mod function_editor_projection;
 pub mod graph_resource_index;
 pub mod history;
 mod history_hydration;
-pub mod identity;
 pub mod path_format;
 pub mod project_change;
 pub mod project_data;
 pub mod project_error;
 pub mod project_progress;
 pub mod project_registry_store;
-mod project_session_id;
 pub mod resource_lifecycle;
 pub mod resource_name;
 
@@ -59,17 +57,12 @@ pub use history::{
     VariableDocument, VariableDocumentPatch, VariableEffectHistorySnapshots, VariableResourceKey,
     WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
 };
-pub use identity::{
-    HistoryEntryId, OperationId, ProjectResourcePath, ProjectRevision, ProjectTransactionRevision,
-    ResourceRevision, RevisionExhausted,
-};
 pub use path_format::*;
 pub use project_change::*;
 pub use project_data::*;
 pub use project_error::*;
 pub use project_progress::*;
 pub use project_registry_store::*;
-pub use project_session_id::ProjectSessionId;
 pub use resource_lifecycle::*;
 pub use resource_name::*;
 
@@ -185,7 +178,10 @@ pub(crate) mod fixtures {
     ) -> Result<crate::schema::ProjectSaveResultDto, super::ProjectFilesystemError> {
         let session = state.capture_project_session()?;
         state
-            .flush_project_documents(&session.instance_id, crate::project::OperationId::new())
+            .flush_project_documents(
+                &session.instance_id,
+                yss_project_identity::OperationId::new(),
+            )
             .map(Into::into)
     }
 
@@ -207,8 +203,8 @@ pub(crate) mod fixtures {
             .save_graph_document(
                 &session.instance_id,
                 graph_path,
-                crate::project::ResourceRevision::from_graph_revision(revision),
-                crate::project::OperationId::new(),
+                yss_project_identity::ResourceRevision::from_graph_revision(revision),
+                yss_project_identity::OperationId::new(),
             )
             .map(Into::into)
     }

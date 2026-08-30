@@ -5,9 +5,11 @@ use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
 
 use crate::project::{
-    ProjectInstanceId, ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError,
+    ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError,
     ProjectRegistryStoreFuture,
 };
+
+use yss_project_identity::ProjectInstanceId;
 
 /// The only concrete SQLx/SQLite implementation of the Project registry port.
 pub struct SqliteProjectRegistryStore {

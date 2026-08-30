@@ -70,7 +70,7 @@ pub struct LifecycleInvalidationDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LifecycleMutationResultDto {
-    pub operation_id: crate::project::OperationId,
+    pub operation_id: yss_project_identity::OperationId,
     pub kind: LifecycleMutationKindDto,
     pub old_project_instance_id: Option<String>,
     pub new_project_instance_id: Option<String>,
@@ -96,9 +96,9 @@ pub struct GraphProjectionReplacementDto {
 #[serde(rename_all = "camelCase")]
 pub struct GraphDeltaEventDto<T> {
     pub graph_path: String,
-    pub from_revision: crate::project::ResourceRevision,
-    pub to_revision: crate::project::ResourceRevision,
-    pub caused_by: Option<crate::project::OperationId>,
+    pub from_revision: yss_project_identity::ResourceRevision,
+    pub to_revision: yss_project_identity::ResourceRevision,
+    pub caused_by: Option<yss_project_identity::OperationId>,
     pub payload: T,
 }
 
@@ -145,7 +145,7 @@ pub struct ResourceMutationCommandResultDto<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceMutationResultDto {
-    pub operation_id: crate::project::OperationId,
+    pub operation_id: yss_project_identity::OperationId,
     pub project_instance_id: String,
     pub publication_revision: u64,
     pub moves: Vec<ResourceMoveDto>,
@@ -351,9 +351,9 @@ mod tests {
         ResourceProjectionStatus,
     };
     use crate::project::ResourceLifecycleKind;
-    use crate::project::{OperationId, ProjectInstanceId};
     use crate::schema::application_event::ResourceMutationResultDto;
     use serde_json::json;
+    use yss_project_identity::{OperationId, ProjectInstanceId};
 
     #[test]
     fn project_lifecycle_fact_maps_to_the_existing_event_wire_shape() {

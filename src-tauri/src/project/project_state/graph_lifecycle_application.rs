@@ -1,14 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::project::{
-    GraphResourceDocument, ProjectFilesystemError, ProjectInstanceId, ProjectState,
-    ResourceLifecycleIntent, ResourceLifecycleOperation, ResourceName, ResourceRevision,
-    StagedFilesystemMutation,
+    GraphResourceDocument, ProjectFilesystemError, ProjectState, ResourceLifecycleIntent,
+    ResourceLifecycleOperation, ResourceName, StagedFilesystemMutation,
 };
+
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
     NodeId, PortAddress, PortInstanceId, PortRef,
 };
+use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 
 use super::VariableRevisionEntry;
 use crate::project::project_writers::{
@@ -30,7 +31,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         name: &str,
         resource: GraphResourceDocument,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -111,7 +112,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         source_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -231,7 +232,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -306,7 +307,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<crate::project::project_writers::ProjectSaveResult, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -383,7 +384,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         path: GraphResourcePath,
         resource: GraphResourceDocument,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
         resident: bool,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let mut publication = self
@@ -429,7 +430,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         path: &GraphResourcePath,
         expected_revision: ResourceRevision,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let mut publication = self
             .mutation_publication
@@ -770,7 +771,7 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         new_name: &str,
         lifecycle_token: u64,
-        operation_id: crate::project::OperationId,
+        operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let session = self.capture_project_session()?;
@@ -1291,7 +1292,7 @@ fn publication_history_status(state: &ProjectState) -> ProjectHistoryStatus {
 
 fn resource_lifecycle_result(
     project_instance_id: &ProjectInstanceId,
-    operation_id: crate::project::OperationId,
+    operation_id: yss_project_identity::OperationId,
     path: GraphResourcePath,
     resource: GraphResourceDocument,
     resident: bool,
@@ -1320,7 +1321,7 @@ fn resource_lifecycle_result(
 
 fn resource_removal_result(
     project_instance_id: &ProjectInstanceId,
-    operation_id: crate::project::OperationId,
+    operation_id: yss_project_identity::OperationId,
     path: &GraphResourcePath,
     expected_revision: ResourceRevision,
     state: &ProjectState,

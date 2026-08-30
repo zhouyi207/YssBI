@@ -7,7 +7,7 @@ use std::collections::HashMap;
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSaveResultDto {
     pub project_instance_id: String,
-    pub operation_id: crate::project::OperationId,
+    pub operation_id: yss_project_identity::OperationId,
     pub publication_revision: u64,
     pub affected_resources: Vec<crate::project::ResourceKey>,
     pub index_invalidated: bool,

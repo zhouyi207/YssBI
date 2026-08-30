@@ -12,11 +12,11 @@ pub enum ResourceDocumentPatch {
     /// Publish an on-disk graph declaration without installing a resident document.
     DeclareGraph {
         path: GraphResourcePath,
-        revision: crate::project::ResourceRevision,
+        revision: yss_project_identity::ResourceRevision,
     },
     RemoveGraph {
         path: GraphResourcePath,
-        revision: crate::project::ResourceRevision,
+        revision: yss_project_identity::ResourceRevision,
     },
     UnloadGraph {
         path: GraphResourcePath,
@@ -42,7 +42,7 @@ pub enum ResourceDocumentPatch {
     },
     RemoveWorksheet {
         path: WorksheetResourcePath,
-        revision: crate::project::ResourceRevision,
+        revision: yss_project_identity::ResourceRevision,
     },
     MoveWorksheet {
         from: WorksheetResourcePath,

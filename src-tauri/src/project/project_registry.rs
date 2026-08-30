@@ -4,11 +4,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::{
-    NormalizedProjectRoot, ProjectCleanupProgress, ProjectInstanceId, ProjectProgress,
-    ProjectProgressSink, ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError,
-    ProjectRootBinding, ProjectRootIdentity, ProjectScanProgress, format_path_for_user,
-    format_path_for_user_path, is_picker_task_cancelled,
+    NormalizedProjectRoot, ProjectCleanupProgress, ProjectProgress, ProjectProgressSink,
+    ProjectRegistryRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRootBinding,
+    ProjectRootIdentity, ProjectScanProgress, format_path_for_user, format_path_for_user_path,
+    is_picker_task_cancelled,
 };
+
+use yss_project_identity::ProjectInstanceId;
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
 

@@ -1,6 +1,7 @@
-use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::project::{ProjectFilesystemError, ProjectState};
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProjectRelativePath(PathBuf);

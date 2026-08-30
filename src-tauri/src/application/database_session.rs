@@ -7,13 +7,14 @@ use thiserror::Error;
 use super::execution::ApplicationSession;
 use crate::database::error::DatabaseError;
 use crate::database::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
-use crate::project::ProjectSessionId;
-use crate::project::{NormalizedProjectRoot, ProjectInstanceId};
+use crate::project::NormalizedProjectRoot;
 use yss_database_contract::DatabaseSessionOpenRequest;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
     DatabaseSessionOpenRequestError,
 };
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ProjectSessionId;
 
 /// Owned Project facts used to open one Database runtime session. The Database
 /// module receives only the converted contract request, never this type.

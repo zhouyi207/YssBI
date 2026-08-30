@@ -5,15 +5,16 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::ProjectInstanceId;
+use crate::project::MutationRequest;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
-use crate::project::{MutationRequest, OperationId, ResourceRevision};
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 #[cfg(all(test, any()))]
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ResourceRevision};
 
 #[cfg(all(test, any()))]
 pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(
@@ -83,7 +84,8 @@ pub fn unload_project_graph(
     graph_path: String,
     lifecycle_token: u64,
 ) -> Result<(), CommandError> {
-    let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
+    let project_instance_id =
+        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     application
         .unload_graph_resource(
             project_instance_id,

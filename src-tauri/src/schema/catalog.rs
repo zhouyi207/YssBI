@@ -312,7 +312,6 @@ mod tests {
         ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
     };
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::project::ProjectSessionId;
     use crate::project::{GraphDocumentKind, ProjectData};
     use std::num::NonZeroU64;
     use std::sync::Arc;
@@ -325,6 +324,7 @@ mod tests {
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+    use yss_project_identity::ProjectSessionId;
 
     fn application_with_function() -> (
         crate::project::fixtures::TempProject,

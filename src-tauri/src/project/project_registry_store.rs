@@ -2,7 +2,9 @@ use std::future::Future;
 use std::pin::Pin;
 use thiserror::Error;
 
-use super::{ProjectInstanceId, ProjectRootIdentity, ProjectRootIdentityState};
+use super::{ProjectRootIdentity, ProjectRootIdentityState};
+
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectRegistryRecord {

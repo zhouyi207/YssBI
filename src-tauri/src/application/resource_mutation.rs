@@ -22,10 +22,7 @@ use crate::database::error::DatabaseError;
 use crate::database::session_api::catalog_snapshot;
 use crate::project::project_writers::ProjectSaveResult;
 use crate::project::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
-use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, OperationId, ProjectFilesystemError,
-    ProjectInstanceId, ResourceRevision,
-};
+use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectFilesystemError};
 use std::collections::BTreeMap;
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
@@ -37,6 +34,7 @@ use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
+use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Debug, Error)]
 pub enum ResourceMutationApplicationError {

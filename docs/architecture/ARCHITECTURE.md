@@ -118,6 +118,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
+| `src-tauri/crates/yss-project-identity/` | 独立 Pure Leaf：project instance/session/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；Polars adapter 留在 `backend_adapters/`，变量归一化留在 `project/` |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
@@ -340,6 +341,8 @@ yss-graph-registry + yss-graph-analysis-contract
   → Execution immutable plan/runtime
 yss-graph-resource-contract
   → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
+yss-graph-document
+  → yss-project-identity → Project/Application/Transport/Adapters
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
@@ -355,6 +358,7 @@ yss-graph-resource-contract
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
 - `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
 - `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
+- `yss-project-identity`：统一拥有 `ProjectInstanceId`、`ProjectSessionId`、`OperationId`、`HistoryEntryId` 与 monotonic revision 值对象。project instance 与 replaceable runtime session 保持不同强类型；Graph/Project revision 只允许显式命名转换，测试便利的 `next()` 仅通过 `test-support` feature 暴露。根 `project` 不做兼容 re-export。
 - `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
 - `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。

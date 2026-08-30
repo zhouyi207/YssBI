@@ -4,12 +4,10 @@ use crate::project::resource_patch::ResourceDocumentPatch;
 use crate::project::{
     GraphResourceDocument, NormalizedProjectRoot, PreparedProjectActivation, ProjectData,
     ProjectFilesystemCoordinator, ProjectFilesystemError, ProjectFilesystemTransaction,
-    ProjectInstanceId, ProjectSession, ProjectStore, ProjectTransactionContext,
-    ResourceLifecycleIntent, ResourceLifecycleOperation, ResourceLifecycleRegistry,
-    ResourceRenameOwnershipLease, StagedFilesystemMutation, WorksheetResourcePath,
-    load_project_graph_from_file,
+    ProjectSession, ProjectStore, ProjectTransactionContext, ResourceLifecycleIntent,
+    ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
+    StagedFilesystemMutation, WorksheetResourcePath, load_project_graph_from_file,
 };
-use crate::project::{HistoryEntryId, OperationId, ResourceRevision};
 use crate::project::{
     HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
     ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
@@ -18,6 +16,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use yss_graph_document::GraphResourcePath;
 use yss_graph_document::NodeId;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
 
 mod activation;
 mod authority;
@@ -740,7 +740,7 @@ impl ProjectState {
                 .unwrap();
         self.history.write().unwrap().record_committed_transaction(
             ProjectHistoryTransaction::graph_move(
-                crate::project::OperationId::new(),
+                yss_project_identity::OperationId::new(),
                 path.clone(),
                 path,
                 serde_json::Value::Null,
@@ -878,9 +878,9 @@ impl ProjectState {
         std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
         std::collections::HashMap<
             yss_variable_contract::VariableId,
-            crate::project::ResourceRevision,
+            yss_project_identity::ResourceRevision,
         >,
-        std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
+        std::collections::HashMap<WorksheetResourcePath, yss_project_identity::ResourceRevision>,
     ) {
         (
             self.graph_revisions.read().unwrap().clone(),
@@ -906,8 +906,8 @@ impl ProjectState {
     pub(crate) fn runtime_identity_sessions_for_test(
         &self,
     ) -> (
-        crate::project::ProjectSessionId,
-        crate::project::ProjectSessionId,
+        yss_project_identity::ProjectSessionId,
+        yss_project_identity::ProjectSessionId,
     ) {
         let _publication = self.mutation_publication.lock().unwrap();
         let runtime = self
@@ -957,7 +957,7 @@ impl ProjectState {
     ) {
         self.worksheet_revisions.write().unwrap().insert(
             worksheet_path.clone(),
-            crate::project::ResourceRevision::INITIAL,
+            yss_project_identity::ResourceRevision::INITIAL,
         );
     }
 

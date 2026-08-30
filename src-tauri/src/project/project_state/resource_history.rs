@@ -42,7 +42,7 @@ pub(in crate::project) fn validate_context_revisions(
     >,
     worksheet_revisions: &std::collections::HashMap<
         WorksheetResourcePath,
-        crate::project::ResourceRevision,
+        yss_project_identity::ResourceRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
     for resource in &context.affected_resources {

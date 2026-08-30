@@ -113,7 +113,7 @@ impl std::error::Error for ComputationSettingsValidationError {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettingsSnapshot {
-    pub project_instance_id: crate::project::ProjectInstanceId,
+    pub project_instance_id: yss_project_identity::ProjectInstanceId,
     pub settings_revision: u64,
     pub publication_revision: u64,
     pub settings: ProjectComputationSettings,
@@ -122,8 +122,8 @@ pub struct ComputationSettingsSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettingsMutationRequest {
-    pub project_instance_id: crate::project::ProjectInstanceId,
-    pub operation_id: crate::project::OperationId,
+    pub project_instance_id: yss_project_identity::ProjectInstanceId,
+    pub operation_id: yss_project_identity::OperationId,
     pub expected_revision: u64,
     pub settings: ProjectComputationSettings,
 }
@@ -131,8 +131,8 @@ pub struct ComputationSettingsMutationRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettingsMutationReceipt {
-    pub project_instance_id: crate::project::ProjectInstanceId,
-    pub operation_id: crate::project::OperationId,
+    pub project_instance_id: yss_project_identity::ProjectInstanceId,
+    pub operation_id: yss_project_identity::OperationId,
     pub settings_revision: u64,
     pub publication_revision: u64,
     pub settings: ProjectComputationSettings,

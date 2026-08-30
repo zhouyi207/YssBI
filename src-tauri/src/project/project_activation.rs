@@ -1,13 +1,14 @@
-use crate::project::ResourceRevision;
 use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::project::{
-    NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
-    ProjectState, ProjectStore, WorksheetResourcePath,
+    NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectSession, ProjectState,
+    ProjectStore, WorksheetResourcePath,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ResourceRevision;
 use yss_variable_contract::VariableId;
 
 #[derive(Clone, Default)]

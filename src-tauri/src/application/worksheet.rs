@@ -5,9 +5,9 @@ use super::execution::session_slot::{
     ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use crate::project::{
-    OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceName, ResourceRevision,
-    WorksheetDocument, WorksheetResourcePath,
+    ProjectFilesystemError, ResourceName, WorksheetDocument, WorksheetResourcePath,
 };
+use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Debug, Error)]
 pub enum WorksheetApplicationError {

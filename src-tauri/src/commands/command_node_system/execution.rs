@@ -5,9 +5,9 @@ use crate::application::execution::run_graph::{
 };
 use crate::commands::execution_dto::{ExecutionChannelEventDto, ExecutionDemandDto};
 use crate::error::CommandError;
-use crate::project::ProjectInstanceId;
 use serde::Serialize;
 use tauri::{State, ipc::Channel};
+use yss_project_identity::ProjectInstanceId;
 
 struct TauriExecutionChannelAdapter {
     channel: Channel<ExecutionChannelEventDto>,

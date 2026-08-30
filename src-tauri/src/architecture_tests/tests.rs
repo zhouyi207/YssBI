@@ -2576,6 +2576,86 @@ fn math_parser_has_one_pure_crate_owner_without_compatibility_module() {
 }
 
 #[test]
+fn project_identity_has_one_pure_crate_owner_without_root_facade() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-identity/Cargo.toml",
+        "src-tauri/crates/yss-project-identity/src/identity.rs",
+        "src-tauri/crates/yss-project-identity/src/lib.rs",
+        "src-tauri/crates/yss-project-identity/src/project_instance_id.rs",
+        "src-tauri/crates/yss-project-identity/src/project_session_id.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project identity owner must exist at {relative}"
+        );
+    }
+    for relative in [
+        "src-tauri/src/project/identity.rs",
+        "src-tauri/src/project/project_session_id.rs",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "the root crate must not retain project identity owner {relative}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project-identity\"",
+        "yss-project-identity = { path = \"./crates/yss-project-identity\" }",
+        "yss-project-identity = { path = \"./crates/yss-project-identity\", features = [\"test-support\"] }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
+        .expect("the root project module must be readable");
+    for facade in [
+        "pub mod identity",
+        "mod project_session_id",
+        "pub use yss_project_identity",
+        "pub use identity::",
+        "pub use project_session_id::",
+    ] {
+        assert!(
+            !project_module.contains(facade),
+            "the root project module must not restore identity facade '{facade}'"
+        );
+    }
+
+    let identity =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-identity/src/identity.rs"))
+            .expect("project identity source must be readable");
+    assert!(
+        identity.contains("cfg(any(test, feature = \"test-support\"))"),
+        "test-only revision advancement must stay behind the explicit feature boundary"
+    );
+    for removed in [
+        "ProjectTransactionRevision",
+        "pub const fn as_uuid",
+        "test transaction revision is available",
+    ] {
+        assert!(
+            !identity.contains(removed),
+            "project identity must not restore unused API '{removed}'"
+        );
+    }
+    let session_identity = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project-identity/src/project_session_id.rs"),
+    )
+    .expect("project session identity source must be readable");
+    assert!(
+        !session_identity.contains("pub fn unknown"),
+        "project session identity must not restore the zero-caller unknown sentinel"
+    );
+}
+
+#[test]
 fn variable_contract_has_one_pure_crate_owner_without_compatibility_module() {
     let root = repository_root();
     for relative in [

@@ -133,7 +133,8 @@ pub fn get_project_index(
     application: State<ApplicationState>,
     project_instance_id: String,
 ) -> Result<ProjectIndex, CommandError> {
-    let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
+    let project_instance_id =
+        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     application
         .query_project_index(project_instance_id)
         .map_err(map_project_query_error)
@@ -147,7 +148,8 @@ pub fn load_project_graph(
     locale: Option<String>,
     lifecycle_token: u64,
 ) -> Result<EditorGraphProjectionDto, CommandError> {
-    let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
+    let project_instance_id =
+        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_project_format"))?;
     let receipt = state
@@ -251,12 +253,13 @@ mod tests {
         EditorGraphMutation, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         MutationRequest, ResourceKey,
     };
-    use crate::project::OperationId;
-    use crate::project::{ProjectData, ProjectInstanceId};
+    use crate::project::ProjectData;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document::GraphRevision;
     use yss_graph_protocol::NodeTypeId;
+    use yss_project_identity::OperationId;
+    use yss_project_identity::ProjectInstanceId;
     use yss_variable_contract::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
@@ -285,7 +288,7 @@ mod tests {
     ) -> MutationRequest<EditorGraphMutation> {
         MutationRequest::new(
             ResourceKey::Graph(graph_path.clone()),
-            crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
+            yss_project_identity::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
             EditorGraphMutation::CreateNode {
                 descriptor: yss_graph_catalog::NodeCreation::Static {
@@ -303,7 +306,7 @@ mod tests {
     ) -> MutationRequest<FunctionDocumentPatch> {
         MutationRequest::new(
             ResourceKey::Function(FunctionResourceKey(function_path.as_str().into())),
-            crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
+            yss_project_identity::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
             FunctionDocumentPatch::new(
                 FunctionSignature::default(),
@@ -525,7 +528,7 @@ mod tests {
 
         assert_eq!(
             graph_mutation.delta.to_revision,
-            crate::project::ResourceRevision::from_graph_revision(GraphRevision::new(1))
+            yss_project_identity::ResourceRevision::from_graph_revision(GraphRevision::new(1))
         );
         assert!(graph_mutation.history.can_undo);
         assert_eq!(after_graph.publication_revision, 0);

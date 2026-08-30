@@ -1,6 +1,7 @@
-use crate::project::OperationId;
-use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::project::{ProjectFilesystemError, ProjectState};
 use std::collections::HashSet;
+use yss_project_identity::OperationId;
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ResourceOperationOwner {

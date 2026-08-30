@@ -1,6 +1,7 @@
-use crate::project::{OperationId, ResourceRevision};
-use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::project::{ProjectFilesystemError, ProjectState};
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ResourceRevision};
 
 pub(crate) fn remap_variable_scope_path(
     scope: &mut yss_variable_contract::VariableScope,

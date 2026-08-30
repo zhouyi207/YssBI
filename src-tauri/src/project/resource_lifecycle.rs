@@ -1,9 +1,8 @@
-use crate::project::{
-    ProjectFilesystemError, ProjectInstanceId, ProjectSession, WorksheetResourcePath,
-};
+use crate::project::{ProjectFilesystemError, ProjectSession, WorksheetResourcePath};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use yss_graph_document::GraphResourcePath;
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum LifecycleResourcePath {
@@ -494,10 +493,11 @@ fn stale_owner_error(owner: &ResourceLifecycleOwner) -> ProjectFilesystemError {
 mod tests {
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, NormalizedProjectRoot, ProjectData,
-        ProjectInstanceId, ProjectSession, ProjectState, WorksheetResourcePath, fixtures,
+        ProjectSession, ProjectState, WorksheetResourcePath, fixtures,
     };
     use std::sync::Arc;
     use yss_graph_document::GraphResourcePath;
+    use yss_project_identity::ProjectInstanceId;
 
     fn session(label: &str) -> ProjectSession {
         ProjectSession {

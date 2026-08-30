@@ -2,7 +2,7 @@ use super::*;
 use crate::project::resource_patch::ResourceDocumentPatch;
 
 pub(super) struct CommittedResourceMutation {
-    pub(in crate::project::project_state) operation_id: crate::project::OperationId,
+    pub(in crate::project::project_state) operation_id: yss_project_identity::OperationId,
     pub(in crate::project::project_state) project_instance_id: String,
     pub(in crate::project::project_state) publication_revision: u64,
     pub(in crate::project::project_state) moves:
@@ -33,7 +33,7 @@ impl CommittedResourceMutation {
         } = self;
         crate::project::project_writers::ProjectResourceMutationFacts::new(
             operation_id,
-            crate::project::ProjectInstanceId::from_existing(project_instance_id.into()),
+            yss_project_identity::ProjectInstanceId::from_existing(project_instance_id.into()),
             publication_revision,
             moves.into_iter().collect::<Vec<_>>().into_boxed_slice(),
             deltas,
@@ -309,7 +309,7 @@ impl ProjectState {
                             let retained = variable_revisions
                                 .get(id)
                                 .map(|entry| entry.revision)
-                                .unwrap_or(crate::project::ResourceRevision::INITIAL);
+                                .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
                             checked_resource_revision(format!("variables/{id}"), retained)
                                 .map(|revision| (*id, revision))
                         })
@@ -361,7 +361,7 @@ impl ProjectState {
                             let retained = variable_revisions
                                 .get(id)
                                 .map(|entry| entry.revision)
-                                .unwrap_or(crate::project::ResourceRevision::INITIAL);
+                                .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
                             checked_resource_revision(format!("variables/{id}"), retained)
                                 .map(|revision| (*id, revision))
                         })
@@ -398,7 +398,7 @@ impl ProjectState {
                         let retained = next_revisions
                             .get(id)
                             .map(|entry| entry.revision)
-                            .unwrap_or(crate::project::ResourceRevision::INITIAL);
+                            .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
                         let revision =
                             checked_resource_revision(format!("variables/{id}"), retained)?;
                         next_revisions.insert(*id, VariableRevisionEntry::deleted(revision));
@@ -407,7 +407,7 @@ impl ProjectState {
                         let retained = next_revisions
                             .get(id)
                             .map(|entry| entry.revision)
-                            .unwrap_or(crate::project::ResourceRevision::INITIAL);
+                            .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
                         let revision =
                             checked_resource_revision(format!("variables/{id}"), retained)?;
                         next_revisions.insert(*id, VariableRevisionEntry::present(revision));

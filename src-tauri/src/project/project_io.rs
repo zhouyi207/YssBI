@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use super::ensure_worksheets_dir;
 use super::{
     GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectComputationSettings, ProjectData, ProjectError, ProjectResourcePath,
-    ProjectWorksheetIndexEntry, load_worksheets_from_root, read_worksheet_index_entries,
-    scan_graph_resource_index,
+    ProjectComputationSettings, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
+    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_project_identity::ProjectResourcePath;
 
 use yss_graph_document::GraphDocument as NodeGraphDocument;
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
@@ -63,7 +63,7 @@ pub struct GraphDocument {
     pub kind: GraphDocumentKind,
     pub name: String,
     #[serde(default)]
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
     pub document: NodeGraphDocument,
     pub function: Option<crate::project::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
@@ -92,9 +92,9 @@ pub struct ProjectGraphIndexEntry {
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_revision: Option<crate::project::ResourceRevision>,
+    pub function_revision: Option<yss_project_identity::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_signature: Option<crate::project::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -106,7 +106,7 @@ pub struct ProjectGraphIndexEntry {
 pub struct ProjectVariableIndexEntry {
     pub id: String,
     pub resource_path: ProjectResourcePath,
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
     pub name: String,
     pub data_type: yss_data_contract::DataType,
     pub data_value: yss_data_contract::DataValue,
@@ -124,7 +124,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
         Self {
             id: value.id.to_string(),
             resource_path: ProjectResourcePath::new(format!("variables/{}", value.id)),
-            revision: crate::project::ResourceRevision::INITIAL,
+            revision: yss_project_identity::ResourceRevision::INITIAL,
             name: value.name,
             data_type: value.data_type,
             data_value: value.data_value,
@@ -143,7 +143,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
 pub struct ProjectDatabaseIndexEntry {
     pub id: String,
     pub resource_path: ProjectResourcePath,
-    pub revision: crate::project::ResourceRevision,
+    pub revision: yss_project_identity::ResourceRevision,
     pub engine: yss_database_contract::DatabaseEngine,
     pub schema_version: u32,
     pub required: bool,
@@ -249,7 +249,9 @@ fn graph_document_from_resource(
         schema_version: SCHEMA_VERSION,
         kind: graph.kind,
         name: graph.name.clone(),
-        revision: crate::project::ResourceRevision::from_graph_revision(graph.document.revision),
+        revision: yss_project_identity::ResourceRevision::from_graph_revision(
+            graph.document.revision,
+        ),
         document: graph.document.clone(),
         function: graph.function.clone(),
         local_variables,
@@ -279,7 +281,7 @@ fn write_loaded_graph_document(
             schema_version: SCHEMA_VERSION,
             kind: graph.kind,
             name: graph.name.clone(),
-            revision: crate::project::ResourceRevision::from_graph_revision(
+            revision: yss_project_identity::ResourceRevision::from_graph_revision(
                 graph.document.revision,
             ),
             document: graph.document.clone(),
@@ -568,7 +570,7 @@ struct GraphFileHeader {
     kind: GraphDocumentKind,
     name: String,
     #[serde(default)]
-    revision: crate::project::ResourceRevision,
+    revision: yss_project_identity::ResourceRevision,
     function: Option<crate::project::FunctionDocument>,
 }
 
@@ -719,7 +721,7 @@ fn read_graph_local_variable_index_entries(
             entries.push(ProjectVariableIndexEntry {
                 id: variable.id.to_string(),
                 resource_path: ProjectResourcePath::new(format!("variables/{}", variable.id)),
-                revision: crate::project::ResourceRevision::INITIAL,
+                revision: yss_project_identity::ResourceRevision::INITIAL,
                 name: variable.name,
                 data_type: variable.data_type,
                 data_value: variable.data_value,

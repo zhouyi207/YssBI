@@ -1,39 +1,8 @@
 use crate::project::NormalizedProjectRoot;
 use crate::project::ResourceKey;
-use crate::project::{OperationId, ResourceRevision};
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProjectInstanceId(String);
-
-impl ProjectInstanceId {
-    pub fn new() -> Self {
-        Self(uuid::Uuid::new_v4().to_string())
-    }
-
-    pub(crate) fn from_existing(value: String) -> Self {
-        Self(value)
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Default for ProjectInstanceId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl std::fmt::Display for ProjectInstanceId {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(formatter)
-    }
-}
+use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectSession {

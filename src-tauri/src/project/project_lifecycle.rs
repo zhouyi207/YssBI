@@ -1,14 +1,15 @@
-use crate::project::OperationId;
 use crate::project::{
     DATABASE_DIR, EVENTS_DIR, FUNCTIONS_DIR, GLOBAL_VARIABLES_FILE, NormalizedProjectRoot,
     PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectInstanceId, ProjectRootBinding, ProjectRootIdentity,
+    ProjectFilesystemTransaction, ProjectRootBinding, ProjectRootIdentity,
     ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
     StagedFilesystemMutation, WORKSHEETS_DIR, ensure_directory, read_project_source_tree,
     remove_directory_if_created, validate_deletion_root, validate_destination_policy,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use yss_project_identity::OperationId;
+use yss_project_identity::ProjectInstanceId;
 
 pub struct PreparedProjectCopy {
     pub metadata_path: PathBuf,
@@ -482,13 +483,13 @@ mod tests {
         GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemFaultPoint,
         fixtures, load_project_from_file,
     };
-    use crate::project::{OperationId, ResourceRevision};
     use std::time::Duration;
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::GraphResourcePath;
     use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
     use yss_graph_protocol::NodeTypeId;
+    use yss_project_identity::{OperationId, ResourceRevision};
     use yss_variable_contract::VariableScope;
 
     fn root(label: &str) -> PathBuf {
@@ -557,7 +558,7 @@ mod tests {
         before_data: &serde_json::Value,
         before_history: crate::project::HistoryStatusDto,
         before_lengths: (usize, usize),
-        before_head: Option<crate::project::HistoryEntryId>,
+        before_head: Option<yss_project_identity::HistoryEntryId>,
         before_revisions: &(
             std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
             std::collections::HashMap<yss_variable_contract::VariableId, ResourceRevision>,
@@ -1048,7 +1049,7 @@ mod tests {
                 .rename_graph_resource_transaction(
                     &instance_id,
                     &rename_path,
-                    crate::project::ResourceRevision::INITIAL,
+                    yss_project_identity::ResourceRevision::INITIAL,
                     "Renamed",
                     1,
                     OperationId::new(),
@@ -1060,7 +1061,7 @@ mod tests {
                 .save_worksheet_document(
                     &instance_id,
                     &worksheet_path,
-                    crate::project::ResourceRevision::INITIAL,
+                    yss_project_identity::ResourceRevision::INITIAL,
                     OperationId::new(),
                     worksheet,
                 )

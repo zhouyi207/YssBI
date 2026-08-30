@@ -3,14 +3,15 @@ use super::progress::{
     bounded_project_progress_adapter, reap_project_progress_worker,
 };
 use crate::error::CommandError;
-use crate::project::OperationId;
 use crate::project::{
-    CleanupInvalidProjectsResult, ProjectInstanceId, ProjectPickerTaskCancelRegistry,
-    ProjectRecord, ProjectRegistry, ScanProjectsResult,
+    CleanupInvalidProjectsResult, ProjectPickerTaskCancelRegistry, ProjectRecord, ProjectRegistry,
+    ScanProjectsResult,
 };
 use crate::schema::application_event::LifecycleMutationResultDto;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
+use yss_project_identity::OperationId;
+use yss_project_identity::ProjectInstanceId;
 
 #[tauri::command]
 pub async fn list_registered_projects(

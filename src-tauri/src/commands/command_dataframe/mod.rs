@@ -11,16 +11,16 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::project::ProjectInstanceId;
 #[cfg(all(test, any()))]
 use crate::project::ProjectState;
-use crate::project::{OperationId, ResourceRevision};
 use crate::schema::application_event::ResourceMutationCommandResultDto;
 use crate::schema::{
     DatabaseEngineDTO, DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto,
     LoadDatabaseResultDto,
 };
 use tauri::{AppHandle, State};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{OperationId, ResourceRevision};
 
 mod error;
 #[cfg(all(test, any()))]
@@ -852,8 +852,8 @@ mod tests {
     use crate::database::DatabaseState;
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
-    use crate::project::{OperationId, ResourceRevision};
     use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+    use yss_project_identity::{OperationId, ResourceRevision};
 
     struct FailingSerialize;
 

@@ -1,4 +1,4 @@
-use crate::project::ProjectSessionId;
+use yss_project_identity::ProjectSessionId;
 
 /// Project-scoped identity owned by the current project authority.
 pub struct ProjectStore {

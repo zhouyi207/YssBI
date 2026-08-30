@@ -13,11 +13,11 @@ use crate::application::execution::session_slot::{
     SessionRevalidationError,
 };
 use crate::application::project_query::ProjectActivation;
-use crate::project::OperationId;
 use crate::project::{
-    ProjectFilesystemError, ProjectInstanceId, ProjectRecord, ProjectRegistry, ProjectState,
-    normalize_existing_path,
+    ProjectFilesystemError, ProjectRecord, ProjectRegistry, ProjectState, normalize_existing_path,
 };
+use yss_project_identity::OperationId;
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, Error)]
 pub enum ProjectLifecycleError {

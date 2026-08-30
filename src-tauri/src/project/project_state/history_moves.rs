@@ -556,7 +556,7 @@ impl ProjectState {
                     variable_revisions
                         .get(&id)
                         .map(|entry| entry.revision)
-                        .unwrap_or(crate::project::ResourceRevision::INITIAL),
+                        .unwrap_or(yss_project_identity::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(id, current.clone());
                 referenced_variables.insert(id, desired);

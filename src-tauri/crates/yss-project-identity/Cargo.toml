@@ -1,0 +1,17 @@
+[package]
+name = "yss-project-identity"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true
+yss-graph-document = { path = "../yss-graph-document" }
+
+[dev-dependencies]
+serde_json.workspace = true

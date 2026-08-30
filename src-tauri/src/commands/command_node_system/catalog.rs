@@ -5,11 +5,11 @@ use crate::application::catalog_query::{
 };
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::error::CommandError;
-use crate::project::ProjectInstanceId;
 #[cfg(all(test, any()))]
 use crate::schema::catalog::LocalizedCatalogDto as LegacyLocalizedCatalogDto;
 use crate::schema::catalog::LocalizedCatalogDto;
 use tauri::State;
+use yss_project_identity::ProjectInstanceId;
 
 fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
     match error {
@@ -95,7 +95,7 @@ pub fn get_compatible_node_catalog(
     state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    graph_revision: crate::project::ResourceRevision,
+    graph_revision: yss_project_identity::ResourceRevision,
     source_port: crate::schema::graph_mutation::PortAddressDto,
     locale: String,
 ) -> Result<LocalizedCatalogDto, CommandError> {

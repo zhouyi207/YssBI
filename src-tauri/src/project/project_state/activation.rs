@@ -11,7 +11,7 @@ struct ActivationGarbage {
     _variable_revisions:
         std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     _worksheet_revisions:
-        std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
+        std::collections::HashMap<WorksheetResourcePath, yss_project_identity::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectAuthorityExpectation,
     _recovery_message: Option<String>,

@@ -991,7 +991,7 @@ pub(in crate::project) fn project_documents(
 pub(super) fn try_project_document_revision(
     documents: &ProjectDocumentState,
     resource: &ResourceKey,
-) -> Option<crate::project::ResourceRevision> {
+) -> Option<yss_project_identity::ResourceRevision> {
     match resource {
         ResourceKey::Graph(path) => documents
             .graphs
@@ -1016,7 +1016,7 @@ pub(super) fn try_project_document_revision(
 pub(super) fn project_document_revision(
     documents: &ProjectDocumentState,
     resource: &ResourceKey,
-) -> crate::project::ResourceRevision {
+) -> yss_project_identity::ResourceRevision {
     try_project_document_revision(documents, resource)
         .expect("history transaction resource remains present")
 }

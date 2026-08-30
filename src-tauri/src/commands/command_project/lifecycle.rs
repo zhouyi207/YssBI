@@ -8,10 +8,9 @@ use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
-use crate::project::OperationId;
 #[cfg(test)]
 use crate::project::ProjectState;
-use crate::project::{ProjectDomainEvent, ProjectInstanceId, ProjectRegistry, ProjectWatchError};
+use crate::project::{ProjectDomainEvent, ProjectRegistry, ProjectWatchError};
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::{
     LifecycleMutationOutcomeDto, LifecycleMutationResultDto, ProjectActivationResultDto,
@@ -19,6 +18,8 @@ use crate::schema::application_event::{
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
+use yss_project_identity::OperationId;
+use yss_project_identity::ProjectInstanceId;
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
@@ -383,12 +384,12 @@ pub fn new_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectFilesystemError};
     use crate::schema::application_event::{
         LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
         LifecycleRecoveryDto,
     };
+    use yss_project_identity::OperationId;
 
     fn lifecycle_result(
         outcome: LifecycleMutationOutcomeDto,

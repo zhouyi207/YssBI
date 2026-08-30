@@ -7,8 +7,7 @@ use thiserror::Error;
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
 use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::project::ProjectSessionId;
-use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::project::{ProjectFilesystemError, ProjectState};
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
@@ -20,6 +19,8 @@ use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ProjectSessionId;
 
 /// Composition-root supplied construction for one session-bound resource factory.
 ///
@@ -335,8 +336,7 @@ pub(crate) fn build_current_project_candidate(
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::project::ProjectSessionId;
-    use crate::project::{ProjectInstanceId, ProjectState};
+    use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -348,6 +348,8 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_project_identity::ProjectInstanceId;
+    use yss_project_identity::ProjectSessionId;
 
     fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
         ResourceProviderFactory::new(project_session.as_str().into())

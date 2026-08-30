@@ -3,7 +3,7 @@ use super::execution::session_slot::{
 };
 use crate::project::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
-    ComputationSettingsSnapshot, ProjectFilesystemError, ProjectInstanceId,
+    ComputationSettingsSnapshot, ProjectFilesystemError,
 };
 use crate::project::{
     ComputationSettingsValidationError, ProjectComputationSettings, StatisticalMissingValuePolicy,
@@ -12,6 +12,7 @@ use crate::sci::api::computation::{MissingValuePolicy, NumericTolerance, SciComp
 use yss_execution::settings::{
     ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
 };
+use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ComputationSettingsMappingError {

@@ -11,13 +11,14 @@ use crate::database::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
 };
-use crate::project::ProjectSessionId;
-use crate::project::{ProjectInstanceId, ProjectState};
+use crate::project::ProjectState;
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::{ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState};
 use yss_graph_runtime::GraphRuntimeState;
+use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::ProjectSessionId;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ApplicationSessionEpoch(u64);

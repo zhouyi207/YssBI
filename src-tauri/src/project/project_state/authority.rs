@@ -4,7 +4,7 @@ use super::*;
 pub(in crate::project) struct ProjectAuthorityExpectation {
     pub(in crate::project) project_instance_id: ProjectInstanceId,
     pub(in crate::project) project_root: Option<NormalizedProjectRoot>,
-    pub(in crate::project) project_session_id: crate::project::ProjectSessionId,
+    pub(in crate::project) project_session_id: yss_project_identity::ProjectSessionId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,19 +28,19 @@ pub(crate) enum VariablePresence {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct VariableRevisionEntry {
-    pub(crate) revision: crate::project::ResourceRevision,
+    pub(crate) revision: yss_project_identity::ResourceRevision,
     pub(crate) presence: VariablePresence,
 }
 
 impl VariableRevisionEntry {
-    pub(crate) const fn present(revision: crate::project::ResourceRevision) -> Self {
+    pub(crate) const fn present(revision: yss_project_identity::ResourceRevision) -> Self {
         Self {
             revision,
             presence: VariablePresence::Present,
         }
     }
 
-    pub(crate) const fn deleted(revision: crate::project::ResourceRevision) -> Self {
+    pub(crate) const fn deleted(revision: yss_project_identity::ResourceRevision) -> Self {
         Self {
             revision,
             presence: VariablePresence::Deleted,

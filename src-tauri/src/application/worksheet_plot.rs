@@ -1,8 +1,8 @@
 use crate::database::plot_query::{
     self, DatabasePlotQueryError, NumericColumnKind, NumericColumnPair,
 };
-use crate::project::{ProjectInstanceId, ResourceRevision};
 use yss_database_contract::DatabaseId;
+use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_tabular_contract::TabularColumnName;
 
 use super::execution::session_slot::{

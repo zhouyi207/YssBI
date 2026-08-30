@@ -9,9 +9,11 @@ use thiserror::Error;
 
 use crate::project::{
     MutationPublication, NormalizedProjectRoot, ProjectComputationSettings, ProjectData,
-    ProjectInstanceId, ProjectSession, ProjectState, ResourceRevision,
+    ProjectSession, ProjectState,
 };
+
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_variable_contract::{VariableId, VariableInstance};
 
 /// Project-owned identity used when a plan names a resource.

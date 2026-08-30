@@ -22,7 +22,12 @@ pub struct ProjectState {
         RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,
     >,
     pub(in crate::project) worksheet_revisions: Arc<
-        RwLock<std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>>,
+        RwLock<
+            std::collections::HashMap<
+                WorksheetResourcePath,
+                yss_project_identity::ResourceRevision,
+            >,
+        >,
     >,
     pub(in crate::project) database_authority_revisions:
         Arc<RwLock<std::collections::HashMap<String, u64>>>,
