@@ -1,10 +1,10 @@
 //! Tauri commands for the system Julia runtime.
 
 use tauri::{Manager, State, async_runtime};
+use yss_julia_runtime::{JuliaRuntimeStatus, get_runtime_status, install_latest_julia};
 
 use crate::error::CommandError;
 use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerStatus};
-use crate::julia::{JuliaRuntimeStatus, get_runtime_status, install_latest_julia};
 
 /// Returns the status of the Julia executable available to the operating system.
 #[tauri::command]

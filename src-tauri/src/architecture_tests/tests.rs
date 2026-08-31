@@ -6887,6 +6887,98 @@ fn project_watcher_has_one_lifecycle_owner_and_notify_adapter_crate() {
 }
 
 #[test]
+fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
+    let facts = production_facts();
+    assert_eq!(
+        facts
+            .classification
+            .get("src-tauri/crates/yss-julia-runtime/src/lib.rs"),
+        Some(&RustLayer::BackendAdapter),
+        "system Julia discovery and installation must be a Backend adapter"
+    );
+
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-julia-runtime/Cargo.toml",
+        "src-tauri/crates/yss-julia-runtime/README.md",
+        "src-tauri/crates/yss-julia-runtime/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "Julia runtime owner must exist at {relative}"
+        );
+    }
+
+    let root_module = std::fs::read_to_string(root.join("src-tauri/src/julia/mod.rs"))
+        .expect("root Julia adapter module must be readable");
+    for forbidden_facade in [
+        "pub enum JuliaRuntimeState",
+        "pub struct JuliaRuntimeStatus",
+        "pub fn get_runtime_status",
+        "pub fn install_latest_julia",
+        "pub fn system_julia_executable",
+        "pub use yss_julia_runtime",
+    ] {
+        assert!(
+            !root_module.contains(forbidden_facade),
+            "root Julia module must not retain runtime facade {forbidden_facade}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-runtime/Cargo.toml"))
+            .expect("Julia runtime manifest must be readable");
+    for dependency in ["serde.workspace = true", "thiserror.workspace = true"] {
+        assert!(
+            manifest.contains(dependency),
+            "Julia runtime must declare canonical dependency {dependency}"
+        );
+    }
+    assert!(
+        !manifest.contains("tauri"),
+        "Julia runtime must remain independent of Tauri"
+    );
+
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-runtime/src/lib.rs"))
+        .expect("Julia runtime owner must be readable");
+    for owned_api in [
+        "pub enum JuliaRuntimeError",
+        "pub enum JuliaRuntimeState",
+        "pub struct JuliaRuntimeStatus",
+        "pub fn get_runtime_status",
+        "pub fn install_latest_julia",
+        "pub fn system_julia_executable",
+    ] {
+        assert!(
+            owner.contains(owned_api),
+            "Julia runtime crate must own {owned_api}"
+        );
+    }
+    for forbidden in [
+        "pub fn install_latest_julia() -> Result<JuliaRuntimeStatus, String>",
+        "pub fn system_julia_executable() -> Result<PathBuf, String>",
+        "tauri::",
+    ] {
+        assert!(
+            !owner.contains(forbidden),
+            "Julia runtime must not restore untyped or framework-coupled API {forbidden}"
+        );
+    }
+
+    for consumer in [
+        "src-tauri/src/commands/command_julia.rs",
+        "src-tauri/src/julia/worker.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(consumer))
+            .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
+        assert!(
+            source.contains("yss_julia_runtime"),
+            "{consumer} must consume the Julia runtime owner directly"
+        );
+    }
+}
+
+#[test]
 fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
     let expectation = CanonicalOwnerExpectation {
         symbol: "CategoricalRole",

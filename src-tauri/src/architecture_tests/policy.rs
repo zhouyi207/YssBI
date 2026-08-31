@@ -574,11 +574,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_julia",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::julia::JuliaRuntimeStatus",
-            "yssbi_lib::julia::get_runtime_status",
-            "yssbi_lib::julia::install_latest_julia",
             "yssbi_lib::julia::worker::JuliaWorkerManager",
             "yssbi_lib::julia::worker::JuliaWorkerStatus",
+            "yss_julia_runtime::JuliaRuntimeStatus",
+            "yss_julia_runtime::get_runtime_status",
+            "yss_julia_runtime::install_latest_julia",
         ],
     },
     InternalDependencyCapability {
@@ -1754,7 +1754,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
-        "yss-project-registry-sqlite" | "yss-tabular-polars"
+        "yss-julia-runtime" | "yss-project-registry-sqlite" | "yss-tabular-polars"
     ) {
         layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {

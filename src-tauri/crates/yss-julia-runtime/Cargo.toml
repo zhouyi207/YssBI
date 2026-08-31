@@ -1,0 +1,14 @@
+[package]
+name = "yss-julia-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+uuid.workspace = true

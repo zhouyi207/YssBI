@@ -123,6 +123,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-resource-contract/` | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog |
 | `src-tauri/crates/yss-graph-runtime/` | 独立 Graph 层：session-scoped registry/catalog 组合、analysis、open candidate materialization 与 catalog query 的唯一 owner；不持有 Project/session authority |
 | `src-tauri/crates/yss-graph-type-mapping/` | 独立 Pure Leaf：persisted `DataType` 到 Graph `TypeExpr` 的唯一 typed conversion owner |
+| `src-tauri/crates/yss-julia-runtime/` | 独立 Backend Adapter：系统 Julia executable discovery、版本探测、Windows Juliaup 安装与 background command policy 的唯一 owner；公开 typed status/error，不持有 worker、SCI、Tauri 或 Bayes behavior |
 | `src-tauri/crates/yss-graph-analysis/` | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner |
 | `src-tauri/crates/yss-graph-compiler/` | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner |
 | `src-tauri/crates/yss-math/` | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner |
@@ -155,7 +156,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
-| `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
+| `src-tauri/src/julia/` | 待迁移的 Julia worker host、typed worker errors、task ownership 与 Bayes adapter；系统 runtime discovery 已由 `yss-julia-runtime` 拥有 |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
 | `src-tauri/crates/yss-diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing` |
 | `src-tauri/crates/yss-window-state/` | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner |
@@ -370,6 +371,8 @@ yss-graph-registry + yss-graph-analysis-contract
   → Execution immutable plan/runtime
 yss-graph-resource-contract
   → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
+yss-julia-runtime
+  → Julia worker host + Julia Tauri commands
 yss-project-layout
   → yss-graph-document + yss-worksheet-document + Project persistence/indexing + Platform watcher classification
 yss-path-display
@@ -593,6 +596,8 @@ Time-series application interface 直接调度 Rust production implementation，
 Regression fit 不再把统计量仅当作松散 JSON。`RegressionFit.statistics` 使用 typed `RegressionStatistics` variants：`Linear`、`Binary`、`Prais`，并组合 typed coefficient/model statistics；系数统计同时保存权威 covariance matrix。Report JSON 从这些 typed statistics 显式投影 `betas`/`cov_beta` 与 binary model statistics，供 hypothesis UI 和展示 parser 使用。
 
 ### 9.3 Julia Bayes worker
+
+系统 Julia executable discovery、1.10+ 版本校验、Windows Juliaup 安装与 hidden-window command policy 由 `yss-julia-runtime` Backend Adapter 唯一拥有。它以 `JuliaRuntimeError` 区分 missing、invalid、unsupported installation platform、command I/O 与非零退出，Commands 和 worker 直接消费 crate，不经根 `julia` facade；空 stderr/stdout 的失败仍保留 process status，而不是生成空诊断。
 
 Rust host 管理单个可重启 worker process、序列化 task request、progress/cancel 和 app-owned task directories。当前 Julia operation registry 只包含 `bayes_fit`。
 

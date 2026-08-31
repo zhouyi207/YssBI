@@ -9376,6 +9376,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-julia-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9736,6 +9746,7 @@ dependencies = [
  "yss-graph-resource-contract",
  "yss-graph-runtime",
  "yss-graph-type-mapping",
+ "yss-julia-runtime",
  "yss-math",
  "yss-path-display",
  "yss-project-change",

@@ -12,7 +12,9 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable};
+use yss_julia_runtime::{
+    JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable,
+};
 
 mod assets;
 mod error;
@@ -196,7 +198,7 @@ impl JuliaWorkerManager {
     pub fn prepare(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
         let worker_dir = ensure_worker_assets(app_data_dir)?;
         let executable = system_julia_executable().map_err(|error| {
-            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error)
+            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error.to_string())
         })?;
         let status = background_command(executable)
             .arg(format!("--project={}", worker_dir.display()))
@@ -465,7 +467,7 @@ struct WorkerProcess {
 impl WorkerProcess {
     fn spawn(worker_dir: &Path) -> Result<Self, JuliaWorkerError> {
         let executable = system_julia_executable().map_err(|error| {
-            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error)
+            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error.to_string())
         })?;
         let script = worker_dir.join("worker.jl");
         let mut child = background_command(executable)

@@ -809,3 +809,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将根 `platform/project_file_watcher` 的 native observation、notify event 映射、bounded debounce、worker lifetime
   与 drain completion 整体迁入 `src-tauri/crates/yss-project-watcher-notify/` Platform Adapter；删除空根
   `platform` facade 与 root package 的直接 `notify` 依赖，让 composition root 只负责 adapter 注入。
+- [ ] 将系统 Julia executable discovery、版本校验、Windows Juliaup 安装与 background command policy 迁入
+  `src-tauri/crates/yss-julia-runtime/` Backend Adapter；Commands/worker 直接消费 typed runtime API，删除根 facade，
+  并以 `JuliaRuntimeError` 替代公开 `String` error，同时保留无 stderr/stdout 命令失败的 process status 诊断。
