@@ -29,6 +29,42 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
         package_name: "ndarray",
@@ -79,36 +115,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "chrono",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "duckdb",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "tauri",
         target_condition: None,
     },
@@ -146,12 +152,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
         package_name: "tracing",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

@@ -1,9 +1,5 @@
-#[cfg(all(test, any()))]
-use super::common::mutation_conflict_to_command_error;
 use super::common::parse_graph_path;
 use crate::error::CommandError;
-#[cfg(all(test, any()))]
-use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::application_event::GraphMutationResultDto;
 use crate::schema::editor_projection_types::EditorGraphProjectionDto;
@@ -13,25 +9,9 @@ use tauri::{AppHandle, State};
 use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use yss_graph_document::NodeId;
-#[cfg(all(test, any()))]
-use yss_graph_editor::ClipboardSubgraph;
 use yss_graph_editor::EditorGraphMutation;
-#[cfg(all(test, any()))]
-use yss_project::ProjectState;
 use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
-
-#[cfg(all(test, any()))]
-pub(super) fn hydrate_editor_graph_from_state(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    locale: &str,
-) -> Result<EditorGraphProjectionDto, CommandError> {
-    state
-        .graph_projection_for_project(&project_instance_id, &parse_graph_path(graph_path)?, locale)
-        .map_err(CommandError::from)
-}
 
 #[tauri::command]
 pub fn hydrate_editor_graph(
@@ -88,22 +68,6 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
                 recovery_required: true,
             }),
     }
-}
-
-#[cfg(all(test, any()))]
-pub(crate) fn export_graph_subgraph_from_state(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    node_ids: Vec<NodeId>,
-) -> Result<ClipboardSubgraph, CommandError> {
-    state
-        .export_editor_subgraph(
-            &project_instance_id,
-            &parse_graph_path(graph_path)?,
-            node_ids,
-        )
-        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]
@@ -169,33 +133,6 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
         )
         .is_err()
     })
-}
-
-#[cfg(all(test, any()))]
-pub(crate) fn mutate_graph_document_with_emitter(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    locale: &str,
-    request: serde_json::Value,
-    mut emit: impl FnMut(Event),
-) -> Result<GraphMutationResultDto, CommandError> {
-    let request = parse_editor_mutation_request(request)?;
-    let result = state
-        .apply_editor_graph_mutation(
-            &project_instance_id,
-            &parse_graph_path(graph_path)?,
-            locale,
-            request,
-        )
-        .map_err(mutation_conflict_to_command_error)?;
-    if !result.delta.payload.operations.is_empty() {
-        emit(Event::Project(EventProject::GraphDelta {
-            project_instance_id: result.project_instance_id.clone(),
-            delta: crate::schema::application_event::graph_delta_to_transport(&result.delta),
-        }));
-    }
-    Ok(result)
 }
 
 #[tauri::command]

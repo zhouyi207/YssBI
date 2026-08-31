@@ -1,0 +1,63 @@
+[package]
+name = "yss-api"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+yss-application = { path = "../yss-application" }
+yss-bayes-model = { path = "../yss-bayes-model" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-computation-settings = { path = "../yss-computation-settings" }
+yss-data-contract = { path = "../yss-data-contract" }
+yss-database-contract = { path = "../yss-database-contract" }
+yss-database-edit = { path = "../yss-database-edit" }
+yss-database-runtime = { path = "../yss-database-runtime" }
+yss-database-schema = { path = "../yss-database-schema" }
+yss-diagnostics = { path = "../yss-diagnostics" }
+yss-execution = { path = "../yss-execution" }
+yss-function-editor-projection = { path = "../yss-function-editor-projection" }
+yss-graph-analysis = { path = "../yss-graph-analysis" }
+yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
+yss-graph-catalog = { path = "../yss-graph-catalog" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-document-edit = { path = "../yss-graph-document-edit" }
+yss-graph-editor = { path = "../yss-graph-editor" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }
+yss-julia-runtime = { path = "../yss-julia-runtime" }
+yss-julia-worker = { path = "../yss-julia-worker" }
+yss-math = { path = "../yss-math" }
+yss-project = { path = "../yss-project" }
+yss-project-history = { path = "../yss-project-history" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-progress = { path = "../yss-project-progress" }
+yss-project-registry = { path = "../yss-project-registry" }
+yss-project-registry-contract = { path = "../yss-project-registry-contract" }
+yss-project-watcher = { path = "../yss-project-watcher" }
+yss-sci-runtime = { path = "../yss-sci-runtime" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-variable-contract = { path = "../yss-variable-contract" }
+yss-window-state = { path = "../yss-window-state" }
+yss-worksheet-document = { path = "../yss-worksheet-document" }
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+yss-application = { path = "../yss-application", features = ["test-support"] }
+yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
+yss-duckdb = { path = "../yss-duckdb" }
+yss-execution = { path = "../yss-execution", features = ["test-support"] }
+yss-graph-catalog = { path = "../yss-graph-catalog", features = ["test-support"] }
+yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
+yss-project = { path = "../yss-project", features = ["test-support"] }
+yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }
+yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }
+yss-project-model = { path = "../yss-project-model" }
+yss-tracing = { path = "../yss-tracing" }

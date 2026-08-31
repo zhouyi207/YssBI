@@ -1,7 +1,5 @@
 use super::common::parse_graph_path;
 use crate::error::CommandError;
-#[cfg(all(test, any()))]
-use crate::schema::catalog::LocalizedCatalogDto as LegacyLocalizedCatalogDto;
 use crate::schema::catalog::LocalizedCatalogDto;
 use tauri::State;
 use yss_application::catalog_query::{
@@ -112,20 +110,4 @@ pub fn get_compatible_node_catalog(
         ))
         .map(LocalizedCatalogDto::from)
         .map_err(catalog_query_command_error)
-}
-
-#[cfg(all(test, any()))]
-pub(super) fn get_localized_node_catalog_from_state(
-    state: &yss_project::ProjectState,
-    project_instance_id: ProjectInstanceId,
-    locale: &str,
-) -> Result<LegacyLocalizedCatalogDto, CommandError> {
-    state
-        .localized_catalog_snapshot(&project_instance_id, locale)
-        .map_err(|error| match error {
-            yss_project_filesystem::ProjectFilesystemError::StaleProjectLifecycle { .. } => {
-                CommandError::expected("catalog_project_stale")
-            }
-            _ => crate::commands::project_failure::application_project_command_error(error),
-        })
 }

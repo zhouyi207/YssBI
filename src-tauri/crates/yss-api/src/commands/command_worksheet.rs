@@ -199,9 +199,9 @@ pub fn get_plot_column_pair(
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, CommandError> {
     let x_column = yss_tabular_contract::TabularColumnName::try_from(x_col.as_str())
-        .map_err(|error| database_computation_error(error))?;
+        .map_err(database_computation_error)?;
     let y_column = yss_tabular_contract::TabularColumnName::try_from(y_col.as_str())
-        .map_err(|error| database_computation_error(error))?;
+        .map_err(database_computation_error)?;
     let result = state
         .query_worksheet_plot(WorksheetPlotQuery {
             project_instance_id,

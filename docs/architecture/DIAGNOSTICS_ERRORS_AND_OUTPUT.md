@@ -167,7 +167,7 @@ logging/diagnostic 调用点仍应遵循数据最小化：优先记录 ID、coun
 }
 ```
 
-Rust 类型为 `src-tauri/src/error/mod.rs` 中的 `CommandError`。wire 中固定只有：
+Rust 类型为 `src-tauri/crates/yss-api/src/error/mod.rs` 中的私有 `CommandError`。wire 中固定只有：
 
 - `code`：稳定、lower_snake_case 的机器分类。
 - `details`：安全、结构化、可选的对象；不能放内部错误文本。

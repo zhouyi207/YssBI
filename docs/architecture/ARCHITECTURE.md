@@ -6,6 +6,7 @@
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
+- [Tauri API transport 说明](../../src-tauri/crates/yss-api/README.md)
 - [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
 - [Bayes result 说明](../../src-tauri/crates/yss-bayes-result/README.md)
 - [Bayes worker 契约说明](../../src-tauri/crates/yss-bayes-worker/README.md)
@@ -32,7 +33,7 @@
 ```mermaid
 flowchart TD
   UI[React views and application hooks] --> FE[Frontend services]
-  FE --> CMD[Tauri commands]
+  FE --> CMD[yss-api Tauri transport]
   CMD --> APP[Application use-case modules]
   APP --> PROJECT[Project authority]
   APP --> GRAPH[Graph semantics]
@@ -58,9 +59,9 @@ flowchart TD
   CHANNEL --> UI
 ```
 
-`commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、graph、execution、database 或 sci module，以提高 depth、leverage 和 locality。
+`yss-api` 是唯一 Tauri transport seam，不是业务 workflow 的归属。它私有持有 commands、wire schema、transport error 与 event delivery，并公开单一 `invoke_handler` 给 composition root。复杂行为进入 application、project、graph、execution、database 或 sci crate，以提高 depth、leverage 和 locality。
 
-`application/` 拥有跨 module 的 database use-case orchestration，并直接组合 `yss-database-runtime` 的 session/query/mutation primitives；`project/` 独立拥有 project/session authority、resource revision、commit 与 coherent snapshot。生产代码中的 `project/` 不依赖 database runtime、`application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
+`yss-application` 拥有跨 module 的 database use-case orchestration，并直接组合 `yss-database-runtime` 的 session/query/mutation primitives；`yss-project` 独立拥有 project/session authority、resource revision、commit 与 coherent snapshot。生产代码中的 `yss-project` 不依赖 database runtime、`yss-application` 或 `yss-api`；该约束由 Rust production-module architecture audit 执行。
 
 ### 1.1 Production architecture fitness gates
 
@@ -117,9 +118,9 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | 路径 | 当前职责 |
 |---|---|
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
-| `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
+| `src-tauri/crates/yss-api/src/` | 唯一 Tauri transport owner：私有 command handlers、wire DTO mapping、稳定 transport error、event/channel 交付与 canonical command registry；公开面仅为 `invoke_handler` |
 | `src-tauri/crates/yss-application/src/` | 独立 Application 层：跨 Project、Execution、Database、Graph、SCI 与 Bayes authority 的用例编排；不依赖根包、Tauri、Commands 或 IPC schema |
-| `src-tauri/src/lib.rs` | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters；不拥有 Project 行为或 transport contract |
+| `src-tauri/src/lib.rs` | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters，并调用 `yss_api::invoke_handler()`；不声明 command/schema/error/event module 或 command registry |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
 | `src-tauri/crates/yss-execution-sci-adapter/` | 独立 Backend Adapter：Execution live ACF/PACF port 到 `yss-sci-runtime` 的 request/result/control/typed-error 穷尽映射唯一 owner；不依赖 Tauri、Application、Project 或 Database state |
 | `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery |
@@ -169,7 +170,6 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/crates/yss-bayes-artifact-contract/` | 独立 Pure Leaf：Bayes artifact reader port 与 read/validation/export typed failure category 的唯一 owner；只依赖 canonical result projection，不依赖 Polars、Tauri、Application 或具体 I/O |
 | `src-tauri/crates/yss-bayes-artifact-polars/` | 独立 Backend Adapter：Arrow IPC artifact materialization、CSV export、sample paging 与 trace/density/autocorrelation/posterior-predictive projection 的唯一 owner；malformed/partial rows fail closed，不依赖 Tauri 或 Application |
 | `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
@@ -228,11 +228,11 @@ Rust scientific modules 与 result payloads 拥有统计计算、canonical order
 - `views/PlotView/PlotWindow.tsx` 只保留 standalone window shell/router。Reusable renderers 不位于 `views/`，obsolete compatibility paths 直接删除而不包装。
 - Canvas 与 ECharts 是需要 profiling 和显式设计决策的未实现 future options；两者都不是当前 renderer 或 project dependency。
 
-## 4. Commands → application → domain
+## 4. yss-api Commands → application → domain
 
 ### 4.1 Command interface
 
-Tauri command 只负责：
+`src-tauri/crates/yss-api/src/commands/` 中的 Tauri command 只负责：
 
 1. 解析和验证 IPC 输入。
 2. 将 DTO 转换为 application/domain 类型。
@@ -256,22 +256,22 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 | `database` | typed import/read/mutate/save/export 用例 | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit |
 | `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesWorkerPort`、Database snapshot、SCI inputs 与 injected artifact reader |
 
-Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata routing 属于 `yss-database-runtime`，`ColumnInfoDTO` conversion 属于 `schema/`。
+Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata routing 属于 `yss-database-runtime`，`ColumnInfoDTO` conversion 属于 `yss-api` 的私有 transport schema mapper。
 
 `hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
 
 典型链路：
 
 ```text
-command_project/lifecycle
+yss-api/commands/command_project/lifecycle
   → application/project_lifecycle
   → project
 
-command_node_system
+yss-api/commands/command_node_system
   → application/catalog_query | graph_open | resource_mutation | graph_commit | execution
   → Project / Graph / Execution
 
-command_dataframe
+yss-api/commands/command_dataframe
   → application/database
   → project + database
 
@@ -365,7 +365,7 @@ ProjectState 只发布 Project-owned durable facts；Application 将 Project ses
 snapshot、Graph document/catalog facts 与 Execution generation 组合为各 use case 的 coherent
 input，禁止把旧 Project runtime handle 混入新 session。
 
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`yss-api` 保持现有 `ColumnInfoDTO` transport conversion，Application 将结果组合进已有 query DTO。
 
 ## 6. Graph 与 Execution
 
@@ -573,7 +573,7 @@ DuckDB-backed instance 保持磁盘列存：
 
 `EditOperation`、`EditHistory` 与 `EditState` 由 `yss-database-edit` 统一定义；Loaded DataFrame 的正向/反向 mutation、checked JSON conversion 与 dtype cast 由 `yss-tabular-polars` 实现。DuckDB 的 cell/add-row/delete-rows operation 构造、SQL apply/reverse、bounded delete-column snapshot 与 transaction 由 `yss-duckdb` 实现；多行删除在同一事务内提交，并在排序前保持 `(index, rowid)` 配对。`yss-database-runtime` 只按当前 physical state 路由相同 operation、维护 session history 与提供事务交接，不复制 Polars 或 DuckDB mechanics。
 
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`yss-api` 保持现有 `ColumnInfoDTO` transport conversion，Application 将结果组合进已有 query DTO。
 
 只有小表完整 materialization 才进入 `Loaded { dataframe, original, history }`；当前 in-memory edit threshold 为 50,000 rows。Ingest 以 50,000 rows 分批 append。
 
@@ -613,8 +613,8 @@ Final live Execution-facing ACF/PACF request/result/error/control 由
 注入到每个 Application execution session。未接入生产调用的 regression/KDE port families、
 整条 relational port 与永远返回 unavailable 的 adapter 已删除，不再由测试制造伪能力。
 
-Application statistics 通过 Execution scientific port 调用 typed backend，commands 只负责
-schema parse/map；Application Bayes 通过 `yss-bayes-worker::BayesWorkerClient` 调用注入的
+Application statistics 通过 Execution scientific port 调用 typed backend，`yss-api` command adapters 只负责
+transport schema parse/map；Application Bayes 通过 `yss-bayes-worker::BayesWorkerClient` 调用注入的
 `BayesWorkerPort`，不直接依赖 Julia worker internals。两个 seam 分别集中输入规范化、错误类型和 backend choice。
 
 Application workflows、`yss-sci-runtime`、Execution adapter 与 Julia Bayes adapter 均直接消费
@@ -688,7 +688,7 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 ### 新 command
 
 - 先在 application/domain module 建立小 interface；
-- command 只添加 transport adapter、DTO/error/event mapping；
+- command 只在 `yss-api` 添加 transport adapter、DTO/error/event mapping，并登记到唯一 handler；
 - frontend 在 `src/services/` 添加 invoke adapter；
 - view 通过 application hook 使用，不直接 invoke。
 

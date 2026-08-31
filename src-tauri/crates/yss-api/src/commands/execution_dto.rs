@@ -410,8 +410,6 @@ fn result_presentation(category: yss_execution::plan::ResultCategory) -> ResultP
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ResultValueDto {
     Value(serde_json::Value),
-    Sequence(Box<[serde_json::Value]>),
-    DataSeries(Box<[serde_json::Value]>),
 }
 
 #[derive(Debug, Serialize)]

@@ -165,13 +165,10 @@ pub(crate) fn reap_project_progress_worker(mut worker: ProjectProgressWorker) {
     let _ = thread::Builder::new()
         .name("yssbi-project-progress-reaper".into())
         .spawn(move || {
-            loop {
-                match worker.finish(ProgressAdapterShutdownControl::new(
-                    Instant::now() + Duration::from_secs(1),
-                )) {
-                    ProjectProgressDrainOutcome::TimedOut(next) => worker = next,
-                    ProjectProgressDrainOutcome::Drained(_) => break,
-                }
+            while let ProjectProgressDrainOutcome::TimedOut(next) = worker.finish(
+                ProgressAdapterShutdownControl::new(Instant::now() + Duration::from_secs(1)),
+            ) {
+                worker = next;
             }
         });
 }

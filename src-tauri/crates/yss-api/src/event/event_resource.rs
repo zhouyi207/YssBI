@@ -28,7 +28,7 @@ mod tests {
 
         let contract: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../src/tests/fixtures/project-event-wire/project-index-invalidated.json"
+            "/../../../src/tests/fixtures/project-event-wire/project-index-invalidated.json"
         )))
         .unwrap();
 

@@ -38,6 +38,36 @@ fn repository_root() -> PathBuf {
     std::fs::canonicalize(manifest_root).expect("repository root must be canonicalizable")
 }
 
+fn assert_workspace_member_or_consumer_dependency(
+    root: &Path,
+    workspace_manifest: &str,
+    declaration: &str,
+) {
+    if declaration.starts_with("\"crates/") {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace must declare member {declaration}"
+        );
+        return;
+    }
+
+    let member_declaration = declaration.replace("path = \"./crates/", "path = \"../");
+    let declared_by_member = std::fs::read_dir(root.join("src-tauri/crates"))
+        .expect("the workspace crate directory must be readable")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("Cargo.toml"))
+        .filter(|manifest| manifest.is_file())
+        .any(|manifest| {
+            std::fs::read_to_string(manifest)
+                .map(|manifest| manifest.contains(&member_declaration))
+                .unwrap_or(false)
+        });
+    assert!(
+        workspace_manifest.contains(declaration) || declared_by_member,
+        "the root composition or a workspace consumer must declare {declaration}"
+    );
+}
+
 struct ProductionFacts {
     repository_root: PathBuf,
     dependencies: Vec<CanonicalDependency>,
@@ -430,439 +460,223 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-api"
                     && alias.declared_name == "yss_sci_runtime"
                     && alias.member_package == "yss-sci-runtime"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-api"
             && dependency.package_name == "yss-sci-runtime"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
             )
     }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_application"
-                    && alias.member_package == "yss-application"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-application"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_data_contract"
-                    && alias.member_package == "yss-data-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-data-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_database_contract"
-                    && alias.member_package == "yss-database-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-database-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_diagnostics"
-                    && alias.member_package == "yss-diagnostics"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-diagnostics"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_execution"
-                    && alias.member_package == "yss-execution"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-execution"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_analysis"
-                    && alias.member_package == "yss-graph-analysis"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-analysis"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_analysis_contract"
-                    && alias.member_package == "yss-graph-analysis-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-analysis-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_catalog"
-                    && alias.member_package == "yss-graph-catalog"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-catalog"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yss-application"
-                    && alias.declared_name == "yss_graph_compiler"
-                    && alias.member_package == "yss-graph-compiler"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-application"
-            && dependency.package_name == "yss-graph-compiler"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yss-graph-catalog"
-                    && alias.declared_name == "yss_graph_compiler_diagnostics"
-                    && alias.member_package == "yss-graph-compiler-diagnostics"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-graph-catalog"
-            && dependency.package_name == "yss-graph-compiler-diagnostics"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_document"
-                    && alias.member_package == "yss-graph-document"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-document"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_document_edit"
-                    && alias.member_package == "yss-graph-document-edit"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-document-edit"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_protocol"
-                    && alias.member_package == "yss-graph-protocol"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-protocol"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yss-application"
-                    && alias.declared_name == "yss_graph_resource_contract"
-                    && alias.member_package == "yss-graph-resource-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-application"
-            && dependency.package_name == "yss-graph-resource-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yss-graph-editor"
-                    && alias.declared_name == "yss_graph_type_mapping"
-                    && alias.member_package == "yss-graph-type-mapping"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-graph-editor"
-            && dependency.package_name == "yss-graph-type-mapping"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_graph_registry"
-                    && alias.member_package == "yss-graph-registry"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-graph-registry"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_math"
-                    && alias.member_package == "yss-math"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-math"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yss-application"
-                    && alias.declared_name == "yss_path_display"
-                    && alias.member_package == "yss-path-display"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-application"
-            && dependency.package_name == "yss-path-display"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_project_model"
-                    && alias.member_package == "yss-project-model"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-project-model"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_tabular_contract"
-                    && alias.member_package == "yss-tabular-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-tabular-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_variable_contract"
-                    && alias.member_package == "yss-variable-contract"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-variable-contract"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_window_state"
-                    && alias.member_package == "yss-window-state"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-window-state"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
-    assert!(
-        workspace
-            .workspace_member_crate_aliases
-            .iter()
-            .any(|alias| {
-                alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_tracing"
-                    && alias.member_package == "yss-tracing"
-            })
-    );
-    assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-tracing"
-            && matches!(
-                dependency.authority,
-                CargoDependencyAuthority::WorkspaceMember { .. }
-            )
-    }));
+    for (owning_package, declared_name, member_package) in [
+        ("yssbi", "yss_application", "yss-application"),
+        ("yss-api", "yss_data_contract", "yss-data-contract"),
+        (
+            "yss-application",
+            "yss_graph_compiler",
+            "yss-graph-compiler",
+        ),
+        (
+            "yss-graph-catalog",
+            "yss_graph_compiler_diagnostics",
+            "yss-graph-compiler-diagnostics",
+        ),
+        (
+            "yss-graph-editor",
+            "yss_graph_type_mapping",
+            "yss-graph-type-mapping",
+        ),
+    ] {
+        assert!(
+            workspace
+                .workspace_member_crate_aliases
+                .iter()
+                .any(|alias| {
+                    alias.owning_package == owning_package
+                        && alias.declared_name == declared_name
+                        && alias.member_package == member_package
+                })
+        );
+        assert!(workspace.dependency_declarations.iter().any(|dependency| {
+            dependency.owning_package == owning_package
+                && dependency.package_name == member_package
+                && matches!(
+                    dependency.authority,
+                    CargoDependencyAuthority::WorkspaceMember { .. }
+                )
+        }));
+    }
     assert!(
         workspace
             .roots
             .iter()
             .all(|root| root.source_path.starts_with(&workspace.repository_root))
     );
+}
+
+#[test]
+fn api_has_one_transport_owner_without_root_facades() {
+    let facts = production_facts();
+    let root = &facts.repository_root;
+
+    for relative in [
+        "src-tauri/crates/yss-api/Cargo.toml",
+        "src-tauri/crates/yss-api/README.md",
+        "src-tauri/crates/yss-api/src/lib.rs",
+        "src-tauri/crates/yss-api/src/commands/mod.rs",
+        "src-tauri/crates/yss-api/src/error/mod.rs",
+        "src-tauri/crates/yss-api/src/event/mod.rs",
+        "src-tauri/crates/yss-api/src/schema/mod.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "API owner must exist at {relative}"
+        );
+    }
+    for obsolete_root in ["commands", "error", "event", "schema"] {
+        assert!(
+            !root.join("src-tauri/src").join(obsolete_root).exists(),
+            "the root package must not restore the {obsolete_root} transport facade"
+        );
+    }
+    for relative in facts
+        .classification
+        .keys()
+        .filter(|relative| relative.starts_with("src-tauri/crates/yss-api/src/"))
+    {
+        let source = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("API source {relative} must be readable: {error}"));
+        assert!(
+            !source.contains("#[cfg(all(test, any()))]"),
+            "API source {relative} must not retain permanently disabled compatibility code"
+        );
+    }
+
+    let root_lib = std::fs::read_to_string(root.join("src-tauri/src/lib.rs"))
+        .expect("the composition root must be readable");
+    assert!(root_lib.contains(".invoke_handler(yss_api::invoke_handler())"));
+    for obsolete_root_api in [
+        "generate_handler![",
+        "mod commands",
+        "mod error",
+        "mod event",
+        "mod schema",
+        "use commands::",
+    ] {
+        assert!(
+            !root_lib.contains(obsolete_root_api),
+            "the composition root must not own {obsolete_root_api}"
+        );
+    }
+
+    let api_lib = std::fs::read_to_string(root.join("src-tauri/crates/yss-api/src/lib.rs"))
+        .expect("the API root must be readable");
+    assert_eq!(
+        api_lib.matches("tauri::generate_handler![").count(),
+        1,
+        "yss-api must own exactly one canonical command registry"
+    );
+    assert!(api_lib.contains("pub fn invoke_handler()"));
+    for private_module in ["commands", "error", "event", "schema"] {
+        assert!(api_lib.contains(&format!("mod {private_module};")));
+        assert!(
+            !api_lib.contains(&format!("pub mod {private_module};")),
+            "{private_module} is an implementation detail of the transport facade"
+        );
+    }
+
+    let root_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the root Cargo manifest must be readable");
+    assert!(root_manifest.contains("\"crates/yss-api\""));
+    let root_runtime_dependencies = root_manifest
+        .split_once("[dependencies]")
+        .expect("the root manifest must have runtime dependencies")
+        .1
+        .split_once("[dev-dependencies]")
+        .expect("the root manifest must have development dependencies")
+        .0;
+    assert!(root_runtime_dependencies.contains("yss-api = { path = \"./crates/yss-api\" }"));
+    for transport_dependency in [
+        "\nyss-data-contract = ",
+        "\nyss-sci-runtime = ",
+        "\nchrono.workspace = true",
+        "\npolars.workspace = true",
+        "\nserde.workspace = true",
+        "\nserde_json.workspace = true",
+        "\nuuid.workspace = true",
+    ] {
+        assert!(
+            !root_runtime_dependencies.contains(transport_dependency),
+            "the root package must not restore transport dependency {transport_dependency}"
+        );
+    }
+
+    let api_manifest = std::fs::read_to_string(root.join("src-tauri/crates/yss-api/Cargo.toml"))
+        .expect("the API Cargo manifest must be readable");
+    let api_runtime_dependencies = api_manifest
+        .split_once("[dependencies]")
+        .expect("the API manifest must have runtime dependencies")
+        .1
+        .split_once("[dev-dependencies]")
+        .expect("the API manifest must have development dependencies")
+        .0;
+    for direct_dependency in [
+        "tauri.workspace = true",
+        "yss-application = { path = \"../yss-application\" }",
+        "yss-data-contract = { path = \"../yss-data-contract\" }",
+        "yss-sci-runtime = { path = \"../yss-sci-runtime\" }",
+    ] {
+        assert!(
+            api_runtime_dependencies.contains(direct_dependency),
+            "the API transport owner must declare {direct_dependency}"
+        );
+    }
+    for composition_dependency in [
+        "yss-bayes-worker-julia",
+        "yss-execution-sci-adapter",
+        "yss-project-registry-sqlite",
+        "yss-project-watcher-notify",
+        "tauri-plugin-clipboard-manager",
+        "tauri-plugin-dialog",
+        "tauri-plugin-fs",
+        "tauri-plugin-opener",
+    ] {
+        assert!(
+            !api_runtime_dependencies.contains(composition_dependency),
+            "the API transport owner must not absorb composition dependency {composition_dependency}"
+        );
+    }
+
+    for (relative, expected_layer) in [
+        ("src-tauri/crates/yss-api/src/lib.rs", RustLayer::Commands),
+        (
+            "src-tauri/crates/yss-api/src/commands/mod.rs",
+            RustLayer::Commands,
+        ),
+        (
+            "src-tauri/crates/yss-api/src/error/mod.rs",
+            RustLayer::Transport,
+        ),
+        (
+            "src-tauri/crates/yss-api/src/event/mod.rs",
+            RustLayer::Transport,
+        ),
+        (
+            "src-tauri/crates/yss-api/src/schema/mod.rs",
+            RustLayer::Transport,
+        ),
+    ] {
+        assert_eq!(
+            facts.classification.get(relative),
+            Some(&expected_layer),
+            "{relative} must retain its architecture layer inside yss-api"
+        );
+    }
 }
 
 #[test]
@@ -2479,10 +2293,7 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
         "yss-duckdb = { path = \"./crates/yss-duckdb\" }",
         "duckdb.workspace = true",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     let engine_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/Cargo.toml"))
@@ -2906,10 +2717,7 @@ fn database_schema_has_one_owner_without_root_snapshot_or_type_string_drift() {
         "\"crates/yss-database-schema\"",
         "yss-database-schema = { path = \"./crates/yss-database-schema\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let schema_manifest =
@@ -2966,7 +2774,7 @@ fn database_schema_has_one_owner_without_root_snapshot_or_type_string_drift() {
         "src-tauri/crates/yss-database-runtime/src/runtime/mod.rs",
         "src-tauri/crates/yss-database-runtime/src/runtime/physical.rs",
         "src-tauri/crates/yss-database-runtime/src/session_api.rs",
-        "src-tauri/src/schema/database.rs",
+        "src-tauri/crates/yss-api/src/schema/database.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3220,10 +3028,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         "\"crates/yss-tabular-io\"",
         "yss-tabular-io = { path = \"./crates/yss-tabular-io\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     let io_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/Cargo.toml"))
@@ -3444,10 +3249,7 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "\"crates/yss-database-runtime\"",
         "yss-database-runtime = { path = \"./crates/yss-database-runtime\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     let runtime_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/Cargo.toml"))
@@ -3552,8 +3354,8 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "src-tauri/crates/yss-application/src/execution/session_slot.rs",
         "src-tauri/crates/yss-application/src/graph_contracts.rs",
         "src-tauri/crates/yss-application/src/worksheet_plot.rs",
-        "src-tauri/src/commands/command_worksheet.rs",
-        "src-tauri/src/schema/catalog.rs",
+        "src-tauri/crates/yss-api/src/commands/command_worksheet.rs",
+        "src-tauri/crates/yss-api/src/schema/catalog.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -4477,16 +4279,13 @@ fn graph_editor_has_one_graph_crate_owner_without_root_compatibility_modules() {
         );
     }
 
-    let manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-graph-editor\"",
         "yss-graph-editor = { path = \"./crates/yss-graph-editor\" }",
     ] {
-        assert!(
-            manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     let editor_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-editor/Cargo.toml"))
@@ -4568,17 +4367,14 @@ fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
         "the root crate must not retain a graph runtime facade"
     );
 
-    let manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-graph-runtime\"",
         "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\" }",
         "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\", features = [\"test-support\"] }",
     ] {
-        assert!(
-            manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let runtime =
@@ -4684,10 +4480,7 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         "yss-project-identity = { path = \"./crates/yss-project-identity\" }",
         "yss-project-identity = { path = \"./crates/yss-project-identity\", features = [\"test-support\"] }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let project_module =
@@ -4778,10 +4571,7 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "yss-project-registry-contract = { path = \"./crates/yss-project-registry-contract\" }",
         "yss-project-registry-sqlite = { path = \"./crates/yss-project-registry-sqlite\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let owner = std::fs::read_to_string(
@@ -4858,8 +4648,8 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "src-tauri/crates/yss-project-registry/src/lib.rs",
         "src-tauri/crates/yss-application/src/events.rs",
         "src-tauri/crates/yss-application/src/project_lifecycle/mod.rs",
-        "src-tauri/src/commands/command_project/registry.rs",
-        "src-tauri/src/schema/application_event.rs",
+        "src-tauri/crates/yss-api/src/commands/command_project/registry.rs",
+        "src-tauri/crates/yss-api/src/schema/application_event.rs",
         "src-tauri/crates/yss-project-registry-sqlite/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -4885,9 +4675,10 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "a committed destination with a failed registry write must request registration recovery"
     );
 
-    let lifecycle_transport =
-        std::fs::read_to_string(root.join("src-tauri/src/schema/application_event.rs"))
-            .expect("project lifecycle transport mapper must be readable");
+    let lifecycle_transport = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-api/src/schema/application_event.rs"),
+    )
+    .expect("project lifecycle transport mapper must be readable");
     assert!(
         lifecycle_transport
             .contains("LifecycleRecoveryAction::RegisterDestination => \"registerDestination\"",),
@@ -5002,10 +4793,7 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         "\"crates/yss-computation-settings\"",
         "yss-computation-settings = { path = \"./crates/yss-computation-settings\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let project_module =
@@ -5045,8 +4833,8 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
 
     for relative in [
         "src-tauri/crates/yss-application/src/computation_settings.rs",
-        "src-tauri/src/commands/command_project/settings.rs",
-        "src-tauri/src/event/event_project.rs",
+        "src-tauri/crates/yss-api/src/commands/command_project/settings.rs",
+        "src-tauri/crates/yss-api/src/event/event_project.rs",
         "src-tauri/crates/yss-project/src/execution_authority.rs",
         "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/crates/yss-project-manifest/src/lib.rs",
@@ -5108,10 +4896,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "\"crates/yss-project-layout\"",
         "yss-project-layout = { path = \"./crates/yss-project-layout\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let owner =
@@ -5514,10 +5299,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         "\"crates/yss-project-history\"",
         "yss-project-history = { path = \"./crates/yss-project-history\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     assert!(
         !workspace_manifest
@@ -5583,7 +5365,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         "src-tauri/crates/yss-application/src/resource_mutation.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_state.rs",
-        "src-tauri/src/schema/application_event.rs",
+        "src-tauri/crates/yss-api/src/schema/application_event.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -5655,10 +5437,7 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "yss-project = { path = \"./crates/yss-project\" }",
         "yss-project = { path = \"./crates/yss-project\", features = [\"test-support\"] }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
     for transitive_dependency in [
         "yss-project-discovery = { path = \"./crates/yss-project-discovery\" }",
@@ -5763,10 +5542,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "\"crates/yss-project-model\"",
         "yss-project-model = { path = \"./crates/yss-project-model\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let manifest =
@@ -6152,7 +5928,7 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "src-tauri/crates/yss-project-filesystem/src/root.rs",
         "src-tauri/crates/yss-project-filesystem/src/transaction.rs",
         "src-tauri/crates/yss-application/src/project_failure.rs",
-        "src-tauri/src/commands/project_failure.rs",
+        "src-tauri/crates/yss-api/src/commands/project_failure.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -6178,10 +5954,7 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\" }",
         "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\", features = [\"test-support\"] }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let manifest =
@@ -6273,9 +6046,10 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
             && application_failure.contains("ApplicationProjectFailure"),
         "Application must own the explicit Project failure view"
     );
-    let command_failure =
-        std::fs::read_to_string(root.join("src-tauri/src/commands/project_failure.rs"))
-            .expect("command project failure adapter must be readable");
+    let command_failure = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-api/src/commands/project_failure.rs"),
+    )
+    .expect("command project failure adapter must be readable");
     let command_failure_production = command_failure
         .split_once("#[cfg(test)]")
         .map_or(command_failure.as_str(), |(production, _)| production);
@@ -6284,8 +6058,9 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
             && !command_failure_production.contains("use yss_project_filesystem"),
         "Commands must map the Application failure view without importing Project"
     );
-    let transport_error = std::fs::read_to_string(root.join("src-tauri/src/error/mod.rs"))
-        .expect("transport error module must be readable");
+    let transport_error =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-api/src/error/mod.rs"))
+            .expect("transport error module must be readable");
     assert!(
         !transport_error.contains("yss_project_filesystem")
             && !transport_error.contains("ApplicationProjectFailure"),
@@ -6562,10 +6337,7 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
         "\"crates/yss-function-editor-projection\"",
         "yss-function-editor-projection = { path = \"./crates/yss-function-editor-projection\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let manifest = std::fs::read_to_string(
@@ -6668,18 +6440,20 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
         "catalog mapping must reuse the canonical function data-type parser"
     );
 
-    let transport_types =
-        std::fs::read_to_string(root.join("src-tauri/src/schema/editor_projection_types.rs"))
-            .expect("editor projection transport types must be readable");
+    let transport_types = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-api/src/schema/editor_projection_types.rs"),
+    )
+    .expect("editor projection transport types must be readable");
     for duplicate in ["FunctionEditorPinDto", "FunctionEditorProjectionDto"] {
         assert!(
             !transport_types.contains(duplicate),
             "Transport must not restore duplicate projection DTO '{duplicate}'"
         );
     }
-    let application_event =
-        std::fs::read_to_string(root.join("src-tauri/src/schema/application_event.rs"))
-            .expect("application event transport must be readable");
+    let application_event = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-api/src/schema/application_event.rs"),
+    )
+    .expect("application event transport must be readable");
     assert!(
         application_event
             .contains("Option<yss_function_editor_projection::FunctionEditorProjection>")
@@ -6855,10 +6629,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "\"crates/yss-worksheet-document\"",
         "yss-worksheet-document = { path = \"./crates/yss-worksheet-document\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let project_module =
@@ -6934,7 +6705,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
 
     for relative in [
         "src-tauri/crates/yss-application/src/worksheet.rs",
-        "src-tauri/src/commands/command_worksheet.rs",
+        "src-tauri/crates/yss-api/src/commands/command_worksheet.rs",
         "src-tauri/crates/yss-project-history/src/lib.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_activation.rs",
@@ -7015,10 +6786,7 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         "\"crates/yss-project-progress\"",
         "yss-project-progress = { path = \"./crates/yss-project-progress\" }",
     ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
+        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
 
     let project_module =
@@ -7064,8 +6832,8 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         "src-tauri/src/lib.rs",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
         "src-tauri/crates/yss-project-discovery/src/lib.rs",
-        "src-tauri/src/commands/command_project/registry.rs",
-        "src-tauri/src/commands/command_project/progress.rs",
+        "src-tauri/crates/yss-api/src/commands/command_project/registry.rs",
+        "src-tauri/crates/yss-api/src/commands/command_project/progress.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -7112,9 +6880,10 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         "CompositionRoot and Commands must not retain a Project task-control capability"
     );
 
-    let command_adapter =
-        std::fs::read_to_string(root.join("src-tauri/src/commands/command_project/progress.rs"))
-            .expect("project progress command adapter must be readable");
+    let command_adapter = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-api/src/commands/command_project/progress.rs"),
+    )
+    .expect("project progress command adapter must be readable");
     assert!(
         command_adapter.contains("pub enum ProjectProgressDto"),
         "the Tauri wire projection must remain command-owned"
@@ -7341,7 +7110,7 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
     }
 
     for consumer in [
-        "src-tauri/src/commands/command_julia.rs",
+        "src-tauri/crates/yss-api/src/commands/command_julia.rs",
         "src-tauri/crates/yss-julia-worker/src/lib.rs",
     ] {
         let source = std::fs::read_to_string(root.join(consumer))
@@ -7465,7 +7234,7 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
 
     for consumer in [
         "src-tauri/src/lib.rs",
-        "src-tauri/src/commands/command_julia.rs",
+        "src-tauri/crates/yss-api/src/commands/command_julia.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
@@ -8298,7 +8067,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let command = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/commands/command_bayes.rs"),
+            .join("src-tauri/crates/yss-api/src/commands/command_bayes.rs"),
     )
     .expect("Bayes command source must be readable");
     for forbidden in [
@@ -8511,7 +8280,13 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     let root_manifest = std::fs::read_to_string(facts.repository_root.join("src-tauri/Cargo.toml"))
         .expect("root Cargo manifest must be readable");
     assert!(root_manifest.contains("\"crates/yss-sci-runtime\""));
-    assert!(root_manifest.contains("yss-sci-runtime = { path = \"./crates/yss-sci-runtime\" }"));
+    let api_manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-api/Cargo.toml"),
+    )
+    .expect("API Cargo manifest must be readable");
+    assert!(api_manifest.contains("yss-sci-runtime = { path = \"../yss-sci-runtime\" }"));
     let root_dependencies = root_manifest
         .split_once("[dependencies]")
         .expect("root Cargo manifest must have dependencies")
@@ -8541,7 +8316,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "src-tauri/crates/yss-application/src/statistics.rs",
         "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
         "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
-        "src-tauri/src/commands/command_panel_did.rs",
+        "src-tauri/crates/yss-api/src/commands/command_panel_did.rs",
     ] {
         let source = std::fs::read_to_string(facts.repository_root.join(consumer))
             .expect("SCI runtime consumer must be readable");
@@ -8903,7 +8678,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     const INTERNAL_CAPABILITIES: &[InternalDependencyCapability] =
         &[InternalDependencyCapability {
             source_layer: RustLayer::Commands,
-            repository_relative_source_file: "src-tauri/src/commands/mod.rs",
+            repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/mod.rs",
             fully_qualified_owner: "fixture_lib::commands",
             canonical_origin_targets: &["fixture_lib::application::run"],
         }];
@@ -8946,7 +8721,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     let classification = BTreeMap::from([
         ("src-tauri/build.rs".to_owned(), RustLayer::BuildScript),
         (
-            "src-tauri/src/commands/mod.rs".to_owned(),
+            "src-tauri/crates/yss-api/src/commands/mod.rs".to_owned(),
             RustLayer::Commands,
         ),
         ("src-tauri/src/graph/mod.rs".to_owned(), RustLayer::Graph),
@@ -8969,7 +8744,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         "build",
     );
     let approved_command = external_dependency(
-        "src-tauri/src/commands/mod.rs",
+        "src-tauri/crates/yss-api/src/commands/mod.rs",
         "fixture_lib::commands",
         RustDependencyMode::Runtime,
         "tauri",
@@ -9082,7 +8857,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
 
     let approved_command_seam = CanonicalDependency {
         owning_package: "fixture".to_owned(),
-        source_file: "src-tauri/src/commands/mod.rs".to_owned(),
+        source_file: "src-tauri/crates/yss-api/src/commands/mod.rs".to_owned(),
         owner: "fixture_lib::commands".to_owned(),
         kind: RustDependencyKind::Path,
         mode: RustDependencyMode::Runtime,
@@ -9124,7 +8899,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     const INVALID_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] =
         &[InternalDependencyCapability {
             source_layer: RustLayer::Commands,
-            repository_relative_source_file: "src-tauri/src/commands/*",
+            repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/*",
             fully_qualified_owner: "fixture_lib::commands",
             canonical_origin_targets: &["fixture_lib::application::*"],
         }];

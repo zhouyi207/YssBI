@@ -874,3 +874,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将根 Execution→SCI adapter 迁入 `src-tauri/crates/yss-execution-sci-adapter/`，仅保留生产实际消费的
   ACF/PACF typed port 并让零 lag fail closed；删除零生产调用的 regression/KDE 与 relational port families、
   永远 unavailable 的 relational stub、透传 session ID 的 resource factory callback 及整个根 `backend_adapters` facade。
+- [ ] 将根 `commands`、`schema`、`error` 与 `event` 整体迁入 `src-tauri/crates/yss-api/`，由私有 transport
+  modules 唯一拥有 command handlers、wire mapping、稳定错误与 event/channel delivery，只公开 canonical
+  `invoke_handler` 给 composition root；删除永久关闭的兼容 helpers/tests、不可构造 DTO 分支与未使用依赖，
+  并禁止根 transport facade、重复 command registry 或 composition-only adapter 依赖回流。

@@ -251,19 +251,19 @@ pub async fn save_project_as(
         .map_err(map_application_project_lifecycle_error)?;
     let transport = crate::schema::application_event::project_lifecycle_to_transport(&result);
     publish_lifecycle_result(&app, &transport);
-    if result.outcome == yss_application::events::ProjectLifecycleOutcome::Committed {
-        if let (Some(metadata_path), Some(project_instance_id)) = (
+    if result.outcome == yss_application::events::ProjectLifecycleOutcome::Committed
+        && let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
             result.new_project_instance_id.as_ref(),
-        ) {
-            start_project_watcher(
-                &app,
-                application.inner(),
-                &watcher,
-                metadata_path,
-                project_instance_id,
-            );
-        }
+        )
+    {
+        start_project_watcher(
+            &app,
+            application.inner(),
+            &watcher,
+            metadata_path,
+            project_instance_id,
+        );
     }
     Ok(transport)
 }

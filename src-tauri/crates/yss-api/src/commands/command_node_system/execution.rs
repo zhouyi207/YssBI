@@ -212,15 +212,14 @@ pub async fn execute_graph_document(
                 delivered
             },
         );
-        let result = if delivery_failed {
+        if delivery_failed {
             Err(execution_channel_command_error())
         } else {
             match execution {
                 Ok(_) => Ok(()),
                 Err(error) => Err(map_application_execution_error(error)),
             }
-        };
-        result
+        }
     })
     .await
     .map_err(CommandError::internal)?

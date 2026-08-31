@@ -412,10 +412,7 @@ mod tests {
             .unwrap();
         let wire = serde_json::to_value(LocalizedCatalogDto::from(result)).unwrap();
 
-        assert_eq!(
-            wire["projectInstanceId"].as_str().unwrap().is_empty(),
-            false
-        );
+        assert!(!wire["projectInstanceId"].as_str().unwrap().is_empty());
         assert!(!wire["registryFingerprint"].as_str().unwrap().is_empty());
         assert_eq!(wire["resourcePublicationRevision"], 0);
         assert_eq!(wire["locale"], "zh-CN");

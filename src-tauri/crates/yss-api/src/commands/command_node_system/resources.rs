@@ -1,39 +1,12 @@
 use super::common::parse_graph_path;
-#[cfg(all(test, any()))]
-use super::common::{EmitOutcome, emit_resource_result, mutation_conflict_to_command_error};
 use crate::error::CommandError;
-#[cfg(all(test, any()))]
-use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
-#[cfg(all(test, any()))]
-use yss_graph_document::GraphResourcePath;
-#[cfg(all(test, any()))]
-use yss_project::ProjectState;
 use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
-
-#[cfg(all(test, any()))]
-pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_name: &str,
-    kind: yss_graph_document::GraphResourceKind,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = state.create_graph_resource_transaction(
-        &project_instance_id,
-        graph_name,
-        kind,
-        operation_id,
-    )?;
-    emit_resource_result(&mut emit, &result);
-    Ok(result)
-}
 
 #[tauri::command]
 pub fn create_event(
@@ -96,30 +69,6 @@ pub fn unload_project_graph(
     Ok(())
 }
 
-#[cfg(all(test, any()))]
-pub(super) fn save_project_graph_with_emitter(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
-    expected_revision: ResourceRevision,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event),
-) -> Result<ProjectSaveResultDto, CommandError> {
-    let result = state
-        .save_graph_document(
-            &project_instance_id,
-            &graph_path,
-            expected_revision,
-            operation_id,
-        )
-        .map_err(CommandError::from)?;
-    let result = ProjectSaveResultDto::from(result);
-    emit(Event::Project(EventProject::ProjectSaved {
-        result: result.clone(),
-    }));
-    Ok(result)
-}
-
 #[tauri::command]
 pub fn save_project_graph(
     app: AppHandle,
@@ -148,25 +97,6 @@ pub fn save_project_graph(
     Ok(result)
 }
 
-#[cfg(all(test, any()))]
-pub(super) fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
-    expected_revision: ResourceRevision,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = state.duplicate_graph_resource_transaction(
-        &project_instance_id,
-        &graph_path,
-        expected_revision,
-        operation_id,
-    )?;
-    emit_resource_result(&mut emit, &result);
-    Ok(result)
-}
-
 #[tauri::command]
 pub fn duplicate_graph(
     app: AppHandle,
@@ -189,25 +119,6 @@ pub fn duplicate_graph(
     Ok(result)
 }
 
-#[cfg(all(test, any()))]
-pub(super) fn remove_graph_resource_with_emitter<R: EmitOutcome>(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
-    expected_revision: ResourceRevision,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = state.remove_graph_resource_transaction(
-        &project_instance_id,
-        &graph_path,
-        expected_revision,
-        operation_id,
-    )?;
-    emit_resource_result(&mut emit, &result);
-    Ok(result)
-}
-
 #[tauri::command]
 pub fn remove_graph(
     app: AppHandle,
@@ -227,29 +138,6 @@ pub fn remove_graph(
         .map_err(map_resource_mutation_error)?;
     let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
-    Ok(result)
-}
-
-#[cfg(all(test, any()))]
-pub(super) fn rename_graph_resource_with_emitter<R: EmitOutcome>(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
-    expected_revision: ResourceRevision,
-    new_name: &str,
-    lifecycle_token: u64,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = state.rename_graph_resource_transaction(
-        &project_instance_id,
-        &graph_path,
-        expected_revision,
-        new_name,
-        lifecycle_token,
-        operation_id,
-    )?;
-    emit_resource_result(&mut emit, &result);
     Ok(result)
 }
 
@@ -277,27 +165,6 @@ pub fn rename_graph_resource(
     let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
-}
-
-#[cfg(all(test, any()))]
-pub(super) fn update_function_signature_with_emitter<R: EmitOutcome>(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    function_path: String,
-    locale: &str,
-    request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
-    mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let path = parse_graph_path(function_path)?;
-    state
-        .update_function_signature_observed(
-            &project_instance_id,
-            &path,
-            locale,
-            request,
-            |result| emit_resource_result(&mut emit, result),
-        )
-        .map_err(mutation_conflict_to_command_error)
 }
 
 #[tauri::command]

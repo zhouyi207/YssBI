@@ -1,7 +1,7 @@
 use std::fmt;
 
 use serde::Serialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use yss_project::{ProjectDatabaseError, ProjectError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -65,7 +65,8 @@ impl CommandError {
         self.code
     }
 
-    pub fn details(&self) -> Option<&Map<String, Value>> {
+    #[cfg(test)]
+    pub(crate) fn details(&self) -> Option<&serde_json::Map<String, Value>> {
         self.details.as_object()
     }
 
