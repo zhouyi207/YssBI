@@ -1,3 +1,4 @@
+use std::io;
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
@@ -66,6 +67,19 @@ impl ProgressAdapterShutdownControl {
 pub enum ProgressAdapterTerminalError {
     DeliveryFailed,
     Panicked,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("project progress worker failed to spawn")]
+pub(crate) struct ProjectProgressAdapterSpawnError {
+    #[source]
+    source: io::Error,
+}
+
+impl From<io::Error> for ProjectProgressAdapterSpawnError {
+    fn from(source: io::Error) -> Self {
+        Self { source }
+    }
 }
 
 struct ProjectProgressPublisherState {
@@ -173,9 +187,24 @@ pub(crate) fn reap_project_progress_worker(mut worker: ProjectProgressWorker) {
         });
 }
 
-pub fn bounded_project_progress_adapter(
+type ProjectProgressWorkerTask = Box<dyn FnOnce() + Send + 'static>;
+
+pub(crate) fn bounded_project_progress_adapter(
     channel: Channel<ProjectProgressDto>,
-) -> (Arc<ProjectProgressPublisher>, ProjectProgressWorker) {
+) -> Result<(Arc<ProjectProgressPublisher>, ProjectProgressWorker), ProjectProgressAdapterSpawnError>
+{
+    bounded_project_progress_adapter_with(channel, |task| {
+        thread::Builder::new()
+            .name("yssbi-project-progress".into())
+            .spawn(task)
+    })
+}
+
+fn bounded_project_progress_adapter_with(
+    channel: Channel<ProjectProgressDto>,
+    spawn: impl FnOnce(ProjectProgressWorkerTask) -> io::Result<JoinHandle<()>>,
+) -> Result<(Arc<ProjectProgressPublisher>, ProjectProgressWorker), ProjectProgressAdapterSpawnError>
+{
     let (sender, receiver) = mpsc::sync_channel(PROJECT_PROGRESS_QUEUE_CAPACITY);
     let publisher = Arc::new(ProjectProgressPublisher {
         state: Mutex::new(ProjectProgressPublisherState {
@@ -184,38 +213,50 @@ pub fn bounded_project_progress_adapter(
         }),
     });
     let (completion_sender, completion) = mpsc::sync_channel(1);
-    let join = thread::Builder::new()
-        .name("yssbi-project-progress".into())
-        .spawn(move || {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut delivery_failed = false;
-                while let Ok(progress) = receiver.recv() {
-                    if channel.send(to_dto(progress)).is_err() {
-                        delivery_failed = true;
-                    }
+    let task: ProjectProgressWorkerTask = Box::new(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut delivery_failed = false;
+            while let Ok(progress) = receiver.recv() {
+                if channel.send(to_dto(progress)).is_err() {
+                    delivery_failed = true;
                 }
-                if delivery_failed {
-                    ProjectProgressWorkerTerminal::DeliveryFailed
-                } else {
-                    ProjectProgressWorkerTerminal::Drained
-                }
-            }));
-            let terminal = result.unwrap_or(ProjectProgressWorkerTerminal::Panicked);
-            let _ = completion_sender.send(terminal);
-        })
-        .expect("project progress worker must spawn");
-    (
+            }
+            if delivery_failed {
+                ProjectProgressWorkerTerminal::DeliveryFailed
+            } else {
+                ProjectProgressWorkerTerminal::Drained
+            }
+        }));
+        let terminal = result.unwrap_or(ProjectProgressWorkerTerminal::Panicked);
+        let _ = completion_sender.send(terminal);
+    });
+    let join = spawn(task)?;
+    Ok((
         publisher,
         ProjectProgressWorker {
             completion,
             join: Some(join),
         },
-    )
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adapter_returns_typed_error_when_worker_spawn_fails() {
+        let result = bounded_project_progress_adapter_with(Channel::new(|_| Ok(())), |_task| {
+            Err(io::Error::other("injected spawn failure"))
+        });
+
+        let Err(error) = result else {
+            panic!("injected worker spawn failure must be returned");
+        };
+        assert_eq!(error.to_string(), "project progress worker failed to spawn");
+        assert_eq!(error.source.kind(), io::ErrorKind::Other);
+    }
+
     #[test]
     fn publisher_drops_newest_when_capacity_is_full_and_closes_all_clones() {
         let (sender, receiver) = mpsc::sync_channel(PROJECT_PROGRESS_QUEUE_CAPACITY);

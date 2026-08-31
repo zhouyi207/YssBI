@@ -208,7 +208,7 @@ fn map_parameter(
 fn map_diagnostic(diagnostic: &EditorDiagnosticModel) -> DiagnosticDto {
     DiagnosticDto {
         code: diagnostic.code.clone(),
-        // The legacy wire has no structured argument field. Keep this field a
+        // The current wire has no structured argument field. Keep this field a
         // stable localization token rather than copying internal backend text.
         message: diagnostic.code.clone(),
         severity: match diagnostic.severity {

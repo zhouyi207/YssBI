@@ -878,3 +878,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   modules 唯一拥有 command handlers、wire mapping、稳定错误与 event/channel delivery，只公开 canonical
   `invoke_handler` 给 composition root；删除永久关闭的兼容 helpers/tests、不可构造 DTO 分支与未使用依赖，
   并禁止根 transport facade、重复 command registry 或 composition-only adapter 依赖回流。
+- [ ] 清理 `yss-api` project progress transport 的线程启动失败路径：以 typed spawn error 替代生产 `expect`，
+  在 command 边界集中映射稳定错误码与 incident ID，并确保 worker 创建失败时不会登记残留的活动取消任务；
+  同时移除当前 wire 文档中的过时 legacy 表述。

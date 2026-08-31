@@ -1,6 +1,6 @@
 use super::progress::{
-    ProgressAdapterShutdownControl, ProjectProgressDrainOutcome, ProjectProgressDto,
-    bounded_project_progress_adapter, reap_project_progress_worker,
+    ProgressAdapterShutdownControl, ProjectProgressAdapterSpawnError, ProjectProgressDrainOutcome,
+    ProjectProgressDto, bounded_project_progress_adapter, reap_project_progress_worker,
 };
 use crate::error::CommandError;
 use crate::schema::application_event::LifecycleMutationResultDto;
@@ -11,6 +11,10 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_progress::ProjectTaskCancellationRegistry;
 use yss_project_registry::{CleanupInvalidProjectsResult, ProjectRegistry, ScanProjectsResult};
 use yss_project_registry_contract::ProjectRecord;
+
+fn project_progress_adapter_spawn_error(error: ProjectProgressAdapterSpawnError) -> CommandError {
+    CommandError::diagnosed("project_progress_worker_spawn_failed", error)
+}
 
 #[tauri::command]
 pub async fn list_registered_projects(
@@ -29,8 +33,9 @@ pub async fn scan_projects_in_directory(
     directory: String,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<ScanProjectsResult, CommandError> {
+    let (publisher, worker) = bounded_project_progress_adapter(on_progress)
+        .map_err(project_progress_adapter_spawn_error)?;
     let cancel = task_cancel.begin();
-    let (publisher, worker) = bounded_project_progress_adapter(on_progress);
     let result = registry
         .scan_directory(&directory, Some(publisher.as_ref()), cancel.clone())
         .await;
@@ -65,8 +70,9 @@ pub async fn cleanup_invalid_registered_projects(
     task_cancel: State<'_, ProjectTaskCancellationRegistry>,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<CleanupInvalidProjectsResult, CommandError> {
+    let (publisher, worker) = bounded_project_progress_adapter(on_progress)
+        .map_err(project_progress_adapter_spawn_error)?;
     let cancel = task_cancel.begin();
-    let (publisher, worker) = bounded_project_progress_adapter(on_progress);
     let result = registry
         .cleanup_invalid_projects(Some(publisher.as_ref()), cancel.clone())
         .await;
@@ -150,4 +156,21 @@ pub async fn toggle_registered_project_favorite(
 #[tauri::command]
 pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
     registry.path().to_string_lossy().into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    #[test]
+    fn progress_worker_spawn_failure_maps_to_stable_diagnosed_error() {
+        let error = ProjectProgressAdapterSpawnError::from(io::Error::other("injected failure"));
+
+        let command_error = project_progress_adapter_spawn_error(error);
+
+        assert_eq!(command_error.code(), "project_progress_worker_spawn_failed");
+        assert!(command_error.incident_id().is_some());
+    }
 }
