@@ -5049,7 +5049,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
     for relative in [
         "src-tauri/src/project/project_change_reconciliation.rs",
         "src-tauri/src/application/project_change.rs",
-        "src-tauri/src/platform/project_file_watcher.rs",
+        "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -5079,9 +5079,10 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
         );
     }
 
-    let platform =
-        std::fs::read_to_string(root.join("src-tauri/src/platform/project_file_watcher.rs"))
-            .expect("project watcher platform adapter must be readable");
+    let platform = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project-watcher-notify/src/lib.rs"),
+    )
+    .expect("project watcher platform adapter must be readable");
     for required in [
         "ProjectChange::rescan_required()",
         "AccessKind::Close(AccessMode::Write)",
@@ -6778,7 +6779,7 @@ fn window_state_has_one_platform_crate_owner_without_compatibility_module() {
 }
 
 #[test]
-fn project_watcher_has_one_lifecycle_owner_and_platform_only_notify() {
+fn project_watcher_has_one_lifecycle_owner_and_notify_adapter_crate() {
     let facts = production_facts();
     assert_eq!(
         facts
@@ -6787,21 +6788,20 @@ fn project_watcher_has_one_lifecycle_owner_and_platform_only_notify() {
         Some(&RustLayer::Application),
         "the platform-neutral watcher lifecycle must be an Application service"
     );
-    for source in [
-        "src-tauri/src/platform/mod.rs",
-        "src-tauri/src/platform/project_file_watcher.rs",
-    ] {
-        assert_eq!(
-            facts.classification.get(source),
-            Some(&RustLayer::PlatformAdapter),
-            "watcher platform source must use the exact Platform classification"
-        );
-    }
+    assert_eq!(
+        facts
+            .classification
+            .get("src-tauri/crates/yss-project-watcher-notify/src/lib.rs"),
+        Some(&RustLayer::PlatformAdapter),
+        "the Notify implementation must be a Platform adapter"
+    );
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-project-watcher/Cargo.toml",
         "src-tauri/crates/yss-project-watcher/src/lib.rs",
         "src-tauri/crates/yss-project-watcher/src/tests.rs",
+        "src-tauri/crates/yss-project-watcher-notify/Cargo.toml",
+        "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -6814,6 +6814,15 @@ fn project_watcher_has_one_lifecycle_owner_and_platform_only_notify() {
             .exists(),
         "the root Application must not retain the watcher lifecycle owner"
     );
+    for removed_root_adapter in [
+        "src-tauri/src/platform/mod.rs",
+        "src-tauri/src/platform/project_file_watcher.rs",
+    ] {
+        assert!(
+            !root.join(removed_root_adapter).exists(),
+            "the root crate must not retain watcher adapter {removed_root_adapter}"
+        );
+    }
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/Cargo.toml"))
             .expect("project watcher manifest must be readable");
@@ -6832,6 +6841,24 @@ fn project_watcher_has_one_lifecycle_owner_and_platform_only_notify() {
             "the platform-neutral watcher must not depend on {forbidden}"
         );
     }
+    let adapter_manifest = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project-watcher-notify/Cargo.toml"),
+    )
+    .expect("Notify watcher manifest must be readable");
+    for dependency in [
+        "notify.workspace = true",
+        "yss-project-change = { path = \"../yss-project-change\" }",
+        "yss-project-watcher = { path = \"../yss-project-watcher\" }",
+    ] {
+        assert!(
+            adapter_manifest.contains(dependency),
+            "Notify watcher must declare its canonical dependency {dependency}"
+        );
+    }
+    assert!(
+        !adapter_manifest.contains("tauri"),
+        "the Notify adapter must remain independent of Tauri"
+    );
     let owner =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/src/lib.rs"))
             .expect("project watcher owner must be readable");

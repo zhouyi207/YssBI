@@ -9,7 +9,6 @@ pub mod error;
 pub mod event;
 
 pub mod julia;
-pub mod platform;
 pub mod project;
 mod schema;
 pub mod sci;
@@ -80,7 +79,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         // 注册全局状态管理器
         .manage(yss_project_watcher::ProjectWatcherState::new(
-            std::sync::Arc::new(platform::NotifyProjectFileWatcher::new()),
+            std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
         ))
         .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
         .manage(julia_worker)

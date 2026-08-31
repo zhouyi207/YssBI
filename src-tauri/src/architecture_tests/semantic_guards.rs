@@ -24,10 +24,8 @@ const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
     "src-tauri/src/project/project_change_reconciliation.rs",
     "src-tauri/src/application/project_change.rs",
 ];
-const PROJECT_WATCHER_PLATFORM_FILES: &[&str] = &[
-    "src-tauri/src/platform/mod.rs",
-    "src-tauri/src/platform/project_file_watcher.rs",
-];
+const PROJECT_WATCHER_PLATFORM_FILES: &[&str] =
+    &["src-tauri/crates/yss-project-watcher-notify/src/lib.rs"];
 
 pub(super) fn project_watcher_source_violations(repository_root: &Path) -> Vec<String> {
     let mut violations = Vec::new();
@@ -77,11 +75,12 @@ pub(super) fn project_watcher_source_violations(repository_root: &Path) -> Vec<S
         ));
     }
     if !platform_source.iter().any(|(relative, source)| {
-        *relative == "src-tauri/src/platform/project_file_watcher.rs"
+        *relative == "src-tauri/crates/yss-project-watcher-notify/src/lib.rs"
             && (source.contains("notify::") || source.contains("use notify"))
     }) {
         violations.push(
-            "src-tauri/src/platform/project_file_watcher.rs: notify adapter missing".to_owned(),
+            "src-tauri/crates/yss-project-watcher-notify/src/lib.rs: notify adapter missing"
+                .to_owned(),
         );
     }
     if repository_root

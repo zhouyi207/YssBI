@@ -54,6 +54,7 @@ members = [
     "crates/yss-project-registry-contract",
     "crates/yss-project-registry-sqlite",
     "crates/yss-project-watcher",
+    "crates/yss-project-watcher-notify",
     "crates/yss-resource-lifecycle",
     "crates/yss-resource-naming",
     "crates/yss-sci",
@@ -77,6 +78,7 @@ duckdb = { version = "1.10504.0", default-features = false, features = ["bundled
 faer = "0.24.0"
 mathlex = "=0.4.2"
 ndarray = "0.17.2"
+notify = "8.2.0"
 num-traits = "0.2.19"
 polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "ipc", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
 polars-arrow = { version = "0.53.0", default-features = false }
@@ -151,6 +153,7 @@ yss-project-registry = { path = "./crates/yss-project-registry" }
 yss-project-registry-contract = { path = "./crates/yss-project-registry-contract" }
 yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-project-watcher = { path = "./crates/yss-project-watcher" }
+yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
@@ -182,7 +185,6 @@ uuid.workspace = true
 thiserror.workspace = true
 rand = "0.10"
 duckdb.workspace = true
-notify = "8.2.0"
 unicode-normalization.workspace = true
 unicode-casefold.workspace = true
 tracing.workspace = true

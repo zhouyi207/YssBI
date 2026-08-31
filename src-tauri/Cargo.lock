@@ -9533,6 +9533,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-watcher-notify"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "thiserror 2.0.20",
+ "tracing",
+ "yss-project-change",
+ "yss-project-watcher",
+]
+
+[[package]]
 name = "yss-resource-lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -9677,7 +9688,6 @@ dependencies = [
  "chrono",
  "duckdb",
  "ndarray",
- "notify",
  "polars",
  "proc-macro2",
  "rand 0.10.2",
@@ -9742,6 +9752,7 @@ dependencies = [
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
  "yss-project-watcher",
+ "yss-project-watcher-notify",
  "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",

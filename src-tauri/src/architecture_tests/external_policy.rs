@@ -61,12 +61,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "notify",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "polars",
         target_condition: None,
     },
@@ -582,6 +576,24 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-project-watcher",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-watcher-notify",
+        mode: RustDependencyMode::Runtime,
+        package_name: "notify",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-watcher-notify",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-watcher-notify",
         mode: RustDependencyMode::Runtime,
         package_name: "tracing",
         target_condition: None,

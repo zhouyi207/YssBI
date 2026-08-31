@@ -179,11 +179,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
         RustLayer::BuiltinComposition,
     ),
-    ("src-tauri/src/platform/mod.rs", RustLayer::PlatformAdapter),
-    (
-        "src-tauri/src/platform/project_file_watcher.rs",
-        RustLayer::PlatformAdapter,
-    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -431,8 +426,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::backend_adapters::execution::resources::database_resource_provider_factory",
             "yss_execution::ports::scientific::ScientificBackend",
             "yssbi_lib::project::project_state::state::ProjectState::new",
-            "yssbi_lib::platform::NotifyProjectFileWatcher::new",
-            "yssbi_lib::platform::project_file_watcher::NotifyProjectFileWatcher::new",
+            "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
             "yss_window_state::WindowStateStore::load",
             "yss_window_state::apply_main_window_state",
         ],
@@ -956,8 +950,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::PlatformAdapter,
-        repository_relative_source_file: "src-tauri/src/platform/project_file_watcher.rs",
-        fully_qualified_owner: "yssbi_lib::platform::project_file_watcher",
+        repository_relative_source_file: "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
+        fully_qualified_owner: "yss_project_watcher_notify",
         canonical_origin_targets: &[
             "yss_project_watcher::FileWatcherStartError",
             "yss_project_watcher::ObservedProjectChange",
@@ -1756,7 +1750,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::Execution);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
-    } else if package == "yss-window-state" {
+    } else if matches!(package, "yss-project-watcher-notify" | "yss-window-state") {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,

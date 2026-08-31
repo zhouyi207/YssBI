@@ -1,3 +1,7 @@
+//! Native filesystem observation for the platform-neutral project watcher.
+
+#![forbid(unsafe_code)]
+
 use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
@@ -51,7 +55,7 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
                 Err(source) => {
                     let error = NotifyProjectFileWatcherError::Callback(source);
                     tracing::warn!(
-                        target: "yssbi::platform::project_file_watcher",
+                        target: "yssbi::project_watcher_notify",
                         diagnostic_domain = "system",
                         diagnostic_event = "watcherError",
                         error = %error,
@@ -123,12 +127,8 @@ fn spawn_worker(
         .spawn(move || {
             let terminal = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 while let Ok(mut change) = receiver.recv() {
-                    loop {
-                        match receiver.recv_timeout(PROJECT_FILE_WATCHER_QUIET_PERIOD) {
-                            Ok(next) => change = next,
-                            Err(mpsc::RecvTimeoutError::Timeout)
-                            | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                        }
+                    while let Ok(next) = receiver.recv_timeout(PROJECT_FILE_WATCHER_QUIET_PERIOD) {
+                        change = next;
                     }
                     sink.publish(change);
                 }
@@ -247,7 +247,7 @@ enum NotifyProjectFileWatcherError {
 
 fn report_start_error(error: NotifyProjectFileWatcherError) -> FileWatcherStartError {
     tracing::warn!(
-        target: "yssbi::platform::project_file_watcher",
+        target: "yssbi::project_watcher_notify",
         diagnostic_domain = "system",
         diagnostic_event = "watcherStartFailed",
         error = %error,

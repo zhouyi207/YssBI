@@ -806,3 +806,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   与 replacement 状态机迁入 `src-tauri/crates/yss-project-watcher/` Application service；根 Application 只保留
   Project authority reconciliation，Notify 适配器直接消费 crate contract，并删除未使用的重复 quiet-period 常量
   与生产不可构造的 `DeliveryFailed` 终态。
+- [ ] 将根 `platform/project_file_watcher` 的 native observation、notify event 映射、bounded debounce、worker lifetime
+  与 drain completion 整体迁入 `src-tauri/crates/yss-project-watcher-notify/` Platform Adapter；删除空根
+  `platform` facade 与 root package 的直接 `notify` 依赖，让 composition root 只负责 adapter 注入。

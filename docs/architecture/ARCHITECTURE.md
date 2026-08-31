@@ -129,6 +129,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-path-display/` | 独立且无依赖的 Pure Leaf：用户可见路径中 Windows extended-length prefix 移除语义的唯一 owner；不执行路径校验、规范化或 I/O |
 | `src-tauri/crates/yss-project-change/` | 独立 Pure Leaf：安全 project-relative path、文件变更/重扫事实、index 相关性判断与强类型失效结果的唯一 owner；不持有 notify、ProjectState、I/O 或 event delivery |
 | `src-tauri/crates/yss-project-watcher/` | 独立 Application service：watcher epoch、delivery admission、session/drain protocol、超时 ownership 与 project replacement 状态机的唯一 owner；不依赖 notify、ProjectState、Tauri、Commands 或 Transport |
+| `src-tauri/crates/yss-project-watcher-notify/` | 独立 Platform Adapter：native recursive observation、notify event 映射、bounded debounce、worker lifetime 与 drain completion 的唯一 owner；不依赖 Tauri、Application/Project state、Commands 或 Transport |
 | `src-tauri/crates/yss-project-identity/` | 独立 Pure Leaf：project instance/registration/session/root/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior |
 | `src-tauri/crates/yss-project-discovery/` | 独立 Project 层：可取消的 project metadata 扫描、目录跳过策略与项目名规范化的唯一 owner；不进入 symlink/reparse point，也不拥有 registry persistence、registration workflow 或 transport DTO |
 | `src-tauri/crates/yss-project-filesystem/` | 独立 Stateful Project 层：native project-root identity、caller binding/revalidation、root lease/lifecycle admission、原子文件事务、rollback/recovery marker 与 filesystem typed error 的唯一 owner；不持有 `ProjectState`、完整 `ProjectSession`、resource revision 或 publication |
@@ -374,7 +375,7 @@ yss-project-layout
 yss-path-display
   → Project registry + Application project query
 yss-project-layout + yss-project-identity
-  → yss-project-change → yss-project-watcher → Notify adapter / Application reconciliation → Commands
+  → yss-project-change → yss-project-watcher → yss-project-watcher-notify / Application reconciliation → Commands
 yss-resource-naming
   → yss-graph-document
 yss-project-identity
@@ -424,6 +425,7 @@ yss-resource-naming + yss-project-identity
 - `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Worksheet 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
 - `yss-project-change`：统一拥有不可绕过的 project-relative path 不变量、文件 change kind、显式 `RescanRequired` 与 `ProjectIndexInvalidation`。Watcher 故障不再伪造为 `metadata.yssbi` 文件变更，无关路径以 `None` 表示无操作而不是错误；notify adapter 忽略普通 read/open access 事件以避免自激重读循环，同时保留 `Close(Write)`、rename 语义和跨边界事件中的安全根内路径。`ProjectState` 重读、watcher lifecycle 与 Tauri event delivery 分别留在各自 owner，根 `project` 不提供 contract facade。
 - `yss-project-watcher`：统一拥有 watcher epoch、旧 session delivery admission 封锁、typed factory/session/drain protocol、超时后可重试的 drain ownership 与替换状态机。Application 只把 canonical `ProjectChange` 交给当前 Project authority，Notify adapter 只实现 filesystem observation；从核心删除未被使用的 duplicate quiet-period 常量及生产不可构造的 `DeliveryFailed` 分支，避免两个 debounce 事实源和伪终态。
+- `yss-project-watcher-notify`：统一拥有 `notify` backend、相关 event 到 canonical `ProjectChange` 的安全映射、单一 250ms debounce 事实、bounded coalescing worker 与可超时重试的 join handoff。根 crate 删除空 `platform` facade 和直接 `notify` 依赖，只在 composition root 将该 adapter 注入 `yss-project-watcher`；普通 read/open access 继续被忽略，callback uncertainty 显式升级为 rescan。
 - `yss-path-display`：统一移除用户可见或稳定存储路径中的 Windows `\\?\` 与 `\\?\UNC\` extended-length prefix。该纯字符串语义在所有宿主平台一致，避免离线测试或跨平台处理产生漂移；路径存在性、canonicalization 与 project validation 仍由调用方拥有，根 `project` 不提供兼容 facade。
 - `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version、manifest wire 与 computation settings 的反序列化校验；schema/settings 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
 - `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
