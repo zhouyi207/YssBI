@@ -123,28 +123,6 @@ struct UnavailableScientificBackend;
 
 #[cfg(any(test, feature = "test-support"))]
 impl ScientificBackend for UnavailableScientificBackend {
-    fn statistics(
-        &self,
-        _request: crate::ports::scientific::StatisticsRequest,
-        _control: &crate::ports::scientific::BackendExecutionControl,
-    ) -> Result<
-        crate::ports::scientific::StatisticsResult,
-        crate::ports::scientific::ScientificBackendError,
-    > {
-        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
-    }
-
-    fn kernel_density(
-        &self,
-        _request: crate::ports::scientific::KernelDensityRequest,
-        _control: &crate::ports::scientific::BackendExecutionControl,
-    ) -> Result<
-        crate::ports::scientific::KernelDensityResult,
-        crate::ports::scientific::ScientificBackendError,
-    > {
-        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
-    }
-
     fn acf_pacf(
         &self,
         _request: crate::ports::scientific::AcfPacfRequest,

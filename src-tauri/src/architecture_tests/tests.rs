@@ -3176,14 +3176,6 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
             && !bayes_application.contains("fn tabular_column_to_series"),
         "the Bayes application must not restore duplicate tabular-to-Polars conversion logic"
     );
-    let backend_adapters =
-        std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
-            .expect("the root backend adapter module must be readable");
-    assert!(
-        !backend_adapters.contains("tabular"),
-        "the root backend adapter module must not retain a tabular facade"
-    );
-
     let facts = production_facts();
     assert_eq!(
         facts
@@ -4932,13 +4924,10 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
             "the SQLite adapter must not depend backwards on '{backwards_dependency}'"
         );
     }
-
-    let backend_adapters =
-        std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
-            .expect("root backend adapter module must be readable");
     assert!(
-        !backend_adapters.contains("project_registry_sqlite"),
-        "the root backend adapter module must not retain a compatibility facade"
+        adapter.contains("target: \"yss_project_registry_sqlite\"")
+            && !adapter.contains("yssbi::backend_adapters"),
+        "the SQLite adapter diagnostic target must follow its crate owner, not a removed root path"
     );
 
     let project_module =
@@ -8324,6 +8313,104 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
 }
 
 #[test]
+fn execution_sci_adapter_has_one_crate_owner_without_dead_root_adapters() {
+    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs";
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-execution-sci-adapter/Cargo.toml",
+        "src-tauri/crates/yss-execution-sci-adapter/README.md",
+        ADAPTER_SOURCE,
+        "src-tauri/crates/yss-execution-sci-adapter/src/tests.rs",
+    ] {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "Execution SCI adapter asset {relative} must exist"
+        );
+    }
+    assert_eq!(
+        facts.classification.get(ADAPTER_SOURCE),
+        Some(&RustLayer::BackendAdapter),
+        "the Execution SCI implementation must remain a Backend Adapter"
+    );
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-execution-sci-adapter/Cargo.toml"),
+    )
+    .expect("Execution SCI adapter manifest must be readable");
+    for dependency in ["yss-execution", "yss-sci-contract", "yss-sci-runtime"] {
+        assert!(
+            manifest.contains(dependency),
+            "Execution SCI adapter must declare {dependency}"
+        );
+    }
+    for backwards_dependency in [
+        "tauri",
+        "yss-application",
+        "yss-project",
+        "yss-database",
+        "yssbi",
+    ] {
+        assert!(
+            !manifest.contains(backwards_dependency),
+            "Execution SCI adapter must not depend on {backwards_dependency}"
+        );
+    }
+
+    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
+        .expect("composition root must be readable");
+    assert!(root_lib.contains("yss_execution_sci_adapter::SciRuntimeBackend::new()"));
+    for removed_seam in [
+        "pub mod backend_adapters",
+        "SessionResourceFactoryBuilder",
+        "database_resource_provider_factory",
+    ] {
+        assert!(
+            !root_lib.contains(removed_seam),
+            "composition root must not restore dead adapter seam {removed_seam}"
+        );
+    }
+    for removed_path in [
+        "src-tauri/src/backend_adapters",
+        "src-tauri/crates/yss-execution/src/ports/relational.rs",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed_path).exists(),
+            "dead root adapter or port {removed_path} must stay absent"
+        );
+    }
+
+    let port = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-execution/src/ports/scientific.rs"),
+    )
+    .expect("Execution scientific port must be readable");
+    assert!(port.contains("pub trait ScientificBackend"));
+    assert!(port.contains("fn acf_pacf("));
+    for dead_family in [
+        "StatisticsRequest",
+        "KernelDensityRequest",
+        "RelationalBackend",
+    ] {
+        assert!(
+            !port.contains(dead_family),
+            "Execution scientific port must not restore test-only family {dead_family}"
+        );
+    }
+
+    let session_factory = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-application/src/execution/session_factory.rs"),
+    )
+    .expect("Application session factory must be readable");
+    assert!(session_factory.contains("ResourceProviderFactory::from_project_session("));
+    assert!(!session_factory.contains("SessionResourceFactoryBuilder"));
+}
+
+#[test]
 fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation() {
     const RUNTIME_SOURCES: &[&str] = &[
         "src-tauri/crates/yss-sci-runtime/src/lib.rs",
@@ -8453,7 +8540,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
         "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
-        "src-tauri/src/backend_adapters/execution/scientific.rs",
+        "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
         "src-tauri/src/commands/command_panel_did.rs",
     ] {
         let source = std::fs::read_to_string(facts.repository_root.join(consumer))

@@ -4,9 +4,7 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use super::session_factory::{
-    SessionResourceFactoryBuilder, UnpublishedApplicationSession, build_current_project_candidate,
-};
+use super::session_factory::{UnpublishedApplicationSession, build_current_project_candidate};
 use yss_database_runtime::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
@@ -760,7 +758,6 @@ impl ApplicationSessionSlot {
     fn finish_project_replacement(
         &self,
         mut replacement: ProjectReplacement,
-        builder: &SessionResourceFactoryBuilder,
         scientific_backend: &Arc<dyn ScientificBackend>,
     ) -> Result<(), ApplicationSessionRefreshError> {
         replacement
@@ -779,7 +776,6 @@ impl ApplicationSessionSlot {
             .map(|old| old.database().instances_for_replacement())
             .unwrap_or_default();
         let candidate = build_current_project_candidate(
-            builder,
             replacement.worker.epoch,
             replacement.project,
             reusable_instances,
@@ -1115,7 +1111,6 @@ pub enum ApplicationSessionRefreshError {
 #[derive(Clone)]
 pub struct ApplicationState {
     session_slot: Arc<ApplicationSessionSlot>,
-    factory_builder: Option<Arc<SessionResourceFactoryBuilder>>,
     scientific_backend: Option<Arc<dyn ScientificBackend>>,
 }
 
@@ -1123,19 +1118,16 @@ impl ApplicationState {
     pub fn new(session_slot: Arc<ApplicationSessionSlot>) -> Self {
         Self {
             session_slot,
-            factory_builder: None,
             scientific_backend: None,
         }
     }
 
     pub fn from_composition(
         session_slot: Arc<ApplicationSessionSlot>,
-        builder: SessionResourceFactoryBuilder,
         scientific_backend: Arc<dyn ScientificBackend>,
     ) -> Self {
         Self {
             session_slot,
-            factory_builder: Some(Arc::new(builder)),
             scientific_backend: Some(scientific_backend),
         }
     }
@@ -1168,16 +1160,12 @@ impl ApplicationState {
         &self,
         replacement: ProjectReplacement,
     ) -> Result<(), ApplicationSessionRefreshError> {
-        let builder = self
-            .factory_builder
-            .as_deref()
-            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
         let scientific_backend = self
             .scientific_backend
             .as_ref()
             .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
         self.session_slot
-            .finish_project_replacement(replacement, builder, scientific_backend)
+            .finish_project_replacement(replacement, scientific_backend)
     }
 
     pub fn retry_session_recovery(

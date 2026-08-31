@@ -3,7 +3,6 @@
 //! 这里只构造并注入各 crate authority、Application state 与平台适配器；领域行为和
 //! transport contract 分别留在各自 owner。
 
-pub mod backend_adapters;
 pub mod commands;
 pub mod error;
 pub mod event;
@@ -40,13 +39,8 @@ fn initialize_application_state(
     project_state: Arc<yss_project::ProjectState>,
 ) -> Result<yss_application::execution::ApplicationState, ApplicationInitializationError> {
     let scientific_backend: Arc<dyn yss_execution::ports::scientific::ScientificBackend> =
-        Arc::new(backend_adapters::execution::scientific::SciApiScientificBackend::new());
-    let builder =
-        yss_application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(
-            backend_adapters::execution::resources::database_resource_provider_factory,
-        );
+        Arc::new(yss_execution_sci_adapter::SciRuntimeBackend::new());
     let candidate = yss_application::execution::session_factory::build_current_project_candidate(
-        &builder,
         yss_application::execution::ApplicationSessionEpoch::INITIAL,
         Arc::clone(&project_state),
         std::iter::empty(),
@@ -55,7 +49,6 @@ fn initialize_application_state(
     .map_err(ApplicationInitializationError::SessionComposition)?;
     let application = yss_application::execution::ApplicationState::from_composition(
         Arc::new(yss_application::execution::ApplicationSessionSlot::new()),
-        builder,
         scientific_backend,
     );
     application

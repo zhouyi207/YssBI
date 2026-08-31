@@ -184,24 +184,26 @@ impl PreparedRunResources {
 
 #[derive(Clone)]
 pub struct ResourceProviderFactory {
-    session_identity: Box<str>,
+    project_session: PlanProjectSessionId,
 }
 
 impl ResourceProviderFactory {
-    /// Test-only constructor for an empty factory. Production composition must
-    /// use the composition-injected session identity; concrete database
-    /// handles stay outside the Execution package.
+    /// Test-only constructor for an empty factory. Production callers bind the
+    /// validated Project session through [`Self::from_project_session`];
+    /// concrete database handles stay outside the Execution package.
     #[cfg(any(test, feature = "test-support"))]
     pub fn new(session_identity: Box<str>) -> Self {
-        Self { session_identity }
+        Self {
+            project_session: PlanProjectSessionId::from_existing(session_identity),
+        }
     }
 
-    pub fn from_project_session(session_identity: Box<str>) -> Self {
-        Self { session_identity }
+    pub fn from_project_session(project_session: PlanProjectSessionId) -> Self {
+        Self { project_session }
     }
 
     pub(crate) fn bound_project_session(&self) -> PlanProjectSessionId {
-        PlanProjectSessionId::from_existing(self.session_identity.clone())
+        self.project_session.clone()
     }
 
     pub(crate) fn prepare(

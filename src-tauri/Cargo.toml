@@ -31,6 +31,7 @@ members = [
     "crates/yss-display-naming",
     "crates/yss-duckdb",
     "crates/yss-execution",
+    "crates/yss-execution-sci-adapter",
     "crates/yss-function-editor-projection",
     "crates/yss-graph-analysis",
     "crates/yss-graph-analysis-contract",
@@ -138,6 +139,7 @@ yss-database-schema = { path = "./crates/yss-database-schema" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-duckdb = { path = "./crates/yss-duckdb" }
 yss-execution = { path = "./crates/yss-execution" }
+yss-execution-sci-adapter = { path = "./crates/yss-execution-sci-adapter" }
 yss-function-editor-projection = { path = "./crates/yss-function-editor-projection" }
 yss-graph-analysis = { path = "./crates/yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
@@ -163,7 +165,6 @@ yss-project-registry-contract = { path = "./crates/yss-project-registry-contract
 yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
-yss-sci-contract = { path = "./crates/yss-sci-contract" }
 yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tabular-io = { path = "./crates/yss-tabular-io" }

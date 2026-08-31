@@ -331,12 +331,10 @@ const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
 ];
 const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
     "src-tauri/crates/yss-execution/src/ports/scientific.rs",
-    "src-tauri/src/backend_adapters/mod.rs",
-    "src-tauri/src/backend_adapters/execution/mod.rs",
-    "src-tauri/src/backend_adapters/execution/scientific.rs",
+    "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
 ];
 const SCIENTIFIC_PORT_FILE: &str = "src-tauri/crates/yss-execution/src/ports/scientific.rs";
-const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/src/backend_adapters/execution/scientific.rs";
+const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct WorkerFunction {
     owner: &'static str,
@@ -1753,9 +1751,9 @@ impl ScientificAdapterVisitor<'_> {
             && self.source_file != "src-tauri/src/lib.rs"
             && segments
                 .iter()
-                .any(|segment| segment == "SciApiScientificBackend")
+                .any(|segment| segment == "SciRuntimeBackend")
         {
-            self.record("production-reference", "SciApiScientificBackend");
+            self.record("production-reference", "SciRuntimeBackend");
         }
     }
 }
@@ -1787,7 +1785,7 @@ impl<'ast> Visit<'ast> for ScientificAdapterVisitor<'_> {
             return;
         }
         if self.adapter_source
-            && impl_owner(&item.self_ty).as_deref() == Some("SciApiScientificBackend")
+            && impl_owner(&item.self_ty).as_deref() == Some("SciRuntimeBackend")
             && let Some((trait_path, _)) = &item.trait_
             && trait_path
                 .segments
@@ -1868,8 +1866,8 @@ fn scientific_backend_adapter_is_exact_port_only_and_production_unreachable() {
         SCIENTIFIC_ADAPTER_FILE,
         r#"
 use crate::sci::engine::SciContext;
-struct SciApiScientificBackend;
-impl LegacyScientificBackend for SciApiScientificBackend {}
+struct SciRuntimeBackend;
+impl LegacyScientificBackend for SciRuntimeBackend {}
 "#,
     )
     .expect("adapter fixture must parse");
@@ -1897,7 +1895,7 @@ impl LegacyScientificBackend for SciApiScientificBackend {}
 
     let production_constructor = scientific_adapter_source_violations(
         "src-tauri/src/lib.rs",
-        "fn compose() { let _ = SciApiScientificBackend::new(); }",
+        "fn compose() { let _ = SciRuntimeBackend::new(); }",
     )
     .expect("production constructor fixture must parse");
     assert!(production_constructor.is_empty());

@@ -871,3 +871,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将根 Bayes/Polars artifact reader 迁入 `src-tauri/crates/yss-bayes-artifact-polars/` Backend Adapter，
   删除 Application 内复制的 DataFrame 解析与测试镜像并下沉测试；malformed/null/non-finite rows、空 predictive
   artifact 和零 plot budget 必须 fail closed，禁止静默丢行、除零及 Tauri/Application 回边。
+- [ ] 将根 Execution→SCI adapter 迁入 `src-tauri/crates/yss-execution-sci-adapter/`，仅保留生产实际消费的
+  ACF/PACF typed port 并让零 lag fail closed；删除零生产调用的 regression/KDE 与 relational port families、
+  永远 unavailable 的 relational stub、透传 session ID 的 resource factory callback 及整个根 `backend_adapters` facade。

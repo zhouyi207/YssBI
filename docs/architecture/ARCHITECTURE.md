@@ -119,9 +119,9 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/crates/yss-application/src/` | 独立 Application 层：跨 Project、Execution、Database、Graph、SCI 与 Bayes authority 的用例编排；不依赖根包、Tauri、Commands 或 IPC schema |
-| `src-tauri/src/backend_adapters/` | 尚待抽取的 Execution/SCI composition adapters；由 composition root 注入，不持有 Bayes artifact I/O |
 | `src-tauri/src/lib.rs` | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters；不拥有 Project 行为或 transport contract |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
+| `src-tauri/crates/yss-execution-sci-adapter/` | 独立 Backend Adapter：Execution live ACF/PACF port 到 `yss-sci-runtime` 的 request/result/control/typed-error 穷尽映射唯一 owner；不依赖 Tauri、Application、Project 或 Database state |
 | `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery |
 | `src-tauri/crates/yss-computation-settings/` | 独立 Pure Leaf：持久化 computation settings、validation 与 project settings mutation wire contract 的唯一 canonical owner |
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
@@ -607,11 +607,11 @@ Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标�
    API、report models 与 Rust algorithm adapters；跨层调用通过 `execution::ports::scientific`，
    runtime 不反向编排 Project、Database、Execution、Tauri 或 Julia。
 
-Final Execution-facing scientific request/result/error/control 由
+Final live Execution-facing ACF/PACF request/result/error/control 由
 `yss-execution/src/ports/scientific.rs` 拥有；backend-neutral SCI contract 则只由
-`yss-sci-contract` 拥有。`backend_adapters/execution/scientific.rs` 负责两侧的穷尽映射，并由
-`lib.rs` 注入到每个 Application execution session。Application statistics、Execution
-runtime 与 commands 不再直接调用 concrete SCI implementation。
+`yss-sci-contract` 拥有。`yss-execution-sci-adapter` 负责两侧的穷尽映射，并由 `lib.rs`
+注入到每个 Application execution session。未接入生产调用的 regression/KDE port families、
+整条 relational port 与永远返回 unavailable 的 adapter 已删除，不再由测试制造伪能力。
 
 Application statistics 通过 Execution scientific port 调用 typed backend，commands 只负责
 schema parse/map；Application Bayes 通过 `yss-bayes-worker::BayesWorkerClient` 调用注入的

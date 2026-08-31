@@ -23,27 +23,6 @@ use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
 
-/// Composition-root supplied construction for one session-bound resource factory.
-///
-/// The function pointer is deliberately the only state carried by this owner. It
-/// cannot capture a registry, a latest session, or any other ambient state, and
-/// the owner is consumed by the eventual composition root rather than stored in
-/// an `ApplicationSession`.
-pub struct SessionResourceFactoryBuilder(fn(PlanProjectSessionId) -> ResourceProviderFactory);
-
-impl SessionResourceFactoryBuilder {
-    pub fn from_composition(build: fn(PlanProjectSessionId) -> ResourceProviderFactory) -> Self {
-        Self(build)
-    }
-
-    pub(super) fn build(
-        &self,
-        bound_project_session: PlanProjectSessionId,
-    ) -> ResourceProviderFactory {
-        (self.0)(bound_project_session)
-    }
-}
-
 #[derive(Debug, Eq, PartialEq, Error)]
 pub(crate) enum ReplacementCandidateInputError {
     #[error("candidate Project and Plan session identities differ")]
@@ -191,7 +170,6 @@ impl UnpublishedApplicationSession {
 }
 
 pub(crate) fn build_replacement_candidate(
-    builder: &SessionResourceFactoryBuilder,
     input: ReplacementCandidateInput,
 ) -> Result<UnpublishedApplicationSession, SessionCandidateBuildError> {
     input.validate()?;
@@ -207,7 +185,9 @@ pub(crate) fn build_replacement_candidate(
         execution,
         database,
     } = input;
-    let resource_provider_factory = Arc::new(builder.build(bound_project_session));
+    let resource_provider_factory = Arc::new(ResourceProviderFactory::from_project_session(
+        bound_project_session,
+    ));
     Ok(UnpublishedApplicationSession {
         session: ApplicationSession::from_candidate(
             epoch,
@@ -225,7 +205,6 @@ pub(crate) fn build_replacement_candidate(
 }
 
 pub fn build_current_project_candidate(
-    builder: &SessionResourceFactoryBuilder,
     epoch: ApplicationSessionEpoch,
     project: Arc<ProjectState>,
     reusable_instances: impl IntoIterator<Item = DatabaseInstance>,
@@ -332,21 +311,18 @@ pub fn build_current_project_candidate(
     ));
     let bound_project_session =
         PlanProjectSessionId::from_existing(project_session_id.as_str().into());
-    build_replacement_candidate(
-        builder,
-        ReplacementCandidateInput::new(
-            epoch,
-            project_instance_id,
-            project_session_id,
-            bound_project_session,
-            execution_session_id,
-            runtime_generation,
-            project,
-            graph,
-            execution,
-            database,
-        ),
-    )
+    build_replacement_candidate(ReplacementCandidateInput::new(
+        epoch,
+        project_instance_id,
+        project_session_id,
+        bound_project_session,
+        execution_session_id,
+        runtime_generation,
+        project,
+        graph,
+        execution,
+        database,
+    ))
     .map_err(|source| ProjectSessionCandidateError::Candidate(source.into()))
 }
 
@@ -362,16 +338,11 @@ mod tests {
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_execution::plan::PlanProjectSessionId;
-    use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
     use yss_project::ProjectState;
     use yss_project_identity::ProjectInstanceId;
     use yss_project_identity::ProjectSessionId;
-
-    fn test_factory(project_session: PlanProjectSessionId) -> ResourceProviderFactory {
-        ResourceProviderFactory::new(project_session.as_str().into())
-    }
 
     fn candidate_input() -> ReplacementCandidateInput {
         let project_session_id = ProjectSessionId::new("candidate-session");
@@ -417,8 +388,7 @@ mod tests {
 
     #[test]
     fn candidate_build_binds_one_session_identity_and_rejects_mismatch() {
-        let builder = SessionResourceFactoryBuilder::from_composition(test_factory);
-        let unpublished = build_replacement_candidate(&builder, candidate_input())
+        let unpublished = build_replacement_candidate(candidate_input())
             .expect("matching candidate is buildable");
         let session = unpublished.into_session();
         assert_eq!(session.project_session_id().as_str(), "candidate-session");
@@ -440,7 +410,7 @@ mod tests {
         let mut mismatched = candidate_input();
         mismatched.bound_project_session =
             PlanProjectSessionId::from_existing("other-session".into());
-        match build_replacement_candidate(&builder, mismatched) {
+        match build_replacement_candidate(mismatched) {
             Err(error) => assert_eq!(
                 error,
                 SessionCandidateBuildError::InvalidInput(

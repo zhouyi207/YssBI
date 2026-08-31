@@ -9341,7 +9341,15 @@ dependencies = [
  "thiserror 2.0.20",
  "uuid",
  "yss-data-contract",
- "yss-tabular-contract",
+]
+
+[[package]]
+name = "yss-execution-sci-adapter"
+version = "0.1.0"
+dependencies = [
+ "yss-execution",
+ "yss-sci-contract",
+ "yss-sci-runtime",
 ]
 
 [[package]]
@@ -9923,6 +9931,7 @@ dependencies = [
  "yss-diagnostics",
  "yss-duckdb",
  "yss-execution",
+ "yss-execution-sci-adapter",
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
@@ -9948,7 +9957,6 @@ dependencies = [
  "yss-project-registry-sqlite",
  "yss-project-watcher",
  "yss-project-watcher-notify",
- "yss-sci-contract",
  "yss-sci-runtime",
  "yss-tabular-contract",
  "yss-tabular-io",

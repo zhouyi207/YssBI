@@ -1,0 +1,11 @@
+[package]
+name = "yss-execution-sci-adapter"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+yss-execution = { path = "../yss-execution" }
+yss-sci-contract = { path = "../yss-sci-contract" }
+yss-sci-runtime = { path = "../yss-sci-runtime" }

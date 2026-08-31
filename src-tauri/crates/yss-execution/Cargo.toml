@@ -15,4 +15,3 @@ serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }

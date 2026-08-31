@@ -121,36 +121,12 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     (
-        "src-tauri/crates/yss-execution/src/ports/relational.rs",
-        RustLayer::Execution,
-    ),
-    (
         "src-tauri/crates/yss-execution/src/ports/resources.rs",
         RustLayer::Execution,
     ),
     (
         "src-tauri/crates/yss-execution/src/resource_preparation.rs",
         RustLayer::Execution,
-    ),
-    (
-        "src-tauri/src/backend_adapters/mod.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/backend_adapters/execution/mod.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/backend_adapters/execution/scientific.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/backend_adapters/execution/relational.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/backend_adapters/execution/resources.rs",
-        RustLayer::BackendAdapter,
     ),
     (
         "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
@@ -196,39 +172,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/backend_adapters/execution/scientific.rs",
-        fully_qualified_owner: "yssbi_lib::backend_adapters::execution::scientific",
+        repository_relative_source_file: "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
+        fully_qualified_owner: "yss_execution_sci_adapter",
         canonical_origin_targets: &[
             "yss_execution::ports::scientific::AcfPacfRequest",
             "yss_execution::ports::scientific::AcfPacfResult",
             "yss_execution::ports::scientific::BackendExecutionControl",
-            "yss_execution::ports::scientific::ExecutionInstrumentalVariableKind",
-            "yss_execution::ports::scientific::ExecutionRegressionKind",
-            "yss_execution::ports::scientific::ExecutionStatisticalTrend",
-            "yss_execution::ports::scientific::KdePoint",
-            "yss_execution::ports::scientific::KernelDensityRequest",
-            "yss_execution::ports::scientific::KernelDensityResult",
             "yss_execution::ports::scientific::ScientificBackend",
             "yss_execution::ports::scientific::ScientificBackendError",
             "yss_execution::ports::scientific::ScientificInputViolation",
-            "yss_execution::ports::scientific::StatisticsOperation",
-            "yss_execution::ports::scientific::StatisticsParameters",
-            "yss_execution::ports::scientific::StatisticsRequest",
-            "yss_execution::ports::scientific::StatisticsResult",
-            "yss_execution::settings::ExecutionMissingValuePolicy",
-            "yss_execution::settings::ExecutionSettings",
-            "yss_sci_runtime::api::density::KernelDensityInput",
-            "yss_sci_runtime::api::density::compute_kernel_density",
-            "yss_sci_runtime::api::node_statistics::InstrumentalVariableKind",
-            "yss_sci_runtime::api::node_statistics::RegressionKind",
-            "yss_sci_runtime::api::node_statistics::augmented_dickey_fuller",
-            "yss_sci_runtime::api::node_statistics::fit_instrumental_variables",
-            "yss_sci_runtime::api::node_statistics::fit_panel",
-            "yss_sci_runtime::api::node_statistics::fit_regression",
-            "yss_sci_runtime::api::node_statistics::var_fit",
-            "yss_sci_runtime::api::node_statistics::var_lag_order",
-            "yss_sci_runtime::api::node_statistics::vec_fit",
-            "yss_sci_runtime::api::node_statistics::vec_rank_test",
             "yss_sci_runtime::api::time_series::acf_pacf::AcfPacfInput",
             "yss_sci_runtime::api::time_series::acf_pacf::compute_acf_pacf",
         ],
@@ -242,27 +194,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_bayes_artifact_contract::BayesArtifactReader",
             "yss_sci_runtime::api::density::KernelDensityInput",
             "yss_sci_runtime::api::density::compute_kernel_density",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/backend_adapters/execution/relational.rs",
-        fully_qualified_owner: "yssbi_lib::backend_adapters::execution::relational",
-        canonical_origin_targets: &[
-            "yss_execution::ports::relational::RelationalBackend",
-            "yss_execution::ports::relational::RelationalError",
-            "yss_execution::ports::relational::RelationalExecutionControl",
-            "yss_execution::ports::relational::RelationalRequest",
-            "yss_execution::ports::relational::RelationalResult",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/backend_adapters/execution/resources.rs",
-        fully_qualified_owner: "yssbi_lib::backend_adapters::execution::resources",
-        canonical_origin_targets: &[
-            "yss_execution::plan::identity::PlanProjectSessionId",
-            "yss_execution::resource_preparation::ResourceProviderFactory",
         ],
     },
     InternalDependencyCapability {
@@ -283,21 +214,19 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::bayes::BayesInferenceService::with_worker",
             "yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new",
-            "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
+            "yss_execution_sci_adapter::SciRuntimeBackend::new",
             "yss_julia_worker::JuliaWorkerManager::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yss_project::project_state::state::ProjectState",
             "yss_project_watcher::ProjectWatcherState::new",
             "yss_application::execution::session_factory::ProjectSessionCandidateError",
-            "yss_application::execution::session_factory::SessionResourceFactoryBuilder::from_composition",
             "yss_application::execution::session_factory::build_current_project_candidate",
             "yss_application::execution::session_slot::ApplicationSessionEpoch::INITIAL",
             "yss_application::execution::session_slot::ApplicationSessionSlot::new",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::ApplicationState::from_composition",
             "yss_bayes_artifact_polars::PolarsBayesArtifactReader::new",
-            "yssbi_lib::backend_adapters::execution::resources::database_resource_provider_factory",
             "yss_execution::ports::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
             "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
@@ -1611,6 +1540,7 @@ fn non_build_memberships(
         package,
         "yss-bayes-artifact-polars"
             | "yss-bayes-worker-julia"
+            | "yss-execution-sci-adapter"
             | "yss-julia-runtime"
             | "yss-julia-worker"
             | "yss-project-registry-sqlite"
@@ -1645,7 +1575,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "event" | "schema" | "error" => Some(RustLayer::Transport),
         "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
-        "backend_adapters" => Some(RustLayer::BackendAdapter),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,
     }

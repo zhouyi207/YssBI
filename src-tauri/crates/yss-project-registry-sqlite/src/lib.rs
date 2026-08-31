@@ -92,7 +92,7 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             .await
             .map_err(|error| {
                 tracing::warn!(
-                    target: "yssbi::backend_adapters::project_registry_sqlite",
+                    target: "yss_project_registry_sqlite",
                     diagnostic_domain = "system",
                     diagnostic_event = "projectRegistryLoadFailed",
                     error = %error,
@@ -139,7 +139,7 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             .map(|_| ())
             .map_err(|error| {
                 tracing::warn!(
-                    target: "yssbi::backend_adapters::project_registry_sqlite",
+                    target: "yss_project_registry_sqlite",
                     diagnostic_domain = "system",
                     diagnostic_event = "projectRegistryUpsertFailed",
                     error = %error,
@@ -162,7 +162,7 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
                 .await
                 .map_err(|error| {
                     tracing::warn!(
-                        target: "yssbi::backend_adapters::project_registry_sqlite",
+                        target: "yss_project_registry_sqlite",
                         diagnostic_domain = "system",
                         diagnostic_event = "projectRegistryRemoveFailed",
                         error = %error,
