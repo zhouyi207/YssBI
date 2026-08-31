@@ -322,7 +322,7 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
     violations
 }
 
-const WORKER_FILE: &str = "src-tauri/src/sci/api/bayes/worker.rs";
+const WORKER_FILE: &str = "src-tauri/crates/yss-bayes-worker/src/lib.rs";
 const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
     "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
     "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
@@ -344,24 +344,24 @@ struct WorkerFunction {
 
 const AUTHORITY_FUNCTIONS: &[WorkerFunction] = &[
     WorkerFunction {
-        owner: "BayesTaskHandle",
-        method: "issue_for_worker",
+        owner: "BayesWorkerAuthority",
+        method: "issue_task_handle",
     },
     WorkerFunction {
-        owner: "BayesArtifactHandle",
-        method: "mint_for_worker",
+        owner: "BayesWorkerAuthority",
+        method: "mint_artifact_handle",
     },
     WorkerFunction {
-        owner: "BayesTaskResult",
-        method: "validated_worker_result",
+        owner: "BayesWorkerAuthority",
+        method: "task_result",
     },
     WorkerFunction {
-        owner: "BayesArtifact",
-        method: "from_worker",
+        owner: "BayesWorkerAuthority",
+        method: "artifact",
     },
     WorkerFunction {
-        owner: "BayesInferenceSnapshot",
-        method: "from_worker",
+        owner: "BayesWorkerAuthority",
+        method: "inference_snapshot",
     },
 ];
 const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
@@ -391,10 +391,6 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     },
     WorkerFunction {
         owner: "BayesTaskHandle",
-        method: "issue_for_worker",
-    },
-    WorkerFunction {
-        owner: "BayesTaskHandle",
         method: "task_id",
     },
     WorkerFunction {
@@ -403,19 +399,11 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     },
     WorkerFunction {
         owner: "BayesArtifactHandle",
-        method: "mint_for_worker",
-    },
-    WorkerFunction {
-        owner: "BayesArtifactHandle",
         method: "task",
     },
     WorkerFunction {
         owner: "BayesArtifactHandle",
         method: "artifact_id",
-    },
-    WorkerFunction {
-        owner: "BayesArtifact",
-        method: "from_worker",
     },
     WorkerFunction {
         owner: "BayesArtifact",
@@ -431,10 +419,6 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     },
     WorkerFunction {
         owner: "BayesInferenceSnapshot",
-        method: "from_worker",
-    },
-    WorkerFunction {
-        owner: "BayesInferenceSnapshot",
         method: "task",
     },
     WorkerFunction {
@@ -444,10 +428,6 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     WorkerFunction {
         owner: "BayesInferenceSnapshot",
         method: "diagnostics",
-    },
-    WorkerFunction {
-        owner: "BayesTaskResult",
-        method: "validated_worker_result",
     },
     WorkerFunction {
         owner: "BayesTaskResult",
@@ -461,12 +441,43 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
         owner: "BayesTaskResult",
         method: "artifacts",
     },
+    WorkerFunction {
+        owner: "BayesWorkerClient",
+        method: "new",
+    },
 ];
-const PUBLIC_ASSOCIATED_FUNCTIONS: &[WorkerFunction] = &[WorkerFunction {
-    owner: "ValidatedBayesTask",
-    method: "try_new",
-}];
+const PUBLIC_ASSOCIATED_FUNCTIONS: &[WorkerFunction] = &[
+    WorkerFunction {
+        owner: "ValidatedBayesTask",
+        method: "try_new",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerClient",
+        method: "new",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerAuthority",
+        method: "issue_task_handle",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerAuthority",
+        method: "mint_artifact_handle",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerAuthority",
+        method: "artifact",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerAuthority",
+        method: "inference_snapshot",
+    },
+    WorkerFunction {
+        owner: "BayesWorkerAuthority",
+        method: "task_result",
+    },
+];
 const SEALED_AUTHORITY_TYPES: &[&str] = &[
+    "BayesWorkerAuthority",
     "BayesTaskHandle",
     "BayesArtifactHandle",
     "BayesTaskResult",
@@ -474,6 +485,8 @@ const SEALED_AUTHORITY_TYPES: &[&str] = &[
     "BayesInferenceSnapshot",
 ];
 const WORKER_SURFACE_TYPES: &[&str] = &[
+    "BayesWorkerAuthority",
+    "BayesWorkerClient",
     "BayesTaskId",
     "ArtifactId",
     "ValidatedBayesTask",
@@ -484,6 +497,8 @@ const WORKER_SURFACE_TYPES: &[&str] = &[
     "BayesInferenceSnapshot",
 ];
 const PRIVATE_FIELD_TYPES: &[&str] = &[
+    "BayesWorkerAuthority",
+    "BayesWorkerClient",
     "BayesTaskId",
     "ArtifactId",
     "BayesTaskGeneration",
@@ -495,6 +510,8 @@ const PRIVATE_FIELD_TYPES: &[&str] = &[
     "BayesInferenceSnapshot",
 ];
 const WORKER_PRIVATE_FIELDS: &[&str] = &[
+    "_private",
+    "port",
     "task_id",
     "generation",
     "task",
@@ -592,9 +609,17 @@ struct UseBinding {
 
 fn source_module_path(source_file: &str) -> Vec<String> {
     let normalized = source_file.replace('\\', "/");
-    let relative = normalized
-        .strip_prefix("src-tauri/src/")
-        .unwrap_or(normalized.as_str());
+    let (mut base, relative) =
+        if let Some(relative) = normalized.strip_prefix("src-tauri/crates/yss-bayes-worker/src/") {
+            (vec!["yss_bayes_worker".to_owned()], relative)
+        } else {
+            (
+                Vec::new(),
+                normalized
+                    .strip_prefix("src-tauri/src/")
+                    .unwrap_or(normalized.as_str()),
+            )
+        };
     let mut segments = relative.split('/').map(str::to_owned).collect::<Vec<_>>();
     let Some(file) = segments.pop() else {
         return Vec::new();
@@ -602,7 +627,8 @@ fn source_module_path(source_file: &str) -> Vec<String> {
     if !matches!(file.as_str(), "lib.rs" | "main.rs" | "mod.rs") {
         segments.push(file.trim_end_matches(".rs").to_owned());
     }
-    segments
+    base.extend(segments);
+    base
 }
 
 fn build_worker_scope(
@@ -810,8 +836,7 @@ fn canonical_worker_symbol(path: &[String]) -> Option<WorkerSymbol> {
 }
 
 fn is_worker_module_path(segments: &[String]) -> bool {
-    let expected = ["sci", "api", "bayes", "worker"];
-    segments.iter().map(String::as_str).eq(expected)
+    segments.iter().map(String::as_str).eq(["yss_bayes_worker"])
 }
 
 fn canonical_worker_owner_from_type(ty: &Type, scopes: &[WorkerScope]) -> Option<String> {
@@ -1194,7 +1219,7 @@ fn bayes_worker_surface_violations(
                     let name = function.sig.ident.to_string();
                     if let Some(authority) = authority_function(&owner, &name) {
                         required_functions.remove(&authority);
-                        if !is_crate_visibility(&function.vis) {
+                        if !matches!(function.vis, Visibility::Public(_)) {
                             violations.push(surface_violation(
                                 "authority-visibility",
                                 format!("{owner}::{name}"),
@@ -1258,14 +1283,6 @@ fn impl_owner(ty: &Type) -> Option<String> {
         .segments
         .last()
         .map(|segment| segment.ident.to_string())
-}
-
-fn is_crate_visibility(visibility: &Visibility) -> bool {
-    matches!(
-        visibility,
-        Visibility::Restricted(restricted)
-            if restricted.in_token.is_none() && restricted.path.is_ident("crate")
-    )
 }
 
 fn has_forgeable_derive(attributes: &[syn::Attribute]) -> bool {
@@ -1907,7 +1924,7 @@ fn bayes_artifact_authority_can_only_be_minted_at_worker_boundary() {
         "src-tauri/src/application/forbidden.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker::*;
+use yss_bayes_worker::*;
 
 struct WrongOwner;
 
@@ -1915,11 +1932,11 @@ impl WrongOwner {
     fn issue_for_worker() {}
 }
 
-fn forge(result: BayesTaskResult) {
+fn forge(authority: &BayesWorkerAuthority, result: BayesTaskResult) {
     let _ = BayesTaskHandle { task_id, generation };
-    let _ = BayesTaskHandle::issue_for_worker(task_id, generation);
-    let issue = BayesTaskHandle::issue_for_worker;
-    let _ = issue(task_id, generation);
+    let _ = BayesWorkerAuthority::issue_task_handle(authority, task_id, generation);
+    let issue = BayesWorkerAuthority::issue_task_handle;
+    let _ = issue(authority, task_id, generation);
     WrongOwner::issue_for_worker();
     let _ = BayesTaskHandle::from_parts(task_id, generation);
     let _ = BayesTaskHandle::forge(task_id, generation);
@@ -1931,11 +1948,12 @@ fn forge(result: BayesTaskResult) {
     assert!(fixture.iter().any(|finding| finding.kind == "broad-import"));
     assert!(fixture.iter().any(|finding| finding.kind == "construction"));
     assert!(fixture.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
     assert!(fixture.iter().any(|finding| {
         finding.kind == "authority-reference"
-            && finding.target == "BayesTaskHandle::issue_for_worker"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
     assert!(fixture.iter().any(|finding| {
         finding.kind == "forbidden-associated-function"
@@ -1956,18 +1974,22 @@ fn forge(result: BayesTaskResult) {
         r#"
 pub struct BayesTaskHandle { task_id: (), generation: () }
 impl BayesTaskHandle {
-    pub(crate) fn issue_for_worker() {}
     pub fn task_id(&self) {}
     pub fn generation(&self) {}
     pub fn from_parts() {}
     pub fn forge() {}
 }
 pub struct BayesArtifactHandle { task: (), artifact: () }
-impl BayesArtifactHandle { pub(crate) fn mint_for_worker() {} }
 pub struct BayesArtifact { handle: (), media_type: (), bytes: () }
-impl BayesArtifact { pub(crate) fn from_worker() {} }
 pub struct BayesTaskResult { inference: (), artifacts: () }
-impl BayesTaskResult { pub(crate) fn validated_worker_result() {} }
+pub struct BayesWorkerAuthority { private: () }
+impl BayesWorkerAuthority {
+    pub fn issue_task_handle() {}
+    pub fn mint_artifact_handle() {}
+    pub fn artifact() {}
+    pub fn inference_snapshot() {}
+    pub fn task_result() {}
+}
 "#,
     )
     .expect("the authority surface fixture must parse");
@@ -1979,12 +2001,8 @@ impl BayesTaskResult { pub(crate) fn validated_worker_result() {} }
         finding.kind == "public-associated-function" && finding.target == "BayesTaskHandle::forge"
     }));
 
-    let worker_source = std::fs::read_to_string(
-        workspace
-            .repository_root
-            .join("src-tauri/src/sci/api/bayes/worker.rs"),
-    )
-    .expect("Bayes worker contract source must be readable");
+    let worker_source = std::fs::read_to_string(workspace.repository_root.join(WORKER_FILE))
+        .expect("Bayes worker contract source must be readable");
     let surface = bayes_worker_surface_violations(&worker_source)
         .expect("Bayes worker contract source must parse");
     assert!(
@@ -1999,23 +2017,24 @@ fn bayes_import_and_type_alias_authority_is_rejected() {
         "src-tauri/src/application/aliased_worker_authority.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker::BayesTaskHandle as Handle;
-type TaskAuthority = Handle;
+use yss_bayes_worker::BayesWorkerAuthority as Authority;
+type TaskAuthority = Authority;
 
-fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
-    let _ = Handle::issue_for_worker(task_id.clone(), generation);
-    let issue = TaskAuthority::issue_for_worker;
-    let _ = issue(task_id, generation);
+fn forge(authority: &Authority, task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Authority::issue_task_handle(authority, task_id.clone(), generation);
+    let issue = TaskAuthority::issue_task_handle;
+    let _ = issue(authority, task_id, generation);
 }
 "#,
     )
     .expect("aliased authority fixture must parse");
     assert!(findings.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
     assert!(findings.iter().any(|finding| {
         finding.kind == "authority-reference"
-            && finding.target == "BayesTaskHandle::issue_for_worker"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
 }
 
@@ -2025,21 +2044,23 @@ fn bayes_external_impl_self_authority_is_rejected() {
         "src-tauri/src/application/external_worker_impl.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker::BayesTaskHandle;
+use yss_bayes_worker::BayesWorkerAuthority;
 
-impl BayesTaskHandle {
-    pub fn forge(task_id: BayesTaskId, generation: NonZeroU64) -> Self {
-        Self::issue_for_worker(task_id, generation)
+impl BayesWorkerAuthority {
+    pub fn forge(authority: &Self, task_id: BayesTaskId, generation: NonZeroU64) -> BayesTaskHandle {
+        Self::issue_task_handle(authority, task_id, generation)
     }
 }
 "#,
     )
     .expect("external authority impl fixture must parse");
     assert!(findings.iter().any(|finding| {
-        finding.kind == "public-associated-function" && finding.target == "BayesTaskHandle::forge"
+        finding.kind == "public-associated-function"
+            && finding.target == "BayesWorkerAuthority::forge"
     }));
     assert!(findings.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
 }
 
@@ -2049,47 +2070,53 @@ fn bayes_module_scoped_aliases_are_canonicalized() {
         "src-tauri/src/application/module_alias_authority.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker as w;
-use w::BayesTaskHandle as Handle;
+use yss_bayes_worker as w;
+use w::BayesWorkerAuthority as Authority;
 
-fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
-    let _ = Handle::issue_for_worker(task_id, generation);
+fn forge(authority: &Authority, task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Authority::issue_task_handle(authority, task_id, generation);
 }
 "#,
     )
     .expect("module alias fixture must parse");
     assert!(module_alias.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
 
     let relative_import = bayes_worker_source_violations(
         "src-tauri/src/sci/api/bayes/forbidden_authority.rs",
         RustLayer::Application,
         r#"
-use super::worker::BayesArtifactHandle as RelativeArtifact;
+use yss_bayes_worker as worker;
 
-fn forge(task: BayesTaskHandle, artifact: ArtifactId) {
-    let _ = RelativeArtifact::mint_for_worker(task, artifact);
+mod nested {
+use super::worker::BayesWorkerAuthority as RelativeAuthority;
+
+fn forge(authority: &RelativeAuthority, task: BayesTaskHandle, artifact: ArtifactId) {
+    let _ = RelativeAuthority::mint_artifact_handle(authority, task, artifact);
+}
 }
 "#,
     )
     .expect("relative authority fixture must parse");
     assert!(relative_import.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesArtifactHandle::mint_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::mint_artifact_handle"
     }));
 
     let nested_forward_alias = bayes_worker_source_violations(
         "src-tauri/src/application/nested_alias_authority.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker as w;
+use yss_bayes_worker as w;
 
 mod nested {
     type A = B;
-    type B = super::w::BayesTaskResult;
+    type B = super::w::BayesWorkerAuthority;
 
     fn forge() {
-        let build = A::validated_worker_result;
+        let build = A::task_result;
     }
 }
 "#,
@@ -2097,7 +2124,7 @@ mod nested {
     .expect("nested forward alias fixture must parse");
     assert!(nested_forward_alias.iter().any(|finding| {
         finding.kind == "authority-reference"
-            && finding.target == "BayesTaskResult::validated_worker_result"
+            && finding.target == "BayesWorkerAuthority::task_result"
     }));
 
     let unrelated = bayes_worker_source_violations(
@@ -2124,17 +2151,18 @@ fn bayes_group_self_module_alias_is_canonicalized() {
         "src-tauri/src/application/group_self_authority.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker::{self as w};
-use w::BayesTaskHandle as Handle;
+use yss_bayes_worker::{self as w};
+use w::BayesWorkerAuthority as Authority;
 
-fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
-    let _ = Handle::issue_for_worker(task_id, generation);
+fn forge(authority: &Authority, task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Authority::issue_task_handle(authority, task_id, generation);
 }
 "#,
     )
     .expect("group self authority fixture must parse");
     assert!(findings.iter().any(|finding| {
-        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+        finding.kind == "authority-call"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
 }
 
@@ -2144,27 +2172,27 @@ fn bayes_restricted_associated_functions_are_rejected() {
         "src-tauri/src/application/restricted_worker_impl.rs",
         RustLayer::Application,
         r#"
-use crate::sci::api::bayes::worker::BayesTaskHandle;
+use yss_bayes_worker::BayesWorkerAuthority;
 
-impl BayesTaskHandle {
+impl BayesWorkerAuthority {
     pub(super) fn from_parts() {}
     pub(in crate::application) fn forge() {}
-    pub(in crate) fn issue_for_worker() {}
+    pub(in crate) fn issue_task_handle() {}
 }
 "#,
     )
     .expect("restricted authority fixture must parse");
     assert!(findings.iter().any(|finding| {
         finding.kind == "restricted-associated-function"
-            && finding.target == "BayesTaskHandle::from_parts"
+            && finding.target == "BayesWorkerAuthority::from_parts"
     }));
     assert!(findings.iter().any(|finding| {
         finding.kind == "restricted-associated-function"
-            && finding.target == "BayesTaskHandle::forge"
+            && finding.target == "BayesWorkerAuthority::forge"
     }));
     assert!(findings.iter().any(|finding| {
         finding.kind == "restricted-associated-function"
-            && finding.target == "BayesTaskHandle::issue_for_worker"
+            && finding.target == "BayesWorkerAuthority::issue_task_handle"
     }));
 }
 
@@ -2270,12 +2298,8 @@ fn bayes_worker_result_is_neutral_and_path_free() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
         .expect("the real Cargo workspace must be discoverable");
-    let worker_source = std::fs::read_to_string(
-        workspace
-            .repository_root
-            .join("src-tauri/src/sci/api/bayes/worker.rs"),
-    )
-    .expect("Bayes worker source must be readable");
+    let worker_source = std::fs::read_to_string(workspace.repository_root.join(WORKER_FILE))
+        .expect("Bayes worker source must be readable");
     let actual = bayes_worker_result_neutrality_violations(&worker_source)
         .expect("Bayes worker source must parse");
     assert!(

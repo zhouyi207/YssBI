@@ -7,10 +7,10 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::sci::api::bayes::worker::{
+use yss_bayes_worker::{
     BayesArtifact, BayesArtifactHandle, BayesCancelTerminal, BayesTaskHandle, BayesTaskId,
-    BayesTaskResult, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
-    ValidatedBayesTask,
+    BayesTaskResult, BayesWorkerAuthority, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort,
+    BayesWorkerTerminalCode, ValidatedBayesTask,
 };
 use yss_julia_worker::{JuliaWorkerError, JuliaWorkerManager, JuliaWorkerTaskDirectory};
 use yss_sci_contract::{CancelDeliveryControl, ExecutionControl};
@@ -109,6 +109,7 @@ impl JuliaBayesWorkerAdapter {
 
     fn issue_handle(
         &self,
+        authority: &BayesWorkerAuthority,
         task_id: BayesTaskId,
     ) -> Result<(BayesTaskHandle, u64), BayesWorkerError> {
         let mut current = self.next_generation.load(Ordering::Acquire);
@@ -130,7 +131,7 @@ impl JuliaBayesWorkerAdapter {
             ) {
                 Ok(_) => {
                     return Ok((
-                        BayesTaskHandle::issue_for_worker(task_id, generation),
+                        BayesWorkerAuthority::issue_task_handle(authority, task_id, generation),
                         current,
                     ));
                 }
@@ -205,6 +206,7 @@ impl JuliaBayesWorkerAdapter {
 impl BayesWorkerPort for JuliaBayesWorkerAdapter {
     fn start(
         &self,
+        authority: &BayesWorkerAuthority,
         task: ValidatedBayesTask,
         control: &ExecutionControl,
     ) -> Result<BayesTaskHandle, BayesWorkerError> {
@@ -226,7 +228,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
         if control.is_expired(Instant::now()) {
             return Err(BayesWorkerError::AcceptanceDeadline { task: task_id });
         }
-        let (handle, generation) = self.issue_handle(task_id.clone())?;
+        let (handle, generation) = self.issue_handle(authority, task_id.clone())?;
         let worker_task_id = format!("bayes-{generation}");
         let app_data_dir = self.app_data_dir.clone();
         let runtime = Arc::clone(&self.runtime);
@@ -260,6 +262,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
 
     fn await_result(
         &self,
+        authority: &BayesWorkerAuthority,
         handle: &BayesTaskHandle,
         control: &ExecutionControl,
     ) -> Result<BayesTaskResult, BayesWorkerError> {
@@ -324,7 +327,8 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
             };
             match receiver.recv_timeout(remaining.min(CONTROL_POLL_INTERVAL)) {
                 Ok(Ok(completion)) => {
-                    let completed = fit::finish_task(handle, &expected_worker_task_id, completion)?;
+                    let completed =
+                        fit::finish_task(authority, handle, &expected_worker_task_id, completion)?;
                     return self.store_completion(handle, completed);
                 }
                 Ok(Err(error)) => {
@@ -428,6 +432,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
 
     fn read_artifact(
         &self,
+        authority: &BayesWorkerAuthority,
         artifact: &BayesArtifactHandle,
         control: &ExecutionControl,
     ) -> Result<BayesArtifact, BayesWorkerError> {
@@ -472,7 +477,8 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 artifact: artifact.clone(),
             });
         }
-        Ok(BayesArtifact::from_worker(
+        Ok(BayesWorkerAuthority::artifact(
+            authority,
             artifact.clone(),
             media_type,
             Arc::from(bytes),
@@ -492,11 +498,11 @@ mod tests {
     use super::{
         JuliaBayesRuntime, JuliaBayesWorkerAdapter, JuliaTaskCompletion, PreparedJuliaTask,
     };
-    use crate::sci::api::bayes::worker::{
-        ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId,
-        BayesWorkerError, BayesWorkerPort, ValidatedBayesTask,
-    };
     use yss_bayes_model::BayesModelSpec;
+    use yss_bayes_worker::{
+        BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId, BayesWorkerClient,
+        BayesWorkerError, ValidatedBayesTask,
+    };
     use yss_julia_worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
     use yss_sci_contract::{
         AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
@@ -700,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn accepted_result_maps_owned_artifacts_and_rejects_stale_or_foreign_handles() {
+    fn accepted_result_maps_owned_artifacts_and_rejects_stale_handles() {
         let root = TemporaryAppRoot::new("julia-adapter-result");
         let runtime = Arc::new(FakeRuntime::new([
             FakeRun {
@@ -716,7 +722,10 @@ mod tests {
                 gate: None,
             },
         ]));
-        let adapter = JuliaBayesWorkerAdapter::with_runtime(root.path(), runtime);
+        let adapter = BayesWorkerClient::new(Arc::new(JuliaBayesWorkerAdapter::with_runtime(
+            root.path(),
+            runtime,
+        )));
         let (run_control, _, _) = controls();
         let first = adapter
             .start(validated_task("shared-task"), &run_control)
@@ -749,16 +758,8 @@ mod tests {
             adapter.read_artifact(&result.artifacts()[0], &run_control),
             Err(BayesWorkerError::StaleTaskHandle { task }) if task == first
         ));
-        let foreign = BayesArtifactHandle::mint_for_worker(
-            second,
-            ArtifactId::try_from("foreign.json").expect("artifact ID must validate"),
-        );
-        assert!(matches!(
-            adapter.read_artifact(&foreign, &run_control),
-            Err(BayesWorkerError::ArtifactNotOwned { artifact }) if artifact == foreign
-        ));
         let second_result = adapter
-            .await_result(foreign.task(), &run_control)
+            .await_result(&second, &run_control)
             .expect("second generation must finish before its temporary root is released");
         assert!(second_result.artifacts().is_empty());
     }
@@ -777,7 +778,10 @@ mod tests {
                 gate: None,
             },
         ]));
-        let adapter = JuliaBayesWorkerAdapter::with_runtime(root.path(), runtime.clone());
+        let adapter = BayesWorkerClient::new(Arc::new(JuliaBayesWorkerAdapter::with_runtime(
+            root.path(),
+            runtime.clone(),
+        )));
         let (run_control, cancel_control, now) = controls();
         let (_source, token) = SciCancellationSource::new();
         let expired_run = ExecutionControl::new(token, AbsoluteDeadline::at(now));

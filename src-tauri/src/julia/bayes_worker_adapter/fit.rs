@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use super::JuliaTaskCompletion;
 use super::predictor::{JuliaGeneratedModel, JuliaModelGenerationError, generate_julia_model};
-use crate::sci::api::bayes::worker::{
-    ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesInferenceSnapshot,
-    BayesTaskHandle, BayesTaskResult, BayesWorkerError, ValidatedBayesTask,
-};
 use yss_bayes_model::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
 use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
+use yss_bayes_worker::{
+    ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult,
+    BayesWorkerAuthority, BayesWorkerError, BayesWorkerTerminalCode, ValidatedBayesTask,
+};
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
     JuliaWorkerTaskDirectory,
@@ -324,6 +324,7 @@ struct JuliaArtifactRecord {
 }
 
 pub(super) fn finish_task(
+    authority: &BayesWorkerAuthority,
     handle: &BayesTaskHandle,
     expected_worker_task_id: &str,
     completion: JuliaTaskCompletion,
@@ -347,7 +348,8 @@ pub(super) fn finish_task(
             .and_then(|name| name.to_str())
             .ok_or_else(|| worker_terminal(handle))?;
         let artifact_id = ArtifactId::try_from(name).map_err(|_| worker_terminal(handle))?;
-        let artifact = BayesArtifactHandle::mint_for_worker(handle.clone(), artifact_id);
+        let artifact =
+            BayesWorkerAuthority::mint_artifact_handle(authority, handle.clone(), artifact_id);
         let path = completion
             .task_directory
             .claim_artifact(&record.path)
@@ -363,12 +365,14 @@ pub(super) fn finish_task(
         }
         handles.push(artifact);
     }
-    let inference = BayesInferenceSnapshot::from_worker(
+    let inference = BayesWorkerAuthority::inference_snapshot(
+        authority,
         handle.clone(),
         Arc::from(metadata.summaries),
         metadata.diagnostics,
     );
-    let result = BayesTaskResult::validated_worker_result(handle, inference, Arc::from(handles))?;
+    let result =
+        BayesWorkerAuthority::task_result(authority, handle, inference, Arc::from(handles))?;
     Ok(CompletedJuliaTask {
         result,
         artifacts,
@@ -396,7 +400,7 @@ fn artifact_media_type(
 fn worker_terminal(handle: &BayesTaskHandle) -> BayesWorkerError {
     BayesWorkerError::WorkerTerminal {
         task: handle.clone(),
-        terminal: crate::sci::api::bayes::worker::BayesWorkerTerminalCode::Failed,
+        terminal: BayesWorkerTerminalCode::Failed,
     }
 }
 

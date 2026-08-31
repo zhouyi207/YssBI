@@ -2,7 +2,6 @@
 mod backend;
 #[cfg(test)]
 mod input_validation;
-pub mod worker;
 
 #[cfg(test)]
 pub use backend::*;

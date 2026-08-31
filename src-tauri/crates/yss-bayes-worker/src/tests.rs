@@ -8,8 +8,8 @@ use super::{
     ArtifactId, ArtifactIdValidationError, BayesArtifact, BayesArtifactHandle,
     BayesArtifactMediaType, BayesCancelTerminal, BayesInferenceSnapshot, BayesTaskHandle,
     BayesTaskId, BayesTaskIdValidationError, BayesTaskResult, BayesTaskValidationError,
-    BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
-    ValidatedBayesTask,
+    BayesWorkerAuthority, BayesWorkerClient, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort,
+    BayesWorkerTerminalCode, ValidatedBayesTask,
 };
 use yss_bayes_model::{BayesModelSpec, Expression};
 use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
@@ -89,7 +89,8 @@ fn valid_inputs() -> Arc<[StatisticalInput]> {
 }
 
 fn task_handle(task_id: &BayesTaskId, generation: u64) -> BayesTaskHandle {
-    BayesTaskHandle::issue_for_worker(
+    BayesWorkerAuthority::issue_task_handle(
+        &BayesWorkerAuthority { _private: () },
         task_id.clone(),
         NonZeroU64::new(generation).expect("test generation must be non-zero"),
     )
@@ -117,7 +118,12 @@ fn inference_snapshot(task: &BayesTaskHandle) -> BayesInferenceSnapshot {
         "warnings": []
     }))
     .expect("neutral diagnostics must deserialize");
-    BayesInferenceSnapshot::from_worker(task.clone(), Arc::from(summaries), diagnostics)
+    BayesWorkerAuthority::inference_snapshot(
+        &BayesWorkerAuthority { _private: () },
+        task.clone(),
+        Arc::from(summaries),
+        diagnostics,
+    )
 }
 
 fn validated_task(task_id: &str) -> ValidatedBayesTask {
@@ -243,7 +249,11 @@ impl FakeWorker {
         artifact_id: ArtifactId,
         bytes: &'static [u8],
     ) -> BayesArtifactHandle {
-        let handle = BayesArtifactHandle::mint_for_worker(task, artifact_id);
+        let handle = BayesWorkerAuthority::mint_artifact_handle(
+            &BayesWorkerAuthority { _private: () },
+            task,
+            artifact_id,
+        );
         self.state
             .lock()
             .expect("test state lock must be available")
@@ -277,6 +287,7 @@ impl FakeWorker {
 impl BayesWorkerPort for FakeWorker {
     fn start(
         &self,
+        authority: &BayesWorkerAuthority,
         task: ValidatedBayesTask,
         control: &ExecutionControl,
     ) -> Result<BayesTaskHandle, BayesWorkerError> {
@@ -299,7 +310,8 @@ impl BayesWorkerPort for FakeWorker {
 
         let generation = NonZeroU64::new(self.next_generation.fetch_add(1, Ordering::Relaxed))
             .expect("test generation must stay non-zero");
-        let handle = BayesTaskHandle::issue_for_worker(task_id.clone(), generation);
+        let handle =
+            BayesWorkerAuthority::issue_task_handle(authority, task_id.clone(), generation);
         let mut state = self
             .state
             .lock()
@@ -311,6 +323,7 @@ impl BayesWorkerPort for FakeWorker {
 
     fn await_result(
         &self,
+        authority: &BayesWorkerAuthority,
         handle: &BayesTaskHandle,
         _control: &ExecutionControl,
     ) -> Result<BayesTaskResult, BayesWorkerError> {
@@ -326,7 +339,8 @@ impl BayesWorkerPort for FakeWorker {
                 phase: BayesWorkerPhase::AwaitResult,
             }),
             FakeTaskState::Terminal(BayesWorkerTerminalCode::Succeeded) => {
-                BayesTaskResult::validated_worker_result(
+                BayesWorkerAuthority::task_result(
+                    authority,
                     handle,
                     inference_snapshot(handle),
                     Arc::from([]),
@@ -385,6 +399,7 @@ impl BayesWorkerPort for FakeWorker {
 
     fn read_artifact(
         &self,
+        authority: &BayesWorkerAuthority,
         artifact: &BayesArtifactHandle,
         control: &ExecutionControl,
     ) -> Result<BayesArtifact, BayesWorkerError> {
@@ -413,10 +428,80 @@ impl BayesWorkerPort for FakeWorker {
                 artifact: artifact.clone(),
             });
         }
-        Ok(BayesArtifact::from_worker(
+        Ok(BayesWorkerAuthority::artifact(
+            authority,
             artifact.clone(),
             media_type,
             bytes,
+        ))
+    }
+}
+
+struct CrossTaskWorker;
+
+impl BayesWorkerPort for CrossTaskWorker {
+    fn start(
+        &self,
+        authority: &BayesWorkerAuthority,
+        task: ValidatedBayesTask,
+        _control: &ExecutionControl,
+    ) -> Result<BayesTaskHandle, BayesWorkerError> {
+        Ok(BayesWorkerAuthority::issue_task_handle(
+            authority,
+            task.task_id().clone(),
+            NonZeroU64::new(1).expect("test generation must be non-zero"),
+        ))
+    }
+
+    fn await_result(
+        &self,
+        authority: &BayesWorkerAuthority,
+        handle: &BayesTaskHandle,
+        _control: &ExecutionControl,
+    ) -> Result<BayesTaskResult, BayesWorkerError> {
+        let other = BayesWorkerAuthority::issue_task_handle(
+            authority,
+            BayesTaskId::try_from("cross-task").expect("test task ID must validate"),
+            NonZeroU64::new(1).expect("test generation must be non-zero"),
+        );
+        let snapshot = BayesWorkerAuthority::inference_snapshot(
+            authority,
+            other.clone(),
+            Arc::from([]),
+            inference_snapshot(handle).diagnostics().clone(),
+        );
+        BayesWorkerAuthority::task_result(authority, &other, snapshot, Arc::from([]))
+    }
+
+    fn cancel(
+        &self,
+        _handle: &BayesTaskHandle,
+        _control: &CancelDeliveryControl,
+    ) -> Result<BayesCancelTerminal, BayesWorkerError> {
+        Ok(BayesCancelTerminal::Cancelled)
+    }
+
+    fn read_artifact(
+        &self,
+        authority: &BayesWorkerAuthority,
+        artifact: &BayesArtifactHandle,
+        _control: &ExecutionControl,
+    ) -> Result<BayesArtifact, BayesWorkerError> {
+        let wrong_task = BayesWorkerAuthority::issue_task_handle(
+            authority,
+            artifact.task().task_id().clone(),
+            NonZeroU64::new(2).expect("test generation must be non-zero"),
+        );
+        let wrong_artifact = BayesWorkerAuthority::mint_artifact_handle(
+            authority,
+            wrong_task,
+            artifact.artifact_id().clone(),
+        );
+        Ok(BayesWorkerAuthority::artifact(
+            authority,
+            wrong_artifact,
+            BayesArtifactMediaType::Json,
+            Arc::from(&b"{}"[..]),
         ))
     }
 }
@@ -546,10 +631,15 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
     let awaited = task_handle(&task_id, 1);
     let other_generation = task_handle(&task_id, 2);
     let artifact_id = ArtifactId::try_from("summary.json").expect("valid artifact ID");
-    let matching_artifact =
-        BayesArtifactHandle::mint_for_worker(awaited.clone(), artifact_id.clone());
+    let authority = BayesWorkerAuthority { _private: () };
+    let matching_artifact = BayesWorkerAuthority::mint_artifact_handle(
+        &authority,
+        awaited.clone(),
+        artifact_id.clone(),
+    );
 
-    let result = BayesTaskResult::validated_worker_result(
+    let result = BayesWorkerAuthority::task_result(
+        &authority,
         &awaited,
         inference_snapshot(&awaited),
         Arc::from([matching_artifact.clone()]),
@@ -558,10 +648,11 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
     assert_eq!(result.task(), &awaited);
     assert_eq!(result.inference().summaries()[0].parameter(), "beta");
     assert_eq!(result.inference().diagnostics().chains(), 1);
-    assert_eq!(result.artifacts(), [matching_artifact.clone()]);
+    assert_eq!(result.artifacts(), std::slice::from_ref(&matching_artifact));
 
     assert!(matches!(
-        BayesTaskResult::validated_worker_result(
+        BayesWorkerAuthority::task_result(
+            &authority,
             &awaited,
             inference_snapshot(&other_generation),
             Arc::from([]),
@@ -569,9 +660,11 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
         Err(BayesWorkerError::StaleTaskHandle { task }) if task == other_generation
     ));
 
-    let foreign_artifact = BayesArtifactHandle::mint_for_worker(other_generation, artifact_id);
+    let foreign_artifact =
+        BayesWorkerAuthority::mint_artifact_handle(&authority, other_generation, artifact_id);
     assert!(matches!(
-        BayesTaskResult::validated_worker_result(
+        BayesWorkerAuthority::task_result(
+            &authority,
             &awaited,
             inference_snapshot(&awaited),
             Arc::from([foreign_artifact.clone()]),
@@ -579,7 +672,8 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
         Err(BayesWorkerError::ArtifactNotOwned { artifact }) if artifact == foreign_artifact
     ));
 
-    let artifact = BayesArtifact::from_worker(
+    let artifact = BayesWorkerAuthority::artifact(
+        &authority,
         matching_artifact.clone(),
         BayesArtifactMediaType::Json,
         Arc::from(&b"{}"[..]),
@@ -587,6 +681,36 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
     assert_eq!(artifact.handle(), &matching_artifact);
     assert_eq!(artifact.media_type(), BayesArtifactMediaType::Json);
     assert_eq!(artifact.bytes(), b"{}");
+}
+
+#[test]
+fn client_revalidates_cross_task_results_and_artifact_reads() {
+    let now = Instant::now();
+    let deadline = now
+        .checked_add(Duration::from_secs(5))
+        .expect("test deadline must be representable");
+    let control = execution_control(deadline);
+    let client = BayesWorkerClient::new(Arc::new(CrossTaskWorker));
+    let handle = client
+        .start(validated_task("client-task"), &control)
+        .expect("matching start handle must be accepted");
+
+    assert!(matches!(
+        client.await_result(&handle, &control),
+        Err(BayesWorkerError::StaleTaskHandle { task })
+            if task.task_id().as_str() == "cross-task"
+    ));
+
+    let requested = BayesWorkerAuthority::mint_artifact_handle(
+        &BayesWorkerAuthority { _private: () },
+        handle,
+        ArtifactId::try_from("summary.json").expect("artifact ID must validate"),
+    );
+    assert!(matches!(
+        client.read_artifact(&requested, &control),
+        Err(BayesWorkerError::ArtifactNotOwned { artifact })
+            if artifact.task().generation() != requested.task().generation()
+    ));
 }
 
 #[test]
@@ -598,9 +722,10 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
 
     let start_gate = TestGate::new();
     let gated_worker = Arc::new(FakeWorker::with_gates(now, Some(start_gate.clone()), None));
+    let gated_client = BayesWorkerClient::new(gated_worker.clone());
     let (cancel_source, cancel_token) = SciCancellationSource::new();
     let start_control = ExecutionControl::new(cancel_token, AbsoluteDeadline::at(future));
-    let start_worker = Arc::clone(&gated_worker);
+    let start_worker = gated_client.clone();
     let start_thread = std::thread::spawn(move || {
         start_worker.start(validated_task("pre-publication"), &start_control)
     });
@@ -614,7 +739,8 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     ));
     assert_eq!(gated_worker.tracked_task_count(), 0);
 
-    let worker = FakeWorker::new(now);
+    let worker_port = Arc::new(FakeWorker::new(now));
+    let worker = BayesWorkerClient::new(worker_port.clone());
     let run_control = execution_control(future);
     let cancel_first = worker
         .start(validated_task("cancel-first"), &run_control)
@@ -644,7 +770,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     let completion_first = worker
         .start(validated_task("completion-first"), &run_control)
         .expect("start must publish a handle");
-    worker.complete(&completion_first, BayesWorkerTerminalCode::Succeeded);
+    worker_port.complete(&completion_first, BayesWorkerTerminalCode::Succeeded);
     assert_eq!(
         worker.cancel(&completion_first, &cancel_control),
         Ok(BayesCancelTerminal::AlreadyTerminal {
@@ -662,7 +788,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     let failed = worker
         .start(validated_task("failed"), &run_control)
         .expect("start must publish a handle");
-    worker.complete(&failed, BayesWorkerTerminalCode::Failed);
+    worker_port.complete(&failed, BayesWorkerTerminalCode::Failed);
     assert!(matches!(
         worker.await_result(&failed, &run_control),
         Err(BayesWorkerError::WorkerTerminal {
@@ -678,7 +804,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     run_cancel_source.cancel();
     let cancelled_run = ExecutionControl::new(run_cancel_token, AbsoluteDeadline::at(future));
     assert!(cancelled_run.is_cancelled());
-    let attempts_before = worker.cancel_attempts();
+    let attempts_before = worker_port.cancel_attempts();
     assert!(matches!(
         worker.cancel(
             &independent_cancel,
@@ -687,7 +813,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
         Err(BayesWorkerError::CancelDeliveryDeadline { task })
             if task == independent_cancel
     ));
-    assert_eq!(worker.cancel_attempts(), attempts_before + 1);
+    assert_eq!(worker_port.cancel_attempts(), attempts_before + 1);
     assert_eq!(
         worker.cancel(&independent_cancel, &cancel_control),
         Ok(BayesCancelTerminal::Cancelled)
@@ -698,7 +824,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
         .start(validated_task("artifact-task"), &run_control)
         .expect("first generation must start");
     let first_artifact =
-        worker.add_artifact(first_generation.clone(), artifact_id.clone(), b"first");
+        worker_port.add_artifact(first_generation.clone(), artifact_id.clone(), b"first");
     assert_eq!(
         worker
             .read_artifact(&first_artifact, &run_control)
@@ -711,7 +837,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
         .start(validated_task("artifact-task"), &run_control)
         .expect("second generation must start");
     let second_artifact =
-        worker.add_artifact(second_generation.clone(), artifact_id.clone(), b"second");
+        worker_port.add_artifact(second_generation.clone(), artifact_id.clone(), b"second");
     assert_eq!(
         worker
             .read_artifact(&second_artifact, &run_control)
@@ -727,7 +853,11 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     let other_task = worker
         .start(validated_task("other-task"), &run_control)
         .expect("other task must start");
-    let foreign_lookup = BayesArtifactHandle::mint_for_worker(other_task, artifact_id.clone());
+    let foreign_lookup = BayesWorkerAuthority::mint_artifact_handle(
+        &BayesWorkerAuthority { _private: () },
+        other_task,
+        artifact_id.clone(),
+    );
     assert!(matches!(
         worker.read_artifact(&foreign_lookup, &run_control),
         Err(BayesWorkerError::ArtifactNotOwned { artifact })
@@ -736,13 +866,14 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
 
     let read_gate = TestGate::new();
     let deadline_worker = Arc::new(FakeWorker::with_gates(now, None, Some(read_gate.clone())));
+    let deadline_client = BayesWorkerClient::new(deadline_worker.clone());
     let deadline_control = execution_control(future);
-    let deadline_task = deadline_worker
+    let deadline_task = deadline_client
         .start(validated_task("deadline-task"), &deadline_control)
         .expect("deadline task must start");
     let deadline_artifact =
         deadline_worker.add_artifact(deadline_task, artifact_id, b"never-returned");
-    let read_worker = Arc::clone(&deadline_worker);
+    let read_worker = deadline_client.clone();
     let expected_artifact = deadline_artifact.clone();
     let read_thread = std::thread::spawn(move || {
         read_worker.read_artifact(&deadline_artifact, &deadline_control)

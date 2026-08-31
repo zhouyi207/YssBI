@@ -9,10 +9,6 @@ use std::time::Instant;
 use polars::prelude::{Column, DataFrame, Float64Chunked};
 
 use crate::error::new_diagnostic_incident_id;
-use crate::sci::api::bayes::worker::{
-    BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult, BayesWorkerError, BayesWorkerPort,
-    ValidatedBayesTask, validate_bayes_task,
-};
 #[cfg(test)]
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesInputValidationError,
@@ -30,6 +26,10 @@ use yss_bayes_result::{
     AutocorrelationPoint, AutocorrelationSeries, DensityPoint, DensitySeries,
     PosteriorPredictiveRow, PosteriorPredictiveSummary, PosteriorSampleRow, TracePoint,
     TraceSeries,
+};
+use yss_bayes_worker::{
+    BayesArtifactMediaType, BayesTaskHandle, BayesTaskId, BayesTaskResult, BayesWorkerClient,
+    BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, ValidatedBayesTask,
 };
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
@@ -341,7 +341,7 @@ pub struct BayesInferenceService {
     artifact_reader: Arc<dyn BayesArtifactReader>,
     #[cfg(test)]
     backend: Arc<dyn BayesBackend>,
-    worker: Option<Arc<dyn BayesWorkerPort>>,
+    worker: Option<BayesWorkerClient>,
     worker_app_data_dir: Option<PathBuf>,
 }
 
@@ -411,7 +411,7 @@ impl BayesInferenceService {
             artifact_reader,
             #[cfg(test)]
             backend: Arc::new(PlaceholderBayesBackend),
-            worker: Some(worker),
+            worker: Some(BayesWorkerClient::new(worker)),
             worker_app_data_dir: Some(app_data_dir.into()),
         }
     }
@@ -521,7 +521,9 @@ impl BayesInferenceService {
         inputs: Arc<[StatisticalInput]>,
     ) -> Result<BayesInferenceTask, BayesApplicationError> {
         let task_id = new_task_id();
-        let task = validate_bayes_task(task_id.as_str(), spec, inputs)
+        let worker_task_id = BayesTaskId::try_from(task_id.as_str())
+            .map_err(|_| BayesApplicationError::ValidationFailed)?;
+        let task = ValidatedBayesTask::try_new(worker_task_id, spec, inputs)
             .map_err(|_| BayesApplicationError::ValidationFailed)?;
         let cancellation = Arc::new(SciCancellationSource::new().0);
         let queued = queued_task(task_id.clone());
@@ -615,7 +617,7 @@ impl BayesInferenceService {
     }
 
     pub fn cancel(&self, task_id: &str) -> Result<(), BayesApplicationError> {
-        let (should_cancel_backend, worker_cancel) = {
+        let (_should_cancel_backend, worker_cancel) = {
             let mut state = self.lock_state()?;
             let task = state
                 .tasks
@@ -668,7 +670,7 @@ impl BayesInferenceService {
             }
         }
         #[cfg(all(test, any()))]
-        if should_cancel_backend {
+        if _should_cancel_backend {
             self.backend
                 .cancel(task_id)
                 .map_err(|source| BayesApplicationError::CancelFailed {
@@ -850,7 +852,7 @@ fn run_backend_queue(inner: Arc<Mutex<BayesInferenceState>>, backend: Arc<dyn Ba
 
 fn run_worker_queue(
     inner: Arc<Mutex<BayesInferenceState>>,
-    worker: Arc<dyn BayesWorkerPort>,
+    worker: BayesWorkerClient,
     app_data_dir: PathBuf,
 ) {
     while let Some(job) = pop_next_worker_job(&inner) {
@@ -907,7 +909,7 @@ fn pop_next_worker_job(inner: &Arc<Mutex<BayesInferenceState>>) -> Option<BayesW
 
 fn finish_worker_task(
     inner: &Arc<Mutex<BayesInferenceState>>,
-    worker: &Arc<dyn BayesWorkerPort>,
+    worker: &BayesWorkerClient,
     app_data_dir: &Path,
     task_id: String,
     worker_result: Result<BayesTaskResult, BayesWorkerError>,
@@ -935,10 +937,8 @@ fn finish_worker_task(
     }
 
     let materialized: Result<StoredInferenceResult, BayesTaskFailure> = match worker_result {
-        Ok(result) => {
-            materialize_worker_result(worker.as_ref(), app_data_dir, &task_id, &result, control)
-                .map_err(bayes_worker_backend_error)
-        }
+        Ok(result) => materialize_worker_result(worker, app_data_dir, &task_id, &result, control)
+            .map_err(bayes_worker_backend_error),
         Err(error) => Err(bayes_worker_backend_error(error)),
     };
     match materialized {
@@ -977,7 +977,7 @@ fn finish_worker_task(
 }
 
 fn materialize_worker_result(
-    worker: &dyn BayesWorkerPort,
+    worker: &BayesWorkerClient,
     app_data_dir: &Path,
     task_id: &str,
     result: &BayesTaskResult,
@@ -1032,7 +1032,7 @@ fn materialize_worker_result(
 
 fn artifact_io_error() -> BayesWorkerError {
     BayesWorkerError::WorkerUnavailable {
-        phase: crate::sci::api::bayes::worker::BayesWorkerPhase::ReadArtifact,
+        phase: BayesWorkerPhase::ReadArtifact,
     }
 }
 

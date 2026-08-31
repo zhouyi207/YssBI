@@ -9108,6 +9108,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-bayes-worker"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-bayes-model",
+ "yss-bayes-result",
+ "yss-sci-contract",
+]
+
+[[package]]
 name = "yss-canonical-hash"
 version = "0.1.0"
 dependencies = [
@@ -9760,6 +9771,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "yss-bayes-model",
  "yss-bayes-result",
+ "yss-bayes-worker",
  "yss-canonical-hash",
  "yss-computation-settings",
  "yss-data-contract",

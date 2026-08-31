@@ -287,40 +287,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         ],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
-        fully_qualified_owner: "yssbi_lib::julia::bayes_worker_adapter",
-        canonical_origin_targets: &[
-            "yssbi_lib::sci::api::bayes::worker::BayesArtifact",
-            "yssbi_lib::sci::api::bayes::worker::BayesArtifactHandle",
-            "yssbi_lib::sci::api::bayes::worker::BayesCancelTerminal",
-            "yssbi_lib::sci::api::bayes::worker::BayesTaskHandle",
-            "yssbi_lib::sci::api::bayes::worker::BayesTaskId",
-            "yssbi_lib::sci::api::bayes::worker::BayesTaskResult",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerError",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerPhase",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerPort",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerTerminalCode",
-            "yssbi_lib::sci::api::bayes::worker::ValidatedBayesTask",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
-        fully_qualified_owner: "yssbi_lib::julia::bayes_worker_adapter::fit",
-        canonical_origin_targets: &[
-            "yssbi_lib::sci::api::bayes::worker::ArtifactId",
-            "yssbi_lib::sci::api::bayes::worker::BayesArtifactHandle",
-            "yssbi_lib::sci::api::bayes::worker::BayesArtifactMediaType",
-            "yssbi_lib::sci::api::bayes::worker::BayesInferenceSnapshot",
-            "yssbi_lib::sci::api::bayes::worker::BayesTaskHandle",
-            "yssbi_lib::sci::api::bayes::worker::BayesTaskResult",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerError",
-            "yssbi_lib::sci::api::bayes::worker::BayesWorkerTerminalCode::Failed",
-            "yssbi_lib::sci::api::bayes::worker::ValidatedBayesTask",
-        ],
-    },
-    InternalDependencyCapability {
         source_layer: RustLayer::CompositionRoot,
         repository_relative_source_file: "src-tauri/src/lib.rs",
         fully_qualified_owner: "yssbi_lib",
@@ -1583,6 +1549,7 @@ fn non_build_memberships(
         package,
         "yss-bayes-model"
             | "yss-bayes-result"
+            | "yss-bayes-worker"
             | "yss-canonical-hash"
             | "yss-computation-settings"
             | "yss-data-contract"

@@ -137,16 +137,6 @@ pub enum BayesTaskValidationError {
     InvalidInput { index: usize },
 }
 
-pub(crate) fn validate_bayes_task(
-    task_id: &str,
-    model: BayesModelSpec,
-    inputs: Arc<[StatisticalInput]>,
-) -> Result<ValidatedBayesTask, BayesTaskValidationError> {
-    let task_id =
-        BayesTaskId::try_from(task_id).map_err(|_| BayesTaskValidationError::InvalidTaskId)?;
-    ValidatedBayesTask::try_new(task_id, model, inputs)
-}
-
 impl ValidatedBayesTask {
     pub fn try_new(
         task_id: BayesTaskId,
@@ -192,17 +182,6 @@ pub struct BayesTaskHandle {
 }
 
 impl BayesTaskHandle {
-    #[allow(
-        dead_code,
-        reason = "worker authority stays production-unreachable until the final adapter is staged"
-    )]
-    pub(crate) fn issue_for_worker(task_id: BayesTaskId, generation: NonZeroU64) -> Self {
-        Self {
-            task_id,
-            generation: BayesTaskGeneration(generation.get()),
-        }
-    }
-
     pub fn task_id(&self) -> &BayesTaskId {
         &self.task_id
     }
@@ -219,14 +198,6 @@ pub struct BayesArtifactHandle {
 }
 
 impl BayesArtifactHandle {
-    #[allow(
-        dead_code,
-        reason = "worker authority stays production-unreachable until the final adapter is staged"
-    )]
-    pub(crate) fn mint_for_worker(task: BayesTaskHandle, artifact: ArtifactId) -> Self {
-        Self { task, artifact }
-    }
-
     pub fn task(&self) -> &BayesTaskHandle {
         &self.task
     }
@@ -250,22 +221,6 @@ pub struct BayesArtifact {
 }
 
 impl BayesArtifact {
-    #[allow(
-        dead_code,
-        reason = "worker authority stays production-unreachable until the final adapter is staged"
-    )]
-    pub(crate) fn from_worker(
-        handle: BayesArtifactHandle,
-        media_type: BayesArtifactMediaType,
-        bytes: Arc<[u8]>,
-    ) -> Self {
-        Self {
-            handle,
-            media_type,
-            bytes,
-        }
-    }
-
     pub fn handle(&self) -> &BayesArtifactHandle {
         &self.handle
     }
@@ -327,15 +282,95 @@ pub enum BayesWorkerError {
     WorkerUnavailable { phase: BayesWorkerPhase },
 }
 
+/// A temporary construction capability supplied only during a worker-port call.
+///
+/// The private field prevents application and transport code from manufacturing worker handles
+/// or results. A port implementation receives a borrowed authority from [`BayesWorkerClient`]
+/// exactly when it needs to construct a backend response.
+pub struct BayesWorkerAuthority {
+    _private: (),
+}
+
+impl BayesWorkerAuthority {
+    pub fn issue_task_handle(
+        _authority: &Self,
+        task_id: BayesTaskId,
+        generation: NonZeroU64,
+    ) -> BayesTaskHandle {
+        BayesTaskHandle {
+            task_id,
+            generation: BayesTaskGeneration(generation.get()),
+        }
+    }
+
+    pub fn mint_artifact_handle(
+        _authority: &Self,
+        task: BayesTaskHandle,
+        artifact: ArtifactId,
+    ) -> BayesArtifactHandle {
+        BayesArtifactHandle { task, artifact }
+    }
+
+    pub fn artifact(
+        _authority: &Self,
+        handle: BayesArtifactHandle,
+        media_type: BayesArtifactMediaType,
+        bytes: Arc<[u8]>,
+    ) -> BayesArtifact {
+        BayesArtifact {
+            handle,
+            media_type,
+            bytes,
+        }
+    }
+
+    pub fn inference_snapshot(
+        _authority: &Self,
+        task: BayesTaskHandle,
+        summaries: Arc<[ParameterSummary]>,
+        diagnostics: InferenceDiagnostics,
+    ) -> BayesInferenceSnapshot {
+        BayesInferenceSnapshot {
+            task,
+            summaries,
+            diagnostics,
+        }
+    }
+
+    pub fn task_result(
+        _authority: &Self,
+        awaited: &BayesTaskHandle,
+        inference: BayesInferenceSnapshot,
+        artifacts: Arc<[BayesArtifactHandle]>,
+    ) -> Result<BayesTaskResult, BayesWorkerError> {
+        if inference.task() != awaited {
+            return Err(BayesWorkerError::StaleTaskHandle {
+                task: inference.task().clone(),
+            });
+        }
+        if let Some(artifact) = artifacts.iter().find(|artifact| artifact.task() != awaited) {
+            return Err(BayesWorkerError::ArtifactNotOwned {
+                artifact: artifact.clone(),
+            });
+        }
+        Ok(BayesTaskResult {
+            inference,
+            artifacts,
+        })
+    }
+}
+
 pub trait BayesWorkerPort: Send + Sync {
     fn start(
         &self,
+        authority: &BayesWorkerAuthority,
         task: ValidatedBayesTask,
         control: &ExecutionControl,
     ) -> Result<BayesTaskHandle, BayesWorkerError>;
 
     fn await_result(
         &self,
+        authority: &BayesWorkerAuthority,
         handle: &BayesTaskHandle,
         control: &ExecutionControl,
     ) -> Result<BayesTaskResult, BayesWorkerError>;
@@ -348,9 +383,82 @@ pub trait BayesWorkerPort: Send + Sync {
 
     fn read_artifact(
         &self,
+        authority: &BayesWorkerAuthority,
         artifact: &BayesArtifactHandle,
         control: &ExecutionControl,
     ) -> Result<BayesArtifact, BayesWorkerError>;
+}
+
+#[derive(Clone)]
+pub struct BayesWorkerClient {
+    port: Arc<dyn BayesWorkerPort>,
+}
+
+impl BayesWorkerClient {
+    pub fn new(port: Arc<dyn BayesWorkerPort>) -> Self {
+        Self { port }
+    }
+
+    pub fn start(
+        &self,
+        task: ValidatedBayesTask,
+        control: &ExecutionControl,
+    ) -> Result<BayesTaskHandle, BayesWorkerError> {
+        let expected_task_id = task.task_id().clone();
+        let authority = BayesWorkerAuthority { _private: () };
+        let handle = self.port.start(&authority, task, control)?;
+        if handle.task_id() != &expected_task_id {
+            return Err(BayesWorkerError::StaleTaskHandle { task: handle });
+        }
+        Ok(handle)
+    }
+
+    pub fn await_result(
+        &self,
+        handle: &BayesTaskHandle,
+        control: &ExecutionControl,
+    ) -> Result<BayesTaskResult, BayesWorkerError> {
+        let authority = BayesWorkerAuthority { _private: () };
+        let result = self.port.await_result(&authority, handle, control)?;
+        if result.task() != handle {
+            return Err(BayesWorkerError::StaleTaskHandle {
+                task: result.task().clone(),
+            });
+        }
+        if let Some(artifact) = result
+            .artifacts()
+            .iter()
+            .find(|artifact| artifact.task() != handle)
+        {
+            return Err(BayesWorkerError::ArtifactNotOwned {
+                artifact: artifact.clone(),
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn cancel(
+        &self,
+        handle: &BayesTaskHandle,
+        control: &CancelDeliveryControl,
+    ) -> Result<BayesCancelTerminal, BayesWorkerError> {
+        self.port.cancel(handle, control)
+    }
+
+    pub fn read_artifact(
+        &self,
+        artifact: &BayesArtifactHandle,
+        control: &ExecutionControl,
+    ) -> Result<BayesArtifact, BayesWorkerError> {
+        let authority = BayesWorkerAuthority { _private: () };
+        let result = self.port.read_artifact(&authority, artifact, control)?;
+        if result.handle() != artifact {
+            return Err(BayesWorkerError::ArtifactNotOwned {
+                artifact: result.handle().clone(),
+            });
+        }
+        Ok(result)
+    }
 }
 
 pub struct BayesTaskResult {
@@ -365,22 +473,6 @@ pub struct BayesInferenceSnapshot {
 }
 
 impl BayesInferenceSnapshot {
-    #[allow(
-        dead_code,
-        reason = "worker result authority stays unreachable until the final adapter is staged"
-    )]
-    pub(crate) fn from_worker(
-        task: BayesTaskHandle,
-        summaries: Arc<[ParameterSummary]>,
-        diagnostics: InferenceDiagnostics,
-    ) -> Self {
-        Self {
-            task,
-            summaries,
-            diagnostics,
-        }
-    }
-
     pub fn task(&self) -> &BayesTaskHandle {
         &self.task
     }
@@ -395,31 +487,6 @@ impl BayesInferenceSnapshot {
 }
 
 impl BayesTaskResult {
-    #[allow(
-        dead_code,
-        reason = "worker authority stays production-unreachable until the final adapter is staged"
-    )]
-    pub(crate) fn validated_worker_result(
-        awaited: &BayesTaskHandle,
-        inference: BayesInferenceSnapshot,
-        artifacts: Arc<[BayesArtifactHandle]>,
-    ) -> Result<Self, BayesWorkerError> {
-        if inference.task() != awaited {
-            return Err(BayesWorkerError::StaleTaskHandle {
-                task: inference.task().clone(),
-            });
-        }
-        if let Some(artifact) = artifacts.iter().find(|artifact| artifact.task() != awaited) {
-            return Err(BayesWorkerError::ArtifactNotOwned {
-                artifact: artifact.clone(),
-            });
-        }
-        Ok(Self {
-            inference,
-            artifacts,
-        })
-    }
-
     pub fn task(&self) -> &BayesTaskHandle {
         self.inference.task()
     }

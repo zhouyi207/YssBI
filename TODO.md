@@ -830,3 +830,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   与仅测试挂载的重复 Julia Bayes backend，让 Commands、Application、worker 和 Julia adapter 直接消费唯一 owner；
   artifact lease 由 Application 的 materialization 清单唯一管理，不再嵌入可序列化 result，同时拒绝把 PNG/任意 binary
   伪装成 Arrow IPC。
+- [ ] 将 backend-neutral Bayes validated task、opaque generation/artifact handle、terminal/error contract 与 worker port
+  迁入 `src-tauri/crates/yss-bayes-worker/` Pure Leaf；删除根 `sci/api/bayes/worker` owner/facade，让 Application 与
+  Julia adapter 直接消费唯一 crate，并以不可构造的 `BayesWorkerAuthority` 和 `BayesWorkerClient` 临时借用收敛
+  handle/result 铸造权限，避免因跨 crate 迁移而把旧 `pub(crate)` 构造器直接公开；Julia process 与 task-directory
+  lifecycle 继续仅由 `yss-julia-worker` 拥有。

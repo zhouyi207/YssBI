@@ -1562,6 +1562,7 @@ fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]>
     } else if source_file.starts_with("src-tauri/src/sci/")
         || source_file.starts_with("src-tauri/crates/yss-bayes-model/src/")
         || source_file.starts_with("src-tauri/crates/yss-bayes-result/src/")
+        || source_file.starts_with("src-tauri/crates/yss-bayes-worker/src/")
         || source_file.starts_with("src-tauri/crates/yss-sci-contract/src/")
     {
         Some(SCI_SYMBOLS)
@@ -7271,14 +7272,14 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     )
     .expect("Bayes spec validation source must be readable");
     assert!(spec_validation.contains("pub fn model_spec_is_valid"));
-    let root_worker_validation = std::fs::read_to_string(
+    let worker_validation = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/worker/validation.rs"),
+            .join("src-tauri/crates/yss-bayes-worker/src/validation.rs"),
     )
-    .expect("root Bayes worker validation source must be readable");
+    .expect("Bayes worker validation source must be readable");
     assert!(
-        !root_worker_validation.contains("fn model_is_valid"),
+        !worker_validation.contains("fn model_is_valid"),
         "worker input validation must not duplicate the canonical model validator"
     );
 
@@ -7492,7 +7493,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let worker = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/worker.rs"),
+            .join("src-tauri/crates/yss-bayes-worker/src/lib.rs"),
     )
     .expect("Bayes worker contract must be readable");
     assert!(worker.contains("ArrowIpc"));
@@ -7586,6 +7587,204 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
             actual_origins,
             BTreeSet::from([expected_origin]),
             "{symbol} must have one canonical Bayes result owner"
+        );
+    }
+}
+
+#[test]
+fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() {
+    const WORKER_PREFIX: &str = "src-tauri/crates/yss-bayes-worker/";
+    const WORKER_SOURCES: &[&str] = &[
+        "src-tauri/crates/yss-bayes-worker/src/lib.rs",
+        "src-tauri/crates/yss-bayes-worker/src/validation.rs",
+    ];
+
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-bayes-worker/Cargo.toml",
+        "src-tauri/crates/yss-bayes-worker/README.md",
+    ]
+    .into_iter()
+    .chain(WORKER_SOURCES.iter().copied())
+    {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "Bayes worker owner {relative} must exist"
+        );
+    }
+    for source in WORKER_SOURCES {
+        assert_eq!(
+            facts.classification.get(*source),
+            Some(&RustLayer::PureLeaf),
+            "Bayes worker owner {source} must remain a Pure Leaf"
+        );
+    }
+
+    for removed in [
+        "src-tauri/src/sci/api/bayes/worker.rs",
+        "src-tauri/src/sci/api/bayes/worker/validation.rs",
+        "src-tauri/src/sci/api/bayes/worker/tests.rs",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed).exists(),
+            "removed root Bayes worker owner {removed} must stay absent"
+        );
+    }
+
+    let root_module = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/sci/api/bayes/mod.rs"),
+    )
+    .expect("root Bayes module must be readable");
+    for forbidden_facade in ["mod worker;", "pub mod worker;", "yss_bayes_worker"] {
+        assert!(
+            !root_module.contains(forbidden_facade),
+            "root Bayes module must not restore worker facade {forbidden_facade}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-worker/Cargo.toml"),
+    )
+    .expect("Bayes worker manifest must be readable");
+    for required_dependency in [
+        "thiserror.workspace = true",
+        "yss-bayes-model",
+        "yss-bayes-result",
+        "yss-sci-contract",
+    ] {
+        assert!(
+            manifest.contains(required_dependency),
+            "Bayes worker manifest must declare {required_dependency}"
+        );
+    }
+    for forbidden_dependency in ["polars", "tauri", "serde.workspace = true", "yss-julia"] {
+        assert!(
+            !manifest.contains(forbidden_dependency),
+            "Bayes worker contract must not depend on {forbidden_dependency}"
+        );
+    }
+
+    let worker = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-worker/src/lib.rs"),
+    )
+    .expect("Bayes worker source must be readable");
+    for required_capability in [
+        "pub struct BayesWorkerAuthority",
+        "_private: ()",
+        "pub struct BayesWorkerClient",
+        "port: Arc<dyn BayesWorkerPort>",
+        "BayesWorkerAuthority { _private: () }",
+    ] {
+        assert!(
+            worker.contains(required_capability),
+            "Bayes worker capability boundary must contain {required_capability}"
+        );
+    }
+    for forbidden_constructor in [
+        "issue_for_worker",
+        "mint_for_worker",
+        "validated_worker_result",
+        "BayesArtifact::from_worker",
+        "BayesInferenceSnapshot::from_worker",
+    ] {
+        assert!(
+            !worker.contains(forbidden_constructor),
+            "sealed worker values must not expose legacy constructor {forbidden_constructor}"
+        );
+    }
+
+    for direct_consumer in [
+        "src-tauri/src/application/bayes.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
+    ] {
+        let source = std::fs::read_to_string(facts.repository_root.join(direct_consumer))
+            .expect("Bayes worker consumer must be readable");
+        assert!(
+            source.contains("yss_bayes_worker"),
+            "{direct_consumer} must consume the canonical worker crate directly"
+        );
+        assert!(
+            !source.contains("crate::sci::api::bayes::worker"),
+            "{direct_consumer} must not restore the root worker route"
+        );
+    }
+
+    let stale_references = facts
+        .classification
+        .keys()
+        .filter_map(|source_file| {
+            let source = std::fs::read_to_string(facts.repository_root.join(source_file)).ok()?;
+            source
+                .contains("crate::sci::api::bayes::worker")
+                .then_some(source_file.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        stale_references.is_empty(),
+        "production consumers must use yss_bayes_worker directly: {stale_references:#?}"
+    );
+
+    let forbidden_dependencies = facts
+        .dependencies
+        .iter()
+        .filter(|dependency| dependency.source_file.starts_with(WORKER_PREFIX))
+        .filter(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                ..
+            } => {
+                facts
+                    .classification
+                    .get(repository_relative_declaration_file)
+                    != Some(&RustLayer::PureLeaf)
+            }
+            CanonicalOrigin::External(origin) => origin.package_name != "thiserror",
+            CanonicalOrigin::LanguageBuiltin { .. } | CanonicalOrigin::RepositoryAsset { .. } => {
+                false
+            }
+        })
+        .map(|dependency| dependency.canonical_origin_target.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden_dependencies.is_empty(),
+        "Bayes worker boundary must remain pure: {forbidden_dependencies:#?}"
+    );
+
+    for symbol in [
+        "BayesWorkerAuthority",
+        "BayesWorkerClient",
+        "BayesWorkerPort",
+        "ValidatedBayesTask",
+        "BayesTaskHandle",
+    ] {
+        let actual_origins = facts
+            .dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: resolved_symbol,
+                    ..
+                } if resolved_symbol == symbol => {
+                    Some(repository_relative_declaration_file.as_str())
+                }
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_origins,
+            BTreeSet::from(["src-tauri/crates/yss-bayes-worker/src/lib.rs"]),
+            "{symbol} must have one canonical Bayes worker owner"
         );
     }
 }

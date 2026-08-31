@@ -1,0 +1,15 @@
+[package]
+name = "yss-bayes-worker"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+yss-bayes-model = { path = "../yss-bayes-model" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-sci-contract = { path = "../yss-sci-contract" }
+
+[dev-dependencies]
+serde_json.workspace = true
