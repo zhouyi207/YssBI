@@ -24,13 +24,6 @@ pub struct ParseExpressionRequest {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BayesInputValidationDetails {
-    column: Option<String>,
-    row: Option<usize>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct BayesPagingDetails {
     offset: usize,
     limit: usize,
@@ -41,12 +34,6 @@ fn bayes_command_error(error: BayesApplicationError) -> CommandError {
         BayesApplicationError::ValidationFailed => {
             CommandError::expected("bayes_validation_failed")
         }
-        #[cfg(test)]
-        BayesApplicationError::InputValidation(source) => CommandError::expected(source.code)
-            .with_details(BayesInputValidationDetails {
-                column: source.column,
-                row: source.row,
-            }),
         BayesApplicationError::DatasetSourceUnsupported => {
             CommandError::expected("bayes_dataset_source_unsupported")
         }
@@ -287,9 +274,10 @@ mod tests {
 
     #[test]
     fn expected_application_error_maps_to_exact_command_wire() {
-        let application_error = BayesInferenceService::new()
-            .sample_page("missing", 4, 0, None)
-            .expect_err("zero page limit rejected");
+        let application_error = BayesApplicationError::PagingInvalid {
+            offset: 4,
+            limit: 0,
+        };
 
         let wire = serde_json::to_value(bayes_command_error(application_error)).unwrap();
 

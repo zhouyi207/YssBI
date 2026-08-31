@@ -6,14 +6,9 @@ use std::thread;
 use std::time::Instant;
 
 #[cfg(test)]
-use polars::prelude::{Column, DataFrame, Float64Chunked};
+use polars::prelude::{DataFrame, Float64Chunked};
 
 use crate::error::new_diagnostic_incident_id;
-#[cfg(test)]
-use crate::sci::api::bayes::{
-    BayesBackend, BayesBackendError, BayesBackendRequest, BayesInputValidationError,
-    BayesProgressCallback, PlaceholderBayesBackend, validate_bayes_input_table,
-};
 use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
 use yss_bayes_result::{
     AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
@@ -44,8 +39,6 @@ use yss_sci_contract::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
     StatisticalInput, StatisticalScalar,
 };
-#[cfg(test)]
-use yss_tabular_io::read_ipc_dataframe;
 
 use super::execution::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
@@ -66,8 +59,6 @@ pub enum BayesDatasetLoadError {
 #[derive(Debug)]
 pub enum BayesApplicationError {
     ValidationFailed,
-    #[cfg(test)]
-    InputValidation(BayesInputValidationError),
     DatasetSourceUnsupported,
     TaskNotFound,
     TaskActive,
@@ -246,19 +237,10 @@ impl From<BayesWorkerError> for BayesTaskFailure {
     }
 }
 
-#[cfg(test)]
-impl From<BayesBackendError> for BayesTaskFailure {
-    fn from(error: BayesBackendError) -> Self {
-        Self::new(error.code.into_boxed_str(), error.details)
-    }
-}
-
 impl fmt::Display for BayesApplicationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ValidationFailed => formatter.write_str("Bayesian model validation failed"),
-            #[cfg(test)]
-            Self::InputValidation(source) => write!(formatter, "{source}"),
             Self::DatasetSourceUnsupported => {
                 formatter.write_str("Bayesian dataset source is unsupported")
             }
@@ -326,8 +308,6 @@ impl fmt::Display for BayesApplicationError {
 impl std::error::Error for BayesApplicationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            #[cfg(test)]
-            Self::InputValidation(source) => Some(source),
             Self::CancelFailed { source, .. } => Some(source),
             Self::DatasetLoadFailed { source } => Some(source),
             _ => None,
@@ -339,23 +319,17 @@ impl std::error::Error for BayesApplicationError {
 pub struct BayesInferenceService {
     inner: Arc<Mutex<BayesInferenceState>>,
     artifact_reader: Arc<dyn BayesArtifactReader>,
-    #[cfg(test)]
-    backend: Arc<dyn BayesBackend>,
-    worker: Option<BayesWorkerClient>,
-    worker_app_data_dir: Option<PathBuf>,
+    worker: BayesWorkerClient,
+    worker_app_data_dir: PathBuf,
 }
 
 #[derive(Default)]
 struct BayesInferenceState {
     tasks: HashMap<String, BayesInferenceTask>,
     results: HashMap<String, StoredInferenceResult>,
-    #[cfg(test)]
-    queue: VecDeque<BayesBackendJob>,
     worker_queue: VecDeque<BayesWorkerJob>,
     worker_handles: HashMap<String, BayesTaskHandle>,
     worker_sources: HashMap<String, Arc<SciCancellationSource>>,
-    #[cfg(test)]
-    runner_active: bool,
     worker_runner_active: bool,
 }
 
@@ -365,42 +339,12 @@ struct StoredInferenceResult {
     owned_artifact_directory: Option<PathBuf>,
 }
 
-#[cfg(test)]
-struct BayesBackendJob {
-    task_id: String,
-    spec: BayesModelSpec,
-    input_table: Option<DataFrame>,
-}
-
 struct BayesWorkerJob {
     task: ValidatedBayesTask,
     cancellation: Arc<SciCancellationSource>,
 }
 
-#[cfg(test)]
-impl Default for BayesInferenceService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl BayesInferenceService {
-    #[cfg(test)]
-    pub fn new() -> Self {
-        Self::with_backend(Arc::new(PlaceholderBayesBackend))
-    }
-
-    #[cfg(test)]
-    pub fn with_backend(backend: Arc<dyn BayesBackend>) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(BayesInferenceState::default())),
-            artifact_reader: Arc::new(UnavailableBayesArtifactReader),
-            backend,
-            worker: None,
-            worker_app_data_dir: None,
-        }
-    }
-
     pub(crate) fn with_worker(
         app_data_dir: impl Into<PathBuf>,
         worker: Arc<dyn BayesWorkerPort>,
@@ -409,19 +353,9 @@ impl BayesInferenceService {
         Self {
             inner: Arc::new(Mutex::new(BayesInferenceState::default())),
             artifact_reader,
-            #[cfg(test)]
-            backend: Arc::new(PlaceholderBayesBackend),
-            worker: Some(BayesWorkerClient::new(worker)),
-            worker_app_data_dir: Some(app_data_dir.into()),
+            worker: BayesWorkerClient::new(worker),
+            worker_app_data_dir: app_data_dir.into(),
         }
-    }
-
-    #[cfg(test)]
-    pub fn submit(
-        &self,
-        draft: BayesModelDraft,
-    ) -> Result<BayesInferenceTask, BayesApplicationError> {
-        self.submit_with_input_table(draft, None)
     }
 
     pub fn submit_from_application(
@@ -466,34 +400,6 @@ impl BayesInferenceService {
         .map_err(|source| BayesApplicationError::DatasetLoadFailed {
             source: BayesDatasetLoadError::Database(source),
         })?;
-        if self.worker.is_none() {
-            #[cfg(test)]
-            {
-                let input_table = dataframe_from_snapshot(&snapshot, &required_columns, &database)?;
-                validate_bayes_input_table(&spec, &input_table)
-                    .map_err(BayesApplicationError::InputValidation)?;
-                application
-                    .revalidate_captured_session(&captured)
-                    .map_err(|error| BayesApplicationError::DatasetLoadFailed {
-                        source: bayes_dataset_load_error_from_session_revalidation(error),
-                    })?;
-                let current_observations = project_database_observations(&captured, &database)?;
-                if current_observations != captured_observations {
-                    return Err(BayesApplicationError::DatasetLoadFailed {
-                        source: BayesDatasetLoadError::ProjectAuthorityChanged { database },
-                    });
-                }
-                revalidate_declaration_observations(captured.database(), &captured_observations)
-                    .map_err(|source| BayesApplicationError::DatasetLoadFailed {
-                        source: BayesDatasetLoadError::Database(source),
-                    })?;
-                return self.submit_spec(spec, Some(input_table));
-            }
-            #[cfg(not(test))]
-            {
-                return Err(BayesApplicationError::DatasetSourceUnsupported);
-            }
-        }
         let inputs = statistical_inputs_from_snapshot(&snapshot, &required_columns, &database)?;
 
         application
@@ -545,66 +451,11 @@ impl BayesInferenceService {
         };
         if should_start_runner {
             let inner = Arc::clone(&self.inner);
-            let worker = self
-                .worker
-                .as_ref()
-                .cloned()
-                .ok_or(BayesApplicationError::ValidationFailed)?;
-            let app_data_dir = self
-                .worker_app_data_dir
-                .as_ref()
-                .cloned()
-                .ok_or(BayesApplicationError::ValidationFailed)?;
+            let worker = self.worker.clone();
+            let app_data_dir = self.worker_app_data_dir.clone();
             thread::spawn(move || run_worker_queue(inner, worker, app_data_dir));
         }
         Ok(queued)
-    }
-
-    #[cfg(test)]
-    fn submit_with_input_table(
-        &self,
-        draft: BayesModelDraft,
-        input_table: Option<DataFrame>,
-    ) -> Result<BayesInferenceTask, BayesApplicationError> {
-        let spec = validated_spec(draft)?;
-        if let Some(table) = &input_table {
-            validate_bayes_input_table(&spec, table)
-                .map_err(BayesApplicationError::InputValidation)?;
-        }
-        self.submit_spec(spec, input_table)
-    }
-
-    #[cfg(test)]
-    fn submit_spec(
-        &self,
-        spec: BayesModelSpec,
-        input_table: Option<DataFrame>,
-    ) -> Result<BayesInferenceTask, BayesApplicationError> {
-        let task_id = new_task_id();
-        let task = queued_task(task_id.clone());
-        let should_start_runner = {
-            let mut state = self.lock_state()?;
-            state.tasks.insert(task_id.clone(), task.clone());
-            state.queue.push_back(BayesBackendJob {
-                task_id,
-                spec,
-                input_table,
-            });
-            if state.runner_active {
-                false
-            } else {
-                state.runner_active = true;
-                true
-            }
-        };
-
-        if should_start_runner {
-            let inner = self.inner.clone();
-            let backend = self.backend.clone();
-            thread::spawn(move || run_backend_queue(inner, backend));
-        }
-
-        Ok(task)
     }
 
     pub fn status(&self, task_id: &str) -> Result<BayesInferenceTask, BayesApplicationError> {
@@ -617,48 +468,54 @@ impl BayesInferenceService {
     }
 
     pub fn cancel(&self, task_id: &str) -> Result<(), BayesApplicationError> {
-        let (_should_cancel_backend, worker_cancel) = {
+        let worker_cancel = {
             let mut state = self.lock_state()?;
-            let task = state
+            let status = state
                 .tasks
-                .get_mut(task_id)
+                .get(task_id)
+                .map(|task| task.status.clone())
                 .ok_or(BayesApplicationError::TaskNotFound)?;
-            match task.status {
+            match status {
                 TaskStatus::Queued => {
+                    let task = state
+                        .tasks
+                        .get_mut(task_id)
+                        .ok_or(BayesApplicationError::TaskNotFound)?;
                     *task = cancelled_task(task_id.to_string());
-                    (false, None)
+                    None
                 }
                 TaskStatus::Running => {
+                    let source = state.worker_sources.get(task_id).cloned().ok_or_else(|| {
+                        BayesApplicationError::BackendStateInvalid {
+                            task_id: task_id.to_string(),
+                            status: TaskStatus::Running,
+                            result_present: state.results.contains_key(task_id),
+                        }
+                    })?;
+                    let handle = state.worker_handles.get(task_id).cloned();
+                    let task = state
+                        .tasks
+                        .get_mut(task_id)
+                        .ok_or(BayesApplicationError::TaskNotFound)?;
                     task.status = TaskStatus::Cancelling;
                     task.progress = Some(TaskProgress {
                         stage: "cancelling".to_string(),
                         completed: None,
                         total: None,
                     });
-                    if let Some(source) = state.worker_sources.get(task_id).cloned() {
-                        (
-                            false,
-                            Some((source, state.worker_handles.get(task_id).cloned())),
-                        )
-                    } else {
-                        (true, None)
-                    }
+                    Some((source, handle))
                 }
-                TaskStatus::Cancelling => (false, None),
-                TaskStatus::Completed | TaskStatus::Cancelled | TaskStatus::Failed => (false, None),
+                TaskStatus::Cancelling => None,
+                TaskStatus::Completed | TaskStatus::Cancelled | TaskStatus::Failed => None,
             }
         };
         if let Some((source, handle)) = worker_cancel {
             source.cancel();
             if let Some(handle) = handle {
-                let worker = self
-                    .worker
-                    .as_ref()
-                    .ok_or(BayesApplicationError::TaskNotFound)?;
                 let deadline = Instant::now()
                     .checked_add(std::time::Duration::from_secs(30))
                     .ok_or(BayesApplicationError::TaskNotFound)?;
-                worker
+                self.worker
                     .cancel(
                         &handle,
                         &CancelDeliveryControl::new(AbsoluteDeadline::at(deadline)),
@@ -668,15 +525,6 @@ impl BayesInferenceService {
                         source: bayes_worker_backend_error(source),
                     })?;
             }
-        }
-        #[cfg(all(test, any()))]
-        if _should_cancel_backend {
-            self.backend
-                .cancel(task_id)
-                .map_err(|source| BayesApplicationError::CancelFailed {
-                    task_id: task_id.to_string(),
-                    source,
-                })?;
         }
         Ok(())
     }
@@ -829,24 +677,6 @@ impl BayesInferenceService {
         self.inner
             .lock()
             .map_err(|_| BayesApplicationError::ServiceLockPoisoned)
-    }
-}
-
-#[cfg(test)]
-fn run_backend_queue(inner: Arc<Mutex<BayesInferenceState>>, backend: Arc<dyn BayesBackend>) {
-    loop {
-        let Some(job) = pop_next_backend_job(&inner) else {
-            return;
-        };
-        let task_id = job.task_id.clone();
-        let progress = task_progress_callback(inner.clone(), task_id.clone());
-        let backend_result = backend.fit(BayesBackendRequest::with_progress(
-            task_id.clone(),
-            job.spec,
-            job.input_table,
-            Some(progress),
-        ));
-        finish_backend_task(&inner, task_id, backend_result);
     }
 }
 
@@ -1057,105 +887,6 @@ fn bayes_worker_backend_error(error: BayesWorkerError) -> BayesTaskFailure {
     error.into()
 }
 
-#[cfg(test)]
-fn task_progress_callback(
-    inner: Arc<Mutex<BayesInferenceState>>,
-    task_id: String,
-) -> BayesProgressCallback {
-    Arc::new(move |progress| update_task_progress(&inner, &task_id, progress))
-}
-
-#[cfg(test)]
-fn update_task_progress(
-    inner: &Arc<Mutex<BayesInferenceState>>,
-    task_id: &str,
-    progress: TaskProgress,
-) {
-    let Ok(mut state) = inner.lock() else {
-        return;
-    };
-    let Some(task) = state.tasks.get_mut(task_id) else {
-        return;
-    };
-    if task.status == TaskStatus::Running {
-        task.progress = Some(progress);
-    }
-}
-
-#[cfg(test)]
-fn pop_next_backend_job(inner: &Arc<Mutex<BayesInferenceState>>) -> Option<BayesBackendJob> {
-    let Ok(mut state) = inner.lock() else {
-        return None;
-    };
-
-    loop {
-        let Some(job) = state.queue.pop_front() else {
-            state.runner_active = false;
-            return None;
-        };
-        let Some(task) = state.tasks.get_mut(&job.task_id) else {
-            continue;
-        };
-        match task.status {
-            TaskStatus::Queued => {
-                task.status = TaskStatus::Running;
-                task.progress = Some(TaskProgress {
-                    stage: "running".to_string(),
-                    completed: None,
-                    total: None,
-                });
-                return Some(job);
-            }
-            TaskStatus::Cancelling | TaskStatus::Cancelled => {
-                let task_id = job.task_id;
-                state.tasks.insert(task_id.clone(), cancelled_task(task_id));
-            }
-            TaskStatus::Running | TaskStatus::Completed | TaskStatus::Failed => {}
-        }
-    }
-}
-
-#[cfg(test)]
-fn finish_backend_task(
-    inner: &Arc<Mutex<BayesInferenceState>>,
-    task_id: String,
-    backend_result: Result<InferenceResult, BayesBackendError>,
-) {
-    let Ok(mut state) = inner.lock() else {
-        return;
-    };
-    let Some(current_task) = state.tasks.get(&task_id) else {
-        return;
-    };
-    if matches!(
-        current_task.status,
-        TaskStatus::Cancelling | TaskStatus::Cancelled
-    ) {
-        state.tasks.insert(task_id.clone(), cancelled_task(task_id));
-        return;
-    }
-
-    match backend_result {
-        Ok(result) => {
-            let completed = completed_task(task_id.clone());
-            state.results.insert(
-                task_id.clone(),
-                StoredInferenceResult {
-                    result,
-                    owned_artifacts: Vec::new(),
-                    owned_artifact_directory: None,
-                },
-            );
-            state.tasks.insert(task_id, completed);
-        }
-        Err(error) => {
-            state
-                .tasks
-                .insert(task_id.clone(), failed_task(task_id, error));
-        }
-    }
-}
-
 fn remove_result_artifacts(result: &StoredInferenceResult) {
     cleanup_owned_artifacts(
         &result.owned_artifacts,
@@ -1223,19 +954,6 @@ fn result_from_state(
         }
         None => Err(BayesApplicationError::ResultNotFound),
     }
-}
-
-#[cfg(test)]
-fn read_bayes_artifact_dataframe(
-    path: &str,
-    context: &'static str,
-) -> Result<DataFrame, BayesApplicationError> {
-    read_ipc_dataframe(Path::new(path)).map_err(|source| {
-        BayesApplicationError::ArtifactReadFailed {
-            context,
-            source: source.to_string(),
-        }
-    })
 }
 
 fn validate_paging(offset: usize, limit: usize) -> Result<(), BayesApplicationError> {
@@ -1668,51 +1386,6 @@ fn bayes_dataset_load_error_from_session_revalidation(
     }
 }
 
-#[cfg(test)]
-fn dataframe_from_snapshot(
-    snapshot: &DatabaseDataSnapshot,
-    required_columns: &[yss_tabular_contract::TabularColumnName],
-    database: &DatabaseId,
-) -> Result<DataFrame, BayesApplicationError> {
-    let columns = snapshot.rows().columns();
-    if columns.len() != required_columns.len()
-        || columns
-            .iter()
-            .zip(required_columns)
-            .any(|(column, required)| column.name() != required)
-    {
-        return Err(BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::Database(DatabaseError::schema(
-                DatabaseOperation::DataSnapshot,
-                Some(database.clone()),
-            )),
-        });
-    }
-    let series = columns
-        .iter()
-        .map(|column| {
-            yss_tabular_polars::column_to_series(column)
-                .map(Column::from)
-                .map_err(|error| BayesApplicationError::DatasetLoadFailed {
-                    source: BayesDatasetLoadError::Database(DatabaseError::polars_driver(
-                        DatabaseOperation::DataSnapshot,
-                        Some(database.clone()),
-                        error,
-                    )),
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    DataFrame::new(snapshot.rows().row_count(), series).map_err(|error| {
-        BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::Database(DatabaseError::polars_driver(
-                DatabaseOperation::DataSnapshot,
-                Some(database.clone()),
-                error,
-            )),
-        }
-    })
-}
-
 fn statistical_inputs_from_snapshot(
     snapshot: &DatabaseDataSnapshot,
     required_columns: &[yss_tabular_contract::TabularColumnName],
@@ -1840,6 +1513,7 @@ fn completed_task(task_id: String) -> BayesInferenceTask {
 mod tests {
     use std::collections::BTreeMap;
     use std::fs;
+    use std::num::NonZeroU64;
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -1852,21 +1526,30 @@ mod tests {
     use yss_diagnostics::DiagnosticsRuntime;
     use yss_tracing::LogLayer;
 
-    use crate::sci::api::bayes::{BayesBackend, BayesBackendError, BayesBackendRequest};
     use yss_bayes_model::{
         BayesModelDraft, BinaryOp, ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType,
         Expression, InferenceConfig, LikelihoodSpec, ParameterConstraint, ParameterRef,
         ParameterSpec, PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding,
         SamplerAlgorithm, SymbolDraft, SymbolRole,
     };
-    use yss_bayes_result::{BayesInferenceTask, InferenceResult, TaskErrorDetails, TaskStatus};
+    use yss_bayes_result::{
+        BayesInferenceTask, InferenceDiagnostics, InferenceResult, TaskErrorDetails, TaskStatus,
+    };
+    use yss_bayes_worker::{
+        BayesArtifact, BayesArtifactHandle, BayesCancelTerminal, BayesTaskHandle, BayesTaskResult,
+        BayesWorkerAuthority, BayesWorkerError, BayesWorkerPort, BayesWorkerTerminalCode,
+        ValidatedBayesTask,
+    };
+    use yss_sci_contract::{
+        CancelDeliveryControl, ExecutionControl, StatisticalInput, StatisticalScalar,
+    };
 
     use super::{
-        BayesApplicationError, BayesInferenceService, StoredInferenceResult,
-        autocorrelation_plot_data_from_dataframe, cancelled_task, completed_task,
-        density_plot_data_from_dataframe, failed_task, posterior_predictive_page_from_dataframe,
-        posterior_sample_page_from_dataframe, required_input_columns,
-        trace_plot_data_from_dataframe, validated_spec,
+        BayesApplicationError, BayesInferenceService, BayesTaskFailure, StoredInferenceResult,
+        UnavailableBayesArtifactReader, autocorrelation_plot_data_from_dataframe, cancelled_task,
+        completed_task, density_plot_data_from_dataframe, failed_task,
+        posterior_predictive_page_from_dataframe, posterior_sample_page_from_dataframe,
+        queued_task, required_input_columns, trace_plot_data_from_dataframe, validated_spec,
     };
 
     struct TemporaryAppRoot {
@@ -1891,54 +1574,134 @@ mod tests {
         }
     }
 
-    struct CountingBackend {
-        calls: Arc<Mutex<usize>>,
+    #[derive(Clone, Copy)]
+    enum TestWorkerOutcome {
+        Success,
+        Failure,
     }
 
-    impl BayesBackend for CountingBackend {
-        fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            assert!(request.task_id.starts_with("bayes-"));
+    struct TestWorker {
+        calls: Arc<Mutex<usize>>,
+        outcome: TestWorkerOutcome,
+    }
+
+    impl BayesWorkerPort for TestWorker {
+        fn start(
+            &self,
+            authority: &BayesWorkerAuthority,
+            task: ValidatedBayesTask,
+            _control: &ExecutionControl,
+        ) -> Result<BayesTaskHandle, BayesWorkerError> {
+            assert!(task.task_id().as_str().starts_with("bayes-"));
             assert_eq!(
-                request.spec.response().data_variables.get("y"),
+                task.model().response().data_variables.get("y"),
                 Some(&"response".to_string())
             );
-            assert!(request.input_table.is_none());
+            assert_eq!(
+                task.inputs()
+                    .iter()
+                    .map(StatisticalInput::name)
+                    .collect::<Vec<_>>(),
+                ["response", "time"]
+            );
             *self.calls.lock().expect("calls lock") += 1;
-            serde_json::from_value(serde_json::json!({
-                "summaries": [],
-                "diagnostics": {
-                    "chains": 1,
-                    "drawsPerChain": 10,
-                    "warmup": 5,
-                    "divergences": 0,
-                    "maxTreedepthHits": 0,
-                    "warnings": [{
-                        "code": "test_backend",
-                        "metric": "rhat",
-                        "value": 1.02,
-                        "threshold": 1.01,
-                        "parameter": "a"
-                    }]
-                },
-                "artifactManifest": {
-                    "taskId": request.task_id,
-                    "artifacts": []
-                }
+            Ok(BayesWorkerAuthority::issue_task_handle(
+                authority,
+                task.task_id().clone(),
+                NonZeroU64::new(1).expect("test generation must be non-zero"),
+            ))
+        }
+
+        fn await_result(
+            &self,
+            authority: &BayesWorkerAuthority,
+            handle: &BayesTaskHandle,
+            _control: &ExecutionControl,
+        ) -> Result<BayesTaskResult, BayesWorkerError> {
+            if matches!(self.outcome, TestWorkerOutcome::Failure) {
+                return Err(BayesWorkerError::WorkerTerminal {
+                    task: handle.clone(),
+                    terminal: BayesWorkerTerminalCode::Failed,
+                });
+            }
+            let diagnostics: InferenceDiagnostics = serde_json::from_value(serde_json::json!({
+                "chains": 1,
+                "drawsPerChain": 10,
+                "warmup": 5,
+                "divergences": 0,
+                "maxTreedepthHits": 0,
+                "warnings": [{
+                    "code": "test_worker",
+                    "metric": "rhat",
+                    "value": 1.02,
+                    "threshold": 1.01,
+                    "parameter": "a"
+                }]
             }))
-            .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))
+            .expect("test worker diagnostics must deserialize");
+            let inference = BayesWorkerAuthority::inference_snapshot(
+                authority,
+                handle.clone(),
+                Arc::from([]),
+                diagnostics,
+            );
+            BayesWorkerAuthority::task_result(authority, handle, inference, Arc::from([]))
+        }
+
+        fn cancel(
+            &self,
+            _handle: &BayesTaskHandle,
+            _control: &CancelDeliveryControl,
+        ) -> Result<BayesCancelTerminal, BayesWorkerError> {
+            Ok(BayesCancelTerminal::Cancelled)
+        }
+
+        fn read_artifact(
+            &self,
+            _authority: &BayesWorkerAuthority,
+            artifact: &BayesArtifactHandle,
+            _control: &ExecutionControl,
+        ) -> Result<BayesArtifact, BayesWorkerError> {
+            Err(BayesWorkerError::ArtifactNotOwned {
+                artifact: artifact.clone(),
+            })
         }
     }
 
-    struct FailingBackend;
+    fn test_service(
+        app_data_dir: &Path,
+        calls: Arc<Mutex<usize>>,
+        outcome: TestWorkerOutcome,
+    ) -> BayesInferenceService {
+        BayesInferenceService::with_worker(
+            app_data_dir,
+            Arc::new(TestWorker { calls, outcome }),
+            Arc::new(UnavailableBayesArtifactReader),
+        )
+    }
 
-    impl BayesBackend for FailingBackend {
-        fn fit(&self, _request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            Err(BayesBackendError::with_detail(
-                "test_backend_failed",
-                "private asynchronous backend message",
-                "private asynchronous backend detail",
-            ))
-        }
+    fn valid_inputs() -> Arc<[StatisticalInput]> {
+        let input = |name: &str, values: [f64; 2]| {
+            StatisticalInput::try_new(
+                name.into(),
+                values
+                    .into_iter()
+                    .map(|value| Some(StatisticalScalar::Numeric(value)))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                None,
+            )
+            .expect("test statistical input must validate")
+        };
+        Arc::from([input("response", [1.0, 2.0]), input("time", [0.0, 1.0])])
+    }
+
+    fn submit_test_task(
+        service: &BayesInferenceService,
+        draft: BayesModelDraft,
+    ) -> Result<BayesInferenceTask, BayesApplicationError> {
+        let spec = validated_spec(draft)?;
+        service.submit_worker_spec(spec, valid_inputs())
     }
 
     fn valid_draft() -> BayesModelDraft {
@@ -2192,17 +1955,15 @@ mod tests {
         let task = tracing::subscriber::with_default(subscriber, || {
             failed_task(
                 "task-1".to_string(),
-                BayesBackendError::with_detail(
+                BayesTaskFailure::new(
                     "test_backend_failed",
-                    "private backend message",
-                    "private backend detail",
-                )
-                .with_safe_details(TaskErrorDetails {
-                    column: Some("predictor_x".to_string()),
-                    row: Some(7),
-                    parameter: Some("beta".to_string()),
-                    path: Some("parameters.beta".to_string()),
-                }),
+                    Some(TaskErrorDetails {
+                        column: Some("predictor_x".to_string()),
+                        row: Some(7),
+                        parameter: Some("beta".to_string()),
+                        path: Some("parameters.beta".to_string()),
+                    }),
+                ),
             )
         });
 
@@ -2262,42 +2023,50 @@ mod tests {
 
     #[test]
     fn submit_rejects_invalid_draft() {
-        let service = BayesInferenceService::new();
+        let root = TemporaryAppRoot::new("bayes-invalid-draft");
+        let service = test_service(
+            root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::Success,
+        );
         let mut draft = valid_draft();
         draft.dataset = None;
-        let error = service.submit(draft).expect_err("invalid draft rejected");
+        let error = submit_test_task(&service, draft).expect_err("invalid draft rejected");
         assert!(matches!(error, BayesApplicationError::ValidationFailed));
     }
 
     #[test]
-    fn submit_uses_configured_backend() {
+    fn submit_uses_configured_worker() {
+        let root = TemporaryAppRoot::new("bayes-worker-success");
         let calls = Arc::new(Mutex::new(0));
-        let service = BayesInferenceService::with_backend(Arc::new(CountingBackend {
-            calls: calls.clone(),
-        }));
-        let task = service.submit(valid_draft()).expect("submitted task");
+        let service = test_service(root.path(), calls.clone(), TestWorkerOutcome::Success);
+        let task = submit_test_task(&service, valid_draft()).expect("submitted task");
         let completed = wait_for_terminal_task(&service, &task.task_id);
         assert_eq!(completed.status, TaskStatus::Completed);
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
-        assert_eq!(result.diagnostics().warnings()[0].code(), "test_backend");
+        assert_eq!(result.diagnostics().warnings()[0].code(), "test_worker");
     }
 
     #[test]
-    fn backend_failure_stores_failed_task() {
-        let service = BayesInferenceService::with_backend(Arc::new(FailingBackend));
-        let task = service.submit(valid_draft()).expect("failed task returned");
+    fn worker_failure_stores_failed_task() {
+        let root = TemporaryAppRoot::new("bayes-worker-failure");
+        let service = test_service(
+            root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::Failure,
+        );
+        let task = submit_test_task(&service, valid_draft()).expect("failed task returned");
         let failed = wait_for_terminal_task(&service, &task.task_id);
         assert_eq!(failed.status, TaskStatus::Failed);
         let error = failed.error.as_ref().expect("failed task error");
-        assert_eq!(error.code, "test_backend_failed");
+        assert_eq!(error.code, "bayes_worker_terminal");
         assert!(error.details.is_none());
         assert!(
             Uuid::parse_str(error.incident_id.as_deref().expect("failure incident ID")).is_ok()
         );
         let wire = serde_json::to_string(&failed).expect("serialize asynchronous failure");
-        assert!(!wire.contains("private asynchronous backend message"));
-        assert!(!wire.contains("private asynchronous backend detail"));
+        assert!(!wire.contains("worker terminal"));
         assert!(service.result(&task.task_id).is_err());
     }
 
@@ -2334,7 +2103,11 @@ mod tests {
             }
         }))
         .expect("valid result projection");
-        let service = BayesInferenceService::new();
+        let service = test_service(
+            test_root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::Success,
+        );
         {
             let mut state = service.inner.lock().expect("service state lock");
             state
@@ -2358,8 +2131,48 @@ mod tests {
     }
 
     #[test]
+    fn cancel_preserves_running_status_when_worker_state_is_incomplete() {
+        let root = TemporaryAppRoot::new("bayes-incomplete-worker-state");
+        let service = test_service(
+            root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::Success,
+        );
+        let task_id = "task-without-cancellation-source".to_string();
+        {
+            let mut state = service.inner.lock().expect("service state lock");
+            let mut task = queued_task(task_id.clone());
+            task.status = TaskStatus::Running;
+            task.progress = None;
+            state.tasks.insert(task_id.clone(), task);
+        }
+
+        let error = service
+            .cancel(&task_id)
+            .expect_err("incomplete worker state must be rejected");
+
+        assert!(matches!(
+            error,
+            BayesApplicationError::BackendStateInvalid {
+                status: TaskStatus::Running,
+                ..
+            }
+        ));
+        let task = service
+            .status(&task_id)
+            .expect("running task remains stored");
+        assert_eq!(task.status, TaskStatus::Running);
+        assert!(task.progress.is_none());
+    }
+
+    #[test]
     fn unknown_task_returns_error() {
-        let service = BayesInferenceService::new();
+        let root = TemporaryAppRoot::new("bayes-unknown-task");
+        let service = test_service(
+            root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::Success,
+        );
         let error = service
             .status("missing")
             .expect_err("missing task rejected");

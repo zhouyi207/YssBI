@@ -3,16 +3,19 @@
 `src-tauri/src/sci/` 是尚待迁移的主应用科学计算 runtime interface，不是独立算法或 Bayes model crate。当前调用方向是：
 
 ```text
-commands / application / node_system kernels
+Bayes commands / application
   → yss-bayes-model draft/parser/validated spec
   → yss-bayes-result diagnostics/task/result projections
   → yss-bayes-worker validated task/opaque handle/port client
+  → JuliaBayesWorkerAdapter
+
+other scientific application / node_system kernels
   → sci::api remaining runtime interface
   → sci::backends adapter
-  → yss-sci Rust algorithms or Julia Bayes worker
+  → yss-sci Rust algorithms
 ```
 
-`yss-bayes-model` 是 Pure Leaf，唯一拥有 Bayes draft、表达式解析、校验与不可变 spec 构造；`yss-bayes-result` 唯一拥有 diagnostics、task/result projections、artifact manifest 与 plot/page DTO；`yss-bayes-worker` 唯一拥有 validated task、opaque handle、worker port/client 与临时构造 capability。commands、Application 和 Julia adapter 直接依赖对应 crate，不经过根 facade。其余 runtime seam 集中 backend dispatch 与 error mapping，避免调用方依赖 Julia protocol。
+`yss-bayes-model` 是 Pure Leaf，唯一拥有 Bayes draft、表达式解析、校验与不可变 spec 构造；`yss-bayes-result` 唯一拥有 diagnostics、task/result projections、artifact manifest 与 plot/page DTO；`yss-bayes-worker` 唯一拥有 validated task、opaque handle、worker port/client 与临时构造 capability。commands、Application 和 Julia adapter 直接依赖对应 crate，不经过根 facade。根 `sci::api` 不再保留 test-only Bayes backend 或 Polars input-validation 镜像；生产和测试都通过同一个 `BayesWorkerPort` seam。
 
 ## Ownership
 
@@ -43,7 +46,6 @@ projection 与 artifact manifest 由 `yss-bayes-result` 拥有；shared statisti
 ```text
 sci/
 ├─ api/
-│  ├─ bayes/ (test-only application backend fixtures)
 │  ├─ density.rs
 │  ├─ node_statistics.rs
 │  ├─ stats/hypothesis.rs
@@ -88,5 +90,5 @@ Each variant combines `RegressionCoefficientStatistics`—including the authorit
 - Rust adapters map algorithm validation failures to `SciError` stable codes.
 - `ValidationReport.ok` is derived from its private error set; draft-to-spec conversion fails closed without production `expect` branches.
 - Julia worker errors are classified by typed `JuliaWorkerErrorCode`, not by parsing diagnostic prose.
-- `JuliaBayesWorkerAdapter` maps worker categories to stable Bayes codes and copies only safe structured details.
+- `JuliaBayesWorkerAdapter` returns typed `BayesWorkerError`; Application maps it to stable Bayes task codes without copying backend prose.
 - Commands convert these errors to the project-wide `{ code, details, incidentId }` wire; backend prose stays diagnostic-only.

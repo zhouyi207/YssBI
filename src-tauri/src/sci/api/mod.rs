@@ -1,4 +1,3 @@
-pub mod bayes;
 pub mod density;
 pub mod node_statistics;
 pub mod stats;

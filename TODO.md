@@ -835,3 +835,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   Julia adapter 直接消费唯一 crate，并以不可构造的 `BayesWorkerAuthority` 和 `BayesWorkerClient` 临时借用收敛
   handle/result 铸造权限，避免因跨 crate 迁移而把旧 `pub(crate)` 构造器直接公开；Julia process 与 task-directory
   lifecycle 继续仅由 `yss-julia-worker` 拥有。
+- [ ] 删除根 `sci/api/bayes` 中仅测试启用的 `BayesBackend` 与 Polars input-validation 第二路径；让
+  `BayesInferenceService` 强制持有非可选 `BayesWorkerClient` 和 app-data root，生产与测试共同通过
+  `BayesWorkerPort` 执行；删除双 queue/runner、空 SCI facade、不可达 cancel backend 分支与零调用 artifact reader，
+  并由架构测试禁止恢复 test-only backend、可选 worker 或 Transport validation 镜像。

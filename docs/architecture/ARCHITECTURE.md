@@ -8,6 +8,7 @@
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
 - [Bayes result 说明](../../src-tauri/crates/yss-bayes-result/README.md)
+- [Bayes worker 契约说明](../../src-tauri/crates/yss-bayes-worker/README.md)
 - [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
@@ -167,7 +168,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
 | `src-tauri/crates/yss-bayes-result/` | 独立 Pure Leaf：Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 的唯一 owner；不持有 model 构造、worker/process capability、filesystem lease、Julia、Polars、Application state 或 Tauri |
 | `src-tauri/crates/yss-bayes-worker/` | 独立 Pure Leaf：validated Bayes task、opaque task/artifact handle、terminal/error contract、`BayesWorkerPort` 与 capability-gated `BayesWorkerClient` 的唯一 owner；不持有 Julia process、filesystem artifact、Polars、Application state 或 Tauri |
-| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API 与 regression/panel models；共享 input/settings/control/error、Bayes model/result/worker contract 已分别由 `yss-sci-contract`、`yss-bayes-model`、`yss-bayes-result`、`yss-bayes-worker` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
+| `src-tauri/src/sci/` | 尚待迁移的非 Bayes SCI runtime API 与 regression/panel models；共享 input/settings/control/error、Bayes model/result/worker contract 已分别由 `yss-sci-contract`、`yss-bayes-model`、`yss-bayes-result`、`yss-bayes-worker` 唯一拥有；根 SCI 不保留 test-only Bayes backend/input-validation facade，也不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/crates/yss-sci-contract/` | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现 |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |

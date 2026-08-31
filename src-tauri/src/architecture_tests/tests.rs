@@ -2926,10 +2926,7 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         !root.join("src-tauri/src/database/row_mapping.rs").exists(),
         "the unused duplicate dataframe row projection must stay removed"
     );
-    for relative in [
-        "src-tauri/src/application/bayes.rs",
-        "src-tauri/crates/yss-database-runtime/src/plot_query.rs",
-    ] {
+    for relative in ["src-tauri/crates/yss-database-runtime/src/plot_query.rs"] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
         assert!(
@@ -2943,6 +2940,21 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
             "{relative} must not retain duplicate tabular-to-Polars conversion logic"
         );
     }
+    let bayes_application =
+        std::fs::read_to_string(root.join("src-tauri/src/application/bayes.rs"))
+            .expect("the Bayes application must be readable");
+    assert!(
+        bayes_application.contains("DatabaseDataSnapshot")
+            && bayes_application.contains("statistical_inputs_from_snapshot")
+            && bayes_application.contains("yss_tabular_contract::TabularScalar")
+            && !bayes_application.contains("yss_tabular_polars::column_to_series"),
+        "the Bayes application must consume typed database snapshots without a Polars adapter"
+    );
+    assert!(
+        !bayes_application.contains("fn tabular_scalar_to_any_value")
+            && !bayes_application.contains("fn tabular_column_to_series"),
+        "the Bayes application must not restore duplicate tabular-to-Polars conversion logic"
+    );
     let backend_adapters =
         std::fs::read_to_string(root.join("src-tauri/src/backend_adapters/mod.rs"))
             .expect("the root backend adapter module must be readable");
@@ -3067,7 +3079,6 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     );
 
     for relative in [
-        "src-tauri/src/application/bayes.rs",
         "src-tauri/src/application/database.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
@@ -3080,6 +3091,15 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
             "{relative} must consume yss-tabular-io directly"
         );
     }
+    let bayes_application =
+        std::fs::read_to_string(root.join("src-tauri/src/application/bayes.rs"))
+            .expect("the Bayes application must be readable");
+    assert!(
+        bayes_application.contains("yss_database_runtime::session_api")
+            && bayes_application.contains("DatabaseDataSnapshot")
+            && !bayes_application.contains("yss_tabular_io"),
+        "the Bayes application must consume the database snapshot contract instead of file I/O"
+    );
     assert!(
         !root.join("src-tauri/src/database").exists(),
         "the root package must not retain a tabular I/O facade"
@@ -7200,26 +7220,13 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
         );
     }
 
-    let root_module = std::fs::read_to_string(
-        facts
+    assert!(
+        !facts
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/mod.rs"),
-    )
-    .expect("root Bayes module must be readable");
-    for forbidden_facade in [
-        "mod convert;",
-        "mod draft;",
-        "mod expression;",
-        "mod model;",
-        "mod validation;",
-        "mod validators;",
-        "yss_bayes_model",
-    ] {
-        assert!(
-            !root_module.contains(forbidden_facade),
-            "root Bayes module must not restore model facade {forbidden_facade}"
-        );
-    }
+            .join("src-tauri/src/sci/api/bayes/mod.rs")
+            .exists(),
+        "the empty root Bayes model facade must stay absent"
+    );
 
     let manifest = std::fs::read_to_string(
         facts
@@ -7419,26 +7426,13 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
         );
     }
 
-    let root_module = std::fs::read_to_string(
-        facts
+    assert!(
+        !facts
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/mod.rs"),
-    )
-    .expect("root Bayes module must be readable");
-    for forbidden_facade in [
-        "mod contract;",
-        "mod result;",
-        "mod exchange;",
-        "pub use contract",
-        "pub use result",
-        "pub use exchange",
-        "yss_bayes_result",
-    ] {
-        assert!(
-            !root_module.contains(forbidden_facade),
-            "root Bayes module must not restore result facade {forbidden_facade}"
-        );
-    }
+            .join("src-tauri/src/sci/api/bayes/mod.rs")
+            .exists(),
+        "the empty root Bayes result facade must stay absent"
+    );
 
     let manifest = std::fs::read_to_string(
         facts
@@ -7631,18 +7625,13 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
         );
     }
 
-    let root_module = std::fs::read_to_string(
-        facts
+    assert!(
+        !facts
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/mod.rs"),
-    )
-    .expect("root Bayes module must be readable");
-    for forbidden_facade in ["mod worker;", "pub mod worker;", "yss_bayes_worker"] {
-        assert!(
-            !root_module.contains(forbidden_facade),
-            "root Bayes module must not restore worker facade {forbidden_facade}"
-        );
-    }
+            .join("src-tauri/src/sci/api/bayes/mod.rs")
+            .exists(),
+        "the empty root Bayes worker facade must stay absent"
+    );
 
     let manifest = std::fs::read_to_string(
         facts
@@ -7785,6 +7774,82 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
             actual_origins,
             BTreeSet::from(["src-tauri/crates/yss-bayes-worker/src/lib.rs"]),
             "{symbol} must have one canonical Bayes worker owner"
+        );
+    }
+}
+
+#[test]
+fn bayes_application_uses_one_required_worker_route_without_test_backend_facade() {
+    let facts = production_facts();
+    for removed in [
+        "src-tauri/src/sci/api/bayes/mod.rs",
+        "src-tauri/src/sci/api/bayes/backend.rs",
+        "src-tauri/src/sci/api/bayes/input_validation.rs",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed).exists(),
+            "legacy test-only Bayes backend owner {removed} must stay absent"
+        );
+    }
+
+    let api = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/sci/api/mod.rs"))
+        .expect("SCI API module must be readable");
+    assert!(
+        !api.contains("pub mod bayes"),
+        "the root SCI API must not restore an empty or test-only Bayes facade"
+    );
+
+    let application = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/application/bayes.rs"),
+    )
+    .expect("Bayes application source must be readable");
+    for required in [
+        "worker: BayesWorkerClient,",
+        "worker_app_data_dir: PathBuf,",
+        "worker: BayesWorkerClient::new(worker),",
+        "let worker = self.worker.clone();",
+        "let app_data_dir = self.worker_app_data_dir.clone();",
+        "impl BayesWorkerPort for TestWorker",
+        "service.submit_worker_spec(spec, valid_inputs())",
+    ] {
+        assert!(
+            application.contains(required),
+            "Bayes application and its tests must share the worker route fact {required}"
+        );
+    }
+    for forbidden in [
+        "BayesBackend",
+        "BayesInputValidationError",
+        "PlaceholderBayesBackend",
+        "Option<BayesWorkerClient>",
+        "worker.is_none()",
+        "input_table",
+        "submit_with_input_table",
+        "run_backend_queue",
+        "state.runner_active",
+        "#[cfg(all(test, any()))]",
+    ] {
+        assert!(
+            !application.contains(forbidden),
+            "Bayes application must not restore legacy alternate route {forbidden}"
+        );
+    }
+
+    let command = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/commands/command_bayes.rs"),
+    )
+    .expect("Bayes command source must be readable");
+    for forbidden in [
+        "BayesInputValidationDetails",
+        "BayesApplicationError::InputValidation",
+    ] {
+        assert!(
+            !command.contains(forbidden),
+            "Bayes transport must not mirror removed input validation route {forbidden}"
         );
     }
 }
