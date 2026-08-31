@@ -26,7 +26,6 @@ use crate::application::execution::session_slot::{
     SessionRevalidationError,
 };
 use crate::database::error::{DatabaseError, DatabaseErrorCode};
-use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::session_api;
 use crate::project::{
     ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
@@ -36,6 +35,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
 };
 use yss_database_edit::EditState;
+use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 use yss_display_naming::allocate_unique_display_name;
 use yss_duckdb::{
     DuckDbTableMeta, MAX_GET_DATAFRAME_ROWS, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
@@ -75,7 +75,7 @@ pub(crate) struct LoadDatabaseResult {
     pub name: String,
     pub row_count: usize,
     pub column_count: usize,
-    pub columns: Vec<crate::database::schema_snapshot::DatabaseColumnFact>,
+    pub columns: Vec<DatabaseColumnFact>,
 }
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ pub(crate) struct DatabaseMetaResult {
     pub name: String,
     pub row_count: usize,
     pub column_count: usize,
-    pub columns: Vec<crate::database::schema_snapshot::DatabaseColumnFact>,
+    pub columns: Vec<DatabaseColumnFact>,
 }
 
 #[derive(Debug)]

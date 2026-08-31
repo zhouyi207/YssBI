@@ -191,10 +191,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/database/session_api.rs",
         RustLayer::DatabaseCore,
     ),
-    (
-        "src-tauri/src/database/schema_snapshot.rs",
-        RustLayer::DatabaseCore,
-    ),
     ("src-tauri/src/platform/mod.rs", RustLayer::PlatformAdapter),
     (
         "src-tauri/src/platform/project_file_watcher.rs",
@@ -215,7 +211,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/src/schema/database.rs",
         fully_qualified_owner: "yssbi_lib::schema::database",
-        canonical_origin_targets: &["yssbi_lib::database::schema_snapshot::DatabaseColumnFact"],
+        canonical_origin_targets: &["yss_database_schema::DatabaseColumnFact"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::DatabaseCore,
@@ -1755,6 +1751,7 @@ fn non_build_memberships(
     } else if matches!(
         package,
         "yss-database-edit"
+            | "yss-database-schema"
             | "yss-dataset-profile"
             | "yss-duckdb"
             | "yss-sql-source"

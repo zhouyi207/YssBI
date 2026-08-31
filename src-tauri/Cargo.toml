@@ -17,6 +17,7 @@ members = [
     "crates/yss-data-contract",
     "crates/yss-database-contract",
     "crates/yss-database-edit",
+    "crates/yss-database-schema",
     "crates/yss-dataset-profile",
     "crates/yss-diagnostics",
     "crates/yss-display-naming",
@@ -111,6 +112,7 @@ yss-computation-settings = { path = "./crates/yss-computation-settings" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
+yss-database-schema = { path = "./crates/yss-database-schema" }
 yss-dataset-profile = { path = "./crates/yss-dataset-profile" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-display-naming = { path = "./crates/yss-display-naming" }

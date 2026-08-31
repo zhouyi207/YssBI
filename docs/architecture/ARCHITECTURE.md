@@ -112,6 +112,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation、fingerprint 与 CSV/Parquet export format 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-edit/` | 独立 Database Core：共享 `EditOperation`、undo/redo `EditHistory` 与 `EditState` projection 的唯一 owner；不依赖 Polars、DuckDB、root database、Application 或 Tauri |
+| `src-tauri/crates/yss-database-schema/` | 独立 Database Core：runtime schema facts、runtime/schema revision projection，以及 Polars/DuckDB physical metadata 到 canonical `DataType` normalization 的唯一 owner；不持有 session、Application 或 Tauri authority |
 | `src-tauri/crates/yss-dataset-profile/` | 独立 Database Core：dataset profile DTO、内存 Polars column stats/distribution/overview 与稳定分类、排序语义的唯一 owner；不依赖 DuckDB、root database、Application 或 Tauri |
 | `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
 | `src-tauri/crates/yss-duckdb/` | 独立 Database Core engine crate：DuckDB table lifecycle、ingest/Arrow bridge、catalog/display metadata、paged/column query、transactional cell/row/column edit、bounded reversible column snapshot、identifier/literal quoting、dataset-profile physical SQL 与 typed CSV/Parquet `COPY` export 的唯一 owner |
@@ -147,7 +148,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/database/` | DatabaseInstance state routing、session/runtime authority、schema snapshot 与 query/edit/export orchestration；edit model/history、Polars adapter、DuckDB mechanics、external SQL source 和 filesystem I/O 分别由 `yss-database-edit`、`yss-tabular-polars`、`yss-duckdb`、`yss-sql-source`、`yss-tabular-io` 拥有 |
+| `src-tauri/src/database/` | DatabaseInstance state routing、session/runtime authority 与 query/edit/export orchestration；edit model/history、runtime schema normalization、Polars adapter、DuckDB mechanics、external SQL source 和 filesystem I/O 分别由 `yss-database-edit`、`yss-database-schema`、`yss-tabular-polars`、`yss-duckdb`、`yss-sql-source`、`yss-tabular-io` 拥有 |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |

@@ -3,10 +3,10 @@ use super::error::DatabaseExportError;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
 use yss_database_edit::{EditHistory, EditOperation, EditState};
 
-use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use yss_database_schema::DatabaseSchemaFact;
 use yss_dataset_profile::{
     ColumnDistribution, ColumnStats, DatasetOverview, compute_all_column_distributions,
     compute_all_column_stats, compute_dataset_overview,

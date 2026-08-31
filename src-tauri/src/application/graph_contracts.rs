@@ -407,7 +407,6 @@ fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::schema_snapshot::database_column_fact_fixture;
     use crate::database::session_api::{
         DatabaseCatalogSnapshotFixtureSchema, database_catalog_snapshot_fixture,
     };
@@ -417,6 +416,7 @@ mod tests {
         DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
     };
+    use yss_database_schema::DatabaseColumnFact;
     use yss_graph_resource_contract::VariableValueContract;
 
     #[test]
@@ -446,7 +446,7 @@ mod tests {
                 database: database.id.clone(),
                 runtime_revision: 0,
                 schema_revision: 0,
-                columns: Box::new([database_column_fact_fixture(
+                columns: Box::new([DatabaseColumnFact::new(
                     yss_tabular_contract::TabularColumnName::try_from("amount").unwrap(),
                     DataType::Float64,
                     false,

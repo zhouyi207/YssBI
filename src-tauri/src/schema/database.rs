@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::database::schema_snapshot::DatabaseColumnFact;
+use yss_database_schema::DatabaseColumnFact;
 
 fn default_csv_delimiter() -> char {
     ','
@@ -358,6 +358,10 @@ impl TryFrom<DatabaseEngineDTO> for yss_database_contract::DatabaseEngine {
 mod tests {
     use super::*;
     use serde_json::json;
+    use yss_data_contract::DataType;
+    use yss_database_contract::DatabaseId;
+    use yss_database_schema::DatabaseSchemaFact;
+    use yss_duckdb::DuckDbColumnMeta;
 
     #[test]
     fn database_declaration_wire_exposes_only_machine_load_state() {
@@ -392,6 +396,34 @@ mod tests {
                 "name": "Sales",
                 "loadFailed": true,
             })
+        );
+    }
+
+    #[test]
+    fn database_schema_facts_map_to_column_info_dto_wire() {
+        let database = DatabaseId::from_existing("database-id".into());
+        let source_columns = [
+            DuckDbColumnMeta {
+                name: "value".into(),
+                dtype: "Int64".into(),
+            },
+            DuckDbColumnMeta {
+                name: "label".into(),
+                dtype: "String".into(),
+            },
+        ];
+        let fact = DatabaseSchemaFact::from_duckdb(&database, &source_columns)
+            .expect("test database schema should be valid");
+
+        let wire = serde_json::to_value(column_info_from_schema(fact.columns()))
+            .expect("column info DTOs should serialize");
+
+        assert_eq!(
+            wire,
+            json!([
+                { "name": "value", "type": DataType::Int64.to_string() },
+                { "name": "label", "type": DataType::String.to_string() },
+            ])
         );
     }
 

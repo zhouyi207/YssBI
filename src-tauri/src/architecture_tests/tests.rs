@@ -2233,7 +2233,7 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
         .expect("the Rust architecture policy must be readable");
     assert!(
         policy.contains(
-            "\"yss-database-edit\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
+            "\"yss-database-edit\"\n            | \"yss-database-schema\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
         ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the dataset profile crate must be classified in Database Core"
     );
@@ -2471,7 +2471,7 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
         "src-tauri/src/database/database_instance.rs",
         "src-tauri/src/database/database_state.rs",
         "src-tauri/src/database/project_storage.rs",
-        "src-tauri/src/database/schema_snapshot.rs",
+        "src-tauri/crates/yss-database-schema/src/lib.rs",
         "src-tauri/src/application/database.rs",
         "src-tauri/src/project/project_io.rs",
     ] {
@@ -2683,6 +2683,117 @@ fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallba
         policy.contains("| \"yss-sql-source\"")
             && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the SQL source crate must be classified in Database Core"
+    );
+}
+
+#[test]
+fn database_schema_has_one_owner_without_root_snapshot_or_type_string_drift() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-database-schema/Cargo.toml",
+        "src-tauri/crates/yss-database-schema/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "the database schema owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/database/schema_snapshot.rs")
+            .exists(),
+        "the root package must not retain a database schema snapshot owner"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-database-schema\"",
+        "yss-database-schema = { path = \"./crates/yss-database-schema\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+
+    let schema_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-schema/Cargo.toml"))
+            .expect("the database schema manifest must be readable");
+    for dependency in [
+        "polars.workspace = true",
+        "thiserror.workspace = true",
+        "yss-data-contract = { path = \"../yss-data-contract\" }",
+        "yss-database-contract = { path = \"../yss-database-contract\" }",
+        "yss-duckdb = { path = \"../yss-duckdb\" }",
+        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
+    ] {
+        assert!(
+            schema_manifest.contains(dependency),
+            "the database schema crate must declare {dependency}"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-schema/src/lib.rs"))
+            .expect("the database schema owner must be readable");
+    for invariant in [
+        "pub struct DatabaseRuntimeRevision",
+        "pub struct DatabaseSchemaRevision",
+        "pub struct DatabaseColumnFact",
+        "pub struct DatabaseSchemaFact",
+        "pub enum DatabaseSchemaFactError",
+        "pub fn from_dataframe",
+        "pub fn from_duckdb",
+        "\"DateTime\" | \"Datetime\" => DataType::Datetime",
+        "duckdb_timestamp_metadata_maps_to_datetime_without_any_fallback",
+        "dataframe_schema_preserves_temporal_types_nullability_and_revisions",
+        "invalid_physical_column_names_fail_closed",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "the database schema owner must preserve invariant {invariant}"
+        );
+    }
+    for forbidden in ["crate::database", "yssbi_lib", "tauri::"] {
+        assert!(
+            !owner.contains(forbidden),
+            "the database schema owner must not depend backwards on {forbidden}"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/application/database.rs",
+        "src-tauri/src/application/database_mutation.rs",
+        "src-tauri/src/application/project_query.rs",
+        "src-tauri/src/database/database_instance.rs",
+        "src-tauri/src/database/plot_query.rs",
+        "src-tauri/src/database/runtime/mod.rs",
+        "src-tauri/src/database/runtime/physical.rs",
+        "src-tauri/src/database/session_api.rs",
+        "src-tauri/src/schema/database.rs",
+    ] {
+        let consumer = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        assert!(
+            consumer.contains("yss_database_schema") && !consumer.contains("schema_snapshot"),
+            "{relative} must consume the canonical database schema crate directly"
+        );
+    }
+    let root_database = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    assert!(
+        !root_database.contains("schema_snapshot"),
+        "the root database module must not retain a schema compatibility facade"
+    );
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("canonical_origin_targets: &[\"yss_database_schema::DatabaseColumnFact\"]")
+            && policy.contains("| \"yss-database-schema\"")
+            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        "database schema ownership must be canonical and classified in Database Core"
     );
 }
 
@@ -2997,7 +3108,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         .expect("the Rust architecture policy must be readable");
     assert!(
         policy.contains(
-            "\"yss-database-edit\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
+            "\"yss-database-edit\"\n            | \"yss-database-schema\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
         ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the tabular I/O crate must be classified in Database Core"
     );

@@ -7,12 +7,12 @@ use crate::database::error::{
     DatabaseDriverError, DatabaseError, DatabaseErrorCode, DatabaseOperation,
 };
 use crate::database::runtime::DatabaseRuntimeSession;
-use crate::database::schema_snapshot::DatabaseColumnFact;
 use crate::database::session_api::{
     self, DatabaseColumnSelection, DatabaseDataSnapshotRequest, DatabaseQueryBasis,
 };
 use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
+use yss_database_schema::DatabaseColumnFact;
 use yss_tabular_contract::TabularColumnName;
 use yss_tabular_polars::column_to_series;
 

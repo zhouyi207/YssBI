@@ -4,8 +4,10 @@
 `DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
 history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast；`yss-duckdb` owns
 transactional SQL edit/reverse 与 bounded column snapshot；`yss-sql-source` owns external
-SQLite/PostgreSQL/MySQL discovery 与 strict typed materialization。`src-tauri/src/database/` owns
-`DatabaseInstance` state routing、session authority、schema metadata 与 query/edit orchestration。
+SQLite/PostgreSQL/MySQL discovery 与 strict typed materialization；`yss-database-schema` owns runtime
+schema facts、revision projection 以及 DuckDB/Polars physical schema normalization。
+`src-tauri/src/database/` owns `DatabaseInstance` state routing、session/runtime authority 与
+query/edit orchestration。
 Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
 
@@ -145,9 +147,9 @@ DuckDB overview 仍准确提供：
 |---|---|
 | `database_instance.rs` | State-dependent query/edit/export interface |
 | `project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
-| `schema_snapshot.rs` | DuckDB/Polars metadata 到 Database-owned `DatabaseSchemaFact`/`DataType` 的 normalization |
 | `../schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
 | `../../crates/yss-database-edit/` | EditOperation、EditHistory 与 EditState |
+| `../../crates/yss-database-schema/` | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization |
 | `../../crates/yss-tabular-polars/src/edit.rs` | checked JSON/Polars edit apply、reverse 与 cast |
 | `../../crates/yss-duckdb/src/edit.rs` | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits |
 | `../../crates/yss-duckdb/src/column_snapshot.rs` | Bounded reversible delete-column snapshot |

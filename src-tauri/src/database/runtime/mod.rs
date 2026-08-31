@@ -2,7 +2,6 @@ mod physical;
 mod registry;
 
 use crate::database::error::{DatabaseError, DatabaseOperation};
-use crate::database::schema_snapshot::DatabaseSchemaFact;
 pub(crate) use physical::PreparedDatabasePhysicalMutation;
 use physical::{
     DatabaseRuntimeDataSnapshot, DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot,
@@ -19,6 +18,7 @@ use yss_database_contract::{
     DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
 };
 use yss_database_edit::EditState;
+use yss_database_schema::DatabaseSchemaFact;
 
 pub(crate) use registry::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,

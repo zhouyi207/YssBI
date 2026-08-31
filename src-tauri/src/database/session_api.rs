@@ -8,15 +8,15 @@ use crate::database::runtime::{
     DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
     DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
-use crate::database::schema_snapshot::{
-    DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
-};
 use yss_data_contract::DataType;
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
 use yss_database_edit::EditState;
+use yss_database_schema::{
+    DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
+};
 use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

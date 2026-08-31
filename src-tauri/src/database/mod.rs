@@ -6,7 +6,6 @@ pub mod session_api;
 pub mod database_instance;
 pub mod database_state;
 pub mod project_storage;
-pub mod schema_snapshot;
 
 pub use database_instance::*;
 pub use database_state::*;

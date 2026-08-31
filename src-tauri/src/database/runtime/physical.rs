@@ -7,10 +7,10 @@ use std::path::Path;
 use crate::database::database_instance::DatabaseInstance;
 use crate::database::database_state::DatabaseState;
 use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
-use crate::database::schema_snapshot::{DatabaseColumnFact, DatabaseSchemaFact};
 use crate::database::session_api::DatabaseMutationOperation;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
 use yss_database_edit::EditState;
+use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 use yss_tabular_contract::{
     FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot,
 };

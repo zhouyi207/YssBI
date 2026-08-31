@@ -11,7 +11,6 @@ use crate::application::events::{
 };
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database::runtime::DatabaseRuntimeSession;
-use crate::database::schema_snapshot::DatabaseRuntimeRevision;
 use crate::database::session_api::{
     CommittedDatabaseRuntimeChange, DatabaseCompensationAttempt, DatabaseCompensationFailureCode,
     DatabaseDeclarationTransition, DatabaseMutationOperation as RuntimeDatabaseMutationOperation,
@@ -20,6 +19,7 @@ use crate::database::session_api::{
 };
 use yss_database_contract::{DatabaseDeclarationObservation, DatabaseId};
 use yss_database_edit::EditState;
+use yss_database_schema::DatabaseRuntimeRevision;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DatabaseMutationRequest {

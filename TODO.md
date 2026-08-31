@@ -786,3 +786,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   降级为 null、BLOB 被替换成 `<N bytes>` 字符串、空表丢失列 schema、list-table decode error 被 `filter_map`
   吞掉、SQLite 路径手拼 URL，以及 `ssl`/`charset`/`auto_create` persisted config 未生效的问题；unsupported
   source type 改为 fail closed，并验证同步 API 在既有 Tokio runtime 内不会 nested-`block_on` panic。
+- [ ] 将根 `database/schema_snapshot.rs` 的 runtime schema facts、revision projection 与 Polars/DuckDB
+  physical metadata normalization 迁入职责命名的 `src-tauri/crates/yss-database-schema/` Database Core；删除
+  根 owner/facade，并让 Application、Database runtime 与 Transport conversion 直接消费唯一 schema owner，
+  session/runtime authority 继续留在根 Database 层。
+- [ ] 修复 DuckDB `TIMESTAMP` metadata 经 `duckdb_type_to_raw_string` 产生精确 `DateTime` 后，在 schema
+  normalization 中因仅识别 `DateTime(...)` 而静默降级为 `DataType::Any` 的漂移；同时锁定 Polars temporal
+  dtype、nullable、revision 与非法列名 fail-closed 语义。
