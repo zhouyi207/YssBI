@@ -839,3 +839,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `BayesInferenceService` 强制持有非可选 `BayesWorkerClient` 和 app-data root，生产与测试共同通过
   `BayesWorkerPort` 执行；删除双 queue/runner、空 SCI facade、不可达 cancel backend 分支与零调用 artifact reader，
   并由架构测试禁止恢复 test-only backend、可选 worker 或 Transport validation 镜像。
+- [ ] 将根 `julia/bayes_worker_adapter` 的 Julia model kernel 生成、typed exchange files、worker task 状态、
+  cancel/result/artifact port 实现整体迁入 `src-tauri/crates/yss-bayes-worker-julia/` Backend Adapter；删除空根
+  `julia` facade，让 composition root 直接构造具体 adapter，并禁止新 crate 反向依赖 Tauri、Application、
+  Commands、Project 或 Database。

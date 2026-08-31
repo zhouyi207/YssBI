@@ -9,6 +9,7 @@
 - [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
 - [Bayes result 说明](../../src-tauri/crates/yss-bayes-result/README.md)
 - [Bayes worker 契约说明](../../src-tauri/crates/yss-bayes-worker/README.md)
+- [Julia Bayes worker 适配器说明](../../src-tauri/crates/yss-bayes-worker-julia/README.md)
 - [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
@@ -168,11 +169,11 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
 | `src-tauri/crates/yss-bayes-result/` | 独立 Pure Leaf：Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 的唯一 owner；不持有 model 构造、worker/process capability、filesystem lease、Julia、Polars、Application state 或 Tauri |
 | `src-tauri/crates/yss-bayes-worker/` | 独立 Pure Leaf：validated Bayes task、opaque task/artifact handle、terminal/error contract、`BayesWorkerPort` 与 capability-gated `BayesWorkerClient` 的唯一 owner；不持有 Julia process、filesystem artifact、Polars、Application state 或 Tauri |
+| `src-tauri/crates/yss-bayes-worker-julia/` | 独立 Backend Adapter：`BayesWorkerPort` 的 Julia 实现、Julia model kernel 生成、typed exchange files、worker task 状态与安全 artifact materialization 的唯一 owner；组合 `yss-bayes-worker` 和 `yss-julia-worker`，不依赖 Tauri、Application、Commands、Project 或 Database |
 | `src-tauri/src/sci/` | 尚待迁移的非 Bayes SCI runtime API 与 regression/panel models；共享 input/settings/control/error、Bayes model/result/worker contract 已分别由 `yss-sci-contract`、`yss-bayes-model`、`yss-bayes-result`、`yss-bayes-worker` 唯一拥有；根 SCI 不保留 test-only Bayes backend/input-validation facade，也不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/crates/yss-sci-contract/` | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现 |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
-| `src-tauri/src/julia/` | 待迁移的 Julia Bayes adapter；runtime discovery 与通用 worker host 已分别由 `yss-julia-runtime`、`yss-julia-worker` 拥有 |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
 | `src-tauri/crates/yss-diagnostics/` | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing` |
 | `src-tauri/crates/yss-window-state/` | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner |
@@ -272,7 +273,7 @@ command_bayes
   → application/bayes
   → SCI-facing StatisticalInput
   → BayesWorkerPort
-  → JuliaBayesWorkerAdapter
+  → yss-bayes-worker-julia::JuliaBayesWorkerAdapter
 ```
 
 ## 5. Project authority 与资源生命周期
@@ -389,8 +390,8 @@ yss-graph-resource-contract
   → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
 yss-julia-runtime
   → yss-julia-worker + Julia Tauri commands
-yss-julia-worker
-  → Julia Bayes adapter + Julia Tauri commands + composition root
+yss-julia-worker + yss-bayes-worker
+  → yss-bayes-worker-julia → composition root
 yss-project-layout
   → yss-graph-document + yss-worksheet-document + Project persistence/indexing + Platform watcher classification
 yss-path-display
@@ -635,7 +636,7 @@ adapter 因而可以生成完整 generation-bound handle/result，而 Applicatio
 | Durbin-Watson/Ljung-Box/Breusch-Godfrey | Rust：`backends::rust::time_series::serial_tests` |
 | t/Wald hypothesis tests | Rust：`backends::rust::stats::hypothesis` |
 | Node regression/time-series statistics | Application/Execution scientific port → `yss-sci` adapter |
-| Bayesian inference | Julia：`JuliaBayesWorkerAdapter` 实现 `BayesWorkerPort` |
+| Bayesian inference | Julia：`yss-bayes-worker-julia::JuliaBayesWorkerAdapter` 实现 `BayesWorkerPort` |
 
 Time-series application interface 直接调度 Rust production implementation，没有 Julia time-series adapter。Julia 是 Bayes seam 上唯一真实 production adapter。
 
@@ -647,7 +648,11 @@ Regression fit 不再把统计量仅当作松散 JSON。`RegressionFit.statistic
 
 `yss-julia-worker` Backend Adapter 管理单个可重启 worker process、序列化 JSON-RPC task request、progress/cancel、embedded assets 与 app-owned task directories。它只输出 typed worker error，不再提供 `Result<_, String>` compatibility 入口；worker environment preparation 复用 `yss-julia-runtime` 的 stderr→stdout→process-status 唯一诊断策略，startup 状态用完备 match 表达而不保留 `unreachable!()`。该 crate 不知道 SCI/Bayes/Polars/Tauri，当前 Julia operation registry 只包含 `bayes_fit`。
 
-`JuliaBayesWorkerAdapter`：
+`yss-bayes-worker-julia` Backend Adapter 组合 backend-neutral `yss-bayes-worker` port 与通用
+`yss-julia-worker` process host。根 package 不再保留 `julia` module facade；composition root 直接构造
+`yss_bayes_worker_julia::JuliaBayesWorkerAdapter`。
+
+`yss-bayes-worker-julia::JuliaBayesWorkerAdapter`：
 
 - 接收 Application 从 Project/Database snapshot 生成的 typed `StatisticalInput`；
 - 在 owned task directory 写 Arrow input、model/config、generated kernels 与 exchange manifest；

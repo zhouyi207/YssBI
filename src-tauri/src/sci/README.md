@@ -7,7 +7,7 @@ Bayes commands / application
   → yss-bayes-model draft/parser/validated spec
   → yss-bayes-result diagnostics/task/result projections
   → yss-bayes-worker validated task/opaque handle/port client
-  → JuliaBayesWorkerAdapter
+  → yss-bayes-worker-julia::JuliaBayesWorkerAdapter
 
 other scientific application / node_system kernels
   → sci::api remaining runtime interface
@@ -24,12 +24,13 @@ other scientific application / node_system kernels
 - application-facing scientific request/result types；
 - ACF/PACF、serial tests、hypothesis 和 node statistics interface；
 - typed regression models/statistics；
-- Rust/Julia adapters；Julia worker adapter 位于 `julia/bayes_worker_adapter`；
+- Rust SCI adapters；
 
 Bayes model/draft/parser/validation 由 `yss-bayes-model` 拥有；Bayes diagnostics、task/result
 projection 与 artifact manifest 由 `yss-bayes-result` 拥有；shared statistical input/settings/control
 与 stable `SciError` 由 `yss-sci-contract` 拥有；validated worker task、opaque handle、
-`BayesWorkerPort` 与 `BayesWorkerClient` 由 `yss-bayes-worker` 拥有。
+`BayesWorkerPort` 与 `BayesWorkerClient` 由 `yss-bayes-worker` 拥有；Julia 的具体 port
+实现由 `yss-bayes-worker-julia` Backend Adapter 拥有。
 
 本 module 不拥有：
 
@@ -56,9 +57,8 @@ sci/
 └─ engine.rs
 ```
 
-The concrete Julia worker adapter is composition-side at
-`src-tauri/src/julia/bayes_worker_adapter/`; it implements the contract-owned
-`yss-bayes-worker::BayesWorkerPort` and is not a SCI backend module.
+The concrete Julia worker adapter is composition-side in `yss-bayes-worker-julia`; it implements
+the contract-owned `yss-bayes-worker::BayesWorkerPort` and is not a SCI backend module.
 
 ## Production execution
 
@@ -68,7 +68,7 @@ The concrete Julia worker adapter is composition-side at
 | Durbin-Watson, Ljung-Box, Breusch-Godfrey | Rust |
 | t/Wald hypothesis tests | Rust |
 | Node regression/time-series statistics | Rust over `yss-sci` |
-| Bayesian inference | `JuliaBayesWorkerAdapter` through `BayesWorkerPort` |
+| Bayesian inference | `yss-bayes-worker-julia::JuliaBayesWorkerAdapter` through `BayesWorkerPort` |
 
 ACF/PACF 与 context-free KDE 直接位于 SCI API；`SciContext::rust()` 仍为 serial/hypothesis
 显式选择当前 Rust path。不存在 Julia time-series adapter；Julia 只在

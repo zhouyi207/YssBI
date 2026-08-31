@@ -6937,22 +6937,10 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
         );
     }
 
-    let root_module = std::fs::read_to_string(root.join("src-tauri/src/julia/mod.rs"))
-        .expect("root Julia adapter module must be readable");
-    for forbidden_facade in [
-        "pub enum JuliaRuntimeState",
-        "pub struct JuliaRuntimeStatus",
-        "pub fn get_runtime_status",
-        "pub fn install_latest_julia",
-        "pub fn system_julia_executable",
-        "pub fn command_output_failure_detail",
-        "pub use yss_julia_runtime",
-    ] {
-        assert!(
-            !root_module.contains(forbidden_facade),
-            "root Julia module must not retain runtime facade {forbidden_facade}"
-        );
-    }
+    assert!(
+        !root.join("src-tauri/src/julia/mod.rs").exists(),
+        "the root Julia facade must stay absent"
+    );
 
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-runtime/Cargo.toml"))
@@ -7049,14 +7037,10 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
         );
     }
 
-    let root_module = std::fs::read_to_string(root.join("src-tauri/src/julia/mod.rs"))
-        .expect("root Julia adapter module must be readable");
-    for forbidden_facade in ["pub mod worker", "pub use yss_julia_worker"] {
-        assert!(
-            !root_module.contains(forbidden_facade),
-            "root Julia module must not retain worker facade {forbidden_facade}"
-        );
-    }
+    assert!(
+        !root.join("src-tauri/src/julia/mod.rs").exists(),
+        "the root Julia facade must stay absent"
+    );
 
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-worker/Cargo.toml"))
@@ -7124,8 +7108,8 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
     for consumer in [
         "src-tauri/src/lib.rs",
         "src-tauri/src/commands/command_julia.rs",
-        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
-        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
         let source = std::fs::read_to_string(root.join(consumer))
             .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
@@ -7138,6 +7122,114 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
             "{consumer} must not restore a root Julia worker facade"
         );
     }
+}
+
+#[test]
+fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
+    let facts = production_facts();
+    const ADAPTER_SOURCES: &[&str] = &[
+        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/predictor.rs",
+    ];
+    for source in ADAPTER_SOURCES {
+        assert_eq!(
+            facts.classification.get(*source),
+            Some(&RustLayer::BackendAdapter),
+            "Julia Bayes worker source {source} must remain a Backend adapter"
+        );
+    }
+
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-bayes-worker-julia/Cargo.toml",
+        "src-tauri/crates/yss-bayes-worker-julia/README.md",
+    ]
+    .into_iter()
+    .chain(ADAPTER_SOURCES.iter().copied())
+    {
+        assert!(
+            root.join(relative).is_file(),
+            "Julia Bayes worker adapter owner must exist at {relative}"
+        );
+    }
+    for removed in [
+        "src-tauri/src/julia/mod.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "root Julia Bayes adapter path must stay absent at {removed}"
+        );
+    }
+
+    let workspace = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-bayes-worker-julia\"",
+        "yss-bayes-worker-julia = { path = \"./crates/yss-bayes-worker-julia\" }",
+    ] {
+        assert!(
+            workspace.contains(declaration),
+            "workspace must declare the Julia Bayes adapter through {declaration}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/Cargo.toml"))
+            .expect("Julia Bayes adapter manifest must be readable");
+    for dependency in [
+        "polars.workspace = true",
+        "serde.workspace = true",
+        "serde_json.workspace = true",
+        "thiserror.workspace = true",
+        "tracing.workspace = true",
+        "yss-bayes-model = { path = \"../yss-bayes-model\" }",
+        "yss-bayes-result = { path = \"../yss-bayes-result\" }",
+        "yss-bayes-worker = { path = \"../yss-bayes-worker\" }",
+        "yss-julia-worker = { path = \"../yss-julia-worker\" }",
+        "yss-sci-contract = { path = \"../yss-sci-contract\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "Julia Bayes adapter must declare boundary dependency {dependency}"
+        );
+    }
+    for forbidden in ["tauri", "yssbi", "yss-database", "yss-project"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "Julia Bayes adapter must remain independent of {forbidden}"
+        );
+    }
+
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/src/lib.rs"))
+            .expect("Julia Bayes adapter owner must be readable");
+    assert!(
+        owner.contains("pub struct JuliaBayesWorkerAdapter")
+            && owner.contains("impl BayesWorkerPort for JuliaBayesWorkerAdapter")
+            && owner.contains("use yss_julia_worker::{"),
+        "the extracted crate must own the concrete Bayes worker port implementation"
+    );
+    let fit =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/src/fit.rs"))
+            .expect("Julia Bayes fit adapter must be readable");
+    assert!(
+        fit.contains(
+            "const JULIA_BAYES_WORKER_TRACING_TARGET: &str = \"yssbi::bayes_worker_julia\";",
+        ) && !fit.contains("yssbi::julia::bayes_worker_adapter"),
+        "Julia Bayes tracing must use one target owned by the extracted crate"
+    );
+
+    let composition = std::fs::read_to_string(root.join("src-tauri/src/lib.rs"))
+        .expect("composition root must be readable");
+    assert!(
+        composition.contains("yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new")
+            && !composition.contains("pub mod julia"),
+        "the composition root must construct the adapter directly without a Julia facade"
+    );
 }
 
 #[test]
@@ -7690,8 +7782,8 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
 
     for direct_consumer in [
         "src-tauri/src/application/bayes.rs",
-        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
-        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
+        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
         let source = std::fs::read_to_string(facts.repository_root.join(direct_consumer))
             .expect("Bayes worker consumer must be readable");

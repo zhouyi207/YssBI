@@ -9,3 +9,6 @@ transport code can only consume the validated projections.
 
 This crate does not own Julia process management, filesystem artifacts, Polars dataframes, Tauri
 commands, or application task storage.
+
+The production Julia implementation lives in the separate `yss-bayes-worker-julia` Backend
+Adapter.

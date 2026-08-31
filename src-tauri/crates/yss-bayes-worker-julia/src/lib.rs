@@ -1,3 +1,5 @@
+//! Julia implementation of the backend-neutral Bayesian worker port.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::num::NonZeroU64;
@@ -76,13 +78,15 @@ enum AdapterTaskState {
         worker_task_id: Box<str>,
         completion: Option<mpsc::Receiver<Result<JuliaTaskCompletion, JuliaWorkerError>>>,
     },
-    Completed {
-        result: Option<BayesTaskResult>,
-        artifacts: BTreeMap<BayesArtifactHandle, OwnedArtifact>,
-        _task_directory: JuliaWorkerTaskDirectory,
-    },
+    Completed(Box<CompletedTaskState>),
     Cancelled,
     Failed,
+}
+
+struct CompletedTaskState {
+    result: Option<BayesTaskResult>,
+    artifacts: BTreeMap<BayesArtifactHandle, OwnedArtifact>,
+    _task_directory: JuliaWorkerTaskDirectory,
 }
 
 impl JuliaBayesWorkerAdapter {
@@ -119,10 +123,7 @@ impl JuliaBayesWorkerAdapter {
                     phase: BayesWorkerPhase::Start,
                 });
             };
-            let next = match current.checked_add(1) {
-                Some(next) => next,
-                None => 0,
-            };
+            let next = current.checked_add(1).unwrap_or_default();
             match self.next_generation.compare_exchange_weak(
                 current,
                 next,
@@ -180,11 +181,11 @@ impl JuliaBayesWorkerAdapter {
         }
         state.tasks.insert(
             handle.clone(),
-            AdapterTaskState::Completed {
+            AdapterTaskState::Completed(Box::new(CompletedTaskState {
                 result: None,
                 artifacts: completed.artifacts,
                 _task_directory: completed.task_directory,
-            },
+            })),
         );
         Ok(completed.result)
     }
@@ -286,11 +287,14 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                         })?,
                     worker_task_id.clone(),
                 ),
-                Some(AdapterTaskState::Completed { result, .. }) => {
-                    return result.take().ok_or(BayesWorkerError::WorkerTerminal {
-                        task: handle.clone(),
-                        terminal: BayesWorkerTerminalCode::Succeeded,
-                    });
+                Some(AdapterTaskState::Completed(completed)) => {
+                    return completed
+                        .result
+                        .take()
+                        .ok_or(BayesWorkerError::WorkerTerminal {
+                            task: handle.clone(),
+                            terminal: BayesWorkerTerminalCode::Succeeded,
+                        });
                 }
                 Some(AdapterTaskState::Cancelled) => {
                     return Err(BayesWorkerError::Cancelled {
@@ -369,7 +373,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 })?;
             match Self::validate_current(&state, handle)? {
                 AdapterTaskState::Active { worker_task_id, .. } => worker_task_id.clone(),
-                AdapterTaskState::Completed { .. } => {
+                AdapterTaskState::Completed(_) => {
                     return Ok(BayesCancelTerminal::AlreadyTerminal {
                         terminal: BayesWorkerTerminalCode::Succeeded,
                     });
@@ -415,7 +419,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                     .insert(handle.clone(), AdapterTaskState::Cancelled);
                 Ok(BayesCancelTerminal::Cancelled)
             }
-            Some(AdapterTaskState::Completed { .. }) => Ok(BayesCancelTerminal::AlreadyTerminal {
+            Some(AdapterTaskState::Completed(_)) => Ok(BayesCancelTerminal::AlreadyTerminal {
                 terminal: BayesWorkerTerminalCode::Succeeded,
             }),
             Some(AdapterTaskState::Cancelled) => Ok(BayesCancelTerminal::AlreadyTerminal {
@@ -449,8 +453,8 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                     phase: BayesWorkerPhase::ReadArtifact,
                 })?;
             match Self::validate_current(&state, artifact.task())? {
-                AdapterTaskState::Completed { artifacts, .. } => {
-                    let owned = artifacts.get(artifact).ok_or_else(|| {
+                AdapterTaskState::Completed(completed) => {
+                    let owned = completed.artifacts.get(artifact).ok_or_else(|| {
                         BayesWorkerError::ArtifactNotOwned {
                             artifact: artifact.clone(),
                         }

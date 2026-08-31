@@ -9119,6 +9119,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-bayes-worker-julia"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+ "yss-bayes-model",
+ "yss-bayes-result",
+ "yss-bayes-worker",
+ "yss-julia-worker",
+ "yss-sci-contract",
+]
+
+[[package]]
 name = "yss-canonical-hash"
 version = "0.1.0"
 dependencies = [
@@ -9772,6 +9788,7 @@ dependencies = [
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker",
+ "yss-bayes-worker-julia",
  "yss-canonical-hash",
  "yss-computation-settings",
  "yss-data-contract",

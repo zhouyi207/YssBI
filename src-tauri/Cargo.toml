@@ -15,6 +15,7 @@ members = [
     "crates/yss-bayes-model",
     "crates/yss-bayes-result",
     "crates/yss-bayes-worker",
+    "crates/yss-bayes-worker-julia",
     "crates/yss-canonical-hash",
     "crates/yss-computation-settings",
     "crates/yss-data-contract",
@@ -120,6 +121,7 @@ tauri-build = { version = "2", features = [] }
 yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-bayes-result = { path = "./crates/yss-bayes-result" }
 yss-bayes-worker = { path = "./crates/yss-bayes-worker" }
+yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
 yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-computation-settings = { path = "./crates/yss-computation-settings" }
 yss-data-contract = { path = "./crates/yss-data-contract" }

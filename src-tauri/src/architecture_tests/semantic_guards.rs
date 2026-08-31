@@ -324,9 +324,9 @@ pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -
 
 const WORKER_FILE: &str = "src-tauri/crates/yss-bayes-worker/src/lib.rs";
 const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
-    "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
-    "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
-    "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
+    "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
+    "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
+    "src-tauri/crates/yss-bayes-worker-julia/src/predictor.rs",
 ];
 const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
     "src-tauri/crates/yss-execution/src/ports/scientific.rs",

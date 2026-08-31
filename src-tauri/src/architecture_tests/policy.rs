@@ -149,19 +149,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/backend_adapters/execution/resources.rs",
         RustLayer::BackendAdapter,
     ),
-    ("src-tauri/src/julia/mod.rs", RustLayer::BackendAdapter),
-    (
-        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
-        RustLayer::BackendAdapter,
-    ),
     (
         "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
         RustLayer::BuiltinComposition,
@@ -292,7 +279,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib",
         canonical_origin_targets: &[
             "yssbi_lib::application::bayes::BayesInferenceService::with_worker",
-            "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new",
+            "yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new",
             "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
             "yss_julia_worker::JuliaWorkerManager::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
@@ -1624,7 +1611,8 @@ fn non_build_memberships(
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
-        "yss-julia-runtime"
+        "yss-bayes-worker-julia"
+            | "yss-julia-runtime"
             | "yss-julia-worker"
             | "yss-project-registry-sqlite"
             | "yss-tabular-polars"

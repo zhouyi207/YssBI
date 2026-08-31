@@ -1,3 +1,5 @@
+//! Julia task preparation, exchange files, and result materialization.
+
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -19,6 +21,8 @@ use yss_julia_worker::{
     JuliaWorkerTaskDirectory,
 };
 use yss_sci_contract::{CategoricalRole, StatisticalInput, StatisticalScalar};
+
+const JULIA_BAYES_WORKER_TRACING_TARGET: &str = "yssbi::bayes_worker_julia";
 
 pub(super) struct PreparedJuliaTask {
     model: serde_json::Value,
@@ -105,7 +109,7 @@ fn response_input<'a>(
 
 fn model_generation_error(error: JuliaModelGenerationError) -> JuliaWorkerError {
     tracing::warn!(
-        target: "yssbi::julia::bayes_worker_adapter",
+        target: JULIA_BAYES_WORKER_TRACING_TARGET,
         diagnostic_domain = "execution",
         error = ?error,
         "Julia model generation rejected a validated task"
@@ -414,7 +418,7 @@ pub(super) fn map_worker_error(
         }
     } else {
         tracing::warn!(
-            target: "yssbi::julia::bayes_worker_adapter",
+            target: JULIA_BAYES_WORKER_TRACING_TARGET,
             diagnostic_domain = "execution",
             error_code = error.code().as_str(),
             "Julia Bayes worker task failed"

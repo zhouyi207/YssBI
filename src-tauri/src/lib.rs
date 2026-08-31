@@ -8,7 +8,6 @@ pub mod commands;
 pub mod error;
 pub mod event;
 
-pub mod julia;
 pub mod project;
 mod schema;
 pub mod sci;
@@ -119,7 +118,7 @@ pub fn run() {
                 registry_path,
             );
             app.manage(project_registry);
-            let bayes_adapter = julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new(
+            let bayes_adapter = yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new(
                 app_dir.clone(),
                 bayes_worker.clone(),
             );

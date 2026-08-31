@@ -1,0 +1,18 @@
+[package]
+name = "yss-bayes-worker-julia"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+polars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+yss-bayes-model = { path = "../yss-bayes-model" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-bayes-worker = { path = "../yss-bayes-worker" }
+yss-julia-worker = { path = "../yss-julia-worker" }
+yss-sci-contract = { path = "../yss-sci-contract" }

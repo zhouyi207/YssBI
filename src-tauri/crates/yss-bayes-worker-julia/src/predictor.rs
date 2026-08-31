@@ -1,4 +1,4 @@
-//! Typed Julia model source generation.
+//! Typed Julia model source generation for the Bayesian worker adapter.
 
 use std::collections::BTreeMap;
 
