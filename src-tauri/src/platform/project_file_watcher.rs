@@ -1,8 +1,3 @@
-use crate::application::project_watcher::{
-    FileWatcherStartError, ObservedProjectChange, ProjectChangeSink, ProjectFileWatcherDrain,
-    ProjectFileWatcherDrainOutcome, ProjectFileWatcherFactory, ProjectFileWatcherSession,
-    ProjectWatcherEpoch, WatcherShutdownControl,
-};
 use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
@@ -12,6 +7,11 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use thiserror::Error;
 use yss_project_change::{ProjectChange, ProjectFileChangeKind, ProjectRelativePath};
+use yss_project_watcher::{
+    FileWatcherStartError, ObservedProjectChange, ProjectChangeSink, ProjectFileWatcherDrain,
+    ProjectFileWatcherDrainOutcome, ProjectFileWatcherFactory, ProjectFileWatcherSession,
+    ProjectWatcherEpoch, WatcherShutdownControl,
+};
 
 const PROJECT_CHANGE_QUEUE_CAPACITY: usize = 1;
 const PROJECT_FILE_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);

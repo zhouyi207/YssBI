@@ -802,3 +802,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   record 与 physical state 私有；删除可绕过真实 runtime 伪造 catalog snapshot 的 test-only minting seam、
   永远不可产生的内部 driver compensation 分支及重复 restore wrapper，并以架构测试锁定 runtime 不反向依赖
   Project、Application、Commands、Transport 或 Tauri。
+- [ ] 将平台中立的 project watcher epoch、delivery admission、factory/session/drain protocol、超时 ownership
+  与 replacement 状态机迁入 `src-tauri/crates/yss-project-watcher/` Application service；根 Application 只保留
+  Project authority reconciliation，Notify 适配器直接消费 crate contract，并删除未使用的重复 quiet-period 常量
+  与生产不可构造的 `DeliveryFailed` 终态。

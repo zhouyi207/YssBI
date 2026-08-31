@@ -209,7 +209,6 @@ fn watcher_shutdown_timeout_retains_handle_and_retry_joins_worker() {
     let drain = match drain.finish(WatcherShutdownControl::new(Instant::now())) {
         ProjectFileWatcherDrainOutcome::TimedOut(drain) => drain,
         ProjectFileWatcherDrainOutcome::Drained
-        | ProjectFileWatcherDrainOutcome::DeliveryFailed
         | ProjectFileWatcherDrainOutcome::WorkerPanicked => {
             panic!("the blocked worker must retain its drain owner")
         }

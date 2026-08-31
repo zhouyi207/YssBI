@@ -5048,7 +5048,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
 
     for relative in [
         "src-tauri/src/project/project_change_reconciliation.rs",
-        "src-tauri/src/application/project_watcher.rs",
+        "src-tauri/src/application/project_change.rs",
         "src-tauri/src/platform/project_file_watcher.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -6778,8 +6778,15 @@ fn window_state_has_one_platform_crate_owner_without_compatibility_module() {
 }
 
 #[test]
-fn project_watcher_ownership_is_neutral_and_platform_only() {
+fn project_watcher_has_one_lifecycle_owner_and_platform_only_notify() {
     let facts = production_facts();
+    assert_eq!(
+        facts
+            .classification
+            .get("src-tauri/crates/yss-project-watcher/src/lib.rs"),
+        Some(&RustLayer::Application),
+        "the platform-neutral watcher lifecycle must be an Application service"
+    );
     for source in [
         "src-tauri/src/platform/mod.rs",
         "src-tauri/src/platform/project_file_watcher.rs",
@@ -6788,6 +6795,61 @@ fn project_watcher_ownership_is_neutral_and_platform_only() {
             facts.classification.get(source),
             Some(&RustLayer::PlatformAdapter),
             "watcher platform source must use the exact Platform classification"
+        );
+    }
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project-watcher/Cargo.toml",
+        "src-tauri/crates/yss-project-watcher/src/lib.rs",
+        "src-tauri/crates/yss-project-watcher/src/tests.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project watcher owner must exist at {relative}"
+        );
+    }
+    assert!(
+        !root
+            .join("src-tauri/src/application/project_watcher.rs")
+            .exists(),
+        "the root Application must not retain the watcher lifecycle owner"
+    );
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/Cargo.toml"))
+            .expect("project watcher manifest must be readable");
+    for dependency in [
+        "yss-project-change = { path = \"../yss-project-change\" }",
+        "yss-project-filesystem = { path = \"../yss-project-filesystem\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project watcher must declare its canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["notify", "tauri"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "the platform-neutral watcher must not depend on {forbidden}"
+        );
+    }
+    let owner =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/src/lib.rs"))
+            .expect("project watcher owner must be readable");
+    for owned_api in [
+        "pub struct ProjectWatcherState",
+        "pub trait ProjectFileWatcherFactory",
+        "pub trait ProjectChangeSink",
+        "pub enum ProjectFileWatcherDrainOutcome",
+    ] {
+        assert!(
+            owner.contains(owned_api),
+            "project watcher crate must own {owned_api}"
+        );
+    }
+    for removed_drift in ["PROJECT_WATCHER_QUIET_PERIOD", "DeliveryFailed"] {
+        assert!(
+            !owner.contains(removed_drift),
+            "project watcher must not restore dead or duplicate fact {removed_drift}"
         );
     }
     let violations = project_watcher_source_violations(&repository_root());

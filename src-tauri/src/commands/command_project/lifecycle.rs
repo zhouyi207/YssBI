@@ -1,9 +1,6 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::project_change::ApplicationProjectWatchError;
 use crate::application::project_lifecycle::ProjectLifecycleError;
-use crate::application::project_watcher::{
-    ApplicationProjectWatchError, ObservedProjectChange, ProjectChangeSink, ProjectWatcherError,
-    ProjectWatcherState,
-};
 use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
@@ -20,6 +17,9 @@ use tauri::{AppHandle, State};
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::ProjectRegistry;
+use yss_project_watcher::{
+    ObservedProjectChange, ProjectChangeSink, ProjectWatcherError, ProjectWatcherState,
+};
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));

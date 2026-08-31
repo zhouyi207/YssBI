@@ -79,7 +79,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         // 注册全局状态管理器
-        .manage(application::project_watcher::ProjectWatcherState::new(
+        .manage(yss_project_watcher::ProjectWatcherState::new(
             std::sync::Arc::new(platform::NotifyProjectFileWatcher::new()),
         ))
         .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())

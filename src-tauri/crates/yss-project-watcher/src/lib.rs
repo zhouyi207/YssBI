@@ -5,48 +5,9 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
-use yss_project_filesystem::{ProjectFilesystemError, project_root_from_path};
-use yss_project_identity::ProjectInstanceId;
+use yss_project_change::ProjectChange;
+use yss_project_filesystem::project_root_from_path;
 
-use super::execution::session_slot::{ApplicationState, SessionCaptureError};
-
-#[derive(Debug, Error)]
-pub enum ApplicationProjectWatchError {
-    #[error(transparent)]
-    SessionCapture(#[from] SessionCaptureError),
-    #[error("watched project identity is stale")]
-    ProjectIdentityMismatch,
-    #[error("project index reconciliation failed")]
-    Reconciliation(
-        #[source]
-        #[from]
-        ProjectFilesystemError,
-    ),
-    #[error("captured application session changed during watcher reconciliation")]
-    SessionChanged,
-}
-
-impl ApplicationState {
-    pub fn reconcile_project_change(
-        &self,
-        project_instance_id: &ProjectInstanceId,
-        change: ProjectChange,
-    ) -> Result<Option<ProjectIndexInvalidation>, ApplicationProjectWatchError> {
-        let captured = self.capture_session()?;
-        if captured.project_instance_id() != project_instance_id {
-            return Err(ApplicationProjectWatchError::ProjectIdentityMismatch);
-        }
-        let event = captured
-            .project()
-            .reconcile_project_change(project_instance_id, change)?;
-        self.revalidate_captured_session(&captured)
-            .map_err(|_| ApplicationProjectWatchError::SessionChanged)?;
-        Ok(event)
-    }
-}
-
-pub const PROJECT_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);
 const PROJECT_WATCHER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
 const PROJECT_WATCHER_REAPER_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -80,7 +41,7 @@ impl WatcherShutdownControl {
         Instant::now() >= self.deadline
     }
 
-    pub(crate) fn remaining(self) -> Option<Duration> {
+    pub fn remaining(self) -> Option<Duration> {
         self.deadline.checked_duration_since(Instant::now())
     }
 }
@@ -101,7 +62,6 @@ pub trait ProjectFileWatcherSession: Send {
 
 pub enum ProjectFileWatcherDrainOutcome {
     Drained,
-    DeliveryFailed,
     WorkerPanicked,
     TimedOut(Box<dyn ProjectFileWatcherDrain>),
 }
@@ -110,7 +70,6 @@ impl fmt::Debug for ProjectFileWatcherDrainOutcome {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Drained => formatter.write_str("Drained"),
-            Self::DeliveryFailed => formatter.write_str("DeliveryFailed"),
             Self::WorkerPanicked => formatter.write_str("WorkerPanicked"),
             Self::TimedOut(_) => formatter.write_str("TimedOut(<drain>)"),
         }
@@ -305,7 +264,7 @@ impl ProjectWatcherState {
     pub fn stop(&self) {
         if let Err(error) = self.retire_active(WatcherShutdownControl::new(Instant::now())) {
             tracing::warn!(
-                target: "yssbi::application::project_watcher",
+                target: "yssbi::project_watcher",
                 diagnostic_domain = "system",
                 error = %error,
                 "Project watcher shutdown remains pending"
@@ -415,19 +374,9 @@ impl ProjectWatcherState {
                 self.finish_draining(epoch, &admission, &drain);
                 Ok(())
             }
-            ProjectFileWatcherDrainOutcome::DeliveryFailed => {
-                tracing::warn!(
-                    target: "yssbi::application::project_watcher",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectWatcherDeliveryFailed",
-                    "Project watcher delivery failed while shutting down"
-                );
-                self.finish_draining(epoch, &admission, &drain);
-                Ok(())
-            }
             ProjectFileWatcherDrainOutcome::WorkerPanicked => {
                 tracing::error!(
-                    target: "yssbi::application::project_watcher",
+                    target: "yssbi::project_watcher",
                     diagnostic_domain = "system",
                     diagnostic_event = "projectWatcherWorkerPanicked",
                     "Project watcher worker panicked while shutting down"
@@ -665,16 +614,9 @@ fn spawn_drain_reaper(cell: Arc<DrainCell>) {
     let _ = thread::Builder::new()
         .name("yssbi-project-watcher-reaper".into())
         .spawn(move || {
-            loop {
-                match cell.finish(WatcherShutdownControl::after(
-                    PROJECT_WATCHER_REAPER_TIMEOUT,
-                )) {
-                    ProjectFileWatcherDrainOutcome::TimedOut(_) => {}
-                    ProjectFileWatcherDrainOutcome::Drained
-                    | ProjectFileWatcherDrainOutcome::DeliveryFailed
-                    | ProjectFileWatcherDrainOutcome::WorkerPanicked => break,
-                }
-            }
+            while let ProjectFileWatcherDrainOutcome::TimedOut(_) = cell.finish(
+                WatcherShutdownControl::after(PROJECT_WATCHER_REAPER_TIMEOUT),
+            ) {}
         });
 }
 
@@ -709,5 +651,4 @@ impl Drop for ProjectWatcherState {
 }
 
 #[cfg(test)]
-#[path = "project_watcher/tests.rs"]
 mod tests;

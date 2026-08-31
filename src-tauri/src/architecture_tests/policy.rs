@@ -419,7 +419,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
-            "yssbi_lib::application::project_watcher::ProjectWatcherState::new",
+            "yss_project_watcher::ProjectWatcherState::new",
             "yssbi_lib::application::execution::session_factory::ProjectSessionCandidateError",
             "yssbi_lib::application::execution::session_factory::SessionResourceFactoryBuilder::from_composition",
             "yssbi_lib::application::execution::session_factory::build_current_project_candidate",
@@ -932,15 +932,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/commands/command_project/lifecycle.rs",
         fully_qualified_owner: "yssbi_lib::commands::command_project::lifecycle",
         canonical_origin_targets: &[
-            "yssbi_lib::application::project_watcher::ProjectWatcherError",
-            "yssbi_lib::application::project_watcher::ProjectWatcherState",
-            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError",
-            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::ProjectIdentityMismatch",
-            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::Reconciliation",
-            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::SessionCapture",
-            "yssbi_lib::application::project_watcher::ApplicationProjectWatchError::SessionChanged",
-            "yssbi_lib::application::project_watcher::ObservedProjectChange",
-            "yssbi_lib::application::project_watcher::ProjectChangeSink",
+            "yssbi_lib::application::project_change::ApplicationProjectWatchError",
+            "yssbi_lib::application::project_change::ApplicationProjectWatchError::ProjectIdentityMismatch",
+            "yssbi_lib::application::project_change::ApplicationProjectWatchError::Reconciliation",
+            "yssbi_lib::application::project_change::ApplicationProjectWatchError::SessionCapture",
+            "yssbi_lib::application::project_change::ApplicationProjectWatchError::SessionChanged",
+            "yss_project_watcher::ProjectWatcherError",
+            "yss_project_watcher::ProjectWatcherState",
+            "yss_project_watcher::ObservedProjectChange",
+            "yss_project_watcher::ProjectChangeSink",
             "yssbi_lib::event::event_resource::EventResource",
             "yss_project_registry::ProjectRegistry",
             "yssbi_lib::schema::project::ProjectSaveResultDto",
@@ -959,15 +959,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/platform/project_file_watcher.rs",
         fully_qualified_owner: "yssbi_lib::platform::project_file_watcher",
         canonical_origin_targets: &[
-            "yssbi_lib::application::project_watcher::FileWatcherStartError",
-            "yssbi_lib::application::project_watcher::ObservedProjectChange",
-            "yssbi_lib::application::project_watcher::ProjectChangeSink",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcherDrain",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcherDrainOutcome",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcherFactory",
-            "yssbi_lib::application::project_watcher::ProjectFileWatcherSession",
-            "yssbi_lib::application::project_watcher::ProjectWatcherEpoch",
-            "yssbi_lib::application::project_watcher::WatcherShutdownControl",
+            "yss_project_watcher::FileWatcherStartError",
+            "yss_project_watcher::ObservedProjectChange",
+            "yss_project_watcher::ProjectChangeSink",
+            "yss_project_watcher::ProjectFileWatcherDrain",
+            "yss_project_watcher::ProjectFileWatcherDrainOutcome",
+            "yss_project_watcher::ProjectFileWatcherFactory",
+            "yss_project_watcher::ProjectFileWatcherSession",
+            "yss_project_watcher::ProjectWatcherEpoch",
+            "yss_project_watcher::WatcherShutdownControl",
         ],
     },
     InternalDependencyCapability {
@@ -1711,6 +1711,8 @@ fn non_build_memberships(
             | "yss-worksheet-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
+    } else if package == "yss-project-watcher" {
+        layers.insert(RustLayer::Application);
     } else if matches!(
         package,
         "yss-project-discovery" | "yss-project-history" | "yss-project-model"

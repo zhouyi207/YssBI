@@ -9523,6 +9523,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-project-watcher"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "tracing",
+ "yss-project-change",
+ "yss-project-filesystem",
+]
+
+[[package]]
 name = "yss-resource-lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -9731,6 +9741,7 @@ dependencies = [
  "yss-project-registry",
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
+ "yss-project-watcher",
  "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",

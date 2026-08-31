@@ -1,0 +1,12 @@
+[package]
+name = "yss-project-watcher"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+yss-project-change = { path = "../yss-project-change" }
+yss-project-filesystem = { path = "../yss-project-filesystem" }
