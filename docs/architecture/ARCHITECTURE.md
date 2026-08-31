@@ -6,7 +6,7 @@
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
-- [Database 实现说明](../../src-tauri/src/database/README.md)
+- [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
 
@@ -32,7 +32,7 @@ flowchart TD
   APP --> PROJECT[Project authority]
   APP --> GRAPH[Graph semantics]
   APP --> EXEC[Execution runtime]
-  APP --> DB[Database module]
+  APP --> DB[Database runtime crate]
   APP --> SCI[Execution scientific port]
   PROJECT --> PURE[Pure persisted contracts]
   GRAPH --> PURE
@@ -45,7 +45,7 @@ flowchart TD
 
 `commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、graph、execution、database 或 sci module，以提高 depth、leverage 和 locality。
 
-`application/` 拥有跨 module 的 database use-case orchestration；`project/` 拥有 project/session authority、resource revision、commit 与 coherent snapshot，并直接依赖 `database/` 提供的存储和 runtime primitives。生产代码中的 `project/` 不依赖 `application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
+`application/` 拥有跨 module 的 database use-case orchestration，并直接组合 `yss-database-runtime` 的 session/query/mutation primitives；`project/` 独立拥有 project/session authority、resource revision、commit 与 coherent snapshot。生产代码中的 `project/` 不依赖 database runtime、`application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
 
 ### 1.1 Production architecture fitness gates
 
@@ -112,6 +112,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-data-contract/` | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-contract/` | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation、fingerprint 与 CSV/Parquet export format 的唯一 canonical owner |
 | `src-tauri/crates/yss-database-edit/` | 独立 Database Core：共享 `EditOperation`、undo/redo `EditHistory` 与 `EditState` projection 的唯一 owner；不依赖 Polars、DuckDB、root database、Application 或 Tauri |
+| `src-tauri/crates/yss-database-runtime/` | 独立 Database Core：`DatabaseInstance`、session-scoped declaration observation/revision authority、admission/drain/recovery、cross-engine physical routing 与 typed query/edit handoff 的唯一 owner；不持有 Project publication、Application workflow、Commands、Transport 或 Tauri |
 | `src-tauri/crates/yss-database-schema/` | 独立 Database Core：runtime schema facts、runtime/schema revision projection，以及 Polars/DuckDB physical metadata 到 canonical `DataType` normalization 的唯一 owner；不持有 session、Application 或 Tauri authority |
 | `src-tauri/crates/yss-dataset-profile/` | 独立 Database Core：dataset profile DTO、内存 Polars column stats/distribution/overview 与稳定分类、排序语义的唯一 owner；不依赖 DuckDB、root database、Application 或 Tauri |
 | `src-tauri/crates/yss-display-naming/` | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner |
@@ -148,7 +149,6 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/database/` | DatabaseInstance state routing、session/runtime authority 与 query/edit/export orchestration；edit model/history、runtime schema normalization、Polars adapter、DuckDB mechanics、external SQL source 和 filesystem I/O 分别由 `yss-database-edit`、`yss-database-schema`、`yss-tabular-polars`、`yss-duckdb`、`yss-sql-source`、`yss-tabular-io` 拥有 |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
@@ -230,7 +230,7 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 | `database` | typed import/read/mutate/save/export 用例 | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit |
 | `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesWorkerPort`、Database snapshot、SCI inputs 与 injected artifact reader |
 
-Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata 属于 `database/`，`ColumnInfoDTO` conversion 属于 `schema/`。
+Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata routing 属于 `yss-database-runtime`，`ColumnInfoDTO` conversion 属于 `schema/`。
 
 `hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
 
@@ -339,7 +339,7 @@ ProjectState 只发布 Project-owned durable facts；Application 将 Project ses
 snapshot、Graph document/catalog facts 与 Execution generation 组合为各 use case 的 coherent
 input，禁止把旧 Project runtime handle 混入新 session。
 
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database schema metadata。Database 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
 
 ## 6. Graph 与 Execution
 
@@ -405,6 +405,8 @@ Polars DataFrame
   → yss-dataset-profile → Database/Application/Commands
 yss-dataset-profile
   → yss-duckdb physical profiling → Database/Application/Commands
+yss-database-contract + yss-database-edit + yss-database-schema + yss-dataset-profile + yss-duckdb + yss-tabular-io + yss-tabular-polars
+  → yss-database-runtime → Application/Commands/Transport
 yss-display-naming
   → Project/Application database and variable display-name allocation
 yss-project-progress
@@ -517,7 +519,7 @@ Rust `tracing` 是唯一 logging 入口。`src-tauri/crates/yss-tracing/` 安装
 
 Logging 与 Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。详细 contract 见专项文档。
 
-## 8. Database module
+## 8. Database runtime crates
 
 ### 8.1 Typed import 与 project DuckDB
 
@@ -534,9 +536,9 @@ DuckDB-backed instance 保持磁盘列存：
 - column statistics、distribution 与 dataset overview 使用 SQL aggregate；
 - DataView edit/undo/redo 使用增量 SQL，不先整表进入 Polars。
 
-`EditOperation`、`EditHistory` 与 `EditState` 由 `yss-database-edit` 统一定义；Loaded DataFrame 的正向/反向 mutation、checked JSON conversion 与 dtype cast 由 `yss-tabular-polars` 实现。DuckDB 的 cell/add-row/delete-rows operation 构造、SQL apply/reverse、bounded delete-column snapshot 与 transaction 由 `yss-duckdb` 实现；多行删除在同一事务内提交，并在排序前保持 `(index, rowid)` 配对。根 Database 只按当前 physical state 路由相同 operation 并维护 history，不保留 model、Polars 或 DuckDB compatibility facade。
+`EditOperation`、`EditHistory` 与 `EditState` 由 `yss-database-edit` 统一定义；Loaded DataFrame 的正向/反向 mutation、checked JSON conversion 与 dtype cast 由 `yss-tabular-polars` 实现。DuckDB 的 cell/add-row/delete-rows operation 构造、SQL apply/reverse、bounded delete-column snapshot 与 transaction 由 `yss-duckdb` 实现；多行删除在同一事务内提交，并在排序前保持 `(index, rowid)` 配对。`yss-database-runtime` 只按当前 physical state 路由相同 operation、维护 session history 与提供事务交接，不复制 Polars 或 DuckDB mechanics。
 
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database schema metadata。Database 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
 
 只有小表完整 materialization 才进入 `Loaded { dataframe, original, history }`；当前 in-memory edit threshold 为 50,000 rows。Ingest 以 50,000 rows 分批 append。
 
@@ -546,7 +548,7 @@ SQL path 将 identifier 与 string literal 分开引用；table/column identifie
 
 ### 8.3 Export 与 overview
 
-CSV/Parquet format 由 `yss-database-contract` 唯一拥有。DuckDB table export 由 `yss-duckdb` 使用 typed `COPY (SELECT ...) TO ...`，大表不会先完整物化为 Polars；Loaded DataFrame 才直接调用 `yss-tabular-io` writer。根 Database 只按物理状态编排，不保留混合 export owner 或字符串错误 facade。Application module 先导出到 destination 的独占 sibling temp file，再在最终 project authority gate 下原子替换目标；失败时清理 temp。
+CSV/Parquet format 由 `yss-database-contract` 唯一拥有。DuckDB table export 由 `yss-duckdb` 使用 typed `COPY (SELECT ...) TO ...`，大表不会先完整物化为 Polars；Loaded DataFrame 才直接调用 `yss-tabular-io` writer。`yss-database-runtime` 只按物理状态选择 typed adapter，不保留混合 export owner 或字符串错误 facade。Application module 先导出到 destination 的独占 sibling temp file，再在最终 project authority gate 下原子替换目标；失败时清理 temp。
 
 Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-backed overview 中 `estimatedDataframeMemoryBytes` 与 `duplicatedRows` 为 unavailable；row/column count、schema 分类和 null completeness 仍由缓存 metadata 与 SQL 计算。
 Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标签由 `yss-dataset-profile` 唯一拥有。Loaded DataFrame 的 stats/distribution/overview 在该 crate 内计算；`yss-duckdb` 持有 DuckDB physical SQL，并通过借用型列 metadata view 构造同一 DTO。两条路径均忽略统计量与直方图中的非有限数、使用稳定同频排序，且仅最后一个直方图区间闭合右边界。
@@ -570,7 +572,7 @@ Application statistics 通过 Execution scientific port 调用 typed backend，c
 schema parse/map；Application Bayes 通过 `BayesWorkerPort` 调用 Julia worker，不直接依赖
 Julia worker internals。两个 seam 分别集中输入规范化、错误类型和 backend choice。
 
-`yss-sci` 不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，authority 编排仍属于主 crate 的 database/project modules。
+`yss-sci` 不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
 
 ### 9.2 Production backend matrix
 

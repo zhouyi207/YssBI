@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::database::session_api::{
-    catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
-};
 use crate::project::ProjectIndex;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
+use yss_database_runtime::session_api::{
+    catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
 use yss_function_editor_projection::parse_function_data_type;
 use yss_graph_catalog::{
@@ -184,7 +184,7 @@ pub enum CatalogQueryApplicationError {
     #[error(transparent)]
     Project(#[from] ProjectCatalogReadError),
     #[error(transparent)]
-    Database(#[from] crate::database::error::DatabaseError),
+    Database(#[from] yss_database_runtime::error::DatabaseError),
     #[error(transparent)]
     Contract(#[from] GraphContractMappingError),
     #[error(transparent)]

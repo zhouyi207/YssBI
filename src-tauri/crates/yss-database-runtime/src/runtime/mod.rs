@@ -1,8 +1,8 @@
 mod physical;
 mod registry;
 
-use crate::database::error::{DatabaseError, DatabaseOperation};
-pub(crate) use physical::PreparedDatabasePhysicalMutation;
+use crate::error::{DatabaseError, DatabaseOperation};
+pub use physical::PreparedDatabasePhysicalMutation;
 use physical::{
     DatabaseRuntimeDataSnapshot, DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot,
     DatabaseRuntimePhysicalState,
@@ -96,23 +96,19 @@ pub struct DatabaseOutstandingWork {
 }
 
 impl DatabaseOutstandingWork {
-    #[cfg(test)]
-    pub(crate) const fn operation_leases(self) -> usize {
+    pub const fn operation_leases(self) -> usize {
         self.operation_leases
     }
 
-    #[cfg(test)]
-    pub(crate) const fn pending_prepares(self) -> usize {
+    pub const fn pending_prepares(self) -> usize {
         self.pending_prepares
     }
 
-    #[cfg(test)]
-    pub(crate) const fn committed_changes(self) -> usize {
+    pub const fn committed_changes(self) -> usize {
         self.committed_changes
     }
 
-    #[cfg(test)]
-    pub(crate) const fn recoveries(self) -> usize {
+    pub const fn recoveries(self) -> usize {
         self.recoveries
     }
 
@@ -163,7 +159,7 @@ impl DatabaseOutstandingWork {
 }
 
 #[must_use = "database operation leases are released when this guard is dropped"]
-pub(crate) struct DatabaseOperationLease {
+pub struct DatabaseOperationLease {
     pub(crate) runtime: Arc<DatabaseSessionRuntime>,
     pub(crate) active: bool,
 }
@@ -189,10 +185,10 @@ impl DatabaseRuntimeRegistry {
         self.open_session_with_physical(request, DatabaseRuntimePhysicalState::empty())
     }
 
-    pub(crate) fn open_session_with_instances(
+    pub fn open_session_with_instances(
         &self,
         request: DatabaseSessionOpenRequest,
-        instances: impl IntoIterator<Item = crate::database::database_instance::DatabaseInstance>,
+        instances: impl IntoIterator<Item = crate::DatabaseInstance>,
     ) -> Result<DatabaseRuntimeSession, DatabaseError> {
         let DatabaseSessionOpenRequestParts {
             identity,
@@ -258,12 +254,21 @@ impl DatabaseRuntimeSession {
         &self.basis.declarations
     }
 
-    pub(crate) fn observations(&self) -> DatabaseDeclarationObservationSet {
+    pub fn observations(&self) -> DatabaseDeclarationObservationSet {
         self.runtime.observations()
     }
 
     pub(crate) fn revisions(&self, database: &DatabaseId) -> Option<DatabaseRuntimeRevisions> {
         self.runtime.revisions(database)
+    }
+
+    pub fn runtime_revision(
+        &self,
+        database: &DatabaseId,
+    ) -> Option<yss_database_schema::DatabaseRuntimeRevision> {
+        self.revisions(database).map(|revisions| {
+            yss_database_schema::DatabaseRuntimeRevision::from_existing(revisions.runtime)
+        })
     }
 
     pub(crate) fn capture_operation(
@@ -273,7 +278,7 @@ impl DatabaseRuntimeSession {
         self.runtime.capture_operation(operation)
     }
 
-    pub(crate) fn admit_operation(
+    pub fn admit_operation(
         &self,
         operation: DatabaseOperation,
     ) -> Result<DatabaseOperationLease, DatabaseError> {
@@ -372,7 +377,7 @@ impl DatabaseRuntimeSession {
         self.physical.read_edit_state(database)
     }
 
-    pub(crate) fn export_physical_to_path(
+    pub fn export_physical_to_path(
         &self,
         database: &DatabaseId,
         path: &std::path::Path,
@@ -381,7 +386,7 @@ impl DatabaseRuntimeSession {
         self.physical.export_to_path(database, path, format)
     }
 
-    pub(crate) fn remove_physical_database(
+    pub fn remove_physical_database(
         &self,
         database: &DatabaseId,
         project_root: &std::path::Path,
@@ -389,27 +394,20 @@ impl DatabaseRuntimeSession {
         self.physical.remove_database(database, project_root)
     }
 
-    pub(crate) fn prepare_physical_mutation(
+    pub fn prepare_physical_mutation(
         &self,
         database: &DatabaseId,
-        operation: &crate::database::session_api::DatabaseMutationOperation,
+        operation: &crate::session_api::DatabaseMutationOperation,
     ) -> Result<PreparedDatabasePhysicalMutation, DatabaseError> {
         self.physical.prepare_mutation(database, operation)
     }
 
-    pub(crate) fn install_physical_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
+    pub fn install_physical_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
         self.physical.install_mutation(mutation);
     }
 
-    pub(crate) fn instances_for_replacement(&self) -> Vec<crate::database::DatabaseInstance> {
+    pub fn instances_for_replacement(&self) -> Vec<crate::DatabaseInstance> {
         self.physical.instances_for_replacement()
-    }
-
-    pub(crate) fn restore_physical_mutation(
-        &self,
-        mutation: &PreparedDatabasePhysicalMutation,
-    ) -> Result<(), DatabaseError> {
-        mutation.rollback()
     }
 
     #[cfg(test)]

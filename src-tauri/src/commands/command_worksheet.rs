@@ -238,19 +238,18 @@ fn worksheet_plot_command_error(error: WorksheetPlotApplicationError) -> Command
             CommandError::expected("stale_project_lifecycle")
         }
         WorksheetPlotApplicationError::Database(error) => match error.kind() {
-            crate::database::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed => {
+            yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed => {
                 CommandError::expected("project_lifecycle_admission_closed")
             }
-            crate::database::plot_query::DatabasePlotQueryErrorKind::SessionMismatch
-            | crate::database::plot_query::DatabasePlotQueryErrorKind::GenerationMismatch
-            | crate::database::plot_query::DatabasePlotQueryErrorKind::RuntimeRevisionMismatch
-            | crate::database::plot_query::DatabasePlotQueryErrorKind::SchemaRevisionMismatch => {
+            yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::SessionMismatch
+            | yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::RuntimeRevisionMismatch
+            | yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::SchemaRevisionMismatch => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::database::plot_query::DatabasePlotQueryErrorKind::DatabaseNotFound => {
+            yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::DatabaseNotFound => {
                 CommandError::expected("database_not_found")
             }
-            crate::database::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed => {
+            yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed => {
                 CommandError::diagnosed("database_computation_failed", error)
             }
         },

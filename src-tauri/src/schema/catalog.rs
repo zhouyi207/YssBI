@@ -311,13 +311,13 @@ mod tests {
     use crate::application::execution::{
         ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
     };
-    use crate::database::runtime::DatabaseRuntimeRegistry;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;

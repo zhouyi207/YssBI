@@ -267,75 +267,41 @@ cargo test test_iris_lazy_filtering -- --nocapture
 
 ---
 
-## 数据库模块使用示例
+## Database runtime 使用示例
 
-### 基本用法
+Database 的 persisted contract 与 session runtime 已有独立 owner；集成测试应直接依赖
+`yss-database-contract`、`yss-database-edit` 与 `yss-database-runtime`，不经过根 crate facade。
 
 ```rust
-use yssbi_lib::database::{
-    DatabaseAccess, DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState,
-};
+use std::sync::Arc;
 
-// 1. 创建 CSV 引擎
-let engine = DatabaseEngine::Csv {
-    path: "tests/data/iris.csv".to_string(),
-    delimiter: ',',
-    has_header: true,
-    infer_schema_length: Some(100),
-};
+use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+use yss_database_edit::EditHistory;
+use yss_database_runtime::{DatabaseInstance, DatabaseState};
 
-// 2. 构建 LazyFrame
-let lazy_frame = engine.build_lazy().expect("Failed to build lazy frame");
-
-// 3. 创建数据库实例
-let mut db_instance = DatabaseInstance {
+let dataframe = polars::df!("sepal_length" => &[5.1_f64, 6.2]).unwrap();
+let mut database = DatabaseInstance {
     decl: DatabaseDecl {
-        id: "iris_dataset".to_string(),
-        engine,
+        id: DatabaseId::from_existing("iris_dataset".into()),
+        engine: DatabaseEngine::InMemory {
+            name: "Iris".into(),
+        },
         schema_version: 1,
         required: true,
+        name: "Iris".into(),
     },
-    state: DatabaseState::Lazy { lazy_frame },
+    state: DatabaseState::Loaded {
+        dataframe: Arc::new(dataframe.clone()),
+        original: Arc::new(dataframe),
+        history: EditHistory::new(),
+    },
 };
 
-// 4. 获取预览数据
-let preview_df = db_instance.get_preview(10).expect("Failed to get preview");
-
-// 5. 加载完整数据
-let full_df = db_instance.ensure_loaded().expect("Failed to load data");
+let schema = database.data_schema().unwrap();
+assert_eq!(schema.columns().len(), 1);
 ```
 
-### 访问模式
-
-数据库实例支持两种访问模式：
-
-1. **Preview 模式** - 用于 UI 预览，限制返回行数（最多 100 行）
-   ```rust
-   let preview_view = db_instance.access(DatabaseAccess::Preview)?;
-   ```
-
-2. **Execution 模式** - 用于图执行，返回完整数据
-   ```rust
-   let exec_view = db_instance.access(DatabaseAccess::Execution)?;
-   ```
-
-### LazyFrame 操作
-
-使用 Polars LazyFrame API 进行数据操作：
-
-```rust
-use polars::prelude::*;
-
-// 过滤
-let filtered = lazy_frame.filter(col("sepal_length").gt(6.0));
-
-// 选择列
-let selected = lazy_frame.select(&[col("sepal_length"), col("species")]);
-
-// 聚合
-let aggregated = lazy_frame.group_by(&[col("species")])
-    .agg(&[col("sepal_length").mean()]);
-
-// 收集结果
-let result = filtered.collect()?;
-```
+需要验证 session 一致性、分页、catalog snapshot 或 mutation handoff 时，应通过
+`DatabaseRuntimeRegistry`、`DatabaseRuntimeSession` 与 `session_api` 构造真实 runtime；完整示例见
+[`database_test.rs`](./database_test.rs) 以及 crate 的
+[`README.md`](../crates/yss-database-runtime/README.md)。

@@ -179,18 +179,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
         RustLayer::BuiltinComposition,
     ),
-    (
-        "src-tauri/src/database/runtime/mod.rs",
-        RustLayer::DatabaseCore,
-    ),
-    (
-        "src-tauri/src/database/runtime/registry.rs",
-        RustLayer::DatabaseCore,
-    ),
-    (
-        "src-tauri/src/database/session_api.rs",
-        RustLayer::DatabaseCore,
-    ),
     ("src-tauri/src/platform/mod.rs", RustLayer::PlatformAdapter),
     (
         "src-tauri/src/platform/project_file_watcher.rs",
@@ -215,8 +203,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/src/database/database_instance.rs",
-        fully_qualified_owner: "yssbi_lib::database::database_instance",
+        repository_relative_source_file: "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
+        fully_qualified_owner: "yss_database_runtime::database_instance",
         canonical_origin_targets: &[
             "yss_tabular_polars::anyvalue_to_json",
             "yss_tabular_polars::edit::apply_operation",
@@ -230,8 +218,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/src/database/plot_query.rs",
-        fully_qualified_owner: "yssbi_lib::database::plot_query",
+        repository_relative_source_file: "src-tauri/crates/yss-database-runtime/src/plot_query.rs",
+        fully_qualified_owner: "yss_database_runtime::plot_query",
         canonical_origin_targets: &["yss_tabular_polars::column_to_series"],
     },
     InternalDependencyCapability {
@@ -1181,15 +1169,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::worksheet_plot::PlotAxisFormat::Date",
             "yssbi_lib::application::worksheet_plot::PlotAxisFormat::Datetime",
             "yssbi_lib::application::worksheet_plot::PlotAxisFormat::Number",
-            "yssbi_lib::database::database_instance::DatabaseInstance",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::DatabaseNotFound",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::GenerationMismatch",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::RuntimeRevisionMismatch",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::SchemaRevisionMismatch",
-            "yssbi_lib::database::plot_query::DatabasePlotQueryErrorKind::SessionMismatch",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::DatabaseNotFound",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::GenerationMismatch",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::RuntimeRevisionMismatch",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::SchemaRevisionMismatch",
+            "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::SessionMismatch",
             "yssbi_lib::error::CommandError",
             "yssbi_lib::event::Event",
             "yssbi_lib::event::emit_project_event_result",
@@ -1751,6 +1738,7 @@ fn non_build_memberships(
     } else if matches!(
         package,
         "yss-database-edit"
+            | "yss-database-runtime"
             | "yss-database-schema"
             | "yss-dataset-profile"
             | "yss-duckdb"

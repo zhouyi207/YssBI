@@ -1,3 +1,5 @@
+//! Cross-engine physical database state held by a runtime session.
+
 use polars::prelude::*;
 use std::sync::Arc;
 use yss_database_edit::EditHistory;

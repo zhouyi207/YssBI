@@ -3,7 +3,6 @@ use super::*;
 use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
-use crate::database::runtime::DatabaseRuntimeRegistry;
 use crate::project::ProjectState;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
@@ -13,6 +12,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
+use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
@@ -340,6 +340,6 @@ fn localized_catalog_rejects_a_project_database_schema_mismatch() {
     assert!(matches!(
         error,
         CatalogQueryApplicationError::Database(error)
-            if error.code() == crate::database::error::DatabaseErrorCode::Conflict
+            if error.code() == yss_database_runtime::error::DatabaseErrorCode::Conflict
     ));
 }

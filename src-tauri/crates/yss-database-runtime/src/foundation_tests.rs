@@ -1,5 +1,5 @@
-use crate::database::error::{DatabaseErrorCode, DatabaseOperation};
-use crate::database::runtime::{
+use crate::error::{DatabaseErrorCode, DatabaseOperation};
+use crate::runtime::{
     DatabaseAdmissionCloseOutcome, DatabaseDrainDeadline, DatabaseDrainOutcome,
     DatabaseOutstandingWork, DatabaseRuntimeRegistry, DatabaseSessionDrainControl,
 };

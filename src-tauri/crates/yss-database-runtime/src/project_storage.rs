@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{DatabaseInstance, DatabaseState};
+use crate::{DatabaseInstance, DatabaseState};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 use yss_database_edit::EditHistory;
 use yss_duckdb::{drop_data_table, read_table_meta};

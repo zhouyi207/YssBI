@@ -215,6 +215,24 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-database-schema",
         mode: RustDependencyMode::Runtime,
         package_name: "polars",

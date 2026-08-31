@@ -11,14 +11,14 @@ use super::session_slot::{
 };
 use crate::application::catalog_query::capture_localized_project_facts;
 use crate::application::graph_contracts::{build_resource_catalog, execution_package_from_graph};
-use crate::database::error::DatabaseError;
-use crate::database::session_api::catalog_snapshot;
 use crate::project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
     ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
     ProjectResourceRequirement,
 };
+use yss_database_runtime::error::DatabaseError;
+use yss_database_runtime::session_api::catalog_snapshot;
 use yss_execution::error::RunPhase;
 use yss_execution::package_preparation::PackagePreparationError;
 use yss_execution::plan::{
@@ -765,13 +765,13 @@ fn variable_id_from_resource(
 mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;

@@ -4,10 +4,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use polars::prelude::{AnyValue, DataFrame};
 use std::path::Path;
 
-use crate::database::database_instance::DatabaseInstance;
-use crate::database::database_state::DatabaseState;
-use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
-use crate::database::session_api::DatabaseMutationOperation;
+use crate::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
+use crate::session_api::DatabaseMutationOperation;
+use crate::{DatabaseInstance, DatabaseState};
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
 use yss_database_edit::EditState;
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
@@ -250,14 +249,15 @@ impl DatabaseRuntimePhysicalState {
         let instance = self.instance_snapshot(database)?.ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::CommitMutation, Some(database.clone()))
         })?;
-        crate::database::remove_duckdb_table_if_needed(&instance.decl.engine, Some(project_root))
-            .map_err(|error| {
+        crate::remove_duckdb_table_if_needed(&instance.decl.engine, Some(project_root)).map_err(
+            |error| {
                 DatabaseError::driver(
                     DatabaseOperation::CommitMutation,
                     Some(database.clone()),
                     DatabaseDriverError::Operation(error.into_boxed_str()),
                 )
-            })
+            },
+        )
     }
 
     pub(crate) fn prepare_mutation(
@@ -326,7 +326,7 @@ pub(crate) struct DatabaseRuntimeMetadata {
     pub(crate) row_count: usize,
 }
 
-pub(crate) struct PreparedDatabasePhysicalMutation {
+pub struct PreparedDatabasePhysicalMutation {
     physical: Arc<DatabaseRuntimePhysicalState>,
     database: DatabaseId,
     before: DatabaseInstance,
@@ -335,11 +335,11 @@ pub(crate) struct PreparedDatabasePhysicalMutation {
 }
 
 impl PreparedDatabasePhysicalMutation {
-    pub(crate) fn edit_state(&self) -> EditState {
+    pub fn edit_state(&self) -> EditState {
         self.after.edit_state()
     }
 
-    pub(crate) fn rollback(&self) -> Result<(), DatabaseError> {
+    pub fn rollback(&self) -> Result<(), DatabaseError> {
         if !matches!(self.before.state, DatabaseState::DuckDb { .. }) {
             self.physical.restore_mutation(self);
             return Ok(());
@@ -375,7 +375,11 @@ fn apply_mutation(
             column,
             value,
             row_id,
-        } => instance.edit_cell(*row, column, tabular_scalar_to_json(value), *row_id),
+        } => {
+            let value = serde_json::to_value(value)
+                .map_err(|_| "tabular scalar serialization failed".to_owned())?;
+            instance.edit_cell(*row, column, value, *row_id)
+        }
         DatabaseMutationOperation::AddRow { index } => instance.add_row(Some(*index)),
         DatabaseMutationOperation::DeleteRows { indices, row_ids } => {
             instance.delete_rows(indices, row_ids.as_deref())
@@ -396,19 +400,6 @@ fn apply_mutation(
         DatabaseMutationOperation::Undo => instance.undo_edit(),
         DatabaseMutationOperation::Redo => instance.redo_edit(),
         DatabaseMutationOperation::Save => instance.save_changes(None),
-    }
-}
-
-fn tabular_scalar_to_json(value: &TabularScalar) -> serde_json::Value {
-    match value {
-        TabularScalar::Null => serde_json::Value::Null,
-        TabularScalar::Bool(value) => serde_json::Value::Bool(*value),
-        TabularScalar::Integer(value) => serde_json::Value::Number((*value).into()),
-        TabularScalar::Unsigned(value) => serde_json::Value::Number((*value).into()),
-        TabularScalar::Decimal(value) => serde_json::Number::from_f64(value.as_f64())
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        TabularScalar::String(value) => serde_json::Value::String(value.to_string()),
     }
 }
 
@@ -536,10 +527,14 @@ fn tabular_scalar(value: AnyValue<'_>) -> Result<TabularScalar, DatabaseError> {
         AnyValue::UInt16(value) => TabularScalar::Unsigned(u64::from(value)),
         AnyValue::UInt32(value) => TabularScalar::Unsigned(u64::from(value)),
         AnyValue::UInt64(value) => TabularScalar::Unsigned(value),
-        AnyValue::Int128(value) => finite_decimal(value as f64),
-        AnyValue::UInt128(value) => finite_decimal(value as f64),
-        AnyValue::Float32(value) => finite_decimal(f64::from(value)),
-        AnyValue::Float64(value) => finite_decimal(value),
+        AnyValue::Int128(value) => i64::try_from(value)
+            .map(TabularScalar::Integer)
+            .map_err(|_| unsupported_scalar())?,
+        AnyValue::UInt128(value) => u64::try_from(value)
+            .map(TabularScalar::Unsigned)
+            .map_err(|_| unsupported_scalar())?,
+        AnyValue::Float32(value) => finite_decimal(f64::from(value))?,
+        AnyValue::Float64(value) => finite_decimal(value)?,
         AnyValue::Date(value) => TabularScalar::Integer(i64::from(value)),
         AnyValue::Datetime(value, _, _) | AnyValue::DatetimeOwned(value, _, _) => {
             TabularScalar::Integer(value)
@@ -549,7 +544,7 @@ fn tabular_scalar(value: AnyValue<'_>) -> Result<TabularScalar, DatabaseError> {
             let Some(scale) = i32::try_from(scale).ok() else {
                 return Err(unsupported_scalar());
             };
-            finite_decimal((value as f64) / 10_f64.powi(scale))
+            finite_decimal((value as f64) / 10_f64.powi(scale))?
         }
         AnyValue::String(value) => TabularScalar::String(value.into()),
         AnyValue::StringOwned(value) => TabularScalar::String(value.to_string().into()),
@@ -558,12 +553,39 @@ fn tabular_scalar(value: AnyValue<'_>) -> Result<TabularScalar, DatabaseError> {
     Ok(scalar)
 }
 
-fn finite_decimal(value: f64) -> TabularScalar {
+fn finite_decimal(value: f64) -> Result<TabularScalar, DatabaseError> {
     FiniteTabularDecimal::try_from(value)
         .map(TabularScalar::Decimal)
-        .unwrap_or(TabularScalar::Null)
+        .map_err(|_| unsupported_scalar())
 }
 
 fn unsupported_scalar() -> DatabaseError {
     DatabaseError::unsupported(DatabaseOperation::DataSnapshot, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tabular_scalar;
+    use crate::error::DatabaseErrorCode;
+    use polars::prelude::AnyValue;
+    use yss_tabular_contract::TabularScalar;
+
+    #[test]
+    fn tabular_snapshot_scalars_fail_closed_without_numeric_drift() {
+        assert_eq!(
+            tabular_scalar(AnyValue::UInt128(u128::from(u64::MAX))).unwrap(),
+            TabularScalar::Unsigned(u64::MAX)
+        );
+        for unsupported in [
+            AnyValue::Int128(i128::MAX),
+            AnyValue::UInt128(u128::MAX),
+            AnyValue::Float64(f64::NAN),
+            AnyValue::Float64(f64::INFINITY),
+        ] {
+            assert_eq!(
+                tabular_scalar(unsupported).unwrap_err().code(),
+                DatabaseErrorCode::Unsupported
+            );
+        }
+    }
 }

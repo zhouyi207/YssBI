@@ -852,9 +852,9 @@ pub fn get_edit_state(
 #[cfg(all(test, any()))]
 mod tests {
     use super::*;
-    use crate::database::DatabaseState;
     use crate::event::{Event, EventProject};
     use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
+    use yss_database_runtime::DatabaseState;
     use yss_project_identity::{OperationId, ResourceRevision};
     use yss_project_model::ProjectData;
 
@@ -936,9 +936,9 @@ mod tests {
         let dataframe = polars::df!("amount" => &[1_i64, 2_i64]).unwrap();
         state.project_store.write().unwrap().databases.insert(
             "sales".into(),
-            crate::database::DatabaseInstance {
+            yss_database_runtime::DatabaseInstance {
                 decl,
-                state: crate::database::DatabaseState::Loaded {
+                state: yss_database_runtime::DatabaseState::Loaded {
                     dataframe: std::sync::Arc::new(dataframe.clone()),
                     original: std::sync::Arc::new(dataframe),
                     history: EditHistory::new(),

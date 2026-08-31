@@ -8,13 +8,6 @@ use std::time::Instant;
 #[cfg(test)]
 use polars::prelude::{Column, DataFrame, Float64Chunked};
 
-#[cfg(test)]
-use crate::database::error::DatabaseDriverError;
-use crate::database::error::{DatabaseError, DatabaseOperation};
-use crate::database::session_api::{
-    DatabaseColumnSelection, DatabaseDataSnapshot, DatabaseDataSnapshotRequest,
-    revalidate_declaration_observations,
-};
 use crate::error::new_diagnostic_incident_id;
 use crate::sci::api::bayes::worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult, BayesWorkerError, BayesWorkerPort,
@@ -41,6 +34,11 @@ use crate::sci::api::control::{AbsoluteDeadline, ExecutionControl, SciCancellati
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
+use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
+use yss_database_runtime::session_api::{
+    DatabaseColumnSelection, DatabaseDataSnapshot, DatabaseDataSnapshotRequest,
+    revalidate_declaration_observations,
 };
 #[cfg(test)]
 use yss_tabular_io::read_ipc_dataframe;
@@ -452,7 +450,7 @@ impl BayesInferenceService {
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
-        let snapshot = crate::database::session_api::data_snapshot(
+        let snapshot = yss_database_runtime::session_api::data_snapshot(
             captured.database(),
             DatabaseDataSnapshotRequest {
                 database: database.clone(),
@@ -1677,20 +1675,20 @@ fn dataframe_from_snapshot(
             yss_tabular_polars::column_to_series(column)
                 .map(Column::from)
                 .map_err(|error| BayesApplicationError::DatasetLoadFailed {
-                    source: BayesDatasetLoadError::Database(DatabaseError::driver(
+                    source: BayesDatasetLoadError::Database(DatabaseError::polars_driver(
                         DatabaseOperation::DataSnapshot,
                         Some(database.clone()),
-                        DatabaseDriverError::Polars(error),
+                        error,
                     )),
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
     DataFrame::new(snapshot.rows().row_count(), series).map_err(|error| {
         BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::Database(DatabaseError::driver(
+            source: BayesDatasetLoadError::Database(DatabaseError::polars_driver(
                 DatabaseOperation::DataSnapshot,
                 Some(database.clone()),
-                DatabaseDriverError::Polars(error),
+                error,
             )),
         }
     })

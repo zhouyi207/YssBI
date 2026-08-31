@@ -5,7 +5,6 @@
 pub mod application;
 pub mod backend_adapters;
 pub mod commands;
-pub mod database;
 pub mod error;
 pub mod event;
 

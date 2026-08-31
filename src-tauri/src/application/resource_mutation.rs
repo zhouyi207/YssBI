@@ -18,10 +18,10 @@ use super::graph_commit::{GraphCommitApplicationError, commit_captured_graph_can
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
 };
-use crate::database::error::DatabaseError;
-use crate::database::session_api::catalog_snapshot;
 use crate::project::project_writers::ProjectSaveResult;
 use std::collections::BTreeMap;
+use yss_database_runtime::error::DatabaseError;
+use yss_database_runtime::session_api::catalog_snapshot;
 use yss_execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };

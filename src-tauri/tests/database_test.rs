@@ -4,12 +4,12 @@ use std::sync::Arc;
 use polars::prelude::*;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseId};
 use yss_database_edit::EditHistory;
+use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use yss_duckdb::{
     MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, ingest_csv_to_duckdb,
     ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta, write_display_name,
 };
 use yss_project_identity::OperationId;
-use yssbi_lib::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 
 fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {

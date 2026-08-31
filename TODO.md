@@ -793,3 +793,12 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 修复 DuckDB `TIMESTAMP` metadata 经 `duckdb_type_to_raw_string` 产生精确 `DateTime` 后，在 schema
   normalization 中因仅识别 `DateTime(...)` 而静默降级为 `DataType::Any` 的漂移；同时锁定 Polars temporal
   dtype、nullable、revision 与非法列名 fail-closed 语义。
+- [ ] 将剩余 session-scoped database instance/state、declaration observation/revision authority、
+  admission/drain/recovery、physical routing 与 typed query/edit handoff 整体迁入职责命名的
+  `src-tauri/crates/yss-database-runtime/` Database Core；删除根 `src/database/` owner/facade，所有
+  Application、Commands、Transport 与 integration test 消费方直接依赖新 crate，且不创建混合领域的
+  catch-all `yss-backend`。
+- [ ] 清理 database runtime 抽取后的边界漂移：公开最小的不透明 session/transaction API，保留 registry
+  record 与 physical state 私有；删除可绕过真实 runtime 伪造 catalog snapshot 的 test-only minting seam、
+  永远不可产生的内部 driver compensation 分支及重复 restore wrapper，并以架构测试锁定 runtime 不反向依赖
+  Project、Application、Commands、Transport 或 Tauri。

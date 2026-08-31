@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 
-use crate::database::error::{DatabaseError, DatabaseOperation};
-use crate::database::runtime::{
+use crate::declaration_observation_for;
+use crate::error::{DatabaseError, DatabaseOperation};
+use crate::runtime::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
     DatabaseRuntimeCommittedChange, DatabaseRuntimeCompensationFailureCode,
     DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
@@ -41,7 +42,8 @@ pub struct DatabaseDataSnapshot {
     rows: TabularSnapshot,
 }
 
-pub(crate) struct DatabaseMetaSnapshot {
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatabaseMetaSnapshot {
     database: DatabaseId,
     name: Box<str>,
     schema: DatabaseSchemaFact,
@@ -49,39 +51,40 @@ pub(crate) struct DatabaseMetaSnapshot {
 }
 
 impl DatabaseMetaSnapshot {
-    pub(crate) fn database(&self) -> &DatabaseId {
+    pub fn database(&self) -> &DatabaseId {
         &self.database
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub(crate) fn schema(&self) -> &DatabaseSchemaFact {
+    pub fn schema(&self) -> &DatabaseSchemaFact {
         &self.schema
     }
 
-    pub(crate) const fn row_count(&self) -> usize {
+    pub const fn row_count(&self) -> usize {
         self.row_count
     }
 }
 
-pub(crate) struct DatabasePageSnapshot {
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatabasePageSnapshot {
     database: DatabaseId,
     rows: TabularSnapshot,
     row_ids: Vec<i64>,
 }
 
 impl DatabasePageSnapshot {
-    pub(crate) fn database(&self) -> &DatabaseId {
+    pub fn database(&self) -> &DatabaseId {
         &self.database
     }
 
-    pub(crate) fn rows(&self) -> &TabularSnapshot {
+    pub fn rows(&self) -> &TabularSnapshot {
         &self.rows
     }
 
-    pub(crate) fn row_ids(&self) -> &[i64] {
+    pub fn row_ids(&self) -> &[i64] {
         &self.row_ids
     }
 }
@@ -91,12 +94,12 @@ impl DatabaseDataSnapshot {
         &self.database
     }
 
-    #[allow(
-        dead_code,
-        reason = "neutral column projection is consumed by later Application seams"
-    )]
-    pub(crate) fn columns(&self) -> &[DatabaseColumnFact] {
+    pub fn columns(&self) -> &[DatabaseColumnFact] {
         &self.columns
+    }
+
+    pub const fn runtime_revision(&self) -> DatabaseRuntimeRevision {
+        self.runtime_revision
     }
 
     pub fn rows(&self) -> &TabularSnapshot {
@@ -118,21 +121,13 @@ pub struct DatabaseCatalogSnapshot {
 }
 
 impl DatabaseCatalogSnapshot {
-    #[allow(
-        dead_code,
-        reason = "neutral schema projection is consumed by later Graph seams"
-    )]
-    pub(crate) fn schemas(&self) -> &[DatabaseSchemaFact] {
+    pub fn schemas(&self) -> &[DatabaseSchemaFact] {
         &self.schemas
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(
-    dead_code,
-    reason = "query basis is activated by the later Database plot seam"
-)]
-pub(crate) struct DatabaseQueryBasis {
+pub struct DatabaseQueryBasis {
     session: DatabaseSessionIdentity,
     generation: NonZeroU64,
     database: DatabaseId,
@@ -187,10 +182,26 @@ pub enum DatabaseMutationOperation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatabaseMutationRequest {
-    pub(crate) database: DatabaseId,
-    pub(crate) expected_runtime_revision: DatabaseRuntimeRevision,
-    pub(crate) declaration_transition: DatabaseDeclarationTransition,
-    pub(crate) operation: DatabaseMutationOperation,
+    database: DatabaseId,
+    expected_runtime_revision: DatabaseRuntimeRevision,
+    declaration_transition: DatabaseDeclarationTransition,
+    operation: DatabaseMutationOperation,
+}
+
+impl DatabaseMutationRequest {
+    pub fn new(
+        database: DatabaseId,
+        expected_runtime_revision: DatabaseRuntimeRevision,
+        declaration_transition: DatabaseDeclarationTransition,
+        operation: DatabaseMutationOperation,
+    ) -> Self {
+        Self {
+            database,
+            expected_runtime_revision,
+            declaration_transition,
+            operation,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -200,16 +211,11 @@ pub struct DatabaseRuntimeChangeOutcome {
 }
 
 impl DatabaseRuntimeChangeOutcome {
-    #[allow(dead_code, reason = "outcome identity is consumed by Project finalize")]
-    pub(crate) fn database(&self) -> &DatabaseId {
+    pub fn database(&self) -> &DatabaseId {
         &self.database
     }
 
-    #[allow(
-        dead_code,
-        reason = "runtime revision is consumed by the final session owner"
-    )]
-    pub(crate) const fn runtime_revision(&self) -> DatabaseRuntimeRevision {
+    pub const fn runtime_revision(&self) -> DatabaseRuntimeRevision {
         self.runtime_revision
     }
 }
@@ -226,20 +232,8 @@ pub struct PreparedDatabaseRuntimeChange {
 }
 
 pub struct CommittedDatabaseRuntimeChange {
-    #[allow(
-        dead_code,
-        reason = "resolution evidence is consumed by Project finalize"
-    )]
     outcome: DatabaseRuntimeChangeOutcome,
-    #[allow(
-        dead_code,
-        reason = "resolution evidence is consumed by Project finalize"
-    )]
     expected_observation: DatabaseDeclarationObservation,
-    #[allow(
-        dead_code,
-        reason = "resolution evidence is consumed by Project finalize"
-    )]
     next_observation: DatabaseDeclarationObservation,
     registration: DatabaseCommittedRegistration,
 }
@@ -254,7 +248,7 @@ impl CommittedDatabaseRuntimeChange {
         self.outcome
     }
 
-    pub(crate) fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
+    pub fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
         match self.registration.compensate() {
             Ok(runtime_revision) => {
                 DatabaseCompensationAttempt::Restored(DatabaseCompensationOutcome::Restored {
@@ -268,25 +262,17 @@ impl CommittedDatabaseRuntimeChange {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "resolution evidence is consumed by Project finalize"
-    )]
-    pub(crate) fn expected_observation(&self) -> &DatabaseDeclarationObservation {
+    pub fn expected_observation(&self) -> &DatabaseDeclarationObservation {
         &self.expected_observation
     }
 
-    #[allow(
-        dead_code,
-        reason = "resolution evidence is consumed by Project finalize"
-    )]
-    pub(crate) fn next_observation(&self) -> &DatabaseDeclarationObservation {
+    pub fn next_observation(&self) -> &DatabaseDeclarationObservation {
         &self.next_observation
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DatabaseCompensationOutcome {
+pub enum DatabaseCompensationOutcome {
     Restored {
         runtime_revision: DatabaseRuntimeRevision,
     },
@@ -310,7 +296,7 @@ impl DatabaseCompensationFailure {
     }
 }
 
-pub(crate) enum DatabaseCompensationAttempt<T> {
+pub enum DatabaseCompensationAttempt<T> {
     Restored(DatabaseCompensationOutcome),
     Retryable {
         owner: T,
@@ -322,10 +308,6 @@ pub(crate) enum DatabaseCompensationAttempt<T> {
 pub struct DatabaseRecoveryId(u64);
 
 impl DatabaseRecoveryId {
-    #[allow(
-        dead_code,
-        reason = "recovery IDs are minted by unresolved commit cleanup"
-    )]
     pub(crate) const fn from_existing(value: u64) -> Self {
         Self(value)
     }
@@ -362,25 +344,29 @@ impl DatabaseRecoveryRequirement {
     }
 }
 
-pub(crate) struct DatabaseRecoveryConfirmation {
+pub struct DatabaseRecoveryConfirmation {
     claim: DatabaseRuntimeRecoveryClaim,
     outcome: DatabaseRuntimeChangeOutcome,
 }
 
 impl DatabaseRecoveryConfirmation {
-    pub(crate) fn confirm(self) -> DatabaseRuntimeChangeOutcome {
+    pub fn confirm(self) -> DatabaseRuntimeChangeOutcome {
         self.claim.confirm();
         self.outcome
     }
 }
 
-pub(crate) struct DatabaseRecoveryCompensation {
+pub struct DatabaseRecoveryCompensation {
     claim: DatabaseRuntimeRecoveryClaim,
     outcome: DatabaseRuntimeChangeOutcome,
 }
 
 impl DatabaseRecoveryCompensation {
-    pub(crate) fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
+    pub fn outcome(&self) -> &DatabaseRuntimeChangeOutcome {
+        &self.outcome
+    }
+
+    pub fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
         match self.claim.compensate() {
             Ok(runtime_revision) => {
                 DatabaseCompensationAttempt::Restored(DatabaseCompensationOutcome::Restored {
@@ -395,7 +381,7 @@ impl DatabaseRecoveryCompensation {
     }
 }
 
-pub(crate) enum DatabaseRecoveryResolution {
+pub enum DatabaseRecoveryResolution {
     Confirm(DatabaseRecoveryConfirmation),
     Compensate(DatabaseRecoveryCompensation),
 }
@@ -413,18 +399,9 @@ pub enum DatabaseRecoveryClaimError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DatabaseMutationSchemaEffect {
+enum DatabaseMutationSchemaEffect {
     DataOnly,
     Schema,
-}
-
-fn observation_for<'a>(
-    observations: &'a DatabaseDeclarationObservationSet,
-    database: &DatabaseId,
-) -> Option<&'a DatabaseDeclarationObservation> {
-    observations
-        .iter()
-        .find_map(|(id, observation)| (id == database).then_some(observation))
 }
 
 fn basis_for(
@@ -599,7 +576,7 @@ pub fn data_snapshot(
     })
 }
 
-pub(crate) fn metadata_snapshot(
+pub fn metadata_snapshot(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<DatabaseMetaSnapshot, DatabaseError> {
@@ -626,7 +603,7 @@ pub(crate) fn metadata_snapshot(
     })
 }
 
-pub(crate) fn page_snapshot(
+pub fn page_snapshot(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
     offset: usize,
@@ -647,7 +624,7 @@ pub(crate) fn page_snapshot(
     })
 }
 
-pub(crate) fn column_statistics(
+pub fn column_statistics(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
@@ -661,7 +638,7 @@ pub(crate) fn column_statistics(
     session.read_physical_column_stats(&database)
 }
 
-pub(crate) fn column_distributions(
+pub fn column_distributions(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
@@ -675,7 +652,7 @@ pub(crate) fn column_distributions(
     session.read_physical_column_distributions(&database)
 }
 
-pub(crate) fn dataset_overview(
+pub fn dataset_overview(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
@@ -689,7 +666,7 @@ pub(crate) fn dataset_overview(
     session.read_physical_dataset_overview(&database)
 }
 
-pub(crate) fn edit_state(
+pub fn edit_state(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<EditState, DatabaseError> {
@@ -708,12 +685,13 @@ pub fn prepare_database_runtime_change(
     request: DatabaseMutationRequest,
 ) -> Result<PreparedDatabaseRuntimeChange, DatabaseError> {
     let current_observations = session.observations();
-    let current = observation_for(&current_observations, &request.database).ok_or_else(|| {
-        DatabaseError::not_found(
-            DatabaseOperation::PrepareMutation,
-            Some(request.database.clone()),
-        )
-    })?;
+    let current = declaration_observation_for(&current_observations, &request.database)
+        .ok_or_else(|| {
+            DatabaseError::not_found(
+                DatabaseOperation::PrepareMutation,
+                Some(request.database.clone()),
+            )
+        })?;
     let revisions = session.revisions(&request.database).ok_or_else(|| {
         DatabaseError::not_found(
             DatabaseOperation::PrepareMutation,
@@ -775,11 +753,7 @@ pub fn commit_database_runtime_change(
     })
 }
 
-#[allow(
-    dead_code,
-    reason = "query basis is activated by the later Database plot seam"
-)]
-pub(crate) fn revalidate_query_basis(
+pub fn revalidate_query_basis(
     session: &DatabaseRuntimeSession,
     basis: &DatabaseQueryBasis,
 ) -> Result<(), DatabaseError> {
@@ -812,11 +786,7 @@ pub(crate) fn revalidate_query_basis(
 }
 
 impl DatabaseRuntimeSession {
-    #[allow(
-        dead_code,
-        reason = "query basis is activated by the later Database plot seam"
-    )]
-    pub(crate) fn capture_query_basis(
+    pub fn capture_query_basis(
         &self,
         database: &DatabaseId,
     ) -> Result<DatabaseQueryBasis, DatabaseError> {
@@ -837,7 +807,7 @@ impl DatabaseRuntimeSession {
         })
     }
 
-    pub(crate) fn claim_recovery(
+    pub fn claim_recovery(
         &self,
         recovery: DatabaseRecoveryId,
         current_authority: &DatabaseDeclarationObservation,
@@ -866,7 +836,7 @@ impl DatabaseRuntimeSession {
         }
     }
 
-    pub(crate) fn recovery_requirements(&self) -> Vec<DatabaseRecoveryRequirement> {
+    pub fn recovery_requirements(&self) -> Vec<DatabaseRecoveryRequirement> {
         self.runtime_recovery_requirements()
             .iter()
             .map(recovery_requirement)
@@ -874,70 +844,62 @@ impl DatabaseRuntimeSession {
     }
 }
 
-#[cfg(test)]
-pub(crate) struct DatabaseCatalogSnapshotFixtureSchema {
-    pub database: DatabaseId,
-    pub runtime_revision: u64,
-    pub schema_revision: u64,
-    pub columns: Box<[DatabaseColumnFact]>,
+fn declaration_observations_match(
+    current: &DatabaseDeclarationObservationSet,
+    expected: &DatabaseDeclarationObservationSet,
+) -> bool {
+    current == expected
 }
 
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DatabaseCatalogSnapshotFixtureError {
-    EmptySessionIdentity,
-    DuplicateDatabaseId,
-    ObservationSchemaSetMismatch,
-}
-
-#[cfg(test)]
-pub(crate) fn database_catalog_snapshot_fixture(
-    session_identity: Box<str>,
-    generation: NonZeroU64,
-    declaration_observations: DatabaseDeclarationObservationSet,
-    schemas: Box<[DatabaseCatalogSnapshotFixtureSchema]>,
-) -> Result<DatabaseCatalogSnapshot, DatabaseCatalogSnapshotFixtureError> {
-    if session_identity.is_empty() {
-        return Err(DatabaseCatalogSnapshotFixtureError::EmptySessionIdentity);
-    }
-    let mut ids = BTreeSet::new();
-    let schemas = schemas
-        .into_vec()
-        .into_iter()
-        .map(|schema| {
-            if !ids.insert(schema.database.clone()) {
-                return Err(DatabaseCatalogSnapshotFixtureError::DuplicateDatabaseId);
+fn compensation_failure(
+    code: DatabaseRuntimeCompensationFailureCode,
+) -> DatabaseCompensationFailure {
+    DatabaseCompensationFailure {
+        code: match code {
+            DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision => {
+                DatabaseCompensationFailureCode::StaleRuntimeRevision
             }
-            Ok(DatabaseSchemaFact::from_columns(
-                schema.database,
-                schema.runtime_revision,
-                schema.schema_revision,
-                schema.columns,
-            ))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let observation_ids = declaration_observations
-        .iter()
-        .map(|(id, _)| id.clone())
-        .collect::<BTreeSet<_>>();
-    if observation_ids != ids {
-        return Err(DatabaseCatalogSnapshotFixtureError::ObservationSchemaSetMismatch);
-    }
-    Ok(DatabaseCatalogSnapshot {
-        basis: DatabaseCatalogBasis {
-            session: DatabaseSessionIdentity::from_existing(session_identity),
-            generation,
-            observations: declaration_observations,
         },
-        schemas: schemas.into_boxed_slice(),
-    })
+    }
+}
+
+fn recovery_requirement(record: &DatabaseRuntimeChangeRecord) -> DatabaseRecoveryRequirement {
+    DatabaseRecoveryRequirement {
+        recovery: DatabaseRecoveryId::from_existing(record.recovery_id()),
+        database: record.database().clone(),
+        outcome: DatabaseRuntimeChangeOutcome {
+            database: record.database().clone(),
+            runtime_revision: DatabaseRuntimeRevision::from_existing(
+                record.after_runtime_revision(),
+            ),
+        },
+        expected_observation: record.expected_observation().clone(),
+        next_observation: record.next_observation().clone(),
+    }
+}
+
+fn map_recovery_claim_error(
+    error: DatabaseRuntimeRecoveryClaimError,
+) -> DatabaseRecoveryClaimError {
+    match error {
+        DatabaseRuntimeRecoveryClaimError::NotFound => DatabaseRecoveryClaimError::NotFound,
+        DatabaseRuntimeRecoveryClaimError::AlreadyClaimed => {
+            DatabaseRecoveryClaimError::AlreadyClaimed
+        }
+        DatabaseRuntimeRecoveryClaimError::SessionStillOpen => {
+            DatabaseRecoveryClaimError::SessionStillOpen
+        }
+        DatabaseRuntimeRecoveryClaimError::AuthorityNeither => {
+            DatabaseRecoveryClaimError::AuthorityNeither
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState};
+    use crate::runtime::DatabaseRuntimeRegistry;
+    use crate::{DatabaseInstance, DatabaseState};
     use std::time::Instant;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
@@ -1023,7 +985,7 @@ mod tests {
             revalidate_catalog_snapshot(&other, &snapshot)
                 .unwrap_err()
                 .code(),
-            crate::database::error::DatabaseErrorCode::Conflict
+            crate::error::DatabaseErrorCode::Conflict
         );
 
         let request = DatabaseMutationRequest {
@@ -1058,7 +1020,7 @@ mod tests {
             revalidate_catalog_snapshot(&first_session, &snapshot)
                 .unwrap_err()
                 .code(),
-            crate::database::error::DatabaseErrorCode::Conflict
+            crate::error::DatabaseErrorCode::Conflict
         );
 
         let fresh = catalog_snapshot(&first_session).unwrap();
@@ -1092,7 +1054,7 @@ mod tests {
             revalidate_catalog_snapshot(&first_session, &fresh)
                 .unwrap_err()
                 .code(),
-            crate::database::error::DatabaseErrorCode::Schema
+            crate::error::DatabaseErrorCode::Schema
         );
     }
 
@@ -1111,7 +1073,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             empty.code(),
-            crate::database::error::DatabaseErrorCode::InvalidRequest
+            crate::error::DatabaseErrorCode::InvalidRequest
         );
     }
 
@@ -1145,24 +1107,24 @@ mod tests {
 
         assert_eq!(
             session.close_admission(),
-            crate::database::runtime::DatabaseAdmissionCloseOutcome::Closed
+            crate::runtime::DatabaseAdmissionCloseOutcome::Closed
         );
         assert_eq!(
             session
                 .admit_operation(DatabaseOperation::Query)
                 .unwrap_err()
                 .code(),
-            crate::database::error::DatabaseErrorCode::AdmissionClosed
+            crate::error::DatabaseErrorCode::AdmissionClosed
         );
 
         drop(committed);
         assert_eq!(session.outstanding_work().committed_changes(), 0);
         assert_eq!(session.outstanding_work().recoveries(), 1);
         assert!(matches!(
-            session.drain(&crate::database::runtime::DatabaseSessionDrainControl::new(
-                crate::database::runtime::DatabaseDrainDeadline::at(Instant::now()),
+            session.drain(&crate::runtime::DatabaseSessionDrainControl::new(
+                crate::runtime::DatabaseDrainDeadline::at(Instant::now()),
             )),
-            crate::database::runtime::DatabaseDrainOutcome::TimedOut { outstanding }
+            crate::runtime::DatabaseDrainOutcome::TimedOut { outstanding }
                 if outstanding.recoveries() == 1
         ));
 
@@ -1181,12 +1143,12 @@ mod tests {
         }
         assert_eq!(session.outstanding_work(), Default::default());
         assert_eq!(
-            session.drain(&crate::database::runtime::DatabaseSessionDrainControl::new(
-                crate::database::runtime::DatabaseDrainDeadline::at(
+            session.drain(&crate::runtime::DatabaseSessionDrainControl::new(
+                crate::runtime::DatabaseDrainDeadline::at(
                     Instant::now() + std::time::Duration::from_secs(1),
                 ),
             )),
-            crate::database::runtime::DatabaseDrainOutcome::Drained {
+            crate::runtime::DatabaseDrainOutcome::Drained {
                 outstanding: Default::default(),
             }
         );
@@ -1274,59 +1236,5 @@ mod tests {
             DatabaseCompensationAttempt::Restored(_)
         ));
         assert_eq!(session.outstanding_work(), Default::default());
-    }
-}
-
-fn declaration_observations_match(
-    current: &DatabaseDeclarationObservationSet,
-    expected: &DatabaseDeclarationObservationSet,
-) -> bool {
-    current == expected
-}
-
-fn compensation_failure(
-    code: DatabaseRuntimeCompensationFailureCode,
-) -> DatabaseCompensationFailure {
-    DatabaseCompensationFailure {
-        code: match code {
-            DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision => {
-                DatabaseCompensationFailureCode::StaleRuntimeRevision
-            }
-            DatabaseRuntimeCompensationFailureCode::Driver => {
-                DatabaseCompensationFailureCode::Driver
-            }
-        },
-    }
-}
-
-fn recovery_requirement(record: &DatabaseRuntimeChangeRecord) -> DatabaseRecoveryRequirement {
-    DatabaseRecoveryRequirement {
-        recovery: DatabaseRecoveryId::from_existing(record.recovery_id()),
-        database: record.database().clone(),
-        outcome: DatabaseRuntimeChangeOutcome {
-            database: record.database().clone(),
-            runtime_revision: DatabaseRuntimeRevision::from_existing(
-                record.after_runtime_revision(),
-            ),
-        },
-        expected_observation: record.expected_observation().clone(),
-        next_observation: record.next_observation().clone(),
-    }
-}
-
-fn map_recovery_claim_error(
-    error: DatabaseRuntimeRecoveryClaimError,
-) -> DatabaseRecoveryClaimError {
-    match error {
-        DatabaseRuntimeRecoveryClaimError::NotFound => DatabaseRecoveryClaimError::NotFound,
-        DatabaseRuntimeRecoveryClaimError::AlreadyClaimed => {
-            DatabaseRecoveryClaimError::AlreadyClaimed
-        }
-        DatabaseRuntimeRecoveryClaimError::SessionStillOpen => {
-            DatabaseRecoveryClaimError::SessionStillOpen
-        }
-        DatabaseRuntimeRecoveryClaimError::AuthorityNeither => {
-            DatabaseRecoveryClaimError::AuthorityNeither
-        }
     }
 }

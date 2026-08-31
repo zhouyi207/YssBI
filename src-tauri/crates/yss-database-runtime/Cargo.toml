@@ -1,0 +1,20 @@
+[package]
+name = "yss-database-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+polars.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-database-contract = { path = "../yss-database-contract" }
+yss-database-edit = { path = "../yss-database-edit" }
+yss-database-schema = { path = "../yss-database-schema" }
+yss-dataset-profile = { path = "../yss-dataset-profile" }
+yss-duckdb = { path = "../yss-duckdb" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-tabular-io = { path = "../yss-tabular-io" }
+yss-tabular-polars = { path = "../yss-tabular-polars" }

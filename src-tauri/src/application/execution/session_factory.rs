@@ -5,13 +5,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
-use crate::database::runtime::DatabaseRuntimeSession;
-use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use crate::project::ProjectState;
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
+use yss_database_runtime::runtime::DatabaseRuntimeSession;
+use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::plan::PlanProjectSessionId;
 use yss_execution::ports::scientific::ScientificBackend;
@@ -336,7 +336,6 @@ pub(crate) fn build_current_project_candidate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
     use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use std::sync::Arc;
@@ -344,6 +343,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
         DatabaseSessionOpenRequest,
     };
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_execution::plan::PlanProjectSessionId;
     use yss_execution::resource_preparation::ResourceProviderFactory;

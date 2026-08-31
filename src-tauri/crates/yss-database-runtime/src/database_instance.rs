@@ -1,5 +1,5 @@
-use super::DatabaseState;
 use super::error::DatabaseExportError;
+use crate::DatabaseState;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
 use yss_database_edit::{EditHistory, EditOperation, EditState};
 

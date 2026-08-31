@@ -25,8 +25,6 @@ use crate::application::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
-use crate::database::error::{DatabaseError, DatabaseErrorCode};
-use crate::database::session_api;
 use crate::project::{
     ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
@@ -35,6 +33,8 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
 };
 use yss_database_edit::EditState;
+use yss_database_runtime::error::{DatabaseError, DatabaseErrorCode};
+use yss_database_runtime::session_api;
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 use yss_display_naming::allocate_unique_display_name;
 use yss_duckdb::{
@@ -158,7 +158,7 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
     fn finalize(
         &self,
         prepared: PreparedProjectDatabaseMutation,
-        database: &crate::database::session_api::DatabaseRuntimeChangeOutcome,
+        database: &yss_database_runtime::session_api::DatabaseRuntimeChangeOutcome,
     ) -> Result<ProjectDatabaseMutationReceipt, ProjectDatabaseFinalizeError> {
         let Some((session_epoch, database_id, expected_runtime_revision, token)) =
             prepared.take_project_authority()
@@ -278,7 +278,7 @@ impl ApplicationState {
             id,
             expected_revision,
             operation_id,
-            crate::database::session_api::DatabaseMutationOperation::RenameDatabase {
+            yss_database_runtime::session_api::DatabaseMutationOperation::RenameDatabase {
                 name: name.into_boxed_str(),
             },
             after,
@@ -657,7 +657,7 @@ fn delete_database_in_captured_session(
             ))
         })?;
     let database = database_id(&id);
-    if captured.database().revisions(&database).is_none() {
+    if captured.database().runtime_revision(&database).is_none() {
         return Err(ApplicationDatabaseError::Database(
             DatabaseApplicationError::NotFound {
                 database_id: id.clone(),
@@ -734,7 +734,7 @@ fn save_database_in_captured_session(
         id,
         expected_revision,
         operation_id,
-        crate::database::session_api::DatabaseMutationOperation::Save,
+        yss_database_runtime::session_api::DatabaseMutationOperation::Save,
         declaration,
         DatabaseApplicationOperation::Save,
     )?;
@@ -1111,7 +1111,7 @@ fn apply_database_mutation_in_session(
     id: String,
     expected_project_revision: ResourceRevision,
     operation_id: OperationId,
-    operation: crate::database::session_api::DatabaseMutationOperation,
+    operation: yss_database_runtime::session_api::DatabaseMutationOperation,
     after: DatabaseDecl,
     application_operation: DatabaseApplicationOperation,
 ) -> Result<
@@ -1121,8 +1121,8 @@ fn apply_database_mutation_in_session(
     let database = database_id(&id);
     let runtime_revision = captured
         .database()
-        .revisions(&database)
-        .map(|revisions| revisions.runtime)
+        .runtime_revision(&database)
+        .map(|revision| revision.get())
         .ok_or_else(|| {
             ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
                 database_id: id.clone(),
@@ -1211,8 +1211,9 @@ fn map_database_runtime_error(
 fn runtime_database_mutation(
     database_id: &str,
     mutation: DatabaseMutation,
-) -> Result<crate::database::session_api::DatabaseMutationOperation, ApplicationDatabaseError> {
-    use crate::database::session_api::DatabaseMutationOperation;
+) -> Result<yss_database_runtime::session_api::DatabaseMutationOperation, ApplicationDatabaseError>
+{
+    use yss_database_runtime::session_api::DatabaseMutationOperation;
     let operation = mutation.operation();
     let invalid = |field| {
         ApplicationDatabaseError::Database(DatabaseApplicationError::InvalidInput {

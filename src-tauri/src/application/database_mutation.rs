@@ -9,16 +9,16 @@ use super::execution::session_slot::{
 use crate::application::events::{
     CommittedResourceMutation, committed_resource_mutation_from_project,
 };
-use crate::database::error::{DatabaseError, DatabaseOperation};
-use crate::database::runtime::DatabaseRuntimeSession;
-use crate::database::session_api::{
+use yss_database_contract::{DatabaseDeclarationObservation, DatabaseId};
+use yss_database_edit::EditState;
+use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
+use yss_database_runtime::runtime::DatabaseRuntimeSession;
+use yss_database_runtime::session_api::{
     CommittedDatabaseRuntimeChange, DatabaseCompensationAttempt, DatabaseCompensationFailureCode,
     DatabaseDeclarationTransition, DatabaseMutationOperation as RuntimeDatabaseMutationOperation,
     DatabaseMutationRequest as RuntimeDatabaseMutationRequest, DatabaseRuntimeChangeOutcome,
     commit_database_runtime_change, prepare_database_runtime_change,
 };
-use yss_database_contract::{DatabaseDeclarationObservation, DatabaseId};
-use yss_database_edit::EditState;
 use yss_database_schema::DatabaseRuntimeRevision;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,17 +48,15 @@ impl DatabaseMutationRequest {
     }
 
     fn into_runtime(self) -> RuntimeDatabaseMutationRequest {
-        RuntimeDatabaseMutationRequest {
-            database: self.database,
-            expected_runtime_revision: DatabaseRuntimeRevision::from_existing(
-                self.expected_runtime_revision,
-            ),
-            declaration_transition: DatabaseDeclarationTransition {
+        RuntimeDatabaseMutationRequest::new(
+            self.database,
+            DatabaseRuntimeRevision::from_existing(self.expected_runtime_revision),
+            DatabaseDeclarationTransition {
                 expected: self.expected_observation,
                 next: self.next_observation,
             },
-            operation: self.operation,
-        }
+            self.operation,
+        )
     }
 
     pub(crate) fn database(&self) -> &DatabaseId {
@@ -192,7 +190,7 @@ pub(crate) struct UnresolvedDatabaseCompensation {
     database: DatabaseId,
     failure: DatabaseCompensationFailureCode,
     owner: CommittedDatabaseRuntimeChange,
-    physical: Option<crate::database::runtime::PreparedDatabasePhysicalMutation>,
+    physical: Option<yss_database_runtime::runtime::PreparedDatabasePhysicalMutation>,
 }
 
 impl fmt::Debug for UnresolvedDatabaseCompensation {
@@ -409,7 +407,7 @@ fn coordinate_database_handoff(
 
 fn compensate_committed_change(
     committed: CommittedDatabaseRuntimeChange,
-    physical: crate::database::runtime::PreparedDatabasePhysicalMutation,
+    physical: yss_database_runtime::runtime::PreparedDatabasePhysicalMutation,
 ) -> DatabaseMutationRecovery {
     let database = committed.outcome().database().clone();
     if physical.rollback().is_err() {
@@ -466,14 +464,14 @@ impl DatabaseMutationApplicationReceipt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState};
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use yss_database_edit::EditHistory;
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
+    use yss_database_runtime::{DatabaseInstance, DatabaseState};
 
     struct RejectingProject;
 
@@ -583,9 +581,9 @@ mod tests {
         }
         assert_eq!(
             database
-                .revisions(&DatabaseId::from_existing("sales".into()))
+                .runtime_revision(&DatabaseId::from_existing("sales".into()))
                 .expect("database revision remains registered")
-                .runtime,
+                .get(),
             0
         );
     }

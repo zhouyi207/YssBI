@@ -7,11 +7,11 @@ use thiserror::Error;
 use super::session_factory::{
     SessionResourceFactoryBuilder, UnpublishedApplicationSession, build_current_project_candidate,
 };
-use crate::database::runtime::{
+use crate::project::ProjectState;
+use yss_database_runtime::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
 };
-use crate::project::ProjectState;
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
@@ -734,7 +734,7 @@ impl ApplicationSessionSlot {
             old.database().drain(&DatabaseSessionDrainControl::new(
                 DatabaseDrainDeadline::at(deadline)
             )),
-            crate::database::runtime::DatabaseDrainOutcome::Drained { .. }
+            yss_database_runtime::runtime::DatabaseDrainOutcome::Drained { .. }
         ) {
             let required = worker
                 .retain_recovery(SessionRecoveryPhase::DrainOldDatabase)
@@ -1199,7 +1199,6 @@ impl ApplicationState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
     use std::num::NonZeroU64;
     use std::sync::{Arc, Barrier};
     use std::thread;
@@ -1208,6 +1207,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_execution::identity::ExecutionSessionId;
     use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch};

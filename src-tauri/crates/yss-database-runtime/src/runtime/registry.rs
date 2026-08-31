@@ -1,5 +1,6 @@
 use super::{DatabaseDrainOutcome, DatabaseOperationLease, DatabaseOutstandingWork};
-use crate::database::error::{DatabaseError, DatabaseOperation};
+use crate::declaration_observation_for;
+use crate::error::{DatabaseError, DatabaseOperation};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use yss_database_contract::{
@@ -75,7 +76,6 @@ pub(crate) struct DatabaseRuntimeCommittedChange {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DatabaseRuntimeCompensationFailureCode {
     StaleRuntimeRevision,
-    Driver,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -330,7 +330,8 @@ impl DatabaseSessionRuntime {
                 Some(database),
             ));
         };
-        let Some(current_observation) = observation_for(&state.observations, &database) else {
+        let Some(current_observation) = declaration_observation_for(&state.observations, &database)
+        else {
             return Err(DatabaseError::not_found(
                 DatabaseOperation::CommitMutation,
                 Some(database),
@@ -409,6 +410,7 @@ impl DatabaseSessionRuntime {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn outstanding(&self) -> DatabaseOutstandingWork {
         lock_or_recover(&self.state).outstanding
     }
@@ -541,12 +543,12 @@ impl DatabaseSessionRuntime {
 
     fn abandon_committed(&self, recovery_id: u64) {
         let mut state = lock_or_recover(&self.state);
-        if let Some(record) = state.changes.get_mut(&recovery_id) {
-            if record.state == DatabaseCommittedRecordState::Committed {
-                record.state = DatabaseCommittedRecordState::Available;
-                state.outstanding.release_committed();
-                state.outstanding.add_recovery();
-            }
+        if let Some(record) = state.changes.get_mut(&recovery_id)
+            && record.state == DatabaseCommittedRecordState::Committed
+        {
+            record.state = DatabaseCommittedRecordState::Available;
+            state.outstanding.release_committed();
+            state.outstanding.add_recovery();
         }
         drop(state);
         self.changed.notify_all();
@@ -554,10 +556,10 @@ impl DatabaseSessionRuntime {
 
     fn release_recovery_claim(&self, recovery_id: u64) {
         let mut state = lock_or_recover(&self.state);
-        if let Some(record) = state.changes.get_mut(&recovery_id) {
-            if record.state == DatabaseCommittedRecordState::Claimed {
-                record.state = DatabaseCommittedRecordState::Available;
-            }
+        if let Some(record) = state.changes.get_mut(&recovery_id)
+            && record.state == DatabaseCommittedRecordState::Claimed
+        {
+            record.state = DatabaseCommittedRecordState::Available;
         }
         drop(state);
         self.changed.notify_all();
@@ -592,7 +594,8 @@ impl DatabaseSessionRuntime {
         let Some(current_revisions) = state.revisions.get(&record.database).copied() else {
             return Err(DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision);
         };
-        let Some(current_observation) = observation_for(&state.observations, &record.database)
+        let Some(current_observation) =
+            declaration_observation_for(&state.observations, &record.database)
         else {
             return Err(DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision);
         };
@@ -644,15 +647,6 @@ fn admit(
         return Err(DatabaseError::admission_closed(operation, None));
     }
     Ok(())
-}
-
-fn observation_for<'a>(
-    observations: &'a DatabaseDeclarationObservationSet,
-    database: &DatabaseId,
-) -> Option<&'a DatabaseDeclarationObservation> {
-    observations
-        .iter()
-        .find_map(|(id, observation)| (id == database).then_some(observation))
 }
 
 fn replace_observation(

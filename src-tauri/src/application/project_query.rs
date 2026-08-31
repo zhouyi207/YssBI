@@ -27,7 +27,7 @@ pub enum ProjectQueryApplicationError {
     #[error(transparent)]
     ProjectRead(#[from] ProjectError),
     #[error("database catalog could not be read")]
-    Database(#[from] crate::database::error::DatabaseError),
+    Database(#[from] yss_database_runtime::error::DatabaseError),
     #[error("project resource reference is invalid")]
     InvalidResourceReference,
     #[error("project resource was not found")]
@@ -71,7 +71,7 @@ impl ApplicationState {
     ) -> Result<ProjectDatabasesVariablesSnapshot, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
         let data = captured.project().get_data()?;
-        let catalog = crate::database::session_api::catalog_snapshot(captured.database())?;
+        let catalog = yss_database_runtime::session_api::catalog_snapshot(captured.database())?;
         let databases = data
             .databases
             .iter()
@@ -94,7 +94,10 @@ impl ApplicationState {
             .into_values()
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        crate::database::session_api::revalidate_catalog_snapshot(captured.database(), &catalog)?;
+        yss_database_runtime::session_api::revalidate_catalog_snapshot(
+            captured.database(),
+            &catalog,
+        )?;
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
         Ok(ProjectDatabasesVariablesSnapshot {

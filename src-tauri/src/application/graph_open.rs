@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::database::session_api::{
+use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
 use yss_execution::plan::{
@@ -151,7 +151,7 @@ pub enum OpenGraphApplicationError {
     #[error(transparent)]
     Project(#[from] OpenGraphProjectError),
     #[error(transparent)]
-    Database(#[from] crate::database::error::DatabaseError),
+    Database(#[from] yss_database_runtime::error::DatabaseError),
     #[error(transparent)]
     Contract(#[from] GraphContractMappingError),
     #[error(transparent)]

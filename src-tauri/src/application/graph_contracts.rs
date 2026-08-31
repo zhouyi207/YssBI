@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::database::session_api::DatabaseCatalogSnapshot;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
+use yss_database_runtime::session_api::DatabaseCatalogSnapshot;
 use yss_execution::plan::{
     CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
     CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
@@ -407,16 +407,17 @@ fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::session_api::{
-        DatabaseCatalogSnapshotFixtureSchema, database_catalog_snapshot_fixture,
-    };
     use std::num::NonZeroU64;
+    use std::sync::Arc;
     use yss_data_contract::DataType;
     use yss_database_contract::{
         DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
+        DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
-    use yss_database_schema::DatabaseColumnFact;
+    use yss_database_edit::EditHistory;
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
+    use yss_database_runtime::{DatabaseInstance, DatabaseState};
     use yss_graph_resource_contract::VariableValueContract;
 
     #[test]
@@ -438,22 +439,27 @@ mod tests {
             ),
         )])
         .unwrap();
-        let schema = database_catalog_snapshot_fixture(
-            "session".into(),
-            NonZeroU64::new(1).unwrap(),
-            observations,
-            Box::new([DatabaseCatalogSnapshotFixtureSchema {
-                database: database.id.clone(),
-                runtime_revision: 0,
-                schema_revision: 0,
-                columns: Box::new([DatabaseColumnFact::new(
-                    yss_tabular_contract::TabularColumnName::try_from("amount").unwrap(),
-                    DataType::Float64,
-                    false,
-                )]),
-            }]),
-        )
-        .unwrap();
+        let dataframe = polars::df!("amount" => &[1.0_f64]).unwrap();
+        let runtime = DatabaseRuntimeRegistry::new()
+            .open_session_with_instances(
+                DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing("session".into()),
+                    NonZeroU64::new(1).unwrap(),
+                    None,
+                    vec![database.clone()].into(),
+                    observations,
+                ),
+                [DatabaseInstance {
+                    decl: database.clone(),
+                    state: DatabaseState::Loaded {
+                        dataframe: Arc::new(dataframe.clone()),
+                        original: Arc::new(dataframe),
+                        history: EditHistory::new(),
+                    },
+                }],
+            )
+            .unwrap();
+        let schema = yss_database_runtime::session_api::catalog_snapshot(&runtime).unwrap();
         let function_path = GraphResourcePath::new("functions/forecast.yssbi-function").unwrap();
         let mut functions = BTreeMap::new();
         functions.insert(

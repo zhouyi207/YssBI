@@ -1,3 +1,5 @@
+//! Stable runtime error classification with redacted driver details.
+
 use std::fmt;
 
 use yss_database_contract::DatabaseId;
@@ -100,10 +102,6 @@ impl PartialEq for DatabaseError {
 
 impl Eq for DatabaseError {}
 
-#[allow(
-    dead_code,
-    reason = "constructors are staged for later database operation seams"
-)]
 impl DatabaseError {
     pub fn code(&self) -> DatabaseErrorCode {
         self.code
@@ -117,10 +115,7 @@ impl DatabaseError {
         self.resource.as_ref()
     }
 
-    pub(crate) fn invalid_request(
-        operation: DatabaseOperation,
-        resource: Option<DatabaseId>,
-    ) -> Self {
+    pub fn invalid_request(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
         Self::without_driver(DatabaseErrorCode::InvalidRequest, operation, resource)
     }
 
@@ -139,12 +134,8 @@ impl DatabaseError {
         Self::without_driver(DatabaseErrorCode::Conflict, operation, resource)
     }
 
-    pub(crate) fn schema(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
+    pub fn schema(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
         Self::without_driver(DatabaseErrorCode::Schema, operation, resource)
-    }
-
-    pub(crate) fn constraint(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
-        Self::without_driver(DatabaseErrorCode::Constraint, operation, resource)
     }
 
     pub(crate) fn unsupported(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
@@ -164,12 +155,12 @@ impl DatabaseError {
         }
     }
 
-    pub(crate) fn cancelled(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
-        Self::without_driver(DatabaseErrorCode::Cancelled, operation, resource)
-    }
-
-    pub(crate) fn deadline(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
-        Self::without_driver(DatabaseErrorCode::Deadline, operation, resource)
+    pub fn polars_driver(
+        operation: DatabaseOperation,
+        resource: Option<DatabaseId>,
+        source: polars::error::PolarsError,
+    ) -> Self {
+        Self::driver(operation, resource, DatabaseDriverError::Polars(source))
     }
 
     fn without_driver(

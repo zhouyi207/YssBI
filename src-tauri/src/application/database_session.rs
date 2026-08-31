@@ -5,13 +5,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::execution::ApplicationSession;
-use crate::database::error::DatabaseError;
-use crate::database::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
 use yss_database_contract::DatabaseSessionOpenRequest;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
     DatabaseSessionOpenRequestError,
 };
+use yss_database_runtime::error::DatabaseError;
+use yss_database_runtime::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
 use yss_project_filesystem::NormalizedProjectRoot;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
@@ -87,7 +87,7 @@ pub(crate) fn prepare_database_session(
 
 pub(crate) fn prepare_database_session_with_instances(
     facts: &ProjectDatabaseSessionFacts,
-    instances: impl IntoIterator<Item = crate::database::DatabaseInstance>,
+    instances: impl IntoIterator<Item = yss_database_runtime::DatabaseInstance>,
 ) -> Result<Arc<DatabaseRuntimeSession>, DatabaseSessionApplicationError> {
     if facts.project_session_id.as_str().is_empty() {
         return Err(DatabaseSessionApplicationError::EmptyProjectSession);

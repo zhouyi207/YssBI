@@ -3,11 +3,9 @@ use std::sync::Arc;
 use polars::prelude::{DataType as PolarsDataType, PolarsResult, Series};
 use thiserror::Error;
 
-use crate::database::error::{
-    DatabaseDriverError, DatabaseError, DatabaseErrorCode, DatabaseOperation,
-};
-use crate::database::runtime::DatabaseRuntimeSession;
-use crate::database::session_api::{
+use crate::error::{DatabaseDriverError, DatabaseError, DatabaseErrorCode, DatabaseOperation};
+use crate::runtime::DatabaseRuntimeSession;
+use crate::session_api::{
     self, DatabaseColumnSelection, DatabaseDataSnapshotRequest, DatabaseQueryBasis,
 };
 use yss_data_contract::DataType;
@@ -68,7 +66,6 @@ impl NumericColumnPair {
 pub enum DatabasePlotQueryErrorKind {
     AdmissionClosed,
     SessionMismatch,
-    GenerationMismatch,
     DatabaseNotFound,
     RuntimeRevisionMismatch,
     SchemaRevisionMismatch,
@@ -82,7 +79,7 @@ pub struct DatabasePlotQueryError {
     database: DatabaseId,
     column: Option<TabularColumnName>,
     #[source]
-    source: Option<DatabaseError>,
+    source: Option<Box<DatabaseError>>,
 }
 
 impl DatabasePlotQueryError {
@@ -198,7 +195,18 @@ pub fn read_numeric_column_pair(
     })?;
 
     pair_from_fact_series(
-        basis, database, x_fact, y_fact, &x_series, &y_series, x_column, y_column,
+        basis,
+        database,
+        NumericColumnMaterialization {
+            fact: x_fact,
+            series: &x_series,
+            column: x_column,
+        },
+        NumericColumnMaterialization {
+            fact: y_fact,
+            series: &y_series,
+            column: y_column,
+        },
     )
 }
 
@@ -245,7 +253,7 @@ fn map_database_error(
         kind,
         database: database.clone(),
         column: column.cloned(),
-        source: Some(error),
+        source: Some(Box::new(error)),
     }
 }
 
@@ -258,26 +266,28 @@ fn materialization_error(
         kind: DatabasePlotQueryErrorKind::ColumnMaterializationFailed,
         database: database.clone(),
         column: column.cloned(),
-        source: Some(source),
+        source: Some(Box::new(source)),
     }
+}
+
+struct NumericColumnMaterialization<'a> {
+    fact: &'a DatabaseColumnFact,
+    series: &'a Series,
+    column: &'a TabularColumnName,
 }
 
 fn pair_from_fact_series(
     basis: DatabaseQueryBasis,
     database: &DatabaseId,
-    x_fact: &DatabaseColumnFact,
-    y_fact: &DatabaseColumnFact,
-    x_series: &Series,
-    y_series: &Series,
-    x_column: &TabularColumnName,
-    y_column: &TabularColumnName,
+    x: NumericColumnMaterialization<'_>,
+    y: NumericColumnMaterialization<'_>,
 ) -> Result<NumericColumnPair, DatabasePlotQueryError> {
-    let x_kind = numeric_kind(x_fact.data_type());
-    let y_kind = numeric_kind(y_fact.data_type());
-    let x = series_to_numeric_values(x_series, x_kind).map_err(|error| {
+    let x_kind = numeric_kind(x.fact.data_type());
+    let y_kind = numeric_kind(y.fact.data_type());
+    let x_values = series_to_numeric_values(x.series, x_kind).map_err(|error| {
         materialization_error(
             database,
-            Some(x_column),
+            Some(x.column),
             DatabaseError::driver(
                 DatabaseOperation::Query,
                 Some(database.clone()),
@@ -285,10 +295,10 @@ fn pair_from_fact_series(
             ),
         )
     })?;
-    let y = series_to_numeric_values(y_series, y_kind).map_err(|error| {
+    let y_values = series_to_numeric_values(y.series, y_kind).map_err(|error| {
         materialization_error(
             database,
-            Some(y_column),
+            Some(y.column),
             DatabaseError::driver(
                 DatabaseOperation::Query,
                 Some(database.clone()),
@@ -301,10 +311,10 @@ fn pair_from_fact_series(
             query: basis,
             database: database.clone(),
         },
-        x,
-        y,
-        x_label: label_for_series(x_series),
-        y_label: label_for_series(y_series),
+        x: x_values,
+        y: y_values,
+        x_label: label_for_series(x.series),
+        y_label: label_for_series(y.series),
         x_kind,
         y_kind,
     })
@@ -357,8 +367,8 @@ fn label_for_series(series: &Series) -> Option<Box<str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::runtime::DatabaseRuntimeRegistry;
-    use crate::database::{DatabaseInstance, DatabaseState};
+    use crate::runtime::DatabaseRuntimeRegistry;
+    use crate::{DatabaseInstance, DatabaseState};
     use polars::prelude::{AnyValue, Column, DataFrame, PlSmallStr, TimeUnit};
     use std::num::NonZeroU64;
     use std::sync::Arc;

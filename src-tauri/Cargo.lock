@@ -9136,6 +9136,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-database-runtime"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-database-contract",
+ "yss-database-edit",
+ "yss-database-schema",
+ "yss-dataset-profile",
+ "yss-duckdb",
+ "yss-tabular-contract",
+ "yss-tabular-io",
+ "yss-tabular-polars",
+]
+
+[[package]]
 name = "yss-database-schema"
 version = "0.1.0"
 dependencies = [
@@ -9677,6 +9695,7 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-database-edit",
+ "yss-database-runtime",
  "yss-database-schema",
  "yss-dataset-profile",
  "yss-diagnostics",
