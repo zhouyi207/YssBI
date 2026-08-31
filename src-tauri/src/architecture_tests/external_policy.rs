@@ -91,12 +91,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "sqlx",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "statrs",
         target_condition: None,
     },
@@ -134,12 +128,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tokio",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -668,6 +656,30 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "statrs",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sql-source",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sql-source",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sql-source",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sql-source",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

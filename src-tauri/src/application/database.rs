@@ -28,7 +28,6 @@ use crate::application::execution::session_slot::{
 use crate::database::error::{DatabaseError, DatabaseErrorCode};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::session_api;
-use crate::database::sql_reader;
 use crate::project::{
     ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
@@ -44,6 +43,7 @@ use yss_duckdb::{
 };
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_sql_source::{list_tables as list_sql_source_tables, read_table_to_dataframe};
 use yss_tabular_contract::TabularSnapshot;
 use yss_tabular_io::list_excel_sheets as list_workbook_sheets;
 
@@ -1027,14 +1027,12 @@ fn ingest_sql_for_application(
     table_name: String,
 ) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
     let mut dataframe =
-        sql_reader::read_table_to_dataframe(&engine, &connection_string, &table_name).map_err(
-            |error| {
-                ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                    DatabaseApplicationOperation::Load,
-                    error,
-                ))
-            },
-        )?;
+        read_table_to_dataframe(&engine, &connection_string, &table_name).map_err(|error| {
+            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
+                DatabaseApplicationOperation::Load,
+                error.to_string(),
+            ))
+        })?;
     let (id, table, duckdb_abs, relative_path) =
         prepare_duckdb_ingest_paths(session).map_err(|error| {
             ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
@@ -1301,11 +1299,11 @@ fn prepare_duckdb_ingest_paths(
 }
 
 pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
-    sql_reader::list_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, path).map_err(
+    list_sql_source_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, path).map_err(
         |error| {
             DatabaseApplicationError::internal_message(
                 DatabaseApplicationOperation::ListTables,
-                error,
+                error.to_string(),
             )
         },
     )
@@ -1326,8 +1324,11 @@ pub fn list_sql_tables(
             });
         }
     };
-    sql_reader::list_tables(&engine, connection_string).map_err(|error| {
-        DatabaseApplicationError::internal_message(DatabaseApplicationOperation::ListTables, error)
+    list_sql_source_tables(&engine, connection_string).map_err(|error| {
+        DatabaseApplicationError::internal_message(
+            DatabaseApplicationOperation::ListTables,
+            error.to_string(),
+        )
     })
 }
 

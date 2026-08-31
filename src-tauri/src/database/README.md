@@ -3,7 +3,8 @@
 `src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
 `DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
 history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast；`yss-duckdb` owns
-transactional SQL edit/reverse 与 bounded column snapshot。`src-tauri/src/database/` owns
+transactional SQL edit/reverse 与 bounded column snapshot；`yss-sql-source` owns external
+SQLite/PostgreSQL/MySQL discovery 与 strict typed materialization。`src-tauri/src/database/` owns
 `DatabaseInstance` state routing、session authority、schema metadata 与 query/edit orchestration。
 Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
@@ -155,6 +156,7 @@ DuckDB overview 仍准确提供：
 | `../../crates/yss-duckdb/src/sql.rs` | Identifier/literal quoting 与 editable dtype allowlist |
 | `../../crates/yss-duckdb/src/export.rs` | Typed DuckDB CSV/Parquet `COPY` export |
 | `../../crates/yss-dataset-profile/` | Profile DTO 与 Loaded DataFrame profile calculation |
+| `../../crates/yss-sql-source/` | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization |
 | `../../crates/yss-tabular-io/` | Loaded DataFrame/Excel filesystem I/O |
 
 验证命令以 [`docs/development/LOCAL_WORKFLOW.md`](../../../docs/development/LOCAL_WORKFLOW.md) 为准，从 repository root 通过 `pnpm` scripts 运行。

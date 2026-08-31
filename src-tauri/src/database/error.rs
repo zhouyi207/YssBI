@@ -187,21 +187,11 @@ impl DatabaseError {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[allow(
-    dead_code,
-    reason = "driver variants are staged until adapters move into Database"
-)]
 pub(crate) enum DatabaseDriverError {
     #[error("database operation failed")]
     Operation(Box<str>),
     #[error("database export failed")]
     Export(#[source] DatabaseExportError),
-    #[error("SQLx driver failure")]
-    Sqlx(#[source] sqlx::Error),
-    #[error("DuckDB driver failure")]
-    DuckDb(#[source] duckdb::Error),
-    #[error("database filesystem failure")]
-    Filesystem(#[source] std::io::Error),
     #[error("Polars driver failure")]
     Polars(#[source] polars::error::PolarsError),
 }
@@ -216,7 +206,7 @@ mod tests {
         let error = DatabaseError::driver(
             DatabaseOperation::Query,
             None,
-            DatabaseDriverError::Filesystem(std::io::Error::new(std::io::ErrorKind::Other, secret)),
+            DatabaseDriverError::Operation(secret.into()),
         );
 
         assert!(!error.to_string().contains(secret));

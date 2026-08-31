@@ -54,6 +54,7 @@ members = [
     "crates/yss-resource-lifecycle",
     "crates/yss-resource-naming",
     "crates/yss-sci",
+    "crates/yss-sql-source",
     "crates/yss-tabular-contract",
     "crates/yss-tabular-io",
     "crates/yss-tabular-polars",
@@ -147,6 +148,7 @@ yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
+yss-sql-source = { path = "./crates/yss-sql-source" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tabular-io = { path = "./crates/yss-tabular-io" }
 yss-tabular-polars = { path = "./crates/yss-tabular-polars" }
@@ -168,12 +170,10 @@ ndarray.workspace = true
 polars.workspace = true
 statrs.workspace = true
 chrono.workspace = true
-tokio.workspace = true
 
 
 uuid.workspace = true
 thiserror.workspace = true
-sqlx.workspace = true
 rand = "0.10"
 duckdb.workspace = true
 notify = "8.2.0"
@@ -184,6 +184,7 @@ trash = "5.2"
 
 [dev-dependencies]
 proc-macro2 = "1"
+sqlx.workspace = true
 syn = { version = "3", features = ["full", "visit"] }
 tracing-subscriber.workspace = true
 yss-execution = { path = "./crates/yss-execution", features = ["test-support"] }

@@ -2233,7 +2233,7 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
         .expect("the Rust architecture policy must be readable");
     assert!(
         policy.contains(
-            "\"yss-database-edit\" | \"yss-dataset-profile\" | \"yss-duckdb\" | \"yss-tabular-io\""
+            "\"yss-database-edit\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
         ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the dataset profile crate must be classified in Database Core"
     );
@@ -2515,6 +2515,174 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
     assert!(
         policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the DuckDB engine crate must be classified in Database Core"
+    );
+}
+
+#[test]
+fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallbacks() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-sql-source/Cargo.toml",
+        "src-tauri/crates/yss-sql-source/src/dataframe.rs",
+        "src-tauri/crates/yss-sql-source/src/lib.rs",
+        "src-tauri/crates/yss-sql-source/src/mysql.rs",
+        "src-tauri/crates/yss-sql-source/src/postgres.rs",
+        "src-tauri/crates/yss-sql-source/src/runtime.rs",
+        "src-tauri/crates/yss-sql-source/src/sqlite.rs",
+        "src-tauri/crates/yss-sql-source/src/tests.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "the SQL source owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/database/sql_reader.rs",
+        "src-tauri/src/database/sqlite_reader.rs",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "the root database package must not retain SQL source owner {removed_owner}"
+        );
+    }
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-sql-source\"",
+        "yss-sql-source = { path = \"./crates/yss-sql-source\" }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    let root_runtime_dependencies = workspace_manifest
+        .split_once("[dependencies]")
+        .expect("the root manifest must have runtime dependencies")
+        .1
+        .split_once("[dev-dependencies]")
+        .expect("the root manifest must have development dependencies")
+        .0;
+    assert!(
+        !root_runtime_dependencies.contains("sqlx.workspace = true")
+            && !root_runtime_dependencies.contains("tokio.workspace = true"),
+        "SQLx and Tokio must leave the root package's production dependency surface"
+    );
+    let source_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-sql-source/Cargo.toml"))
+            .expect("the SQL source manifest must be readable");
+    for dependency in [
+        "polars.workspace = true",
+        "sqlx.workspace = true",
+        "thiserror.workspace = true",
+        "tokio.workspace = true",
+        "yss-database-contract = { path = \"../yss-database-contract\" }",
+    ] {
+        assert!(
+            source_manifest.contains(dependency),
+            "the SQL source crate must declare {dependency}"
+        );
+    }
+
+    let owner = [
+        "src-tauri/crates/yss-sql-source/src/dataframe.rs",
+        "src-tauri/crates/yss-sql-source/src/lib.rs",
+        "src-tauri/crates/yss-sql-source/src/mysql.rs",
+        "src-tauri/crates/yss-sql-source/src/postgres.rs",
+        "src-tauri/crates/yss-sql-source/src/runtime.rs",
+        "src-tauri/crates/yss-sql-source/src/sqlite.rs",
+    ]
+    .into_iter()
+    .map(|relative| {
+        std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
+    })
+    .collect::<Vec<_>>()
+    .join("\n");
+    for invariant in [
+        "pub enum SqlSourceError",
+        "pub fn list_tables",
+        "pub fn read_table_to_dataframe",
+        "UnsupportedColumnType",
+        "AnyValue::BinaryOwned",
+        "Series::full_null",
+        ".ssl_mode(if ssl",
+        ".charset(charset)",
+        ".create_if_missing(auto_create)",
+        ".read_only(!auto_create)",
+        "Handle::try_current().is_ok()",
+    ] {
+        assert!(
+            owner.contains(invariant),
+            "the SQL source owner must preserve invariant {invariant}"
+        );
+    }
+    for forbidden in [
+        "crate::database",
+        "yssbi_lib",
+        "filter_map",
+        "unwrap_or_else(|_| Series::new_null",
+    ] {
+        assert!(
+            !owner.contains(forbidden),
+            "the SQL source owner must not retain fallback or root dependency {forbidden}"
+        );
+    }
+
+    let regressions =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-sql-source/src/tests.rs"))
+            .expect("the SQL source regressions must be readable");
+    for regression in [
+        "sqlite_source_preserves_typed_values_binary_and_quoted_names",
+        "empty_sqlite_table_retains_column_names_and_declared_dtypes",
+        "sqlite_auto_create_is_explicit_and_missing_read_only_sources_stay_missing",
+        "sync_api_is_safe_when_called_from_an_existing_tokio_runtime",
+        "engine_metadata_maps_to_exact_supported_polars_kinds",
+    ] {
+        assert!(
+            regressions.contains(regression),
+            "the SQL source crate must retain regression {regression}"
+        );
+    }
+
+    let application = std::fs::read_to_string(root.join("src-tauri/src/application/database.rs"))
+        .expect("the database application must be readable");
+    assert!(
+        application.contains("use yss_sql_source::{")
+            && application.contains("list_sql_source_tables")
+            && application.contains("read_table_to_dataframe")
+            && !application.contains("sql_reader"),
+        "Application must consume the typed SQL source owner without a root facade"
+    );
+    let database_module = std::fs::read_to_string(root.join("src-tauri/src/database/mod.rs"))
+        .expect("the root database module must be readable");
+    assert!(
+        !database_module.contains("sql_reader") && !database_module.contains("sqlite_reader"),
+        "the root database module must not retain SQL reader facades"
+    );
+    let database_error = std::fs::read_to_string(root.join("src-tauri/src/database/error.rs"))
+        .expect("the root database error owner must be readable");
+    let driver_error = database_error
+        .split_once("pub(crate) enum DatabaseDriverError {")
+        .expect("the root database driver error enum must exist")
+        .1
+        .split_once("\n}")
+        .expect("the root database driver error enum must be closed")
+        .0;
+    for removed_driver_variant in ["Sqlx(", "DuckDb(", "Filesystem("] {
+        assert!(
+            !driver_error.contains(removed_driver_variant),
+            "the root database error must not retain dead driver variant {removed_driver_variant}"
+        );
+    }
+
+    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
+        .expect("the Rust architecture policy must be readable");
+    assert!(
+        policy.contains("| \"yss-sql-source\"")
+            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
+        "the SQL source crate must be classified in Database Core"
     );
 }
 
@@ -2829,7 +2997,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         .expect("the Rust architecture policy must be readable");
     assert!(
         policy.contains(
-            "\"yss-database-edit\" | \"yss-dataset-profile\" | \"yss-duckdb\" | \"yss-tabular-io\""
+            "\"yss-database-edit\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
         ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
         "the tabular I/O crate must be classified in Database Core"
     );

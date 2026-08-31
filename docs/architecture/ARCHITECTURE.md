@@ -140,13 +140,14 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-registry-sqlite/` | 独立 Backend Adapter：`ProjectRegistryStore` 的 SQLx/SQLite schema、CRUD 与 strict row mapping 唯一 owner；不依赖 registry workflow、ProjectState 或 Tauri |
 | `src-tauri/crates/yss-resource-lifecycle/` | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport |
 | `src-tauri/crates/yss-resource-naming/` | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner |
+| `src-tauri/crates/yss-sql-source/` | 独立 Database Core：SQLite/PostgreSQL/MySQL read-only table discovery、连接配置、identifier quoting、strict SQLx value decoding 与 typed Polars materialization 的唯一 owner；不持有 Project/Application/Tauri 状态或导入 publication |
 | `src-tauri/crates/yss-tabular-contract/` | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；变量值归一化由 `yss-variable-value` 负责 |
 | `src-tauri/crates/yss-tabular-io/` | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O、Excel workbook sheet inspection/CSV bridge 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io`、`database/excel_reader` owner，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-tabular-polars/` | 独立 Backend Adapter：canonical tabular scalar/column/snapshot 的 Polars materialization、双向 JSON value projection，以及 `yss-database-edit` operation 的 DataFrame apply/reverse/cast 唯一 owner；完整保留 `u64` 与 1970 年前时间戳，且不依赖 root database、Application 或 Tauri |
 | `src-tauri/crates/yss-variable-contract/` | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project |
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
-| `src-tauri/src/database/` | DatabaseInstance state routing、session/runtime authority、schema snapshot 与 query/edit/export orchestration；edit model/history、Polars adapter、DuckDB engine mechanics 和 filesystem I/O 分别由 `yss-database-edit`、`yss-tabular-polars`、`yss-duckdb`、`yss-tabular-io` 拥有 |
+| `src-tauri/src/database/` | DatabaseInstance state routing、session/runtime authority、schema snapshot 与 query/edit/export orchestration；edit model/history、Polars adapter、DuckDB mechanics、external SQL source 和 filesystem I/O 分别由 `yss-database-edit`、`yss-tabular-polars`、`yss-duckdb`、`yss-sql-source`、`yss-tabular-io` 拥有 |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |

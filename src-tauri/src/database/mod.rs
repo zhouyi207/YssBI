@@ -8,9 +8,6 @@ pub mod database_state;
 pub mod project_storage;
 pub mod schema_snapshot;
 
-pub mod sql_reader;
-pub mod sqlite_reader;
-
 pub use database_instance::*;
 pub use database_state::*;
 pub use project_storage::*;

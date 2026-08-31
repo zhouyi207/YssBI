@@ -9526,6 +9526,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-sql-source"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "yss-database-contract",
+]
+
+[[package]]
 name = "yss-tabular-contract"
 version = "0.1.0"
 dependencies = [
@@ -9642,7 +9653,6 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "thiserror 2.0.20",
- "tokio",
  "tracing",
  "tracing-subscriber",
  "trash",
@@ -9692,6 +9702,7 @@ dependencies = [
  "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",
+ "yss-sql-source",
  "yss-tabular-contract",
  "yss-tabular-io",
  "yss-tabular-polars",

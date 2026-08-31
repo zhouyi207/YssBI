@@ -779,3 +779,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 修复 DuckDB cell edit 将大于 `i64::MAX` 的 JSON unsigned integer 经 `f64` 中转而丢失精度的问题；
   SQL numeric literal 直接使用 `serde_json::Number` 的规范十进制表示，并用 `u64::MAX -> UBIGINT` 回归测试
   锁定无损语义。
+- [ ] 将根 `database/sql_reader.rs` 与 `sqlite_reader.rs` 合并迁入职责命名的 `yss-sql-source` Database Core；
+  统一 SQLite/PostgreSQL/MySQL table discovery、identifier quoting、连接配置、SQLx decode 与 Polars
+  materialization，删除根 facade 以及 root production 的 Tokio/SQLx 依赖，并由 Application 直接调用 typed API。
+- [ ] 修复 external SQL import 将 PostgreSQL `INT2/INT4`、MySQL 各宽度 signed/unsigned integer 等合法值静默
+  降级为 null、BLOB 被替换成 `<N bytes>` 字符串、空表丢失列 schema、list-table decode error 被 `filter_map`
+  吞掉、SQLite 路径手拼 URL，以及 `ssl`/`charset`/`auto_create` persisted config 未生效的问题；unsupported
+  source type 改为 fail closed，并验证同步 API 在既有 Tokio runtime 内不会 nested-`block_on` panic。

@@ -1754,7 +1754,11 @@ fn non_build_memberships(
         layers.insert(RustLayer::Graph);
     } else if matches!(
         package,
-        "yss-database-edit" | "yss-dataset-profile" | "yss-duckdb" | "yss-tabular-io"
+        "yss-database-edit"
+            | "yss-dataset-profile"
+            | "yss-duckdb"
+            | "yss-sql-source"
+            | "yss-tabular-io"
     ) {
         layers.insert(RustLayer::DatabaseCore);
     } else if package == "yss-sci" {
