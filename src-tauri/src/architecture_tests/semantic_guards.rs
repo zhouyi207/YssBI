@@ -2283,41 +2283,42 @@ fn bayes_worker_result_is_neutral_and_path_free() {
         "Bayes worker result must not own legacy result/path authority: {actual:#?}"
     );
 
-    let contract_source = std::fs::read_to_string(
+    let diagnostics_source = std::fs::read_to_string(
         workspace
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/contract.rs"),
+            .join("src-tauri/crates/yss-bayes-result/src/diagnostics.rs"),
     )
-    .expect("Bayes neutral contract source must be readable");
+    .expect("Bayes diagnostics owner must be readable");
     let result_source = std::fs::read_to_string(
         workspace
             .repository_root
-            .join("src-tauri/src/sci/api/bayes/result.rs"),
+            .join("src-tauri/crates/yss-bayes-result/src/result.rs"),
     )
-    .expect("Bayes legacy result source must be readable");
-    let contract = syn::parse_file(&contract_source).expect("Bayes neutral contract must parse");
-    let result = syn::parse_file(&result_source).expect("Bayes legacy result must parse");
+    .expect("Bayes result owner must be readable");
+    let diagnostics =
+        syn::parse_file(&diagnostics_source).expect("Bayes diagnostics owner must parse");
+    let result = syn::parse_file(&result_source).expect("Bayes result owner must parse");
     for symbol in [
         "ParameterSummary",
         "InferenceDiagnostics",
         "DiagnosticWarning",
         "DiagnosticMetric",
     ] {
-        let in_contract = contract.items.iter().any(|item| match item {
+        let in_diagnostics = diagnostics.items.iter().any(|item| match item {
             Item::Struct(item) => item.ident == symbol,
             Item::Enum(item) => item.ident == symbol,
             _ => false,
         });
-        let in_legacy_result = result.items.iter().any(|item| match item {
+        let in_result = result.items.iter().any(|item| match item {
             Item::Struct(item) => item.ident == symbol,
             Item::Enum(item) => item.ident == symbol,
             Item::Type(item) => item.ident == symbol,
             _ => false,
         });
-        assert!(in_contract, "{symbol} must be neutral-contract owned");
+        assert!(in_diagnostics, "{symbol} must be diagnostics-owned");
         assert!(
-            !in_legacy_result,
-            "{symbol} must not be declared or aliased by the old result owner"
+            !in_result,
+            "{symbol} must not be declared or aliased by the result DTO module"
         );
     }
     for owner in [
@@ -2332,7 +2333,7 @@ fn bayes_worker_result_is_neutral_and_path_free() {
                 Item::Struct(item) if item.ident == owner => Some(item),
                 _ => None,
             })
-            .expect("legacy result owner must exist");
+            .expect("result owner must exist");
         assert!(
             item.fields
                 .iter()
@@ -2343,7 +2344,7 @@ fn bayes_worker_result_is_neutral_and_path_free() {
 
     let fixture = bayes_worker_result_neutrality_violations(
         r#"
-use crate::sci::api::bayes::result::{InferenceResult, ResultArtifactManifest};
+use yss_bayes_result::{InferenceResult, ResultArtifactManifest};
 use std::path::PathBuf;
 
 pub struct BayesInferenceSnapshot {
@@ -2358,7 +2359,7 @@ pub struct BayesTaskResult {
 }
 "#,
     )
-    .expect("legacy result fixture must parse");
+    .expect("result neutrality fixture must parse");
     assert!(fixture.iter().any(|finding| finding == "InferenceResult"));
     assert!(
         fixture

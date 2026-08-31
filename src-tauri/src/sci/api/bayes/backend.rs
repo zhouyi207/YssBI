@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use polars::prelude::DataFrame;
 
-use super::{InferenceResult, TaskErrorDetails, TaskProgress};
 use yss_bayes_model::BayesModelSpec;
+use yss_bayes_result::{InferenceResult, TaskErrorDetails, TaskProgress};
 
 pub type BayesProgressCallback = Arc<dyn Fn(TaskProgress) + Send + Sync>;
 

@@ -1,7 +1,9 @@
+//! Structured Bayesian inference diagnostics.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParameterSummary {
     parameter: String,
     mean: f64,
@@ -53,7 +55,7 @@ impl ParameterSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InferenceDiagnostics {
     chains: usize,
     draws_per_chain: usize,
@@ -127,4 +129,40 @@ pub enum DiagnosticMetric {
     Rhat,
     EssBulk,
     EssTail,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InferenceDiagnostics, ParameterSummary};
+
+    #[test]
+    fn diagnostics_reject_unknown_protocol_fields() {
+        assert!(
+            serde_json::from_value::<ParameterSummary>(serde_json::json!({
+                "parameter": "beta",
+                "mean": 1.0,
+                "sd": 0.5,
+                "median": 1.0,
+                "q025": 0.1,
+                "q975": 1.9,
+                "rhat": 1.0,
+                "essBulk": 200.0,
+                "essTail": 180.0,
+                "legacyLabel": "beta"
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<InferenceDiagnostics>(serde_json::json!({
+                "chains": 4,
+                "drawsPerChain": 1000,
+                "warmup": 500,
+                "divergences": 0,
+                "maxTreedepthHits": 0,
+                "warnings": [],
+                "backendMessage": "private"
+            }))
+            .is_err()
+        );
+    }
 }

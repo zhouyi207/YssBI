@@ -4,12 +4,12 @@ use tauri::State;
 use crate::application::bayes::{BayesApplicationError, BayesInferenceService};
 use crate::application::execution::ApplicationState;
 use crate::error::CommandError;
-use crate::sci::api::bayes::{
-    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
-    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifactKind, TracePlotData,
-};
 use yss_bayes_model::{
     BayesModelDraft, ColumnMeta, ParsedExpression, parse_model_expression, validate_draft,
+};
+use yss_bayes_result::{
+    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
+    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifactKind, TracePlotData,
 };
 
 #[derive(Debug, Clone, Deserialize)]

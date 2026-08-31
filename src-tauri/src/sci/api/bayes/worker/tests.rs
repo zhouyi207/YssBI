@@ -11,8 +11,8 @@ use super::{
     BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
     ValidatedBayesTask,
 };
-use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 use yss_bayes_model::{BayesModelSpec, Expression};
+use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
 use yss_sci_contract::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
     StatisticalInput, StatisticalScalar,

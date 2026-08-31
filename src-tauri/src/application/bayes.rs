@@ -13,23 +13,24 @@ use crate::sci::api::bayes::worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult, BayesWorkerError, BayesWorkerPort,
     ValidatedBayesTask, validate_bayes_task,
 };
-use crate::sci::api::bayes::{
-    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
-    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifactKind, TaskError, TaskErrorDetails,
-    TaskProgress, TaskStatus, TracePlotData,
-};
-#[cfg(test)]
-use crate::sci::api::bayes::{
-    AutocorrelationPoint, AutocorrelationSeries, DensityPoint, DensitySeries,
-    PosteriorPredictiveRow, PosteriorPredictiveSummary, PosteriorSampleRow, TracePoint,
-    TraceSeries,
-};
 #[cfg(test)]
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesInputValidationError,
     BayesProgressCallback, PlaceholderBayesBackend, validate_bayes_input_table,
 };
 use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
+use yss_bayes_result::{
+    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
+    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifact, ResultArtifactFormat,
+    ResultArtifactKind, ResultArtifactManifest, TaskError, TaskErrorDetails, TaskProgress,
+    TaskStatus, TracePlotData,
+};
+#[cfg(test)]
+use yss_bayes_result::{
+    AutocorrelationPoint, AutocorrelationSeries, DensityPoint, DensitySeries,
+    PosteriorPredictiveRow, PosteriorPredictiveSummary, PosteriorSampleRow, TracePoint,
+    TraceSeries,
+};
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
@@ -360,8 +361,8 @@ struct BayesInferenceState {
 
 struct StoredInferenceResult {
     result: InferenceResult,
-    artifact_owner: Option<Box<dyn crate::sci::api::bayes::ResultArtifactOwner>>,
     owned_artifacts: Vec<PathBuf>,
+    owned_artifact_directory: Option<PathBuf>,
 }
 
 #[cfg(test)]
@@ -950,8 +951,8 @@ fn finish_worker_task(
                 state.worker_sources.remove(&task_id);
             }
         }
-        Ok(stored) => {
-            if let Ok(mut state) = inner.lock() {
+        Ok(stored) => match inner.lock() {
+            Ok(mut state) => {
                 if state
                     .tasks
                     .get(&task_id)
@@ -970,7 +971,8 @@ fn finish_worker_task(
                 state.worker_handles.remove(&task_id);
                 state.worker_sources.remove(&task_id);
             }
-        }
+            Err(_) => remove_result_artifacts(&stored),
+        },
     }
 }
 
@@ -981,49 +983,57 @@ fn materialize_worker_result(
     result: &BayesTaskResult,
     control: &ExecutionControl,
 ) -> Result<StoredInferenceResult, BayesWorkerError> {
-    let result_dir = app_data_dir.join("bayes-results").join(task_id);
-    std::fs::create_dir_all(&result_dir).map_err(|_| BayesWorkerError::WorkerUnavailable {
-        phase: crate::sci::api::bayes::worker::BayesWorkerPhase::ReadArtifact,
-    })?;
+    let result_root = app_data_dir.join("bayes-results");
+    std::fs::create_dir_all(&result_root).map_err(|_| artifact_io_error())?;
+    let result_dir = result_root.join(task_id);
+    std::fs::create_dir(&result_dir).map_err(|_| artifact_io_error())?;
     let mut manifest = Vec::new();
     let mut owned_paths = Vec::new();
-    for artifact in result.artifacts() {
-        let name = artifact.artifact_id().as_str();
-        let kind = result_artifact_kind(name).ok_or_else(|| {
-            BayesWorkerError::ArtifactFormatUnsupported {
-                artifact: artifact.clone(),
-            }
-        })?;
-        let media = worker.read_artifact(artifact, control)?;
-        let path = result_dir.join(name);
-        std::fs::write(&path, media.bytes()).map_err(|_| BayesWorkerError::WorkerUnavailable {
-            phase: crate::sci::api::bayes::worker::BayesWorkerPhase::ReadArtifact,
-        })?;
-        let format = match media.media_type() {
-            BayesArtifactMediaType::Json => crate::sci::api::bayes::ResultArtifactFormat::Json,
-            BayesArtifactMediaType::Csv => crate::sci::api::bayes::ResultArtifactFormat::Text,
-            BayesArtifactMediaType::Png | BayesArtifactMediaType::Binary => {
-                crate::sci::api::bayes::ResultArtifactFormat::ArrowIpc
-            }
-        };
-        manifest.push(crate::sci::api::bayes::ResultArtifact::from_worker(
-            kind,
-            format,
-            path.to_string_lossy(),
-            None,
-        ));
-        owned_paths.push(path);
+    let materialized = (|| {
+        for artifact in result.artifacts() {
+            let name = artifact.artifact_id().as_str();
+            let kind = result_artifact_kind(name).ok_or_else(|| {
+                BayesWorkerError::ArtifactFormatUnsupported {
+                    artifact: artifact.clone(),
+                }
+            })?;
+            let media = worker.read_artifact(artifact, control)?;
+            let path = result_dir.join(name);
+            owned_paths.push(path.clone());
+            std::fs::write(&path, media.bytes()).map_err(|_| artifact_io_error())?;
+            let format = match media.media_type() {
+                BayesArtifactMediaType::Json => ResultArtifactFormat::Json,
+                BayesArtifactMediaType::Csv => ResultArtifactFormat::Text,
+                BayesArtifactMediaType::ArrowIpc => ResultArtifactFormat::ArrowIpc,
+            };
+            manifest.push(ResultArtifact::from_worker(
+                kind,
+                format,
+                path.to_string_lossy(),
+                None,
+            ));
+        }
+        let inference = InferenceResult::new(
+            result.inference().summaries().to_vec(),
+            result.inference().diagnostics().clone(),
+            ResultArtifactManifest::from_worker(task_id, manifest),
+        );
+        Ok(StoredInferenceResult {
+            result: inference,
+            owned_artifacts: owned_paths.clone(),
+            owned_artifact_directory: Some(result_dir.clone()),
+        })
+    })();
+    if materialized.is_err() {
+        cleanup_owned_artifacts(&owned_paths, Some(&result_dir));
     }
-    let inference = InferenceResult::new(
-        result.inference().summaries().to_vec(),
-        result.inference().diagnostics().clone(),
-        crate::sci::api::bayes::ResultArtifactManifest::from_worker(task_id, manifest),
-    );
-    Ok(StoredInferenceResult {
-        result: inference,
-        artifact_owner: None,
-        owned_artifacts: owned_paths,
-    })
+    materialized
+}
+
+fn artifact_io_error() -> BayesWorkerError {
+    BayesWorkerError::WorkerUnavailable {
+        phase: crate::sci::api::bayes::worker::BayesWorkerPhase::ReadArtifact,
+    }
 }
 
 fn result_artifact_kind(name: &str) -> Option<ResultArtifactKind> {
@@ -1126,15 +1136,14 @@ fn finish_backend_task(
     }
 
     match backend_result {
-        Ok(mut result) => {
+        Ok(result) => {
             let completed = completed_task(task_id.clone());
-            let artifact_owner = result.take_artifact_owner();
             state.results.insert(
                 task_id.clone(),
                 StoredInferenceResult {
                     result,
-                    artifact_owner,
                     owned_artifacts: Vec::new(),
+                    owned_artifact_directory: None,
                 },
             );
             state.tasks.insert(task_id, completed);
@@ -1148,17 +1157,14 @@ fn finish_backend_task(
 }
 
 fn remove_result_artifacts(result: &StoredInferenceResult) {
-    if let Some(owner) = result.artifact_owner.as_ref() {
-        if let Err(error) = owner.cleanup() {
-            tracing::warn!(
-                target: "yssbi::bayes",
-                diagnostic_domain = "application",
-                error = %error,
-                "Failed to clean owned Bayesian result artifacts"
-            );
-        }
-    }
-    for path in &result.owned_artifacts {
+    cleanup_owned_artifacts(
+        &result.owned_artifacts,
+        result.owned_artifact_directory.as_deref(),
+    );
+}
+
+fn cleanup_owned_artifacts(owned_artifacts: &[PathBuf], owned_directory: Option<&Path>) {
+    for path in owned_artifacts {
         if let Err(error) = std::fs::remove_file(path) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 tracing::warn!(
@@ -1166,6 +1172,18 @@ fn remove_result_artifacts(result: &StoredInferenceResult) {
                     diagnostic_domain = "application",
                     error = %error,
                     "Failed to clean owned Bayesian result artifact"
+                );
+            }
+        }
+    }
+    if let Some(directory) = owned_directory {
+        if let Err(error) = std::fs::remove_dir(directory) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(
+                    target: "yssbi::bayes",
+                    diagnostic_domain = "application",
+                    error = %error,
+                    "Failed to clean owned Bayesian result directory"
                 );
             }
         }
@@ -1834,22 +1852,21 @@ mod tests {
     use yss_diagnostics::DiagnosticsRuntime;
     use yss_tracing::LogLayer;
 
-    use crate::sci::api::bayes::{
-        BayesBackend, BayesBackendError, BayesBackendRequest, InferenceResult, ResultArtifactOwner,
-        TaskErrorDetails,
-    };
+    use crate::sci::api::bayes::{BayesBackend, BayesBackendError, BayesBackendRequest};
     use yss_bayes_model::{
         BayesModelDraft, BinaryOp, ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType,
         Expression, InferenceConfig, LikelihoodSpec, ParameterConstraint, ParameterRef,
         ParameterSpec, PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding,
         SamplerAlgorithm, SymbolDraft, SymbolRole,
     };
+    use yss_bayes_result::{BayesInferenceTask, InferenceResult, TaskErrorDetails, TaskStatus};
 
     use super::{
-        BayesApplicationError, BayesInferenceService, autocorrelation_plot_data_from_dataframe,
-        cancelled_task, completed_task, density_plot_data_from_dataframe, failed_task,
-        posterior_predictive_page_from_dataframe, posterior_sample_page_from_dataframe,
-        required_input_columns, trace_plot_data_from_dataframe, validated_spec,
+        BayesApplicationError, BayesInferenceService, StoredInferenceResult,
+        autocorrelation_plot_data_from_dataframe, cancelled_task, completed_task,
+        density_plot_data_from_dataframe, failed_task, posterior_predictive_page_from_dataframe,
+        posterior_sample_page_from_dataframe, required_input_columns,
+        trace_plot_data_from_dataframe, validated_spec,
     };
 
     struct TemporaryAppRoot {
@@ -1909,60 +1926,6 @@ mod tests {
                 }
             }))
             .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))
-        }
-    }
-
-    struct OwnedArtifactBackend {
-        app_root: PathBuf,
-        external_artifact: PathBuf,
-        owned_directory: Arc<Mutex<Option<PathBuf>>>,
-    }
-
-    #[derive(Debug)]
-    struct TestArtifactOwner(PathBuf);
-
-    impl ResultArtifactOwner for TestArtifactOwner {
-        fn cleanup(&self) -> Result<(), Box<str>> {
-            match fs::remove_dir_all(&self.0) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error.to_string().into_boxed_str()),
-            }
-        }
-    }
-
-    impl BayesBackend for OwnedArtifactBackend {
-        fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            let owned_directory = self.app_root.join("owned-artifacts").join(&request.task_id);
-            fs::create_dir_all(&owned_directory).expect("create owned artifact directory");
-            fs::write(owned_directory.join("output.arrow"), b"owned artifact")
-                .expect("write owned artifact");
-            *self.owned_directory.lock().expect("owned directory lock") =
-                Some(owned_directory.clone());
-
-            let mut result: InferenceResult = serde_json::from_value(serde_json::json!({
-                "summaries": [],
-                "diagnostics": {
-                    "chains": 1,
-                    "drawsPerChain": 1,
-                    "warmup": 0,
-                    "divergences": 0,
-                    "maxTreedepthHits": 0,
-                    "warnings": []
-                },
-                "artifactManifest": {
-                    "taskId": request.task_id,
-                    "artifacts": [{
-                        "kind": "posterior_samples",
-                        "format": "arrow_ipc",
-                        "path": self.external_artifact.to_string_lossy(),
-                        "rows": 1
-                    }]
-                }
-            }))
-            .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))?;
-            result.set_artifact_owner(TestArtifactOwner(owned_directory));
-            Ok(result)
         }
     }
 
@@ -2168,15 +2131,13 @@ mod tests {
     fn wait_for_terminal_task(
         service: &BayesInferenceService,
         task_id: &str,
-    ) -> crate::sci::api::bayes::BayesInferenceTask {
+    ) -> BayesInferenceTask {
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
             let task = service.status(task_id).expect("task status");
             if matches!(
                 task.status,
-                crate::sci::api::bayes::TaskStatus::Completed
-                    | crate::sci::api::bayes::TaskStatus::Cancelled
-                    | crate::sci::api::bayes::TaskStatus::Failed
+                TaskStatus::Completed | TaskStatus::Cancelled | TaskStatus::Failed
             ) {
                 return task;
             }
@@ -2211,7 +2172,7 @@ mod tests {
     fn completed_task_has_terminal_status() {
         let task = completed_task("task".to_string());
 
-        assert_eq!(task.status, crate::sci::api::bayes::TaskStatus::Completed);
+        assert_eq!(task.status, TaskStatus::Completed);
         assert!(task.error.is_none());
     }
 
@@ -2219,7 +2180,7 @@ mod tests {
     fn cancelled_task_has_no_error_payload() {
         let task = cancelled_task("task".to_string());
 
-        assert_eq!(task.status, crate::sci::api::bayes::TaskStatus::Cancelled);
+        assert_eq!(task.status, TaskStatus::Cancelled);
         assert!(task.error.is_none());
     }
 
@@ -2316,10 +2277,7 @@ mod tests {
         }));
         let task = service.submit(valid_draft()).expect("submitted task");
         let completed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            completed.status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
+        assert_eq!(completed.status, TaskStatus::Completed);
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
         assert_eq!(result.diagnostics().warnings()[0].code(), "test_backend");
@@ -2330,7 +2288,7 @@ mod tests {
         let service = BayesInferenceService::with_backend(Arc::new(FailingBackend));
         let task = service.submit(valid_draft()).expect("failed task returned");
         let failed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(failed.status, crate::sci::api::bayes::TaskStatus::Failed);
+        assert_eq!(failed.status, TaskStatus::Failed);
         let error = failed.error.as_ref().expect("failed task error");
         assert_eq!(error.code, "test_backend_failed");
         assert!(error.details.is_none());
@@ -2344,35 +2302,57 @@ mod tests {
     }
 
     #[test]
-    fn clear_task_deletes_only_owned_worker_task_directory() {
+    fn clear_task_deletes_only_materialized_worker_artifacts() {
         let test_root = TemporaryAppRoot::new("bayes-artifact-ownership");
-        let app_root = test_root.path().join("app");
-        fs::create_dir_all(&app_root).expect("create temporary app root");
+        let owned_directory = test_root.path().join("bayes-results").join("task-owned");
+        fs::create_dir_all(&owned_directory).expect("create owned artifact directory");
+        let owned_artifact = owned_directory.join("samples.arrow");
+        fs::write(&owned_artifact, b"owned artifact").expect("write owned artifact");
         let external_directory = test_root.path().join("external");
         fs::create_dir_all(&external_directory).expect("create external artifact directory");
         let external_artifact = external_directory.join("samples.arrow");
         fs::write(&external_artifact, b"external artifact").expect("write external artifact");
-        let owned_directory = Arc::new(Mutex::new(None));
-        let service = BayesInferenceService::with_backend(Arc::new(OwnedArtifactBackend {
-            app_root,
-            external_artifact: external_artifact.clone(),
-            owned_directory: owned_directory.clone(),
-        }));
-        let task = service.submit(valid_draft()).expect("submitted task");
-        let completed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            completed.status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
-        let owned_directory = owned_directory
-            .lock()
-            .expect("owned directory lock")
-            .clone()
-            .expect("owned task directory");
-        assert!(owned_directory.exists());
+        let task_id = "task-owned".to_owned();
+        let result: InferenceResult = serde_json::from_value(serde_json::json!({
+            "summaries": [],
+            "diagnostics": {
+                "chains": 1,
+                "drawsPerChain": 1,
+                "warmup": 0,
+                "divergences": 0,
+                "maxTreedepthHits": 0,
+                "warnings": []
+            },
+            "artifactManifest": {
+                "taskId": task_id,
+                "artifacts": [{
+                    "kind": "posterior_samples",
+                    "format": "arrow_ipc",
+                    "path": external_artifact.to_string_lossy(),
+                    "rows": 1
+                }]
+            }
+        }))
+        .expect("valid result projection");
+        let service = BayesInferenceService::new();
+        {
+            let mut state = service.inner.lock().expect("service state lock");
+            state
+                .tasks
+                .insert(task_id.clone(), completed_task(task_id.clone()));
+            state.results.insert(
+                task_id.clone(),
+                StoredInferenceResult {
+                    result,
+                    owned_artifacts: vec![owned_artifact.clone()],
+                    owned_artifact_directory: Some(owned_directory.clone()),
+                },
+            );
+        }
 
-        service.clear_task(&task.task_id).expect("clear task");
+        service.clear_task(&task_id).expect("clear task");
 
+        assert!(!owned_artifact.exists());
         assert!(!owned_directory.exists());
         assert!(external_artifact.exists());
     }

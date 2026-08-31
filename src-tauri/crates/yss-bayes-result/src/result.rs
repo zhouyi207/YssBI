@@ -1,42 +1,15 @@
+//! Bayesian task, artifact, plot, and paging result projections.
+
 use serde::{Deserialize, Serialize};
 
-use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
+use super::diagnostics::{InferenceDiagnostics, ParameterSummary};
 
-/// Opaque ownership for backend-produced artifacts.
-///
-/// The scientific contract can retain and release an artifact lease without
-/// knowing which adapter owns the underlying files or process resources.
-pub trait ResultArtifactOwner: std::fmt::Debug + Send + Sync {
-    fn cleanup(&self) -> Result<(), Box<str>>;
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InferenceResult {
     summaries: Vec<ParameterSummary>,
     diagnostics: InferenceDiagnostics,
     artifact_manifest: ResultArtifactManifest,
-    #[serde(skip)]
-    artifact_owner: Option<Box<dyn ResultArtifactOwner>>,
-}
-
-impl Clone for InferenceResult {
-    fn clone(&self) -> Self {
-        Self {
-            summaries: self.summaries.clone(),
-            diagnostics: self.diagnostics.clone(),
-            artifact_manifest: self.artifact_manifest.clone(),
-            artifact_owner: None,
-        }
-    }
-}
-
-impl PartialEq for InferenceResult {
-    fn eq(&self, other: &Self) -> bool {
-        self.summaries == other.summaries
-            && self.diagnostics == other.diagnostics
-            && self.artifact_manifest == other.artifact_manifest
-    }
 }
 
 impl InferenceResult {
@@ -49,16 +22,7 @@ impl InferenceResult {
             summaries,
             diagnostics,
             artifact_manifest,
-            artifact_owner: None,
         }
-    }
-
-    pub(crate) fn set_artifact_owner(&mut self, owner: impl ResultArtifactOwner + 'static) {
-        self.artifact_owner = Some(Box::new(owner));
-    }
-
-    pub(crate) fn take_artifact_owner(&mut self) -> Option<Box<dyn ResultArtifactOwner>> {
-        self.artifact_owner.take()
     }
 
     pub fn summaries(&self) -> &[ParameterSummary] {
@@ -75,14 +39,14 @@ impl InferenceResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResultArtifactManifest {
     task_id: String,
     artifacts: Vec<ResultArtifact>,
 }
 
 impl ResultArtifactManifest {
-    pub(crate) fn from_worker(task_id: impl Into<String>, artifacts: Vec<ResultArtifact>) -> Self {
+    pub fn from_worker(task_id: impl Into<String>, artifacts: Vec<ResultArtifact>) -> Self {
         Self {
             task_id: task_id.into(),
             artifacts,
@@ -99,7 +63,7 @@ impl ResultArtifactManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResultArtifact {
     kind: ResultArtifactKind,
     format: ResultArtifactFormat,
@@ -108,7 +72,7 @@ pub struct ResultArtifact {
 }
 
 impl ResultArtifact {
-    pub(crate) fn from_worker(
+    pub fn from_worker(
         kind: ResultArtifactKind,
         format: ResultArtifactFormat,
         path: impl Into<String>,
@@ -158,7 +122,7 @@ pub enum ResultArtifactFormat {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PosteriorSampleRow {
     pub parameter: String,
     pub chain: usize,
@@ -167,7 +131,7 @@ pub struct PosteriorSampleRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PosteriorSamplePage {
     pub rows: Vec<PosteriorSampleRow>,
     pub offset: usize,
@@ -176,14 +140,14 @@ pub struct PosteriorSamplePage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TracePoint {
     pub draw: usize,
     pub value: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TraceSeries {
     pub parameter: String,
     pub chain: usize,
@@ -191,7 +155,7 @@ pub struct TraceSeries {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TracePlotData {
     pub series: Vec<TraceSeries>,
     pub max_points_per_chain: usize,
@@ -199,14 +163,14 @@ pub struct TracePlotData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DensityPoint {
     pub x: f64,
     pub density: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DensitySeries {
     pub parameter: String,
     pub chain: Option<usize>,
@@ -214,21 +178,21 @@ pub struct DensitySeries {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DensityPlotData {
     pub series: Vec<DensitySeries>,
     pub grid_points: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AutocorrelationPlotData {
     pub series: Vec<AutocorrelationSeries>,
     pub max_lag: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AutocorrelationSeries {
     pub parameter: String,
     pub chain: usize,
@@ -236,14 +200,14 @@ pub struct AutocorrelationSeries {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AutocorrelationPoint {
     pub lag: usize,
     pub autocorrelation: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PosteriorPredictiveSummary {
     pub observed: f64,
     pub mean: f64,
@@ -252,7 +216,7 @@ pub struct PosteriorPredictiveSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PosteriorPredictiveRow {
     pub observation: usize,
     pub model: PosteriorPredictiveSummary,
@@ -260,7 +224,7 @@ pub struct PosteriorPredictiveRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PosteriorPredictivePage {
     pub rows: Vec<PosteriorPredictiveRow>,
     pub response_transform: String,
@@ -272,7 +236,7 @@ pub struct PosteriorPredictivePage {
 #[cfg(test)]
 mod tests {
     use super::{DensityPlotData, TaskError};
-    use crate::sci::api::bayes::contract::DiagnosticWarning;
+    use crate::diagnostics::DiagnosticWarning;
 
     #[test]
     fn task_errors_and_diagnostic_warnings_use_safe_structured_wire_shapes() {
@@ -365,15 +329,36 @@ mod tests {
         assert!(
             serde_json::from_value::<DensityPlotData>(serde_json::json!({
                 "series": [],
+                "gridPoints": 64,
                 "bins": 64
             }))
             .is_err()
         );
     }
+
+    #[test]
+    fn result_artifacts_reject_unknown_fields_and_unsupported_formats() {
+        let artifact = serde_json::json!({
+            "kind": "posterior_samples",
+            "format": "arrow_ipc",
+            "path": "results/samples.arrow",
+            "rows": 10,
+            "owner": "legacy"
+        });
+        assert!(serde_json::from_value::<super::ResultArtifact>(artifact).is_err());
+
+        let unsupported = serde_json::json!({
+            "kind": "posterior_samples",
+            "format": "png",
+            "path": "results/plot.png",
+            "rows": null
+        });
+        assert!(serde_json::from_value::<super::ResultArtifact>(unsupported).is_err());
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BayesInferenceTask {
     pub task_id: String,
     pub status: TaskStatus,
@@ -393,7 +378,7 @@ pub enum TaskStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskProgress {
     pub stage: String,
     pub completed: Option<usize>,

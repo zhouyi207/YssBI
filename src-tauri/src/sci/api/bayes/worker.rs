@@ -1,8 +1,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use super::contract::{InferenceDiagnostics, ParameterSummary};
 use yss_bayes_model::{BayesModelSpec, model_spec_is_valid};
+use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
 use yss_sci_contract::{CancelDeliveryControl, ExecutionControl, StatisticalInput};
 
 const MAX_OPAQUE_ID_LEN: usize = 128;
@@ -240,8 +240,7 @@ impl BayesArtifactHandle {
 pub enum BayesArtifactMediaType {
     Json,
     Csv,
-    Png,
-    Binary,
+    ArrowIpc,
 }
 
 pub struct BayesArtifact {

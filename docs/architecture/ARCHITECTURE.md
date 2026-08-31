@@ -7,6 +7,7 @@
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
+- [Bayes result 说明](../../src-tauri/crates/yss-bayes-result/README.md)
 - [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
@@ -44,6 +45,10 @@ flowchart TD
   APP --> SCICONTRACT[yss-sci-contract]
   SCI --> SCICONTRACT
   JULIA --> SCICONTRACT
+  CMD --> BAYESRESULT[yss-bayes-result]
+  APP --> BAYESRESULT
+  SCI --> BAYESRESULT
+  JULIA --> BAYESRESULT
   CMD --> CHANNEL[Events and ordered channels]
   CHANNEL --> UI
 ```
@@ -160,7 +165,8 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
-| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API、result 与 regression/panel models；共享 input/settings/control/error 和 Bayes model 已分别由 `yss-sci-contract`、`yss-bayes-model` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
+| `src-tauri/crates/yss-bayes-result/` | 独立 Pure Leaf：Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 的唯一 owner；不持有 model 构造、worker/process capability、filesystem lease、Julia、Polars、Application state 或 Tauri |
+| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API、Bayes worker port 与 regression/panel models；共享 input/settings/control/error、Bayes model 和 Bayes result 已分别由 `yss-sci-contract`、`yss-bayes-model`、`yss-bayes-result` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/crates/yss-sci-contract/` | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现 |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
@@ -572,16 +578,18 @@ Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标�
 
 ## 9. SCI 与 Julia
 
-### 9.1 四个独立职责
+### 9.1 五个独立职责
 
-科学计算与 Bayes model 分为四个职责：
+科学计算与 Bayes 分为五个职责：
 
 1. `src-tauri/crates/yss-sci-contract/` 的 `yss-sci-contract` Pure Leaf：backend-neutral
    statistical input/settings、执行控制、取消 capability 与稳定 SCI error code。
 2. `src-tauri/crates/yss-bayes-model/` 的 `yss-bayes-model` Pure Leaf：Bayes draft、
    expression parser、structured validation 与 validated immutable spec 构造。
-3. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-4. `src-tauri/src/sci/`：尚待迁移的主应用 SCI runtime API、result 与部分 models；跨层调用通过
+3. `src-tauri/crates/yss-bayes-result/` 的 `yss-bayes-result` Pure Leaf：Bayes diagnostics、
+   task/result projection、artifact manifest 与 plot/page DTO。
+4. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
+5. `src-tauri/src/sci/`：尚待迁移的主应用 SCI runtime API、Bayes worker port 与部分 models；跨层调用通过
    `execution::ports::scientific`，不由 SCI 反向编排 Project 或 Execution。
 
 Final Execution-facing scientific request/result/error/control 由
@@ -603,6 +611,10 @@ Commands、Application、Bayes worker validation、integration tests 与 Julia a
 集合推导，不能与 errors 分别成为事实源；draft-to-spec conversion 使用内部 parts object，并在
 validation 漂移时返回 structured error，不保留生产 `expect` panic 分支；worker admission 复用同一个
 immutable-spec validator，不维护第二套 model 不变量。
+
+Commands、Application、Bayes worker 与 Julia adapter 直接消费 `yss-bayes-result`，根
+`sci::api::bayes` 不保留 result/diagnostics facade。Result DTO 不持有 filesystem owner；Application
+只清理由 worker materialization 明确登记的 artifact 路径，不根据客户端可见 manifest 删除外部文件。
 
 `yss-sci-contract` 与 `yss-sci` 都不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
 
@@ -631,7 +643,7 @@ Regression fit 不再把统计量仅当作松散 JSON。`RegressionFit.statistic
 - 接收 Application 从 Project/Database snapshot 生成的 typed `StatisticalInput`；
 - 在 owned task directory 写 Arrow input、model/config、generated kernels 与 exchange manifest；
 - 读取 typed inference metadata/artifact manifest；
-- 在 SCI adapter 一侧持有 task-directory，并按需要适配 artifact ownership contract；
+- 在 adapter 内持有 worker task-directory，直到 Application 将 artifact materialize 到自己的结果目录；
 - 按 stable worker error code 映射 Bayes error，不解析 diagnostic prose。
 
 Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sync_all` 和 atomic replace 更新。Task directory 必须是 `<app-data>/julia-worker/tasks/<task-id>` 的 canonical direct child；RAII owner 只清理仍满足该 ownership invariant 的路径。
@@ -667,6 +679,7 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 
 - 可跨 workflow/runtime/adapter 共享的 input、settings、control 与 error 放 `yss-sci-contract`；
 - Bayes draft、expression parsing、validation 与 immutable model spec 放 `yss-bayes-model`；
+- Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 放 `yss-bayes-result`；
 - 纯算法放 `yss-sci`；
 - 尚未独立成 crate 的运行期 API 与 models 暂放 `src-tauri/src/sci/`；
 - 只有存在真实可替换 implementation 时才建立 backend seam；

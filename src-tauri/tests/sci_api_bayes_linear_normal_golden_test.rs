@@ -3,7 +3,6 @@ use serde::Deserialize;
 use yss_bayes_model::{
     BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, ParameterConstraint, PriorSpec,
 };
-use yssbi_lib::sci::api::bayes::{BayesDataExchangeManifest, BayesExchangeColumn};
 
 const SIMPLE_LINEAR_NORMAL: &str = include_str!("sci/fixtures/bayes/linear_normal/simple.json");
 const EXPONENTIAL_DECAY_NORMAL: &str =
@@ -181,41 +180,6 @@ fn poisson_log_fixture_defines_model_family_protocol() {
     );
     assert!(spec.sampler().save_samples);
     assert_eq!(fixture_input_table(&fixture).height(), 8);
-}
-
-#[test]
-fn linear_normal_fixture_exchange_manifest_is_stable() {
-    let fixture = simple_linear_normal_fixture();
-    let dataframe = fixture_input_table(&fixture);
-    let manifest = BayesDataExchangeManifest::new(
-        "bayes-fixture",
-        "input.arrow",
-        "model_spec.json",
-        "inference_config.json",
-        "predictor_kernel.jl",
-        "likelihood_kernel.jl",
-        vec!["x".to_string()],
-        "output.arrow",
-        "metadata.json",
-        dataframe.height(),
-        dataframe
-            .get_column_names()
-            .into_iter()
-            .map(|name| BayesExchangeColumn {
-                name: name.to_string(),
-            })
-            .collect(),
-    );
-
-    let value = serde_json::to_value(&manifest).expect("manifest JSON");
-    assert_eq!(value["version"], 3);
-    assert_eq!(value["taskId"], "bayes-fixture");
-    assert_eq!(value["predictorKernelPath"], "predictor_kernel.jl");
-    assert_eq!(value["likelihoodKernelPath"], "likelihood_kernel.jl");
-    assert_eq!(value["predictorColumns"], serde_json::json!(["x"]));
-    assert_eq!(value["inputRows"], 6);
-    assert_eq!(value["inputColumns"][0]["name"], "x");
-    assert_eq!(value["inputColumns"][1]["name"], "y");
 }
 
 fn simple_linear_normal_fixture() -> BayesGoldenFixture {

@@ -707,7 +707,6 @@ mod tests {
                 artifacts: vec![
                     ("summary.json", b"{}"),
                     ("table.csv", b"x\n1\n"),
-                    ("plot.png", b"png"),
                     ("draws.arrow", b"arrow"),
                 ],
                 gate: None,
@@ -726,13 +725,12 @@ mod tests {
             .await_result(&first, &run_control)
             .expect("task must complete");
         assert_eq!(result.task(), &first);
-        assert_eq!(result.artifacts().len(), 4);
+        assert_eq!(result.artifacts().len(), 3);
         for handle in result.artifacts() {
             let expected = match handle.artifact_id().as_str() {
                 "summary.json" => BayesArtifactMediaType::Json,
                 "table.csv" => BayesArtifactMediaType::Csv,
-                "plot.png" => BayesArtifactMediaType::Png,
-                "draws.arrow" => BayesArtifactMediaType::Binary,
+                "draws.arrow" => BayesArtifactMediaType::ArrowIpc,
                 other => panic!("unexpected artifact fixture: {other}"),
             };
             assert_eq!(
@@ -759,6 +757,10 @@ mod tests {
             adapter.read_artifact(&foreign, &run_control),
             Err(BayesWorkerError::ArtifactNotOwned { artifact }) if artifact == foreign
         ));
+        let second_result = adapter
+            .await_result(foreign.task(), &run_control)
+            .expect("second generation must finish before its temporary root is released");
+        assert!(second_result.artifacts().is_empty());
     }
 
     #[test]

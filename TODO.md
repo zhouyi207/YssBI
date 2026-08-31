@@ -825,3 +825,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   worker validation、integration tests 与 Julia adapters 直接消费唯一 owner；同时以内部 parts object 收敛
   多参数构造，统一 conversion/worker 的 spec validator，并消除 `ValidationReport.ok`/errors 双事实源、
   非有限 prior 漏检及 draft-to-spec 的生产 `expect` 分支。
+- [ ] 将 Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 迁入
+  `src-tauri/crates/yss-bayes-result/` Pure Leaf；删除根 `sci/api/bayes` result/contract facade、旧 exchange contract
+  与仅测试挂载的重复 Julia Bayes backend，让 Commands、Application、worker 和 Julia adapter 直接消费唯一 owner；
+  artifact lease 由 Application 的 materialization 清单唯一管理，不再嵌入可序列化 result，同时拒绝把 PNG/任意 binary
+  伪装成 Arrow IPC。

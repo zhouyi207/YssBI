@@ -5,12 +5,13 @@
 ```text
 commands / application / node_system kernels
   → yss-bayes-model draft/parser/validated spec
-  → sci::api remaining runtime/result interface
+  → yss-bayes-result diagnostics/task/result projections
+  → sci::api remaining runtime interface
   → sci::backends adapter
   → yss-sci Rust algorithms or Julia Bayes worker
 ```
 
-`yss-bayes-model` 是 Pure Leaf，唯一拥有 Bayes draft、表达式解析、校验与不可变 spec 构造；commands、Application、worker validation 和 Julia adapter 直接依赖它，不经过根 facade。其余 runtime seam 集中 typed output、backend dispatch 与 error mapping，避免调用方依赖 Julia protocol。
+`yss-bayes-model` 是 Pure Leaf，唯一拥有 Bayes draft、表达式解析、校验与不可变 spec 构造；`yss-bayes-result` 是另一个 Pure Leaf，唯一拥有 diagnostics、task/result projections、artifact manifest 与 plot/page DTO。commands、Application、worker validation 和 Julia adapter 直接依赖对应 crate，不经过根 facade。其余 runtime seam 集中 worker capability、backend dispatch 与 error mapping，避免调用方依赖 Julia protocol。
 
 ## Ownership
 
@@ -19,11 +20,12 @@ commands / application / node_system kernels
 - application-facing scientific request/result types；
 - ACF/PACF、serial tests、hypothesis 和 node statistics interface；
 - typed regression models/statistics；
-- Bayes result 与 `BayesWorkerPort` interface；
+- Bayes `BayesWorkerPort` interface；
 - Rust/Julia adapters；Julia worker adapter 位于 `julia/bayes_worker_adapter`；
 
-Bayes model/draft/parser/validation 由 `yss-bayes-model` 拥有；shared statistical
-input/settings/control 与 stable `SciError` 由 `yss-sci-contract` 拥有。
+Bayes model/draft/parser/validation 由 `yss-bayes-model` 拥有；Bayes diagnostics、task/result
+projection 与 artifact manifest 由 `yss-bayes-result` 拥有；shared statistical input/settings/control
+与 stable `SciError` 由 `yss-sci-contract` 拥有。
 
 本 module 不拥有：
 
@@ -40,7 +42,7 @@ input/settings/control 与 stable `SciError` 由 `yss-sci-contract` 拥有。
 ```text
 sci/
 ├─ api/
-│  ├─ bayes/ (remaining result/worker runtime contracts)
+│  ├─ bayes/ (remaining worker runtime contract)
 │  ├─ density.rs
 │  ├─ node_statistics.rs
 │  ├─ stats/hypothesis.rs

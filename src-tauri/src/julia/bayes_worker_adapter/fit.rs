@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use super::JuliaTaskCompletion;
 use super::predictor::{JuliaGeneratedModel, JuliaModelGenerationError, generate_julia_model};
-use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 use crate::sci::api::bayes::worker::{
     ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesInferenceSnapshot,
     BayesTaskHandle, BayesTaskResult, BayesWorkerError, ValidatedBayesTask,
 };
 use yss_bayes_model::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
+use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
     JuliaWorkerTaskDirectory,
@@ -386,8 +386,7 @@ fn artifact_media_type(
     match extension.as_deref() {
         Some("json") => Ok(BayesArtifactMediaType::Json),
         Some("csv") => Ok(BayesArtifactMediaType::Csv),
-        Some("png") => Ok(BayesArtifactMediaType::Png),
-        Some("arrow" | "ipc" | "bin") => Ok(BayesArtifactMediaType::Binary),
+        Some("arrow" | "ipc") => Ok(BayesArtifactMediaType::ArrowIpc),
         None | Some(_) => Err(BayesWorkerError::ArtifactFormatUnsupported {
             artifact: artifact.clone(),
         }),
