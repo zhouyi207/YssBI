@@ -116,7 +116,7 @@ pub fn get_compatible_node_catalog(
 
 #[cfg(all(test, any()))]
 pub(super) fn get_localized_node_catalog_from_state(
-    state: &crate::project::ProjectState,
+    state: &yss_project::ProjectState,
     project_instance_id: ProjectInstanceId,
     locale: &str,
 ) -> Result<LegacyLocalizedCatalogDto, CommandError> {

@@ -3,7 +3,6 @@ use super::*;
 use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
-use crate::project::ProjectState;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
@@ -26,6 +25,7 @@ use yss_graph_runtime::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
 };
+use yss_project::ProjectState;
 use yss_project_identity::ProjectSessionId;
 use yss_project_model::{GraphResourceDocument, ProjectData};
 
@@ -40,7 +40,7 @@ impl TestProject {
             "yssbi-catalog-query-{label}-{}",
             uuid::Uuid::new_v4()
         ));
-        crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
         Self {

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
-use crate::project::ProjectState;
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
@@ -19,6 +18,7 @@ use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+use yss_project::ProjectState;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
@@ -211,13 +211,7 @@ pub(crate) fn build_current_project_candidate(
         .get_data()
         .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
     let project_instance_id = ProjectInstanceId::from_existing(project.project_instance_id());
-    let project_session_id = {
-        let store = project
-            .project_store
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        store.project_session_id.clone()
-    };
+    let project_session_id = project.project_session_id();
     let builtin =
         build_builtin_node_system().map_err(ProjectSessionCandidateError::GraphRuntime)?;
     let (root, database_revisions) = match project.get_path() {
@@ -336,7 +330,6 @@ pub(crate) fn build_current_project_candidate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -349,6 +342,7 @@ mod tests {
     use yss_execution::resource_preparation::ResourceProviderFactory;
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_project::ProjectState;
     use yss_project_identity::ProjectInstanceId;
     use yss_project_identity::ProjectSessionId;
 

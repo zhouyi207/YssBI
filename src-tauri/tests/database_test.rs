@@ -9,8 +9,8 @@ use yss_duckdb::{
     MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, ingest_csv_to_duckdb,
     ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta, write_display_name,
 };
+use yss_project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 use yss_project_identity::OperationId;
-use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 
 fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
     DatabaseInstance {

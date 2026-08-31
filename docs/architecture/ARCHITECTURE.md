@@ -120,7 +120,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/src/application/` | 跨 module 用例编排 |
 | `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
-| `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
+| `src-tauri/src/lib.rs` | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters；不拥有 Project 行为或 transport contract |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
 | `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery |
 | `src-tauri/crates/yss-computation-settings/` | 独立 Pure Leaf：持久化 computation settings、validation 与 project settings mutation wire contract 的唯一 canonical owner |
@@ -153,6 +153,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-history/` | 独立 Project 层：mutation envelope、resource/document patch、undo/redo transaction 与内存 document state machine 的唯一 owner；不持有 filesystem、publication、transport 或 Graph edit adapter |
 | `src-tauri/crates/yss-project-layout/` | 独立且无依赖的 Pure Leaf：project 磁盘目录、文件名、扩展名与 index-input 相对路径分类的唯一 canonical owner；不持有 I/O、schema、watcher 或 workflow |
 | `src-tauri/crates/yss-project-manifest/` | 独立 Pure Leaf：`metadata.yssbi` 当前 schema version、严格 manifest wire 与 computation settings fail-closed validation 的唯一 owner；不持有 ProjectData、时钟、I/O 或 lifecycle |
+| `src-tauri/crates/yss-project/` | 独立 Stateful Project 层：`ProjectState`、运行期 session/instance、resource revision、history hydration、持久化事务编排与 commit 后 publication 的唯一 owner；组合专职 Project crates，但不依赖 Tauri、Commands、IPC schema、Application workflow 或 Database runtime |
 | `src-tauri/crates/yss-project-model/` | 独立 Project 层：内存 `ProjectData`、`ProjectMetadata`、Graph resource aggregate 与 `ProjectDataPatch` 的唯一 owner；不持有文件 I/O、时钟、publication 或整包 project JSON wire |
 | `src-tauri/crates/yss-project-operation/` | 独立 Stateful Project 层：project/session 绑定的 operation admission、in-flight/completed replay protection 与 RAII reservation lifecycle 的唯一 owner；不持有 ProjectState、publication、I/O 或 transport |
 | `src-tauri/crates/yss-project-progress/` | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter |
@@ -408,7 +409,7 @@ yss-project-identity
 yss-project-identity + yss-project-registry-contract
   → yss-project-registry-sqlite → Composition Root
 yss-project-identity + yss-graph-document + yss-worksheet-document + yss-database-contract
-  → yss-project-history → Project hydration/authority → Application/Commands/Transport
+  → yss-project-history → yss-project
 yss-data-contract + yss-project-history + yss-project-identity
   → yss-function-editor-projection → Project index/Application events/Transport
 yss-project-layout + yss-project-progress
@@ -416,15 +417,17 @@ yss-project-layout + yss-project-progress
 yss-computation-settings
   → yss-project-manifest → Project I/O/lifecycle
 yss-computation-settings + yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-worksheet-document
-  → yss-project-model → Project authority/persistence adapters → Application/Commands
+  → yss-project-model → yss-project
 yss-project-identity
-  → yss-project-operation → Project authority/mutation writers
+  → yss-project-operation → yss-project
 yss-project-identity + yss-project-layout + yss-resource-lifecycle + yss-resource-naming + yss-graph-document + yss-worksheet-document
-  → yss-project-filesystem → Project authority/persistence adapters → Application failure view → Commands
+  → yss-project-filesystem → yss-project
 yss-project-identity + yss-graph-document + yss-worksheet-document
-  → yss-resource-lifecycle → Project authority/mutation writers
+  → yss-resource-lifecycle → yss-project
 yss-data-contract + yss-tabular-contract + yss-variable-contract
-  → yss-variable-value → Project variable staging/activation
+  → yss-variable-value → yss-project
+yss-project-model + yss-project-history + yss-project-operation + yss-project-filesystem + yss-resource-lifecycle
+  → yss-project → Application workflows → Commands/API; composition root only constructs and injects authority
 yss-tabular-contract
   → yss-tabular-polars → Database Polars editing
 Polars DataFrame
@@ -439,9 +442,9 @@ yss-display-naming
 yss-project-progress
   → Project registry workflows → Commands Tauri queue/Channel projection
 yss-computation-settings + yss-project-identity
-  → Project persistence/authority → Application SCI/Execution mappings → Commands/Event wire
+  → yss-project → Application SCI/Execution mappings → Commands/Event wire
 yss-resource-naming + yss-project-identity
-  → yss-worksheet-document → Project worksheet persistence/authority → Application/Commands
+  → yss-worksheet-document → yss-project → Application/Commands
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
@@ -456,10 +459,11 @@ yss-resource-naming + yss-project-identity
 - `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
 - `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
 - `yss-function-editor-projection`：统一从 `FunctionDocument` 构造带强类型 `ResourceRevision` 的 editor inputs/outputs，并拥有 Project index 与 mutation event 共用的严格 camelCase wire。三个调用方不再各自展开 parameter/signature，Transport 中字段完全相同的 DTO 镜像与复制转换已删除；Project I/O、Application event 编排和交付仍留在各自 owner。
+- `yss-project`：统一拥有 `ProjectState`、激活 session/instance、resource revision、history hydration、持久化事务编排与 commit 后 publication。原根 `src/project/` owner、兼容 facade、失效测试 hooks 和重复 resource-mutation 路径已删除；Graph move 的 undo/redo 现在复用可构造的真实磁盘重命名计划。该 crate 只返回 Project-owned typed facts，Application 负责工作流/事件投影，Commands/API 负责 wire，root 只负责构造与注入，因此无需也禁止 catch-all `yss-backend`。
 - `yss-project-model`：统一拥有运行期 `ProjectData`、`ProjectMetadata`、`GraphResourceDocument` 聚合与原子候选 `ProjectDataPatch`；默认值确定性地使用空 export time，由 lifecycle 在创建/导出边界显式读取时钟。运行期聚合 patch 不再与 `yss-project-history::ResourceDocumentPatch` 共用同名类型，根 `project/resource_patch.rs` 与 facade 已删除；ProjectState 继续独占锁、事务、I/O 与 publication。旧的整包 `ProjectData` JSON、`info` 与隐式 metadata 刷新 API 已删除，Graph kind 直接复用 `yss-graph-document::GraphResourceKind`。
-- `yss-project-operation`：统一拥有 project/session 绑定的 operation admission、进行中/已完成防重放集合与 reservation 的完成/Drop 状态机。旧 ledger 自建的 UUID session epoch 已删除，改为复用 canonical `ProjectSessionId`，从而避免第二会话事实源，并保证 project instance id 被复用时旧 reservation 不会污染新会话；根 Project 层继续拥有 publication 线性化、锁顺序及 `ProjectFilesystemError` 映射。
-- `yss-project-filesystem`：统一拥有 native project-root identity、入口路径 binding/revalidation、root-scoped 有序租约、lifecycle admission 封锁、redirect-safe I/O、原子 mutation journal、rollback/recovery marker 与 `ProjectFilesystemError`。原根 `project/filesystem/` owner 和错误镜像已删除；事务 API 只接收 `NormalizedProjectRoot`、`OperationId` 与 recovery marker，避免反向依赖完整 `ProjectSession`，而 resource revision 校验、ProjectState publication 和 document serialization 继续留在根 Project 层。错误码与 recovery 分类先投影为 Application-owned failure view，再由 Commands 映射成 wire error；通用 Transport error 不再直接依赖 Project 或 Application。
-- `yss-resource-lifecycle`：统一拥有 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、ownership predecessor chain、提交/放弃状态与 RAII guard。核心 API 只接收 canonical `ProjectInstanceId`，不再耦合完整 `ProjectSession`；原先被 `cfg(all(test, any()))` 永久关闭的 17 个状态机测试已恢复，零调用且可能 panic 的资源路径 getter 与根层测试探针已删除。跨状态 `ProjectSession` 校验和激活 publication 锁顺序继续留在根 Project 层，typed filesystem 分类映射由 `yss-project-filesystem` 唯一拥有。
+- `yss-project-operation`：统一拥有 project/session 绑定的 operation admission、进行中/已完成防重放集合与 reservation 的完成/Drop 状态机。旧 ledger 自建的 UUID session epoch 已删除，改为复用 canonical `ProjectSessionId`，从而避免第二会话事实源，并保证 project instance id 被复用时旧 reservation 不会污染新会话；`yss-project` 继续拥有 publication 线性化、锁顺序及 `ProjectFilesystemError` 映射。
+- `yss-project-filesystem`：统一拥有 native project-root identity、入口路径 binding/revalidation、root-scoped 有序租约、lifecycle admission 封锁、redirect-safe I/O、原子 mutation journal、rollback/recovery marker 与 `ProjectFilesystemError`。原根 `project/filesystem/` owner 和错误镜像已删除；事务 API 只接收 `NormalizedProjectRoot`、`OperationId` 与 recovery marker，避免反向依赖完整 `ProjectSession`，而 resource revision 校验、ProjectState publication 和 document serialization 继续留在 `yss-project`。错误码与 recovery 分类先投影为 Application-owned failure view，再由 Commands 映射成 wire error；通用 Transport error 不再直接依赖 Project 或 Application。
+- `yss-resource-lifecycle`：统一拥有 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、ownership predecessor chain、提交/放弃状态与 RAII guard。核心 API 只接收 canonical `ProjectInstanceId`，不再耦合完整 `ProjectSession`；原先被 `cfg(all(test, any()))` 永久关闭的 17 个状态机测试已恢复，零调用且可能 panic 的资源路径 getter 与根层测试探针已删除。跨状态 `ProjectSession` 校验和激活 publication 锁顺序继续留在 `yss-project`，typed filesystem 分类映射由 `yss-project-filesystem` 唯一拥有。
 - `yss-variable-value`：统一拥有变量类型变更后的 inert 默认值、`var:{id}` handle 与 tabular literal/snapshot 归一化。数组和对象默认值为空，避免伪造用户数据或违反元素类型；canonical handle 缺失 snapshot 时 fail closed，DataSeries 只替换 handle 并保留 element/dummy/time-series metadata。Project 激活不再吞掉归一化错误，状态、事务和持久化仍留在 Project。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
 - `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire 与资源路径；`worksheets/*.yssbi-worksheet` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。

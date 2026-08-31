@@ -73,7 +73,7 @@ pub(crate) struct PreparedProjectDatabaseMutation {
     session_epoch: ApplicationSessionEpoch,
     database: DatabaseId,
     expected_runtime_revision: u64,
-    project_authority: Option<crate::project::database_authority::DatabaseAuthorityToken>,
+    project_authority: Option<yss_project::database_authority::DatabaseAuthorityToken>,
 }
 
 impl PreparedProjectDatabaseMutation {
@@ -90,7 +90,7 @@ impl PreparedProjectDatabaseMutation {
         session_epoch: ApplicationSessionEpoch,
         database: DatabaseId,
         expected_runtime_revision: u64,
-        project_authority: crate::project::database_authority::DatabaseAuthorityToken,
+        project_authority: yss_project::database_authority::DatabaseAuthorityToken,
     ) -> Self {
         Self {
             session_epoch,
@@ -106,7 +106,7 @@ impl PreparedProjectDatabaseMutation {
         ApplicationSessionEpoch,
         DatabaseId,
         u64,
-        crate::project::database_authority::DatabaseAuthorityToken,
+        yss_project::database_authority::DatabaseAuthorityToken,
     )> {
         self.project_authority.take().map(|authority| {
             (
@@ -134,7 +134,7 @@ pub(crate) enum ProjectDatabaseFinalizeError {
     #[error("Project database finalization observed a stale session")]
     StaleSession,
     #[error("Project database finalization was rejected")]
-    Project(#[source] crate::project::ProjectDatabaseError),
+    Project(#[source] yss_project::ProjectDatabaseError),
 }
 
 #[derive(Debug)]
@@ -148,7 +148,7 @@ impl ProjectDatabaseMutationReceipt {
     pub(crate) fn from_project(
         session_epoch: ApplicationSessionEpoch,
         database: DatabaseId,
-        mutation: crate::project::project_writers::ProjectResourceMutationFacts,
+        mutation: yss_project::project_writers::ProjectResourceMutationFacts,
     ) -> Self {
         Self {
             session_epoch,

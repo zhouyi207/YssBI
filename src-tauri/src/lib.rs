@@ -1,6 +1,7 @@
-//! YssBI 后端模块
+//! YssBI Tauri 组合入口。
 //!
-//! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
+//! 这里只构造并注入各 crate authority、Application state 与平台适配器；领域行为和
+//! transport contract 分别留在各自 owner。
 
 pub mod application;
 pub mod backend_adapters;
@@ -8,7 +9,6 @@ pub mod commands;
 pub mod error;
 pub mod event;
 
-pub mod project;
 mod schema;
 
 #[cfg(test)]
@@ -23,8 +23,8 @@ use tauri::Manager;
 
 // ==================== 应用入口 ====================
 
-fn initialize_project_state() -> project::ProjectState {
-    project::ProjectState::new()
+fn initialize_project_state() -> yss_project::ProjectState {
+    yss_project::ProjectState::new()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -38,7 +38,7 @@ enum ApplicationInitializationError {
 }
 
 fn initialize_application_state(
-    project_state: Arc<project::ProjectState>,
+    project_state: Arc<yss_project::ProjectState>,
 ) -> Result<application::execution::ApplicationState, ApplicationInitializationError> {
     let scientific_backend: Arc<dyn yss_execution::ports::scientific::ScientificBackend> =
         Arc::new(backend_adapters::execution::scientific::SciApiScientificBackend::new());

@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::project::ProjectIndex;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
@@ -17,6 +16,7 @@ use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAd
 use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, VariableValueContract};
 use yss_graph_runtime::GraphRuntimeCatalogError;
+use yss_project::ProjectIndex;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
@@ -261,7 +261,7 @@ pub(crate) struct ProjectCatalogResources {
 
 impl ProjectCatalogResources {
     fn from_index(index: ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
-        let authority_generation = index.authority_generation;
+        let authority_generation = index.authority_generation();
         let mut functions = BTreeMap::new();
         let mut variables = BTreeMap::new();
         let mut databases = BTreeMap::new();
@@ -450,7 +450,7 @@ pub(crate) fn capture_localized_project_facts(
         return Err(ProjectCatalogReadError::ProjectLifecycleChanged);
     }
     let resource_publication_revision = index.publication_revision;
-    let authority_generation = index.authority_generation;
+    let authority_generation = index.authority_generation();
     let project_instance_id = session.project_instance_id().clone();
     let resources =
         ProjectCatalogResources::from_index(index).map_err(ProjectCatalogReadError::Internal)?;
@@ -632,7 +632,7 @@ pub(crate) fn revalidate_project_catalog_facts(
         .map_err(map_project_catalog_error)?;
     if current.project_instance_id != facts.authority_basis.project_instance_id.as_str()
         || current.publication_revision != facts.authority_basis.resource_publication_revision
-        || current.authority_generation != facts.authority_basis.authority_generation
+        || current.authority_generation() != facts.authority_basis.authority_generation
     {
         return Err(ProjectCatalogReadError::CatalogResourceStale {
             resource: GraphResourceId::new("project/catalog"),

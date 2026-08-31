@@ -11,8 +11,6 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-#[cfg(all(test, any()))]
-use crate::project::ProjectState;
 use crate::schema::application_event::ResourceMutationCommandResultDto;
 use crate::schema::{
     DatabaseEngineDTO, DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto,
@@ -22,6 +20,8 @@ use tauri::{AppHandle, State};
 #[cfg(all(test, any()))]
 use yss_database_edit::EditHistory;
 use yss_database_edit::EditState;
+#[cfg(all(test, any()))]
+use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -1247,7 +1247,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let mut project = ProjectData::new();
         project.metadata.project_name = "database command publication".into();
-        crate::project::fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+        yss_project::fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
         let csv = root.join("writer.csv");
         std::fs::write(&csv, "value\n1\n").unwrap();
         let state = ProjectState::new();

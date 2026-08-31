@@ -1876,7 +1876,7 @@ fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
     }
 
     let project_store =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_store.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_store.rs"))
             .expect("ProjectStore source must be readable");
     for removed_mirror in [
         "databases:",
@@ -2461,7 +2461,7 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
         "src-tauri/crates/yss-database-runtime/src/project_storage.rs",
         "src-tauri/crates/yss-database-schema/src/lib.rs",
         "src-tauri/src/application/database.rs",
-        "src-tauri/src/project/project_io.rs",
+        "src-tauri/crates/yss-project/src/project_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3395,8 +3395,8 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
         );
     }
     for removed_owner in [
-        "src-tauri/src/project/variable_defaults.rs",
-        "src-tauri/src/project/variable_tabular.rs",
+        "src-tauri/crates/yss-project/src/variable_defaults.rs",
+        "src-tauri/crates/yss-project/src/variable_tabular.rs",
     ] {
         assert!(
             !root.join(removed_owner).exists(),
@@ -3406,13 +3406,10 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-variable-value\"",
-        "yss-variable-value = { path = \"./crates/yss-variable-value\" }",
-    ] {
+    for declaration in ["\"crates/yss-variable-value\""] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must declare {declaration}"
         );
     }
 
@@ -3467,8 +3464,9 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod variable_defaults",
         "mod variable_tabular",
@@ -3481,9 +3479,9 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
     }
 
     for relative in [
-        "src-tauri/src/project/project_activation.rs",
-        "src-tauri/src/project/project_state_variable.rs",
-        "src-tauri/src/project/project_writers.rs",
+        "src-tauri/crates/yss-project/src/project_activation.rs",
+        "src-tauri/crates/yss-project/src/project_state_variable.rs",
+        "src-tauri/crates/yss-project/src/project_writers.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -3498,9 +3496,10 @@ fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activatio
         );
     }
 
-    let activation =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_activation.rs"))
-            .expect("project activation must be readable");
+    let activation = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/project_activation.rs"),
+    )
+    .expect("project activation must be readable");
     assert!(
         !activation.contains("let _ = normalize_variable_tabular"),
         "project activation must not silently discard variable normalization failures"
@@ -3532,7 +3531,9 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
         );
     }
     assert!(
-        !root.join("src-tauri/src/project/path_format.rs").exists(),
+        !root
+            .join("src-tauri/crates/yss-project/src/path_format.rs")
+            .exists(),
         "Project must not retain the removed path display owner"
     );
 
@@ -3599,8 +3600,9 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in ["mod path_format", "pub use yss_path_display"] {
         assert!(
             !project_module.contains(facade),
@@ -3616,7 +3618,7 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
         "path-display must remain a Pure Leaf"
     );
     assert!(
-        !policy.contains("yssbi_lib::project::path_format::format_path_for_user_path"),
+        !policy.contains("yss_project::path_format::format_path_for_user_path"),
         "architecture capabilities must not preserve the removed Project facade"
     );
 }
@@ -4042,7 +4044,7 @@ fn resource_naming_has_one_pure_crate_owner_without_root_or_graph_facades() {
         );
     }
     for obsolete in [
-        "src-tauri/src/project/resource_name.rs",
+        "src-tauri/crates/yss-project/src/resource_name.rs",
         "src-tauri/crates/yss-graph-document/src/name.rs",
     ] {
         assert!(
@@ -4051,8 +4053,9 @@ fn resource_naming_has_one_pure_crate_owner_without_root_or_graph_facades() {
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("project module must be readable");
     assert!(
         !project_module.contains("mod resource_name")
             && !project_module.contains("resource_name::*"),
@@ -4107,7 +4110,7 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
         );
     }
     for obsolete in [
-        "src-tauri/src/project/unique_name.rs",
+        "src-tauri/crates/yss-project/src/unique_name.rs",
         "src/shared/utils/getUniqueName.ts",
     ] {
         assert!(
@@ -4123,8 +4126,9 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
         "the unused frontend display-name compatibility export must stay removed"
     );
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("project module must be readable");
     assert!(
         !project_module.contains("mod unique_name"),
         "project must consume yss-display-naming directly without a compatibility facade"
@@ -4154,8 +4158,8 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
 
     for consumer in [
         "src-tauri/src/application/database.rs",
-        "src-tauri/src/project/project_state_variable.rs",
-        "src-tauri/src/project/project_writers/variables.rs",
+        "src-tauri/crates/yss-project/src/project_state_variable.rs",
+        "src-tauri/crates/yss-project/src/project_writers/variables.rs",
     ] {
         let source = std::fs::read_to_string(root.join(consumer)).unwrap_or_else(|error| {
             panic!("display-name consumer {consumer} must be readable: {error}")
@@ -4443,8 +4447,8 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         );
     }
     for relative in [
-        "src-tauri/src/project/identity.rs",
-        "src-tauri/src/project/project_session_id.rs",
+        "src-tauri/crates/yss-project/src/identity.rs",
+        "src-tauri/crates/yss-project/src/project_session_id.rs",
     ] {
         assert!(
             !root.join(relative).exists(),
@@ -4465,8 +4469,9 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "pub mod identity",
         "mod project_session_id",
@@ -4525,13 +4530,13 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
     }
     assert!(
         !root
-            .join("src-tauri/src/project/project_registry_store.rs")
+            .join("src-tauri/crates/yss-project/src/project_registry_store.rs")
             .exists(),
         "the root crate must not retain a mirrored project registry storage model"
     );
     assert!(
         !root
-            .join("src-tauri/src/project/project_registry.rs")
+            .join("src-tauri/crates/yss-project/src/project_registry.rs")
             .exists(),
         "the root crate must not retain the extracted project registry workflow"
     );
@@ -4706,8 +4711,9 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "the root backend adapter module must not retain a compatibility facade"
     );
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "pub mod project_registry",
         "pub use project_registry",
@@ -4766,7 +4772,7 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
     }
     assert!(
         !root
-            .join("src-tauri/src/project/computation_settings.rs")
+            .join("src-tauri/crates/yss-project/src/computation_settings.rs")
             .exists(),
         "the root project crate must not retain a computation-settings owner"
     );
@@ -4783,8 +4789,9 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod computation_settings",
         "pub use computation_settings",
@@ -4821,10 +4828,10 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         "src-tauri/src/application/computation_settings.rs",
         "src-tauri/src/commands/command_project/settings.rs",
         "src-tauri/src/event/event_project.rs",
-        "src-tauri/src/project/execution_authority.rs",
+        "src-tauri/crates/yss-project/src/execution_authority.rs",
         "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/crates/yss-project-manifest/src/lib.rs",
-        "src-tauri/src/project/project_state.rs",
+        "src-tauri/crates/yss-project/src/project_state.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -4932,12 +4939,12 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "src-tauri/crates/yss-project-discovery/src/lib.rs",
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
         "src-tauri/crates/yss-worksheet-document/src/lib.rs",
-        "src-tauri/src/project/graph_resource_index.rs",
+        "src-tauri/crates/yss-project/src/graph_resource_index.rs",
         "src-tauri/crates/yss-project-change/src/lib.rs",
-        "src-tauri/src/project/project_io.rs",
-        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_io.rs",
+        "src-tauri/crates/yss-project/src/project_lifecycle.rs",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
-        "src-tauri/src/project/worksheet_io.rs",
+        "src-tauri/crates/yss-project/src/worksheet_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -4953,7 +4960,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
             "pub const PROJECT_METADATA_FILE",
         ),
         (
-            "src-tauri/src/project/project_io.rs",
+            "src-tauri/crates/yss-project/src/project_io.rs",
             "pub const GLOBAL_VARIABLES_FILE",
         ),
         (
@@ -4977,8 +4984,9 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     assert!(
         !project_module.contains("pub use yss_project_layout"),
         "Project must not restore a project-layout compatibility facade"
@@ -4998,7 +5006,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
     for relative in [
         "src-tauri/crates/yss-project-change/Cargo.toml",
         "src-tauri/crates/yss-project-change/src/lib.rs",
-        "src-tauri/src/project/project_change_reconciliation.rs",
+        "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -5007,7 +5015,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
     }
     assert!(
         !root
-            .join("src-tauri/src/project/project_change.rs")
+            .join("src-tauri/crates/yss-project/src/project_change.rs")
             .exists(),
         "the root crate must not retain a project-change contract owner"
     );
@@ -5067,8 +5075,9 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in ["pub mod project_change;", "pub use yss_project_change"] {
         assert!(
             !project_module.contains(facade),
@@ -5077,7 +5086,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
     }
 
     for relative in [
-        "src-tauri/src/project/project_change_reconciliation.rs",
+        "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
         "src-tauri/src/application/project_change.rs",
         "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
     ] {
@@ -5090,7 +5099,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
     }
 
     let reconciliation = std::fs::read_to_string(
-        root.join("src-tauri/src/project/project_change_reconciliation.rs"),
+        root.join("src-tauri/crates/yss-project/src/project_change_reconciliation.rs"),
     )
     .expect("project change reconciliation must be readable");
     assert!(
@@ -5146,19 +5155,18 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
         );
     }
     assert!(
-        !root.join("src-tauri/src/project/project_scan.rs").exists(),
+        !root
+            .join("src-tauri/crates/yss-project/src/project_scan.rs")
+            .exists(),
         "the root crate must not retain a second project-discovery owner"
     );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-project-discovery\"",
-        "yss-project-discovery = { path = \"./crates/yss-project-discovery\" }",
-    ] {
+    for declaration in ["\"crates/yss-project-discovery\""] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must declare {declaration}"
         );
     }
 
@@ -5215,8 +5223,9 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in ["project_scan", "pub use yss_project_discovery"] {
         assert!(
             !project_module.contains(facade),
@@ -5225,7 +5234,7 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
     }
 
     for relative in [
-        "src-tauri/src/project/project_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_lifecycle.rs",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -5271,7 +5280,9 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         );
     }
     assert!(
-        !root.join("src-tauri/src/project/history.rs").exists(),
+        !root
+            .join("src-tauri/crates/yss-project/src/history.rs")
+            .exists(),
         "the root crate must not retain a second project-history owner"
     );
 
@@ -5332,8 +5343,9 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "pub mod history;",
         "pub use history::",
@@ -5347,8 +5359,8 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
 
     for relative in [
         "src-tauri/src/application/resource_mutation.rs",
-        "src-tauri/src/project/history_hydration.rs",
-        "src-tauri/src/project/project_state.rs",
+        "src-tauri/crates/yss-project/src/history_hydration.rs",
+        "src-tauri/crates/yss-project/src/project_state.rs",
         "src-tauri/src/schema/application_event.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -5374,6 +5386,132 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
 }
 
 #[test]
+fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport_cycle() {
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-project/Cargo.toml",
+        "src-tauri/crates/yss-project/README.md",
+        "src-tauri/crates/yss-project/src/lib.rs",
+        "src-tauri/crates/yss-project/src/project_state/state.rs",
+        "src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_writers.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "project runtime owner must exist at {relative}"
+        );
+    }
+    for removed_owner in [
+        "src-tauri/src/project",
+        "src-tauri/crates/yss-project/src/project_state/graph_rename.rs",
+        "src-tauri/crates/yss-project/src/resource_mutations.rs",
+        "src-tauri/crates/yss-project/src/resource_mutations",
+    ] {
+        assert!(
+            !root.join(removed_owner).exists(),
+            "obsolete project owner must stay absent at {removed_owner}"
+        );
+    }
+
+    let root_lib = std::fs::read_to_string(root.join("src-tauri/src/lib.rs"))
+        .expect("the root library must be readable");
+    assert!(
+        !root_lib.contains("mod project;")
+            && !root_lib.contains("pub mod project;")
+            && !root_lib.contains("pub use yss_project"),
+        "the root package must not restore a project compatibility facade"
+    );
+    assert!(
+        root_lib.contains("yss_project::ProjectState"),
+        "the composition root must construct the project authority from its crate"
+    );
+
+    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-project\"",
+        "yss-project = { path = \"./crates/yss-project\" }",
+        "yss-project = { path = \"./crates/yss-project\", features = [\"test-support\"] }",
+    ] {
+        assert!(
+            workspace_manifest.contains(declaration),
+            "the workspace and root package must declare {declaration}"
+        );
+    }
+    for transitive_dependency in [
+        "yss-project-discovery = { path = \"./crates/yss-project-discovery\" }",
+        "yss-project-manifest = { path = \"./crates/yss-project-manifest\" }",
+        "yss-project-operation = { path = \"./crates/yss-project-operation\" }",
+        "yss-resource-lifecycle = { path = \"./crates/yss-resource-lifecycle\" }",
+        "yss-variable-value = { path = \"./crates/yss-variable-value\" }",
+        "unicode-normalization.workspace = true",
+        "unicode-casefold.workspace = true",
+        "trash = \"5.2\"",
+    ] {
+        assert!(
+            !workspace_manifest.contains(transitive_dependency),
+            "the root package must not retain transitive Project dependency {transitive_dependency}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(root.join("src-tauri/crates/yss-project/Cargo.toml"))
+        .expect("project runtime manifest must be readable");
+    for dependency in [
+        "yss-project-discovery = { path = \"../yss-project-discovery\" }",
+        "yss-project-filesystem = { path = \"../yss-project-filesystem\" }",
+        "yss-project-history = { path = \"../yss-project-history\" }",
+        "yss-project-identity = { path = \"../yss-project-identity\" }",
+        "yss-project-manifest = { path = \"../yss-project-manifest\" }",
+        "yss-project-model = { path = \"../yss-project-model\" }",
+        "yss-project-operation = { path = \"../yss-project-operation\" }",
+        "yss-resource-lifecycle = { path = \"../yss-resource-lifecycle\" }",
+        "yss-variable-value = { path = \"../yss-variable-value\" }",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "project runtime must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden in ["tauri", "yss-database-runtime", "yss-backend"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "project runtime must not depend backwards on {forbidden}"
+        );
+    }
+
+    let project_sources = production_facts()
+        .classification
+        .iter()
+        .filter(|(relative, _)| relative.starts_with("src-tauri/crates/yss-project/src/"))
+        .collect::<Vec<_>>();
+    assert!(
+        !project_sources.is_empty(),
+        "project runtime production sources must be classified"
+    );
+    for (relative, layer) in project_sources {
+        assert_eq!(
+            *layer,
+            RustLayer::Project,
+            "{relative} must remain in the Project layer"
+        );
+        let source = std::fs::read_to_string(root.join(relative))
+            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+        for backwards_path in [
+            "crate::application",
+            "crate::commands",
+            "crate::schema",
+            "tauri::",
+            "yss_database_runtime::",
+        ] {
+            assert!(
+                !source.contains(backwards_path),
+                "{relative} must not depend backwards through {backwards_path}"
+            );
+        }
+    }
+}
+
+#[test]
 fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph_kind() {
     let root = repository_root();
     for relative in [
@@ -5387,9 +5525,9 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         );
     }
     for removed_owner in [
-        "src-tauri/src/project/project_data.rs",
-        "src-tauri/src/project/project_metadata.rs",
-        "src-tauri/src/project/resource_patch.rs",
+        "src-tauri/crates/yss-project/src/project_data.rs",
+        "src-tauri/crates/yss-project/src/project_metadata.rs",
+        "src-tauri/crates/yss-project/src/resource_patch.rs",
     ] {
         assert!(
             !root.join(removed_owner).exists(),
@@ -5486,8 +5624,9 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "the canonical graph resource kind must own its stable lower-case wire"
     );
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod project_data",
         "mod project_metadata",
@@ -5501,8 +5640,9 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         );
     }
 
-    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
-        .expect("Project IO must be readable");
+    let project_io =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_io.rs"))
+            .expect("Project IO must be readable");
     for duplicate in ["pub enum GraphDocumentKind", "pub enum GraphResourceKind"] {
         assert!(
             !project_io.contains(duplicate),
@@ -5513,10 +5653,10 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     for relative in [
         "src-tauri/src/application/execution/run_graph.rs",
         "src-tauri/src/application/resource_mutation.rs",
-        "src-tauri/src/project/history_hydration.rs",
-        "src-tauri/src/project/project_io.rs",
-        "src-tauri/src/project/project_lifecycle.rs",
-        "src-tauri/src/project/project_state.rs",
+        "src-tauri/crates/yss-project/src/history_hydration.rs",
+        "src-tauri/crates/yss-project/src/project_io.rs",
+        "src-tauri/crates/yss-project/src/project_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_state.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -5536,7 +5676,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     }
 
     let lifecycle =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_lifecycle.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_lifecycle.rs"))
             .expect("project lifecycle must be readable");
     assert!(
         lifecycle.contains("data.metadata.export_time = current_export_time();")
@@ -5607,8 +5747,9 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
         "persisted history payloads must retain their distinct canonical owner"
     );
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("root project module must be readable");
     for facade in [
         "mod resource_patch",
         "pub mod resource_patch",
@@ -5621,18 +5762,17 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
     }
     assert!(
         !root
-            .join("src-tauri/src/project/resource_patch.rs")
+            .join("src-tauri/crates/yss-project/src/resource_patch.rs")
             .exists(),
         "the deleted root aggregate patch owner must stay absent"
     );
 
     for relative in [
-        "src-tauri/src/project/project_writers.rs",
-        "src-tauri/src/project/project_writers/worksheets.rs",
-        "src-tauri/src/project/project_state/graph_rename.rs",
-        "src-tauri/src/project/project_state/history_moves.rs",
-        "src-tauri/src/project/project_state/resource_history.rs",
-        "src-tauri/src/project/project_state/resource_patch.rs",
+        "src-tauri/crates/yss-project/src/project_writers.rs",
+        "src-tauri/crates/yss-project/src/project_writers/worksheets.rs",
+        "src-tauri/crates/yss-project/src/project_state/history_moves.rs",
+        "src-tauri/crates/yss-project/src/project_state/resource_history.rs",
+        "src-tauri/crates/yss-project/src/project_state/resource_patch.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -5653,7 +5793,7 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
     for relative in [
         "src-tauri/crates/yss-project-operation/Cargo.toml",
         "src-tauri/crates/yss-project-operation/src/lib.rs",
-        "src-tauri/src/project/project_operation_admission.rs",
+        "src-tauri/crates/yss-project/src/project_operation_admission.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -5662,20 +5802,17 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
     }
     assert!(
         !root
-            .join("src-tauri/src/project/resource_mutations/operation_ledger.rs")
+            .join("src-tauri/crates/yss-project/src/resource_mutations/operation_ledger.rs")
             .exists(),
         "the root crate must not retain the project operation ledger owner"
     );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-project-operation\"",
-        "yss-project-operation = { path = \"./crates/yss-project-operation\" }",
-    ] {
+    for declaration in ["\"crates/yss-project-operation\""] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must declare {declaration}"
         );
     }
 
@@ -5730,9 +5867,10 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
         );
     }
 
-    let bridge =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_operation_admission.rs"))
-            .expect("project operation admission bridge must be readable");
+    let bridge = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/project_operation_admission.rs"),
+    )
+    .expect("project operation admission bridge must be readable");
     for behavior in [
         "self.mutation_publication.lock().unwrap()",
         "ProjectOperationLedger::reserve(",
@@ -5747,30 +5885,25 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
         );
     }
 
-    let resource_mutations =
-        std::fs::read_to_string(root.join("src-tauri/src/project/resource_mutations.rs"))
-            .expect("resource mutation module must be readable");
-    for facade in [
-        "mod operation_ledger",
-        "ResourceOperationLedger",
-        "ResourceOperationReservation",
-    ] {
-        assert!(
-            !resource_mutations.contains(facade),
-            "root resource mutations must not restore ledger facade '{facade}'"
-        );
-    }
+    assert!(
+        !root
+            .join("src-tauri/crates/yss-project/src/resource_mutations.rs")
+            .exists(),
+        "the obsolete resource mutation facade must stay absent"
+    );
 
-    let project_state =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/state.rs"))
-            .expect("project state must be readable");
+    let project_state = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/project_state/state.rs"),
+    )
+    .expect("project state must be readable");
     assert!(
         project_state.contains("Arc<Mutex<yss_project_operation::ProjectOperationLedger>>"),
         "ProjectState must hold the extracted operation owner directly"
     );
-    let activation =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/activation.rs"))
-            .expect("project activation must be readable");
+    let activation = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/project_state/activation.rs"),
+    )
+    .expect("project activation must be readable");
     assert!(
         activation.contains("next_identity.project_session_id.clone()"),
         "activation must reset operation state with the canonical project session identity"
@@ -5805,10 +5938,10 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         );
     }
     for relative in [
-        "src-tauri/src/project/filesystem/mod.rs",
-        "src-tauri/src/project/filesystem/coordinator.rs",
-        "src-tauri/src/project/filesystem/root.rs",
-        "src-tauri/src/project/filesystem/transaction.rs",
+        "src-tauri/crates/yss-project/src/filesystem/mod.rs",
+        "src-tauri/crates/yss-project/src/filesystem/coordinator.rs",
+        "src-tauri/crates/yss-project/src/filesystem/root.rs",
+        "src-tauri/crates/yss-project/src/filesystem/transaction.rs",
     ] {
         assert!(
             !root.join(relative).exists(),
@@ -5885,22 +6018,24 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "project filesystem tests must remain executable"
     );
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("root project module must be readable");
     assert!(
         !project_module.contains("mod filesystem")
             && !project_module.contains("pub use yss_project_filesystem"),
         "the root Project layer must consume the crate directly without a compatibility facade"
     );
     let project_error =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_error.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_error.rs"))
             .expect("root project error module must be readable");
     assert!(
         !project_error.contains("enum ProjectFilesystemError"),
         "ProjectFilesystemError must have one canonical owner"
     );
-    let session = std::fs::read_to_string(root.join("src-tauri/src/project/project_session.rs"))
-        .expect("project session must be readable");
+    let session =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_session.rs"))
+            .expect("project session must be readable");
     assert!(
         session.contains("ProjectFilesystemTransactionContext")
             && session.contains("fn filesystem_context(&self)"),
@@ -5949,7 +6084,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     for relative in [
         "src-tauri/crates/yss-resource-lifecycle/Cargo.toml",
         "src-tauri/crates/yss-resource-lifecycle/src/lib.rs",
-        "src-tauri/src/project/resource_lifecycle_operation.rs",
+        "src-tauri/crates/yss-project/src/resource_lifecycle_operation.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -5958,20 +6093,17 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     }
     assert!(
         !root
-            .join("src-tauri/src/project/resource_lifecycle.rs")
+            .join("src-tauri/crates/yss-project/src/resource_lifecycle.rs")
             .exists(),
         "the root crate must not retain the resource lifecycle state-machine owner"
     );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-resource-lifecycle\"",
-        "yss-resource-lifecycle = { path = \"./crates/yss-resource-lifecycle\" }",
-    ] {
+    for declaration in ["\"crates/yss-resource-lifecycle\""] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must declare {declaration}"
         );
     }
 
@@ -6042,8 +6174,9 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("project module must be readable");
     for facade in [
         "pub mod resource_lifecycle",
         "pub use resource_lifecycle",
@@ -6055,9 +6188,10 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         );
     }
 
-    let bridge =
-        std::fs::read_to_string(root.join("src-tauri/src/project/resource_lifecycle_operation.rs"))
-            .expect("resource lifecycle operation bridge must be readable");
+    let bridge = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/resource_lifecycle_operation.rs"),
+    )
+    .expect("resource lifecycle operation bridge must be readable");
     for behavior in [
         "pub(crate) struct ResourceLifecycleOperation",
         "pub(crate) session: ProjectSession",
@@ -6088,7 +6222,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     }
 
     let project_state =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_state.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_state.rs"))
             .expect("project state module must be readable");
     assert!(
         project_state.contains("use yss_resource_lifecycle::ResourceLifecycleRegistry;")
@@ -6098,7 +6232,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
     );
 
     let graph_lifecycle = std::fs::read_to_string(
-        root.join("src-tauri/src/project/project_state/graph_lifecycle_application.rs"),
+        root.join("src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs"),
     )
     .expect("graph lifecycle application must be readable");
     assert!(
@@ -6107,9 +6241,10 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         "graph load must retain an exercised replacement seam before lifecycle revalidation"
     );
 
-    let activation =
-        std::fs::read_to_string(root.join("src-tauri/src/project/project_state/activation.rs"))
-            .expect("project activation must be readable");
+    let activation = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-project/src/project_state/activation.rs"),
+    )
+    .expect("project activation must be readable");
     for behavior in [
         "_lifecycle: yss_resource_lifecycle::ResourceLifecycleState",
         "self.resource_lifecycle.boundary_recovering()",
@@ -6122,7 +6257,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         );
     }
     let activation_commit = activation
-        .split_once("let mut garbage = None;")
+        .split_once("let garbage;")
         .expect("activation commit boundary must remain explicit")
         .1;
     let publication_lock = activation_commit
@@ -6150,15 +6285,11 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
 
     for (relative, direct_dependency) in [
         (
-            "src-tauri/src/project/project_state/graph_lifecycle_application.rs",
+            "src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs",
             "use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};",
         ),
         (
-            "src-tauri/src/project/project_state/graph_rename.rs",
-            "yss_resource_lifecycle::LifecycleResourcePath::Graph",
-        ),
-        (
-            "src-tauri/src/project/project_writers/worksheets.rs",
+            "src-tauri/crates/yss-project/src/project_writers/worksheets.rs",
             "yss_resource_lifecycle::LifecycleResourcePath::Worksheet",
         ),
     ] {
@@ -6197,7 +6328,7 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     }
     assert!(
         !root
-            .join("src-tauri/src/project/function_editor_projection.rs")
+            .join("src-tauri/crates/yss-project/src/function_editor_projection.rs")
             .exists(),
         "Project must not retain the old function editor projection owner"
     );
@@ -6267,8 +6398,9 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod function_editor_projection",
         "pub use function_editor_projection",
@@ -6281,8 +6413,8 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     }
 
     for relative in [
-        "src-tauri/src/project/project_io.rs",
-        "src-tauri/src/project/project_reads.rs",
+        "src-tauri/crates/yss-project/src/project_io.rs",
+        "src-tauri/crates/yss-project/src/project_reads.rs",
         "src-tauri/src/application/resource_mutation.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -6341,9 +6473,8 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     );
     assert!(
         policy.contains("\"yss_function_editor_projection::FunctionEditorProjection\"")
-            && !policy.contains(
-                "yssbi_lib::project::function_editor_projection::FunctionEditorProjection"
-            ),
+            && !policy
+                .contains("yss_project::function_editor_projection::FunctionEditorProjection"),
         "transport capability must point only at the canonical crate owner"
     );
 }
@@ -6363,13 +6494,10 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-project-manifest\"",
-        "yss-project-manifest = { path = \"./crates/yss-project-manifest\" }",
-    ] {
+    for declaration in ["\"crates/yss-project-manifest\""] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must declare {declaration}"
         );
     }
 
@@ -6422,8 +6550,9 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
         );
     }
 
-    let project_io = std::fs::read_to_string(root.join("src-tauri/src/project/project_io.rs"))
-        .expect("project IO must be readable");
+    let project_io =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/project_io.rs"))
+            .expect("project IO must be readable");
     for removed_root_owner in [
         "pub const SCHEMA_VERSION",
         "pub struct ProjectManifest",
@@ -6442,11 +6571,11 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
     );
 
     for relative in [
-        "src-tauri/src/project/project_io.rs",
-        "src-tauri/src/project/project_lifecycle.rs",
-        "src-tauri/src/project/project_state.rs",
-        "src-tauri/src/project/project_writers.rs",
-        "src-tauri/src/project/project_state/variable_effects.rs",
+        "src-tauri/crates/yss-project/src/project_io.rs",
+        "src-tauri/crates/yss-project/src/project_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_state.rs",
+        "src-tauri/crates/yss-project/src/project_writers.rs",
+        "src-tauri/crates/yss-project/src/project_state/variable_effects.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -6461,8 +6590,9 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     assert!(
         !project_module.contains("pub use yss_project_manifest"),
         "the root project module must not restore a project-manifest compatibility facade"
@@ -6491,7 +6621,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     }
     assert!(
         !root
-            .join("src-tauri/src/project/worksheet_resource_path.rs")
+            .join("src-tauri/crates/yss-project/src/worksheet_resource_path.rs")
             .exists(),
         "Project must not retain the old worksheet resource-path owner"
     );
@@ -6508,8 +6638,9 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod worksheet_resource_path",
         "pub use worksheet_resource_path",
@@ -6562,8 +6693,9 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         );
     }
 
-    let worksheet_io = std::fs::read_to_string(root.join("src-tauri/src/project/worksheet_io.rs"))
-        .expect("worksheet IO adapter must be readable");
+    let worksheet_io =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/worksheet_io.rs"))
+            .expect("worksheet IO adapter must be readable");
     for removed_owner in [
         "pub struct WorksheetDocument {",
         "pub struct WorksheetEncodings {",
@@ -6581,18 +6713,18 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/src/application/worksheet.rs",
         "src-tauri/src/commands/command_worksheet.rs",
         "src-tauri/crates/yss-project-history/src/lib.rs",
-        "src-tauri/src/project/history_hydration.rs",
-        "src-tauri/src/project/project_activation.rs",
+        "src-tauri/crates/yss-project/src/history_hydration.rs",
+        "src-tauri/crates/yss-project/src/project_activation.rs",
         "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/crates/yss-project-filesystem/src/error.rs",
-        "src-tauri/src/project/project_lifecycle.rs",
-        "src-tauri/src/project/project_reads.rs",
-        "src-tauri/src/project/project_state.rs",
-        "src-tauri/src/project/project_writers.rs",
+        "src-tauri/crates/yss-project/src/project_lifecycle.rs",
+        "src-tauri/crates/yss-project/src/project_reads.rs",
+        "src-tauri/crates/yss-project/src/project_state.rs",
+        "src-tauri/crates/yss-project/src/project_writers.rs",
         "src-tauri/crates/yss-resource-lifecycle/src/lib.rs",
         "src-tauri/crates/yss-project-model/src/patch.rs",
-        "src-tauri/src/project/resource_reveal.rs",
-        "src-tauri/src/project/worksheet_io.rs",
+        "src-tauri/crates/yss-project/src/resource_reveal.rs",
+        "src-tauri/crates/yss-project/src/worksheet_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -6619,8 +6751,8 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "worksheet document must be classified as a Pure Leaf"
     );
     for removed_capability in [
-        "yssbi_lib::project::worksheet_io::WorksheetDocument",
-        "yssbi_lib::project::worksheet_resource_path::WorksheetResourcePath",
+        "yss_project::worksheet_io::WorksheetDocument",
+        "yss_project::worksheet_resource_path::WorksheetResourcePath",
     ] {
         assert!(
             !policy.contains(removed_capability),
@@ -6643,13 +6775,13 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     }
     assert!(
         !root
-            .join("src-tauri/src/project/project_progress.rs")
+            .join("src-tauri/crates/yss-project/src/project_progress.rs")
             .exists(),
         "the root crate must not retain a project progress owner"
     );
     assert!(
         !root
-            .join("src-tauri/src/project/project_picker_task.rs")
+            .join("src-tauri/crates/yss-project/src/project_picker_task.rs")
             .exists(),
         "the root crate must not retain a project task cancellation owner"
     );
@@ -6666,8 +6798,9 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         );
     }
 
-    let project_module = std::fs::read_to_string(root.join("src-tauri/src/project/mod.rs"))
-        .expect("the root project module must be readable");
+    let project_module =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
+            .expect("the root project module must be readable");
     for facade in [
         "mod project_progress",
         "pub use project_progress",
@@ -6752,7 +6885,7 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("Rust architecture policy must be readable");
     assert!(
-        !policy.contains("yssbi_lib::project::project_picker_task"),
+        !policy.contains("yss_project::project_picker_task"),
         "CompositionRoot and Commands must not retain a Project task-control capability"
     );
 

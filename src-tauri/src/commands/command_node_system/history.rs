@@ -6,10 +6,10 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, emit_project_event_result};
-#[cfg(all(test, any()))]
-use crate::project::ProjectState;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
+#[cfg(all(test, any()))]
+use yss_project::ProjectState;
 use yss_project_history::{HistoryMutation, HistoryStatusDto, MutationRequest};
 use yss_project_identity::ProjectInstanceId;
 

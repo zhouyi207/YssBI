@@ -1,0 +1,48 @@
+[package]
+name = "yss-project"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+test-support = [
+    "yss-project-filesystem/test-support",
+    "yss-project-identity/test-support",
+]
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+trash = "5.2"
+uuid.workspace = true
+yss-computation-settings = { path = "../yss-computation-settings" }
+yss-data-contract = { path = "../yss-data-contract" }
+yss-database-contract = { path = "../yss-database-contract" }
+yss-display-naming = { path = "../yss-display-naming" }
+yss-duckdb = { path = "../yss-duckdb" }
+yss-function-editor-projection = { path = "../yss-function-editor-projection" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-document-edit = { path = "../yss-graph-document-edit" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-project-change = { path = "../yss-project-change" }
+yss-project-discovery = { path = "../yss-project-discovery" }
+yss-project-filesystem = { path = "../yss-project-filesystem" }
+yss-project-history = { path = "../yss-project-history" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-layout = { path = "../yss-project-layout" }
+yss-project-manifest = { path = "../yss-project-manifest" }
+yss-project-model = { path = "../yss-project-model" }
+yss-project-operation = { path = "../yss-project-operation" }
+yss-resource-lifecycle = { path = "../yss-resource-lifecycle" }
+yss-resource-naming = { path = "../yss-resource-naming" }
+yss-variable-contract = { path = "../yss-variable-contract" }
+yss-variable-value = { path = "../yss-variable-value" }
+yss-worksheet-document = { path = "../yss-worksheet-document" }
+
+[dev-dependencies]
+yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }
+yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }

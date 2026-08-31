@@ -3,10 +3,8 @@ use std::sync::Arc;
 use crate::application::execution::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::project_state::graph_operation::{
-    GraphCommitReceipt, GraphOperationCapture, ProjectGraphCommitError,
-};
 use yss_graph_document::GraphDocument;
+use yss_project::{GraphCommitReceipt, GraphOperationCapture, ProjectGraphCommitError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphCommitApplicationError {

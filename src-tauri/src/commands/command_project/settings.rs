@@ -3,13 +3,13 @@ use crate::error::CommandError;
 #[cfg(test)]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-#[cfg(test)]
-use crate::project::ProjectState;
 use tauri::{AppHandle, State};
 use yss_computation_settings::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
     ComputationSettingsSnapshot,
 };
+#[cfg(test)]
+use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
 
 #[tauri::command]

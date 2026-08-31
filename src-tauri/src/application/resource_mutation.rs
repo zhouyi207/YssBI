@@ -18,7 +18,6 @@ use super::graph_commit::{GraphCommitApplicationError, commit_captured_graph_can
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
 };
-use crate::project::project_writers::ProjectSaveResult;
 use std::collections::BTreeMap;
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::catalog_snapshot;
@@ -33,6 +32,7 @@ use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
+use yss_project::project_writers::ProjectSaveResult;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -49,11 +49,9 @@ pub enum ResourceMutationApplicationError {
     #[error("project history mutation conflicted")]
     History(#[source] yss_project_history::ProjectHistoryMutationError),
     #[error("graph operation capture failed")]
-    GraphOperation(
-        #[source] crate::project::project_state::graph_operation::ProjectGraphOperationError,
-    ),
+    GraphOperation(#[source] yss_project::ProjectGraphOperationError),
     #[error("graph operation commit failed")]
-    GraphCommit(#[source] crate::project::project_state::graph_operation::ProjectGraphCommitError),
+    GraphCommit(#[source] yss_project::ProjectGraphCommitError),
     #[error("graph resource is unavailable")]
     GraphUnavailable { graph: GraphResourcePath },
     #[error("project catalog facts could not be captured")]
@@ -393,7 +391,7 @@ impl ApplicationState {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured
             .project()
-            .undo_history_for_application(&project_instance_id, request)
+            .undo_history(&project_instance_id, request)
             .map_err(ResourceMutationApplicationError::History)?;
         self.refresh_resource_session()?;
         let _ = locale;
@@ -409,7 +407,7 @@ impl ApplicationState {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured
             .project()
-            .redo_history_for_application(&project_instance_id, request)
+            .redo_history(&project_instance_id, request)
             .map_err(ResourceMutationApplicationError::History)?;
         self.refresh_resource_session()?;
         let _ = locale;
@@ -424,14 +422,13 @@ impl ApplicationState {
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let (path, unique_name) = captured.project().allocate_graph_path_for_application(
-            &project_instance_id,
-            &name,
-            kind,
-        )?;
+        let (path, unique_name) =
+            captured
+                .project()
+                .allocate_graph_path(&project_instance_id, &name, kind)?;
         let resource = build_graph_shell(&path, unique_name, kind)?;
         let resource_name = resource.name.clone();
-        let result = captured.project().create_graph_resource_for_application(
+        let result = captured.project().create_graph_resource(
             &project_instance_id,
             &resource_name,
             resource,
@@ -450,14 +447,12 @@ impl ApplicationState {
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .duplicate_graph_resource_for_application(
-                &project_instance_id,
-                &graph_path,
-                expected_revision,
-                operation_id,
-            )?;
+        let result = captured.project().duplicate_graph_resource(
+            &project_instance_id,
+            &graph_path,
+            expected_revision,
+            operation_id,
+        )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
@@ -471,7 +466,7 @@ impl ApplicationState {
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured.project().remove_graph_resource_for_application(
+        let result = captured.project().remove_graph_resource(
             &project_instance_id,
             &graph_path,
             expected_revision,
@@ -492,7 +487,7 @@ impl ApplicationState {
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured.project().rename_graph_resource_transaction_impl(
+        let result = captured.project().rename_graph_resource(
             &project_instance_id,
             &graph_path,
             expected_revision,
@@ -513,7 +508,7 @@ impl ApplicationState {
         operation_id: OperationId,
     ) -> Result<ProjectSaveResult, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured.project().save_graph_resource_for_application(
+        let result = captured.project().save_graph_resource(
             &project_instance_id,
             &graph_path,
             expected_revision,
@@ -552,11 +547,7 @@ impl ApplicationState {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured
             .project()
-            .update_function_signature_for_application(
-                &project_instance_id,
-                &function_path,
-                request,
-            )
+            .update_function_signature(&project_instance_id, &function_path, request)
             .map_err(ResourceMutationApplicationError::History)?;
         self.refresh_resource_session()?;
         Ok(committed_resource_mutation_from_project(result))

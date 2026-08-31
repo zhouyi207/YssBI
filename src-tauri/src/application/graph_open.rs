@@ -247,7 +247,7 @@ pub(crate) fn open_graph_in_session(
     if !already_resident {
         captured
             .project()
-            .load_graph_document_for_application(
+            .load_graph_document(
                 captured.project_instance_id(),
                 request.graph_path(),
                 request.lifecycle_token(),

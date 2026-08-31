@@ -3,7 +3,6 @@ use super::*;
 use crate::application::execution::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
 };
-use crate::project::ProjectState;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
@@ -22,6 +21,7 @@ use yss_graph_runtime::{
     GraphMaterializationError, GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
     GraphRuntimeTestControl, GraphRuntimeTestEvent,
 };
+use yss_project::ProjectState;
 use yss_project_identity::ProjectSessionId;
 use yss_project_model::{GraphResourceDocument, ProjectData};
 
@@ -33,7 +33,7 @@ struct TestProject {
 impl TestProject {
     fn active(label: &str, data: ProjectData) -> Self {
         let root = test_root(label);
-        crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
         Self {
@@ -44,7 +44,7 @@ impl TestProject {
 
     fn unloaded(label: &str, data: ProjectData) -> Self {
         let root = test_root(label);
-        crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
         Self {

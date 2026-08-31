@@ -9453,6 +9453,42 @@ name = "yss-path-display"
 version = "0.1.0"
 
 [[package]]
+name = "yss-project"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+ "trash",
+ "uuid",
+ "yss-computation-settings",
+ "yss-data-contract",
+ "yss-database-contract",
+ "yss-display-naming",
+ "yss-duckdb",
+ "yss-function-editor-projection",
+ "yss-graph-document",
+ "yss-graph-document-edit",
+ "yss-graph-protocol",
+ "yss-project-change",
+ "yss-project-discovery",
+ "yss-project-filesystem",
+ "yss-project-history",
+ "yss-project-identity",
+ "yss-project-layout",
+ "yss-project-manifest",
+ "yss-project-model",
+ "yss-project-operation",
+ "yss-resource-lifecycle",
+ "yss-resource-naming",
+ "yss-variable-contract",
+ "yss-variable-value",
+ "yss-worksheet-document",
+]
+
+[[package]]
 name = "yss-project-change"
 version = "0.1.0"
 dependencies = [
@@ -9792,9 +9828,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",
- "trash",
- "unicode-casefold",
- "unicode-normalization",
  "uuid",
  "windows-sys 0.61.2",
  "yss-bayes-model",
@@ -9831,22 +9864,19 @@ dependencies = [
  "yss-julia-worker",
  "yss-math",
  "yss-path-display",
+ "yss-project",
  "yss-project-change",
- "yss-project-discovery",
  "yss-project-filesystem",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",
- "yss-project-manifest",
  "yss-project-model",
- "yss-project-operation",
  "yss-project-progress",
  "yss-project-registry",
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
  "yss-project-watcher",
  "yss-project-watcher-notify",
- "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci-contract",
  "yss-sci-runtime",
@@ -9856,7 +9886,6 @@ dependencies = [
  "yss-tabular-polars",
  "yss-tracing",
  "yss-variable-contract",
- "yss-variable-value",
  "yss-window-state",
  "yss-worksheet-document",
 ]

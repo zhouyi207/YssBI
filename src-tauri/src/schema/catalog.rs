@@ -328,7 +328,7 @@ mod tests {
     use yss_project_model::ProjectData;
 
     fn application_with_function() -> (
-        crate::project::fixtures::TempProject,
+        yss_project::fixtures::TempProject,
         crate::application::execution::ApplicationState,
     ) {
         let path =
@@ -341,12 +341,10 @@ mod tests {
                 GraphResourceKind::Function,
             ),
         );
-        let fixture = crate::project::fixtures::TempProject::activate(
-            "catalog-schema-mapper",
-            project.clone(),
-        );
+        let fixture =
+            yss_project::fixtures::TempProject::activate("catalog-schema-mapper", project.clone());
         let root = fixture.state().get_path().unwrap();
-        crate::project::fixtures::write_graph(&project, &root, &path).unwrap();
+        yss_project::fixtures::write_graph(&project, &root, &path).unwrap();
         let project = Arc::new(fixture.state().clone());
         let project_instance_id = project.capture_project_session().unwrap().instance_id;
         let project_session_id = ProjectSessionId::new("catalog-schema-session");

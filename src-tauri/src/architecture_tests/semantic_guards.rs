@@ -21,7 +21,7 @@ const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/crates/yss-graph-document/
 const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
     "src-tauri/crates/yss-project-change/src/lib.rs",
     "src-tauri/crates/yss-project-watcher/src/lib.rs",
-    "src-tauri/src/project/project_change_reconciliation.rs",
+    "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
     "src-tauri/src/application/project_change.rs",
 ];
 const PROJECT_WATCHER_PLATFORM_FILES: &[&str] =
@@ -84,11 +84,12 @@ pub(super) fn project_watcher_source_violations(repository_root: &Path) -> Vec<S
         );
     }
     if repository_root
-        .join("src-tauri/src/project/project_watcher.rs")
+        .join("src-tauri/crates/yss-project/src/project_watcher.rs")
         .exists()
     {
         violations.push(
-            "src-tauri/src/project/project_watcher.rs: legacy watcher owner remains".to_owned(),
+            "src-tauri/crates/yss-project/src/project_watcher.rs: legacy watcher owner remains"
+                .to_owned(),
         );
     }
     violations

@@ -25,9 +25,6 @@ use crate::application::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
-use crate::project::{
-    ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
-};
 use uuid::Uuid;
 use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
@@ -40,6 +37,9 @@ use yss_display_naming::allocate_unique_display_name;
 use yss_duckdb::{
     DuckDbTableMeta, MAX_GET_DATAFRAME_ROWS, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
     ingest_excel_to_duckdb, ingest_parquet_to_duckdb, write_display_name,
+};
+use yss_project::{
+    ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
 };
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -175,7 +175,7 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
             return Err(ProjectDatabaseFinalizeError::Rejected);
         }
         self.project
-            .commit_database_declaration_for_application(
+            .commit_database_declaration_update(
                 &self.project_instance_id,
                 token,
                 self.after.clone(),
@@ -676,7 +676,7 @@ fn delete_database_in_captured_session(
         })?;
     let mutation = captured
         .project()
-        .commit_database_declaration_delete_for_application(
+        .commit_database_declaration_delete(
             &project_instance_id,
             &id,
             expected_revision,
@@ -834,8 +834,7 @@ fn load_database_in_captured_session(
         })?;
     let lease = captured
         .project()
-        .filesystem()
-        .acquire(session.root.clone())
+        .acquire_filesystem_lease(session.root.clone())
         .map_err(|error| {
             ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
                 error,
@@ -919,11 +918,7 @@ fn load_database_in_captured_session(
 
     let mutation = captured
         .project()
-        .commit_database_declaration_add_for_application(
-            &project_instance_id,
-            declaration,
-            operation_id,
-        )
+        .commit_database_declaration_add(&project_instance_id, declaration, operation_id)
         .map_err(|error| {
             ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_database(
                 error,

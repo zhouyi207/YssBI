@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::project::ProjectDatabaseError;
+use yss_project::ProjectDatabaseError;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;

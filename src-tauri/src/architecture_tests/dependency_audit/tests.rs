@@ -253,9 +253,12 @@ mod selected;
 
 #[test]
 fn production_project_modules_do_not_depend_on_application() {
-    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("crates")
+        .join("yss-project")
+        .join("src");
     for forbidden_module in ["application", "commands"] {
-        let violations = audit_production_dependency(&source_root, "project", forbidden_module)
+        let violations = audit_production_dependency(&source_root, "lib", forbidden_module)
             .unwrap_or_else(|error| {
                 panic!("Project dependency audit for {forbidden_module} must complete: {error}")
             });

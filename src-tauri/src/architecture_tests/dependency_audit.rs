@@ -416,8 +416,16 @@ fn resolve_root_module(source_root: &Path, module: &str) -> Result<ModuleSource,
         (false, false) => return Err(format!("root module '{module}' was not found")),
     };
     let file = canonicalize_under(source_root, &file)?;
+    let child_module_dir = if matches!(
+        file.file_name().and_then(|name| name.to_str()),
+        Some("lib.rs" | "main.rs")
+    ) {
+        source_root.to_path_buf()
+    } else {
+        child_module_dir_for_file(&file)
+    };
     Ok(ModuleSource {
-        child_module_dir: child_module_dir_for_file(&file),
+        child_module_dir,
         path_attr_dir: path_attr_dir_for_file(&file),
         file,
         module_path: vec![module.to_owned()],

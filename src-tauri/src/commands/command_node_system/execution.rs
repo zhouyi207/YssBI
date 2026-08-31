@@ -111,9 +111,9 @@ fn session_capture_command_error(
 }
 
 fn project_preparation_command_code(
-    error: &crate::project::execution_authority::ProjectExecutionPreparationError,
+    error: &yss_project::execution_authority::ProjectExecutionPreparationError,
 ) -> &'static str {
-    use crate::project::execution_authority::ProjectExecutionPreparationError;
+    use yss_project::execution_authority::ProjectExecutionPreparationError;
 
     match error {
         ProjectExecutionPreparationError::Unavailable

@@ -851,3 +851,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   与唯一实体 ID 集合，避免稀疏 ID 生成 phantom entities；regression report 改为一次 typed serialization 并将
   失败映射为 `SciError`，不再依赖对象形状 `expect` 或多阶段可变 JSON；以 crate ownership/semantic guards
   禁止根 SCI、重复验证和旧 consumer route 回流。
+- [ ] 将根 `src/project/` 的 `ProjectState`、session/instance authority、resource revision、history hydration、
+  持久化事务编排与 publication 整体迁入 `src-tauri/crates/yss-project/` Stateful Project 层；删除根 owner/facade、
+  重复 resource mutation 路径、永久关闭的边缘测试与零调用 hooks，让 Application/Commands/Composition Root 直接
+  依赖唯一 crate；同时修复 Graph move undo/redo 误入恒定失败 legacy rename stub，并以可构造磁盘计划回归锁定。

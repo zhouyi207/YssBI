@@ -86,10 +86,11 @@ pub(super) fn resource_mutation_to_command_error(
                 CommandError::expected("project_lifecycle_admission_closed")
             }
             crate::application::execution::SessionCaptureError::Recovering => {
-                CommandError::expected("project_recovery_required")
-                    .with_details(RecoveryRequiredDetails {
+                CommandError::expected("project_recovery_required").with_details(
+                    RecoveryRequiredDetails {
                         recovery_required: true,
-                    })
+                    },
+                )
             }
         },
         ResourceMutationApplicationError::Project(error) => {
@@ -120,45 +121,14 @@ pub(super) fn resource_mutation_to_command_error(
                 CommandError::diagnosed("history_mutation_failed", error)
             }
         },
-        ResourceMutationApplicationError::GraphOperation(error) => {
-            match error {
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::ProjectIdentityMismatch { .. } => {
-                    CommandError::expected("stale_project_lifecycle")
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::GraphUnavailable { .. } => {
-                    CommandError::internal("graph resource is unavailable")
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::RevisionConflict { .. } => {
-                    let command = CommandError::expected(revision_conflict_code);
-                    if revision_conflict_code == "graph_revision_conflict" {
-                        command.with_details(GraphMutationErrorDetailsDto::VALUE)
-                    } else {
-                        command
-                    }
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::ResourceLifecycleChanged { .. } => {
-                    CommandError::expected("stale_resource_lifecycle")
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::OperationOwnershipChanged { .. } => {
-                    CommandError::expected("duplicate_operation")
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::AdmissionClosed => {
-                    CommandError::expected("project_lifecycle_admission_closed")
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::RecoveryRequired => {
-                    CommandError::expected("project_recovery_required").with_details(
-                        RecoveryRequiredDetails {
-                            recovery_required: true,
-                        },
-                    )
-                }
-                crate::project::project_state::graph_operation::ProjectGraphOperationError::Internal(error) => {
-                    CommandError::internal(error)
-                }
+        ResourceMutationApplicationError::GraphOperation(error) => match error {
+            yss_project::ProjectGraphOperationError::ProjectIdentityMismatch { .. } => {
+                CommandError::expected("stale_project_lifecycle")
             }
-        }
-        ResourceMutationApplicationError::GraphCommit(error) => match error {
-            crate::project::project_state::graph_operation::ProjectGraphCommitError::StaleAuthority { .. } => {
+            yss_project::ProjectGraphOperationError::GraphUnavailable { .. } => {
+                CommandError::internal("graph resource is unavailable")
+            }
+            yss_project::ProjectGraphOperationError::RevisionConflict { .. } => {
                 let command = CommandError::expected(revision_conflict_code);
                 if revision_conflict_code == "graph_revision_conflict" {
                     command.with_details(GraphMutationErrorDetailsDto::VALUE)
@@ -166,13 +136,41 @@ pub(super) fn resource_mutation_to_command_error(
                     command
                 }
             }
-            crate::project::project_state::graph_operation::ProjectGraphCommitError::RevisionExhausted { .. } => {
-                CommandError::expected("resource_revision_overflow")
-            }
-            crate::project::project_state::graph_operation::ProjectGraphCommitError::LifecycleChanged { .. } => {
+            yss_project::ProjectGraphOperationError::ResourceLifecycleChanged { .. } => {
                 CommandError::expected("stale_resource_lifecycle")
             }
-            crate::project::project_state::graph_operation::ProjectGraphCommitError::OperationOwnershipChanged { .. } => {
+            yss_project::ProjectGraphOperationError::OperationOwnershipChanged { .. } => {
+                CommandError::expected("duplicate_operation")
+            }
+            yss_project::ProjectGraphOperationError::AdmissionClosed => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            yss_project::ProjectGraphOperationError::RecoveryRequired => CommandError::expected(
+                "project_recovery_required",
+            )
+            .with_details(RecoveryRequiredDetails {
+                recovery_required: true,
+            }),
+            yss_project::ProjectGraphOperationError::Internal(error) => {
+                CommandError::internal(error)
+            }
+        },
+        ResourceMutationApplicationError::GraphCommit(error) => match error {
+            yss_project::ProjectGraphCommitError::StaleAuthority { .. } => {
+                let command = CommandError::expected(revision_conflict_code);
+                if revision_conflict_code == "graph_revision_conflict" {
+                    command.with_details(GraphMutationErrorDetailsDto::VALUE)
+                } else {
+                    command
+                }
+            }
+            yss_project::ProjectGraphCommitError::RevisionExhausted { .. } => {
+                CommandError::expected("resource_revision_overflow")
+            }
+            yss_project::ProjectGraphCommitError::LifecycleChanged { .. } => {
+                CommandError::expected("stale_resource_lifecycle")
+            }
+            yss_project::ProjectGraphCommitError::OperationOwnershipChanged { .. } => {
                 CommandError::expected("duplicate_operation")
             }
         },

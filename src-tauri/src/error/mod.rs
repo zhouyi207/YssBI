@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::project::{ProjectDatabaseError, ProjectError};
+use yss_project::{ProjectDatabaseError, ProjectError};
 
 pub(crate) fn new_diagnostic_incident_id() -> String {
     Uuid::new_v4().to_string()

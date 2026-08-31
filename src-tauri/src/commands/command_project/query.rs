@@ -1,14 +1,14 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
-use crate::project::ProjectIndex;
-#[cfg(test)]
-use crate::project::ProjectState;
 use crate::schema::application_event::ProjectActivationResultDto;
 use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 use serde::Serialize;
 use tauri::State;
+use yss_project::ProjectIndex;
+#[cfg(test)]
+use yss_project::ProjectState;
 use yss_project_registry::normalize_existing_path;
 
 #[derive(Serialize)]
@@ -272,10 +272,8 @@ mod tests {
 
     #[test]
     fn current_project_activation_bootstraps_late_created_webviews() {
-        let project = crate::project::fixtures::TempProject::activate(
-            "current-activation",
-            ProjectData::new(),
-        );
+        let project =
+            yss_project::fixtures::TempProject::activate("current-activation", ProjectData::new());
         let state = project.state();
         let session = state.capture_project_session().unwrap();
 
@@ -328,11 +326,8 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
-        crate::project::fixtures::write_project(
-            &ProjectData::new(),
-            root.to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        yss_project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+            .unwrap();
 
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
@@ -387,11 +382,8 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
-        crate::project::fixtures::write_project(
-            &ProjectData::new(),
-            root.to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        yss_project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+            .unwrap();
 
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
@@ -478,11 +470,8 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
-        crate::project::fixtures::write_project(
-            &ProjectData::new(),
-            root.to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        yss_project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+            .unwrap();
 
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
@@ -542,7 +531,7 @@ mod tests {
 
     #[test]
     fn project_index_during_activation_observes_only_the_previous_complete_lifecycle() {
-        let project = crate::project::fixtures::TempProject::activate(
+        let project = yss_project::fixtures::TempProject::activate(
             "query-activation-index",
             ProjectData::new(),
         );
@@ -559,7 +548,7 @@ mod tests {
             .unwrap();
         let previous_identity = state.project_instance_id();
 
-        let replacement_project = crate::project::fixtures::TempProject::activate(
+        let replacement_project = yss_project::fixtures::TempProject::activate(
             "project-index-replacement",
             ProjectData::new(),
         );
@@ -642,7 +631,7 @@ mod tests {
 
     #[test]
     fn project_resource_query_during_activation_never_mixes_authority_and_runtime() {
-        let project = crate::project::fixtures::TempProject::activate(
+        let project = yss_project::fixtures::TempProject::activate(
             "query-resource-snapshot-old",
             project_resources("old"),
         );

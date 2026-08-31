@@ -31,7 +31,7 @@ impl ApplicationState {
     ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
         let name = ResourceName::parse(&name).map_err(ProjectFilesystemError::from)?;
-        let result = captured.project().create_worksheet_resource_facts(
+        let result = captured.project().create_worksheet_resource(
             &project_instance_id,
             &name,
             database_id,
@@ -49,7 +49,7 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
     ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured.project().duplicate_worksheet_resource_facts(
+        let result = captured.project().duplicate_worksheet_resource(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
@@ -82,7 +82,7 @@ impl ApplicationState {
         document: WorksheetDocument,
     ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured.project().save_worksheet_document_facts(
+        let result = captured.project().save_worksheet_document(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
@@ -104,7 +104,7 @@ impl ApplicationState {
     ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
         let new_name = ResourceName::parse(&new_name).map_err(ProjectFilesystemError::from)?;
-        let result = captured.project().rename_worksheet_resource_facts(
+        let result = captured.project().rename_worksheet_resource(
             &project_instance_id,
             &worksheet_path,
             expected_revision,
@@ -124,7 +124,7 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
     ) -> Result<CommittedResourceMutation, WorksheetApplicationError> {
         let captured = self.capture_worksheet_session(&project_instance_id)?;
-        let result = captured.project().remove_worksheet_resource_facts(
+        let result = captured.project().remove_worksheet_resource(
             &project_instance_id,
             &worksheet_path,
             expected_revision,

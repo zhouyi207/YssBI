@@ -5,12 +5,10 @@ use thiserror::Error;
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::project::{
-    ProjectError, ProjectIndex, RevealProjectResourceRequest, resolve_reveal_path,
-};
 use yss_database_contract::DatabaseDecl;
 use yss_database_schema::DatabaseSchemaFact;
 use yss_path_display::format_path_for_user_path;
+use yss_project::{ProjectError, ProjectIndex, RevealProjectResourceRequest, resolve_reveal_path};
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::normalize_existing_path;

@@ -5,8 +5,6 @@ use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
-#[cfg(test)]
-use crate::project::ProjectState;
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::{
     LifecycleMutationOutcomeDto, LifecycleMutationResultDto, ProjectActivationResultDto,
@@ -14,6 +12,8 @@ use crate::schema::application_event::{
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
+#[cfg(test)]
+use yss_project::ProjectState;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::ProjectRegistry;

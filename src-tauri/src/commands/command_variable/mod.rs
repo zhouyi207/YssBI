@@ -3,13 +3,13 @@ use crate::error::CommandError;
 use crate::event::EventProject;
 use crate::event::{Event, emit_project_event_result};
 #[cfg(all(test, any()))]
-use crate::project::ProjectState;
-#[cfg(all(test, any()))]
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::VariableInstanceDTO;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 use yss_data_contract::{DataType, DataValue};
+#[cfg(all(test, any()))]
+use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_variable_contract::{VariableId, VariableScope};
@@ -1003,7 +1003,7 @@ mod tests {
         if let Some(variable) = variable {
             data.variables.insert(variable.id, variable);
         }
-        crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
@@ -1014,7 +1014,7 @@ mod tests {
         root: &std::path::Path,
         graph_path: &yss_graph_document::GraphResourcePath,
     ) -> std::collections::HashMap<VariableId, yss_variable_contract::VariableInstance> {
-        let document: crate::project::project_io::GraphDocument =
+        let document: yss_project::project_io::GraphDocument =
             serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap())
                 .unwrap();
         document.local_variables
@@ -1072,7 +1072,7 @@ mod tests {
             .unwrap();
         assert!(state.get_variable(&variable_id).unwrap().is_none());
         let entry = state
-            .variable_revision_entry_for_test(&variable_id)
+            .variable_revision_snapshot_for_test(&variable_id)
             .unwrap();
         assert_eq!(entry.revision, ResourceRevision::new(4));
         assert!(!entry.is_present());
@@ -1170,7 +1170,7 @@ mod tests {
             .unwrap();
         assert_eq!(restored.publication_revision, 5);
         let restored_entry = state
-            .variable_revision_entry_for_test(&variable_id)
+            .variable_revision_snapshot_for_test(&variable_id)
             .unwrap();
         assert_eq!(restored_entry.revision, ResourceRevision::new(5));
         assert!(restored_entry.is_present());
@@ -1200,7 +1200,7 @@ mod tests {
             .unwrap();
         assert!(state.get_variable(&variable_id).unwrap().is_none());
         let entry = state
-            .variable_revision_entry_for_test(&variable_id)
+            .variable_revision_snapshot_for_test(&variable_id)
             .unwrap();
         assert_eq!(entry.revision, ResourceRevision::new(6));
         assert!(!entry.is_present());
@@ -1210,11 +1210,8 @@ mod tests {
     #[test]
     fn global_create_update_delete_history_restores_full_documents_and_publishes_once() {
         let (root, state, project_instance_id) = active_state("crud-history");
-        crate::project::fixtures::write_project(
-            &ProjectData::new(),
-            root.to_string_lossy().as_ref(),
-        )
-        .unwrap();
+        yss_project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+            .unwrap();
         let created = create_variable_with_emitter(
             &state,
             "before",
@@ -1373,7 +1370,7 @@ mod tests {
         );
         assert_eq!(created.result.unwrap().publication_revision, 1);
         let reloaded =
-            crate::project::load_project_from_file(root.to_string_lossy().as_ref()).unwrap();
+            yss_project::load_project_from_file(root.to_string_lossy().as_ref()).unwrap();
         assert!(!reloaded.variables.contains_key(&variable_id));
         let _ = std::fs::remove_dir_all(root);
     }

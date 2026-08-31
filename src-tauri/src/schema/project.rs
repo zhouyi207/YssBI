@@ -1,7 +1,7 @@
 use super::{DatabaseDeclDTO, VariableInstanceDTO};
-use crate::project::project_writers::ProjectSaveResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use yss_project::project_writers::ProjectSaveResult;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

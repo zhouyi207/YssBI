@@ -143,9 +143,9 @@ pub struct GraphMutationResult {
 }
 
 pub(crate) fn committed_resource_mutation_from_project(
-    facts: crate::project::project_writers::ProjectResourceMutationFacts,
+    facts: yss_project::project_writers::ProjectResourceMutationFacts,
 ) -> CommittedResourceMutation {
-    let (
+    let yss_project::project_writers::ProjectResourceMutationParts {
         operation_id,
         project_instance_id,
         publication_revision,
@@ -153,7 +153,7 @@ pub(crate) fn committed_resource_mutation_from_project(
         deltas,
         projection_status,
         history,
-    ) = facts.into_parts();
+    } = facts.into_parts();
     CommittedResourceMutation {
         operation_id,
         project_instance_id,
@@ -170,12 +170,12 @@ pub(crate) fn committed_resource_mutation_from_project(
             .collect(),
         deltas: deltas.into_vec(),
         projection_status: match projection_status {
-            crate::project::project_writers::ProjectProjectionStatus::Complete {
+            yss_project::project_writers::ProjectProjectionStatus::Complete {
                 expected_graph_paths,
             } => ResourceProjectionStatus::Complete {
                 expected_graph_paths: expected_graph_paths.into_vec(),
             },
-            crate::project::project_writers::ProjectProjectionStatus::Incomplete {
+            yss_project::project_writers::ProjectProjectionStatus::Incomplete {
                 invalidated_graph_paths,
             } => ResourceProjectionStatus::Incomplete {
                 invalidated_graph_paths: invalidated_graph_paths.into_vec(),

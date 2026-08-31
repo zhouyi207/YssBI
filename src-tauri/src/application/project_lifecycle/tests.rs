@@ -1,9 +1,9 @@
 use super::*;
-use crate::project::{ProjectState, fixtures};
 use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use yss_data_contract::{DataType, DataValue};
+use yss_project::{ProjectState, fixtures};
 use yss_project_filesystem::ProjectRootBinding;
 use yss_project_model::ProjectData;
 use yss_project_registry::ProjectRegistry;
@@ -69,7 +69,7 @@ struct DeleteHookReset;
 impl Drop for DeleteHookReset {
     fn drop(&mut self) {
         set_before_registry_remove_test_hook(None);
-        crate::project::set_recycle_bin_test_hook(None);
+        yss_project::set_recycle_bin_test_hook(None);
     }
 }
 
@@ -305,7 +305,7 @@ fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
         let record = register_root(&registry, &root, "Registered").await;
         let session_before = session.clone();
         let operation_id = OperationId::new();
-        crate::project::set_recycle_bin_test_hook(Some(Arc::new(|_| {
+        yss_project::set_recycle_bin_test_hook(Some(Arc::new(|_| {
             Err("injected recycle-bin failure".into())
         })));
 
@@ -400,7 +400,9 @@ fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
                 .is_none()
         );
         assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
+            state
+                .filesystem_for_test()
+                .lifecycle_state_for_test(&normalized),
             (false, false, 0)
         );
     });
@@ -451,7 +453,7 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
                 registry: true,
             },
         };
-        let filesystem = state.filesystem().clone();
+        let filesystem = state.filesystem_for_test().clone();
         let root_during_registry = normalized.clone();
         set_before_registry_remove_test_hook(Some(Arc::new(move || {
             assert_eq!(
@@ -474,10 +476,12 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
         assert_eq!(result, expected);
         assert!(state.capture_project_session().is_err());
         assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
+            state
+                .filesystem_for_test()
+                .lifecycle_state_for_test(&normalized),
             (false, false, 0)
         );
-        drop(state.filesystem().acquire(normalized).unwrap());
+        drop(state.filesystem_for_test().acquire(normalized).unwrap());
         assert!(
             registry
                 .fetch_by_id(record.id.as_str())
@@ -595,10 +599,12 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
         assert!(!root.exists());
         assert!(state.capture_project_session().is_err());
         assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
+            state
+                .filesystem_for_test()
+                .lifecycle_state_for_test(&normalized),
             (false, false, 0)
         );
-        drop(state.filesystem().acquire(normalized).unwrap());
+        drop(state.filesystem_for_test().acquire(normalized).unwrap());
         assert!(
             registry
                 .fetch_by_id(record.id.as_str())

@@ -11,12 +11,6 @@ use super::session_slot::{
 };
 use crate::application::catalog_query::capture_localized_project_facts;
 use crate::application::graph_contracts::{build_resource_catalog, execution_package_from_graph};
-use crate::project::execution_authority::{
-    CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
-    ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
-    ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
-    ProjectResourceRequirement,
-};
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::catalog_snapshot;
 use yss_execution::error::RunPhase;
@@ -32,6 +26,12 @@ use yss_execution::state::{
 };
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::GraphResourcePath;
+use yss_project::execution_authority::{
+    CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
+    ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
+    ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
+    ProjectResourceRequirement,
+};
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::ProjectData;
@@ -765,7 +765,6 @@ fn variable_id_from_resource(
 mod tests {
     use super::*;
     use crate::application::execution::ApplicationSessionEpoch;
-    use crate::project::ProjectState;
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
@@ -777,6 +776,7 @@ mod tests {
     use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+    use yss_project::ProjectState;
     use yss_project_identity::ProjectSessionId;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {

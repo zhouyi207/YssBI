@@ -5,13 +5,13 @@ use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
 use crate::event::{Event, EventProject, emit_project_event_result};
-#[cfg(all(test, any()))]
-use crate::project::ProjectState;
 use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::ResourceMutationResultDto;
 use tauri::{AppHandle, State};
 #[cfg(all(test, any()))]
 use yss_graph_document::GraphResourcePath;
+#[cfg(all(test, any()))]
+use yss_project::ProjectState;
 use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};

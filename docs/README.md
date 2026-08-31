@@ -13,6 +13,7 @@ when they remain useful to the current architecture.
 
 ## Implementation notes
 
+- [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
 - [Julia Bayes worker protocol](../src-tauri/julia/README.md)

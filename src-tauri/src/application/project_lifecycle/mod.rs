@@ -13,7 +13,7 @@ use crate::application::execution::session_slot::{
     SessionRevalidationError,
 };
 use crate::application::project_query::ProjectActivation;
-use crate::project::ProjectState;
+use yss_project::ProjectState;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
@@ -158,7 +158,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<crate::project::project_writers::ProjectSaveResult, ApplicationProjectLifecycleError>
+    ) -> Result<yss_project::project_writers::ProjectSaveResult, ApplicationProjectLifecycleError>
     {
         let captured = self.capture_session()?;
         let result = captured
