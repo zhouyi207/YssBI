@@ -235,8 +235,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
-        fully_qualified_owner: "yssbi_lib::backend_adapters::execution::bayes_artifacts",
+        repository_relative_source_file: "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
+        fully_qualified_owner: "yss_bayes_artifact_polars",
         canonical_origin_targets: &[
             "yss_bayes_artifact_contract::BayesArtifactReadError",
             "yss_bayes_artifact_contract::BayesArtifactReader",
@@ -296,7 +296,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationSessionSlot::new",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::ApplicationState::from_composition",
-            "yssbi_lib::backend_adapters::execution::bayes_artifacts::PolarsBayesArtifactReader",
+            "yss_bayes_artifact_polars::PolarsBayesArtifactReader::new",
             "yssbi_lib::backend_adapters::execution::resources::database_resource_provider_factory",
             "yss_execution::ports::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
@@ -1609,7 +1609,8 @@ fn non_build_memberships(
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
-        "yss-bayes-worker-julia"
+        "yss-bayes-artifact-polars"
+            | "yss-bayes-worker-julia"
             | "yss-julia-runtime"
             | "yss-julia-worker"
             | "yss-project-registry-sqlite"

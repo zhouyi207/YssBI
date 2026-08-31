@@ -14,6 +14,7 @@ members = [
     ".",
     "crates/yss-application",
     "crates/yss-bayes-artifact-contract",
+    "crates/yss-bayes-artifact-polars",
     "crates/yss-bayes-model",
     "crates/yss-bayes-result",
     "crates/yss-bayes-worker",
@@ -124,7 +125,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 yss-application = { path = "./crates/yss-application" }
-yss-bayes-artifact-contract = { path = "./crates/yss-bayes-artifact-contract" }
+yss-bayes-artifact-polars = { path = "./crates/yss-bayes-artifact-polars" }
 yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-bayes-result = { path = "./crates/yss-bayes-result" }
 yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
@@ -193,6 +194,7 @@ proc-macro2 = "1"
 sqlx.workspace = true
 syn = { version = "3", features = ["full", "visit"] }
 tracing-subscriber.workspace = true
+yss-bayes-artifact-contract = { path = "./crates/yss-bayes-artifact-contract" }
 yss-execution = { path = "./crates/yss-execution", features = ["test-support"] }
 yss-graph-catalog = { path = "./crates/yss-graph-catalog", features = ["test-support"] }
 yss-graph-runtime = { path = "./crates/yss-graph-runtime", features = ["test-support"] }

@@ -227,6 +227,8 @@ pub fn read_bayes_posterior_predictive(
 
 #[cfg(test)]
 mod tests {
+    use yss_bayes_artifact_contract::BayesArtifactReadError;
+
     use super::*;
 
     #[test]
@@ -295,7 +297,7 @@ mod tests {
     fn internal_application_error_maps_to_incident_without_source_prose() {
         let error = bayes_command_error(BayesApplicationError::ArtifactReadFailed {
             context: "posterior samples",
-            source: "private artifact path and backend prose".to_string(),
+            source: BayesArtifactReadError::Read,
         });
 
         let wire = serde_json::to_value(error).unwrap();

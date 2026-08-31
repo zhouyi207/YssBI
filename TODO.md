@@ -868,3 +868,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Bayes artifact reader port/error 从 Application 抽取到
   `src-tauri/crates/yss-bayes-artifact-contract/` Pure Leaf；Application 与 concrete reader 直接消费唯一 contract，
   禁止 contract 反向依赖 Polars、Tauri、Application 或具体 filesystem I/O。
+- [ ] 将根 Bayes/Polars artifact reader 迁入 `src-tauri/crates/yss-bayes-artifact-polars/` Backend Adapter，
+  删除 Application 内复制的 DataFrame 解析与测试镜像并下沉测试；malformed/null/non-finite rows、空 predictive
+  artifact 和零 plot budget 必须 fail closed，禁止静默丢行、除零及 Tauri/Application 回边。

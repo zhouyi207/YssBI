@@ -123,9 +123,7 @@ pub fn run() {
             app.manage(yss_application::bayes::BayesInferenceService::with_worker(
                 app_dir.clone(),
                 std::sync::Arc::new(bayes_adapter),
-                std::sync::Arc::new(
-                    backend_adapters::execution::bayes_artifacts::PolarsBayesArtifactReader,
-                ),
+                std::sync::Arc::new(yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()),
             ));
             let warmup_worker = bayes_worker.clone();
             tauri::async_runtime::spawn_blocking(move || {

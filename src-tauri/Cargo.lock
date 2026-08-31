@@ -9160,6 +9160,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-bayes-artifact-polars"
+version = "0.1.0"
+dependencies = [
+ "polars",
+ "yss-bayes-artifact-contract",
+ "yss-bayes-result",
+ "yss-sci-runtime",
+ "yss-tabular-io",
+]
+
+[[package]]
 name = "yss-bayes-model"
 version = "0.1.0"
 dependencies = [
@@ -9899,6 +9910,7 @@ dependencies = [
  "uuid",
  "yss-application",
  "yss-bayes-artifact-contract",
+ "yss-bayes-artifact-polars",
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker-julia",

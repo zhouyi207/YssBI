@@ -5,24 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 
-#[cfg(test)]
-use polars::prelude::{DataFrame, Float64Chunked};
-
-#[cfg(test)]
-use yss_bayes_artifact_contract::BayesArtifactReadError;
-use yss_bayes_artifact_contract::BayesArtifactReader;
+use yss_bayes_artifact_contract::{BayesArtifactReadError, BayesArtifactReader};
 use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
 use yss_bayes_result::{
     AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
     PosteriorPredictivePage, PosteriorSamplePage, ResultArtifact, ResultArtifactFormat,
     ResultArtifactKind, ResultArtifactManifest, TaskError, TaskErrorDetails, TaskProgress,
     TaskStatus, TracePlotData,
-};
-#[cfg(test)]
-use yss_bayes_result::{
-    AutocorrelationPoint, AutocorrelationSeries, DensityPoint, DensitySeries,
-    PosteriorPredictiveRow, PosteriorPredictiveSummary, PosteriorSampleRow, TracePoint,
-    TraceSeries,
 };
 use yss_bayes_worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskId, BayesTaskResult, BayesWorkerClient,
@@ -83,17 +72,17 @@ pub enum BayesApplicationError {
     },
     ArtifactReadFailed {
         context: &'static str,
-        source: String,
+        source: BayesArtifactReadError,
     },
     ArtifactWriteFailed {
         destination: String,
-        source: String,
+        source: BayesArtifactReadError,
     },
     SamplesInvalid {
-        source: String,
+        source: BayesArtifactReadError,
     },
     PosteriorPredictiveInvalid {
-        source: String,
+        source: BayesArtifactReadError,
     },
     BackendStateInvalid {
         task_id: String,
@@ -269,6 +258,10 @@ impl std::error::Error for BayesApplicationError {
         match self {
             Self::CancelFailed { source, .. } => Some(source),
             Self::DatasetLoadFailed { source } => Some(source),
+            Self::ArtifactReadFailed { source, .. }
+            | Self::ArtifactWriteFailed { source, .. }
+            | Self::SamplesInvalid { source }
+            | Self::PosteriorPredictiveInvalid { source } => Some(source),
             _ => None,
         }
     }
@@ -536,9 +529,9 @@ impl BayesInferenceService {
         let source = artifact_path(&result, kind).ok_or(BayesApplicationError::ArtifactNotFound)?;
         self.artifact_reader
             .export_csv(Path::new(&source), Path::new(destination))
-            .map_err(|_| BayesApplicationError::ArtifactWriteFailed {
+            .map_err(|source| BayesApplicationError::ArtifactWriteFailed {
                 destination: destination.to_string(),
-                source: "artifact export failed".to_owned(),
+                source,
             })
     }
 
@@ -558,7 +551,7 @@ impl BayesInferenceService {
         };
         self.artifact_reader
             .sample_page(Path::new(&source), offset, limit, parameter)
-            .map_err(|_| samples_invalid_application())
+            .map_err(sample_artifact_error)
     }
 
     pub fn trace_plot_data(
@@ -575,7 +568,7 @@ impl BayesInferenceService {
         };
         self.artifact_reader
             .trace_plot_data(Path::new(&source), parameter, max_points_per_chain.max(1))
-            .map_err(|_| samples_invalid_application())
+            .map_err(sample_artifact_error)
     }
 
     pub fn density_plot_data(
@@ -592,7 +585,7 @@ impl BayesInferenceService {
         };
         self.artifact_reader
             .density_plot_data(Path::new(&source), parameter, grid_points.clamp(8, 256))
-            .map_err(|_| samples_invalid_application())
+            .map_err(sample_artifact_error)
     }
 
     pub fn autocorrelation_plot_data(
@@ -609,7 +602,7 @@ impl BayesInferenceService {
         };
         self.artifact_reader
             .autocorrelation_plot_data(Path::new(&source), parameter, max_lag.clamp(1, 512))
-            .map_err(|_| samples_invalid_application())
+            .map_err(sample_artifact_error)
     }
 
     pub fn posterior_predictive_page(
@@ -627,7 +620,7 @@ impl BayesInferenceService {
             .ok_or(BayesApplicationError::PosteriorPredictiveNotFound)?;
         self.artifact_reader
             .posterior_predictive_page(Path::new(&ppc_path), offset, limit)
-            .map_err(|_| posterior_predictive_invalid_application())
+            .map_err(posterior_predictive_artifact_error)
     }
 
     fn lock_state(
@@ -921,347 +914,30 @@ fn validate_paging(offset: usize, limit: usize) -> Result<(), BayesApplicationEr
     Ok(())
 }
 
-fn samples_invalid_application() -> BayesApplicationError {
-    BayesApplicationError::SamplesInvalid {
-        source: "posterior samples are invalid".to_owned(),
+fn sample_artifact_error(source: BayesArtifactReadError) -> BayesApplicationError {
+    match source {
+        BayesArtifactReadError::InvalidSamples => BayesApplicationError::SamplesInvalid { source },
+        BayesArtifactReadError::Read
+        | BayesArtifactReadError::InvalidPosteriorPredictive
+        | BayesArtifactReadError::Export => BayesApplicationError::ArtifactReadFailed {
+            context: "posterior samples",
+            source,
+        },
     }
 }
 
-fn posterior_predictive_invalid_application() -> BayesApplicationError {
-    BayesApplicationError::PosteriorPredictiveInvalid {
-        source: "posterior predictive data is invalid".to_owned(),
-    }
-}
-
-#[cfg(test)]
-fn samples_invalid(source: impl fmt::Display) -> BayesApplicationError {
-    BayesApplicationError::SamplesInvalid {
-        source: source.to_string(),
-    }
-}
-
-#[cfg(test)]
-fn posterior_predictive_invalid(source: impl fmt::Display) -> BayesApplicationError {
-    BayesApplicationError::PosteriorPredictiveInvalid {
-        source: source.to_string(),
-    }
-}
-
-#[cfg(test)]
-fn posterior_sample_page_from_dataframe(
-    dataframe: &DataFrame,
-    offset: usize,
-    limit: usize,
-    parameter: Option<&str>,
-) -> Result<PosteriorSamplePage, BayesApplicationError> {
-    let parameters = dataframe
-        .column("parameter")
-        .and_then(|column| column.str())
-        .map_err(samples_invalid)?;
-    let chains = dataframe
-        .column("chain")
-        .and_then(|column| column.i64())
-        .map_err(samples_invalid)?;
-    let draws = dataframe
-        .column("draw")
-        .and_then(|column| column.i64())
-        .map_err(samples_invalid)?;
-    let values = dataframe
-        .column("value")
-        .and_then(|column| column.f64())
-        .map_err(samples_invalid)?;
-
-    let mut matching_indices = Vec::new();
-    for index in 0..dataframe.height() {
-        let Some(row_parameter) = parameters.get(index) else {
-            continue;
-        };
-        if parameter.is_none_or(|selected| selected == row_parameter) {
-            matching_indices.push(index);
+fn posterior_predictive_artifact_error(source: BayesArtifactReadError) -> BayesApplicationError {
+    match source {
+        BayesArtifactReadError::InvalidPosteriorPredictive => {
+            BayesApplicationError::PosteriorPredictiveInvalid { source }
         }
+        BayesArtifactReadError::Read
+        | BayesArtifactReadError::InvalidSamples
+        | BayesArtifactReadError::Export => BayesApplicationError::ArtifactReadFailed {
+            context: "posterior predictive data",
+            source,
+        },
     }
-
-    let total = matching_indices.len();
-    let rows = matching_indices
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .filter_map(|index| {
-            Some(PosteriorSampleRow {
-                parameter: parameters.get(index)?.to_string(),
-                chain: usize::try_from(chains.get(index)?).ok()?,
-                draw: usize::try_from(draws.get(index)?).ok()?,
-                value: values.get(index)?,
-            })
-        })
-        .collect();
-
-    Ok(PosteriorSamplePage {
-        rows,
-        offset,
-        limit,
-        total,
-    })
-}
-
-#[cfg(test)]
-fn posterior_predictive_page_from_dataframe(
-    dataframe: &DataFrame,
-    offset: usize,
-    limit: usize,
-) -> Result<PosteriorPredictivePage, BayesApplicationError> {
-    let observations = dataframe
-        .column("observation")
-        .and_then(|column| column.i64())
-        .map_err(posterior_predictive_invalid)?;
-    let transforms = dataframe
-        .column("response_transform")
-        .and_then(|column| column.str())
-        .map_err(posterior_predictive_invalid)?;
-    let response_transform = transforms.get(0).unwrap_or("identity").to_string();
-    if transforms
-        .into_iter()
-        .flatten()
-        .any(|value| value != response_transform)
-    {
-        return Err(posterior_predictive_invalid(
-            "posterior predictive rows contain inconsistent response transforms",
-        ));
-    }
-    let observed_model = predictive_f64_column(dataframe, "observed_model")?;
-    let mean_model = predictive_f64_column(dataframe, "mean_model")?;
-    let q025_model = predictive_f64_column(dataframe, "q025_model")?;
-    let q975_model = predictive_f64_column(dataframe, "q975_model")?;
-    let observed_original = predictive_f64_column(dataframe, "observed_original")?;
-    let mean_original = predictive_f64_column(dataframe, "mean_original")?;
-    let q025_original = predictive_f64_column(dataframe, "q025_original")?;
-    let q975_original = predictive_f64_column(dataframe, "q975_original")?;
-
-    let total = dataframe.height();
-    let rows = (offset..total.min(offset.saturating_add(limit)))
-        .filter_map(|index| {
-            Some(PosteriorPredictiveRow {
-                observation: usize::try_from(observations.get(index)?).ok()?,
-                model: PosteriorPredictiveSummary {
-                    observed: observed_model.get(index)?,
-                    mean: mean_model.get(index)?,
-                    q025: q025_model.get(index)?,
-                    q975: q975_model.get(index)?,
-                },
-                original: PosteriorPredictiveSummary {
-                    observed: observed_original.get(index)?,
-                    mean: mean_original.get(index)?,
-                    q025: q025_original.get(index)?,
-                    q975: q975_original.get(index)?,
-                },
-            })
-        })
-        .collect();
-
-    Ok(PosteriorPredictivePage {
-        rows,
-        response_transform,
-        offset,
-        limit,
-        total,
-    })
-}
-
-#[cfg(test)]
-fn predictive_f64_column<'a>(
-    dataframe: &'a DataFrame,
-    name: &str,
-) -> Result<&'a Float64Chunked, BayesApplicationError> {
-    dataframe
-        .column(name)
-        .and_then(|column| column.f64())
-        .map_err(posterior_predictive_invalid)
-}
-
-#[cfg(test)]
-fn trace_plot_data_from_dataframe(
-    dataframe: &DataFrame,
-    parameter: Option<&str>,
-    max_points_per_chain: usize,
-) -> Result<TracePlotData, BayesApplicationError> {
-    let rows = sample_rows_from_dataframe(dataframe, parameter)?;
-    let mut grouped: BTreeMap<(String, usize), Vec<TracePoint>> = BTreeMap::new();
-    for row in rows {
-        grouped
-            .entry((row.parameter, row.chain))
-            .or_default()
-            .push(TracePoint {
-                draw: row.draw,
-                value: row.value,
-            });
-    }
-
-    let mut stride = 1;
-    let series = grouped
-        .into_iter()
-        .map(|((parameter, chain), mut points)| {
-            points.sort_by_key(|point| point.draw);
-            let local_stride = points.len().div_ceil(max_points_per_chain).max(1);
-            stride = stride.max(local_stride);
-            let points = points
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, point)| (index % local_stride == 0).then_some(point))
-                .collect();
-            TraceSeries {
-                parameter,
-                chain,
-                points,
-            }
-        })
-        .collect();
-
-    Ok(TracePlotData {
-        series,
-        max_points_per_chain,
-        stride,
-    })
-}
-
-#[cfg(test)]
-fn density_plot_data_from_dataframe(
-    dataframe: &DataFrame,
-    parameter: Option<&str>,
-    grid_points: usize,
-) -> Result<DensityPlotData, BayesApplicationError> {
-    let rows = sample_rows_from_dataframe(dataframe, parameter)?;
-    let mut grouped: BTreeMap<String, BTreeMap<usize, Vec<f64>>> = BTreeMap::new();
-    for row in rows {
-        grouped
-            .entry(row.parameter)
-            .or_default()
-            .entry(row.chain)
-            .or_default()
-            .push(row.value);
-    }
-
-    let mut series = Vec::new();
-    for (parameter, chains) in grouped {
-        let pooled = chains.values().flatten().copied().collect::<Vec<_>>();
-        series.push(density_series(&parameter, None, &pooled, grid_points));
-        series.extend(
-            chains.into_iter().map(|(chain, values)| {
-                density_series(&parameter, Some(chain), &values, grid_points)
-            }),
-        );
-    }
-
-    Ok(DensityPlotData {
-        series,
-        grid_points,
-    })
-}
-
-#[cfg(test)]
-fn density_series(
-    parameter: &str,
-    chain: Option<usize>,
-    values: &[f64],
-    grid_points: usize,
-) -> DensitySeries {
-    DensitySeries {
-        parameter: parameter.to_string(),
-        chain,
-        points: yss_sci_runtime::api::density::compute_kernel_density(
-            yss_sci_runtime::api::density::KernelDensityInput {
-                values,
-                grid_points,
-                min_x: None,
-            },
-        )
-        .points
-        .into_iter()
-        .map(|point| DensityPoint {
-            x: point.x,
-            density: point.density,
-        })
-        .collect(),
-    }
-}
-
-#[cfg(test)]
-fn autocorrelation_plot_data_from_dataframe(
-    dataframe: &DataFrame,
-    parameter: Option<&str>,
-    max_lag: usize,
-) -> Result<AutocorrelationPlotData, BayesApplicationError> {
-    let rows = sample_rows_from_dataframe(dataframe, parameter)?;
-    let mut grouped: BTreeMap<(String, usize), Vec<PosteriorSampleRow>> = BTreeMap::new();
-    for row in rows {
-        grouped
-            .entry((row.parameter.clone(), row.chain))
-            .or_default()
-            .push(row);
-    }
-
-    let series = grouped
-        .into_iter()
-        .filter_map(|((parameter, chain), mut rows)| {
-            rows.sort_by_key(|row| row.draw);
-            let values = rows.into_iter().map(|row| row.value).collect::<Vec<_>>();
-            let points = autocorrelation_points(&values, max_lag);
-            (!points.is_empty()).then_some(AutocorrelationSeries {
-                parameter,
-                chain,
-                points,
-            })
-        })
-        .collect();
-
-    Ok(AutocorrelationPlotData { series, max_lag })
-}
-
-#[cfg(test)]
-fn autocorrelation_points(values: &[f64], max_lag: usize) -> Vec<AutocorrelationPoint> {
-    let values = values
-        .iter()
-        .copied()
-        .filter(|value| value.is_finite())
-        .collect::<Vec<_>>();
-    if values.len() < 2 {
-        return Vec::new();
-    }
-    let mean = values.iter().sum::<f64>() / values.len() as f64;
-    let variance = values
-        .iter()
-        .map(|value| {
-            let centered = value - mean;
-            centered * centered
-        })
-        .sum::<f64>();
-    if variance <= f64::EPSILON {
-        return Vec::new();
-    }
-
-    let max_lag = max_lag.min(values.len() - 1);
-    (0..=max_lag)
-        .map(|lag| {
-            let covariance = values
-                .iter()
-                .take(values.len() - lag)
-                .zip(values.iter().skip(lag))
-                .map(|(left, right)| (left - mean) * (right - mean))
-                .sum::<f64>();
-            AutocorrelationPoint {
-                lag,
-                autocorrelation: covariance / variance,
-            }
-        })
-        .collect()
-}
-
-#[cfg(test)]
-fn sample_rows_from_dataframe(
-    dataframe: &DataFrame,
-    parameter: Option<&str>,
-) -> Result<Vec<PosteriorSampleRow>, BayesApplicationError> {
-    let page = posterior_sample_page_from_dataframe(dataframe, 0, usize::MAX, parameter)?;
-    Ok(page.rows)
 }
 
 fn validated_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, BayesApplicationError> {
@@ -1477,7 +1153,6 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    use polars::prelude::{Column, DataFrame};
     use tracing::field::{Field, Visit};
     use tracing_subscriber::Layer;
     use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -1503,10 +1178,8 @@ mod tests {
 
     use super::{
         BayesApplicationError, BayesInferenceService, BayesTaskFailure, StoredInferenceResult,
-        UnavailableBayesArtifactReader, autocorrelation_plot_data_from_dataframe, cancelled_task,
-        completed_task, density_plot_data_from_dataframe, failed_task,
-        posterior_predictive_page_from_dataframe, posterior_sample_page_from_dataframe,
-        queued_task, required_input_columns, trace_plot_data_from_dataframe, validated_spec,
+        UnavailableBayesArtifactReader, cancelled_task, completed_task, failed_task, queued_task,
+        required_input_columns, validated_spec,
     };
 
     #[derive(Default)]
@@ -1807,83 +1480,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn posterior_predictive_page_paginates_rows() {
-        let dataframe = DataFrame::new(
-            3,
-            vec![
-                Column::new("observation".into(), &[1_i64, 2, 3]),
-                Column::new("response_transform".into(), &["ln", "ln", "ln"]),
-                Column::new("observed_model".into(), &[1.0, 2.0, 3.0]),
-                Column::new("mean_model".into(), &[1.1, 2.1, 3.1]),
-                Column::new("q025_model".into(), &[0.5, 1.4, 2.2]),
-                Column::new("q975_model".into(), &[1.8, 2.8, 3.7]),
-                Column::new("observed_original".into(), &[3.0, 5.0, 7.0]),
-                Column::new("mean_original".into(), &[3.1, 5.1, 6.9]),
-                Column::new("q025_original".into(), &[2.5, 4.4, 6.2]),
-                Column::new("q975_original".into(), &[3.8, 5.8, 7.7]),
-            ],
-        )
-        .expect("valid ppc dataframe");
-
-        let page = posterior_predictive_page_from_dataframe(&dataframe, 1, 1).expect("ppc page");
-        assert_eq!(page.total, 3);
-        assert_eq!(page.rows.len(), 1);
-        assert_eq!(page.response_transform, "ln");
-        assert_eq!(page.rows[0].observation, 2);
-        assert_eq!(page.rows[0].model.observed, 2.0);
-        assert_eq!(page.rows[0].original.mean, 5.1);
-    }
-
-    #[test]
-    fn trace_density_and_autocorrelation_plot_data_are_aggregated_from_samples() {
-        let dataframe = sample_dataframe();
-
-        let trace = trace_plot_data_from_dataframe(&dataframe, Some("a"), 1).expect("trace data");
-        assert_eq!(trace.series.len(), 2);
-        assert_eq!(trace.series[0].parameter, "a");
-        assert_eq!(trace.series[0].points.len(), 1);
-
-        let density =
-            density_plot_data_from_dataframe(&dataframe, Some("b"), 8).expect("density data");
-        assert_eq!(density.grid_points, 8);
-        assert_eq!(density.series.len(), 3);
-        assert_eq!(density.series[0].parameter, "b");
-        assert_eq!(density.series[0].chain, None);
-        assert_eq!(density.series[1].chain, Some(1));
-        assert_eq!(density.series[2].chain, Some(2));
-        assert_eq!(density.series[0].points.len(), 8);
-        assert!(
-            density.series[0]
-                .points
-                .iter()
-                .all(|point| point.density.is_finite() && point.density >= 0.0)
-        );
-
-        let autocorrelation =
-            autocorrelation_plot_data_from_dataframe(&dataframe, Some("a"), 2).expect("acf data");
-        assert_eq!(autocorrelation.max_lag, 2);
-        assert_eq!(autocorrelation.series.len(), 1);
-        assert_eq!(autocorrelation.series[0].points[0].lag, 0);
-        assert!((autocorrelation.series[0].points[0].autocorrelation - 1.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn posterior_samples_page_filters_and_paginates() {
-        let dataframe = sample_dataframe();
-
-        let page =
-            posterior_sample_page_from_dataframe(&dataframe, 1, 2, Some("a")).expect("sample page");
-
-        assert_eq!(page.total, 3);
-        assert_eq!(page.rows.len(), 2);
-        assert_eq!(page.rows[0].parameter, "a");
-        assert_eq!(page.rows[0].chain, 1);
-        assert_eq!(page.rows[0].draw, 2);
-        assert_eq!(page.rows[0].value, 1.1);
-        assert_eq!(page.rows[1].chain, 2);
-    }
-
     fn wait_for_terminal_task(
         service: &BayesInferenceService,
         task_id: &str,
@@ -1903,19 +1499,6 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(10));
         }
-    }
-
-    fn sample_dataframe() -> DataFrame {
-        DataFrame::new(
-            5,
-            vec![
-                Column::new("parameter".into(), &["a", "a", "b", "a", "b"]),
-                Column::new("chain".into(), &[1_i64, 1, 1, 2, 2]),
-                Column::new("draw".into(), &[1_i64, 2, 1, 1, 2]),
-                Column::new("value".into(), &[1.0, 1.1, 2.0, 1.2, 2.1]),
-            ],
-        )
-        .expect("valid samples dataframe")
     }
 
     #[test]

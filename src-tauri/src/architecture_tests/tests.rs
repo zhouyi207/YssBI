@@ -933,14 +933,18 @@ fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
 }
 
 #[test]
-fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() {
+fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
     let facts = production_facts();
-    const PREFIX: &str = "src-tauri/crates/yss-bayes-artifact-contract/src/";
+    const CONTRACT_PREFIX: &str = "src-tauri/crates/yss-bayes-artifact-contract/src/";
+    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs";
 
     for relative in [
         "src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml",
         "src-tauri/crates/yss-bayes-artifact-contract/README.md",
         "src-tauri/crates/yss-bayes-artifact-contract/src/lib.rs",
+        "src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml",
+        "src-tauri/crates/yss-bayes-artifact-polars/README.md",
+        ADAPTER_SOURCE,
     ] {
         assert!(
             facts.repository_root.join(relative).is_file(),
@@ -962,6 +966,38 @@ fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() 
         );
     }
 
+    let adapter_manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml"),
+    )
+    .expect("Bayes artifact Polars manifest must be readable");
+    for dependency in [
+        "polars.workspace = true",
+        "yss-bayes-artifact-contract",
+        "yss-bayes-result",
+        "yss-sci-runtime",
+        "yss-tabular-io",
+    ] {
+        assert!(
+            adapter_manifest.contains(dependency),
+            "Bayes artifact Polars adapter must declare {dependency}"
+        );
+    }
+    for backwards_dependency in ["tauri", "yss-application", "yssbi"] {
+        assert!(
+            !adapter_manifest.contains(backwards_dependency),
+            "Bayes artifact Polars adapter must not depend on {backwards_dependency}"
+        );
+    }
+    assert!(
+        !facts
+            .repository_root
+            .join("src-tauri/src/backend_adapters/execution/bayes_artifacts.rs")
+            .exists(),
+        "the root Bayes artifact adapter owner must stay absent"
+    );
+
     let application = std::fs::read_to_string(
         facts
             .repository_root
@@ -971,7 +1007,7 @@ fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() 
     let adapter = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/backend_adapters/execution/bayes_artifacts.rs"),
+            .join("src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs"),
     )
     .expect("Bayes artifact adapter must be readable");
     for consumer in [&application, &adapter] {
@@ -983,17 +1019,29 @@ fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() 
     for former_owner in [
         "pub enum BayesArtifactReadError",
         "pub trait BayesArtifactReader",
+        "fn posterior_sample_page_from_dataframe",
+        "fn posterior_predictive_page_from_dataframe",
+        "fn trace_plot_data_from_dataframe",
+        "fn density_plot_data_from_dataframe",
+        "fn autocorrelation_plot_data_from_dataframe",
     ] {
         assert!(
             !application.contains(former_owner),
             "Application must not retain duplicate artifact contract {former_owner}"
         );
     }
+    assert!(
+        !application.contains("polars::"),
+        "Bayes Application source must not retain Polars-backed adapter or test-mirror logic"
+    );
+    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
+        .expect("composition root must be readable");
+    assert!(root_lib.contains("yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()"));
 
     let contract_sources = facts
         .classification
         .iter()
-        .filter(|(source, _)| source.starts_with(PREFIX))
+        .filter(|(source, _)| source.starts_with(CONTRACT_PREFIX))
         .collect::<Vec<_>>();
     assert!(!contract_sources.is_empty());
     assert!(
@@ -1001,6 +1049,11 @@ fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() 
             .iter()
             .all(|(_, layer)| **layer == RustLayer::PureLeaf),
         "every yss-bayes-artifact-contract production source must remain a Pure Leaf"
+    );
+    assert_eq!(
+        facts.classification.get(ADAPTER_SOURCE),
+        Some(&RustLayer::BackendAdapter),
+        "the concrete Polars reader must remain a Backend Adapter"
     );
 }
 
@@ -3248,7 +3301,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
 
     for relative in [
         "src-tauri/crates/yss-application/src/database.rs",
-        "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
+        "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
         "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
         "src-tauri/crates/yss-duckdb/src/table.rs",
     ] {
@@ -8397,10 +8450,9 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "composition root must not restore the SCI facade"
     );
     for consumer in [
-        "src-tauri/crates/yss-application/src/bayes.rs",
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
-        "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
+        "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
         "src-tauri/src/backend_adapters/execution/scientific.rs",
         "src-tauri/src/commands/command_panel_did.rs",
     ] {
@@ -8415,6 +8467,16 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
             "{consumer} must not restore the root SCI route"
         );
     }
+    let bayes_application = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+    )
+    .expect("Bayes Application source must be readable");
+    assert!(
+        !bayes_application.contains("yss_sci_runtime"),
+        "Bayes Application must not restore the SCI density implementation moved to the artifact adapter"
+    );
 
     let panel = std::fs::read_to_string(
         facts

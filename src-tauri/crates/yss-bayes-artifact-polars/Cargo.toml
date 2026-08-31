@@ -1,0 +1,13 @@
+[package]
+name = "yss-bayes-artifact-polars"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+polars.workspace = true
+yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-sci-runtime = { path = "../yss-sci-runtime" }
+yss-tabular-io = { path = "../yss-tabular-io" }

@@ -155,6 +155,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-artifact-polars",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-bayes-model",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
