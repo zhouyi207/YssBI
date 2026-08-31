@@ -865,3 +865,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 收窄 `yss-application` 跨 crate API：以 `HypothesisApplicationError` 替代 hypothesis/`at()` 的公开
   `String` error，隐藏仅内部使用的解析与 candidate-install 类型，并新增 ownership 门禁禁止根 Application facade、
   Tauri/Transport 反向依赖及错误层分类回流。
+- [ ] 将 Bayes artifact reader port/error 从 Application 抽取到
+  `src-tauri/crates/yss-bayes-artifact-contract/` Pure Leaf；Application 与 concrete reader 直接消费唯一 contract，
+  禁止 contract 反向依赖 Polars、Tauri、Application 或具体 filesystem I/O。

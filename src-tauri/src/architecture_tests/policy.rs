@@ -238,8 +238,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         fully_qualified_owner: "yssbi_lib::backend_adapters::execution::bayes_artifacts",
         canonical_origin_targets: &[
-            "yss_application::bayes::BayesArtifactReadError",
-            "yss_application::bayes::BayesArtifactReader",
+            "yss_bayes_artifact_contract::BayesArtifactReadError",
+            "yss_bayes_artifact_contract::BayesArtifactReader",
             "yss_sci_runtime::api::density::KernelDensityInput",
             "yss_sci_runtime::api::density::compute_kernel_density",
         ],
@@ -1531,7 +1531,8 @@ fn non_build_memberships(
     let exact_layer = exact_source_layer(source_file);
     if matches!(
         package,
-        "yss-bayes-model"
+        "yss-bayes-artifact-contract"
+            | "yss-bayes-model"
             | "yss-bayes-result"
             | "yss-bayes-worker"
             | "yss-canonical-hash"

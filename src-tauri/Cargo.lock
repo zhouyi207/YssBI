@@ -9104,6 +9104,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "windows-sys 0.61.2",
+ "yss-bayes-artifact-contract",
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker",
@@ -9149,6 +9150,13 @@ dependencies = [
  "yss-tabular-io",
  "yss-variable-contract",
  "yss-worksheet-document",
+]
+
+[[package]]
+name = "yss-bayes-artifact-contract"
+version = "0.1.0"
+dependencies = [
+ "yss-bayes-result",
 ]
 
 [[package]]
@@ -9890,6 +9898,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "yss-application",
+ "yss-bayes-artifact-contract",
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker-julia",

@@ -8,6 +8,9 @@ use std::time::Instant;
 #[cfg(test)]
 use polars::prelude::{DataFrame, Float64Chunked};
 
+#[cfg(test)]
+use yss_bayes_artifact_contract::BayesArtifactReadError;
+use yss_bayes_artifact_contract::BayesArtifactReader;
 use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
 use yss_bayes_result::{
     AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
@@ -104,49 +107,6 @@ pub enum BayesApplicationError {
 pub struct BayesTaskFailure {
     code: Box<str>,
     details: Option<TaskErrorDetails>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BayesArtifactReadError {
-    Read,
-    InvalidSamples,
-    InvalidPosteriorPredictive,
-    Export,
-}
-
-pub trait BayesArtifactReader: Send + Sync {
-    fn export_csv(&self, source: &Path, destination: &Path) -> Result<(), BayesArtifactReadError>;
-    fn sample_page(
-        &self,
-        source: &Path,
-        offset: usize,
-        limit: usize,
-        parameter: Option<&str>,
-    ) -> Result<PosteriorSamplePage, BayesArtifactReadError>;
-    fn trace_plot_data(
-        &self,
-        source: &Path,
-        parameter: Option<&str>,
-        max_points_per_chain: usize,
-    ) -> Result<TracePlotData, BayesArtifactReadError>;
-    fn density_plot_data(
-        &self,
-        source: &Path,
-        parameter: Option<&str>,
-        grid_points: usize,
-    ) -> Result<DensityPlotData, BayesArtifactReadError>;
-    fn autocorrelation_plot_data(
-        &self,
-        source: &Path,
-        parameter: Option<&str>,
-        max_lag: usize,
-    ) -> Result<AutocorrelationPlotData, BayesArtifactReadError>;
-    fn posterior_predictive_page(
-        &self,
-        source: &Path,
-        offset: usize,
-        limit: usize,
-    ) -> Result<PosteriorPredictivePage, BayesArtifactReadError>;
 }
 
 #[cfg(test)]

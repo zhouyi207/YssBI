@@ -933,6 +933,78 @@ fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
 }
 
 #[test]
+fn bayes_artifact_contract_has_one_pure_leaf_owner_without_backend_back_edges() {
+    let facts = production_facts();
+    const PREFIX: &str = "src-tauri/crates/yss-bayes-artifact-contract/src/";
+
+    for relative in [
+        "src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml",
+        "src-tauri/crates/yss-bayes-artifact-contract/README.md",
+        "src-tauri/crates/yss-bayes-artifact-contract/src/lib.rs",
+    ] {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "Bayes artifact contract boundary must exist at {relative}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml"),
+    )
+    .expect("Bayes artifact contract manifest must be readable");
+    assert!(manifest.contains("yss-bayes-result"));
+    for backwards_dependency in ["polars", "tauri", "yss-application", "yss-tabular-io"] {
+        assert!(
+            !manifest.contains(backwards_dependency),
+            "Bayes artifact contract must not depend on {backwards_dependency}"
+        );
+    }
+
+    let application = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+    )
+    .expect("Bayes application source must be readable");
+    let adapter = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/backend_adapters/execution/bayes_artifacts.rs"),
+    )
+    .expect("Bayes artifact adapter must be readable");
+    for consumer in [&application, &adapter] {
+        assert!(
+            consumer.contains("yss_bayes_artifact_contract"),
+            "Application and backend adapter must consume the canonical artifact contract"
+        );
+    }
+    for former_owner in [
+        "pub enum BayesArtifactReadError",
+        "pub trait BayesArtifactReader",
+    ] {
+        assert!(
+            !application.contains(former_owner),
+            "Application must not retain duplicate artifact contract {former_owner}"
+        );
+    }
+
+    let contract_sources = facts
+        .classification
+        .iter()
+        .filter(|(source, _)| source.starts_with(PREFIX))
+        .collect::<Vec<_>>();
+    assert!(!contract_sources.is_empty());
+    assert!(
+        contract_sources
+            .iter()
+            .all(|(_, layer)| **layer == RustLayer::PureLeaf),
+        "every yss-bayes-artifact-contract production source must remain a Pure Leaf"
+    );
+}
+
+#[test]
 fn production_target_discovery_fails_closed_for_unknown_kind() {
     let mut metadata = metadata_fixture_with_all_target_kinds();
     metadata["packages"][0]["targets"]

@@ -170,6 +170,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
+| `src-tauri/crates/yss-bayes-artifact-contract/` | 独立 Pure Leaf：Bayes artifact reader port 与 read/validation/export typed failure category 的唯一 owner；只依赖 canonical result projection，不依赖 Polars、Tauri、Application 或具体 I/O |
 | `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
 | `src-tauri/crates/yss-bayes-result/` | 独立 Pure Leaf：Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 的唯一 owner；不持有 model 构造、worker/process capability、filesystem lease、Julia、Polars、Application state 或 Tauri |
 | `src-tauri/crates/yss-bayes-worker/` | 独立 Pure Leaf：validated Bayes task、opaque task/artifact handle、terminal/error contract、`BayesWorkerPort` 与 capability-gated `BayesWorkerClient` 的唯一 owner；不持有 Julia process、filesystem artifact、Polars、Application state 或 Tauri |

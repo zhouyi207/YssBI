@@ -13,6 +13,7 @@ resolver = "3"
 members = [
     ".",
     "crates/yss-application",
+    "crates/yss-bayes-artifact-contract",
     "crates/yss-bayes-model",
     "crates/yss-bayes-result",
     "crates/yss-bayes-worker",
@@ -123,6 +124,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 yss-application = { path = "./crates/yss-application" }
+yss-bayes-artifact-contract = { path = "./crates/yss-bayes-artifact-contract" }
 yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-bayes-result = { path = "./crates/yss-bayes-result" }
 yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
