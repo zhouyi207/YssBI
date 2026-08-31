@@ -2,8 +2,8 @@
 
 use ndarray::{Array1, Array2};
 
-use crate::sci::backends::rust;
-use crate::sci::engine::SciContext;
+use crate::backends::rust;
+use crate::engine::SciContext;
 use yss_sci_contract::SciError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

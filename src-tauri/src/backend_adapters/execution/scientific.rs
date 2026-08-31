@@ -1,15 +1,5 @@
 use std::time::Instant;
 
-use crate::sci::api::density::{
-    KernelDensityInput, compute_kernel_density as compute_kernel_density_api,
-};
-use crate::sci::api::node_statistics::{
-    InstrumentalVariableKind, RegressionKind, augmented_dickey_fuller, fit_instrumental_variables,
-    fit_panel, fit_regression, var_fit, var_lag_order, vec_fit, vec_rank_test,
-};
-use crate::sci::api::time_series::acf_pacf::{
-    AcfPacfInput, compute_acf_pacf as compute_acf_pacf_api,
-};
 use yss_execution::ports::scientific::{
     AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ExecutionInstrumentalVariableKind,
     ExecutionRegressionKind, ExecutionStatisticalTrend, KdePoint, KernelDensityRequest,
@@ -21,6 +11,16 @@ use yss_sci_contract::{
     AbsoluteDeadline, ExecutionControl, MissingValuePolicy, NumericTolerance,
     SciCancellationSource, SciComputationSettings, SciError, SciInputViolation, SciOperationCode,
     StatisticalObservationMetadata, StatisticalSettingSource,
+};
+use yss_sci_runtime::api::density::{
+    KernelDensityInput, compute_kernel_density as compute_kernel_density_api,
+};
+use yss_sci_runtime::api::node_statistics::{
+    InstrumentalVariableKind, RegressionKind, augmented_dickey_fuller, fit_instrumental_variables,
+    fit_panel, fit_regression, var_fit, var_lag_order, vec_fit, vec_rank_test,
+};
+use yss_sci_runtime::api::time_series::acf_pacf::{
+    AcfPacfInput, compute_acf_pacf as compute_acf_pacf_api,
 };
 
 pub struct SciApiScientificBackend;

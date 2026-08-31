@@ -67,12 +67,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "rand",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
@@ -80,12 +74,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "statrs",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -810,6 +798,42 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "ndarray",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "rand",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "statrs",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
         target_condition: None,

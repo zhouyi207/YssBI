@@ -1,8 +1,8 @@
 use serde::Deserialize;
-use yssbi_lib::sci::api::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
+use yss_sci_runtime::api::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
 
 const SIMPLE_EXPONENTIAL: &str =
-    include_str!("sci/fixtures/time_series/acf_pacf/simple_exponential.json");
+    include_str!("fixtures/time_series/acf_pacf/simple_exponential.json");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

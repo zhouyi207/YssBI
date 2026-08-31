@@ -9652,6 +9652,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-sci-runtime"
+version = "0.1.0"
+dependencies = [
+ "ndarray",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "statrs",
+ "thiserror 2.0.20",
+ "yss-sci",
+ "yss-sci-contract",
+]
+
+[[package]]
 name = "yss-sql-source"
 version = "0.1.0"
 dependencies = [
@@ -9765,11 +9779,9 @@ dependencies = [
  "ndarray",
  "polars",
  "proc-macro2",
- "rand 0.10.2",
  "serde",
  "serde_json",
  "sqlx",
- "statrs",
  "syn 3.0.3",
  "tauri",
  "tauri-build",
@@ -9836,8 +9848,8 @@ dependencies = [
  "yss-project-watcher-notify",
  "yss-resource-lifecycle",
  "yss-resource-naming",
- "yss-sci",
  "yss-sci-contract",
+ "yss-sci-runtime",
  "yss-sql-source",
  "yss-tabular-contract",
  "yss-tabular-io",

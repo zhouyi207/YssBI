@@ -1,6 +1,6 @@
 use yss_sci::ts::serial_correlation::{breusch_godfrey, durbin_watson, ljung_box_q};
 
-use crate::sci::api::time_series::serial_tests::{
+use crate::api::time_series::serial_tests::{
     DurbinWatsonResult, SerialTestWithLag, SerialTestsOutput,
 };
 

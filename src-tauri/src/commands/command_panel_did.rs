@@ -1,7 +1,7 @@
 //! Panel DID 结果页按需调用：虚构处理组置换检验
 
 use crate::error::CommandError;
-use crate::sci::models::panel_did::{
+use yss_sci_runtime::models::panel_did::{
     ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock, compute_fake_group_ri,
 };
 
@@ -21,7 +21,7 @@ pub fn compute_panel_did_fake_group_ri(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sci::models::panel_did::{DidFakeGroupEnginePayload, ExogLabelEntry};
+    use yss_sci_runtime::models::panel_did::{DidFakeGroupEnginePayload, ExogLabelEntry};
 
     fn malformed_request() -> ComputeDidFakeGroupRequest {
         ComputeDidFakeGroupRequest {

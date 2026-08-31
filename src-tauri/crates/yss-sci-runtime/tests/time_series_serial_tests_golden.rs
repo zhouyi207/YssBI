@@ -1,11 +1,11 @@
 use serde::Deserialize;
-use yssbi_lib::sci::api::time_series::serial_tests::{
-    SerialTestsInput, SerialTestsOutput, compute_serial_tests,
+use yss_sci_runtime::api::time_series::serial_tests::{
+    SerialTestWithLag, SerialTestsInput, SerialTestsOutput, compute_serial_tests,
 };
 
 const SIMPLE_RESIDUALS: &str =
-    include_str!("sci/fixtures/time_series/serial_tests/simple_residuals.json");
-const WITH_EXOG_BG: &str = include_str!("sci/fixtures/time_series/serial_tests/with_exog_bg.json");
+    include_str!("fixtures/time_series/serial_tests/simple_residuals.json");
+const WITH_EXOG_BG: &str = include_str!("fixtures/time_series/serial_tests/with_exog_bg.json");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,8 +78,8 @@ fn assert_output_close(
 fn assert_lagged_close(
     name: &str,
     metric: &str,
-    actual: &yssbi_lib::sci::api::time_series::serial_tests::SerialTestWithLag,
-    expected: &yssbi_lib::sci::api::time_series::serial_tests::SerialTestWithLag,
+    actual: &SerialTestWithLag,
+    expected: &SerialTestWithLag,
     tolerance: f64,
 ) {
     assert_eq!(actual.lags, expected.lags, "{name} {metric}.lags");

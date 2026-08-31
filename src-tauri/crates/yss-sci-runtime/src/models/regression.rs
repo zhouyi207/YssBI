@@ -1,4 +1,4 @@
-//! 信息展示相关的数据结构
+//! Scientific regression report and transport-neutral model structures.
 
 use serde::{Deserialize, Serialize};
 use yss_sci_contract::CategoricalRole;

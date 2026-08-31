@@ -1209,8 +1209,8 @@ fn density_series(
     DensitySeries {
         parameter: parameter.to_string(),
         chain,
-        points: crate::sci::api::density::compute_kernel_density(
-            crate::sci::api::density::KernelDensityInput {
+        points: yss_sci_runtime::api::density::compute_kernel_density(
+            yss_sci_runtime::api::density::KernelDensityInput {
                 values,
                 grid_points,
                 min_x: None,

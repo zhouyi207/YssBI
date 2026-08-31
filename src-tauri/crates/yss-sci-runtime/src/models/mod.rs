@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn scientific_models_do_not_import_node_identity_layers() {
-        let model_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/sci/models");
+        let model_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/models");
         let forbidden = [
             ["node", "_system"].concat(),
             ["graph", "::register"].concat(),
@@ -104,7 +104,9 @@ mod tests {
         ];
         let mut offenders = Vec::new();
         for name in ["regression.rs", "panel_did.rs"] {
-            let source = std::fs::read_to_string(model_root.join(name)).unwrap();
+            let source = std::fs::read_to_string(model_root.join(name)).unwrap_or_else(|error| {
+                panic!("scientific model {name} must be readable: {error}")
+            });
             for (line_index, line) in source.lines().enumerate() {
                 for pattern in &forbidden {
                     if line.contains(pattern) {

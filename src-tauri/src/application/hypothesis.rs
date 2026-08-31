@@ -3,13 +3,13 @@
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
-use crate::sci::api::stats::hypothesis::{
-    Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
-};
-use crate::sci::engine::SciContext;
 use yss_math::{
     BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
+use yss_sci_runtime::api::stats::hypothesis::{
+    Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
+};
+use yss_sci_runtime::engine::SciContext;
 
 pub struct HypothesisTestInput {
     pub betas: Vec<f64>,

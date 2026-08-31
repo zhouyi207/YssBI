@@ -5,11 +5,43 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
+use thiserror::Error;
 use yss_sci::regression::panel::fit_panel_fe_twoway;
 
 const FAKE_GROUP_PERM_CAP: usize = 2000;
 const FAKE_GROUP_PERM_MIN_VALID: usize = 10;
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum DidFakeGroupError {
+    #[error("observed coefficient must be finite")]
+    NonFiniteObservedCoefficient,
+    #[error("exogenous matrix dimensions overflow")]
+    ExogShapeOverflow,
+    #[error("exogenous matrix has {actual} values; expected {expected}")]
+    ExogShape { actual: usize, expected: usize },
+    #[error("exogenous label count does not match the column count")]
+    LabelCount,
+    #[error("DID input vector lengths do not match the response row count")]
+    LengthMismatch,
+    #[error("DID numeric inputs must be finite")]
+    NonFiniteInput,
+    #[error("the last exogenous label must be the DID term")]
+    DidLabelPosition {
+        expected: String,
+        actual: Option<String>,
+    },
+    #[error("DID entity input must not be empty")]
+    EmptyEntities,
+    #[error("DID fake-group TWFE fit failed")]
+    FitFailed { diagnostic: String },
+    #[error("DID coefficient index is out of bounds")]
+    CoefficientIndex,
+    #[error("DID coefficient must be finite")]
+    NonFiniteCoefficient,
+    #[error("DID summary statistics must be finite")]
+    NonFiniteSummary,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -51,61 +83,57 @@ fn labels_after_fe_omit(
     }
 }
 
-fn run_placebo_fake_treatment_ri(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
-    labels: &[(String, Option<String>)],
-    entity_id: &[usize],
-    time_id: &[usize],
-    post: &[f64],
-    treat: &[f64],
+struct FakeGroupRiRequest<'a> {
+    endog: &'a Array1<f64>,
+    exog: &'a Array2<f64>,
+    labels: &'a [(String, Option<String>)],
+    entity_id: &'a [usize],
+    time_id: &'a [usize],
+    post: &'a [f64],
+    treat: &'a [f64],
     constant: bool,
-    cov_type: &str,
-    did_label: &str,
+    cov_type: &'a str,
+    did_label: &'a str,
     observed_coef: f64,
     n_perm: usize,
     rng_seed: u64,
-) -> Result<FakeGroupRiOutcome, String> {
-    let n = endog.len();
-    if exog.nrows() != n
-        || entity_id.len() != n
-        || time_id.len() != n
-        || post.len() != n
-        || treat.len() != n
-    {
-        return Err("DID fake-group placebo: length mismatch".to_string());
-    }
-    let ncols = exog.ncols();
-    if labels.len() != ncols {
-        return Err("DID fake-group placebo: label count != exog columns".to_string());
-    }
-    let last_column = ncols.saturating_sub(1);
-    if labels
-        .get(last_column)
-        .map(|(name, _)| name.as_str() != did_label)
-        .unwrap_or(true)
-    {
-        return Err(format!(
-            "DID fake-group placebo: last exog column should be '{}', got {:?}",
-            did_label,
-            labels.get(last_column).map(|(name, _)| name.as_str())
-        ));
-    }
+}
 
-    let n_entities = entity_id
+fn run_placebo_fake_treatment_ri(
+    input: FakeGroupRiRequest<'_>,
+) -> Result<FakeGroupRiOutcome, DidFakeGroupError> {
+    let FakeGroupRiRequest {
+        endog,
+        exog,
+        labels,
+        entity_id,
+        time_id,
+        post,
+        treat,
+        constant,
+        cov_type,
+        did_label,
+        observed_coef,
+        n_perm,
+        rng_seed,
+    } = input;
+    let n = endog.len();
+    let last_column = exog.ncols() - 1;
+    let entities = entity_id
         .iter()
         .copied()
-        .max()
-        .map(|maximum| maximum + 1)
-        .ok_or_else(|| "DID fake-group placebo: empty entity_id".to_string())?;
-    let mut ever_treated = vec![false; n_entities];
-    for index in 0..n {
-        if treat[index] > 0.5 {
-            ever_treated[entity_id[index]] = true;
-        }
-    }
-    let n_treated_entities = ever_treated.iter().filter(|&&treated| treated).count();
-    let n_rep = n_perm.max(1).min(FAKE_GROUP_PERM_CAP);
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let n_entities = entities.len();
+    let ever_treated = entity_id
+        .iter()
+        .copied()
+        .zip(treat.iter().copied())
+        .filter_map(|(entity, treatment)| (treatment > 0.5).then_some(entity))
+        .collect::<HashSet<_>>();
+    let n_treated_entities = ever_treated.len();
+    let n_rep = n_perm.clamp(1, FAKE_GROUP_PERM_CAP);
     if n_treated_entities == 0 {
         return Ok(FakeGroupRiOutcome::Unavailable {
             code: DidFakeGroupUnavailableCode::NoTreatedEntities,
@@ -126,7 +154,7 @@ fn run_placebo_fake_treatment_ri(
     }
 
     let mut rng = StdRng::seed_from_u64(rng_seed);
-    let mut pool: Vec<usize> = (0..n_entities).collect();
+    let mut pool = entities;
     let mut permuted_exog = exog.clone();
     let mut coefficients = Vec::with_capacity(n_rep);
 
@@ -151,16 +179,15 @@ fn run_placebo_fake_treatment_ri(
             cov_type,
             None,
         )
-        .map_err(|error| format!("DID fake-group placebo: TWFE fit failed: {error}"))?;
+        .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
         let kept_labels = labels_after_fe_omit(labels, result.omitted_indices.as_deref());
         if let Some(index) = kept_labels.iter().position(|(name, _)| name == did_label) {
-            let coefficient = result.betas.get(index).ok_or_else(|| {
-                "DID fake-group placebo: TWFE coefficient index is out of bounds".to_string()
-            })?;
+            let coefficient = result
+                .betas
+                .get(index)
+                .ok_or(DidFakeGroupError::CoefficientIndex)?;
             if !coefficient.is_finite() {
-                return Err(
-                    "DID fake-group placebo: TWFE returned a non-finite coefficient".to_string(),
-                );
+                return Err(DidFakeGroupError::NonFiniteCoefficient);
             }
             coefficients.push(*coefficient);
         }
@@ -190,7 +217,7 @@ fn run_placebo_fake_treatment_ri(
         / n_valid as f64;
     let standard_deviation = variance.max(0.0).sqrt();
     if !p_value.is_finite() || !mean.is_finite() || !standard_deviation.is_finite() {
-        return Err("DID fake-group placebo: non-finite summary statistics".to_string());
+        return Err(DidFakeGroupError::NonFiniteSummary);
     }
 
     Ok(FakeGroupRiOutcome::Available {
@@ -260,47 +287,82 @@ pub fn compute_fake_group_ri(
     payload: &DidFakeGroupEnginePayload,
     n_perm: usize,
     rng_seed: u64,
-) -> Result<DidPlaceboFakeGroupBlock, String> {
+) -> Result<DidPlaceboFakeGroupBlock, DidFakeGroupError> {
     let n = payload.endog.len();
     if !payload.observed_coef.is_finite() {
-        return Err("observed_coef must be finite".to_string());
+        return Err(DidFakeGroupError::NonFiniteObservedCoefficient);
     }
-    if payload.exog_row_major.len() != n.saturating_mul(payload.ncols) {
-        return Err(format!(
-            "exog_row_major len {} != n*ncols ({}*{})",
-            payload.exog_row_major.len(),
-            n,
-            payload.ncols
-        ));
+    let expected_values = n
+        .checked_mul(payload.ncols)
+        .ok_or(DidFakeGroupError::ExogShapeOverflow)?;
+    if payload.exog_row_major.len() != expected_values {
+        return Err(DidFakeGroupError::ExogShape {
+            actual: payload.exog_row_major.len(),
+            expected: expected_values,
+        });
     }
     if payload.all_labels.len() != payload.ncols {
-        return Err("all_labels len != ncols".to_string());
+        return Err(DidFakeGroupError::LabelCount);
     }
-    let exog = Array2::from_shape_vec((n, payload.ncols), payload.exog_row_major.clone())
-        .map_err(|error| format!("exog reshape: {:?}", error))?;
+    if payload.entity_id.len() != n
+        || payload.time_id.len() != n
+        || payload.post.len() != n
+        || payload.treat.len() != n
+    {
+        return Err(DidFakeGroupError::LengthMismatch);
+    }
+    if payload
+        .endog
+        .iter()
+        .chain(&payload.exog_row_major)
+        .chain(&payload.post)
+        .chain(&payload.treat)
+        .any(|value| !value.is_finite())
+    {
+        return Err(DidFakeGroupError::NonFiniteInput);
+    }
+    let actual_last = payload
+        .all_labels
+        .last()
+        .map(|entry| entry.variable.as_str());
+    if actual_last != Some(payload.did_label.as_str()) {
+        return Err(DidFakeGroupError::DidLabelPosition {
+            expected: payload.did_label.clone(),
+            actual: actual_last.map(str::to_owned),
+        });
+    }
+    if payload.entity_id.is_empty() {
+        return Err(DidFakeGroupError::EmptyEntities);
+    }
+    let exog = Array2::from_shape_vec((n, payload.ncols), payload.exog_row_major.clone()).map_err(
+        |_| DidFakeGroupError::ExogShape {
+            actual: payload.exog_row_major.len(),
+            expected: expected_values,
+        },
+    )?;
     let endog = Array1::from_vec(payload.endog.clone());
     let labels: Vec<(String, Option<String>)> = payload
         .all_labels
         .iter()
         .map(|entry| (entry.variable.clone(), entry.category.clone()))
         .collect();
-    let n_perm_requested = n_perm.max(1).min(FAKE_GROUP_PERM_CAP);
+    let n_perm_requested = n_perm.clamp(1, FAKE_GROUP_PERM_CAP);
 
-    match run_placebo_fake_treatment_ri(
-        &endog,
-        &exog,
-        &labels,
-        &payload.entity_id,
-        &payload.time_id,
-        &payload.post,
-        &payload.treat,
-        payload.constant,
-        &payload.cov_type,
-        &payload.did_label,
-        payload.observed_coef,
-        n_perm_requested,
+    match run_placebo_fake_treatment_ri(FakeGroupRiRequest {
+        endog: &endog,
+        exog: &exog,
+        labels: &labels,
+        entity_id: &payload.entity_id,
+        time_id: &payload.time_id,
+        post: &payload.post,
+        treat: &payload.treat,
+        constant: payload.constant,
+        cov_type: &payload.cov_type,
+        did_label: &payload.did_label,
+        observed_coef: payload.observed_coef,
+        n_perm: n_perm_requested,
         rng_seed,
-    )? {
+    })? {
         FakeGroupRiOutcome::Available {
             n_perm,
             n_perm_valid,
@@ -493,33 +555,57 @@ mod tests {
     }
 
     #[test]
+    fn sparse_entity_ids_do_not_create_phantom_entities() {
+        let mut payload = valid_payload();
+        for entity in &mut payload.entity_id {
+            *entity = (*entity + 1) * 10;
+        }
+        payload.treat.fill(0.0);
+
+        let result = unavailable(&payload, 10);
+
+        assert_eq!(result.n_entities, 8);
+        assert_eq!(result.n_treated_entities, 0);
+        assert_eq!(
+            result.unavailable_code,
+            Some(DidFakeGroupUnavailableCode::NoTreatedEntities)
+        );
+    }
+
+    #[test]
     fn malformed_structure_returns_diagnostic_errors() {
         let mut bad_shape = valid_payload();
         bad_shape.exog_row_major.pop();
         assert_eq!(
             compute_fake_group_ri(&bad_shape, 10, 1).unwrap_err(),
-            "exog_row_major len 95 != n*ncols (48*2)"
+            DidFakeGroupError::ExogShape {
+                actual: 95,
+                expected: 96,
+            }
         );
 
         let mut bad_labels = valid_payload();
         bad_labels.all_labels.clear();
         assert_eq!(
             compute_fake_group_ri(&bad_labels, 10, 1).unwrap_err(),
-            "all_labels len != ncols"
+            DidFakeGroupError::LabelCount
         );
 
         let mut length = valid_payload();
         length.time_id.pop();
         assert_eq!(
             compute_fake_group_ri(&length, 10, 1).unwrap_err(),
-            "DID fake-group placebo: length mismatch"
+            DidFakeGroupError::LengthMismatch
         );
 
         let mut wrong_last = valid_payload();
         wrong_last.all_labels[1].variable = "other".into();
         assert_eq!(
             compute_fake_group_ri(&wrong_last, 10, 1).unwrap_err(),
-            "DID fake-group placebo: last exog column should be 'Treat×Post', got Some(\"other\")"
+            DidFakeGroupError::DidLabelPosition {
+                expected: wrong_last.did_label.clone(),
+                actual: Some("other".into()),
+            }
         );
 
         let mut empty = valid_payload();
@@ -531,7 +617,14 @@ mod tests {
         empty.treat.clear();
         assert_eq!(
             compute_fake_group_ri(&empty, 10, 1).unwrap_err(),
-            "DID fake-group placebo: empty entity_id"
+            DidFakeGroupError::EmptyEntities
+        );
+
+        let mut non_finite = valid_payload();
+        non_finite.treat[0] = f64::NAN;
+        assert_eq!(
+            compute_fake_group_ri(&non_finite, 10, 1).unwrap_err(),
+            DidFakeGroupError::NonFiniteInput
         );
     }
 
@@ -542,7 +635,10 @@ mod tests {
 
         let error = compute_fake_group_ri(&payload, 10, 1).unwrap_err();
 
-        assert!(error.contains("cov_type 'hac-panel' not yet implemented"));
+        let DidFakeGroupError::FitFailed { diagnostic } = error else {
+            panic!("algorithm failures must remain typed as FitFailed");
+        };
+        assert!(diagnostic.contains("cov_type 'hac-panel' not yet implemented"));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::sci::models::regression::{
+use crate::models::regression::{
     BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, PraisInfo,
     PraisRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
 };
@@ -486,7 +486,29 @@ fn binary_model_basic_info(
     })
 }
 
-pub fn regression_report(fit: &RegressionFit) -> serde_json::Value {
+pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciError> {
+    #[derive(Serialize)]
+    struct DiagnosticInfo<'a> {
+        cond_no: f64,
+        fitted_values: &'a [f64],
+        residuals: &'a [f64],
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prais_info: Option<PraisInfo>,
+    }
+
+    #[derive(Serialize)]
+    struct RegressionReport<'a> {
+        title: String,
+        endog_name: &'static str,
+        model_basic_info: serde_json::Value,
+        coefficients: Vec<serde_json::Value>,
+        diagnostic_info: DiagnosticInfo<'a>,
+        betas: &'a [f64],
+        cov_beta: &'a [Vec<f64>],
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_statistics: Option<&'a RegressionStatistics>,
+    }
+
     let observations = fit.metadata.used_observation_count;
     let coefficients = report_coefficients(fit);
     let (model_basic_info, condition_number, model_statistics, prais_info) = match &fit.statistics {
@@ -499,10 +521,7 @@ pub fn regression_report(fit: &RegressionFit) -> serde_json::Value {
         RegressionStatistics::Binary { link, model, .. } => (
             binary_model_basic_info(fit, *link, model),
             model.condition_number,
-            Some(
-                serde_json::to_value(&fit.statistics)
-                    .expect("regression statistics must serialize to a report value"),
-            ),
+            Some(&fit.statistics),
             None,
         ),
         RegressionStatistics::Prais { model, .. } => (
@@ -518,36 +537,22 @@ pub fn regression_report(fit: &RegressionFit) -> serde_json::Value {
             }),
         ),
     };
-    let mut report = serde_json::json!({
-        "title": format!("{} Summary", fit.family.to_uppercase()),
-        "endog_name": "response",
-        "model_basic_info": model_basic_info,
-        "coefficients": coefficients,
-        "diagnostic_info": {
-            "cond_no": condition_number,
-            "fitted_values": &fit.fitted,
-            "residuals": &fit.residuals,
+    serde_json::to_value(RegressionReport {
+        title: format!("{} Summary", fit.family.to_uppercase()),
+        endog_name: "response",
+        model_basic_info,
+        coefficients,
+        diagnostic_info: DiagnosticInfo {
+            cond_no: condition_number,
+            fitted_values: &fit.fitted,
+            residuals: &fit.residuals,
+            prais_info,
         },
-        "betas": &fit.coefficients,
-        "cov_beta": &fit.statistics.coefficient_statistics().covariance,
-    });
-    if let Some(prais_info) = prais_info {
-        report["diagnostic_info"]
-            .as_object_mut()
-            .expect("regression diagnostics must be an object")
-            .insert(
-                "prais_info".to_owned(),
-                serde_json::to_value(prais_info)
-                    .expect("Prais statistics must serialize to a report value"),
-            );
-    }
-    if let Some(model_statistics) = model_statistics {
-        report
-            .as_object_mut()
-            .expect("regression report must be an object")
-            .insert("model_statistics".to_owned(), model_statistics);
-    }
-    report
+        betas: &fit.coefficients,
+        cov_beta: &fit.statistics.coefficient_statistics().covariance,
+        model_statistics,
+    })
+    .map_err(|_| computation_failed(SciOperationCode::Regression))
 }
 
 fn linear_fit(
@@ -959,7 +964,7 @@ mod tests {
         )
         .unwrap();
 
-        let report = regression_report(&fit);
+        let report = regression_report(&fit).expect("regression report must serialize");
 
         assert_eq!(report["betas"], serde_json::json!(fit.coefficients));
         assert_eq!(report["cov_beta"].as_array().map(Vec::len), Some(2));
@@ -989,7 +994,7 @@ mod tests {
                 regression_metadata(response.len()),
             )
             .unwrap();
-            let report = regression_report(&fit);
+            let report = regression_report(&fit).expect("binary report must serialize");
             let basic = report["model_basic_info"]
                 .as_object()
                 .expect("binary report must keep the canonical model info object");
@@ -1065,7 +1070,7 @@ mod tests {
         )
         .unwrap();
 
-        let report = regression_report(&fit);
+        let report = regression_report(&fit).expect("Prais report must serialize");
         let prais = report["diagnostic_info"]["prais_info"]
             .as_object()
             .expect("Prais report must expose structured autocorrelation statistics");

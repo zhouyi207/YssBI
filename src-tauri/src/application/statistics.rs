@@ -4,11 +4,13 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::sci::api::time_series::serial_tests::compute_serial_tests as compute_serial_tests_api;
 use yss_execution::ports::scientific::{
     AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ScientificBackendError,
 };
 use yss_sci_contract::SciError;
+use yss_sci_runtime::api::time_series::serial_tests::{
+    SerialTestsInput, compute_serial_tests as compute_serial_tests_api,
+};
 
 #[derive(Debug, Error)]
 pub enum AcfPacfApplicationError {
@@ -68,14 +70,12 @@ pub struct SerialTestsResult {
 pub fn compute_serial_tests(
     input: SerialTestsRequest,
 ) -> Result<SerialTestsResult, SerialTestsApplicationError> {
-    let result = compute_serial_tests_api(
-        crate::sci::api::time_series::serial_tests::SerialTestsInput {
-            residuals: input.residuals,
-            lags: input.lags,
-            exog: input.exog,
-            bg_nomiss0: input.bg_nomiss0,
-        },
-    )
+    let result = compute_serial_tests_api(SerialTestsInput {
+        residuals: input.residuals,
+        lags: input.lags,
+        exog: input.exog,
+        bg_nomiss0: input.bg_nomiss0,
+    })
     .map_err(SerialTestsApplicationError)?;
     Ok(SerialTestsResult {
         bg: result.bg.map(|value| SerialTestWithLag {

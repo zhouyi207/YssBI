@@ -214,20 +214,20 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_execution::ports::scientific::StatisticsResult",
             "yss_execution::settings::ExecutionMissingValuePolicy",
             "yss_execution::settings::ExecutionSettings",
-            "yssbi_lib::sci::api::density::KernelDensityInput",
-            "yssbi_lib::sci::api::density::compute_kernel_density",
-            "yssbi_lib::sci::api::node_statistics::InstrumentalVariableKind",
-            "yssbi_lib::sci::api::node_statistics::RegressionKind",
-            "yssbi_lib::sci::api::node_statistics::augmented_dickey_fuller",
-            "yssbi_lib::sci::api::node_statistics::fit_instrumental_variables",
-            "yssbi_lib::sci::api::node_statistics::fit_panel",
-            "yssbi_lib::sci::api::node_statistics::fit_regression",
-            "yssbi_lib::sci::api::node_statistics::var_fit",
-            "yssbi_lib::sci::api::node_statistics::var_lag_order",
-            "yssbi_lib::sci::api::node_statistics::vec_fit",
-            "yssbi_lib::sci::api::node_statistics::vec_rank_test",
-            "yssbi_lib::sci::api::time_series::acf_pacf::AcfPacfInput",
-            "yssbi_lib::sci::api::time_series::acf_pacf::compute_acf_pacf",
+            "yss_sci_runtime::api::density::KernelDensityInput",
+            "yss_sci_runtime::api::density::compute_kernel_density",
+            "yss_sci_runtime::api::node_statistics::InstrumentalVariableKind",
+            "yss_sci_runtime::api::node_statistics::RegressionKind",
+            "yss_sci_runtime::api::node_statistics::augmented_dickey_fuller",
+            "yss_sci_runtime::api::node_statistics::fit_instrumental_variables",
+            "yss_sci_runtime::api::node_statistics::fit_panel",
+            "yss_sci_runtime::api::node_statistics::fit_regression",
+            "yss_sci_runtime::api::node_statistics::var_fit",
+            "yss_sci_runtime::api::node_statistics::var_lag_order",
+            "yss_sci_runtime::api::node_statistics::vec_fit",
+            "yss_sci_runtime::api::node_statistics::vec_rank_test",
+            "yss_sci_runtime::api::time_series::acf_pacf::AcfPacfInput",
+            "yss_sci_runtime::api::time_series::acf_pacf::compute_acf_pacf",
         ],
     },
     InternalDependencyCapability {
@@ -237,8 +237,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yssbi_lib::application::bayes::BayesArtifactReadError",
             "yssbi_lib::application::bayes::BayesArtifactReader",
-            "yssbi_lib::sci::api::density::KernelDensityInput",
-            "yssbi_lib::sci::api::density::compute_kernel_density",
+            "yss_sci_runtime::api::density::KernelDensityInput",
+            "yss_sci_runtime::api::density::compute_kernel_density",
         ],
     },
     InternalDependencyCapability {
@@ -729,9 +729,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_panel_did",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::sci::models::panel_did::ComputeDidFakeGroupRequest",
-            "yssbi_lib::sci::models::panel_did::DidPlaceboFakeGroupBlock",
-            "yssbi_lib::sci::models::panel_did::compute_fake_group_ri",
+            "yss_sci_runtime::models::panel_did::ComputeDidFakeGroupRequest",
+            "yss_sci_runtime::models::panel_did::DidPlaceboFakeGroupBlock",
+            "yss_sci_runtime::models::panel_did::compute_fake_group_ri",
         ],
     },
     InternalDependencyCapability {
@@ -1599,7 +1599,7 @@ fn non_build_memberships(
             | "yss-tabular-io"
     ) {
         layers.insert(RustLayer::DatabaseCore);
-    } else if package == "yss-sci" {
+    } else if matches!(package, "yss-sci" | "yss-sci-runtime") {
         layers.insert(RustLayer::SciCore);
     } else if package == "yss-diagnostics" {
         layers.insert(RustLayer::Diagnostics);

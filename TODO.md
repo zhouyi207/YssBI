@@ -843,3 +843,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   cancel/result/artifact port 实现整体迁入 `src-tauri/crates/yss-bayes-worker-julia/` Backend Adapter；删除空根
   `julia` facade，让 composition root 直接构造具体 adapter，并禁止新 crate 反向依赖 Tauri、Application、
   Commands、Project 或 Database。
+- [ ] 将剩余根 `src/sci` 同步 runtime API、regression/panel models 与 Rust adapters 整体迁入职责命名的
+  `src-tauri/crates/yss-sci-runtime/` SCI Core；删除根 facade，让 Application、Execution adapter 与 Commands
+  直接消费唯一 owner，并把 time-series golden tests/fixtures 随 owner 下沉；root package 不再直接依赖
+  `yss-sci`、`rand` 或 `statrs`，runtime 不反向依赖 Tauri、Project、Database、Execution 或 Julia。
+- [ ] 清理 SCI runtime 迁移后的失效分支与重复事实：Panel DID 使用 typed `DidFakeGroupError`、一次外层结构校验
+  与唯一实体 ID 集合，避免稀疏 ID 生成 phantom entities；regression report 改为一次 typed serialization 并将
+  失败映射为 `SciError`，不再依赖对象形状 `expect` 或多阶段可变 JSON；以 crate ownership/semantic guards
+  禁止根 SCI、重复验证和旧 consumer route 回流。

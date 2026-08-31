@@ -1,0 +1,16 @@
+[package]
+name = "yss-sci-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+ndarray.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+statrs.workspace = true
+thiserror.workspace = true
+yss-sci = { path = "../yss-sci" }
+yss-sci-contract = { path = "../yss-sci-contract" }

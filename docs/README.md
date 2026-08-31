@@ -14,8 +14,7 @@ when they remain useful to the current architecture.
 ## Implementation notes
 
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
-- [SCI application module](../src-tauri/src/sci/README.md)
-- [SCI backend adapters](../src-tauri/src/sci/backends/README.md)
+- [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
 - [Julia Bayes worker protocol](../src-tauri/julia/README.md)
 
 ## Development

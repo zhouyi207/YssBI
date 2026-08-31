@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::sci::backends::rust;
+use crate::backends::rust;
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,5 +64,5 @@ fn normalized_lags(input: &SerialTestsInput) -> Result<usize, SciError> {
             violation: SciInputViolation::EmptyInput,
         });
     }
-    Ok(input.lags.min(n / 2 - 1).min(40).max(1))
+    Ok(input.lags.min(n / 2 - 1).clamp(1, 40))
 }

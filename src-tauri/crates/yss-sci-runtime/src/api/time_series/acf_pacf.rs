@@ -1,6 +1,6 @@
 //! ACF/PACF application API and Rust backend orchestration.
 
-use crate::sci::backends::rust;
+use crate::backends::rust;
 use serde::{Deserialize, Serialize};
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
@@ -36,5 +36,5 @@ fn command_max_lag(input: &AcfPacfInput) -> Result<usize, SciError> {
             violation: SciInputViolation::EmptyInput,
         });
     }
-    Ok(input.max_lag.min(n / 2 - 1).min(40).max(1))
+    Ok(input.max_lag.min(n / 2 - 1).clamp(1, 40))
 }

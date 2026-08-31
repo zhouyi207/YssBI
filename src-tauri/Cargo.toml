@@ -65,6 +65,7 @@ members = [
     "crates/yss-resource-naming",
     "crates/yss-sci",
     "crates/yss-sci-contract",
+    "crates/yss-sci-runtime",
     "crates/yss-sql-source",
     "crates/yss-tabular-contract",
     "crates/yss-tabular-io",
@@ -90,6 +91,7 @@ num-traits = "0.2.19"
 polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "ipc", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
 polars-arrow = { version = "0.53.0", default-features = false }
 polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
+rand = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10.9"
@@ -169,8 +171,8 @@ yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
-yss-sci = { path = "./crates/yss-sci" }
 yss-sci-contract = { path = "./crates/yss-sci-contract" }
+yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-sql-source = { path = "./crates/yss-sql-source" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tabular-io = { path = "./crates/yss-tabular-io" }
@@ -191,13 +193,11 @@ serde.workspace = true
 serde_json.workspace = true
 ndarray.workspace = true
 polars.workspace = true
-statrs.workspace = true
 chrono.workspace = true
 
 
 uuid.workspace = true
 thiserror.workspace = true
-rand = "0.10"
 duckdb.workspace = true
 unicode-normalization.workspace = true
 unicode-casefold.workspace = true

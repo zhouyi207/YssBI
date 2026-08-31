@@ -2,7 +2,7 @@ use yss_sci::stats::{
     Alternative as YssSciAlternative, t_test as yss_t_test, wald_test as yss_wald_test,
 };
 
-use crate::sci::api::stats::hypothesis::{
+use crate::api::stats::hypothesis::{
     Alternative, LinearHypothesisTestInput, TTestOutput, WaldTestOutput,
 };
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};

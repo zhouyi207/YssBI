@@ -431,13 +431,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_sci"
-                    && alias.member_package == "yss-sci"
+                    && alias.declared_name == "yss_sci_runtime"
+                    && alias.member_package == "yss-sci-runtime"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-sci"
+            && dependency.package_name == "yss-sci-runtime"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -1559,7 +1559,7 @@ fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]>
 
     if source_file.starts_with("src-tauri/src/graph/") {
         Some(PERSISTED_SYMBOLS)
-    } else if source_file.starts_with("src-tauri/src/sci/")
+    } else if source_file.starts_with("src-tauri/crates/yss-sci-runtime/src/")
         || source_file.starts_with("src-tauri/crates/yss-bayes-model/src/")
         || source_file.starts_with("src-tauri/crates/yss-bayes-result/src/")
         || source_file.starts_with("src-tauri/crates/yss-bayes-worker/src/")
@@ -1675,7 +1675,9 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
                     ..
                 } if repository_relative_declaration_file.starts_with("src-tauri/crates/yss-data-contract/src/")
                     && (dependency.source_file.starts_with("src-tauri/src/graph/")
-                        || (dependency.source_file.starts_with("src-tauri/src/sci/")
+                        || (dependency
+                            .source_file
+                            .starts_with("src-tauri/crates/yss-sci-runtime/src/")
                             && symbol == "CategoricalRole"))
             )
         })
@@ -7884,11 +7886,19 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
         );
     }
 
-    let api = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/sci/api/mod.rs"))
-        .expect("SCI API module must be readable");
+    assert!(
+        !facts.repository_root.join("src-tauri/src/sci").exists(),
+        "the removed root SCI facade must stay absent"
+    );
+    let api = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-runtime/src/api/mod.rs"),
+    )
+    .expect("SCI runtime API module must be readable");
     assert!(
         !api.contains("pub mod bayes"),
-        "the root SCI API must not restore an empty or test-only Bayes facade"
+        "the SCI runtime must not restore an empty or test-only Bayes facade"
     );
 
     let application = std::fs::read_to_string(
@@ -7942,6 +7952,196 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
         assert!(
             !command.contains(forbidden),
             "Bayes transport must not mirror removed input validation route {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation() {
+    const RUNTIME_SOURCES: &[&str] = &[
+        "src-tauri/crates/yss-sci-runtime/src/lib.rs",
+        "src-tauri/crates/yss-sci-runtime/src/engine.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/density.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/node_statistics.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/stats/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/stats/hypothesis.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/time_series/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/time_series/acf_pacf.rs",
+        "src-tauri/crates/yss-sci-runtime/src/api/time_series/serial_tests.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/stats/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/stats/hypothesis.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/acf_pacf.rs",
+        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/serial_tests.rs",
+        "src-tauri/crates/yss-sci-runtime/src/models/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/models/panel_did.rs",
+        "src-tauri/crates/yss-sci-runtime/src/models/regression.rs",
+    ];
+
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-sci-runtime/Cargo.toml",
+        "src-tauri/crates/yss-sci-runtime/README.md",
+        "src-tauri/crates/yss-sci-runtime/tests/time_series_acf_pacf_golden.rs",
+        "src-tauri/crates/yss-sci-runtime/tests/time_series_serial_tests_golden.rs",
+        "src-tauri/crates/yss-sci-runtime/tests/fixtures/time_series/acf_pacf/simple_exponential.json",
+        "src-tauri/crates/yss-sci-runtime/tests/fixtures/time_series/serial_tests/simple_residuals.json",
+        "src-tauri/crates/yss-sci-runtime/tests/fixtures/time_series/serial_tests/with_exog_bg.json",
+    ]
+    .into_iter()
+    .chain(RUNTIME_SOURCES.iter().copied())
+    {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "SCI runtime owner asset {relative} must exist"
+        );
+    }
+    for source in RUNTIME_SOURCES {
+        assert_eq!(
+            facts.classification.get(*source),
+            Some(&RustLayer::SciCore),
+            "SCI runtime owner {source} must remain in SCI Core"
+        );
+    }
+
+    for removed in [
+        "src-tauri/src/sci",
+        "src-tauri/tests/sci_api_time_series_acf_pacf_golden_test.rs",
+        "src-tauri/tests/sci_api_time_series_serial_tests_golden_test.rs",
+        "src-tauri/tests/sci/fixtures/time_series",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed).exists(),
+            "removed root SCI owner or fixture {removed} must stay absent"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-runtime/Cargo.toml"),
+    )
+    .expect("SCI runtime manifest must be readable");
+    for required_dependency in [
+        "ndarray.workspace = true",
+        "rand.workspace = true",
+        "serde.workspace = true",
+        "serde_json.workspace = true",
+        "statrs.workspace = true",
+        "thiserror.workspace = true",
+        "yss-sci = { path = \"../yss-sci\" }",
+        "yss-sci-contract = { path = \"../yss-sci-contract\" }",
+    ] {
+        assert!(
+            manifest.contains(required_dependency),
+            "SCI runtime manifest must declare {required_dependency}"
+        );
+    }
+    for forbidden_dependency in [
+        "tauri",
+        "yssbi",
+        "yss-project",
+        "yss-database",
+        "yss-execution",
+        "yss-julia",
+    ] {
+        assert!(
+            !manifest.contains(forbidden_dependency),
+            "SCI runtime must not depend on {forbidden_dependency}"
+        );
+    }
+
+    let root_manifest = std::fs::read_to_string(facts.repository_root.join("src-tauri/Cargo.toml"))
+        .expect("root Cargo manifest must be readable");
+    assert!(root_manifest.contains("\"crates/yss-sci-runtime\""));
+    assert!(root_manifest.contains("yss-sci-runtime = { path = \"./crates/yss-sci-runtime\" }"));
+    let root_dependencies = root_manifest
+        .split_once("[dependencies]")
+        .expect("root Cargo manifest must have dependencies")
+        .1
+        .split_once("[dev-dependencies]")
+        .expect("root Cargo manifest must have dev dependencies")
+        .0;
+    for removed_dependency in [
+        "\nyss-sci = ",
+        "\nrand.workspace = true",
+        "\nstatrs.workspace = true",
+    ] {
+        assert!(
+            !root_dependencies.contains(removed_dependency),
+            "root package must not restore direct SCI implementation dependency {removed_dependency}"
+        );
+    }
+
+    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
+        .expect("composition root must be readable");
+    assert!(
+        !root_lib.contains("pub mod sci"),
+        "composition root must not restore the SCI facade"
+    );
+    for consumer in [
+        "src-tauri/src/application/bayes.rs",
+        "src-tauri/src/application/hypothesis.rs",
+        "src-tauri/src/application/statistics.rs",
+        "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
+        "src-tauri/src/backend_adapters/execution/scientific.rs",
+        "src-tauri/src/commands/command_panel_did.rs",
+    ] {
+        let source = std::fs::read_to_string(facts.repository_root.join(consumer))
+            .expect("SCI runtime consumer must be readable");
+        assert!(
+            source.contains("yss_sci_runtime"),
+            "{consumer} must consume the canonical SCI runtime directly"
+        );
+        assert!(
+            !source.contains("crate::sci"),
+            "{consumer} must not restore the root SCI route"
+        );
+    }
+
+    let panel = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-runtime/src/models/panel_did.rs"),
+    )
+    .expect("Panel DID runtime source must be readable");
+    for required_fact in [
+        "pub enum DidFakeGroupError",
+        "Result<DidPlaceboFakeGroupBlock, DidFakeGroupError>",
+        ".collect::<BTreeSet<_>>()",
+        "fn sparse_entity_ids_do_not_create_phantom_entities()",
+    ] {
+        assert!(
+            panel.contains(required_fact),
+            "Panel DID must retain the single validated runtime fact {required_fact}"
+        );
+    }
+    for forbidden_fact in [
+        "Result<DidPlaceboFakeGroupBlock, String>",
+        ".max().unwrap() + 1",
+    ] {
+        assert!(
+            !panel.contains(forbidden_fact),
+            "Panel DID must not restore duplicate or sparse-ID-invalid logic {forbidden_fact}"
+        );
+    }
+
+    let node_statistics = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-runtime/src/api/node_statistics.rs"),
+    )
+    .expect("node statistics runtime source must be readable");
+    let production_node_statistics = node_statistics
+        .split_once("#[cfg(test)]")
+        .map_or(node_statistics.as_str(), |(production, _)| production);
+    for forbidden_panic in [".expect(", ".unwrap(", "unreachable!(", "panic!("] {
+        assert!(
+            !production_node_statistics.contains(forbidden_panic),
+            "regression report production code must propagate failures instead of using {forbidden_panic}"
         );
     }
 }
@@ -8158,7 +8358,7 @@ fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources(
     }
 
     let fixture = SourceFixture::new();
-    fixture.write("src-tauri/src/lib.rs", "pub mod graph;\npub mod sci;\n");
+    fixture.write("src-tauri/src/lib.rs", "pub mod graph;\n");
     fixture.write("src-tauri/src/graph/mod.rs", "pub mod value;\n");
     fixture.write("src-tauri/src/graph/value/mod.rs", "mod aliases;\n");
     fixture.write(
@@ -8175,10 +8375,16 @@ pub type PersistedDummyInfo = yss_data_contract::DummyInfo;
 pub type TestOnlyAlias = yss_data_contract::DataType;
 "#,
     );
-    fixture.write("src-tauri/src/sci/mod.rs", "pub mod api;\n");
-    fixture.write("src-tauri/src/sci/api/mod.rs", "pub mod computation;\n");
     fixture.write(
-        "src-tauri/src/sci/api/computation.rs",
+        "src-tauri/crates/yss-sci-runtime/src/lib.rs",
+        "pub mod api;\n",
+    );
+    fixture.write(
+        "src-tauri/crates/yss-sci-runtime/src/api/mod.rs",
+        "pub mod computation;\n",
+    );
+    fixture.write(
+        "src-tauri/crates/yss-sci-runtime/src/api/computation.rs",
         r#"
 pub enum CategoricalRole {
     Individual,
@@ -8189,13 +8395,24 @@ pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
     );
     let modules = collect_production_modules(
         &fixture.root,
-        &[ProductionRoot {
-            package_id: "fixture-package".to_owned(),
-            package: "fixture".to_owned(),
-            target: "fixture_lib".to_owned(),
-            kind: ProductionRootKind::Library,
-            source_path: fixture.root.join("src-tauri/src/lib.rs"),
-        }],
+        &[
+            ProductionRoot {
+                package_id: "fixture-package".to_owned(),
+                package: "fixture".to_owned(),
+                target: "fixture_lib".to_owned(),
+                kind: ProductionRootKind::Library,
+                source_path: fixture.root.join("src-tauri/src/lib.rs"),
+            },
+            ProductionRoot {
+                package_id: "fixture-sci-runtime-package".to_owned(),
+                package: "yss-sci-runtime".to_owned(),
+                target: "yss_sci_runtime".to_owned(),
+                kind: ProductionRootKind::Library,
+                source_path: fixture
+                    .root
+                    .join("src-tauri/crates/yss-sci-runtime/src/lib.rs"),
+            },
+        ],
     )
     .expect("real alias fixture modules must be discovered");
     let aliases = forbidden_persisted_contract_type_aliases(&fixture.root, &modules)
@@ -8207,13 +8424,13 @@ pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
     assert_eq!(
         aliases,
         vec![
+            "src-tauri/crates/yss-sci-runtime/src/api/computation.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
             "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|yss_data_contract::DataSeriesValue",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataType|yss_data_contract::DataType",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|yss_data_contract::DataValue",
             "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|yss_data_contract::DummyInfo",
             "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|yss_data_contract::TimeSeriesState",
-            "src-tauri/src/sci/api/computation.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
         ]
     );
 }

@@ -10,7 +10,6 @@ pub mod event;
 
 pub mod project;
 mod schema;
-pub mod sci;
 
 #[cfg(test)]
 mod test_support;
