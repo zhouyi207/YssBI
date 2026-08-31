@@ -1,10 +1,21 @@
-//! DuckDB table storage, engine primitives, physical profiling, and export.
+//! DuckDB table storage, transactional editing, physical profiling, and export.
 
+mod column_snapshot;
+mod edit;
 mod export;
 mod profile;
 mod sql;
 mod table;
 
+pub use column_snapshot::{
+    DuckDbColumnSnapshot, MAX_DELETE_COLUMN_SNAPSHOT_BYTES, MAX_DELETE_COLUMN_SNAPSHOT_ROWS,
+    delete_column_with_snapshot,
+};
+pub use edit::{
+    MAX_GET_DATAFRAME_ROWS, MAX_IN_MEMORY_EDIT_ROWS, add_row_with_operation, apply_edit_on_duckdb,
+    delete_rows_with_operations, edit_cell_with_operation, refresh_duckdb_meta,
+    reverse_edit_on_duckdb, should_use_in_memory_editing,
+};
 pub use export::{DuckDbExportError, DuckDbExportPhase, export_duckdb_table};
 pub use profile::{
     DatasetProfileColumnRef, compute_all_column_distributions, compute_all_column_stats,

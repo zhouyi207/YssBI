@@ -771,3 +771,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   DataFrame apply/reverse/cast 迁入现有 `yss-tabular-polars::edit` adapter，使 DuckDB 与 Loaded state 复用同一
   operation model，同时下沉 root package 不再直接使用的 `polars-dtype` 依赖，并删除零调用的
   `EditOperation` serde wire compatibility，只保留实际跨 IPC 的 `EditState` camelCase projection。
+- [ ] 将根 `database/duckdb_editing.rs` 与 `duckdb_column_snapshot.rs` 整体迁入现有 `yss-duckdb` engine
+  crate；让根 `DatabaseInstance` 仅调用 typed operation API，不再自行打开 DuckDB edit connection，并使
+  cell/add-row/delete-rows/apply/reverse 全部在 engine transaction 中完成；同时修复未排序 `indices` 与
+  `rowIds` 配对漂移、多行删除中途失败产生半提交、add-row reverse 已命中 null row 时仍提前求值 index
+  fallback，以及 update 未命中 rowid 却静默成功的问题。
+- [ ] 修复 DuckDB cell edit 将大于 `i64::MAX` 的 JSON unsigned integer 经 `f64` 中转而丢失精度的问题；
+  SQL numeric literal 直接使用 `serde_json::Number` 的规范十进制表示，并用 `u64::MAX -> UBIGINT` 回归测试
+  锁定无损语义。

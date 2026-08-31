@@ -301,6 +301,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-duckdb",
         mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-duckdb",
+        mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
         target_condition: None,
     },

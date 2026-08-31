@@ -9170,8 +9170,10 @@ dependencies = [
  "polars",
  "polars-arrow",
  "polars-dtype",
+ "serde_json",
  "thiserror 2.0.20",
  "yss-database-contract",
+ "yss-database-edit",
  "yss-dataset-profile",
  "yss-tabular-io",
 ]

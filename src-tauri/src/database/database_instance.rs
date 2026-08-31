@@ -3,11 +3,6 @@ use super::error::DatabaseExportError;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
 use yss_database_edit::{EditHistory, EditOperation, EditState};
 
-use super::{
-    apply_edit_on_duckdb, delete_column_with_snapshot, fetch_cell_json, fetch_row_json,
-    refresh_duckdb_meta, resolve_row_id_by_index, resolve_row_ids_by_indices,
-    reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row,
-};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
@@ -17,12 +12,15 @@ use yss_dataset_profile::{
     compute_all_column_stats, compute_dataset_overview,
 };
 use yss_duckdb::{
-    DatasetProfileColumnRef, DuckDbColumnMeta, PageQueryResult,
+    DatasetProfileColumnRef, DuckDbColumnMeta, PageQueryResult, add_row_with_operation,
+    apply_edit_on_duckdb,
     compute_all_column_distributions as compute_all_column_distributions_duckdb,
     compute_all_column_stats as compute_all_column_stats_duckdb,
-    compute_dataset_overview as compute_dataset_overview_duckdb, duckdb_table_sql,
-    export_duckdb_table, ingest_dataframe_to_duckdb, query_columns_to_dataframe,
-    query_page_with_rowids, query_to_dataframe_for_table, write_display_name,
+    compute_dataset_overview as compute_dataset_overview_duckdb, delete_column_with_snapshot,
+    delete_rows_with_operations, duckdb_table_sql, edit_cell_with_operation, export_duckdb_table,
+    ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_with_rowids,
+    query_to_dataframe_for_table, refresh_duckdb_meta, reverse_edit_on_duckdb,
+    should_use_in_memory_editing, write_display_name,
 };
 use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 use yss_tabular_polars::{
@@ -273,22 +271,9 @@ impl DatabaseInstance {
         {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
-            let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
-            let rid = match row_id {
-                Some(id) => id,
-                None => resolve_row_id_by_index(&conn, &table_name, row)?,
-            };
-            let old_value = fetch_cell_json(&conn, &table_name, rid, col_name)?;
-            drop(conn);
-            let mut op = EditOperation::EditCell {
-                row,
-                row_id: Some(rid),
-                col: col_name.to_string(),
-                old_value,
-                new_value,
-            };
-            apply_edit_on_duckdb(&path, &table_name, &mut op)?;
-            history.push(op);
+            let operation =
+                edit_cell_with_operation(&path, &table_name, row, row_id, col_name, new_value)?;
+            history.push(operation);
             return Ok(history.state());
         }
 
@@ -334,15 +319,9 @@ impl DatabaseInstance {
         {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
-            let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
             let idx = index.unwrap_or(*row_count);
-            let new_id = sql_add_row(&conn, &table_name)?;
-            drop(conn);
-            let op = EditOperation::AddRow {
-                index: idx,
-                row_id: Some(new_id),
-            };
-            history.push(op);
+            let operation = add_row_with_operation(&path, &table_name, idx)?;
+            history.push(operation);
             *row_count += 1;
             return Ok(history.state());
         }
@@ -383,36 +362,12 @@ impl DatabaseInstance {
         {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
-            let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
-
-            let mut sorted_indices = indices.to_vec();
-            sorted_indices.sort_unstable();
-            sorted_indices.dedup();
-
-            let ids: Vec<i64> = if let Some(ids) = row_ids {
-                if ids.len() != sorted_indices.len() {
-                    return Err("rowIds length must match indices".into());
-                }
-                ids.to_vec()
-            } else {
-                resolve_row_ids_by_indices(&conn, &table_name, &sorted_indices)?
-            };
-
-            let mut ops = Vec::with_capacity(sorted_indices.len());
-            for (&idx, &rid) in sorted_indices.iter().zip(ids.iter()) {
-                let data = fetch_row_json(&conn, &table_name, rid)?;
-                ops.push(EditOperation::DeleteRow {
-                    index: idx,
-                    row_id: Some(rid),
-                    data,
-                });
+            let operations = delete_rows_with_operations(&path, &table_name, indices, row_ids)?;
+            let deleted_count = operations.len();
+            for operation in operations {
+                history.push(operation);
             }
-            drop(conn);
-            for mut op in ops {
-                apply_edit_on_duckdb(&path, &table_name, &mut op)?;
-                history.push(op);
-            }
-            *row_count = row_count.saturating_sub(sorted_indices.len());
+            *row_count = row_count.saturating_sub(deleted_count);
             return Ok(history.state());
         }
 

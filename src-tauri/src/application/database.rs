@@ -39,8 +39,8 @@ use yss_database_contract::{
 use yss_database_edit::EditState;
 use yss_display_naming::allocate_unique_display_name;
 use yss_duckdb::{
-    DuckDbTableMeta, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
-    ingest_parquet_to_duckdb, write_display_name,
+    DuckDbTableMeta, MAX_GET_DATAFRAME_ROWS, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
+    ingest_excel_to_duckdb, ingest_parquet_to_duckdb, write_display_name,
 };
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -419,13 +419,13 @@ impl ApplicationState {
         limit: usize,
     ) -> Result<DatabaseRowsResult, ApplicationDatabaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
-        if limit > crate::database::MAX_GET_DATAFRAME_ROWS {
+        if limit > MAX_GET_DATAFRAME_ROWS {
             return Err(ApplicationDatabaseError::Database(
                 DatabaseApplicationError::RowLimitExceeded {
                     database_id: id,
                     operation: DatabaseApplicationOperation::ReadRows,
                     requested_rows: limit,
-                    max_rows: crate::database::MAX_GET_DATAFRAME_ROWS,
+                    max_rows: MAX_GET_DATAFRAME_ROWS,
                 },
             ));
         }

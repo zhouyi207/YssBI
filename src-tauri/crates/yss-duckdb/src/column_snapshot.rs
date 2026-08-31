@@ -3,7 +3,7 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use yss_duckdb::{
+use crate::{
     DUCKDB_ROWID_SQL, duckdb_table_sql, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
     quote_duckdb_string_literal,
 };

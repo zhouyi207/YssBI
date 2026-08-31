@@ -2,8 +2,9 @@
 
 `src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
 `DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
-history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast。`src-tauri/src/database/`
-owns `DatabaseInstance` semantics、DuckDB runtime binding、schema metadata 与 query/edit orchestration。
+history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast；`yss-duckdb` owns
+transactional SQL edit/reverse 与 bounded column snapshot。`src-tauri/src/database/` owns
+`DatabaseInstance` state routing、session authority、schema metadata 与 query/edit orchestration。
 Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
 
@@ -78,7 +79,7 @@ Snapshot 保存：
 
 Cast operation 也在 `EditOperation::CastColumn` 中保存 `old_dtype`。In-memory reverse path 使用 `old_dtype + old_data` 重建原列；DuckDB reverse path 将 column cast 回保存的 dtype。
 
-共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，不保留未使用的 serde wire；实际跨 IPC 的 `EditState` 保持 strict camelCase。Polars 路径由 `yss-tabular-polars::edit` 实现，DuckDB SQL 路径由 engine adapter 消费同一 operation。
+共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，不保留未使用的 serde wire；实际跨 IPC 的 `EditState` 保持 strict camelCase。Polars 路径由 `yss-tabular-polars::edit` 实现；DuckDB 路径由 `yss-duckdb::edit` 在 transaction 中构造、apply/reverse 同一 operation。多行删除先保持调用方 `(index, rowid)` 配对再排序，任一 SQL 失败都会回滚整批；add-row reverse 的已找到 rowid 不再提前求值 index fallback。
 
 ## 4. Identifier 与 checked conversion
 
@@ -145,10 +146,10 @@ DuckDB overview 仍准确提供：
 | `project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
 | `schema_snapshot.rs` | DuckDB/Polars metadata 到 Database-owned `DatabaseSchemaFact`/`DataType` 的 normalization |
 | `../schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
-| `duckdb_editing.rs` | Incremental SQL edit/undo helpers |
-| `duckdb_column_snapshot.rs` | Bounded reversible delete-column snapshot |
 | `../../crates/yss-database-edit/` | EditOperation、EditHistory 与 EditState |
 | `../../crates/yss-tabular-polars/src/edit.rs` | checked JSON/Polars edit apply、reverse 与 cast |
+| `../../crates/yss-duckdb/src/edit.rs` | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits |
+| `../../crates/yss-duckdb/src/column_snapshot.rs` | Bounded reversible delete-column snapshot |
 | `../../crates/yss-duckdb/src/table.rs` | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query |
 | `../../crates/yss-duckdb/src/profile.rs` | DuckDB physical stats/distribution/overview SQL |
 | `../../crates/yss-duckdb/src/sql.rs` | Identifier/literal quoting 与 editable dtype allowlist |

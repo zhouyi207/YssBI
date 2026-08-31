@@ -2240,10 +2240,12 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
 }
 
 #[test]
-fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facades() {
+fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_facades() {
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-duckdb/Cargo.toml",
+        "src-tauri/crates/yss-duckdb/src/column_snapshot.rs",
+        "src-tauri/crates/yss-duckdb/src/edit.rs",
         "src-tauri/crates/yss-duckdb/src/export.rs",
         "src-tauri/crates/yss-duckdb/src/lib.rs",
         "src-tauri/crates/yss-duckdb/src/profile.rs",
@@ -2257,6 +2259,8 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
     }
     for removed_owner in [
         "src-tauri/src/database/duckdb_analytics.rs",
+        "src-tauri/src/database/duckdb_column_snapshot.rs",
+        "src-tauri/src/database/duckdb_editing.rs",
         "src-tauri/src/database/duckdb_reader.rs",
         "src-tauri/src/database/duckdb_sql.rs",
         "src-tauri/src/database/export.rs",
@@ -2287,8 +2291,10 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
         "polars.workspace = true",
         "polars-arrow.workspace = true",
         "polars-dtype.workspace = true",
+        "serde_json.workspace = true",
         "thiserror.workspace = true",
         "yss-database-contract = { path = \"../yss-database-contract\" }",
+        "yss-database-edit = { path = \"../yss-database-edit\" }",
         "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
         "yss-tabular-io = { path = \"../yss-tabular-io\" }",
     ] {
@@ -2307,16 +2313,25 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
         "DuckDbExportPhase",
         "DuckDbTableMeta",
         "INGEST_CHUNK_ROWS",
+        "MAX_DELETE_COLUMN_SNAPSHOT_ROWS",
+        "MAX_GET_DATAFRAME_ROWS",
+        "MAX_IN_MEMORY_EDIT_ROWS",
         "PageQueryResult",
+        "add_row_with_operation",
+        "apply_edit_on_duckdb",
         "compute_all_column_distributions",
         "compute_all_column_stats",
         "compute_dataset_overview",
+        "delete_column_with_snapshot",
+        "delete_rows_with_operations",
         "duckdb_table_sql",
+        "edit_cell_with_operation",
         "editable_dtype_to_duckdb_sql",
         "export_duckdb_table",
         "ingest_dataframe_to_duckdb",
         "query_page_with_rowids",
         "read_table_meta",
+        "reverse_edit_on_duckdb",
         "quote_duckdb_identifier",
         "quote_duckdb_string_literal",
     ] {
@@ -2325,6 +2340,59 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
             "the DuckDB engine crate must export {owned_api}"
         );
     }
+
+    let edit = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/edit.rs"))
+        .expect("the DuckDB edit owner must be readable");
+    for invariant in [
+        "pub fn edit_cell_with_operation",
+        "pub fn add_row_with_operation",
+        "pub fn delete_rows_with_operations",
+        "fn apply_edit_on_connection",
+        "Failed to start row-delete transaction",
+        "match resolve_all_null_row_id(conn, table)?",
+        "delete_rows_keeps_unsorted_indices_paired_with_their_row_ids",
+        "multi_row_delete_rolls_back_when_a_later_delete_fails",
+        "failed_edit_restores_the_operation_and_leaves_the_table_unchanged",
+        "edit_cell_preserves_the_full_unsigned_json_integer",
+    ] {
+        assert!(
+            edit.contains(invariant),
+            "the DuckDB edit owner must preserve invariant {invariant}"
+        );
+    }
+    for forbidden in [
+        "yss_duckdb::",
+        "crate::database",
+        ".unwrap_or(resolve_row_id_by_index",
+        "yssbi_lib",
+    ] {
+        assert!(
+            !edit.contains(forbidden),
+            "the DuckDB edit owner must not depend on {forbidden}"
+        );
+    }
+
+    let column_snapshot =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/column_snapshot.rs"))
+            .expect("the DuckDB delete-column snapshot owner must be readable");
+    for invariant in [
+        "pub struct DuckDbColumnSnapshot",
+        "pub fn delete_column_with_snapshot",
+        "pub fn restore_deleted_column",
+        "MAX_DELETE_COLUMN_SNAPSHOT_BYTES",
+        "current_row_fingerprints",
+    ] {
+        assert!(
+            column_snapshot.contains(invariant),
+            "the DuckDB column snapshot owner must preserve invariant {invariant}"
+        );
+    }
+    assert!(
+        !column_snapshot.contains("yss_duckdb::")
+            && !column_snapshot.contains("crate::database")
+            && !column_snapshot.contains("yssbi_lib"),
+        "the DuckDB column snapshot owner must not depend on root compatibility paths"
+    );
     let export = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/export.rs"))
         .expect("the DuckDB export owner must be readable");
     for invariant in [
@@ -2390,6 +2458,8 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
         .expect("the root database module must be readable");
     assert!(
         !root_database.contains("duckdb_analytics")
+            && !root_database.contains("duckdb_column_snapshot")
+            && !root_database.contains("duckdb_editing")
             && !root_database.contains("duckdb_reader")
             && !root_database.contains("duckdb_sql")
             && !root_database.contains("mod export")
@@ -2399,8 +2469,6 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
     );
     for relative in [
         "src-tauri/src/database/database_instance.rs",
-        "src-tauri/src/database/duckdb_column_snapshot.rs",
-        "src-tauri/src/database/duckdb_editing.rs",
         "src-tauri/src/database/database_state.rs",
         "src-tauri/src/database/project_storage.rs",
         "src-tauri/src/database/schema_snapshot.rs",
@@ -2424,8 +2492,12 @@ fn duckdb_engine_crate_owns_table_storage_profiles_and_export_without_root_facad
     assert!(
         database_instance.contains("DatasetProfileColumnRef::new")
             && database_instance.contains("fn duckdb_profile_columns")
-            && database_instance.contains("export_duckdb_table"),
-        "the root runtime must map cached metadata through the borrowed adapter input"
+            && database_instance.contains("export_duckdb_table")
+            && database_instance.contains("edit_cell_with_operation")
+            && database_instance.contains("add_row_with_operation")
+            && database_instance.contains("delete_rows_with_operations")
+            && !database_instance.contains("duckdb::Connection"),
+        "the root runtime must compose typed DuckDB APIs without owning engine connections"
     );
 
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))

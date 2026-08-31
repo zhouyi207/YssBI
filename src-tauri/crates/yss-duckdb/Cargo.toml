@@ -10,7 +10,9 @@ duckdb.workspace = true
 polars.workspace = true
 polars-arrow.workspace = true
 polars-dtype.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
+yss-database-edit = { path = "../yss-database-edit" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-tabular-io = { path = "../yss-tabular-io" }
