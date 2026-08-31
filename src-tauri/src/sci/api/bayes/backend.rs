@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use polars::prelude::DataFrame;
 
-use crate::sci::api::bayes::{BayesModelSpec, InferenceResult, TaskErrorDetails, TaskProgress};
+use super::{InferenceResult, TaskErrorDetails, TaskProgress};
+use yss_bayes_model::BayesModelSpec;
 
 pub type BayesProgressCallback = Arc<dyn Fn(TaskProgress) + Send + Sync>;
 
@@ -107,7 +108,7 @@ impl BayesBackend for PlaceholderBayesBackend {
 #[cfg(test)]
 mod tests {
     use super::{BayesBackend, BayesBackendRequest, PlaceholderBayesBackend};
-    use crate::sci::api::bayes::BayesModelSpec;
+    use yss_bayes_model::BayesModelSpec;
 
     fn spec() -> BayesModelSpec {
         serde_json::from_value(serde_json::json!({

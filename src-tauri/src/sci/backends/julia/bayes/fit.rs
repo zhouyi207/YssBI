@@ -8,9 +8,10 @@ use serde_json::json;
 use super::predictor::compile_predictor;
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesDataExchangeManifest,
-    BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
-    ResultArtifactKind, ResultArtifactOwner, TaskErrorDetails, TaskProgress,
+    BayesExchangeColumn, BayesProgressCallback, InferenceResult, ResultArtifactKind,
+    ResultArtifactOwner, TaskErrorDetails, TaskProgress,
 };
+use yss_bayes_model::BayesModelSpec;
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerProgress,
     JuliaWorkerProgressCallback, JuliaWorkerTask, JuliaWorkerTaskDirectory,

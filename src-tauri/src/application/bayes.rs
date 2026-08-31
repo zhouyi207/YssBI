@@ -14,10 +14,9 @@ use crate::sci::api::bayes::worker::{
     ValidatedBayesTask, validate_bayes_task,
 };
 use crate::sci::api::bayes::{
-    AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, BayesModelSpec,
-    DatasetSourceType, DensityPlotData, InferenceResult, PosteriorPredictivePage,
-    PosteriorSamplePage, ResultArtifactKind, TaskError, TaskErrorDetails, TaskProgress, TaskStatus,
-    TracePlotData, draft_to_model_spec,
+    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
+    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifactKind, TaskError, TaskErrorDetails,
+    TaskProgress, TaskStatus, TracePlotData,
 };
 #[cfg(test)]
 use crate::sci::api::bayes::{
@@ -30,6 +29,7 @@ use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesInputValidationError,
     BayesProgressCallback, PlaceholderBayesBackend, validate_bayes_input_table,
 };
+use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
@@ -1835,11 +1835,14 @@ mod tests {
     use yss_tracing::LogLayer;
 
     use crate::sci::api::bayes::{
-        BayesBackend, BayesBackendError, BayesBackendRequest, BayesModelDraft, BinaryOp,
-        ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, Expression, InferenceConfig,
-        InferenceResult, LikelihoodSpec, ParameterConstraint, ParameterRef, ParameterSpec,
-        PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding, ResultArtifactOwner,
-        SamplerAlgorithm, SymbolDraft, SymbolRole, TaskErrorDetails,
+        BayesBackend, BayesBackendError, BayesBackendRequest, InferenceResult, ResultArtifactOwner,
+        TaskErrorDetails,
+    };
+    use yss_bayes_model::{
+        BayesModelDraft, BinaryOp, ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType,
+        Expression, InferenceConfig, LikelihoodSpec, ParameterConstraint, ParameterRef,
+        ParameterSpec, PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding,
+        SamplerAlgorithm, SymbolDraft, SymbolRole,
     };
 
     use super::{
@@ -1979,7 +1982,7 @@ mod tests {
         BayesModelDraft {
             formula_text: "y \\sim \\operatorname{Normal}\\left(a * x + b, \\sigma\\right)"
                 .to_string(),
-            raw_response: crate::sci::api::bayes::RawExpression::Symbol {
+            raw_response: yss_bayes_model::RawExpression::Symbol {
                 name: "y".to_string(),
             },
             bound_response: Some(Expression::DataVariable {

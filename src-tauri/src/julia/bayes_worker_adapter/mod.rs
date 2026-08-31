@@ -492,11 +492,11 @@ mod tests {
     use super::{
         JuliaBayesRuntime, JuliaBayesWorkerAdapter, JuliaTaskCompletion, PreparedJuliaTask,
     };
-    use crate::sci::api::bayes::BayesModelSpec;
     use crate::sci::api::bayes::worker::{
         ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId,
         BayesWorkerError, BayesWorkerPort, ValidatedBayesTask,
     };
+    use yss_bayes_model::BayesModelSpec;
     use yss_julia_worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
     use yss_sci_contract::{
         AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,

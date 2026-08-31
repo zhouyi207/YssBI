@@ -339,10 +339,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yssbi_lib::sci::api::bayes::contract::InferenceDiagnostics",
             "yssbi_lib::sci::api::bayes::contract::ParameterSummary",
-            "yssbi_lib::sci::api::bayes::model::Expression",
-            "yssbi_lib::sci::api::bayes::model::InferenceConfig",
-            "yssbi_lib::sci::api::bayes::model::LikelihoodSpec",
-            "yssbi_lib::sci::api::bayes::model::ParameterSpec",
             "yssbi_lib::sci::api::bayes::worker::ArtifactId",
             "yssbi_lib::sci::api::bayes::worker::BayesArtifactHandle",
             "yssbi_lib::sci::api::bayes::worker::BayesArtifactMediaType",
@@ -352,19 +348,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerError",
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerTerminalCode::Failed",
             "yssbi_lib::sci::api::bayes::worker::ValidatedBayesTask",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
-        fully_qualified_owner: "yssbi_lib::julia::bayes_worker_adapter::predictor",
-        canonical_origin_targets: &[
-            "yssbi_lib::sci::api::bayes::model::BayesModelSpec",
-            "yssbi_lib::sci::api::bayes::model::BinaryOp",
-            "yssbi_lib::sci::api::bayes::model::Expression",
-            "yssbi_lib::sci::api::bayes::model::LikelihoodSpec",
-            "yssbi_lib::sci::api::bayes::model::MathFunction",
-            "yssbi_lib::sci::api::bayes::model::UnaryOp",
         ],
     },
     InternalDependencyCapability {
@@ -429,10 +412,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::bayes::BayesInferenceService",
             "yssbi_lib::application::execution::session_slot::ApplicationState",
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::sci::api::bayes::draft::BayesModelDraft",
-            "yssbi_lib::sci::api::bayes::draft::ColumnMeta",
-            "yssbi_lib::sci::api::bayes::expression::ParsedExpression",
-            "yssbi_lib::sci::api::bayes::expression::parse_model_expression",
             "yssbi_lib::sci::api::bayes::result::AutocorrelationPlotData",
             "yssbi_lib::sci::api::bayes::result::BayesInferenceTask",
             "yssbi_lib::sci::api::bayes::result::DensityPlotData",
@@ -445,8 +424,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::sci::api::bayes::result::TaskProgress",
             "yssbi_lib::sci::api::bayes::result::TaskStatus",
             "yssbi_lib::sci::api::bayes::result::TracePlotData",
-            "yssbi_lib::sci::api::bayes::validation::ValidationReport",
-            "yssbi_lib::sci::api::bayes::validators::validate_draft",
         ],
     },
     InternalDependencyCapability {
@@ -1646,7 +1623,8 @@ fn non_build_memberships(
     let exact_layer = exact_source_layer(source_file);
     if matches!(
         package,
-        "yss-canonical-hash"
+        "yss-bayes-model"
+            | "yss-canonical-hash"
             | "yss-computation-settings"
             | "yss-data-contract"
             | "yss-database-contract"

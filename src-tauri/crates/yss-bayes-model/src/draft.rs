@@ -1,3 +1,5 @@
+//! Mutable transport-facing Bayesian model drafts.
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

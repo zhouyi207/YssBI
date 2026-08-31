@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use yssbi_lib::sci::api::bayes::{BayesModelDraft, validate_draft};
+use yss_bayes_model::{BayesModelDraft, validate_draft};
 
 const INVALID_FIXTURES: &[(&str, &str)] = &[
     (
@@ -47,7 +47,8 @@ fn invalid_bayes_model_fixtures_report_expected_errors() {
             .unwrap_or_else(|error| panic!("invalid fixture {fixture_id}: {error}"));
         let report = validate_draft(&fixture.draft);
         assert_eq!(
-            report.ok, fixture.expected.ok,
+            report.is_ok(),
+            fixture.expected.ok,
             "unexpected validation ok for {}",
             fixture.name
         );
@@ -55,14 +56,14 @@ fn invalid_bayes_model_fixtures_report_expected_errors() {
         for expected in &fixture.expected.errors {
             assert!(
                 report
-                    .errors
+                    .errors()
                     .iter()
                     .any(|issue| { issue.code == expected.code && issue.path == expected.path }),
                 "fixture {} expected error {} at {}, got {:?}",
                 fixture.name,
                 expected.code,
                 expected.path,
-                report.errors
+                report.errors()
             );
         }
     }

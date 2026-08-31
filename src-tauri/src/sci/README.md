@@ -1,15 +1,16 @@
 # SCI application module
 
-`src-tauri/src/sci/` 是主应用科学计算 interface，不是独立算法 crate。它位于 command/application/node runtime 与具体计算 implementation 之间：
+`src-tauri/src/sci/` 是尚待迁移的主应用科学计算 runtime interface，不是独立算法或 Bayes model crate。当前调用方向是：
 
 ```text
 commands / application / node_system kernels
-  → sci::api typed interface
+  → yss-bayes-model draft/parser/validated spec
+  → sci::api remaining runtime/result interface
   → sci::backends adapter
   → yss-sci Rust algorithms or Julia Bayes worker
 ```
 
-这个 seam 集中输入规范化、typed output、backend dispatch 与 error mapping，避免调用方直接依赖 `yss_sci` 深层路径或 Julia protocol。较小 interface 隐藏 backend 细节，提供 depth、leverage 和 locality。
+`yss-bayes-model` 是 Pure Leaf，唯一拥有 Bayes draft、表达式解析、校验与不可变 spec 构造；commands、Application、worker validation 和 Julia adapter 直接依赖它，不经过根 facade。其余 runtime seam 集中 typed output、backend dispatch 与 error mapping，避免调用方依赖 Julia protocol。
 
 ## Ownership
 
@@ -18,9 +19,11 @@ commands / application / node_system kernels
 - application-facing scientific request/result types；
 - ACF/PACF、serial tests、hypothesis 和 node statistics interface；
 - typed regression models/statistics；
-- Bayes model/draft/validation/result 与 `BayesWorkerPort` interface；
+- Bayes result 与 `BayesWorkerPort` interface；
 - Rust/Julia adapters；Julia worker adapter 位于 `julia/bayes_worker_adapter`；
-- stable `SciError` mapping。
+
+Bayes model/draft/parser/validation 由 `yss-bayes-model` 拥有；shared statistical
+input/settings/control 与 stable `SciError` 由 `yss-sci-contract` 拥有。
 
 本 module 不拥有：
 
@@ -37,7 +40,7 @@ commands / application / node_system kernels
 ```text
 sci/
 ├─ api/
-│  ├─ bayes/
+│  ├─ bayes/ (remaining result/worker runtime contracts)
 │  ├─ density.rs
 │  ├─ node_statistics.rs
 │  ├─ stats/hypothesis.rs
@@ -45,8 +48,7 @@ sci/
 ├─ backends/
 │  └─ rust/
 ├─ models/{regression,panel_did}.rs
-├─ engine.rs
-└─ error.rs
+└─ engine.rs
 ```
 
 The concrete Julia worker adapter is composition-side at
@@ -81,6 +83,7 @@ Each variant combines `RegressionCoefficientStatistics`—including the authorit
 ## Error contract
 
 - Rust adapters map algorithm validation failures to `SciError` stable codes.
+- `ValidationReport.ok` is derived from its private error set; draft-to-spec conversion fails closed without production `expect` branches.
 - Julia worker errors are classified by typed `JuliaWorkerErrorCode`, not by parsing diagnostic prose.
 - `JuliaBayesWorkerAdapter` maps worker categories to stable Bayes codes and copies only safe structured details.
 - Commands convert these errors to the project-wide `{ code, details, incidentId }` wire; backend prose stays diagnostic-only.

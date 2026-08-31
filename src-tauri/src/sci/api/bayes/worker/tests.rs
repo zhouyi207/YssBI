@@ -12,7 +12,7 @@ use super::{
     ValidatedBayesTask,
 };
 use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
-use crate::sci::api::bayes::{BayesModelSpec, Expression};
+use yss_bayes_model::{BayesModelSpec, Expression};
 use yss_sci_contract::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
     StatisticalInput, StatisticalScalar,

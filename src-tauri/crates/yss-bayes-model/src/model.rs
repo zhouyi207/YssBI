@@ -1,3 +1,5 @@
+//! Immutable Bayesian model specifications.
+
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -185,26 +187,28 @@ pub enum SamplerAlgorithm {
     Nuts,
 }
 
+pub(super) struct ValidatedModelParts {
+    pub dataset: DatasetRef,
+    pub response: ResponseSpec,
+    pub predictor: Expression,
+    pub data_variables: BTreeMap<String, String>,
+    pub likelihood: LikelihoodSpec,
+    pub parameters: Vec<ParameterSpec>,
+    pub sampler: InferenceConfig,
+    pub display_formula: String,
+}
+
 impl BayesModelSpec {
-    pub(super) fn from_validated_parts(
-        dataset: DatasetRef,
-        response: ResponseSpec,
-        predictor: Expression,
-        data_variables: BTreeMap<String, String>,
-        likelihood: LikelihoodSpec,
-        parameters: Vec<ParameterSpec>,
-        sampler: InferenceConfig,
-        display_formula: String,
-    ) -> Self {
+    pub(super) fn from_validated_parts(parts: ValidatedModelParts) -> Self {
         Self {
-            dataset,
-            response,
-            predictor,
-            data_variables,
-            likelihood,
-            parameters,
-            sampler,
-            display_formula,
+            dataset: parts.dataset,
+            response: parts.response,
+            predictor: parts.predictor,
+            data_variables: parts.data_variables,
+            likelihood: parts.likelihood,
+            parameters: parts.parameters,
+            sampler: parts.sampler,
+            display_formula: parts.display_formula,
         }
     }
 
@@ -228,22 +232,22 @@ impl BayesModelSpec {
         &self.sampler
     }
 
-    pub(super) fn parameter_names(&self) -> BTreeSet<&str> {
+    pub fn parameter_names(&self) -> BTreeSet<&str> {
         self.parameters
             .iter()
             .map(|parameter| parameter.name.as_str())
             .collect()
     }
 
-    pub(crate) fn dataset(&self) -> &DatasetRef {
+    pub fn dataset(&self) -> &DatasetRef {
         &self.dataset
     }
 
-    pub(crate) fn response(&self) -> &ResponseSpec {
+    pub fn response(&self) -> &ResponseSpec {
         &self.response
     }
 
-    pub(crate) fn display_formula(&self) -> &str {
+    pub fn display_formula(&self) -> &str {
         &self.display_formula
     }
 }

@@ -161,6 +161,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-model",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-computation-settings",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",

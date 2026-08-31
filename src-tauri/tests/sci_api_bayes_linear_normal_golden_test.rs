@@ -1,9 +1,9 @@
 use polars::prelude::{Column, DataFrame};
 use serde::Deserialize;
-use yssbi_lib::sci::api::bayes::{
-    BayesDataExchangeManifest, BayesExchangeColumn, BayesModelSpec, BinaryOp, Expression,
-    LikelihoodSpec, ParameterConstraint, PriorSpec,
+use yss_bayes_model::{
+    BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, ParameterConstraint, PriorSpec,
 };
+use yssbi_lib::sci::api::bayes::{BayesDataExchangeManifest, BayesExchangeColumn};
 
 const SIMPLE_LINEAR_NORMAL: &str = include_str!("sci/fixtures/bayes/linear_normal/simple.json");
 const EXPONENTIAL_DECAY_NORMAL: &str =

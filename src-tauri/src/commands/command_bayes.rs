@@ -5,9 +5,11 @@ use crate::application::bayes::{BayesApplicationError, BayesInferenceService};
 use crate::application::execution::ApplicationState;
 use crate::error::CommandError;
 use crate::sci::api::bayes::{
-    AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, ColumnMeta, DensityPlotData,
-    InferenceResult, ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage,
-    ResultArtifactKind, TracePlotData, parse_model_expression, validate_draft,
+    AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
+    PosteriorPredictivePage, PosteriorSamplePage, ResultArtifactKind, TracePlotData,
+};
+use yss_bayes_model::{
+    BayesModelDraft, ColumnMeta, ParsedExpression, parse_model_expression, validate_draft,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,7 +114,7 @@ pub fn parse_bayes_expression(
 #[tauri::command]
 pub fn validate_bayes_model(
     input: BayesModelDraft,
-) -> Result<crate::sci::api::bayes::ValidationReport, CommandError> {
+) -> Result<yss_bayes_model::ValidationReport, CommandError> {
     Ok(validate_draft(&input))
 }
 
@@ -260,8 +262,8 @@ mod tests {
         assert_eq!(parsed.symbols, ["a", "sigma", "x", "y"]);
         assert!(matches!(
             parsed.formula.raw_predictor,
-            crate::sci::api::bayes::RawExpression::Binary {
-                op: crate::sci::api::bayes::BinaryOp::Mul,
+            yss_bayes_model::RawExpression::Binary {
+                op: yss_bayes_model::BinaryOp::Mul,
                 ..
             }
         ));

@@ -1,3 +1,5 @@
+//! Bayesian expression parsing and symbol classification.
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -112,7 +114,7 @@ pub fn parse_model_expression(
     })
 }
 
-pub fn collect_raw_symbols(expression: &RawExpression, symbols: &mut BTreeSet<String>) {
+fn collect_raw_symbols(expression: &RawExpression, symbols: &mut BTreeSet<String>) {
     match expression {
         RawExpression::Number { .. } => {}
         RawExpression::Symbol { name } => {

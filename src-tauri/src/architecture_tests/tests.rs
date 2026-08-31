@@ -1560,6 +1560,7 @@ fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]>
     if source_file.starts_with("src-tauri/src/graph/") {
         Some(PERSISTED_SYMBOLS)
     } else if source_file.starts_with("src-tauri/src/sci/")
+        || source_file.starts_with("src-tauri/crates/yss-bayes-model/src/")
         || source_file.starts_with("src-tauri/crates/yss-sci-contract/src/")
     {
         Some(SCI_SYMBOLS)
@@ -7147,6 +7148,229 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
         &expectation,
         &BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
     ));
+}
+
+#[test]
+fn bayes_model_has_one_pure_owner_without_root_facade() {
+    const MODEL_PREFIX: &str = "src-tauri/crates/yss-bayes-model/";
+    const MODEL_SOURCES: &[&str] = &[
+        "src-tauri/crates/yss-bayes-model/src/lib.rs",
+        "src-tauri/crates/yss-bayes-model/src/convert.rs",
+        "src-tauri/crates/yss-bayes-model/src/draft.rs",
+        "src-tauri/crates/yss-bayes-model/src/expression.rs",
+        "src-tauri/crates/yss-bayes-model/src/model.rs",
+        "src-tauri/crates/yss-bayes-model/src/spec_validation.rs",
+        "src-tauri/crates/yss-bayes-model/src/validation.rs",
+        "src-tauri/crates/yss-bayes-model/src/validators.rs",
+    ];
+
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-bayes-model/Cargo.toml",
+        "src-tauri/crates/yss-bayes-model/README.md",
+    ]
+    .into_iter()
+    .chain(MODEL_SOURCES.iter().copied())
+    {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "Bayes model owner {relative} must exist"
+        );
+    }
+    for source in MODEL_SOURCES {
+        assert_eq!(
+            facts.classification.get(*source),
+            Some(&RustLayer::PureLeaf),
+            "Bayes model owner {source} must remain a Pure Leaf"
+        );
+    }
+
+    for removed in [
+        "src-tauri/src/sci/api/bayes/convert.rs",
+        "src-tauri/src/sci/api/bayes/draft.rs",
+        "src-tauri/src/sci/api/bayes/expression.rs",
+        "src-tauri/src/sci/api/bayes/model.rs",
+        "src-tauri/src/sci/api/bayes/validation.rs",
+        "src-tauri/src/sci/api/bayes/validators.rs",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed).exists(),
+            "removed Bayes model owner {removed} must stay absent"
+        );
+    }
+
+    let root_module = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/sci/api/bayes/mod.rs"),
+    )
+    .expect("root Bayes module must be readable");
+    for forbidden_facade in [
+        "mod convert;",
+        "mod draft;",
+        "mod expression;",
+        "mod model;",
+        "mod validation;",
+        "mod validators;",
+        "yss_bayes_model",
+    ] {
+        assert!(
+            !root_module.contains(forbidden_facade),
+            "root Bayes module must not restore model facade {forbidden_facade}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-model/Cargo.toml"),
+    )
+    .expect("Bayes model manifest must be readable");
+    assert!(manifest.contains("serde.workspace = true"));
+    assert!(manifest.contains("yss-math"));
+    for forbidden_dependency in ["polars", "tauri", "yss-sci", "yss-julia"] {
+        assert!(
+            !manifest.contains(forbidden_dependency),
+            "Bayes model must not depend on {forbidden_dependency}"
+        );
+    }
+
+    let validation_report = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-model/src/validation.rs"),
+    )
+    .expect("Bayes validation report source must be readable");
+    assert!(validation_report.contains("pub fn is_ok(&self) -> bool"));
+    assert!(validation_report.contains("self.errors.is_empty()"));
+    assert!(validation_report.contains("serialize_field(\"ok\", &self.is_ok())"));
+    for forbidden_dual_fact in ["ok: bool", "self.ok", "pub ok"] {
+        assert!(
+            !validation_report.contains(forbidden_dual_fact),
+            "ValidationReport must derive ok exclusively from errors: {forbidden_dual_fact}"
+        );
+    }
+
+    let conversion = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-model/src/convert.rs"),
+    )
+    .expect("Bayes model conversion source must be readable");
+    assert!(conversion.contains("report.with_error"));
+    assert!(conversion.contains("model_spec_is_valid(&spec)"));
+    assert!(
+        !conversion.contains(".expect("),
+        "draft-to-spec conversion must fail closed without production expect branches"
+    );
+
+    let spec_validation = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-bayes-model/src/spec_validation.rs"),
+    )
+    .expect("Bayes spec validation source must be readable");
+    assert!(spec_validation.contains("pub fn model_spec_is_valid"));
+    let root_worker_validation = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/src/sci/api/bayes/worker/validation.rs"),
+    )
+    .expect("root Bayes worker validation source must be readable");
+    assert!(
+        !root_worker_validation.contains("fn model_is_valid"),
+        "worker input validation must not duplicate the canonical model validator"
+    );
+
+    let stale_references = facts
+        .classification
+        .keys()
+        .filter_map(|source_file| {
+            let source = std::fs::read_to_string(facts.repository_root.join(source_file)).ok()?;
+            [
+                "crate::sci::api::bayes::model",
+                "crate::sci::api::bayes::draft",
+                "crate::sci::api::bayes::expression",
+                "crate::sci::api::bayes::validation",
+                "crate::sci::api::bayes::validators",
+            ]
+            .iter()
+            .any(|stale| source.contains(stale))
+            .then_some(source_file.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        stale_references.is_empty(),
+        "production consumers must use yss_bayes_model directly: {stale_references:#?}"
+    );
+
+    let forbidden_dependencies = facts
+        .dependencies
+        .iter()
+        .filter(|dependency| dependency.source_file.starts_with(MODEL_PREFIX))
+        .filter(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                ..
+            } => {
+                facts
+                    .classification
+                    .get(repository_relative_declaration_file)
+                    != Some(&RustLayer::PureLeaf)
+            }
+            CanonicalOrigin::External(origin) => origin.package_name != "serde",
+            CanonicalOrigin::LanguageBuiltin { .. } | CanonicalOrigin::RepositoryAsset { .. } => {
+                false
+            }
+        })
+        .map(|dependency| dependency.canonical_origin_target.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden_dependencies.is_empty(),
+        "Bayes model must remain pure: {forbidden_dependencies:#?}"
+    );
+
+    for (symbol, expected_origin) in [
+        (
+            "BayesModelDraft",
+            "src-tauri/crates/yss-bayes-model/src/draft.rs",
+        ),
+        (
+            "ParsedExpression",
+            "src-tauri/crates/yss-bayes-model/src/expression.rs",
+        ),
+        (
+            "BayesModelSpec",
+            "src-tauri/crates/yss-bayes-model/src/model.rs",
+        ),
+        (
+            "ValidationReport",
+            "src-tauri/crates/yss-bayes-model/src/validation.rs",
+        ),
+    ] {
+        let actual_origins = facts
+            .dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: resolved_symbol,
+                    ..
+                } if resolved_symbol == symbol => {
+                    Some(repository_relative_declaration_file.as_str())
+                }
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_origins,
+            BTreeSet::from([expected_origin]),
+            "{symbol} must have one canonical Bayes model owner"
+        );
+    }
 }
 
 #[test]

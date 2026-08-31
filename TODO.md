@@ -820,3 +820,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   `src-tauri/crates/yss-sci-contract/` Pure Leaf；删除根 `sci/api/computation.rs`、`sci/api/control.rs`、
   `sci/error.rs` facade 和零生产调用的 Application `DataValue` 映射，让 workflows、SCI runtime、Execution
   adapter 与 Julia Bayes adapter 直接消费唯一 owner，并以 `StatisticalInput::try_new` 拒绝空白名称和非有限数值。
+- [ ] 将 Bayes draft、expression parser、structured validation 与 validated immutable spec 构造迁入
+  `src-tauri/crates/yss-bayes-model/` Pure Leaf；删除根 `sci/api/bayes` model facade，让 Commands、Application、
+  worker validation、integration tests 与 Julia adapters 直接消费唯一 owner；同时以内部 parts object 收敛
+  多参数构造，统一 conversion/worker 的 spec validator，并消除 `ValidationReport.ok`/errors 双事实源、
+  非有限 prior 漏检及 draft-to-spec 的生产 `expect` 分支。

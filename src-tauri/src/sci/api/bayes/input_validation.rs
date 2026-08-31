@@ -2,7 +2,9 @@ use polars::prelude::{AnyValue, DataFrame};
 
 use std::collections::BTreeMap;
 
-use super::model::{BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, UnaryOp};
+use yss_bayes_model::{
+    BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, UnaryOp,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BayesInputValidationError {

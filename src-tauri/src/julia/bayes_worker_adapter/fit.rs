@@ -13,7 +13,7 @@ use crate::sci::api::bayes::worker::{
     ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesInferenceSnapshot,
     BayesTaskHandle, BayesTaskResult, BayesWorkerError, ValidatedBayesTask,
 };
-use crate::sci::api::bayes::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
+use yss_bayes_model::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
     JuliaWorkerTaskDirectory,

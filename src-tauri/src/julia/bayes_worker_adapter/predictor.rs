@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::sci::api::bayes::{
+use yss_bayes_model::{
     BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, UnaryOp,
 };
 
@@ -194,7 +194,7 @@ fn emit_number(value: f64) -> Result<String, JuliaModelGenerationError> {
 #[cfg(test)]
 mod tests {
     use super::{JuliaMathFunction, JuliaModelGenerationError, generate_julia_model};
-    use crate::sci::api::bayes::BayesModelSpec;
+    use yss_bayes_model::BayesModelSpec;
 
     fn model(predictor: serde_json::Value) -> BayesModelSpec {
         serde_json::from_value(serde_json::json!({

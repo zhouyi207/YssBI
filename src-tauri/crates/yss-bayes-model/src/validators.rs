@@ -1,3 +1,5 @@
+//! Cross-field validation for Bayesian model drafts.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::draft::{BayesModelDraft, ColumnDType, ColumnMeta, SymbolRole};
@@ -5,6 +7,7 @@ use super::model::{
     Expression, InferenceConfig, LikelihoodSpec, MathFunction, ParameterConstraint, ParameterSpec,
     PriorSpec,
 };
+use super::spec_validation::{constraint_is_valid, prior_is_valid};
 use super::validation::{ValidationIssue, ValidationReport, error, warning};
 
 pub fn validate_draft(draft: &BayesModelDraft) -> ValidationReport {
@@ -335,29 +338,16 @@ fn validate_constraint(
     constraint: &ParameterConstraint,
     context: &mut ValidationContext,
 ) {
-    if let ParameterConstraint::Bounded { lower, upper, .. } = constraint {
-        if !lower.is_finite() || !upper.is_finite() || lower >= upper {
-            context.error(
-                "parameter_bounds_invalid",
-                format!("parameters.{}.constraint", name),
-            );
-        }
+    if !constraint_is_valid(constraint) {
+        context.error(
+            "parameter_bounds_invalid",
+            format!("parameters.{}.constraint", name),
+        );
     }
 }
 
 fn validate_prior(name: &str, prior: &PriorSpec, context: &mut ValidationContext) {
-    let invalid = match prior {
-        PriorSpec::Normal([_, sd]) => *sd <= 0.0,
-        PriorSpec::LogNormal([_, sd]) => *sd <= 0.0,
-        PriorSpec::Uniform([lower, upper]) => lower >= upper,
-        PriorSpec::Beta([alpha, beta]) => *alpha <= 0.0 || *beta <= 0.0,
-        PriorSpec::Gamma([shape, scale]) => *shape <= 0.0 || *scale <= 0.0,
-        PriorSpec::Exponential([rate]) => *rate <= 0.0,
-        PriorSpec::StudentT([df, _, scale]) => *df <= 0.0 || *scale <= 0.0,
-        PriorSpec::Cauchy([_, scale]) => *scale <= 0.0,
-        PriorSpec::HalfNormal([scale]) => *scale <= 0.0,
-    };
-    if invalid {
+    if !prior_is_valid(prior) {
         context.error(
             "parameter_prior_args_invalid",
             format!("parameters.{}.prior", name),
@@ -408,10 +398,10 @@ fn validate_sampler(sampler: &InferenceConfig, context: &mut ValidationContext) 
     if sampler.samples == 0 {
         context.error("sampler_samples_invalid", "sampler.samples");
     }
-    if let Some(target_accept) = sampler.target_accept {
-        if !(0.0..=1.0).contains(&target_accept) {
-            context.error("sampler_target_accept_invalid", "sampler.targetAccept");
-        }
+    if let Some(target_accept) = sampler.target_accept
+        && !(0.0..=1.0).contains(&target_accept)
+    {
+        context.error("sampler_target_accept_invalid", "sampler.targetAccept");
     }
     if matches!(sampler.max_tree_depth, Some(0)) {
         context.error("sampler_max_tree_depth_invalid", "sampler.maxTreeDepth");
@@ -433,7 +423,7 @@ fn column_map(columns: &[ColumnMeta]) -> BTreeMap<&str, &ColumnMeta> {
         .collect()
 }
 
-pub fn collect_expression_symbols(
+fn collect_expression_symbols(
     expression: &Expression,
     data: &mut BTreeSet<String>,
     parameters: &mut BTreeSet<String>,

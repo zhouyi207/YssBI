@@ -2169,13 +2169,13 @@ impl BayesTaskHandle {
 }
 
 #[test]
-fn bayes_model_spec_exposes_only_final_adapter_projection() {
+fn bayes_model_spec_exposes_only_validated_construction_and_read_projections() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
         .expect("the real Cargo workspace must be discoverable");
     let path = workspace
         .repository_root
-        .join("src-tauri/src/sci/api/bayes/model.rs");
+        .join("src-tauri/crates/yss-bayes-model/src/model.rs");
     let source = std::fs::read_to_string(&path).expect("Bayes model source must be readable");
     let syntax = syn::parse_file(&source).expect("Bayes model source must parse");
 
@@ -2219,9 +2219,13 @@ fn bayes_model_spec_exposes_only_final_adapter_projection() {
         public_methods,
         BTreeSet::from([
             "data_variables".to_owned(),
+            "dataset".to_owned(),
+            "display_formula".to_owned(),
             "likelihood".to_owned(),
+            "parameter_names".to_owned(),
             "parameters".to_owned(),
             "predictor".to_owned(),
+            "response".to_owned(),
             "sampler".to_owned(),
         ]),
         "BayesModelSpec public capability must stay exact"
@@ -2256,14 +2260,8 @@ fn bayes_model_spec_exposes_only_final_adapter_projection() {
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
         restricted_methods,
-        BTreeMap::from([
-            ("dataset".to_owned(), "crate".to_owned()),
-            ("display_formula".to_owned(), "crate".to_owned()),
-            ("from_validated_parts".to_owned(), "super".to_owned()),
-            ("parameter_names".to_owned(), "super".to_owned()),
-            ("response".to_owned(), "crate".to_owned()),
-        ]),
-        "BayesModelSpec internal construction and old-route projection must stay exact"
+        BTreeMap::from([("from_validated_parts".to_owned(), "super".to_owned(),)]),
+        "BayesModelSpec construction authority must stay internal"
     );
 }
 

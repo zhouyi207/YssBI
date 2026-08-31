@@ -6,6 +6,7 @@
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
+- [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
 - [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
@@ -158,7 +159,8 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
-| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API 与 models；共享 input/settings/control/error 已由 `yss-sci-contract` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
+| `src-tauri/crates/yss-bayes-model/` | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri |
+| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API、result 与 regression/panel models；共享 input/settings/control/error 和 Bayes model 已分别由 `yss-sci-contract`、`yss-bayes-model` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/crates/yss-sci-contract/` | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现 |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
@@ -570,14 +572,16 @@ Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标�
 
 ## 9. SCI 与 Julia
 
-### 9.1 三层 Rust module
+### 9.1 四个独立职责
 
-科学计算分为三层：
+科学计算与 Bayes model 分为四个职责：
 
 1. `src-tauri/crates/yss-sci-contract/` 的 `yss-sci-contract` Pure Leaf：backend-neutral
    statistical input/settings、执行控制、取消 capability 与稳定 SCI error code。
-2. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-3. `src-tauri/src/sci/`：尚待迁移的主应用 SCI runtime API 与 models；跨层调用通过
+2. `src-tauri/crates/yss-bayes-model/` 的 `yss-bayes-model` Pure Leaf：Bayes draft、
+   expression parser、structured validation 与 validated immutable spec 构造。
+3. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
+4. `src-tauri/src/sci/`：尚待迁移的主应用 SCI runtime API、result 与部分 models；跨层调用通过
    `execution::ports::scientific`，不由 SCI 反向编排 Project 或 Execution。
 
 Final Execution-facing scientific request/result/error/control 由
@@ -593,6 +597,12 @@ Julia worker internals。两个 seam 分别集中输入规范化、错误类型�
 Application workflows、根 SCI runtime、Execution adapter 与 Julia Bayes adapter 均直接消费
 `yss-sci-contract`，不经过根 facade。`StatisticalInput::try_new` 是唯一构造入口，会拒绝空白名称
 与非有限数值；原 Application `DataValue` 映射及其重复 contract owner 已删除。
+
+Commands、Application、Bayes worker validation、integration tests 与 Julia adapters 均直接消费
+`yss-bayes-model`。根 `sci::api::bayes` 不提供兼容 re-export。`ValidationReport.ok` 只由私有 error
+集合推导，不能与 errors 分别成为事实源；draft-to-spec conversion 使用内部 parts object，并在
+validation 漂移时返回 structured error，不保留生产 `expect` panic 分支；worker admission 复用同一个
+immutable-spec validator，不维护第二套 model 不变量。
 
 `yss-sci-contract` 与 `yss-sci` 都不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
 
@@ -656,6 +666,7 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 ### 新 scientific operation
 
 - 可跨 workflow/runtime/adapter 共享的 input、settings、control 与 error 放 `yss-sci-contract`；
+- Bayes draft、expression parsing、validation 与 immutable model spec 放 `yss-bayes-model`；
 - 纯算法放 `yss-sci`；
 - 尚未独立成 crate 的运行期 API 与 models 暂放 `src-tauri/src/sci/`；
 - 只有存在真实可替换 implementation 时才建立 backend seam；

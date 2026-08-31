@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::contract::{InferenceDiagnostics, ParameterSummary};
-use super::model::BayesModelSpec;
+use yss_bayes_model::{BayesModelSpec, model_spec_is_valid};
 use yss_sci_contract::{CancelDeliveryControl, ExecutionControl, StatisticalInput};
 
 const MAX_OPAQUE_ID_LEN: usize = 128;
@@ -153,7 +153,7 @@ impl ValidatedBayesTask {
         model: BayesModelSpec,
         inputs: Arc<[StatisticalInput]>,
     ) -> Result<Self, BayesTaskValidationError> {
-        if !model_is_valid(&model) {
+        if !model_spec_is_valid(&model) {
             return Err(BayesTaskValidationError::InvalidModel);
         }
         validate_inputs(&model, &inputs)
@@ -180,7 +180,7 @@ impl ValidatedBayesTask {
 
 mod validation;
 
-use validation::{model_is_valid, validate_inputs};
+use validation::validate_inputs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BayesTaskGeneration(u64);

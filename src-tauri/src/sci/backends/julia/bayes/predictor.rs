@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::sci::api::bayes::{BayesModelSpec, BinaryOp, Expression, MathFunction, UnaryOp};
+use yss_bayes_model::{BayesModelSpec, BinaryOp, Expression, MathFunction, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JuliaPredictorKernel {
@@ -112,7 +112,7 @@ impl PredictorCompiler<'_> {
 }
 
 fn emit_likelihood_kernel(spec: &BayesModelSpec, predictor: &str) -> Result<String, String> {
-    use crate::sci::api::bayes::LikelihoodSpec;
+    use yss_bayes_model::LikelihoodSpec;
 
     let contribution = match spec.likelihood() {
         LikelihoodSpec::Normal { sigma, .. } => {
@@ -173,7 +173,7 @@ fn emit_number(value: f64) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::compile_predictor;
-    use crate::sci::api::bayes::{BayesModelSpec, BinaryOp, Expression, MathFunction};
+    use yss_bayes_model::{BayesModelSpec, BinaryOp, Expression, MathFunction};
 
     fn compile(expression: Expression) -> super::JuliaPredictorKernel {
         let predictor = serde_json::to_value(expression).expect("predictor fixture must serialize");
@@ -212,7 +212,7 @@ mod tests {
                 right: Box::new(Expression::Call {
                     function: MathFunction::Exp,
                     args: vec![Expression::Unary {
-                        op: crate::sci::api::bayes::UnaryOp::Neg,
+                        op: yss_bayes_model::UnaryOp::Neg,
                         arg: Box::new(Expression::Binary {
                             op: BinaryOp::Mul,
                             left: Box::new(Expression::Parameter { name: "b".into() }),

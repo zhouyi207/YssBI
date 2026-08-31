@@ -12,6 +12,7 @@ rust-version.workspace = true
 resolver = "3"
 members = [
     ".",
+    "crates/yss-bayes-model",
     "crates/yss-canonical-hash",
     "crates/yss-computation-settings",
     "crates/yss-data-contract",
@@ -114,6 +115,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-computation-settings = { path = "./crates/yss-computation-settings" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
