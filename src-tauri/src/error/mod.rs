@@ -2,13 +2,7 @@ use std::fmt;
 
 use serde::Serialize;
 use serde_json::{Map, Value};
-use uuid::Uuid;
-
 use yss_project::{ProjectDatabaseError, ProjectError};
-
-pub(crate) fn new_diagnostic_incident_id() -> String {
-    Uuid::new_v4().to_string()
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +74,7 @@ impl CommandError {
     }
 
     fn record_incident(code: &'static str, error: impl fmt::Display + fmt::Debug) -> Self {
-        let incident_id = new_diagnostic_incident_id();
+        let incident_id = uuid::Uuid::new_v4().to_string();
         tracing::error!(
             target: "yssbi::command_error",
             diagnostic_domain = "application",

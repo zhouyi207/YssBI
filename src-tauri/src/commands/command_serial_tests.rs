@@ -1,12 +1,12 @@
 //! Serial-correlation test commands.
 
-use crate::application::statistics::{
-    SerialTestsApplicationError, SerialTestsRequest,
-    compute_serial_tests as compute_serial_tests_application,
-};
 use crate::error::CommandError;
 use crate::schema::statistics::{
     DurbinWatsonResultDto, SerialTestWithLagDto, SerialTestsRequestDto, SerialTestsResponseDto,
+};
+use yss_application::statistics::{
+    SerialTestsApplicationError, SerialTestsRequest,
+    compute_serial_tests as compute_serial_tests_application,
 };
 
 #[tauri::command]

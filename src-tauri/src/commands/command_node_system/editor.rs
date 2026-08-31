@@ -1,8 +1,6 @@
 #[cfg(all(test, any()))]
 use super::common::mutation_conflict_to_command_error;
 use super::common::parse_graph_path;
-use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
@@ -12,6 +10,8 @@ use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
 use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::{AppHandle, State};
+use yss_application::execution::{ApplicationState, SessionCaptureError};
+use yss_application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use yss_graph_document::NodeId;
 #[cfg(all(test, any()))]
 use yss_graph_editor::ClipboardSubgraph;
@@ -231,7 +231,7 @@ pub fn mutate_graph_document(
 }
 
 fn map_editor_resource_error(
-    error: crate::application::resource_mutation::ResourceMutationApplicationError,
+    error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
 }

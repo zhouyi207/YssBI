@@ -1,12 +1,3 @@
-use crate::application::database::{
-    self, ApplicationDatabaseError, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult,
-    DatabaseRowsResult, LoadDatabaseResult,
-};
-#[cfg(all(test, any()))]
-use crate::application::database::{
-    DatabaseApplicationError, cleanup_export_temporary_file,
-    export_database_for_project_with_before_publish,
-};
 use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::event::emit_project_event;
@@ -17,6 +8,15 @@ use crate::schema::{
     LoadDatabaseResultDto,
 };
 use tauri::{AppHandle, State};
+use yss_application::database::{
+    self, ApplicationDatabaseError, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult,
+    DatabaseRowsResult, LoadDatabaseResult,
+};
+#[cfg(all(test, any()))]
+use yss_application::database::{
+    DatabaseApplicationError, cleanup_export_temporary_file,
+    export_database_for_project_with_before_publish,
+};
 #[cfg(all(test, any()))]
 use yss_database_edit::EditHistory;
 use yss_database_edit::EditState;
@@ -51,7 +51,7 @@ fn load_database_with_emitter(
     engine: DatabaseImportSourceDTO,
     emit: impl FnMut(Event),
 ) -> Result<
-    ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
+    ResourceMutationCommandResultDto<yss_application::database::LoadDatabaseResult>,
     CommandError,
 > {
     let result = database::load_database(state, &project_instance_id, operation_id, engine.into())
@@ -163,13 +163,13 @@ where
 fn map_application_database_error(error: ApplicationDatabaseError) -> CommandError {
     match error {
         ApplicationDatabaseError::SessionCapture(error) => match error {
-            crate::application::execution::SessionCaptureError::Inactive => {
+            yss_application::execution::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::application::execution::SessionCaptureError::Replacing => {
+            yss_application::execution::SessionCaptureError::Replacing => {
                 CommandError::expected("project_lifecycle_admission_closed")
             }
-            crate::application::execution::SessionCaptureError::Recovering => {
+            yss_application::execution::SessionCaptureError::Recovering => {
                 CommandError::expected("project_recovery_required")
                     .with_details(serde_json::json!({ "recoveryRequired": true }))
             }
@@ -279,7 +279,7 @@ fn serialize_application_database_value<T: serde::Serialize>(
 
 fn mutate_database_from_application(
     app: &AppHandle,
-    application: &crate::application::execution::ApplicationState,
+    application: &yss_application::execution::ApplicationState,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -390,7 +390,7 @@ fn get_edit_state_for_project(
 #[tauri::command]
 pub async fn load_database(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     engine: DatabaseImportSourceDTO,
@@ -440,7 +440,7 @@ pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, Command
 
 #[tauri::command]
 pub fn get_database_meta(
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
@@ -453,7 +453,7 @@ pub fn get_database_meta(
 #[tauri::command]
 pub async fn delete_database(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -512,7 +512,7 @@ fn rename_database_with_emitter(
 #[tauri::command]
 pub fn rename_database(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -535,7 +535,7 @@ pub fn rename_database(
 
 #[tauri::command]
 pub fn get_database_rows(
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     offset: usize,
@@ -549,7 +549,7 @@ pub fn get_database_rows(
 
 #[tauri::command]
 pub async fn get_column_stats(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
@@ -565,7 +565,7 @@ pub async fn get_column_stats(
 
 #[tauri::command]
 pub async fn get_column_distribution(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
@@ -581,7 +581,7 @@ pub async fn get_column_distribution(
 
 #[tauri::command]
 pub async fn get_dataset_overview(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
@@ -600,7 +600,7 @@ pub async fn get_dataset_overview(
 #[tauri::command]
 pub fn edit_cell(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -629,7 +629,7 @@ pub fn edit_cell(
 #[tauri::command]
 pub fn add_row(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -650,7 +650,7 @@ pub fn add_row(
 #[tauri::command]
 pub fn delete_rows(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -672,7 +672,7 @@ pub fn delete_rows(
 #[tauri::command]
 pub fn add_column(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -694,7 +694,7 @@ pub fn add_column(
 #[tauri::command]
 pub fn delete_column(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -715,7 +715,7 @@ pub fn delete_column(
 #[tauri::command]
 pub fn cast_column(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -742,7 +742,7 @@ pub fn cast_column(
 #[tauri::command]
 pub fn rename_column(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -764,7 +764,7 @@ pub fn rename_column(
 #[tauri::command]
 pub fn undo_edit(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -784,7 +784,7 @@ pub fn undo_edit(
 #[tauri::command]
 pub fn redo_edit(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -804,7 +804,7 @@ pub fn redo_edit(
 #[tauri::command]
 pub fn save_database_changes(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -822,7 +822,7 @@ pub fn save_database_changes(
 /// Use `save_database_changes` to persist edits into `project.duckdb`.
 #[tauri::command]
 pub async fn export_database(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     path: String,
@@ -839,7 +839,7 @@ pub async fn export_database(
 
 #[tauri::command]
 pub fn get_edit_state(
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {

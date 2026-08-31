@@ -38,7 +38,7 @@ pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn create_event(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
@@ -59,7 +59,7 @@ pub fn create_event(
 #[tauri::command]
 pub fn create_function(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
@@ -79,7 +79,7 @@ pub fn create_function(
 
 #[tauri::command]
 pub fn unload_project_graph(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: String,
     graph_path: String,
     lifecycle_token: u64,
@@ -123,7 +123,7 @@ pub(super) fn save_project_graph_with_emitter(
 #[tauri::command]
 pub fn save_project_graph(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -170,7 +170,7 @@ pub(super) fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn duplicate_graph(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -211,7 +211,7 @@ pub(super) fn remove_graph_resource_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn remove_graph(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -256,7 +256,7 @@ pub(super) fn rename_graph_resource_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn rename_graph_resource(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -303,7 +303,7 @@ pub(super) fn update_function_signature_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn update_function_signature(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: String,
@@ -336,7 +336,7 @@ fn emit_application_resource_result(
 }
 
 fn map_resource_mutation_error(
-    error: crate::application::resource_mutation::ResourceMutationApplicationError,
+    error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
 }

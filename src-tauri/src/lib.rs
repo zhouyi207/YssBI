@@ -3,7 +3,6 @@
 //! 这里只构造并注入各 crate authority、Application state 与平台适配器；领域行为和
 //! transport contract 分别留在各自 owner。
 
-pub mod application;
 pub mod backend_adapters;
 pub mod commands;
 pub mod error;
@@ -33,29 +32,29 @@ enum ApplicationInitializationError {
     SessionInstallation,
     #[error("initial application session composition could not be prepared")]
     SessionComposition(
-        #[source] application::execution::session_factory::ProjectSessionCandidateError,
+        #[source] yss_application::execution::session_factory::ProjectSessionCandidateError,
     ),
 }
 
 fn initialize_application_state(
     project_state: Arc<yss_project::ProjectState>,
-) -> Result<application::execution::ApplicationState, ApplicationInitializationError> {
+) -> Result<yss_application::execution::ApplicationState, ApplicationInitializationError> {
     let scientific_backend: Arc<dyn yss_execution::ports::scientific::ScientificBackend> =
         Arc::new(backend_adapters::execution::scientific::SciApiScientificBackend::new());
     let builder =
-        application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(
+        yss_application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(
             backend_adapters::execution::resources::database_resource_provider_factory,
         );
-    let candidate = application::execution::session_factory::build_current_project_candidate(
+    let candidate = yss_application::execution::session_factory::build_current_project_candidate(
         &builder,
-        application::execution::ApplicationSessionEpoch::INITIAL,
+        yss_application::execution::ApplicationSessionEpoch::INITIAL,
         Arc::clone(&project_state),
         std::iter::empty(),
         Arc::clone(&scientific_backend),
     )
     .map_err(ApplicationInitializationError::SessionComposition)?;
-    let application = application::execution::ApplicationState::from_composition(
-        Arc::new(application::execution::ApplicationSessionSlot::new()),
+    let application = yss_application::execution::ApplicationState::from_composition(
+        Arc::new(yss_application::execution::ApplicationSessionSlot::new()),
         builder,
         scientific_backend,
     );
@@ -121,7 +120,7 @@ pub fn run() {
                 app_dir.clone(),
                 bayes_worker.clone(),
             );
-            app.manage(application::bayes::BayesInferenceService::with_worker(
+            app.manage(yss_application::bayes::BayesInferenceService::with_worker(
                 app_dir.clone(),
                 std::sync::Arc::new(bayes_adapter),
                 std::sync::Arc::new(

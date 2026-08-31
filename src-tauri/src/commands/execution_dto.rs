@@ -1,9 +1,9 @@
-use crate::application::execution::run_graph::{
-    RunApplicationEvent, RunApplicationEventKind, RunDemand,
-};
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
+use yss_application::execution::run_graph::{
+    RunApplicationEvent, RunApplicationEventKind, RunDemand,
+};
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
 use yss_execution::value::RuntimeValue;
@@ -152,7 +152,7 @@ pub(crate) struct ResultInspectionSourceDto {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RunEventDtoError {
+pub enum RunEventDtoError {
     UnsafePreviewGeneration,
     InvalidOutput,
 }
@@ -231,27 +231,10 @@ impl TryFrom<RunApplicationEvent> for ExecutionChannelEventDto {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ResultStateKindDto {
-    Pending,
-    Ready,
-    Failed,
-    Cancelled,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ResultStateDto {
     Ready,
-}
-
-impl ResultStateDto {
-    pub const fn kind(&self) -> ResultStateKindDto {
-        match self {
-            Self::Ready => ResultStateKindDto::Ready,
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -310,7 +293,6 @@ pub enum ResultReportKindDto {
 pub enum ResultValueKindDto {
     Scalar,
     Sequence,
-    DataSeries,
     Unknown,
 }
 

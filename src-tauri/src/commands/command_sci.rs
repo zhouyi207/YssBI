@@ -1,12 +1,12 @@
 //! Scientific-computing Tauri commands.
 
-use crate::application::execution::ApplicationState;
-use crate::application::statistics::{
-    AcfPacfApplicationError, compute_acf_pacf as compute_acf_pacf_application,
-};
 use crate::error::CommandError;
 use crate::schema::statistics::{AcfPacfRequestDto, AcfPacfResponseDto};
 use tauri::State;
+use yss_application::execution::ApplicationState;
+use yss_application::statistics::{
+    AcfPacfApplicationError, compute_acf_pacf as compute_acf_pacf_application,
+};
 
 #[tauri::command]
 pub fn compute_acf_pacf(
@@ -31,13 +31,13 @@ fn acf_pacf_response(
 fn acf_pacf_command_error(error: AcfPacfApplicationError) -> CommandError {
     match error {
         AcfPacfApplicationError::SessionCapture(error) => match error {
-            crate::application::execution::SessionCaptureError::Inactive => {
+            yss_application::execution::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::application::execution::SessionCaptureError::Replacing => {
+            yss_application::execution::SessionCaptureError::Replacing => {
                 CommandError::expected("project_lifecycle_admission_closed")
             }
-            crate::application::execution::SessionCaptureError::Recovering => {
+            yss_application::execution::SessionCaptureError::Recovering => {
                 CommandError::expected("project_recovery_required")
             }
         },

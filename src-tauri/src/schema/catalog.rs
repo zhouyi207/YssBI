@@ -1,5 +1,5 @@
-use crate::application::catalog_query::CatalogQueryResult;
 use serde::Serialize;
+use yss_application::catalog_query::CatalogQueryResult;
 use yss_graph_catalog::{
     LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
     LocalizedParameter as DomainParameter, LocalizedPort as DomainPort,
@@ -307,12 +307,12 @@ impl TryFrom<NodeCreationDescriptorDto> for yss_graph_catalog::NodeCreation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::catalog_query::LocalizedCatalogRequest;
-    use crate::application::execution::{
-        ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
-    };
     use std::num::NonZeroU64;
     use std::sync::Arc;
+    use yss_application::catalog_query::LocalizedCatalogRequest;
+    use yss_application::execution::{
+        ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot,
+    };
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
@@ -329,7 +329,7 @@ mod tests {
 
     fn application_with_function() -> (
         yss_project::fixtures::TempProject,
-        crate::application::execution::ApplicationState,
+        yss_application::execution::ApplicationState,
     ) {
         let path =
             yss_graph_document::GraphResourcePath::new("functions/Opaque.yssbi-function").unwrap();
@@ -395,7 +395,7 @@ mod tests {
         slot.publish_for_test(session);
         (
             fixture,
-            crate::application::execution::ApplicationState::new(slot),
+            yss_application::execution::ApplicationState::new(slot),
         )
     }
 

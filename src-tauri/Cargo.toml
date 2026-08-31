@@ -12,6 +12,7 @@ rust-version.workspace = true
 resolver = "3"
 members = [
     ".",
+    "crates/yss-application",
     "crates/yss-bayes-model",
     "crates/yss-bayes-result",
     "crates/yss-bayes-worker",
@@ -121,42 +122,33 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-application = { path = "./crates/yss-application" }
 yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-bayes-result = { path = "./crates/yss-bayes-result" }
-yss-bayes-worker = { path = "./crates/yss-bayes-worker" }
 yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
-yss-canonical-hash = { path = "./crates/yss-canonical-hash" }
 yss-computation-settings = { path = "./crates/yss-computation-settings" }
 yss-data-contract = { path = "./crates/yss-data-contract" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
 yss-database-runtime = { path = "./crates/yss-database-runtime" }
 yss-database-schema = { path = "./crates/yss-database-schema" }
-yss-dataset-profile = { path = "./crates/yss-dataset-profile" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
-yss-display-naming = { path = "./crates/yss-display-naming" }
 yss-duckdb = { path = "./crates/yss-duckdb" }
 yss-execution = { path = "./crates/yss-execution" }
 yss-function-editor-projection = { path = "./crates/yss-function-editor-projection" }
 yss-graph-analysis = { path = "./crates/yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "./crates/yss-graph-analysis-contract" }
 yss-graph-catalog = { path = "./crates/yss-graph-catalog" }
-yss-graph-compiler = { path = "./crates/yss-graph-compiler" }
-yss-graph-compiler-diagnostics = { path = "./crates/yss-graph-compiler-diagnostics" }
 yss-graph-document = { path = "./crates/yss-graph-document" }
 yss-graph-document-edit = { path = "./crates/yss-graph-document-edit" }
 yss-graph-editor = { path = "./crates/yss-graph-editor" }
 yss-graph-protocol = { path = "./crates/yss-graph-protocol" }
-yss-graph-resource-contract = { path = "./crates/yss-graph-resource-contract" }
 yss-graph-registry = { path = "./crates/yss-graph-registry" }
 yss-graph-runtime = { path = "./crates/yss-graph-runtime" }
-yss-graph-type-mapping = { path = "./crates/yss-graph-type-mapping" }
 yss-julia-runtime = { path = "./crates/yss-julia-runtime" }
 yss-julia-worker = { path = "./crates/yss-julia-worker" }
 yss-math = { path = "./crates/yss-math" }
-yss-path-display = { path = "./crates/yss-path-display" }
 yss-project = { path = "./crates/yss-project" }
-yss-project-change = { path = "./crates/yss-project-change" }
 yss-project-filesystem = { path = "./crates/yss-project-filesystem" }
 yss-project-history = { path = "./crates/yss-project-history" }
 yss-project-identity = { path = "./crates/yss-project-identity" }
@@ -168,13 +160,10 @@ yss-project-registry-contract = { path = "./crates/yss-project-registry-contract
 yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
-yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci-contract = { path = "./crates/yss-sci-contract" }
 yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
-yss-sql-source = { path = "./crates/yss-sql-source" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tabular-io = { path = "./crates/yss-tabular-io" }
-yss-tabular-polars = { path = "./crates/yss-tabular-polars" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-variable-contract = { path = "./crates/yss-variable-contract" }
 yss-window-state = { path = "./crates/yss-window-state" }
@@ -188,7 +177,6 @@ tauri-plugin-clipboard-manager = "2"
 
 serde.workspace = true
 serde_json.workspace = true
-ndarray.workspace = true
 polars.workspace = true
 chrono.workspace = true
 
@@ -209,6 +197,4 @@ yss-graph-runtime = { path = "./crates/yss-graph-runtime", features = ["test-sup
 yss-project-filesystem = { path = "./crates/yss-project-filesystem", features = ["test-support"] }
 yss-project-identity = { path = "./crates/yss-project-identity", features = ["test-support"] }
 yss-project = { path = "./crates/yss-project", features = ["test-support"] }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true
+yss-application = { path = "./crates/yss-application", features = ["test-support"] }

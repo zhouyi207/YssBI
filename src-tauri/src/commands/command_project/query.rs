@@ -1,14 +1,12 @@
-use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
 use crate::schema::application_event::ProjectActivationResultDto;
 use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 use serde::Serialize;
 use tauri::State;
+use yss_application::execution::{ApplicationState, SessionCaptureError};
+use yss_application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use yss_project::ProjectIndex;
-#[cfg(test)]
-use yss_project::ProjectState;
 use yss_project_registry::normalize_existing_path;
 
 #[derive(Serialize)]
@@ -36,7 +34,7 @@ pub fn get_project_databases_variables(
 }
 
 fn project_databases_variables_to_transport(
-    snapshot: crate::application::project_query::ProjectDatabasesVariablesSnapshot,
+    snapshot: yss_application::project_query::ProjectDatabasesVariablesSnapshot,
 ) -> Result<DatabasesVariablesDTO, CommandError> {
     let databases = snapshot
         .databases()
@@ -64,30 +62,6 @@ fn project_databases_variables_to_transport(
     })
 }
 
-#[cfg(test)]
-fn current_project_activation(
-    state: &ProjectState,
-) -> Result<ProjectActivationResultDto, CommandError> {
-    let activation_revision = state.activation_revision();
-    let session = state
-        .capture_project_session()
-        .map_err(crate::commands::project_failure::application_project_command_error)?;
-    let path = state
-        .get_path()
-        .ok_or_else(|| CommandError::expected("stale_project_lifecycle"))?;
-    state
-        .validate_project_session(&session)
-        .map_err(crate::commands::project_failure::application_project_command_error)?;
-    if state.activation_revision() != activation_revision {
-        return Err(CommandError::expected("stale_project_lifecycle"));
-    }
-    Ok(ProjectActivationResultDto {
-        path: normalize_existing_path(&path).unwrap_or(path),
-        project_instance_id: session.instance_id.to_string(),
-        activation_revision,
-    })
-}
-
 /// 获取当前项目 activation，供项目加载后创建的独立 WebView 建立 lifecycle identity。
 #[tauri::command]
 pub fn get_current_project_activation(
@@ -100,7 +74,7 @@ pub fn get_current_project_activation(
 }
 
 fn project_activation_to_transport(
-    activation: crate::application::project_query::ProjectActivation,
+    activation: yss_application::project_query::ProjectActivation,
 ) -> ProjectActivationResultDto {
     ProjectActivationResultDto {
         path: activation.path,
@@ -211,9 +185,9 @@ pub fn get_project_resource_path(
 }
 
 fn map_project_query_error(
-    error: crate::application::project_query::ProjectQueryApplicationError,
+    error: yss_application::project_query::ProjectQueryApplicationError,
 ) -> CommandError {
-    use crate::application::project_query::ProjectQueryApplicationError;
+    use yss_application::project_query::ProjectQueryApplicationError;
     match error {
         ProjectQueryApplicationError::SessionCapture(error) => match error {
             SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
@@ -670,7 +644,7 @@ mod tests {
             .unwrap();
 
         let old_resources =
-            crate::application::database_schema::databases_variables_from_snapshot(old_snapshot)
+            yss_application::database_schema::databases_variables_from_snapshot(old_snapshot)
                 .unwrap();
         assert_eq!(
             old_resources.databases["shared"].name.as_deref(),
@@ -685,7 +659,7 @@ mod tests {
         let (query_started_tx, query_started_rx) = std::sync::mpsc::channel();
         let query = std::thread::spawn(move || {
             query_started_tx.send(()).unwrap();
-            crate::application::database_schema::project_databases_variables(&query_state)
+            yss_application::database_schema::project_databases_variables(&query_state)
         });
         query_started_rx
             .recv_timeout(std::time::Duration::from_secs(5))

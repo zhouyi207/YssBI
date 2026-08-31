@@ -1,5 +1,5 @@
-use crate::application::project_failure::ApplicationProjectFailure;
 use crate::error::CommandError;
+use yss_application::project_failure::ApplicationProjectFailure;
 
 pub(crate) fn application_project_command_error(
     error: impl Into<ApplicationProjectFailure>,

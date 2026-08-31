@@ -1,6 +1,4 @@
 use crate::error::{CommandError, GraphMutationErrorDetailsDto};
-use crate::event::{Event, EventProject};
-use crate::schema::application_event::ResourceMutationResultDto;
 use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
 
@@ -73,25 +71,24 @@ pub(super) fn mutation_conflict_to_command_error(
 }
 
 pub(super) fn resource_mutation_to_command_error(
-    error: crate::application::resource_mutation::ResourceMutationApplicationError,
+    error: yss_application::resource_mutation::ResourceMutationApplicationError,
     revision_conflict_code: &'static str,
 ) -> CommandError {
-    use crate::application::resource_mutation::ResourceMutationApplicationError;
+    use yss_application::resource_mutation::ResourceMutationApplicationError;
     match error {
         ResourceMutationApplicationError::SessionCapture(error) => match error {
-            crate::application::execution::SessionCaptureError::Inactive => {
+            yss_application::execution::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::application::execution::SessionCaptureError::Replacing => {
+            yss_application::execution::SessionCaptureError::Replacing => {
                 CommandError::expected("project_lifecycle_admission_closed")
             }
-            crate::application::execution::SessionCaptureError::Recovering => {
-                CommandError::expected("project_recovery_required").with_details(
-                    RecoveryRequiredDetails {
-                        recovery_required: true,
-                    },
-                )
-            }
+            yss_application::execution::SessionCaptureError::Recovering => CommandError::expected(
+                "project_recovery_required",
+            )
+            .with_details(RecoveryRequiredDetails {
+                recovery_required: true,
+            }),
         },
         ResourceMutationApplicationError::Project(error) => {
             crate::commands::project_failure::application_project_command_error(error)
@@ -196,26 +193,4 @@ pub(super) fn resource_mutation_to_command_error(
             CommandError::diagnosed("resource_session_refresh_failed", error)
         }
     }
-}
-
-pub(super) trait EmitOutcome {
-    fn discard(self);
-}
-
-impl EmitOutcome for () {
-    fn discard(self) {}
-}
-
-impl<E> EmitOutcome for Result<(), E> {
-    fn discard(self) {}
-}
-
-pub(super) fn emit_resource_result<R: EmitOutcome>(
-    emit: &mut impl FnMut(Event) -> R,
-    result: &ResourceMutationResultDto,
-) {
-    emit(Event::Project(EventProject::ResourceMutationCommitted {
-        result: result.clone(),
-    }))
-    .discard();
 }

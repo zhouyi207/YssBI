@@ -118,7 +118,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 |---|---|
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
-| `src-tauri/src/application/` | 跨 module 用例编排 |
+| `src-tauri/crates/yss-application/src/` | 独立 Application 层：跨 Project、Execution、Database、Graph、SCI 与 Bayes authority 的用例编排；不依赖根包、Tauri、Commands 或 IPC schema |
 | `src-tauri/src/backend_adapters/` | consumer-owned ports 到 concrete backend API 的 exact adapters；由 composition root 注入 |
 | `src-tauri/src/lib.rs` | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters；不拥有 Project 行为或 transport contract |
 | `src-tauri/crates/yss-execution/` | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner |
@@ -243,7 +243,7 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 
 ### 4.2 Application modules
 
-`src-tauri/src/application/` 当前提供以下主要深 module：
+`src-tauri/crates/yss-application/src/` 当前提供以下主要深 module：
 
 | Module | Interface 提供的 leverage | Implementation 所在 locality |
 |---|---|---|

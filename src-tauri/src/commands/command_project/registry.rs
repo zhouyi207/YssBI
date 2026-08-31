@@ -116,7 +116,7 @@ pub async fn remove_registered_project(
 #[tauri::command]
 pub async fn delete_registered_project_files(
     app: tauri::AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     registry: State<'_, ProjectRegistry>,
     id: String,
     expected_active_instance_id: Option<ProjectInstanceId>,

@@ -1,17 +1,17 @@
-use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::application::project_change::ApplicationProjectWatchError;
-use crate::application::project_lifecycle::ProjectLifecycleError;
 use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, EventResource, emit_project_event, emit_project_event_result,
 };
 use crate::schema::ProjectSaveResultDto;
-use crate::schema::application_event::{
-    LifecycleMutationOutcomeDto, LifecycleMutationResultDto, ProjectActivationResultDto,
-};
+#[cfg(test)]
+use crate::schema::application_event::LifecycleMutationOutcomeDto;
+use crate::schema::application_event::{LifecycleMutationResultDto, ProjectActivationResultDto};
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
+use yss_application::execution::{ApplicationState, SessionCaptureError};
+use yss_application::project_change::ApplicationProjectWatchError;
+use yss_application::project_lifecycle::ProjectLifecycleError;
 #[cfg(test)]
 use yss_project::ProjectState;
 use yss_project_identity::OperationId;
@@ -40,10 +40,10 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
 }
 
 pub(super) fn map_application_project_lifecycle_error(
-    error: crate::application::project_lifecycle::ApplicationProjectLifecycleError,
+    error: yss_application::project_lifecycle::ApplicationProjectLifecycleError,
 ) -> CommandError {
     match error {
-        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionCapture(
+        yss_application::project_lifecycle::ApplicationProjectLifecycleError::SessionCapture(
             error,
         ) => match error {
             SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
@@ -53,13 +53,13 @@ pub(super) fn map_application_project_lifecycle_error(
             SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
                 .with_details(serde_json::json!({ "recoveryRequired": true })),
         },
-        crate::application::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(
-            error,
-        ) => map_project_lifecycle_error(error),
-        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionChanged(
+        yss_application::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(error) => {
+            map_project_lifecycle_error(error)
+        }
+        yss_application::project_lifecycle::ApplicationProjectLifecycleError::SessionChanged(
             error,
         ) => CommandError::diagnosed("project_lifecycle_session_changed", error),
-        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionRefresh(
+        yss_application::project_lifecycle::ApplicationProjectLifecycleError::SessionRefresh(
             error,
         ) => CommandError::diagnosed("project_session_refresh_failed", error),
     }
@@ -251,7 +251,7 @@ pub async fn save_project_as(
         .map_err(map_application_project_lifecycle_error)?;
     let transport = crate::schema::application_event::project_lifecycle_to_transport(&result);
     publish_lifecycle_result(&app, &transport);
-    if result.outcome == crate::application::events::ProjectLifecycleOutcome::Committed {
+    if result.outcome == yss_application::events::ProjectLifecycleOutcome::Committed {
         if let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
             result.new_project_instance_id.as_ref(),

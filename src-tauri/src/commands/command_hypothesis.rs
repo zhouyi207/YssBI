@@ -1,10 +1,8 @@
 //! 假设检验 Tauri 命令（薄包装）
 
-use crate::application::hypothesis::{
-    HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test,
-};
 use crate::error::CommandError;
 use serde::{Deserialize, Serialize};
+use yss_application::hypothesis::{HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test};
 
 /// 假设检验请求
 #[derive(Debug, Deserialize)]

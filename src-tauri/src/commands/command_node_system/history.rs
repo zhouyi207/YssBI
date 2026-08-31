@@ -25,7 +25,7 @@ pub(super) fn get_project_history_status_from_state(
 
 #[tauri::command]
 pub fn get_project_history_status(
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
 ) -> Result<HistoryStatusDto, CommandError> {
     application
@@ -55,7 +55,7 @@ pub(super) fn undo_graph_document_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn undo_graph_document(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
@@ -86,7 +86,7 @@ pub(super) fn redo_graph_document_with_emitter<R: EmitOutcome>(
 #[tauri::command]
 pub fn redo_graph_document(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
+    application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
@@ -113,7 +113,7 @@ fn emit_application_history_result(
 }
 
 fn map_history_error(
-    error: crate::application::resource_mutation::ResourceMutationApplicationError,
+    error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "history_revision_conflict")
 }

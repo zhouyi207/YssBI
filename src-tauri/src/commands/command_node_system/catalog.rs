@@ -1,14 +1,14 @@
 use super::common::parse_graph_path;
-use crate::application::catalog_query::{
-    CatalogQueryApplicationError, CompatibleCatalogRequest, LocalizedCatalogRequest,
-    ProjectCatalogReadError,
-};
-use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::error::CommandError;
 #[cfg(all(test, any()))]
 use crate::schema::catalog::LocalizedCatalogDto as LegacyLocalizedCatalogDto;
 use crate::schema::catalog::LocalizedCatalogDto;
 use tauri::State;
+use yss_application::catalog_query::{
+    CatalogQueryApplicationError, CompatibleCatalogRequest, LocalizedCatalogRequest,
+    ProjectCatalogReadError,
+};
+use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_project_identity::ProjectInstanceId;
 
 fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
@@ -28,13 +28,13 @@ fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandEr
             CommandError::diagnosed("graph_contract_failed", error)
         }
         CatalogQueryApplicationError::Graph(error) => match error {
-            crate::application::catalog_query::GraphCatalogQueryError::RevisionConflict {
-                ..
-            } => CommandError::expected("graph_revision_conflict"),
-            crate::application::catalog_query::GraphCatalogQueryError::GraphNotLoaded {
-                ..
-            } => CommandError::expected("graph_not_loaded"),
-            crate::application::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
+            yss_application::catalog_query::GraphCatalogQueryError::RevisionConflict { .. } => {
+                CommandError::expected("graph_revision_conflict")
+            }
+            yss_application::catalog_query::GraphCatalogQueryError::GraphNotLoaded { .. } => {
+                CommandError::expected("graph_not_loaded")
+            }
+            yss_application::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
                 CommandError::expected("compatible_source_invalid")
             }
         },

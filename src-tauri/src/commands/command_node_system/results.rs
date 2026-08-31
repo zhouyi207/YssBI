@@ -1,12 +1,12 @@
 use super::common::parse_opaque_u64;
-use crate::application::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
-use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::commands::execution_dto::{
     PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
 };
 use crate::error::CommandError;
 use serde::Serialize;
 use tauri::State;
+use yss_application::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
+use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_execution::result::{ResultId, StoredResult};
 use yss_execution::value::RuntimeValue;
 

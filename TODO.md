@@ -855,3 +855,13 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   持久化事务编排与 publication 整体迁入 `src-tauri/crates/yss-project/` Stateful Project 层；删除根 owner/facade、
   重复 resource mutation 路径、永久关闭的边缘测试与零调用 hooks，让 Application/Commands/Composition Root 直接
   依赖唯一 crate；同时修复 Graph move undo/redo 误入恒定失败 legacy rename stub，并以可构造磁盘计划回归锁定。
+- [ ] 将根 `src/application/` 的跨 Project、Execution、Database、Graph、SCI 与 Bayes 用例编排整体迁入
+  `src-tauri/crates/yss-application/`；删除根 owner/facade，让 Commands 与 composition root 直接消费唯一
+  Application crate，并以最小公开 typed API、`test-support` feature 和架构门禁禁止 Tauri、Commands、Schema
+  或根包反向依赖。
+- [ ] 清理 Application 抽取后的重复与失效事实：数据库导出失败统一进入 typed cleanup、保留 session transition
+  主错误并记录 cleanup 次错误；删除零调用 database mutation/session hooks、重复 session/database receipt 字段、
+  不可构造 result-state/data-series wire 分支与永久关闭测试遗留的发射器，同时移除根包不再直接消费的依赖。
+- [ ] 收窄 `yss-application` 跨 crate API：以 `HypothesisApplicationError` 替代 hypothesis/`at()` 的公开
+  `String` error，隐藏仅内部使用的解析与 candidate-install 类型，并新增 ownership 门禁禁止根 Application facade、
+  Tauri/Transport 反向依赖及错误层分类回流。

@@ -449,13 +449,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .iter()
             .any(|alias| {
                 alias.owning_package == "yssbi"
-                    && alias.declared_name == "yss_canonical_hash"
-                    && alias.member_package == "yss-canonical-hash"
+                    && alias.declared_name == "yss_application"
+                    && alias.member_package == "yss-application"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
         dependency.owning_package == "yssbi"
-            && dependency.package_name == "yss-canonical-hash"
+            && dependency.package_name == "yss-application"
             && matches!(
                 dependency.authority,
                 CargoDependencyAuthority::WorkspaceMember { .. }
@@ -592,13 +592,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-application"
                     && alias.declared_name == "yss_graph_compiler"
                     && alias.member_package == "yss-graph-compiler"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-application"
             && dependency.package_name == "yss-graph-compiler"
             && matches!(
                 dependency.authority,
@@ -610,13 +610,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-graph-catalog"
                     && alias.declared_name == "yss_graph_compiler_diagnostics"
                     && alias.member_package == "yss-graph-compiler-diagnostics"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-graph-catalog"
             && dependency.package_name == "yss-graph-compiler-diagnostics"
             && matches!(
                 dependency.authority,
@@ -682,13 +682,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-application"
                     && alias.declared_name == "yss_graph_resource_contract"
                     && alias.member_package == "yss-graph-resource-contract"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-application"
             && dependency.package_name == "yss-graph-resource-contract"
             && matches!(
                 dependency.authority,
@@ -700,13 +700,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-graph-editor"
                     && alias.declared_name == "yss_graph_type_mapping"
                     && alias.member_package == "yss-graph-type-mapping"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-graph-editor"
             && dependency.package_name == "yss-graph-type-mapping"
             && matches!(
                 dependency.authority,
@@ -754,13 +754,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yssbi"
+                alias.owning_package == "yss-application"
                     && alias.declared_name == "yss_path_display"
                     && alias.member_package == "yss-path-display"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yssbi"
+        dependency.owning_package == "yss-application"
             && dependency.package_name == "yss-path-display"
             && matches!(
                 dependency.authority,
@@ -866,6 +866,73 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
 }
 
 #[test]
+fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-application/Cargo.toml",
+        "src-tauri/crates/yss-application/README.md",
+        "src-tauri/crates/yss-application/src/lib.rs",
+    ] {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "Application crate boundary must exist at {relative}"
+        );
+    }
+    assert!(
+        !facts
+            .repository_root
+            .join("src-tauri/src/application")
+            .exists(),
+        "the root package must not restore an Application owner or compatibility facade"
+    );
+
+    let workspace = std::fs::read_to_string(facts.repository_root.join("src-tauri/Cargo.toml"))
+        .expect("the Rust workspace manifest must be readable");
+    for declaration in [
+        "\"crates/yss-application\"",
+        "yss-application = { path = \"./crates/yss-application\" }",
+    ] {
+        assert!(
+            workspace.contains(declaration),
+            "the workspace and composition root must declare {declaration}"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-application/Cargo.toml"),
+    )
+    .expect("the Application manifest must be readable");
+    for backwards_dependency in ["tauri", "yssbi"] {
+        assert!(
+            !manifest.contains(backwards_dependency),
+            "Application must not depend backwards on {backwards_dependency}"
+        );
+    }
+
+    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
+        .expect("the composition root must be readable");
+    assert!(
+        root_lib.contains("yss_application::") && !root_lib.contains("pub mod application;"),
+        "the composition root must consume the crate directly without a compatibility module"
+    );
+
+    let application_sources = facts
+        .classification
+        .iter()
+        .filter(|(source, _)| source.starts_with("src-tauri/crates/yss-application/src/"))
+        .collect::<Vec<_>>();
+    assert!(!application_sources.is_empty());
+    assert!(
+        application_sources
+            .iter()
+            .all(|(_, layer)| **layer == RustLayer::Application),
+        "every yss-application production source must belong only to the Application layer"
+    );
+}
+
+#[test]
 fn production_target_discovery_fails_closed_for_unknown_kind() {
     let mut metadata = metadata_fixture_with_all_target_kinds();
     metadata["packages"][0]["targets"]
@@ -893,6 +960,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         target: "fixture_lib".to_owned(),
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/src/lib.rs"),
+    };
+    let application_root = ProductionRoot {
+        package_id: "application-package".to_owned(),
+        package: "yss-application".to_owned(),
+        target: "yss_application".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: PathBuf::from("src-tauri/crates/yss-application/src/lib.rs"),
     };
     let data_contract_root = ProductionRoot {
         package_id: "data-contract-package".to_owned(),
@@ -1085,6 +1159,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let roots = vec![
         runtime_root.clone(),
+        application_root.clone(),
         canonical_hash_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
@@ -1125,9 +1200,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         &roots,
         &[
             module(
-                &runtime_root,
-                "src-tauri/src/application/mod.rs",
-                "fixture_lib::application",
+                &application_root,
+                "src-tauri/crates/yss-application/src/lib.rs",
+                "yss_application",
             ),
             module(
                 &graph_catalog_root,
@@ -1284,7 +1359,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     )
     .expect("the representative production files must classify exactly once");
     assert_eq!(
-        classified["src-tauri/src/application/mod.rs"],
+        classified["src-tauri/crates/yss-application/src/lib.rs"],
         RustLayer::Application
     );
     assert_eq!(
@@ -1428,15 +1503,16 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         &roots,
         &[module(
             &build_root,
-            "src-tauri/src/application/mod.rs",
-            "fixture_lib::application",
+            "src-tauri/crates/yss-application/src/execution/session_factory.rs",
+            "yss_application::execution::session_factory",
         )],
     )
     .expect_err("BuildScript membership must not hide a second layer match");
     assert!(matches!(
         overlap,
         ArchitectureAuditError::MultiplyClassifiedProductionSource { source_files }
-            if source_files == vec!["src-tauri/src/application/mod.rs"]
+            if source_files
+                == vec!["src-tauri/crates/yss-application/src/execution/session_factory.rs"]
     ));
 }
 
@@ -2109,15 +2185,18 @@ fn dataset_profile_has_one_database_owner_without_root_facades() {
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-dataset-profile\"",
-        "yss-dataset-profile = { path = \"./crates/yss-dataset-profile\" }",
-    ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
-    }
+    assert!(
+        workspace_manifest.contains("\"crates/yss-dataset-profile\""),
+        "the workspace must include yss-dataset-profile"
+    );
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
+    assert!(
+        application_manifest
+            .contains("yss-dataset-profile = { path = \"../yss-dataset-profile\" }"),
+        "Application must declare its direct dataset-profile dependency"
+    );
     let profile_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-dataset-profile/Cargo.toml"))
             .expect("the dataset profile manifest must be readable");
@@ -2460,7 +2539,7 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
         "src-tauri/crates/yss-database-runtime/src/database_state.rs",
         "src-tauri/crates/yss-database-runtime/src/project_storage.rs",
         "src-tauri/crates/yss-database-schema/src/lib.rs",
-        "src-tauri/src/application/database.rs",
+        "src-tauri/crates/yss-application/src/database.rs",
         "src-tauri/crates/yss-project/src/project_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -2537,15 +2616,17 @@ fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallba
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-sql-source\"",
-        "yss-sql-source = { path = \"./crates/yss-sql-source\" }",
-    ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
-    }
+    assert!(
+        workspace_manifest.contains("\"crates/yss-sql-source\""),
+        "the workspace must include yss-sql-source"
+    );
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
+    assert!(
+        application_manifest.contains("yss-sql-source = { path = \"../yss-sql-source\" }"),
+        "Application must declare its direct SQL source dependency"
+    );
     let root_runtime_dependencies = workspace_manifest
         .split_once("[dependencies]")
         .expect("the root manifest must have runtime dependencies")
@@ -2635,8 +2716,9 @@ fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallba
         );
     }
 
-    let application = std::fs::read_to_string(root.join("src-tauri/src/application/database.rs"))
-        .expect("the database application must be readable");
+    let application =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/database.rs"))
+            .expect("the database application must be readable");
     assert!(
         application.contains("use yss_sql_source::{")
             && application.contains("list_sql_source_tables")
@@ -2751,9 +2833,9 @@ fn database_schema_has_one_owner_without_root_snapshot_or_type_string_drift() {
     }
 
     for relative in [
-        "src-tauri/src/application/database.rs",
-        "src-tauri/src/application/database_mutation.rs",
-        "src-tauri/src/application/project_query.rs",
+        "src-tauri/crates/yss-application/src/database.rs",
+        "src-tauri/crates/yss-application/src/database_mutation.rs",
+        "src-tauri/crates/yss-application/src/project_query.rs",
         "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
         "src-tauri/crates/yss-database-runtime/src/plot_query.rs",
         "src-tauri/crates/yss-database-runtime/src/runtime/mod.rs",
@@ -2819,15 +2901,27 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-database-edit\"",
-        "yss-database-edit = { path = \"./crates/yss-database-edit\" }",
         "\"crates/yss-tabular-polars\"",
-        "yss-tabular-polars = { path = \"./crates/yss-tabular-polars\" }",
     ] {
         assert!(
             workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
+            "the workspace must include {declaration}"
         );
     }
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
+    assert!(
+        application_manifest.contains("yss-database-edit = { path = \"../yss-database-edit\" }"),
+        "Application must declare its direct database-edit dependency"
+    );
+    let runtime_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/Cargo.toml"))
+            .expect("the database runtime manifest must be readable");
+    assert!(
+        runtime_manifest.contains("yss-tabular-polars = { path = \"../yss-tabular-polars\" }"),
+        "the database runtime must declare its direct tabular-Polars dependency"
+    );
 
     let adapter_manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/Cargo.toml"))
@@ -2943,7 +3037,7 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         );
     }
     let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/src/application/bayes.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/bayes.rs"))
             .expect("the Bayes application must be readable");
     assert!(
         bayes_application.contains("DatabaseDataSnapshot")
@@ -3081,7 +3175,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     );
 
     for relative in [
-        "src-tauri/src/application/database.rs",
+        "src-tauri/crates/yss-application/src/database.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
         "src-tauri/crates/yss-duckdb/src/table.rs",
@@ -3094,7 +3188,7 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         );
     }
     let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/src/application/bayes.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/bayes.rs"))
             .expect("the Bayes application must be readable");
     assert!(
         bayes_application.contains("yss_database_runtime::session_api")
@@ -3166,8 +3260,9 @@ fn database_export_uses_contract_and_engine_owners_without_root_facade() {
         );
     }
 
-    let application = std::fs::read_to_string(root.join("src-tauri/src/application/database.rs"))
-        .expect("the database application must be readable");
+    let application =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/database.rs"))
+            .expect("the database application must be readable");
     assert!(
         application.contains("format.parse::<DatabaseExportFormat>()")
             && !application.contains("DatabaseExportFormat::parse"),
@@ -3334,19 +3429,22 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
     }
 
     for relative in [
-        "src-tauri/src/application/database.rs",
-        "src-tauri/src/application/database_mutation.rs",
-        "src-tauri/src/application/database_session.rs",
-        "src-tauri/src/application/execution/session_slot.rs",
-        "src-tauri/src/application/graph_contracts.rs",
-        "src-tauri/src/application/worksheet_plot.rs",
+        "src-tauri/crates/yss-application/src/database.rs",
+        "src-tauri/crates/yss-application/src/database_mutation.rs",
+        "src-tauri/crates/yss-application/src/database_session.rs",
+        "src-tauri/crates/yss-application/src/execution/session_slot.rs",
+        "src-tauri/crates/yss-application/src/graph_contracts.rs",
+        "src-tauri/crates/yss-application/src/worksheet_plot.rs",
         "src-tauri/src/commands/command_worksheet.rs",
         "src-tauri/src/schema/catalog.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
         assert!(
-            consumer.contains("yss_database_runtime") && !consumer.contains("crate::database"),
+            consumer.contains("yss_database_runtime")
+                && !consumer.contains("crate::database::")
+                && !consumer.contains("use crate::database;")
+                && !consumer.contains("use crate::database::{"),
             "{relative} must consume yss-database-runtime without a root facade"
         );
     }
@@ -3539,15 +3637,17 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-path-display\"",
-        "yss-path-display = { path = \"./crates/yss-path-display\" }",
-    ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
-    }
+    assert!(
+        workspace_manifest.contains("\"crates/yss-path-display\""),
+        "the workspace must include yss-path-display"
+    );
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
+    assert!(
+        application_manifest.contains("yss-path-display = { path = \"../yss-path-display\" }"),
+        "Application must declare its direct path-display dependency"
+    );
 
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-path-display/Cargo.toml"))
@@ -3585,7 +3685,7 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
     }
 
     for relative in [
-        "src-tauri/src/application/project_query.rs",
+        "src-tauri/crates/yss-application/src/project_query.rs",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -3814,9 +3914,10 @@ fn graph_compiler_has_one_owner_without_optional_or_mirrored_compile_state() {
         !root.join("src-tauri/src/graph/error.rs").exists(),
         "the root crate must not restore a second graph error owner"
     );
-    let run_graph =
-        std::fs::read_to_string(root.join("src-tauri/src/application/execution/run_graph.rs"))
-            .expect("run graph source must be readable");
+    let run_graph = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-application/src/execution/run_graph.rs"),
+    )
+    .expect("run graph source must be readable");
     assert!(
         !run_graph.contains("PackageUnavailable"),
         "an infallible optional-package branch must not return"
@@ -4157,7 +4258,7 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
     );
 
     for consumer in [
-        "src-tauri/src/application/database.rs",
+        "src-tauri/crates/yss-application/src/database.rs",
         "src-tauri/crates/yss-project/src/project_state_variable.rs",
         "src-tauri/crates/yss-project/src/project_writers/variables.rs",
     ] {
@@ -4177,9 +4278,12 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
 
     let root_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("root Cargo manifest must be readable");
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
     assert!(
-        root_manifest.contains("yss-display-naming = { path = \"./crates/yss-display-naming\" }"),
-        "the root crate must declare its direct display-name dependency"
+        application_manifest.contains("yss-display-naming = { path = \"../yss-display-naming\" }"),
+        "Application must declare its direct display-name dependency"
     );
     assert!(
         !root_manifest
@@ -4635,8 +4739,8 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
 
     for relative in [
         "src-tauri/crates/yss-project-registry/src/lib.rs",
-        "src-tauri/src/application/events.rs",
-        "src-tauri/src/application/project_lifecycle/mod.rs",
+        "src-tauri/crates/yss-application/src/events.rs",
+        "src-tauri/crates/yss-application/src/project_lifecycle/mod.rs",
         "src-tauri/src/commands/command_project/registry.rs",
         "src-tauri/src/schema/application_event.rs",
         "src-tauri/crates/yss-project-registry-sqlite/src/lib.rs",
@@ -4649,9 +4753,10 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         );
     }
 
-    let lifecycle =
-        std::fs::read_to_string(root.join("src-tauri/src/application/project_lifecycle/mod.rs"))
-            .expect("project lifecycle application must be readable");
+    let lifecycle = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-application/src/project_lifecycle/mod.rs"),
+    )
+    .expect("project lifecycle application must be readable");
     assert!(
         lifecycle.contains("#[cfg(test)]")
             && lifecycle.contains("mod tests;")
@@ -4825,7 +4930,7 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
     );
 
     for relative in [
-        "src-tauri/src/application/computation_settings.rs",
+        "src-tauri/crates/yss-application/src/computation_settings.rs",
         "src-tauri/src/commands/command_project/settings.rs",
         "src-tauri/src/event/event_project.rs",
         "src-tauri/crates/yss-project/src/execution_authority.rs",
@@ -4845,9 +4950,10 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         );
     }
 
-    let application =
-        std::fs::read_to_string(root.join("src-tauri/src/application/computation_settings.rs"))
-            .expect("computation settings application adapter must be readable");
+    let application = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-application/src/computation_settings.rs"),
+    )
+    .expect("computation settings application adapter must be readable");
     for duplicate in ["ComputationSettingsMappingError", "fn validate("] {
         assert!(
             !application.contains(duplicate),
@@ -5022,15 +5128,17 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-project-change\"",
-        "yss-project-change = { path = \"./crates/yss-project-change\" }",
-    ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace and root package must declare {declaration}"
-        );
-    }
+    assert!(
+        workspace_manifest.contains("\"crates/yss-project-change\""),
+        "the workspace must include yss-project-change"
+    );
+    let application_manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
+            .expect("the Application manifest must be readable");
+    assert!(
+        application_manifest.contains("yss-project-change = { path = \"../yss-project-change\" }"),
+        "Application must declare its direct project-change dependency"
+    );
 
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-change/Cargo.toml"))
@@ -5087,7 +5195,7 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
 
     for relative in [
         "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
-        "src-tauri/src/application/project_change.rs",
+        "src-tauri/crates/yss-application/src/project_change.rs",
         "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -5358,7 +5466,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
     }
 
     for relative in [
-        "src-tauri/src/application/resource_mutation.rs",
+        "src-tauri/crates/yss-application/src/resource_mutation.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_state.rs",
         "src-tauri/src/schema/application_event.rs",
@@ -5651,8 +5759,8 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     }
 
     for relative in [
-        "src-tauri/src/application/execution/run_graph.rs",
-        "src-tauri/src/application/resource_mutation.rs",
+        "src-tauri/crates/yss-application/src/execution/run_graph.rs",
+        "src-tauri/crates/yss-application/src/resource_mutation.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_io.rs",
         "src-tauri/crates/yss-project/src/project_lifecycle.rs",
@@ -5929,7 +6037,7 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "src-tauri/crates/yss-project-filesystem/src/recovery.rs",
         "src-tauri/crates/yss-project-filesystem/src/root.rs",
         "src-tauri/crates/yss-project-filesystem/src/transaction.rs",
-        "src-tauri/src/application/project_failure.rs",
+        "src-tauri/crates/yss-application/src/project_failure.rs",
         "src-tauri/src/commands/project_failure.rs",
     ] {
         assert!(
@@ -6042,9 +6150,10 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "Project must adapt its rich transaction context into minimal filesystem facts"
     );
 
-    let application_failure =
-        std::fs::read_to_string(root.join("src-tauri/src/application/project_failure.rs"))
-            .expect("application project failure view must be readable");
+    let application_failure = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-application/src/project_failure.rs"),
+    )
+    .expect("application project failure view must be readable");
     assert!(
         application_failure.contains("ProjectFilesystemError")
             && application_failure.contains("ApplicationProjectFailure"),
@@ -6415,7 +6524,7 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     for relative in [
         "src-tauri/crates/yss-project/src/project_io.rs",
         "src-tauri/crates/yss-project/src/project_reads.rs",
-        "src-tauri/src/application/resource_mutation.rs",
+        "src-tauri/crates/yss-application/src/resource_mutation.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -6437,7 +6546,7 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     }
 
     let catalog_query =
-        std::fs::read_to_string(root.join("src-tauri/src/application/catalog_query.rs"))
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/catalog_query.rs"))
             .expect("catalog query must be readable");
     assert!(
         catalog_query.contains("yss_function_editor_projection::parse_function_data_type")
@@ -6710,7 +6819,7 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     }
 
     for relative in [
-        "src-tauri/src/application/worksheet.rs",
+        "src-tauri/crates/yss-application/src/worksheet.rs",
         "src-tauri/src/commands/command_worksheet.rs",
         "src-tauri/crates/yss-project-history/src/lib.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
@@ -6973,7 +7082,7 @@ fn project_watcher_has_one_lifecycle_owner_and_notify_adapter_crate() {
     }
     assert!(
         !root
-            .join("src-tauri/src/application/project_watcher.rs")
+            .join("src-tauri/crates/yss-application/src/project_watcher.rs")
             .exists(),
         "the root Application must not retain the watcher lifecycle owner"
     );
@@ -7695,7 +7804,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/application/bayes.rs"),
+            .join("src-tauri/crates/yss-application/src/bayes.rs"),
     )
     .expect("Bayes application workflow must be readable");
     assert!(application.contains("owned_artifacts: Vec<PathBuf>"));
@@ -7916,7 +8025,7 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
     }
 
     for direct_consumer in [
-        "src-tauri/src/application/bayes.rs",
+        "src-tauri/crates/yss-application/src/bayes.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
@@ -8037,7 +8146,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/src/application/bayes.rs"),
+            .join("src-tauri/crates/yss-application/src/bayes.rs"),
     )
     .expect("Bayes application source must be readable");
     for required in [
@@ -8216,9 +8325,9 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "composition root must not restore the SCI facade"
     );
     for consumer in [
-        "src-tauri/src/application/bayes.rs",
-        "src-tauri/src/application/hypothesis.rs",
-        "src-tauri/src/application/statistics.rs",
+        "src-tauri/crates/yss-application/src/bayes.rs",
+        "src-tauri/crates/yss-application/src/hypothesis.rs",
+        "src-tauri/crates/yss-application/src/statistics.rs",
         "src-tauri/src/backend_adapters/execution/bayes_artifacts.rs",
         "src-tauri/src/backend_adapters/execution/scientific.rs",
         "src-tauri/src/commands/command_panel_did.rs",
@@ -8314,7 +8423,7 @@ fn sci_contract_has_one_pure_owner_without_root_facades_or_unchecked_inputs() {
         "src-tauri/src/sci/api/computation.rs",
         "src-tauri/src/sci/api/control.rs",
         "src-tauri/src/sci/error.rs",
-        "src-tauri/src/application/statistical_input.rs",
+        "src-tauri/crates/yss-application/src/statistical_input.rs",
     ] {
         assert!(
             !facts.repository_root.join(removed).exists(),
@@ -8621,7 +8730,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         ),
         ("src-tauri/src/graph/mod.rs".to_owned(), RustLayer::Graph),
         (
-            "src-tauri/src/application/mod.rs".to_owned(),
+            "src-tauri/crates/yss-application/src/lib.rs".to_owned(),
             RustLayer::Application,
         ),
         (
@@ -8729,7 +8838,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
 
     let workspace_member = CanonicalDependency {
         owning_package: "fixture".to_owned(),
-        source_file: "src-tauri/src/application/mod.rs".to_owned(),
+        source_file: "src-tauri/crates/yss-application/src/lib.rs".to_owned(),
         owner: "fixture_lib::application".to_owned(),
         kind: RustDependencyKind::Use,
         mode: RustDependencyMode::Runtime,
@@ -8758,7 +8867,8 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         mode: RustDependencyMode::Runtime,
         origin: CanonicalOrigin::Repository {
             package_name: "fixture".to_owned(),
-            repository_relative_declaration_file: "src-tauri/src/application/mod.rs".to_owned(),
+            repository_relative_declaration_file: "src-tauri/crates/yss-application/src/lib.rs"
+                .to_owned(),
             fully_qualified_target: "fixture_lib::application::run".to_owned(),
             symbol: "run".to_owned(),
         },
@@ -8814,7 +8924,8 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         mode: RustDependencyMode::Build,
         origin: CanonicalOrigin::Repository {
             package_name: "fixture".to_owned(),
-            repository_relative_declaration_file: "src-tauri/src/application/mod.rs".to_owned(),
+            repository_relative_declaration_file: "src-tauri/crates/yss-application/src/lib.rs"
+                .to_owned(),
             fully_qualified_target: "fixture_lib::application::ApplicationState".to_owned(),
             symbol: "ApplicationState".to_owned(),
         },

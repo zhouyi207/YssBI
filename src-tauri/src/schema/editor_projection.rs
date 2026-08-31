@@ -1,4 +1,4 @@
-use crate::application::editor_projection::{
+use yss_application::editor_projection::{
     EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
     EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorParameterModel,
     EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionModel,
@@ -68,7 +68,7 @@ pub fn map_editor_projection(
 
 fn map_node(
     model: &EditorProjectionModel,
-    node: &crate::application::editor_projection::EditorNodeModel,
+    node: &yss_application::editor_projection::EditorNodeModel,
 ) -> Result<EditorNodeProjectionDto, TransportMappingError> {
     Ok(EditorNodeProjectionDto {
         graph_path: model.graph_path.as_str().into(),
@@ -276,14 +276,14 @@ fn map_outcome(outcome: &EditorCompilationOutcome) -> CompilationOutcomeDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::editor_projection::{
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use yss_application::editor_projection::{
         EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities, EditorNodeDisplay,
         EditorNodeModel, EditorPortConnectionCapabilities, EditorPortDisplay,
         EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
         EditorTypeSummary,
     };
-    use serde_json::json;
-    use std::collections::BTreeMap;
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };

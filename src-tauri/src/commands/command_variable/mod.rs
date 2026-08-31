@@ -249,7 +249,7 @@ fn ensure_variable_data_type(data_type: &DataType) -> Result<(), CommandError> {
 #[tauri::command]
 pub fn create_variable(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     name: &str,
     data_type: DataType,
     data_value: DataValue,
@@ -260,7 +260,7 @@ pub fn create_variable(
     expected_collection_revision: u64,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    let request = crate::application::variable_mutation::VariableMutationRequest::Create {
+    let request = yss_application::variable_mutation::VariableMutationRequest::Create {
         project_instance_id,
         name: name.to_owned(),
         data_type,
@@ -286,7 +286,7 @@ pub fn create_variable(
 /// 获取变量（统一接口）
 #[tauri::command]
 pub fn get_variable(
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     variable_id: VariableId,
     project_instance_id: ProjectInstanceId,
 ) -> Result<VariableInstanceDTO, CommandError> {
@@ -300,7 +300,7 @@ pub fn get_variable(
 #[tauri::command]
 pub fn update_variable(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     variable_id: VariableId,
     name: Option<String>,
     data_type: Option<DataType>,
@@ -311,7 +311,7 @@ pub fn update_variable(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    let request = crate::application::variable_mutation::VariableMutationRequest::Update {
+    let request = yss_application::variable_mutation::VariableMutationRequest::Update {
         project_instance_id,
         variable_id,
         name,
@@ -338,13 +338,13 @@ pub fn update_variable(
 #[tauri::command]
 pub fn delete_variable(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     variable_id: VariableId,
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    let request = crate::application::variable_mutation::VariableMutationRequest::Delete {
+    let request = yss_application::variable_mutation::VariableMutationRequest::Delete {
         project_instance_id,
         variable_id,
         expected_revision,
@@ -363,7 +363,7 @@ pub fn delete_variable(
 
 fn emit_application_event(
     app: &AppHandle,
-    event: &crate::application::events::ApplicationEvent,
+    event: &yss_application::events::ApplicationEvent,
 ) -> Result<(), CommandError> {
     let event = crate::schema::application_event::application_event_to_transport(event)
         .map_err(|error| CommandError::diagnosed("variable_event_mapping_failed", error))?;
@@ -372,9 +372,9 @@ fn emit_application_event(
 }
 
 fn map_variable_mutation_error(
-    error: crate::application::variable_mutation::VariableMutationApplicationError,
+    error: yss_application::variable_mutation::VariableMutationApplicationError,
 ) -> CommandError {
-    use crate::application::variable_mutation::VariableMutationApplicationError;
+    use yss_application::variable_mutation::VariableMutationApplicationError;
     match error {
         VariableMutationApplicationError::SessionCapture(error) => map_session_capture_error(error),
         VariableMutationApplicationError::ProjectIdentityMismatch { .. } => {
@@ -396,9 +396,9 @@ fn map_variable_mutation_error(
 }
 
 fn map_variable_query_error(
-    error: crate::application::variable_mutation::VariableQueryApplicationError,
+    error: yss_application::variable_mutation::VariableQueryApplicationError,
 ) -> CommandError {
-    use crate::application::variable_mutation::VariableQueryApplicationError;
+    use yss_application::variable_mutation::VariableQueryApplicationError;
     match error {
         VariableQueryApplicationError::SessionCapture(error) => map_session_capture_error(error),
         VariableQueryApplicationError::ProjectIdentityMismatch { .. } => {
@@ -417,16 +417,16 @@ fn map_variable_query_error(
 }
 
 fn map_session_capture_error(
-    error: crate::application::execution::SessionCaptureError,
+    error: yss_application::execution::SessionCaptureError,
 ) -> CommandError {
     match error {
-        crate::application::execution::SessionCaptureError::Inactive => {
+        yss_application::execution::SessionCaptureError::Inactive => {
             CommandError::expected("stale_project_lifecycle")
         }
-        crate::application::execution::SessionCaptureError::Replacing => {
+        yss_application::execution::SessionCaptureError::Replacing => {
             CommandError::expected("project_lifecycle_admission_closed")
         }
-        crate::application::execution::SessionCaptureError::Recovering => {
+        yss_application::execution::SessionCaptureError::Recovering => {
             CommandError::expected("project_recovery_required")
                 .with_details(serde_json::json!({ "recoveryRequired": true }))
         }

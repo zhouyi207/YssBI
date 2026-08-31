@@ -1,7 +1,7 @@
 use serde::Serialize;
 
-use crate::application::database::{DatabaseApplicationError, DatabaseApplicationOperation};
 use crate::error::CommandError;
+use yss_application::database::{DatabaseApplicationError, DatabaseApplicationOperation};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 

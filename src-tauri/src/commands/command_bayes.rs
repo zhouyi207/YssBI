@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::application::bayes::{BayesApplicationError, BayesInferenceService};
-use crate::application::execution::ApplicationState;
 use crate::error::CommandError;
+use yss_application::bayes::{BayesApplicationError, BayesInferenceService};
+use yss_application::execution::ApplicationState;
 use yss_bayes_model::{
     BayesModelDraft, ColumnMeta, ParsedExpression, parse_model_expression, validate_draft,
 };

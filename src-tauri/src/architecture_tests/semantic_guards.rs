@@ -22,7 +22,7 @@ const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
     "src-tauri/crates/yss-project-change/src/lib.rs",
     "src-tauri/crates/yss-project-watcher/src/lib.rs",
     "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
-    "src-tauri/src/application/project_change.rs",
+    "src-tauri/crates/yss-application/src/project_change.rs",
 ];
 const PROJECT_WATCHER_PLATFORM_FILES: &[&str] =
     &["src-tauri/crates/yss-project-watcher-notify/src/lib.rs"];
@@ -1922,7 +1922,7 @@ fn bayes_artifact_authority_can_only_be_minted_at_worker_boundary() {
     );
 
     let fixture = bayes_worker_source_violations(
-        "src-tauri/src/application/forbidden.rs",
+        "src-tauri/crates/yss-application/src/forbidden.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker::*;
@@ -2015,7 +2015,7 @@ impl BayesWorkerAuthority {
 #[test]
 fn bayes_import_and_type_alias_authority_is_rejected() {
     let findings = bayes_worker_source_violations(
-        "src-tauri/src/application/aliased_worker_authority.rs",
+        "src-tauri/crates/yss-application/src/aliased_worker_authority.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker::BayesWorkerAuthority as Authority;
@@ -2042,7 +2042,7 @@ fn forge(authority: &Authority, task_id: BayesTaskId, generation: NonZeroU64) {
 #[test]
 fn bayes_external_impl_self_authority_is_rejected() {
     let findings = bayes_worker_source_violations(
-        "src-tauri/src/application/external_worker_impl.rs",
+        "src-tauri/crates/yss-application/src/external_worker_impl.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker::BayesWorkerAuthority;
@@ -2068,7 +2068,7 @@ impl BayesWorkerAuthority {
 #[test]
 fn bayes_module_scoped_aliases_are_canonicalized() {
     let module_alias = bayes_worker_source_violations(
-        "src-tauri/src/application/module_alias_authority.rs",
+        "src-tauri/crates/yss-application/src/module_alias_authority.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker as w;
@@ -2107,7 +2107,7 @@ fn forge(authority: &RelativeAuthority, task: BayesTaskHandle, artifact: Artifac
     }));
 
     let nested_forward_alias = bayes_worker_source_violations(
-        "src-tauri/src/application/nested_alias_authority.rs",
+        "src-tauri/crates/yss-application/src/nested_alias_authority.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker as w;
@@ -2129,7 +2129,7 @@ mod nested {
     }));
 
     let unrelated = bayes_worker_source_violations(
-        "src-tauri/src/application/unrelated_handle.rs",
+        "src-tauri/crates/yss-application/src/unrelated_handle.rs",
         RustLayer::Application,
         r#"
 use other::Handle;
@@ -2149,7 +2149,7 @@ fn allowed() {
 #[test]
 fn bayes_group_self_module_alias_is_canonicalized() {
     let findings = bayes_worker_source_violations(
-        "src-tauri/src/application/group_self_authority.rs",
+        "src-tauri/crates/yss-application/src/group_self_authority.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker::{self as w};
@@ -2170,7 +2170,7 @@ fn forge(authority: &Authority, task_id: BayesTaskId, generation: NonZeroU64) {
 #[test]
 fn bayes_restricted_associated_functions_are_rejected() {
     let findings = bayes_worker_source_violations(
-        "src-tauri/src/application/restricted_worker_impl.rs",
+        "src-tauri/crates/yss-application/src/restricted_worker_impl.rs",
         RustLayer::Application,
         r#"
 use yss_bayes_worker::BayesWorkerAuthority;

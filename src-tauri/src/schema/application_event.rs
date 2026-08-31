@@ -1,9 +1,9 @@
-use crate::application::events::{
+use crate::event::EventProject;
+use serde::{Deserialize, Serialize};
+use yss_application::events::{
     ApplicationEvent, CommittedResourceMutation, LifecycleRecoveryAction, ProjectLifecycleKind,
     ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceProjectionStatus,
 };
-use crate::event::EventProject;
-use serde::{Deserialize, Serialize};
 use yss_project_registry_contract::ProjectRecord;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,7 +15,7 @@ pub struct ProjectActivationResultDto {
 }
 
 pub(crate) fn project_activation_to_transport(
-    activation: &crate::application::project_query::ProjectActivation,
+    activation: &yss_application::project_query::ProjectActivation,
 ) -> ProjectActivationResultDto {
     ProjectActivationResultDto {
         path: activation.path.clone(),
@@ -169,7 +169,7 @@ pub enum GraphMutationTransportError {
 }
 
 pub fn graph_mutation_to_transport(
-    result: &crate::application::events::GraphMutationResult,
+    result: &yss_application::events::GraphMutationResult,
 ) -> Result<GraphMutationResultDto, GraphMutationTransportError> {
     Ok(GraphMutationResultDto {
         project_instance_id: result.project_instance_id.to_string(),
@@ -193,9 +193,7 @@ pub fn graph_mutation_to_transport(
 }
 
 pub(crate) fn graph_delta_to_transport(
-    delta: &crate::application::events::GraphDeltaEvent<
-        yss_graph_document_edit::GraphDocumentPatch,
-    >,
+    delta: &yss_application::events::GraphDeltaEvent<yss_graph_document_edit::GraphDocumentPatch>,
 ) -> GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch> {
     GraphDeltaEventDto {
         graph_path: delta.graph_path.as_str().to_owned(),
@@ -222,7 +220,7 @@ pub fn application_event_to_transport(
 }
 
 pub(crate) fn project_lifecycle_to_transport(
-    event: &crate::application::events::ProjectLifecycleApplicationEvent,
+    event: &yss_application::events::ProjectLifecycleApplicationEvent,
 ) -> LifecycleMutationResultDto {
     LifecycleMutationResultDto {
         operation_id: event.operation_id,
@@ -278,7 +276,7 @@ fn lifecycle_outcome_to_transport(outcome: ProjectLifecycleOutcome) -> Lifecycle
 }
 
 fn recovery_to_transport(
-    recovery: &crate::application::events::LifecycleRecovery,
+    recovery: &yss_application::events::LifecycleRecovery,
 ) -> LifecycleRecoveryDto {
     LifecycleRecoveryDto {
         required: recovery.required,
@@ -345,14 +343,14 @@ fn projection_status_to_transport(status: &ResourceProjectionStatus) -> Projecti
 #[cfg(test)]
 mod tests {
     use super::application_event_to_transport;
-    use crate::application::events::{
+    use crate::schema::application_event::ResourceMutationResultDto;
+    use serde_json::json;
+    use yss_application::events::{
         ApplicationEvent, CommittedResourceMutation, HistoryStatus, LifecycleInvalidation,
         LifecycleRecovery, LifecycleRecoveryAction, ProjectLifecycleApplicationEvent,
         ProjectLifecycleKind, ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove,
         ResourceProjectionStatus,
     };
-    use crate::schema::application_event::ResourceMutationResultDto;
-    use serde_json::json;
     use yss_project_history::ResourceLifecycleKind;
     use yss_project_identity::{OperationId, ProjectInstanceId};
 

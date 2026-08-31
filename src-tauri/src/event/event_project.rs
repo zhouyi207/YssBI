@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, any()))]
 use crate::schema::application_event::{
     GraphMutationResultDto, GraphProjectionReplacementDto, LifecycleInvalidationDto,
     LifecycleMutationKindDto, LifecycleMutationOutcomeDto, LifecycleMutationPhaseDto,
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn graph_delta_event_carries_project_identity() {
-        let delta = crate::application::events::GraphDeltaEvent {
+        let delta = yss_application::events::GraphDeltaEvent {
             graph_path: yss_graph_document::GraphResourcePath::new("events/Main.yssbi-event")
                 .unwrap(),
             from_revision: yss_project_identity::ResourceRevision::INITIAL,

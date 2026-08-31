@@ -1,12 +1,12 @@
 use super::common::{RecoveryRequiredDetails, parse_graph_path, parse_opaque_u64};
-use crate::application::execution::run_graph::{
-    CancelRunOutcome, ExecutionApplicationError, RunApplicationEvent, RunGraphRequest,
-    run_graph_with_sink,
-};
 use crate::commands::execution_dto::{ExecutionChannelEventDto, ExecutionDemandDto};
 use crate::error::CommandError;
 use serde::Serialize;
 use tauri::{State, ipc::Channel};
+use yss_application::execution::run_graph::{
+    CancelRunOutcome, ExecutionApplicationError, RunApplicationEvent, RunGraphRequest,
+    run_graph_with_sink,
+};
 use yss_project_identity::ProjectInstanceId;
 
 struct TauriExecutionChannelAdapter {
@@ -81,10 +81,10 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
             CommandError::diagnosed("execution_run_finalization_failed", error)
         }
         ExecutionApplicationError::StaleSession(error) => match error {
-            crate::application::execution::SessionRevalidationError::Unavailable(error) => {
+            yss_application::execution::SessionRevalidationError::Unavailable(error) => {
                 session_capture_command_error(error)
             }
-            crate::application::execution::SessionRevalidationError::Changed => {
+            yss_application::execution::SessionRevalidationError::Changed => {
                 CommandError::expected("stale_project_lifecycle")
             }
         },
@@ -92,16 +92,16 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
 }
 
 fn session_capture_command_error(
-    error: crate::application::execution::SessionCaptureError,
+    error: yss_application::execution::SessionCaptureError,
 ) -> CommandError {
     match error {
-        crate::application::execution::SessionCaptureError::Inactive => {
+        yss_application::execution::SessionCaptureError::Inactive => {
             CommandError::expected("stale_project_lifecycle")
         }
-        crate::application::execution::SessionCaptureError::Replacing => {
+        yss_application::execution::SessionCaptureError::Replacing => {
             CommandError::expected("project_lifecycle_admission_closed")
         }
-        crate::application::execution::SessionCaptureError::Recovering => CommandError::expected(
+        yss_application::execution::SessionCaptureError::Recovering => CommandError::expected(
             "project_recovery_required",
         )
         .with_details(RecoveryRequiredDetails {
@@ -164,18 +164,18 @@ pub struct PinPreviewGenerationDto {
 
 #[tauri::command]
 pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, CommandError> {
-    crate::application::pin_preview_generation::allocate_pin_preview_generation()
+    yss_application::pin_preview_generation::allocate_pin_preview_generation()
         .map(|generation| PinPreviewGenerationDto { generation })
         .map_err(|_| CommandError::expected("pin_preview_generation_exhausted"))
 }
 
 #[tauri::command]
 pub fn cancel_graph_run(
-    state: State<'_, crate::application::execution::ApplicationState>,
+    state: State<'_, yss_application::execution::ApplicationState>,
     run_id: String,
 ) -> Result<bool, CommandError> {
     let run_id = parse_opaque_u64("runId", &run_id)?;
-    let outcome = crate::application::execution::run_graph::cancel_run(
+    let outcome = yss_application::execution::run_graph::cancel_run(
         state.inner(),
         yss_execution::run_registry::RunId::from_existing(run_id),
     )
@@ -188,7 +188,7 @@ pub fn cancel_graph_run(
 
 #[tauri::command]
 pub async fn execute_graph_document(
-    state: State<'_, crate::application::execution::ApplicationState>,
+    state: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     demand: ExecutionDemandDto,

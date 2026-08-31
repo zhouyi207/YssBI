@@ -1,11 +1,11 @@
-use crate::application::execution::{ApplicationState, SessionCaptureError};
-use crate::application::worksheet::WorksheetApplicationError;
-use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::application_event::ResourceMutationResultDto;
 use serde::Serialize;
 use tauri::{AppHandle, State};
+use yss_application::execution::{ApplicationState, SessionCaptureError};
+use yss_application::worksheet::WorksheetApplicationError;
+use yss_application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
@@ -68,7 +68,7 @@ fn emit_worksheet_application_result(
 #[tauri::command]
 pub fn create_worksheet(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     name: String,
@@ -85,7 +85,7 @@ pub fn create_worksheet(
 #[tauri::command]
 pub fn duplicate_worksheet(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
@@ -106,7 +106,7 @@ pub fn duplicate_worksheet(
 
 #[tauri::command]
 pub fn load_worksheet(
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: String,
     worksheet_path: WorksheetResourcePath,
 ) -> Result<WorksheetDocument, CommandError> {
@@ -120,7 +120,7 @@ pub fn load_worksheet(
 #[tauri::command]
 pub fn save_worksheet(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
@@ -144,7 +144,7 @@ pub fn save_worksheet(
 #[tauri::command]
 pub fn rename_worksheet_resource(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
@@ -170,7 +170,7 @@ pub fn rename_worksheet_resource(
 #[tauri::command]
 pub fn remove_worksheet(
     app: AppHandle,
-    application: State<crate::application::execution::ApplicationState>,
+    application: State<yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
@@ -272,11 +272,11 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
     }
 }
 
-fn plot_axis_format(format: crate::application::worksheet_plot::PlotAxisFormat) -> String {
+fn plot_axis_format(format: yss_application::worksheet_plot::PlotAxisFormat) -> String {
     match format {
-        crate::application::worksheet_plot::PlotAxisFormat::Number => "number",
-        crate::application::worksheet_plot::PlotAxisFormat::Date => "date",
-        crate::application::worksheet_plot::PlotAxisFormat::Datetime => "datetime",
+        yss_application::worksheet_plot::PlotAxisFormat::Number => "number",
+        yss_application::worksheet_plot::PlotAxisFormat::Date => "date",
+        yss_application::worksheet_plot::PlotAxisFormat::Datetime => "datetime",
     }
     .to_owned()
 }

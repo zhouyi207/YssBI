@@ -4,7 +4,7 @@ use std::path::Path;
 
 use polars::prelude::{DataFrame, Float64Chunked};
 
-use crate::application::bayes::{BayesArtifactReadError, BayesArtifactReader};
+use yss_application::bayes::{BayesArtifactReadError, BayesArtifactReader};
 use yss_bayes_result::{
     AutocorrelationPlotData, AutocorrelationPoint, AutocorrelationSeries, DensityPlotData,
     DensityPoint, DensitySeries, PosteriorPredictivePage, PosteriorPredictiveRow,
