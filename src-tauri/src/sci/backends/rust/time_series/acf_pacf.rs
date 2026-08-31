@@ -1,7 +1,7 @@
 use yss_sci::ts::acf_pacf::{acf, pacf};
 
 use crate::sci::api::time_series::acf_pacf::AcfPacfOutput;
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
 pub fn compute_at_lag(values: &[f64], max_lag: usize) -> Result<AcfPacfOutput, SciError> {
     let n = values.len();

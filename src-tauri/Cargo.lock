@@ -9599,6 +9599,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-sci-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "yss-sql-source"
 version = "0.1.0"
 dependencies = [
@@ -9780,6 +9789,7 @@ dependencies = [
  "yss-resource-lifecycle",
  "yss-resource-naming",
  "yss-sci",
+ "yss-sci-contract",
  "yss-sql-source",
  "yss-tabular-contract",
  "yss-tabular-io",

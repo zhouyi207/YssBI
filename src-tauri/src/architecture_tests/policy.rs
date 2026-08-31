@@ -227,14 +227,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_execution::ports::scientific::StatisticsResult",
             "yss_execution::settings::ExecutionMissingValuePolicy",
             "yss_execution::settings::ExecutionSettings",
-            "yssbi_lib::sci::api::computation::MissingValuePolicy",
-            "yssbi_lib::sci::api::computation::NumericTolerance",
-            "yssbi_lib::sci::api::computation::SciComputationSettings",
-            "yssbi_lib::sci::api::computation::StatisticalObservationMetadata",
-            "yssbi_lib::sci::api::computation::StatisticalSettingSource",
-            "yssbi_lib::sci::api::control::AbsoluteDeadline",
-            "yssbi_lib::sci::api::control::ExecutionControl",
-            "yssbi_lib::sci::api::control::SciCancellationSource",
             "yssbi_lib::sci::api::density::KernelDensityInput",
             "yssbi_lib::sci::api::density::compute_kernel_density",
             "yssbi_lib::sci::api::node_statistics::InstrumentalVariableKind",
@@ -249,9 +241,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::sci::api::node_statistics::vec_rank_test",
             "yssbi_lib::sci::api::time_series::acf_pacf::AcfPacfInput",
             "yssbi_lib::sci::api::time_series::acf_pacf::compute_acf_pacf",
-            "yssbi_lib::sci::error::SciError",
-            "yssbi_lib::sci::error::SciInputViolation",
-            "yssbi_lib::sci::error::SciOperationCode",
         ],
     },
     InternalDependencyCapability {
@@ -341,8 +330,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerPort",
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerTerminalCode",
             "yssbi_lib::sci::api::bayes::worker::ValidatedBayesTask",
-            "yssbi_lib::sci::api::control::CancelDeliveryControl",
-            "yssbi_lib::sci::api::control::ExecutionControl",
         ],
     },
     InternalDependencyCapability {
@@ -365,9 +352,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerError",
             "yssbi_lib::sci::api::bayes::worker::BayesWorkerTerminalCode::Failed",
             "yssbi_lib::sci::api::bayes::worker::ValidatedBayesTask",
-            "yssbi_lib::sci::api::computation::CategoricalRole",
-            "yssbi_lib::sci::api::computation::StatisticalInput",
-            "yssbi_lib::sci::api::computation::StatisticalScalar",
         ],
     },
     InternalDependencyCapability {
@@ -1680,6 +1664,7 @@ fn non_build_memberships(
             | "yss-project-progress"
             | "yss-project-registry-contract"
             | "yss-resource-naming"
+            | "yss-sci-contract"
             | "yss-tabular-contract"
             | "yss-variable-contract"
             | "yss-variable-value"

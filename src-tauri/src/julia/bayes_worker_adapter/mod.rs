@@ -12,8 +12,8 @@ use crate::sci::api::bayes::worker::{
     BayesTaskResult, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
     ValidatedBayesTask,
 };
-use crate::sci::api::control::{CancelDeliveryControl, ExecutionControl};
 use yss_julia_worker::{JuliaWorkerError, JuliaWorkerManager, JuliaWorkerTaskDirectory};
+use yss_sci_contract::{CancelDeliveryControl, ExecutionControl};
 
 mod fit;
 mod predictor;
@@ -497,11 +497,11 @@ mod tests {
         ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId,
         BayesWorkerError, BayesWorkerPort, ValidatedBayesTask,
     };
-    use crate::sci::api::computation::{StatisticalInput, StatisticalScalar};
-    use crate::sci::api::control::{
-        AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
-    };
     use yss_julia_worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
+    use yss_sci_contract::{
+        AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
+        StatisticalInput, StatisticalScalar,
+    };
 
     struct TemporaryAppRoot(std::path::PathBuf);
 
@@ -664,7 +664,7 @@ mod tests {
         }))
         .expect("model fixture must deserialize");
         let input = |name: &str, values: [f64; 2]| {
-            StatisticalInput::new(
+            StatisticalInput::try_new(
                 name.into(),
                 values
                     .into_iter()
@@ -673,6 +673,7 @@ mod tests {
                     .into_boxed_slice(),
                 None,
             )
+            .expect("finite test input must validate")
         };
         ValidatedBayesTask::try_new(
             BayesTaskId::try_from(task_id).expect("task ID must validate"),

@@ -30,7 +30,6 @@ use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesInputValidationError,
     BayesProgressCallback, PlaceholderBayesBackend, validate_bayes_input_table,
 };
-use crate::sci::api::control::{AbsoluteDeadline, ExecutionControl, SciCancellationSource};
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
@@ -39,6 +38,10 @@ use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
 use yss_database_runtime::session_api::{
     DatabaseColumnSelection, DatabaseDataSnapshot, DatabaseDataSnapshotRequest,
     revalidate_declaration_observations,
+};
+use yss_sci_contract::{
+    AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
+    StatisticalInput, StatisticalScalar,
 };
 #[cfg(test)]
 use yss_tabular_io::read_ipc_dataframe;
@@ -514,7 +517,7 @@ impl BayesInferenceService {
     fn submit_worker_spec(
         &self,
         spec: BayesModelSpec,
-        inputs: Arc<[crate::sci::api::computation::StatisticalInput]>,
+        inputs: Arc<[StatisticalInput]>,
     ) -> Result<BayesInferenceTask, BayesApplicationError> {
         let task_id = new_task_id();
         let task = validate_bayes_task(task_id.as_str(), spec, inputs)
@@ -655,9 +658,7 @@ impl BayesInferenceService {
                 worker
                     .cancel(
                         &handle,
-                        &crate::sci::api::control::CancelDeliveryControl::new(
-                            AbsoluteDeadline::at(deadline),
-                        ),
+                        &CancelDeliveryControl::new(AbsoluteDeadline::at(deadline)),
                     )
                     .map_err(|source| BayesApplicationError::CancelFailed {
                         task_id: task_id.to_string(),
@@ -1698,7 +1699,7 @@ fn statistical_inputs_from_snapshot(
     snapshot: &DatabaseDataSnapshot,
     required_columns: &[yss_tabular_contract::TabularColumnName],
     database: &DatabaseId,
-) -> Result<Arc<[crate::sci::api::computation::StatisticalInput]>, BayesApplicationError> {
+) -> Result<Arc<[StatisticalInput]>, BayesApplicationError> {
     let columns = snapshot.rows().columns();
     if columns.len() != required_columns.len()
         || columns
@@ -1722,30 +1723,31 @@ fn statistical_inputs_from_snapshot(
                 .map(|value| match value {
                     yss_tabular_contract::TabularScalar::Null => None,
                     yss_tabular_contract::TabularScalar::Bool(value) => {
-                        Some(crate::sci::api::computation::StatisticalScalar::Category(
-                            value.to_string().into(),
-                        ))
+                        Some(StatisticalScalar::Category(value.to_string().into()))
                     }
-                    yss_tabular_contract::TabularScalar::Integer(value) => Some(
-                        crate::sci::api::computation::StatisticalScalar::Numeric(*value as f64),
-                    ),
-                    yss_tabular_contract::TabularScalar::Unsigned(value) => Some(
-                        crate::sci::api::computation::StatisticalScalar::Numeric(*value as f64),
-                    ),
-                    yss_tabular_contract::TabularScalar::Decimal(value) => Some(
-                        crate::sci::api::computation::StatisticalScalar::Numeric(value.as_f64()),
-                    ),
-                    yss_tabular_contract::TabularScalar::String(value) => Some(
-                        crate::sci::api::computation::StatisticalScalar::Category(value.clone()),
-                    ),
+                    yss_tabular_contract::TabularScalar::Integer(value) => {
+                        Some(StatisticalScalar::Numeric(*value as f64))
+                    }
+                    yss_tabular_contract::TabularScalar::Unsigned(value) => {
+                        Some(StatisticalScalar::Numeric(*value as f64))
+                    }
+                    yss_tabular_contract::TabularScalar::Decimal(value) => {
+                        Some(StatisticalScalar::Numeric(value.as_f64()))
+                    }
+                    yss_tabular_contract::TabularScalar::String(value) => {
+                        Some(StatisticalScalar::Category(value.clone()))
+                    }
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            Ok(crate::sci::api::computation::StatisticalInput::new(
-                column.name().as_str().into(),
-                values,
-                None,
-            ))
+            StatisticalInput::try_new(column.name().as_str().into(), values, None).map_err(|_| {
+                BayesApplicationError::DatasetLoadFailed {
+                    source: BayesDatasetLoadError::Database(DatabaseError::schema(
+                        DatabaseOperation::DataSnapshot,
+                        Some(database.clone()),
+                    )),
+                }
+            })
         })
         .collect::<Result<Vec<_>, BayesApplicationError>>()
         .map(Vec::into_boxed_slice)

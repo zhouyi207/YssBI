@@ -60,6 +60,7 @@ members = [
     "crates/yss-resource-lifecycle",
     "crates/yss-resource-naming",
     "crates/yss-sci",
+    "crates/yss-sci-contract",
     "crates/yss-sql-source",
     "crates/yss-tabular-contract",
     "crates/yss-tabular-io",
@@ -161,6 +162,7 @@ yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-resource-lifecycle = { path = "./crates/yss-resource-lifecycle" }
 yss-resource-naming = { path = "./crates/yss-resource-naming" }
 yss-sci = { path = "./crates/yss-sci" }
+yss-sci-contract = { path = "./crates/yss-sci-contract" }
 yss-sql-source = { path = "./crates/yss-sql-source" }
 yss-tabular-contract = { path = "./crates/yss-tabular-contract" }
 yss-tabular-io = { path = "./crates/yss-tabular-io" }

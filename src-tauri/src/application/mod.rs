@@ -16,7 +16,6 @@ pub mod project_failure;
 pub mod project_lifecycle;
 pub mod project_query;
 pub mod resource_mutation;
-pub mod statistical_input;
 pub mod statistics;
 pub mod variable_mutation;
 pub mod worksheet;

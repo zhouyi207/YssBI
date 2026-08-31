@@ -1,10 +1,5 @@
 use std::time::Instant;
 
-use crate::sci::api::computation::{
-    MissingValuePolicy, NumericTolerance, SciComputationSettings, StatisticalObservationMetadata,
-    StatisticalSettingSource,
-};
-use crate::sci::api::control::{AbsoluteDeadline, ExecutionControl, SciCancellationSource};
 use crate::sci::api::density::{
     KernelDensityInput, compute_kernel_density as compute_kernel_density_api,
 };
@@ -15,7 +10,6 @@ use crate::sci::api::node_statistics::{
 use crate::sci::api::time_series::acf_pacf::{
     AcfPacfInput, compute_acf_pacf as compute_acf_pacf_api,
 };
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use yss_execution::ports::scientific::{
     AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ExecutionInstrumentalVariableKind,
     ExecutionRegressionKind, ExecutionStatisticalTrend, KdePoint, KernelDensityRequest,
@@ -23,6 +17,11 @@ use yss_execution::ports::scientific::{
     StatisticsOperation, StatisticsParameters, StatisticsRequest, StatisticsResult,
 };
 use yss_execution::settings::{ExecutionMissingValuePolicy, ExecutionSettings};
+use yss_sci_contract::{
+    AbsoluteDeadline, ExecutionControl, MissingValuePolicy, NumericTolerance,
+    SciCancellationSource, SciComputationSettings, SciError, SciInputViolation, SciOperationCode,
+    StatisticalObservationMetadata, StatisticalSettingSource,
+};
 
 pub struct SciApiScientificBackend;
 

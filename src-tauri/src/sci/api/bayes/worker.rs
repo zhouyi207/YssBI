@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use super::contract::{InferenceDiagnostics, ParameterSummary};
 use super::model::BayesModelSpec;
-use crate::sci::api::computation::StatisticalInput;
-use crate::sci::api::control::{CancelDeliveryControl, ExecutionControl};
+use yss_sci_contract::{CancelDeliveryControl, ExecutionControl, StatisticalInput};
 
 const MAX_OPAQUE_ID_LEN: usize = 128;
 

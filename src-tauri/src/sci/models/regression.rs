@@ -1,7 +1,7 @@
 //! 信息展示相关的数据结构
 
-use crate::sci::api::computation::CategoricalRole;
 use serde::{Deserialize, Serialize};
+use yss_sci_contract::CategoricalRole;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

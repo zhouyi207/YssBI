@@ -1559,7 +1559,9 @@ fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]>
 
     if source_file.starts_with("src-tauri/src/graph/") {
         Some(PERSISTED_SYMBOLS)
-    } else if source_file.starts_with("src-tauri/src/sci/") {
+    } else if source_file.starts_with("src-tauri/src/sci/")
+        || source_file.starts_with("src-tauri/crates/yss-sci-contract/src/")
+    {
         Some(SCI_SYMBOLS)
     } else {
         None
@@ -1701,7 +1703,7 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
             required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
             allowed_origins: &[
                 "src-tauri/crates/yss-data-contract/src/data_value.rs",
-                "src-tauri/src/sci/api/computation.rs",
+                "src-tauri/crates/yss-sci-contract/src/computation.rs",
             ],
         },
         CanonicalOwnerExpectation {
@@ -7123,7 +7125,7 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
         required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
         allowed_origins: &[
             "src-tauri/crates/yss-data-contract/src/data_value.rs",
-            "src-tauri/src/sci/api/computation.rs",
+            "src-tauri/crates/yss-sci-contract/src/computation.rs",
         ],
     };
 
@@ -7131,7 +7133,7 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
         &expectation,
         &BTreeSet::from([
             "src-tauri/crates/yss-data-contract/src/data_value.rs",
-            "src-tauri/src/sci/api/computation.rs",
+            "src-tauri/crates/yss-sci-contract/src/computation.rs",
         ]),
     ));
     assert!(!canonical_owner_origins_are_valid(
@@ -7143,62 +7145,141 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
     ));
     assert!(!canonical_owner_origins_are_valid(
         &expectation,
-        &BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+        &BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
     ));
 }
 
 #[test]
-fn task1_sci_contracts_are_isolated_and_canonical() {
-    const TASK1_SCI_FILES: &[&str] = &[
-        "src-tauri/src/sci/api/computation.rs",
-        "src-tauri/src/sci/api/node_statistics.rs",
-        "src-tauri/src/sci/api/time_series/acf_pacf.rs",
-        "src-tauri/src/sci/api/time_series/serial_tests.rs",
-        "src-tauri/src/sci/backends/rust/stats/hypothesis.rs",
-        "src-tauri/src/sci/backends/rust/time_series/acf_pacf.rs",
-        "src-tauri/src/sci/error.rs",
-        "src-tauri/src/sci/models/regression.rs",
+fn sci_contract_has_one_pure_owner_without_root_facades_or_unchecked_inputs() {
+    const CONTRACT_PREFIX: &str = "src-tauri/crates/yss-sci-contract/";
+    const CONTRACT_SOURCES: &[&str] = &[
+        "src-tauri/crates/yss-sci-contract/src/lib.rs",
+        "src-tauri/crates/yss-sci-contract/src/computation.rs",
+        "src-tauri/crates/yss-sci-contract/src/control.rs",
+        "src-tauri/crates/yss-sci-contract/src/error.rs",
     ];
 
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
-        .expect("the real Cargo workspace must be discoverable");
-    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
-        .expect("the production module graph must be discoverable");
-    let classification = classify_rust_sources(&workspace.roots, &modules)
-        .expect("every production source must classify exactly once");
-    let raw_dependencies =
-        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
-            .expect("production dependency facts must be discoverable");
-    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
-        .expect("production dependency origins must resolve");
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-sci-contract/Cargo.toml",
+        "src-tauri/crates/yss-sci-contract/README.md",
+    ]
+    .into_iter()
+    .chain(CONTRACT_SOURCES.iter().copied())
+    {
+        assert!(
+            facts.repository_root.join(relative).is_file(),
+            "SCI contract owner {relative} must exist"
+        );
+    }
+    for source in CONTRACT_SOURCES {
+        assert_eq!(
+            facts.classification.get(*source),
+            Some(&RustLayer::PureLeaf),
+            "SCI contract owner {source} must remain a Pure Leaf"
+        );
+    }
 
-    let forbidden = dependencies
+    for removed in [
+        "src-tauri/src/sci/api/computation.rs",
+        "src-tauri/src/sci/api/control.rs",
+        "src-tauri/src/sci/error.rs",
+        "src-tauri/src/application/statistical_input.rs",
+    ] {
+        assert!(
+            !facts.repository_root.join(removed).exists(),
+            "removed SCI compatibility or dead mapping owner {removed} must stay absent"
+        );
+    }
+
+    let manifest = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-contract/Cargo.toml"),
+    )
+    .expect("SCI contract manifest must be readable");
+    assert!(manifest.contains("serde.workspace = true"));
+    assert!(manifest.contains("thiserror.workspace = true"));
+    assert!(
+        !manifest.contains("yss-data-contract") && !manifest.contains("tauri"),
+        "SCI contract must not couple statistical values to persisted data or Tauri"
+    );
+
+    let computation = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-sci-contract/src/computation.rs"),
+    )
+    .expect("SCI computation contract must be readable");
+    for removed_surface in [
+        "DataValue",
+        "StatisticalInputSource",
+        "StatisticalInputMappingError",
+        "StatisticalValueKind",
+        "pub fn new(",
+    ] {
+        assert!(
+            !computation.contains(removed_surface),
+            "SCI contract must not restore dead or unchecked surface {removed_surface}"
+        );
+    }
+    for validated_surface in [
+        "pub fn try_new(",
+        "StatisticalInputValidationError::BlankName",
+        "StatisticalInputValidationError::NonFiniteNumeric",
+    ] {
+        assert!(
+            computation.contains(validated_surface),
+            "SCI input owner must retain validation surface {validated_surface}"
+        );
+    }
+
+    let stale_references = facts
+        .classification
+        .keys()
+        .filter_map(|source_file| {
+            let source = std::fs::read_to_string(facts.repository_root.join(source_file)).ok()?;
+            [
+                "crate::sci::api::computation",
+                "crate::sci::api::control",
+                "crate::sci::error",
+            ]
+            .iter()
+            .any(|stale| source.contains(stale))
+            .then_some(source_file.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        stale_references.is_empty(),
+        "production consumers must use yss_sci_contract directly: {stale_references:#?}"
+    );
+
+    let forbidden_dependencies = facts
+        .dependencies
         .iter()
-        .filter(|dependency| TASK1_SCI_FILES.contains(&dependency.source_file.as_str()))
+        .filter(|dependency| dependency.source_file.starts_with(CONTRACT_PREFIX))
         .filter(|dependency| match &dependency.origin {
             CanonicalOrigin::Repository {
                 repository_relative_declaration_file,
                 ..
-            } => matches!(
-                classification.get(repository_relative_declaration_file),
-                Some(RustLayer::Graph | RustLayer::Project | RustLayer::Execution)
-            ),
-            CanonicalOrigin::External(origin) => origin.package_name == "tauri",
+            } => {
+                facts
+                    .classification
+                    .get(repository_relative_declaration_file)
+                    != Some(&RustLayer::PureLeaf)
+            }
+            CanonicalOrigin::External(origin) => {
+                !matches!(origin.package_name.as_str(), "serde" | "thiserror")
+            }
             CanonicalOrigin::LanguageBuiltin { .. } | CanonicalOrigin::RepositoryAsset { .. } => {
                 false
             }
         })
-        .map(|dependency| {
-            format!(
-                "{}|{}",
-                dependency.source_file, dependency.canonical_origin_target
-            )
-        })
+        .map(|dependency| dependency.canonical_origin_target.as_str())
         .collect::<Vec<_>>();
     assert!(
-        forbidden.is_empty(),
-        "Task 1 SCI contracts must not import Graph, Project, Execution, or Tauri: {forbidden:#?}"
+        forbidden_dependencies.is_empty(),
+        "SCI contract must remain backend neutral: {forbidden_dependencies:#?}"
     );
 
     for (symbol, expected_origins) in [
@@ -7206,19 +7287,20 @@ fn task1_sci_contracts_are_isolated_and_canonical() {
             "CategoricalRole",
             BTreeSet::from([
                 "src-tauri/crates/yss-data-contract/src/data_value.rs",
-                "src-tauri/src/sci/api/computation.rs",
+                "src-tauri/crates/yss-sci-contract/src/computation.rs",
             ]),
         ),
         (
             "StatisticalObservationMetadata",
-            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+            BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
         ),
         (
             "StatisticalSettingSource",
-            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+            BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
         ),
     ] {
-        let actual_origins = dependencies
+        let actual_origins = facts
+            .dependencies
             .iter()
             .filter_map(|dependency| match &dependency.origin {
                 CanonicalOrigin::Repository {
@@ -7237,50 +7319,6 @@ fn task1_sci_contracts_are_isolated_and_canonical() {
             "{symbol} must have only its approved canonical owner(s)"
         );
     }
-
-    let computation_data_value_origins = dependencies
-        .iter()
-        .filter_map(|dependency| match &dependency.origin {
-            CanonicalOrigin::Repository {
-                repository_relative_declaration_file,
-                symbol,
-                ..
-            } if dependency.source_file == "src-tauri/src/sci/api/computation.rs"
-                && symbol == "DataValue" =>
-            {
-                Some(repository_relative_declaration_file.as_str())
-            }
-            CanonicalOrigin::Repository { .. }
-            | CanonicalOrigin::LanguageBuiltin { .. }
-            | CanonicalOrigin::RepositoryAsset { .. }
-            | CanonicalOrigin::External(_) => None,
-        })
-        .collect::<BTreeSet<_>>();
-    assert_eq!(
-        computation_data_value_origins,
-        BTreeSet::from(["src-tauri/crates/yss-data-contract/src/data_value.rs"]),
-        "StatisticalInputSource values must borrow the persisted DataValue owner"
-    );
-    let computation_persisted_role_dependencies = dependencies
-        .iter()
-        .filter(|dependency| {
-            dependency.source_file == "src-tauri/src/sci/api/computation.rs"
-                && matches!(
-                    &dependency.origin,
-                    CanonicalOrigin::Repository {
-                        repository_relative_declaration_file,
-                        symbol,
-                        ..
-                    } if repository_relative_declaration_file
-                        == "src-tauri/crates/yss-data-contract/src/data_value.rs"
-                        && symbol == "CategoricalRole"
-                )
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        computation_persisted_role_dependencies.is_empty(),
-        "StatisticalInputSource must expose the SCI-owned CategoricalRole"
-    );
 }
 
 #[test]

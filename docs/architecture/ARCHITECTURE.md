@@ -7,6 +7,7 @@
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
+- [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
 
@@ -39,6 +40,9 @@ flowchart TD
   EXEC --> PORTS[typed backend ports]
   SCI --> RUSTSCI[yss-sci Rust algorithms]
   SCI --> JULIA[Julia Bayes adapter]
+  APP --> SCICONTRACT[yss-sci-contract]
+  SCI --> SCICONTRACT
+  JULIA --> SCICONTRACT
   CMD --> CHANNEL[Events and ordered channels]
   CHANNEL --> UI
 ```
@@ -154,8 +158,9 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-variable-value/` | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization |
 | `src-tauri/crates/yss-worksheet-document/` | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
-| `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
+| `src-tauri/src/sci/` | 尚待迁移的 SCI runtime API 与 models；共享 input/settings/control/error 已由 `yss-sci-contract` 唯一拥有，不反向依赖 Graph、Project 或 Execution |
 | `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
+| `src-tauri/crates/yss-sci-contract/` | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现 |
 | `src-tauri/crates/yss-tracing/` | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL |
 | `src-tauri/src/julia/` | 待迁移的 Julia Bayes adapter；runtime discovery 与通用 worker host 已分别由 `yss-julia-runtime`、`yss-julia-worker` 拥有 |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
@@ -565,16 +570,19 @@ Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标�
 
 ## 9. SCI 与 Julia
 
-### 9.1 两层 Rust module
+### 9.1 三层 Rust module
 
-科学计算分为两层：
+科学计算分为三层：
 
-1. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-2. `src-tauri/src/sci/`：主应用 SCI-facing interface 与 models；跨层调用通过
+1. `src-tauri/crates/yss-sci-contract/` 的 `yss-sci-contract` Pure Leaf：backend-neutral
+   statistical input/settings、执行控制、取消 capability 与稳定 SCI error code。
+2. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
+3. `src-tauri/src/sci/`：尚待迁移的主应用 SCI runtime API 与 models；跨层调用通过
    `execution::ports::scientific`，不由 SCI 反向编排 Project 或 Execution。
 
-Final Execution-facing scientific request/result/error/control 由 `execution/ports/scientific.rs`
-拥有；`backend_adapters/execution/scientific.rs` 负责与 SCI public API 穷尽映射，并由
+Final Execution-facing scientific request/result/error/control 由
+`yss-execution/src/ports/scientific.rs` 拥有；backend-neutral SCI contract 则只由
+`yss-sci-contract` 拥有。`backend_adapters/execution/scientific.rs` 负责两侧的穷尽映射，并由
 `lib.rs` 注入到每个 Application execution session。Application statistics、Execution
 runtime 与 commands 不再直接调用 concrete SCI implementation。
 
@@ -582,7 +590,11 @@ Application statistics 通过 Execution scientific port 调用 typed backend，c
 schema parse/map；Application Bayes 通过 `BayesWorkerPort` 调用 Julia worker，不直接依赖
 Julia worker internals。两个 seam 分别集中输入规范化、错误类型和 backend choice。
 
-`yss-sci` 不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
+Application workflows、根 SCI runtime、Execution adapter 与 Julia Bayes adapter 均直接消费
+`yss-sci-contract`，不经过根 facade。`StatisticalInput::try_new` 是唯一构造入口，会拒绝空白名称
+与非有限数值；原 Application `DataValue` 映射及其重复 contract owner 已删除。
+
+`yss-sci-contract` 与 `yss-sci` 都不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
 
 ### 9.2 Production backend matrix
 
@@ -643,8 +655,9 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 
 ### 新 scientific operation
 
+- 可跨 workflow/runtime/adapter 共享的 input、settings、control 与 error 放 `yss-sci-contract`；
 - 纯算法放 `yss-sci`；
-- 主应用 typed interface 放 `src-tauri/src/sci/api/`；
+- 尚未独立成 crate 的运行期 API 与 models 暂放 `src-tauri/src/sci/`；
 - 只有存在真实可替换 implementation 时才建立 backend seam；
 - adapter 隔离外部 runtime，不让 worker details 泄漏到 command 或 graph kernel。
 

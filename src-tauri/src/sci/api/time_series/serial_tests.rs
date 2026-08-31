@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sci::backends::rust;
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SerialTestsInput {

@@ -13,9 +13,9 @@ use super::{
 };
 use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 use crate::sci::api::bayes::{BayesModelSpec, Expression};
-use crate::sci::api::computation::{StatisticalInput, StatisticalScalar};
-use crate::sci::api::control::{
+use yss_sci_contract::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
+    StatisticalInput, StatisticalScalar,
 };
 
 fn valid_model() -> BayesModelSpec {
@@ -65,7 +65,8 @@ fn valid_model() -> BayesModelSpec {
 }
 
 fn input(name: &str, values: Vec<Option<StatisticalScalar>>) -> StatisticalInput {
-    StatisticalInput::new(name.into(), values.into_boxed_slice(), None)
+    StatisticalInput::try_new(name.into(), values.into_boxed_slice(), None)
+        .expect("finite test input must validate")
 }
 
 fn valid_inputs() -> Arc<[StatisticalInput]> {

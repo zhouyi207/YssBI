@@ -1,8 +1,8 @@
 //! ACF/PACF application API and Rust backend orchestration.
 
 use crate::sci::backends::rust;
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use serde::{Deserialize, Serialize};
+use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AcfPacfInput {

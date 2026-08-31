@@ -4,7 +4,7 @@ use crate::sci::api::bayes::model::{
     BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, ParameterConstraint,
     ParameterSpec, PriorSpec, UnaryOp,
 };
-use crate::sci::api::computation::{StatisticalInput, StatisticalScalar};
+use yss_sci_contract::{StatisticalInput, StatisticalScalar};
 
 pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
     if model.dataset().source_id.trim().is_empty()

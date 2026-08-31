@@ -14,11 +14,11 @@ use crate::sci::api::bayes::worker::{
     BayesTaskHandle, BayesTaskResult, BayesWorkerError, ValidatedBayesTask,
 };
 use crate::sci::api::bayes::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
-use crate::sci::api::computation::{CategoricalRole, StatisticalInput, StatisticalScalar};
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
     JuliaWorkerTaskDirectory,
 };
+use yss_sci_contract::{CategoricalRole, StatisticalInput, StatisticalScalar};
 
 pub(super) struct PreparedJuliaTask {
     model: serde_json::Value,

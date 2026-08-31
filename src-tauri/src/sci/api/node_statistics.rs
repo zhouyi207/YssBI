@@ -1,5 +1,3 @@
-use crate::sci::api::computation::StatisticalObservationMetadata;
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use crate::sci::models::regression::{
     BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, PraisInfo,
     PraisRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
@@ -17,6 +15,9 @@ use yss_sci::tools::{IntoFaer, matrix_rank};
 use yss_sci::ts::unit_root::adf_test;
 use yss_sci::ts::var::{VAR, VARConfig, var_varsoc};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
+use yss_sci_contract::{
+    SciError, SciInputViolation, SciOperationCode, StatisticalObservationMetadata,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegressionKind {
@@ -926,10 +927,10 @@ fn computation_failed(operation: SciOperationCode) -> SciError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sci::api::computation::{
+    use yss_sci_contract::{
         MissingValuePolicy, StatisticalObservationMetadata, StatisticalSettingSource,
     };
-    use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
+    use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
     fn regression_metadata(observations: usize) -> StatisticalObservationMetadata {
         StatisticalObservationMetadata {

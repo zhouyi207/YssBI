@@ -816,3 +816,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   app-owned task-directory lifecycle 迁入 `src-tauri/crates/yss-julia-worker/` Backend Adapter；SCI/Bayes artifact
   trait 适配留在 adapter 一侧，删除根 worker facade、公开 `String` compatibility API 与状态机不可达分支，并让
   Commands、composition root 及 Bayes adapter 直接消费唯一 worker owner。
+- [ ] 将 backend-neutral statistical input/settings、执行控制、取消 capability 与稳定 SCI error code 迁入
+  `src-tauri/crates/yss-sci-contract/` Pure Leaf；删除根 `sci/api/computation.rs`、`sci/api/control.rs`、
+  `sci/error.rs` facade 和零生产调用的 Application `DataValue` 映射，让 workflows、SCI runtime、Execution
+  adapter 与 Julia Bayes adapter 直接消费唯一 owner，并以 `StatisticalInput::try_new` 拒绝空白名称和非有限数值。

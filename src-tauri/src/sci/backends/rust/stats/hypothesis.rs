@@ -5,7 +5,7 @@ use yss_sci::stats::{
 use crate::sci::api::stats::hypothesis::{
     Alternative, LinearHypothesisTestInput, TTestOutput, WaldTestOutput,
 };
-use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
 pub fn t_test(input: LinearHypothesisTestInput<'_>) -> Result<TTestOutput, SciError> {
     validate_input(&input, SciOperationCode::TTest, true)?;
