@@ -6,16 +6,27 @@ use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 use super::predictor::compile_predictor;
-use crate::julia::worker::{
-    JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerProgressCallback,
-    JuliaWorkerTask,
-};
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesDataExchangeManifest,
     BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
-    ResultArtifactKind, TaskErrorDetails, TaskProgress,
+    ResultArtifactKind, ResultArtifactOwner, TaskErrorDetails, TaskProgress,
+};
+use yss_julia_worker::{
+    JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerProgress,
+    JuliaWorkerProgressCallback, JuliaWorkerTask, JuliaWorkerTaskDirectory,
 };
 use yss_tabular_io::write_ipc_dataframe;
+
+#[derive(Debug)]
+struct JuliaResultArtifactOwner(JuliaWorkerTaskDirectory);
+
+impl ResultArtifactOwner for JuliaResultArtifactOwner {
+    fn cleanup(&self) -> Result<(), Box<str>> {
+        self.0
+            .cleanup()
+            .map_err(|error| error.to_string().into_boxed_str())
+    }
+}
 
 #[derive(Clone)]
 pub struct JuliaBayesBackend {
@@ -42,7 +53,7 @@ impl BayesBackend for JuliaBayesBackend {
         report_stage(&progress, "materializing_data");
         let progress_for_input = progress.clone();
         let worker_progress = progress.clone().map(|callback| {
-            Arc::new(move |update: crate::julia::worker::JuliaWorkerProgress| {
+            Arc::new(move |update: JuliaWorkerProgress| {
                 callback(TaskProgress {
                     stage: update.stage,
                     completed: update.completed,
@@ -52,7 +63,7 @@ impl BayesBackend for JuliaBayesBackend {
         });
         let mut output = self
             .worker
-            .run_task(
+            .run_task_with_typed_input(
                 &self.app_data_dir,
                 JuliaWorkerTask {
                     task_id: Some(task_id.clone()),
@@ -60,7 +71,13 @@ impl BayesBackend for JuliaBayesBackend {
                     parameters: json!({ "model": spec }),
                 },
                 |input_path| {
-                    write_exchange_files(input_path, input_table, &task_id, &exchange_spec)?;
+                    write_exchange_files(input_path, input_table, &task_id, &exchange_spec)
+                        .map_err(|diagnostic| {
+                            JuliaWorkerError::new(
+                                JuliaWorkerErrorCode::InputWriteFailed,
+                                diagnostic,
+                            )
+                        })?;
                     report_stage(&progress_for_input, "loading_model");
                     Ok(())
                 },
@@ -100,7 +117,7 @@ impl BayesBackend for JuliaBayesBackend {
                     "Julia Bayesian result has no artifact owner.",
                 )
             })?;
-            result.set_artifact_owner(owner);
+            result.set_artifact_owner(JuliaResultArtifactOwner(owner));
         }
         Ok(result)
     }
@@ -259,8 +276,8 @@ fn map_worker_error(error: JuliaWorkerError) -> BayesBackendError {
 #[cfg(test)]
 mod tests {
     use super::{map_worker_error, parse_inference_result};
-    use crate::julia::worker::JuliaWorkerError;
     use crate::sci::api::bayes::contract::DiagnosticMetric;
+    use yss_julia_worker::JuliaWorkerError;
 
     #[test]
     fn maps_stable_worker_codes_without_classifying_diagnostic_prose() {

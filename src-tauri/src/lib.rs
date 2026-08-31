@@ -69,7 +69,7 @@ fn initialize_application_state(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let julia_worker = julia::worker::JuliaWorkerManager::new();
+    let julia_worker = yss_julia_worker::JuliaWorkerManager::new();
     let bayes_worker = julia_worker.clone();
 
     tauri::Builder::default()

@@ -2946,12 +2946,13 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         "the root backend adapter module must not retain a tabular facade"
     );
 
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains("\"yss-project-registry-sqlite\" | \"yss-tabular-polars\"")
-            && policy.contains("layers.insert(RustLayer::BackendAdapter)"),
-        "the tabular Polars crate must be classified as a Backend Adapter"
+    let facts = production_facts();
+    assert_eq!(
+        facts
+            .classification
+            .get("src-tauri/crates/yss-tabular-polars/src/lib.rs"),
+        Some(&RustLayer::BackendAdapter),
+        "the tabular Polars crate must be classified as a Backend Adapter",
     );
     let violations = tabular_contract_source_violations(&root);
     assert!(
@@ -4705,10 +4706,13 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         policy.contains("|| package == \"yss-project-registry\""),
         "project registry workflow must be classified in the Project layer"
     );
-    assert!(
-        policy.contains("\"yss-project-registry-sqlite\" | \"yss-tabular-polars\"")
-            && policy.contains("layers.insert(RustLayer::BackendAdapter)"),
-        "project registry SQLite must be classified as a Backend Adapter"
+    let facts = production_facts();
+    assert_eq!(
+        facts
+            .classification
+            .get("src-tauri/crates/yss-project-registry-sqlite/src/lib.rs"),
+        Some(&RustLayer::BackendAdapter),
+        "project registry SQLite must be classified as a Backend Adapter",
     );
     for removed_capability in [
         "project_registry_store::ProjectRegistry",
@@ -6917,6 +6921,7 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
         "pub fn get_runtime_status",
         "pub fn install_latest_julia",
         "pub fn system_julia_executable",
+        "pub fn command_output_failure_detail",
         "pub use yss_julia_runtime",
     ] {
         assert!(
@@ -6967,13 +6972,146 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
 
     for consumer in [
         "src-tauri/src/commands/command_julia.rs",
-        "src-tauri/src/julia/worker.rs",
+        "src-tauri/crates/yss-julia-worker/src/lib.rs",
     ] {
         let source = std::fs::read_to_string(root.join(consumer))
             .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
         assert!(
             source.contains("yss_julia_runtime"),
             "{consumer} must consume the Julia runtime owner directly"
+        );
+    }
+}
+
+#[test]
+fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
+    let facts = production_facts();
+    for relative in [
+        "src-tauri/crates/yss-julia-worker/src/lib.rs",
+        "src-tauri/crates/yss-julia-worker/src/assets.rs",
+        "src-tauri/crates/yss-julia-worker/src/error.rs",
+        "src-tauri/crates/yss-julia-worker/src/task_directory.rs",
+    ] {
+        assert_eq!(
+            facts.classification.get(relative),
+            Some(&RustLayer::BackendAdapter),
+            "Julia worker owner {relative} must remain a Backend adapter"
+        );
+    }
+
+    let root = repository_root();
+    for relative in [
+        "src-tauri/crates/yss-julia-worker/Cargo.toml",
+        "src-tauri/crates/yss-julia-worker/README.md",
+        "src-tauri/crates/yss-julia-worker/src/lib.rs",
+        "src-tauri/crates/yss-julia-worker/src/assets.rs",
+        "src-tauri/crates/yss-julia-worker/src/error.rs",
+        "src-tauri/crates/yss-julia-worker/src/task_directory.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "Julia worker owner must exist at {relative}"
+        );
+    }
+    for obsolete in [
+        "src-tauri/src/julia/worker.rs",
+        "src-tauri/src/julia/worker/assets.rs",
+        "src-tauri/src/julia/worker/error.rs",
+        "src-tauri/src/julia/worker/task_directory.rs",
+    ] {
+        assert!(
+            !root.join(obsolete).exists(),
+            "root Julia worker facade must be deleted at {obsolete}"
+        );
+    }
+
+    let root_module = std::fs::read_to_string(root.join("src-tauri/src/julia/mod.rs"))
+        .expect("root Julia adapter module must be readable");
+    for forbidden_facade in ["pub mod worker", "pub use yss_julia_worker"] {
+        assert!(
+            !root_module.contains(forbidden_facade),
+            "root Julia module must not retain worker facade {forbidden_facade}"
+        );
+    }
+
+    let manifest =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-worker/Cargo.toml"))
+            .expect("Julia worker manifest must be readable");
+    for dependency in [
+        "serde.workspace = true",
+        "serde_json.workspace = true",
+        "tracing.workspace = true",
+        "uuid.workspace = true",
+        "yss-julia-runtime = { path = \"../yss-julia-runtime\" }",
+        "windows-sys.workspace = true",
+    ] {
+        assert!(
+            manifest.contains(dependency),
+            "Julia worker must declare canonical dependency {dependency}"
+        );
+    }
+    for forbidden_dependency in ["tauri", "polars", "yss-sci"] {
+        assert!(
+            !manifest.contains(forbidden_dependency),
+            "Julia worker must remain independent of {forbidden_dependency}"
+        );
+    }
+
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-worker/src/lib.rs"))
+        .expect("Julia worker owner must be readable");
+    for owned_api in [
+        "pub struct JuliaWorkerManager",
+        "pub struct JuliaWorkerTask",
+        "pub struct JuliaWorkerTaskOutput",
+        "pub struct JuliaWorkerStatus",
+        "pub fn run_task_with_typed_input",
+    ] {
+        assert!(
+            owner.contains(owned_api),
+            "Julia worker crate must own {owned_api}"
+        );
+    }
+    for obsolete_compatibility in [
+        "pub fn run_task(",
+        "impl From<JuliaWorkerError> for String",
+        "unreachable!()",
+    ] {
+        assert!(
+            !owner.contains(obsolete_compatibility),
+            "Julia worker must not restore compatibility or impossible branch {obsolete_compatibility}"
+        );
+    }
+    assert!(
+        owner.contains("command_output_failure_detail"),
+        "worker package preparation must reuse the runtime command diagnostic policy"
+    );
+
+    let task_directory = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-julia-worker/src/task_directory.rs"),
+    )
+    .expect("Julia task directory owner must be readable");
+    for forbidden_contract in ["crate::sci", "ResultArtifactOwner"] {
+        assert!(
+            !task_directory.contains(forbidden_contract),
+            "Julia task ownership must not depend on SCI contract {forbidden_contract}"
+        );
+    }
+
+    for consumer in [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/commands/command_julia.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
+        "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(consumer))
+            .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
+        assert!(
+            source.contains("yss_julia_worker"),
+            "{consumer} must consume the Julia worker owner directly"
+        );
+        assert!(
+            !source.contains("crate::julia::worker"),
+            "{consumer} must not restore a root Julia worker facade"
         );
     }
 }

@@ -13,7 +13,8 @@ pub struct JuliaWorkerTaskDirectory {
 }
 
 impl JuliaWorkerTaskDirectory {
-    pub(crate) fn create(app_data_dir: &Path, task_id: &str) -> Result<Self, JuliaWorkerError> {
+    /// Creates the exact app-owned directory for one validated worker task ID.
+    pub fn create(app_data_dir: &Path, task_id: &str) -> Result<Self, JuliaWorkerError> {
         validate_task_id(task_id)?;
         fs::create_dir_all(app_data_dir).map_err(|error| {
             JuliaWorkerError::new(
@@ -84,7 +85,8 @@ impl JuliaWorkerTaskDirectory {
         &self.task_id
     }
 
-    pub(crate) fn claim_artifact(&self, candidate: &Path) -> Result<PathBuf, JuliaWorkerError> {
+    /// Canonicalizes and claims an artifact that is a direct child of this task directory.
+    pub fn claim_artifact(&self, candidate: &Path) -> Result<PathBuf, JuliaWorkerError> {
         let canonical = fs::canonicalize(candidate).map_err(|error| {
             JuliaWorkerError::new(
                 JuliaWorkerErrorCode::TaskDirectoryInvalid,
@@ -125,12 +127,6 @@ impl JuliaWorkerTaskDirectory {
         }
 
         fs::remove_dir_all(&current_path).map_err(task_cleanup_error)
-    }
-}
-
-impl crate::sci::api::bayes::ResultArtifactOwner for JuliaWorkerTaskDirectory {
-    fn cleanup(&self) -> Result<(), Box<str>> {
-        JuliaWorkerTaskDirectory::cleanup(self).map_err(|error| error.to_string().into_boxed_str())
     }
 }
 

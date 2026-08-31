@@ -150,19 +150,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::BackendAdapter,
     ),
     ("src-tauri/src/julia/mod.rs", RustLayer::BackendAdapter),
-    ("src-tauri/src/julia/worker.rs", RustLayer::BackendAdapter),
-    (
-        "src-tauri/src/julia/worker/assets.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/julia/worker/error.rs",
-        RustLayer::BackendAdapter,
-    ),
-    (
-        "src-tauri/src/julia/worker/task_directory.rs",
-        RustLayer::BackendAdapter,
-    ),
     (
         "src-tauri/src/julia/bayes_worker_adapter/mod.rs",
         RustLayer::BackendAdapter,
@@ -328,12 +315,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         ],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/src/julia/worker/task_directory.rs",
-        fully_qualified_owner: "yssbi_lib::julia::worker::task_directory",
-        canonical_origin_targets: &["yssbi_lib::sci::api::bayes::result::ResultArtifactOwner"],
-    },
-    InternalDependencyCapability {
         source_layer: RustLayer::PureLeaf,
         repository_relative_source_file: "src-tauri/crates/yss-graph-document/src/model.rs",
         fully_qualified_owner: "yss_graph_document::model",
@@ -410,7 +391,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::application::bayes::BayesInferenceService::with_worker",
             "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter::new",
             "yssbi_lib::backend_adapters::execution::scientific::SciApiScientificBackend::new",
-            "yssbi_lib::julia::worker::JuliaWorkerManager::new",
+            "yss_julia_worker::JuliaWorkerManager::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yssbi_lib::project::project_state::state::ProjectState",
@@ -574,11 +555,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::commands::command_julia",
         canonical_origin_targets: &[
             "yssbi_lib::error::CommandError",
-            "yssbi_lib::julia::worker::JuliaWorkerManager",
-            "yssbi_lib::julia::worker::JuliaWorkerStatus",
             "yss_julia_runtime::JuliaRuntimeStatus",
             "yss_julia_runtime::get_runtime_status",
             "yss_julia_runtime::install_latest_julia",
+            "yss_julia_worker::JuliaWorkerManager",
+            "yss_julia_worker::JuliaWorkerStatus",
         ],
     },
     InternalDependencyCapability {
@@ -1754,7 +1735,10 @@ fn non_build_memberships(
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
-        "yss-julia-runtime" | "yss-project-registry-sqlite" | "yss-tabular-polars"
+        "yss-julia-runtime"
+            | "yss-julia-worker"
+            | "yss-project-registry-sqlite"
+            | "yss-tabular-polars"
     ) {
         layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {

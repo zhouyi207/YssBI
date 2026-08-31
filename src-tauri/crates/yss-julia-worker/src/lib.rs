@@ -1,4 +1,8 @@
-//! Julia worker lifecycle and Arrow IPC task exchange.
+//! Julia worker process lifecycle and task exchange.
+//!
+//! This crate owns the reusable Julia process host, embedded worker assets,
+//! typed worker failures, and app-owned task directories. Scientific-domain
+//! adapters remain outside this crate.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -13,7 +17,8 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use yss_julia_runtime::{
-    JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable,
+    JuliaRuntimeState, background_command, command_output_failure_detail, get_runtime_status,
+    system_julia_executable,
 };
 
 mod assets;
@@ -47,7 +52,8 @@ pub struct JuliaWorkerTaskOutput {
 }
 
 impl JuliaWorkerTaskOutput {
-    pub(crate) fn take_task_directory(&mut self) -> Option<JuliaWorkerTaskDirectory> {
+    /// Transfers ownership of the task directory to an adapter retaining artifacts.
+    pub fn take_task_directory(&mut self) -> Option<JuliaWorkerTaskDirectory> {
         self.task_directory.take()
     }
 }
@@ -139,28 +145,22 @@ impl JuliaWorkerManager {
             .map(|state| state.clone())
             .unwrap_or(JuliaWorkerStartupState::Failed);
         let observed_process = self.process_state();
-        let (environment_state, process_state) =
-            if matches!(startup, JuliaWorkerStartupState::Preparing) {
-                (
-                    JuliaWorkerEnvironmentState::Missing,
-                    JuliaWorkerProcessState::Starting,
-                )
-            } else if observed_process == JuliaWorkerProcessState::Running {
-                (
-                    JuliaWorkerEnvironmentState::Ready,
-                    JuliaWorkerProcessState::Running,
-                )
-            } else {
-                match startup {
-                    JuliaWorkerStartupState::Failed => {
-                        (JuliaWorkerEnvironmentState::Invalid, observed_process)
-                    }
-                    JuliaWorkerStartupState::Idle => {
-                        (JuliaWorkerEnvironmentState::Missing, observed_process)
-                    }
-                    JuliaWorkerStartupState::Preparing => unreachable!(),
-                }
-            };
+        let (environment_state, process_state) = match startup {
+            JuliaWorkerStartupState::Preparing => (
+                JuliaWorkerEnvironmentState::Missing,
+                JuliaWorkerProcessState::Starting,
+            ),
+            _ if observed_process == JuliaWorkerProcessState::Running => (
+                JuliaWorkerEnvironmentState::Ready,
+                JuliaWorkerProcessState::Running,
+            ),
+            JuliaWorkerStartupState::Failed => {
+                (JuliaWorkerEnvironmentState::Invalid, observed_process)
+            }
+            JuliaWorkerStartupState::Idle => {
+                (JuliaWorkerEnvironmentState::Missing, observed_process)
+            }
+        };
 
         JuliaWorkerStatus {
             runtime_state,
@@ -216,7 +216,7 @@ impl JuliaWorkerManager {
         if status.status.success() {
             Ok(())
         } else {
-            let detail = String::from_utf8_lossy(&status.stderr).trim().to_string();
+            let detail = command_output_failure_detail(&status);
             Err(JuliaWorkerError::new(
                 JuliaWorkerErrorCode::EnvironmentUnavailable,
                 format!("Failed to prepare Julia worker packages: {detail}"),
@@ -224,26 +224,8 @@ impl JuliaWorkerManager {
         }
     }
 
-    pub fn run_task(
-        &self,
-        app_data_dir: &Path,
-        task: JuliaWorkerTask,
-        write_input: impl FnOnce(&Path) -> Result<(), String>,
-        progress: Option<JuliaWorkerProgressCallback>,
-    ) -> Result<JuliaWorkerTaskOutput, JuliaWorkerError> {
-        self.run_task_with_typed_input(
-            app_data_dir,
-            task,
-            |path| {
-                write_input(path).map_err(|diagnostic| {
-                    JuliaWorkerError::new(JuliaWorkerErrorCode::InputWriteFailed, diagnostic)
-                })
-            },
-            progress,
-        )
-    }
-
-    pub(crate) fn run_task_with_typed_input(
+    /// Runs a task whose input writer already returns the worker's typed error.
+    pub fn run_task_with_typed_input(
         &self,
         app_data_dir: &Path,
         task: JuliaWorkerTask,
@@ -508,10 +490,10 @@ impl WorkerProcess {
 
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if let Ok(message) = serde_json::from_str(&line) {
-                    if sender.send(message).is_err() {
-                        break;
-                    }
+                if let Ok(message) = serde_json::from_str(&line)
+                    && sender.send(message).is_err()
+                {
+                    break;
                 }
             }
         });
@@ -662,8 +644,8 @@ mod tests {
     use std::sync::{Arc, Barrier};
 
     use super::{
-        JuliaRuntimeState, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerStartupState,
-        JuliaWorkerTask, TASK_DIR, WORKER_DIR, worker_error, write_asset,
+        JuliaRuntimeState, JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager,
+        JuliaWorkerStartupState, JuliaWorkerTask, TASK_DIR, WORKER_DIR, worker_error, write_asset,
     };
     use serde_json::json;
     use uuid::Uuid;
@@ -748,14 +730,19 @@ mod tests {
         let task_id = "input-failure";
 
         let error = manager
-            .run_task(
+            .run_task_with_typed_input(
                 app_root.path(),
                 JuliaWorkerTask {
                     task_id: Some(task_id.to_string()),
                     operation: "bayes_fit".to_string(),
                     parameters: json!({}),
                 },
-                |_| Err("private input write failure".to_string()),
+                |_| {
+                    Err(JuliaWorkerError::new(
+                        JuliaWorkerErrorCode::InputWriteFailed,
+                        "private input write failure",
+                    ))
+                },
                 None,
             )
             .expect_err("input write must fail");
@@ -778,7 +765,7 @@ mod tests {
         let wrote_input = Cell::new(false);
 
         let error = manager
-            .run_task(
+            .run_task_with_typed_input(
                 app_root.path(),
                 JuliaWorkerTask {
                     task_id: Some("../escape".to_string()),
@@ -787,7 +774,10 @@ mod tests {
                 },
                 |_| {
                     wrote_input.set(true);
-                    Err("input writer must not run".to_string())
+                    Err(JuliaWorkerError::new(
+                        JuliaWorkerErrorCode::InputWriteFailed,
+                        "input writer must not run",
+                    ))
                 },
                 None,
             )

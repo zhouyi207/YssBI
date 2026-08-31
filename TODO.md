@@ -812,3 +812,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将系统 Julia executable discovery、版本校验、Windows Juliaup 安装与 background command policy 迁入
   `src-tauri/crates/yss-julia-runtime/` Backend Adapter；Commands/worker 直接消费 typed runtime API，删除根 facade，
   并以 `JuliaRuntimeError` 替代公开 `String` error，同时保留无 stderr/stdout 命令失败的 process status 诊断。
+- [ ] 将根 Julia reusable process、embedded assets、JSON-RPC、progress/cancel/restart、typed worker error 与
+  app-owned task-directory lifecycle 迁入 `src-tauri/crates/yss-julia-worker/` Backend Adapter；SCI/Bayes artifact
+  trait 适配留在 adapter 一侧，删除根 worker facade、公开 `String` compatibility API 与状态机不可达分支，并让
+  Commands、composition root 及 Bayes adapter 直接消费唯一 worker owner。

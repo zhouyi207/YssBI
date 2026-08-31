@@ -9386,6 +9386,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-julia-worker"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
+ "yss-julia-runtime",
+]
+
+[[package]]
 name = "yss-math"
 version = "0.1.0"
 dependencies = [
@@ -9747,6 +9759,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-julia-runtime",
+ "yss-julia-worker",
  "yss-math",
  "yss-path-display",
  "yss-project-change",

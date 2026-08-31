@@ -7,13 +7,13 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::julia::worker::{JuliaWorkerError, JuliaWorkerManager, JuliaWorkerTaskDirectory};
 use crate::sci::api::bayes::worker::{
     BayesArtifact, BayesArtifactHandle, BayesCancelTerminal, BayesTaskHandle, BayesTaskId,
     BayesTaskResult, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
     ValidatedBayesTask,
 };
 use crate::sci::api::control::{CancelDeliveryControl, ExecutionControl};
+use yss_julia_worker::{JuliaWorkerError, JuliaWorkerManager, JuliaWorkerTaskDirectory};
 
 mod fit;
 mod predictor;
@@ -492,7 +492,6 @@ mod tests {
     use super::{
         JuliaBayesRuntime, JuliaBayesWorkerAdapter, JuliaTaskCompletion, PreparedJuliaTask,
     };
-    use crate::julia::worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
     use crate::sci::api::bayes::BayesModelSpec;
     use crate::sci::api::bayes::worker::{
         ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId,
@@ -502,6 +501,7 @@ mod tests {
     use crate::sci::api::control::{
         AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
     };
+    use yss_julia_worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
 
     struct TemporaryAppRoot(std::path::PathBuf);
 

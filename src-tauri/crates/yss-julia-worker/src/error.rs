@@ -85,7 +85,8 @@ pub struct JuliaWorkerError {
 }
 
 impl JuliaWorkerError {
-    pub(crate) fn new(code: JuliaWorkerErrorCode, diagnostic: impl Into<String>) -> Self {
+    /// Creates a worker failure with a stable code and private diagnostic detail.
+    pub fn new(code: JuliaWorkerErrorCode, diagnostic: impl Into<String>) -> Self {
         Self {
             code,
             details: None,
@@ -93,7 +94,8 @@ impl JuliaWorkerError {
         }
     }
 
-    pub(crate) fn from_json_rpc_error(error: &Value) -> Self {
+    /// Maps a Julia JSON-RPC error payload into a stable worker failure.
+    pub fn from_json_rpc_error(error: &Value) -> Self {
         let code = match error.get("code").and_then(Value::as_str) {
             Some("invalid_request") => JuliaWorkerErrorCode::InvalidRequest,
             Some("invalid_parameters") => JuliaWorkerErrorCode::InvalidParameters,
@@ -136,12 +138,6 @@ impl std::fmt::Display for JuliaWorkerError {
 }
 
 impl std::error::Error for JuliaWorkerError {}
-
-impl From<JuliaWorkerError> for String {
-    fn from(error: JuliaWorkerError) -> Self {
-        error.to_string()
-    }
-}
 
 fn safe_detail(value: &Value, field: &str) -> Option<String> {
     let value = value.get(field)?.as_str()?;

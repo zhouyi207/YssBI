@@ -8,10 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use super::JuliaTaskCompletion;
 use super::predictor::{JuliaGeneratedModel, JuliaModelGenerationError, generate_julia_model};
-use crate::julia::worker::{
-    JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
-    JuliaWorkerTaskDirectory,
-};
 use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 use crate::sci::api::bayes::worker::{
     ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesInferenceSnapshot,
@@ -19,6 +15,10 @@ use crate::sci::api::bayes::worker::{
 };
 use crate::sci::api::bayes::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
 use crate::sci::api::computation::{CategoricalRole, StatisticalInput, StatisticalScalar};
+use yss_julia_worker::{
+    JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
+    JuliaWorkerTaskDirectory,
+};
 
 pub(super) struct PreparedJuliaTask {
     model: serde_json::Value,

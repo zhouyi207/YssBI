@@ -8,7 +8,7 @@
 use serde::Serialize;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::thread;
 
 #[cfg(windows)]
@@ -50,6 +50,24 @@ pub fn background_command(program: impl AsRef<OsStr>) -> Command {
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
     command
+}
+
+/// Selects a stable diagnostic for a failed subprocess, preserving its status
+/// when neither output stream contains detail.
+pub fn command_output_failure_detail(output: &Output) -> String {
+    command_failure_detail(output.status, &output.stdout, &output.stderr)
+}
+
+fn command_failure_detail(status: impl std::fmt::Display, stdout: &[u8], stderr: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    if !stderr.is_empty() {
+        return stderr;
+    }
+    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
+    if !stdout.is_empty() {
+        return stdout;
+    }
+    format!("process exited with {status}")
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -239,17 +257,7 @@ fn run_command(command: &mut Command, operation: &'static str) -> Result<(), Jul
         return Ok(());
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let detail = if !stderr.is_empty() {
-        stderr
-    } else {
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
-    };
-    let detail = if detail.is_empty() {
-        format!("process exited with {}", output.status)
-    } else {
-        detail
-    };
+    let detail = command_output_failure_detail(&output);
     Err(JuliaRuntimeError::CommandFailed { operation, detail })
 }
 
@@ -371,8 +379,8 @@ fn is_supported_julia_version(version: &str) -> bool {
 mod tests {
 
     use super::{
-        JuliaRuntimeState, RuntimeProbe, julia_executable_name, parse_julia_version,
-        probe_julia_candidates, status_from_probe,
+        JuliaRuntimeState, RuntimeProbe, command_failure_detail, julia_executable_name,
+        parse_julia_version, probe_julia_candidates, status_from_probe,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -385,6 +393,22 @@ mod tests {
             Some("1.11.3".to_string())
         );
         assert_eq!(parse_julia_version("not julia\n"), None);
+    }
+
+    #[test]
+    fn command_failure_detail_prefers_stderr_then_stdout_then_status() {
+        assert_eq!(
+            command_failure_detail("exit status: 7", b"stdout detail\n", b"stderr detail\n"),
+            "stderr detail"
+        );
+        assert_eq!(
+            command_failure_detail("exit status: 7", b"stdout detail\n", b"  \n"),
+            "stdout detail"
+        );
+        assert_eq!(
+            command_failure_detail("exit status: 7", b"", b""),
+            "process exited with exit status: 7"
+        );
     }
 
     #[test]

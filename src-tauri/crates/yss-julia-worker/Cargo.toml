@@ -1,0 +1,16 @@
+[package]
+name = "yss-julia-worker"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+yss-julia-runtime = { path = "../yss-julia-runtime" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

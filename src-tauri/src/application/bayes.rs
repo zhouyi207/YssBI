@@ -1829,7 +1829,6 @@ mod tests {
     use tracing_subscriber::layer::SubscriberExt;
     use uuid::Uuid;
 
-    use crate::julia::worker::JuliaWorkerTaskDirectory;
     use yss_diagnostics::DiagnosticsRuntime;
     use yss_tracing::LogLayer;
 
@@ -1837,8 +1836,8 @@ mod tests {
         BayesBackend, BayesBackendError, BayesBackendRequest, BayesModelDraft, BinaryOp,
         ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, Expression, InferenceConfig,
         InferenceResult, LikelihoodSpec, ParameterConstraint, ParameterRef, ParameterSpec,
-        PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding, SamplerAlgorithm,
-        SymbolDraft, SymbolRole, TaskErrorDetails,
+        PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding, ResultArtifactOwner,
+        SamplerAlgorithm, SymbolDraft, SymbolRole, TaskErrorDetails,
     };
 
     use super::{
@@ -1914,14 +1913,27 @@ mod tests {
         owned_directory: Arc<Mutex<Option<PathBuf>>>,
     }
 
+    #[derive(Debug)]
+    struct TestArtifactOwner(PathBuf);
+
+    impl ResultArtifactOwner for TestArtifactOwner {
+        fn cleanup(&self) -> Result<(), Box<str>> {
+            match fs::remove_dir_all(&self.0) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.to_string().into_boxed_str()),
+            }
+        }
+    }
+
     impl BayesBackend for OwnedArtifactBackend {
         fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            let owner = JuliaWorkerTaskDirectory::create(&self.app_root, &request.task_id)
-                .expect("create owned Julia worker task directory");
-            let owned_directory = owner.path().to_path_buf();
+            let owned_directory = self.app_root.join("owned-artifacts").join(&request.task_id);
+            fs::create_dir_all(&owned_directory).expect("create owned artifact directory");
             fs::write(owned_directory.join("output.arrow"), b"owned artifact")
                 .expect("write owned artifact");
-            *self.owned_directory.lock().expect("owned directory lock") = Some(owned_directory);
+            *self.owned_directory.lock().expect("owned directory lock") =
+                Some(owned_directory.clone());
 
             let mut result: InferenceResult = serde_json::from_value(serde_json::json!({
                 "summaries": [],
@@ -1944,7 +1956,7 @@ mod tests {
                 }
             }))
             .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))?;
-            result.set_artifact_owner(owner);
+            result.set_artifact_owner(TestArtifactOwner(owned_directory));
             Ok(result)
         }
     }

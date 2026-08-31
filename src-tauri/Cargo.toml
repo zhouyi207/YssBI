@@ -39,6 +39,7 @@ members = [
     "crates/yss-graph-runtime",
     "crates/yss-graph-type-mapping",
     "crates/yss-julia-runtime",
+    "crates/yss-julia-worker",
     "crates/yss-math",
     "crates/yss-path-display",
     "crates/yss-project-change",
@@ -139,6 +140,7 @@ yss-graph-registry = { path = "./crates/yss-graph-registry" }
 yss-graph-runtime = { path = "./crates/yss-graph-runtime" }
 yss-graph-type-mapping = { path = "./crates/yss-graph-type-mapping" }
 yss-julia-runtime = { path = "./crates/yss-julia-runtime" }
+yss-julia-worker = { path = "./crates/yss-julia-worker" }
 yss-math = { path = "./crates/yss-math" }
 yss-path-display = { path = "./crates/yss-path-display" }
 yss-project-change = { path = "./crates/yss-project-change" }
