@@ -55,7 +55,7 @@ pub fn run() {
     let julia_worker = yss_julia_worker::JuliaWorkerManager::new();
     let bayes_worker = julia_worker.clone();
 
-    tauri::Builder::default()
+    if let Err(error) = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -142,15 +142,15 @@ pub fn run() {
                     "Failed to apply main window state"
                 );
                 // 兜底：即便恢复失败也确保主窗口显示出来
-                if let Some(win) = app.get_webview_window("main") {
-                    if let Err(show_error) = win.show() {
-                        tracing::warn!(
-                            target: "yssbi::window_state",
-                            diagnostic_domain = "ui",
-                            error = %show_error,
-                            "Failed to show main window after state restoration failure"
-                        );
-                    }
+                if let Some(win) = app.get_webview_window("main")
+                    && let Err(show_error) = win.show()
+                {
+                    tracing::warn!(
+                        target: "yssbi::window_state",
+                        diagnostic_domain = "ui",
+                        error = %show_error,
+                        "Failed to show main window after state restoration failure"
+                    );
                 }
             }
             app.manage(window_state_store);
@@ -159,5 +159,13 @@ pub fn run() {
         })
         .invoke_handler(yss_api::invoke_handler())
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    {
+        tracing::error!(
+            target: "yssbi::application",
+            diagnostic_domain = "system",
+            diagnostic_event = "applicationRuntimeFailed",
+            error = %error,
+            "Tauri application runtime failed"
+        );
+    }
 }

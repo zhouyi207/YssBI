@@ -881,3 +881,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 清理 `yss-api` project progress transport 的线程启动失败路径：以 typed spawn error 替代生产 `expect`，
   在 command 边界集中映射稳定错误码与 incident ID，并确保 worker 创建失败时不会登记残留的活动取消任务；
   同时移除当前 wire 文档中的过时 legacy 表述。
+- [ ] 清理根 composition entry 的 Tauri runtime 终止失败路径：移除模板式生产 `expect`，直接记录 typed
+  `tauri::Error` 与稳定 diagnostic event 后返回，并以架构门禁禁止启动 panic 回流。

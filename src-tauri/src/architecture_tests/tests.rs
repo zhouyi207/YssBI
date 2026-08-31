@@ -680,6 +680,20 @@ fn api_has_one_transport_owner_without_root_facades() {
 }
 
 #[test]
+fn composition_root_handles_tauri_runtime_failure_without_panicking() {
+    let root = repository_root();
+    let root_lib = std::fs::read_to_string(root.join("src-tauri/src/lib.rs"))
+        .expect("the composition root must be readable");
+
+    assert!(root_lib.contains("if let Err(error) = tauri::Builder::default()"));
+    assert!(root_lib.contains("diagnostic_event = \"applicationRuntimeFailed\""));
+    assert!(
+        !root_lib.contains(".expect(\"error while running tauri application\")"),
+        "the composition root must report Tauri runtime failure without panicking"
+    );
+}
+
+#[test]
 fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
     let facts = production_facts();
     for relative in [
