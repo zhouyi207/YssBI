@@ -1,5 +1,9 @@
 # Frontend Refactor
 
+> 实施状态：已完成（2026-09-01）。当前维护中的总体边界与 Dockview 细节分别以
+> [`ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) 和
+> [`WORKBENCH_DOCKVIEW_ARCHITECTURE.md`](docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 为准。
+
 ## 1. 目标
 
 前端最终采用以下架构：
@@ -135,14 +139,14 @@ function EditorResourceDockPanel({ scope }: { scope: DockPanelScope }) {
 
 ### 3.4 业务状态 owner
 
-| 状态 | Owner |
-|---|---|
-| panel/group/tab 物理位置与激活态 | Dockview |
-| panel role、默认位置和生命周期规则 | Workbench |
-| panel-local selection、viewport、临时交互 | 以 `panelInstanceId` 为 key 的 UI runtime state |
-| Graph document、节点、连接、revision | Rust authority；React 只保存 projection |
-| Chart document、revision | Rust authority；React 只保存 draft/projection |
-| Database、Variable、Result | Rust authority；React 只保存 projection/runtime state |
+| 状态                                      | Owner                                                 |
+| ----------------------------------------- | ----------------------------------------------------- |
+| panel/group/tab 物理位置与激活态          | Dockview                                              |
+| panel role、默认位置和生命周期规则        | Workbench                                             |
+| panel-local selection、viewport、临时交互 | 以 `panelInstanceId` 为 key 的 UI runtime state       |
+| Graph document、节点、连接、revision      | Rust authority；React 只保存 projection               |
+| Chart document、revision                  | Rust authority；React 只保存 draft/projection         |
+| Database、Variable、Result                | Rust authority；React 只保存 projection/runtime state |
 
 ## 4. 最终目录结构
 
@@ -319,13 +323,10 @@ EditorResource
 metadata 决定实际内容：
 
 ```ts
-type EditorResourceKind =
-  | 'event'
-  | 'function'
-  | 'chart';
+type EditorResourceKind = "event" | "function" | "chart";
 
 type EditorPanelMetadata = {
-  role: 'editor';
+  role: "editor";
   resourceRef: string;
   resourceKind: EditorResourceKind;
   pinned?: boolean;
@@ -382,10 +383,10 @@ interface EditorResourceTarget {
 统一查询：
 
 ```ts
-getActiveEditorPanel()
-getActiveEditorPanelInGroup(groupId)
-listEditorPanelsInGroup(groupId)
-findEditorPanelsByResource(resourceRef)
+getActiveEditorPanel();
+getActiveEditorPanelInGroup(groupId);
+listEditorPanelsInGroup(groupId);
+findEditorPanelsByResource(resourceRef);
 ```
 
 命令名称统一使用 panel 语义：
@@ -435,19 +436,19 @@ ChartModel          与数据来源无关的通用渲染模型
 
 ```ts
 // modules/chart/public.ts
-export { ChartEditor } from './internal/ui/ChartEditor';
-export type { ChartDocument } from './internal/domain/ChartDocument';
-export { chartPanelContribution } from './internal/chartPanelContribution';
+export { ChartEditor } from "./internal/ui/ChartEditor";
+export type { ChartDocument } from "./internal/domain/ChartDocument";
+export { chartPanelContribution } from "./internal/chartPanelContribution";
 ```
 
 模块外禁止 deep import：
 
 ```ts
 // 禁止
-import { ChartPreview } from '@/modules/chart/internal/ui/ChartPreview';
+import { ChartPreview } from "@/modules/chart/internal/ui/ChartPreview";
 
 // 允许
-import { chartPanelContribution } from '@/modules/chart/public';
+import { chartPanelContribution } from "@/modules/chart/public";
 ```
 
 依赖方向：
@@ -514,7 +515,7 @@ interface EditorPanelScope {
   panelInstanceId: string;
   groupId: string;
   resourceRef: string;
-  resourceKind: 'event' | 'function' | 'chart';
+  resourceKind: "event" | "function" | "chart";
 }
 ```
 
@@ -522,41 +523,41 @@ Graph 和 Chart 都只使用自己的 `resourceRef`，禁止通过 `GroupContext
 
 ## 11. 命名规范
 
-| 类型 | 命名规则 | 示例 |
-|---|---|---|
-| 完整窗口 | `*Window` | `WorkbenchWindow` |
-| Dockview 宿主 | `*DockviewHost` | `RootDockviewHost` |
-| Dockview adapter | `*DockPanel` | `EditorResourceDockPanel` |
-| 实际 panel 内容 | `*Panel` / `*Editor` | `DetailsPanel`, `ChartEditor` |
-| 纯展示组件 | `*View` | `GraphNodeView` |
-| 状态连接组件 | `*Controller` | `GraphPinController` |
-| 应用流程 | `*Coordinator` / `*Commands` | `ChartPreviewCoordinator` |
-| 后端投影状态 | `*ProjectionStore` | `GraphProjectionStore` |
-| 临时 UI 状态 | `*UiState` | `ShellOverlayUiState` |
-| Dockview tab 渲染 | `*TabRenderer` | `RootPanelTabRenderer` |
-| 注册表 | `*Registry` | `RootPanelRegistry` |
+| 类型              | 命名规则                     | 示例                          |
+| ----------------- | ---------------------------- | ----------------------------- |
+| 完整窗口          | `*Window`                    | `WorkbenchWindow`             |
+| Dockview 宿主     | `*DockviewHost`              | `RootDockviewHost`            |
+| Dockview adapter  | `*DockPanel`                 | `EditorResourceDockPanel`     |
+| 实际 panel 内容   | `*Panel` / `*Editor`         | `DetailsPanel`, `ChartEditor` |
+| 纯展示组件        | `*View`                      | `GraphNodeView`               |
+| 状态连接组件      | `*Controller`                | `GraphPinController`          |
+| 应用流程          | `*Coordinator` / `*Commands` | `ChartPreviewCoordinator`     |
+| 后端投影状态      | `*ProjectionStore`           | `GraphProjectionStore`        |
+| 临时 UI 状态      | `*UiState`                   | `ShellOverlayUiState`         |
+| Dockview tab 渲染 | `*TabRenderer`               | `RootPanelTabRenderer`        |
+| 注册表            | `*Registry`                  | `RootPanelRegistry`           |
 
 当前名称建议替换：
 
-| 当前名称 | 目标名称 |
-|---|---|
-| `EditorWindow` | `WorkbenchWindow` |
-| `EditorView` | `WorkbenchWindow` 或拆成独立 panel views |
-| `Workspace` | `RootDockviewHost` |
-| `WorkbenchDockviewPanels` | `RootPanelRegistry` |
-| `WorkbenchDockviewTab` | `RootPanelTabRenderer` |
-| `WorkbenchEditorPanel` | `EditorResourceDockPanel` |
-| `GraphEditor` | `GraphDocumentEditor` |
-| `LogWorkspaceDockview` | `LogDomainDockviewHost` |
-| `BottomBar` | `StatusBar` |
+| 当前名称                      | 目标名称                                 |
+| ----------------------------- | ---------------------------------------- |
+| `EditorWindow`                | `WorkbenchWindow`                        |
+| `EditorView`                  | `WorkbenchWindow` 或拆成独立 panel views |
+| `Workspace`                   | `RootDockviewHost`                       |
+| `WorkbenchDockviewPanels`     | `RootPanelRegistry`                      |
+| `WorkbenchDockviewTab`        | `RootPanelTabRenderer`                   |
+| `WorkbenchEditorPanel`        | `EditorResourceDockPanel`                |
+| `GraphEditor`                 | `GraphDocumentEditor`                    |
+| `LogWorkspaceDockview`        | `LogDomainDockviewHost`                  |
+| `BottomBar`                   | `StatusBar`                              |
 | `features/application/layout` | `modules/workbench/internal/application` |
-| `features/core/workbench` | `modules/workbench/internal/ui` |
-| `openEditorTab` | `openEditorPanel` |
-| `switchEditorTab` | `activateEditorPanelAndSyncSession` |
-| `tabCommands` | `editorPanelCloseCommands` |
-| `tabContextMenu` | `editorPanelTabMenu` |
-| `useTabManagement` | 删除或改成窄 `useEditorPanelCommands` |
-| `LayoutTab` | 删除 |
+| `features/core/workbench`     | `modules/workbench/internal/ui`          |
+| `openEditorTab`               | `openEditorPanel`                        |
+| `switchEditorTab`             | `activateEditorPanelAndSyncSession`      |
+| `tabCommands`                 | `editorPanelCloseCommands`               |
+| `tabContextMenu`              | `editorPanelTabMenu`                     |
+| `useTabManagement`            | 删除或改成窄 `useEditorPanelCommands`    |
+| `LayoutTab`                   | 删除                                     |
 
 禁止继续引入无法表达边界的名称：
 

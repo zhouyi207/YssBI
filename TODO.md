@@ -967,3 +967,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 同步维护文档中的最终前端实现地图：以 app composition、`modules/*/public.ts`、
       `WorkbenchWindow`、`RootDockviewHost`、`StatusBar` 和当前 Workbench internal paths 替换旧
       views/EditorWindow/Workspace/BottomBar 与 Core Dockview 描述。
+- [x] 完成 `frontend-refactor.md` 最终验收：production architecture audit 50/50 通过，TypeScript
+      类型检查与 lint、Vite production build 通过；全量 Vitest 的唯一失败仍是既有
+      `projectFilesystemContract` stale-classification 基线，与本次前端迁移无关。
