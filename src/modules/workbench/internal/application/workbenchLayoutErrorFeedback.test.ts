@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  WorkbenchLayoutError,
-  type WorkbenchLayoutErrorCode,
-} from "@/features/core/dockview/workbenchTypes";
+import { WorkbenchLayoutError, type WorkbenchLayoutErrorCode } from "../dockview/workbenchTypes";
 
 const alert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 

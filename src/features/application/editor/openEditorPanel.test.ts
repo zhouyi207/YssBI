@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type WorkbenchGroupInfo,
   type WorkbenchEditorPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+} from "@/modules/workbench/internal/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/internal/dockview/workbenchRead";
+import { workbenchDockviewControl } from "@/modules/workbench/internal/dockview/workbenchControl";
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchEditorPanelInfo[],
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   showWorkbenchLayoutError: vi.fn(),
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutErrorFeedback", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
 }));
 

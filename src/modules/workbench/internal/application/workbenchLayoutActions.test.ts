@@ -1,7 +1,7 @@
 import type { SerializedDockview } from "dockview-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchLayoutTransaction } from "@/features/core/dockview/workbenchDockviewInternal";
+import type { WorkbenchLayoutTransaction } from "../dockview/workbenchDockviewInternal";
 import type {
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
@@ -10,11 +10,8 @@ import type {
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchTypes";
-import type {
-  WorkbenchPanelMetadata,
-  WorkbenchViewId,
-} from "@/features/core/dockview/workbenchPanelModel";
+} from "../dockview/workbenchTypes";
+import type { WorkbenchPanelMetadata, WorkbenchViewId } from "../dockview/workbenchPanelModel";
 import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
@@ -48,7 +45,7 @@ vi.mock("i18next", () => ({
   default: { t: (key: string) => key },
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("../dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listPanels: () => mocks.panels,
     listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
@@ -57,7 +54,7 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchControl", () => ({
+vi.mock("../dockview/workbenchControl", () => ({
   workbenchDockviewControl: {
     ensureView: mocks.ensureView,
     reveal: mocks.reveal,
@@ -65,30 +62,30 @@ vi.mock("@/features/core/dockview/workbenchControl", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchDockviewInternal", () => ({
+vi.mock("../dockview/workbenchDockviewInternal", () => ({
   workbenchDockviewInternal: {
     runLayoutTransaction: mocks.runLayoutTransaction,
   },
 }));
 
-vi.mock("@/features/core/dockview/logsControl", () => ({
+vi.mock("../dockview/logsControl", () => ({
   logsDockviewControl: {
     resetToDefault: mocks.resetLogs,
   },
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutController", () => ({
+vi.mock("./workbenchLayoutController", () => ({
   workbenchLayoutController: {
     beginLayoutReset: mocks.beginLayoutReset,
     completeLayoutReset: mocks.completeLayoutReset,
   },
 }));
 
-vi.mock("@/features/application/editor/workbenchPanelClose", () => ({
-  requestCloseWorkbenchPanel: mocks.requestCloseWorkbenchPanel,
+vi.mock("./panelCommands", () => ({
+  closeWorkbenchViewPanel: mocks.requestCloseWorkbenchPanel,
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutErrorFeedback", () => ({
+vi.mock("./workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
 }));
 

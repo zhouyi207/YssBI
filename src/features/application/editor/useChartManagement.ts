@@ -7,7 +7,7 @@ import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
 
-import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
+import { revealWorkbenchView } from "@/modules/workbench/public";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
 import type { ChartDocument } from "@/shared/types/domain/chart";

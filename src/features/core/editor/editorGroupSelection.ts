@@ -1,8 +1,5 @@
-import {
-  getPaneSelection,
-  useEditorPaneStateStore,
-} from "@/features/core/dockview/editorPaneStateStore";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { getPaneSelection, useEditorPaneStateStore } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 
 export interface GraphSelection {
   nodeIds: Set<string>;

@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/features/core/dockview";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
 
 const DEFAULT_MAX_ATTEMPTS = 3;

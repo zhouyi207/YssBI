@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { buildGraphResourceMeta } from "@/features/core/resource";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
@@ -49,7 +49,7 @@ const dockviewMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     get isReady() {
       return dockviewMocks.ready;
@@ -57,14 +57,14 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchDockviewInternal", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
   workbenchDockviewRuntime: { control: {} },
   workbenchDockviewInternal: {
     runPublicationTransaction: dockviewMocks.runPublicationTransaction,
   },
 }));
 
-vi.mock("@/features/core/dockview/editorPaneStateStore", () => ({
+vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
   useEditorPaneStateStore: {
     getState: () => ({ release: dockviewMocks.releasePane }),
   },

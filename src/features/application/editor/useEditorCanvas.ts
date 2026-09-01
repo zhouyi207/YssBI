@@ -13,7 +13,7 @@ import {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
   useEditorPaneStateStore,
-} from "@/features/core/dockview";
+} from "@/modules/workbench/public";
 import { setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
 import { editorViewportScope, getViewport, subscribeToViewport } from "@/features/core/viewport";

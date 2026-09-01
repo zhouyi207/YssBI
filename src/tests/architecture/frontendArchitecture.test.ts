@@ -309,7 +309,7 @@ describe("frontend architecture model", () => {
 
       const layoutConsumers = sources.filter(
         ({ path, source }) =>
-          path !== "src/features/application/layout/useWorkbenchLayout.ts" &&
+          path !== "src/modules/workbench/internal/application/useWorkbenchLayout.ts" &&
           /\buseWorkbenchLayout\s*\(/u.test(source),
       );
       expect(layoutConsumers.map(({ path }) => path)).toEqual([
@@ -739,6 +739,14 @@ describe("frontend architecture model", () => {
           path: "src/modules/chart/internal/domain/ChartDocument.ts",
           source: "export const document = true;",
         },
+        {
+          path: "src/modules/workbench/internal/dockview/workbenchRead.ts",
+          source: "export const read = true;",
+        },
+        {
+          path: "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
+          source: "export const host = true;",
+        },
         { path: "src/shared/platform/testAdapter.ts", source: "export const adapter = true;" },
         { path: "src/unowned/fixture.ts", source: "export const fixture = true;" },
         { path: "src/shared/overlap.ts", source: "export const overlap = true;" },
@@ -753,6 +761,8 @@ describe("frontend architecture model", () => {
       ["src/modules/chart/internal/state/chartStore.ts", "core"],
       ["src/modules/chart/internal/ui/ChartEditor.tsx", "views"],
       ["src/modules/chart/public.ts", "views"],
+      ["src/modules/workbench/internal/dockview/RootDockviewHost.tsx", "views"],
+      ["src/modules/workbench/internal/dockview/workbenchRead.ts", "core"],
       ["src/shared/platform/testAdapter.ts", "services"],
     ]);
     expect(report.errors).toEqual([
@@ -776,7 +786,7 @@ describe("frontend architecture model", () => {
     });
     expect(FRONTEND_ARCHITECTURE_POLICY.capabilities).toContainEqual(
       expect.objectContaining({
-        canonicalModule: "src/features/core/dockview/workbenchRead.ts",
+        canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
         exportedSymbols: ["WorkbenchDockviewRead"],
         memberCapabilities: {
           WorkbenchDockviewRead: [
@@ -803,7 +813,8 @@ describe("frontend architecture model", () => {
       FRONTEND_ARCHITECTURE_POLICY.capabilities
         .filter(
           (capability) =>
-            capability.canonicalModule === "src/features/core/dockview/workbenchRead.ts" &&
+            capability.canonicalModule ===
+              "src/modules/workbench/internal/dockview/workbenchRead.ts" &&
             capability.exportedSymbols.some(
               (symbol) => symbol === "WorkbenchDockviewRead" || symbol === "workbenchDockviewRead",
             ),

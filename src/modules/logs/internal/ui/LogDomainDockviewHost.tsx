@@ -9,9 +9,9 @@ import {
 import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
-} from "@/features/core/dockview/logsDockviewLayout";
-import { logsDockviewRootBinding } from "@/features/core/dockview";
-import type { LogsDockviewBindingToken } from "@/features/core/dockview";
+} from "@/modules/workbench/public";
+import { logsDockviewRootBinding } from "@/modules/workbench/public";
+import type { LogsDockviewBindingToken } from "@/modules/workbench/public";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiLogsDockviewTheme } from "@/shared/theme/dockviewTheme";
 import { LogDomainPanel } from "./LogDomainPanel";

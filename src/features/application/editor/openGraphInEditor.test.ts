@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { ensureEditorViewport } from "@/features/core/viewport";
 import { openEditorPanel } from "./openEditorPanel";
 import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";

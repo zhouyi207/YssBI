@@ -376,9 +376,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
-} from "@/features/core/dockview/logsDockviewLayout";
-import { logsDockviewRuntime } from "@/features/core/dockview/logsRuntime";
-import { logsDockviewRootBinding } from "@/features/core/dockview/logsRootBinding";
+} from "@/modules/workbench/internal/dockview/logsDockviewLayout";
+import { logsDockviewRuntime } from "@/modules/workbench/internal/dockview/logsRuntime";
+import { logsDockviewRootBinding } from "@/modules/workbench/internal/dockview/logsRootBinding";
 import { logDomainPanelId } from "@/features/domain/log/logDomains";
 import { logBuffer } from "@/features/application/log/logBuffer";
 import { useLogStore } from "@/features/application/log/logStore";

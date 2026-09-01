@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { VscCheckAll, VscClearAll, VscClose, VscCloseAll } from "react-icons/vsc";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 import type { ActionMenuSection } from "@/shared/ui/actionMenu";
-import { workbenchDockviewRead } from "@/features/core/dockview";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import {
   requestCloseAllEditorPanelsInGroup,
   requestCloseEditorPanel,

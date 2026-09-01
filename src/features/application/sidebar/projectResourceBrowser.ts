@@ -3,7 +3,7 @@ import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
 } from "@/features/core/sidebar/projectTreeState";
-import type { EditorResourceTarget } from "@/features/core/dockview";
+import type { EditorResourceTarget } from "@/modules/workbench/public";
 
 export interface ActiveProjectGraph {
   path: string;

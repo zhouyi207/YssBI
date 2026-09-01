@@ -6,9 +6,9 @@ import {
   isEditorCommandTargetCurrent,
 } from "@/features/application/editor/editorCommandFocus";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
-import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { useEditorPaneStateStore } from "@/modules/workbench/public";
+import { useDockviewPortSnapshot } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   getViewport,

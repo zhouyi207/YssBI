@@ -15,7 +15,7 @@ vi.mock("./variableActions", () => ({
   createVariableAction: mocks.createVariableAction,
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({
   revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 

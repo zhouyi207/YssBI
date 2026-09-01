@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { isAppModalOpen } from "@/features/core/keyboard";
 import {
   captureProjectIdentity,

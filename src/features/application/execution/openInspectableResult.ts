@@ -1,10 +1,10 @@
 import type { TFunction } from "i18next";
-import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
+import { showWorkbenchLayoutError } from "@/modules/workbench/public";
 import {
   openPresentationWindow,
   presentationWindowPayloadFromDescriptor,
 } from "@/features/application/window";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
 import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,

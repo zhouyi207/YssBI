@@ -277,6 +277,19 @@ function memberCapabilityAllows(capability: FrontendResolvedCapability, member: 
   return Object.values(capability.memberCapabilities).some((members) => members.includes(member));
 }
 
+function isOwnModulePublicReExport(dependency: ResolvedModuleDependency): boolean {
+  if (dependency.kind !== "re-export" || dependency.origin.kind !== "repository-module") {
+    return false;
+  }
+  const publicMatch = /^src\/modules\/([^/]+)\/public\.ts$/u.exec(
+    dependency.repositoryRelativeSourceFile,
+  );
+  return Boolean(
+    publicMatch &&
+    dependency.origin.declarationTarget.startsWith(`src/modules/${publicMatch[1]}/internal/`),
+  );
+}
+
 function auditResolvedImports(
   source: ArchitectureSource,
   sourceLayer: FrontendLayer,
@@ -308,7 +321,12 @@ function auditResolvedImports(
     if (dependency.origin.kind !== "repository-module") continue;
     const targetLayer = classification.get(dependency.origin.declarationTarget) ?? null;
     const capability = exactCapability(policy, dependency, sourceLayer);
-    if (sourceLayer === "views" && targetLayer === "core" && capability === null) {
+    if (
+      sourceLayer === "views" &&
+      targetLayer === "core" &&
+      capability === null &&
+      !isOwnModulePublicReExport(dependency)
+    ) {
       findings.push(
         semanticFinding(
           "frontend.view-core.capability",

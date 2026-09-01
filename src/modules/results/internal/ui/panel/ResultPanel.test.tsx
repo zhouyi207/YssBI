@@ -9,7 +9,7 @@ import type {
   ResultPanelMetadata,
   WorkbenchPanelMetadata,
   WorkbenchPanelParams,
-} from "@/features/core/dockview";
+} from "@/modules/workbench/internal/dockview";
 
 const mocks = vi.hoisted(() => ({
   resultContent: vi.fn(),

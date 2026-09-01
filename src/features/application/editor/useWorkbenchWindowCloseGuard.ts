@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { i18n } from "@/app/i18n";
 import { currentAppWindow } from "@/services/platform/appWindow";
-import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
-import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
+import { workbenchLayoutController } from "@/modules/workbench/public";
+import { showWorkbenchLayoutError } from "@/modules/workbench/public";
 import { collectDirtyEditorPanels } from "@/features/core/layout/editorPanelDirty";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/features/application/observability/appLogger";

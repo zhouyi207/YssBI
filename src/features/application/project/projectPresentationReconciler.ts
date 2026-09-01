@@ -1,8 +1,8 @@
 import { bootstrapEditorGraphSession } from "@/features/application/editor/bootstrapEditorGraphSession";
 import { reconcileOpenEditorPanelsWithResources } from "@/features/application/editor/reconcileOpenEditorPanels";
 import { synchronizeVisibleGraphPanels } from "@/features/application/editor/synchronizeVisibleGraphPanel";
-import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchLayoutController } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 
 /** Reconciles the mounted presentation after one authoritative Project snapshot. */
 export function reconcileProjectPresentation(): void {

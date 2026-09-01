@@ -1,5 +1,13 @@
 export type { EditorPanelScope, EditorRendererRegistry } from "./internal/dockview/editorRenderer";
 export { EditorResourceDockPanel } from "./internal/dockview/EditorResourceDockPanel";
+export * from "./internal/dockview/index";
+export {
+  DEFAULT_LOGS_DOCKVIEW_LAYOUT,
+  LOGS_DOCKVIEW_COMPONENT_ID,
+} from "./internal/dockview/logsDockviewLayout";
+export type { LogsDockviewPanelParams } from "./internal/dockview/logsDockviewLayout";
+export type { WorkbenchPanelCommitToken } from "./internal/dockview/workbenchTypes";
+export { canRemoveWorkbenchPanel } from "./internal/dockview/workbenchActivityGroup";
 export type {
   RootDockviewPanelComponent,
   RootPanelRegistry,
@@ -9,12 +17,25 @@ export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
 export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
 export { useWorkbenchUiStore } from "./internal/state/workbenchUiStore";
 export {
-  getWorkbenchUiSnapshot,
-  subscribeWorkbenchUi,
-  useWorkbenchUi,
-  workbenchUi,
-} from "./internal/state/ui";
-export type { WorkbenchUiCapability } from "./internal/state/ui";
+  commitEditorPanelPublication,
+  commitWorkbenchPanelRemoval,
+  releaseEditorPaneState,
+  removeProjectScopedPanelsFromWorkbench,
+  resetEditorPaneState,
+} from "./internal/application/panelCommands";
+export {
+  resetWorkbenchLayout,
+  revealWorkbenchView,
+  toggleActivityWorkbenchGroup,
+  toggleBottomWorkbenchGroup,
+  toggleWorkbenchView,
+} from "./internal/application/workbenchLayoutActions";
+export {
+  workbenchLayoutController,
+  type ProjectResourcesReadyContext,
+  type WorkbenchLayoutController,
+} from "./internal/application/workbenchLayoutController";
+export { showWorkbenchLayoutError } from "./internal/application/workbenchLayoutErrorFeedback";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";

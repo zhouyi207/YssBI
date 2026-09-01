@@ -49,6 +49,19 @@ function hasExactCapability(
   );
 }
 
+function isOwnModulePublicReExport(dependency: ResolvedModuleDependency): boolean {
+  if (dependency.kind !== "re-export" || dependency.origin.kind !== "repository-module") {
+    return false;
+  }
+  const publicMatch = /^src\/modules\/([^/]+)\/public\.ts$/u.exec(
+    dependency.repositoryRelativeSourceFile,
+  );
+  return Boolean(
+    publicMatch &&
+    dependency.origin.declarationTarget.startsWith(`src/modules/${publicMatch[1]}/internal/`),
+  );
+}
+
 function internalFinding(
   dependency: ResolvedModuleDependency,
   sourceLayer: FrontendLayer,
@@ -88,6 +101,7 @@ function auditInternalDependencies(
     const sourceLayer = classification.get(dependency.repositoryRelativeSourceFile);
     const targetLayer = classification.get(dependency.origin.declarationTarget);
     if (!sourceLayer || !targetLayer || sourceLayer === targetLayer) continue;
+    if (isOwnModulePublicReExport(dependency)) continue;
     if (hasLayerEdge(policy, sourceLayer, targetLayer)) continue;
     if (hasExactCapability(policy, dependency, sourceLayer)) continue;
     findings.push(internalFinding(dependency, sourceLayer, targetLayer, policy));

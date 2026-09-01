@@ -96,7 +96,7 @@ vi.mock("@/features/core/history", () => ({
     { getState: () => mocks.history },
   ),
 }));
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     getActivePanel: () => mocks.activePanel ?? undefined,
     listGroupPanels: (groupId: string) =>
@@ -104,7 +104,7 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchControl", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
   workbenchDockviewControl: {
     activate: mocks.activate,
   },
@@ -112,7 +112,7 @@ vi.mock("@/features/core/dockview/workbenchControl", () => ({
 vi.mock("./workbenchPanelClose", () => ({
   requestCloseWorkbenchPanel: mocks.requestCloseWorkbenchPanel,
 }));
-vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({
   toggleWorkbenchView: mocks.toggleWorkbenchView,
   toggleActivityWorkbenchGroup: mocks.toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup: mocks.toggleBottomWorkbenchGroup,

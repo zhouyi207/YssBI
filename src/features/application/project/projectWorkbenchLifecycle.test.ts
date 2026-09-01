@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import {
   captureProjectLifecycleState,
   startProjectLifecycle,
@@ -31,13 +31,13 @@ vi.mock("@/features/application/project/projectIOStore", () => ({
   },
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutController", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutController", () => ({
   workbenchLayoutController: {
     invalidateForProjectReplacement: lifecycleMocks.invalidateForProjectReplacement,
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     get isReady() {
       return lifecycleMocks.state.ready;
@@ -45,13 +45,14 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchDockviewInternal", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
+  workbenchDockviewRuntime: { control: {} },
   workbenchDockviewInternal: {
     runLayoutTransaction: lifecycleMocks.runLayoutTransaction,
   },
 }));
 
-vi.mock("@/features/core/dockview/editorPaneStateStore", () => ({
+vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
   useEditorPaneStateStore: {
     getState: () => ({
       release: lifecycleMocks.releasePaneState,

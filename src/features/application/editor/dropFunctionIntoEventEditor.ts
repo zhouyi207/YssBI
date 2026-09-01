@@ -8,7 +8,7 @@ import {
 } from "@/features/core/dnd";
 import { canCreateFunctionNodeInGraph } from "@/features/application/editor/canvasDrop";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
 
 export function resolveDropPointerFromDragEnd(

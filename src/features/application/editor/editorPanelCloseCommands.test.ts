@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
   requestCloseWorkbenchPanels: vi.fn(async () => true),
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listEditorPanelsInGroup: (groupId: string) =>
       mocks.panels.flatMap((panel) =>

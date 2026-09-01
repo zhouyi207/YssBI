@@ -3,7 +3,7 @@ import { lookupGraphResourceKind, useResourceStore } from "@/features/core/resou
 import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEditorGroup";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
-import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
+import { revealWorkbenchView } from "@/modules/workbench/public";
 import {
   createVariableAction,
   deleteVariableAction,

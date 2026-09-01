@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import type { EditorResourceKind } from "@/features/core/dockview";
+import type { EditorResourceKind } from "./workbenchPanelModel";
 
 export interface EditorPanelScope<Kind extends EditorResourceKind = EditorResourceKind> {
   readonly panelInstanceId: string;

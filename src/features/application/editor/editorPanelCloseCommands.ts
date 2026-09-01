@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 

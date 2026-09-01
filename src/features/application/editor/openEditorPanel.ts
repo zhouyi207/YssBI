@@ -1,13 +1,13 @@
-import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
+import { showWorkbenchLayoutError } from "@/modules/workbench/public";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
-import type { EditorResourceTarget } from "@/features/core/dockview/workbenchPanelModel";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import type { EditorResourceTarget } from "@/modules/workbench/public";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
 import {
   workbenchDockviewRead,
   type WorkbenchEditorPanelInfo,
   type WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
-import { WorkbenchLayoutError } from "@/features/core/dockview/workbenchTypes";
+} from "@/modules/workbench/public";
+import { WorkbenchLayoutError } from "@/modules/workbench/public";
 
 import { resolveEditorOpenTargetGroupId } from "./editorOpenTarget";
 import { requestCloseEditorPanels } from "./editorPanelCloseCommands";

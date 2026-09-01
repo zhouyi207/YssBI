@@ -8,7 +8,7 @@ import {
   getCanvasInteraction,
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";

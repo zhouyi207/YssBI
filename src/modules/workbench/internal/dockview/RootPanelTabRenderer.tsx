@@ -30,13 +30,13 @@ import {
   isWorkbenchActivityViewId,
   isWorkbenchPersistentViewMetadata,
   workbenchDockviewRead,
-} from "@/features/core/dockview";
+} from "./index";
 import type {
   WorkbenchPanelInfo,
   WorkbenchPanelMetadata,
   WorkbenchPanelParams,
   WorkbenchViewId,
-} from "@/features/core/dockview";
+} from "./index";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 import {

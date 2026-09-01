@@ -1,6 +1,6 @@
 import type { IDockviewPanelProps } from "dockview-react";
 
-import type { WorkbenchPanelParams } from "@/features/core/dockview";
+import type { WorkbenchPanelParams } from "@/modules/workbench/public";
 import { ResultContent } from "./ResultContent";
 
 export function ResultPanel(props: IDockviewPanelProps<WorkbenchPanelParams>) {

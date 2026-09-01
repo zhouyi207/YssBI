@@ -11,7 +11,7 @@ const dockviewMocks = vi.hoisted(() => ({
   listPanels: vi.fn(),
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: dockviewMocks,
 }));
 

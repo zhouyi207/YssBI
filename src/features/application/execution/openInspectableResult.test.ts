@@ -23,11 +23,11 @@ vi.mock("@/features/application/window", () => ({
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({ route: "/plot", windowTitle: "Plot" })),
 }));
 
-vi.mock("@/features/core/dockview/workbenchControl", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
   workbenchDockviewControl: { upsertResult: mocks.upsertResult },
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutErrorFeedback", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
 }));
 

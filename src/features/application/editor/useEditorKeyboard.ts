@@ -22,14 +22,14 @@ import {
   shouldIgnoreEditorShortcutEvent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
   toggleWorkbenchView,
-} from "@/features/application/layout/workbenchLayoutActions";
+} from "@/modules/workbench/public";
 
 function currentEditorCommandTarget(): EditorCommandTarget | null {
   const target = captureActiveEditorCommandTarget();

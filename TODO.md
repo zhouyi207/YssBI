@@ -932,3 +932,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Workbench settings/node-documentation modal 的非布局 UI state 从
       `features/core/workbench` 迁入 `modules/workbench/internal/state`，删除旧 barrel，并通过 Workbench
       public API 向 Menubar/keyboard workflow 暴露唯一 store owner；Dockview 继续独占全部物理布局状态。
+- [x] 将 root/nested Dockview runtime、read/control/binding、layout persistence 与 layout lifecycle
+      从 `features` 迁入 `modules/workbench/internal/{dockview,application}`；raw transaction 仅留在模块内部，
+      editor publication、panel removal 与 project replacement 通过窄 public commands 协调并释放 panel state。

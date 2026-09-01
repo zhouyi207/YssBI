@@ -1,7 +1,9 @@
-import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
-import { workbenchDockviewInternal } from "@/features/core/dockview/workbenchDockviewInternal";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { WorkbenchPanelCommitToken } from "@/features/core/dockview/workbenchTypes";
+import {
+  commitWorkbenchPanelRemoval,
+  releaseEditorPaneState,
+  workbenchDockviewRead,
+  type WorkbenchPanelCommitToken,
+} from "@/modules/workbench/public";
 import { resourceKey, useResourceStore } from "@/features/core/resource";
 
 /** Atomically remove restored editors whose project resources are absent after hydration. */
@@ -23,9 +25,8 @@ export async function reconcileOpenEditorPanelsWithResources(): Promise<void> {
     groupId: panel.groupId,
     metadata: structuredClone(panel.metadata),
   }));
-  const outcome = await workbenchDockviewInternal.commitRemove(tokens);
+  const outcome = await commitWorkbenchPanelRemoval(tokens);
   if (outcome !== "committed") return;
 
-  const paneState = useEditorPaneStateStore.getState();
-  for (const panel of stalePanels) paneState.release(panel.panelInstanceId);
+  for (const panel of stalePanels) releaseEditorPaneState(panel.panelInstanceId);
 }

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from "@/shared/constants/defaultResourceNames";
-import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
+import { revealWorkbenchView } from "@/modules/workbench/public";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
 import {
   createGraphResource,

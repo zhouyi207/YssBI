@@ -1,9 +1,6 @@
 import i18n from "i18next";
 
-import {
-  WorkbenchLayoutError,
-  type WorkbenchLayoutErrorCode,
-} from "@/features/core/dockview/workbenchTypes";
+import { WorkbenchLayoutError, type WorkbenchLayoutErrorCode } from "../dockview/workbenchTypes";
 import { uiStore } from "@/features/core/ui/UIStore";
 
 const MESSAGE_KEYS = {

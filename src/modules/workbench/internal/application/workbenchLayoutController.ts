@@ -1,37 +1,34 @@
 import type { DockviewApi, SerializedDockview } from "dockview-react";
 
-import { DEFAULT_LOGS_DOCKVIEW_LAYOUT } from "@/features/core/dockview/logsDockviewLayout";
-import { createLogsDockviewRuntime } from "@/features/core/dockview/logsRuntime";
-import { logsDockviewRead, type LogsDockviewRead } from "@/features/core/dockview/logsRead";
-import {
-  logsDockviewControl,
-  type LogsDockviewControl,
-} from "@/features/core/dockview/logsControl";
+import { DEFAULT_LOGS_DOCKVIEW_LAYOUT } from "../dockview/logsDockviewLayout";
+import { createLogsDockviewRuntime } from "../dockview/logsRuntime";
+import { logsDockviewRead, type LogsDockviewRead } from "../dockview/logsRead";
+import { logsDockviewControl, type LogsDockviewControl } from "../dockview/logsControl";
 import {
   createPersistedWorkbenchLayout,
   parsePersistedWorkbenchLayout,
   scrubProjectScopedRootLayout,
   workbenchLayoutStorageKey,
-} from "@/features/core/dockview/workbenchLayoutPersistence";
+} from "../dockview/workbenchLayoutPersistence";
 import {
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
-} from "@/features/core/dockview/workbenchDockviewDefaults";
+} from "../dockview/workbenchDockviewDefaults";
 import {
   createWorkbenchDockviewRuntime,
   workbenchDockviewInternal,
   type WorkbenchDockviewInternal,
   type WorkbenchLayoutTransaction,
-} from "@/features/core/dockview/workbenchDockviewInternal";
+} from "../dockview/workbenchDockviewInternal";
 import {
   workbenchDockviewRead,
   type WorkbenchDockviewRead,
   type WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
+} from "../dockview/workbenchRead";
 import {
   workbenchDockviewControl,
   type WorkbenchDockviewControl,
-} from "@/features/core/dockview/workbenchControl";
+} from "../dockview/workbenchControl";
 
 export interface ProjectResourcesReadyContext {
   isCurrent(): boolean;

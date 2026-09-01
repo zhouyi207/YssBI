@@ -4,21 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultLogsDockviewLayout,
   LOGS_DOCKVIEW_COMPONENT_ID,
-} from "@/features/core/dockview/logsDockviewLayout";
-import { createLogsDockviewRuntime } from "@/features/core/dockview/logsRuntime";
+} from "../dockview/logsDockviewLayout";
+import { createLogsDockviewRuntime } from "../dockview/logsRuntime";
 import type {
   WorkbenchDockviewInternal,
   WorkbenchLayoutTransaction,
-} from "@/features/core/dockview/workbenchDockviewInternal";
-import type { WorkbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
-import type {
-  WorkbenchDockviewRead,
-  WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
-import type {
-  WorkbenchComponentId,
-  WorkbenchViewId,
-} from "@/features/core/dockview/workbenchPanelModel";
+} from "../dockview/workbenchDockviewInternal";
+import type { WorkbenchDockviewControl } from "../dockview/workbenchControl";
+import type { WorkbenchDockviewRead, WorkbenchPanelInfo } from "../dockview/workbenchRead";
+import type { WorkbenchComponentId, WorkbenchViewId } from "../dockview/workbenchPanelModel";
 import { createWorkbenchLayoutController } from "./workbenchLayoutController";
 
 type Listener = () => void;

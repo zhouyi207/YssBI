@@ -4,9 +4,9 @@
  */
 
 import { useMemo } from "react";
-import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { WorkbenchGroupInfo } from "@/features/core/dockview/workbenchRead";
+import { useDockviewPortSnapshot } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
+import type { WorkbenchGroupInfo } from "@/modules/workbench/public";
 
 export function useEditorGroups(): WorkbenchGroupInfo[] {
   const { revision } = useDockviewPortSnapshot(workbenchDockviewRead);

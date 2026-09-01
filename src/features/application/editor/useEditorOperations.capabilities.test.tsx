@@ -64,7 +64,7 @@ vi.mock("@/features/core/editor", () => ({
   },
   updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
 }));
-vi.mock("@/features/core/dockview", () => ({
+vi.mock("@/modules/workbench/internal/dockview", () => ({
   workbenchDockviewRead: {
     getActiveEditorPanelInGroup: (groupId: string) => {
       const resourceRef = mocks.activeResourceByGroup.get(groupId);

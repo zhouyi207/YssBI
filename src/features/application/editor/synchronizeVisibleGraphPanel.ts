@@ -1,6 +1,6 @@
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { editorViewportScope, ensureEditorViewport } from "@/features/core/viewport";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 
 export interface VisibleGraphPanelScope {
   readonly groupId: string;

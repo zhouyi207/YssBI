@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useFunctionCatalog } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { workbenchDockviewRead } from "@/features/core/dockview";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useGraphResourcesByKind } from "@/features/core/resource";

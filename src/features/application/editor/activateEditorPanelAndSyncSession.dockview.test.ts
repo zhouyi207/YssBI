@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
-} from "@/features/core/dockview/workbenchRead";
+} from "@/modules/workbench/internal/dockview/workbenchRead";
 
 const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   setDetailContext: vi.fn(),
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listGroups: () => mocks.groups,
     listEditorPanelsInGroup: (groupId: string) =>
@@ -38,7 +38,7 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchControl", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
   workbenchDockviewControl: {
     activate: mocks.activate,
   },

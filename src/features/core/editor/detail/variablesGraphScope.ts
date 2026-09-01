@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { useEditorStore } from "../stores/useEditorStore";
 
 function readActiveGraphTab(): { id: string; type: "event" | "function" } | null {

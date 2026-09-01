@@ -7,7 +7,7 @@ import {
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from "@/features/application/projectCommandContext";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { isResourceDocumentDirty, markResourceDirty, resourceKey } from "@/features/core/resource";
 import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";

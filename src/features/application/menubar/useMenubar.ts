@@ -6,11 +6,11 @@ import {
   resetWorkbenchLayout,
   toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
-} from "@/features/application/layout/workbenchLayoutActions";
+} from "@/modules/workbench/public";
 import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
 
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { WorkbenchViewId } from "@/features/core/dockview/workbenchPanelModel";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
+import type { WorkbenchViewId } from "@/modules/workbench/public";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import type { MenubarViewState } from "./menubarViewItems";

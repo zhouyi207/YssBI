@@ -125,15 +125,15 @@ const VIEW_CORE_CAPABILITIES = [
   ]),
   viewCoreCapability("src/features/core/dataStore/pinLinks.ts", ["derivePinConnectionView"]),
   viewCoreCapability("src/features/core/dataStore/useNodeView.ts", ["useNodeView"]),
-  viewCoreCapability("src/features/core/dockview/logsDockviewLayout.ts", [
+  viewCoreCapability("src/modules/workbench/internal/dockview/logsDockviewLayout.ts", [
     "DEFAULT_LOGS_DOCKVIEW_LAYOUT",
     "LOGS_DOCKVIEW_COMPONENT_ID",
     "LogsDockviewPanelParams",
   ]),
-  viewCoreCapability("src/features/core/dockview/workbenchDockviewDefaults.ts", [
+  viewCoreCapability("src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts", [
     "WORKBENCH_ACTIVITY_GROUP_ID",
   ]),
-  viewCoreCapability("src/features/core/dockview/workbenchPanelModel.ts", [
+  viewCoreCapability("src/modules/workbench/internal/dockview/workbenchPanelModel.ts", [
     "EditorResourceKind",
     "isWorkbenchActivityViewId",
     "isWorkbenchPersistentViewMetadata",
@@ -372,7 +372,7 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     ...VIEW_DOMAIN_CAPABILITIES,
     {
       sourceLayer: "app-composition",
-      canonicalModule: "src/features/core/dockview/workbenchRead.ts",
+      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
       exportedSymbols: ["WorkbenchDockviewRead"],
       exactConsumers: null,
       memberCapabilities: {
@@ -554,7 +554,7 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/dockview/workbenchRead.ts",
+      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
       exportedSymbols: ["workbenchDockviewRead"],
       exactConsumers: null,
       memberCapabilities: {
@@ -563,21 +563,21 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/dockview/workbenchTypes.ts",
+      canonicalModule: "src/modules/workbench/internal/dockview/workbenchTypes.ts",
       exportedSymbols: ["WorkbenchPanelInfo"],
       exactConsumers: null,
       memberCapabilities: null,
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/dockview/workbenchRootBinding.ts",
+      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRootBinding.ts",
       exportedSymbols: ["workbenchRootBinding"],
       exactConsumers: ["src/modules/workbench/internal/dockview/RootDockviewHost.tsx"],
       memberCapabilities: null,
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/dockview/logsRootBinding.ts",
+      canonicalModule: "src/modules/workbench/internal/dockview/logsRootBinding.ts",
       exportedSymbols: ["logsDockviewRootBinding", "LogsDockviewBindingToken"],
       exactConsumers: ["src/modules/logs/internal/ui/LogDomainDockviewHost.tsx"],
       memberCapabilities: null,
@@ -626,9 +626,23 @@ function isModuleInternalLayer(path: string, layer: "application" | "state" | "d
   return path.startsWith("src/modules/") && path.includes(`/internal/${layer}/`);
 }
 
+const WORKBENCH_DOCKVIEW_VIEW_CONTRACTS = new Set([
+  "src/modules/workbench/internal/dockview/editorRenderer.ts",
+  "src/modules/workbench/internal/dockview/panelContribution.ts",
+]);
+
+function isWorkbenchDockviewStateSource(path: string): boolean {
+  return (
+    path.startsWith("src/modules/workbench/internal/dockview/") &&
+    path.endsWith(".ts") &&
+    !WORKBENCH_DOCKVIEW_VIEW_CONTRACTS.has(path)
+  );
+}
+
 function isModuleViewSource(path: string): boolean {
   return (
     path.startsWith("src/modules/") &&
+    !isWorkbenchDockviewStateSource(path) &&
     !isModuleInternalLayer(path, "application") &&
     !isModuleInternalLayer(path, "state") &&
     !isModuleInternalLayer(path, "domain")
@@ -653,7 +667,9 @@ export const FRONTEND_BASE_RULES: readonly FrontendBaseRule[] = [
   {
     layer: "core",
     matches: (path) =>
-      path.startsWith("src/features/core/") || isModuleInternalLayer(path, "state"),
+      path.startsWith("src/features/core/") ||
+      isModuleInternalLayer(path, "state") ||
+      isWorkbenchDockviewStateSource(path),
   },
   {
     layer: "domain",

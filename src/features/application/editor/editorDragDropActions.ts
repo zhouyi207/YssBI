@@ -11,7 +11,7 @@ import {
 } from "./dropFunctionIntoEventEditor";
 import { canvasDropHandlerStore, useSidebarDragStore } from "@/features/core/sidebarDrag";
 import { sidebarDragUi } from "@/features/core/sidebarDrag/ui";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
 import type { SidebarDragPayload } from "@/features/core/dnd";
 import {
   findSidebarDropCanvasAtPointer,

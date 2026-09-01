@@ -5,7 +5,7 @@ import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
 } from "@/features/application/editor/editorCommandFocus";
-import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
+import { revealWorkbenchView } from "@/modules/workbench/public";
 import { setViewportLive, editorViewportScope } from "@/features/core/viewport";
 
 /** Status bar command handlers — keeps StatusBar presentational. */

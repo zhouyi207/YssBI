@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { DockviewReact, type DockviewApi, type DockviewGroupPanel } from "dockview-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelParams } from "@/features/core/dockview";
+import type { WorkbenchPanelParams } from "./index";
 
 const WORKBENCH_DOCKVIEW_CSS = readFileSync(
   join(process.cwd(), "src/app/workbench-dockview.css"),
@@ -41,7 +41,7 @@ vi.mock("@/features/application/editor/editorPanelTabMenu", () => ({
   buildEditorPanelTabMenu: mocks.buildEditorPanelTabMenu,
 }));
 
-vi.mock("@/features/core/dockview", () => ({
+vi.mock("./index", () => ({
   isWorkbenchActivityViewId: (viewId: string) =>
     ["project", "nodes", "data", "commands"].includes(viewId),
   isWorkbenchPersistentViewMetadata: (metadata: { role: string; viewId?: string }) =>

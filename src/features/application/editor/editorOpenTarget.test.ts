@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
+} from "@/modules/workbench/internal/dockview/workbenchRead";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
 const mocks = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   ensureCentralGroup: vi.fn(async () => "central-group"),
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listGroups: () => mocks.groups,
     listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
@@ -27,7 +27,7 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchControl", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
   workbenchDockviewControl: {
     ensureCentralGroup: mocks.ensureCentralGroup,
   },

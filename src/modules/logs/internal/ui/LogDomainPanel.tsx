@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { IDockviewPanelProps } from "dockview-react";
 
-import type { LogsDockviewPanelParams } from "@/features/core/dockview/logsDockviewLayout";
+import type { LogsDockviewPanelParams } from "@/modules/workbench/public";
 import { isLogDomainId, applyLogFilter } from "@/features/application/log";
 import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
 import { LogPanelList } from "./LogPanelList";

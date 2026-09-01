@@ -23,9 +23,9 @@ import {
 } from "@dnd-kit/core";
 
 import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
-import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
-import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
-import { workbenchDockviewRead } from "@/features/core/dockview";
+import { useWorkbenchLayout } from "../application/useWorkbenchLayout";
+import { workbenchLayoutController } from "../application/workbenchLayoutController";
+import { workbenchDockviewRead } from "./index";
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";

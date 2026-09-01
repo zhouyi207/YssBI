@@ -1,5 +1,5 @@
 import { getGraphByPath } from "@/features/application/project/projectHelpers";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
   if (targetGraphPath) return targetGraphPath;

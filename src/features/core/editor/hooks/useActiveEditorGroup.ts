@@ -1,5 +1,5 @@
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { useDockviewPortSnapshot } from "@/modules/workbench/public";
 import { createGraphSelection } from "../editorGroupSelection";
 import { useEditorGroupPlacement } from "./useEditorGroupPlacement";
 

@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { useOpenChart } from "./useChartManagement";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -39,7 +39,7 @@ vi.mock("./openEditorPanel", () => ({
   isEditorOpenRejectionHandled: (error: unknown) => error === mocks.handledRejection,
 }));
 
-vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({
   revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
-import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
+import { useEditorPaneStateStore } from "@/modules/workbench/public";
+import { useDockviewPortSnapshot } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
+import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 
 export interface EditorGroupPlacementSlice {
   panelInstanceIds: string[];

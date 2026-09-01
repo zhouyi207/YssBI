@@ -1,25 +1,22 @@
 import i18n from "i18next";
 
-import { requestCloseWorkbenchPanel } from "@/features/application/editor/workbenchPanelClose";
-import { logsDockviewControl } from "@/features/core/dockview/logsControl";
+import { logsDockviewControl } from "../dockview/logsControl";
 import {
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
-} from "@/features/core/dockview/workbenchDockviewDefaults";
-import { workbenchDockviewInternal } from "@/features/core/dockview/workbenchDockviewInternal";
-import {
-  workbenchDockviewRead,
-  type WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+} from "../dockview/workbenchDockviewDefaults";
+import { workbenchDockviewInternal } from "../dockview/workbenchDockviewInternal";
+import { workbenchDockviewRead, type WorkbenchPanelInfo } from "../dockview/workbenchRead";
+import { workbenchDockviewControl } from "../dockview/workbenchControl";
 import {
   isWorkbenchActivityMetadata,
   isWorkbenchPersistentViewMetadata,
   type WorkbenchViewId,
-} from "@/features/core/dockview/workbenchPanelModel";
-import { useEditorStore } from "@/features/core/editor";
+} from "../dockview/workbenchPanelModel";
+import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { closeWorkbenchViewPanel } from "./panelCommands";
 import { workbenchLayoutController } from "./workbenchLayoutController";
 import { showWorkbenchLayoutError } from "./workbenchLayoutErrorFeedback";
 
@@ -105,7 +102,7 @@ export async function toggleWorkbenchView(viewId: WorkbenchViewId): Promise<bool
   ) {
     return (await revealWorkbenchView(viewId)) !== null;
   }
-  if (existing) return requestCloseWorkbenchPanel(existing.panelInstanceId);
+  if (existing) return closeWorkbenchViewPanel(existing.panelInstanceId);
   return (await revealWorkbenchView(viewId)) !== null;
 }
 

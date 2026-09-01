@@ -1,8 +1,5 @@
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
-import {
-  workbenchDockviewRead,
-  type WorkbenchEditorPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchDockviewRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 

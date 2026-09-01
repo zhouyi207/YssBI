@@ -4,11 +4,11 @@ import type {
   EditorResourceKind,
   WorkbenchPanelMetadata,
   WorkbenchViewId,
-} from "@/features/core/dockview/workbenchPanelModel";
+} from "@/modules/workbench/internal/dockview/workbenchPanelModel";
 import type {
   WorkbenchPanelCommitToken,
   WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchTypes";
+} from "@/modules/workbench/internal/dockview/workbenchTypes";
 
 const mocks = vi.hoisted(() => {
   type FakePanel = {
@@ -225,13 +225,13 @@ vi.mock("i18next", () => ({
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchRead", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listPanels: () => mocks.panels,
   },
 }));
 
-vi.mock("@/features/core/dockview/workbenchDockviewInternal", () => ({
+vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
   workbenchDockviewRuntime: { control: {} },
   workbenchDockviewInternal: {
     commitRemove: mocks.commitRemove,
@@ -296,7 +296,7 @@ vi.mock("@/features/core/ui/UIStore", () => ({
   uiStore: { confirm3: mocks.confirm3 },
 }));
 
-vi.mock("@/features/core/dockview/editorPaneStateStore", () => ({
+vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
   useEditorPaneStateStore: {
     getState: () => ({ release: mocks.releasePane }),
   },

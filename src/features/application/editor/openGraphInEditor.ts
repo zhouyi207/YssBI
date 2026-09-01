@@ -1,4 +1,4 @@
-import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
 import { logger } from "@/features/application/observability/appLogger";
 import { isValidGraphResourceTabId } from "@/shared/types/domain/graphResourcePath";

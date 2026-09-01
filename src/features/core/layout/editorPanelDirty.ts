@@ -1,5 +1,5 @@
-import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchDockviewRead } from "@/modules/workbench/public";
 import {
   isGraphResourceDirty,
   markResourceDirty,

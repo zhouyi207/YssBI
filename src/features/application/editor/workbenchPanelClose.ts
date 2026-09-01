@@ -1,18 +1,17 @@
 import i18n from "i18next";
 
 import {
+  canRemoveWorkbenchPanel,
+  commitWorkbenchPanelRemoval,
   isWorkbenchPanelMetadata,
+  releaseEditorPaneState,
   type EditorPanelMetadata,
   type EditorResourceKind,
-  type WorkbenchPanelMetadata,
-} from "@/features/core/dockview/workbenchPanelModel";
-import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
-import { workbenchDockviewInternal } from "@/features/core/dockview/workbenchDockviewInternal";
-import {
+  type WorkbenchPanelCommitToken,
   type WorkbenchPanelInfo,
+  type WorkbenchPanelMetadata,
   workbenchDockviewRead,
-} from "@/features/core/dockview/workbenchRead";
-import type { WorkbenchPanelCommitToken } from "@/features/core/dockview/workbenchTypes";
+} from "@/modules/workbench/public";
 import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
 import {
   clearResourceDocumentState,
@@ -20,7 +19,6 @@ import {
   markResourceDirty,
 } from "@/features/core/resource";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
-import { canRemoveWorkbenchPanel } from "@/features/core/dockview/workbenchActivityGroup";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -278,12 +276,10 @@ function finalizeClosedPanels(
     );
   const releasedViewportScopes = new Set<string>();
   const finalizedDocuments = new Set<string>();
-  const paneState = useEditorPaneStateStore.getState();
-
   for (const panel of closedPanels) {
     const metadata = panel.metadata;
     if (metadata.role !== "editor") continue;
-    paneState.release(panel.panelInstanceId);
+    releaseEditorPaneState(panel.panelInstanceId);
 
     if (metadata.resourceKind !== "chart") {
       const hasSameScope = remainingEditors.some(
@@ -367,10 +363,8 @@ async function requestCloseWorkbenchPanelsNow(
   try {
     const identity = snapshot.projectIdentity;
     outcome = identity
-      ? await workbenchDockviewInternal.commitRemove(snapshot.tokens, () =>
-          isCurrentProjectIdentity(identity),
-        )
-      : await workbenchDockviewInternal.commitRemove(snapshot.tokens);
+      ? await commitWorkbenchPanelRemoval(snapshot.tokens, () => isCurrentProjectIdentity(identity))
+      : await commitWorkbenchPanelRemoval(snapshot.tokens);
   } catch {
     const absent = physicallyAbsentPanels(snapshot);
     if (isCloseSnapshotCurrent(snapshot) && absent.length > 0) {

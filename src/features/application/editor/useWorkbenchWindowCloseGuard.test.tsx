@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import type { AppWindowHandle } from "@/services/platform/appWindow";
-import { WorkbenchLayoutError } from "@/features/core/dockview/workbenchTypes";
+import { WorkbenchLayoutError } from "@/modules/workbench/internal/dockview/workbenchTypes";
 import { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,12 +46,12 @@ vi.mock("@/features/core/ui/UIStore", () => ({
 vi.mock("./saveAllDirtyGraphs", () => ({
   saveAllDirtyGraphs: mocks.saveAllDirtyGraphs,
 }));
-vi.mock("@/features/application/layout/workbenchLayoutController", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutController", () => ({
   workbenchLayoutController: {
     flushBeforeWindowClose: mocks.flushBeforeWindowClose,
   },
 }));
-vi.mock("@/features/application/layout/workbenchLayoutErrorFeedback", () => ({
+vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
 }));
 vi.mock("@/app/i18n", () => ({
