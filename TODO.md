@@ -947,3 +947,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 root drag overlay pointer modifier 迁入 Workbench，并让 sidebar primitives 直接消费 dnd-kit
       `Data`；inline action error formatter 由 Project/Data 业务 panel 显式注入，Workbench UI 子树不再依赖
       业务 DnD 或错误摘要 contract，并由 production architecture gate 阻止回流。
+- [x] 将 Result Dockview metadata 解包迁入 app-owned `ResultDockPanel` adapter，Results 模块只接收
+      显式 `resultId` props；新增 production gate，禁止除唯一 Logs nested Dockview adapter 外的业务模块
+      直接导入 `dockview-react`。

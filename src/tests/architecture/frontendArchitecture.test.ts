@@ -364,11 +364,25 @@ describe("frontend architecture model", () => {
       const layoutActions =
         sourceByPath.get("src/modules/workbench/internal/application/workbenchLayoutActions.ts") ??
         "";
+      const directBusinessDockviewConsumers = [...sourceByPath.entries()]
+        .filter(
+          ([path, source]) =>
+            path.startsWith("src/modules/") &&
+            !path.startsWith("src/modules/workbench/") &&
+            /from\s+["']dockview-react["']/u.test(source),
+        )
+        .map(([path]) => path)
+        .sort();
 
       expect(rootHost).not.toMatch(/\b(?:synchronizeActiveEditorPanel|useSettingsRead)\b/u);
       expect(tabRenderer).not.toMatch(/from\s+["']@\/features\//u);
       expect(dragOverlay).not.toMatch(/from\s+["']@\/features\//u);
       expect(layoutActions).not.toMatch(/\b(?:useEditorStore|useGraphSessionStore)\b/u);
+      expect(directBusinessDockviewConsumers).toEqual([
+        "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
+        "src/modules/logs/internal/ui/LogDomainPanel.tsx",
+        "src/modules/logs/internal/ui/LogWorkspaceActions.tsx",
+      ]);
 
       expect(
         sourceByPath.get("src/app/windows/workbench/integrations/panelActivationCoordinator.ts"),

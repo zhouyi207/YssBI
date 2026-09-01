@@ -2,14 +2,7 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { IDockviewPanelProps } from "dockview-react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type {
-  ResultPanelMetadata,
-  WorkbenchPanelMetadata,
-  WorkbenchPanelParams,
-} from "@/modules/workbench/internal/dockview";
 
 const mocks = vi.hoisted(() => ({
   resultContent: vi.fn(),
@@ -33,21 +26,6 @@ vi.mock("./ResultContent", async () => {
 });
 
 import { ResultPanel } from "./ResultPanel";
-
-function resultMetadata(resultId: string): ResultPanelMetadata {
-  return {
-    role: "result",
-    resultKey: "output:shared",
-    resultId,
-    title: `Result ${resultId}`,
-    presentation: { kind: "inspector" },
-    source: null,
-  };
-}
-
-function panelProps(metadata: WorkbenchPanelMetadata): IDockviewPanelProps<WorkbenchPanelParams> {
-  return { params: { metadata } } as unknown as IDockviewPanelProps<WorkbenchPanelParams>;
-}
 
 describe("ResultPanel", () => {
   let container: HTMLDivElement;
@@ -77,12 +55,8 @@ describe("ResultPanel", () => {
     container.remove();
   });
 
-  it("ignores non-results and remounts the same result key for a new result ID", () => {
-    act(() => root.render(<ResultPanel {...panelProps({ role: "view", viewId: "logs" })} />));
-    expect(container.childElementCount).toBe(0);
-    expect(mocks.resultContent).not.toHaveBeenCalled();
-
-    act(() => root.render(<ResultPanel {...panelProps(resultMetadata("result-a"))} />));
+  it("remounts its content for a new result ID", () => {
+    act(() => root.render(<ResultPanel resultId="result-a" />));
     expect(container.querySelector("[data-workbench-result-panel]")).not.toBeNull();
     expect(container.querySelector('[data-testid="result-content"]')).toMatchObject({
       dataset: {
@@ -91,7 +65,7 @@ describe("ResultPanel", () => {
       },
     });
 
-    act(() => root.render(<ResultPanel {...panelProps(resultMetadata("result-b"))} />));
+    act(() => root.render(<ResultPanel resultId="result-b" />));
     expect(container.querySelector('[data-testid="result-content"]')).toMatchObject({
       dataset: {
         resultId: "result-b",

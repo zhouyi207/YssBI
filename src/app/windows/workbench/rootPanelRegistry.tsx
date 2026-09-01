@@ -21,6 +21,11 @@ function MainLogsDockPanel() {
   return <LogDomainDockviewHost layout={{ kind: "main" }} />;
 }
 
+const ResultDockPanel: RootDockviewPanelComponent = ({ params }) => {
+  const { metadata } = params;
+  return metadata.role === "result" ? <ResultPanel resultId={metadata.resultId} /> : null;
+};
+
 export const rootPanelRegistry = {
   EditorResource: EditorResourcePanel,
   Project: projectActivityPanelContribution,
@@ -30,7 +35,7 @@ export const rootPanelRegistry = {
   Details: DetailsPane,
   Assistant: AssistantPanel,
   Inspect: InspectPane,
-  Result: ResultPanel,
+  Result: ResultDockPanel,
   Logs: MainLogsDockPanel,
   Output: OutputPanel,
   Diagnostics: DiagnosticsPanel,
