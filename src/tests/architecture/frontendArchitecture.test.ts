@@ -423,7 +423,7 @@ describe("frontend architecture model", () => {
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphEditor.tsx",
         "src/views/EditorView/Layout/BottomBar.tsx",
         "src/views/EditorView/Layout/WorkbenchDockviewTab.tsx",
-        "src/views/LogView/LogWorkspaceDockview.tsx",
+        "src/modules/logs/internal/ui/LogWorkspaceDockview.tsx",
       ];
       expect(retiredFiles.filter((path) => paths.has(path))).toEqual([]);
 
@@ -432,7 +432,7 @@ describe("frontend architecture model", () => {
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx",
         "src/views/EditorView/Layout/RootPanelTabRenderer.tsx",
         "src/views/EditorView/Layout/StatusBar.tsx",
-        "src/views/LogView/LogDomainDockviewHost.tsx",
+        "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
       ];
       expect(finalFiles.filter((path) => !paths.has(path))).toEqual([]);
     });
@@ -479,7 +479,7 @@ describe("frontend architecture model", () => {
         "src/features/domain/editorProjection/connectionRules.ts",
         "src/features/domain/editorProjection/graphRuntimeTypes.ts",
         "src/shared/charts/ChartModel.ts",
-        "src/views/DataImport/ImportModal.tsx",
+        "src/modules/data-explorer/internal/ui/import/ImportModal.tsx",
       ];
       expect(ownerFiles.filter((path) => !pathSet.has(path))).toEqual([]);
     });

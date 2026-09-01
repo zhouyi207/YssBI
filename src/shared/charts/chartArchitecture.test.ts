@@ -931,13 +931,14 @@ describe("chart package architecture", () => {
     );
   });
 
-  it("keeps legacy PlotView and shared plot compatibility paths removed", () => {
+  it("keeps legacy plot compatibility paths removed", () => {
     const violations = productionSources
       .map((source) => source.path)
       .filter(
         (path) =>
           path.startsWith("src/shared/plot/") ||
-          (path.startsWith("src/views/PlotView/") && path !== "src/views/PlotView/PlotWindow.tsx"),
+          (path.startsWith("src/modules/results/internal/ui/plot/") &&
+            path !== "src/modules/results/internal/ui/plot/PlotWindow.tsx"),
       );
 
     expect(violations, `Dead chart compatibility paths:\n${violations.join("\n")}`).toEqual([]);

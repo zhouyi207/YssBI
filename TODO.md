@@ -914,3 +914,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Graph Canvas、Node、Pin、ContextMenu、NodePalette 与 overlay UI 迁入
       `modules/graph-editor/internal/ui`，保持 Controller/View 和显式 slot 边界，并仅通过模块根
       `public.ts` 向 app composition 暴露 `GraphDocumentEditor` 与 `WatermarkView`。
+- [x] 将 Assistant、Logs、Project Explorer、Data Explorer、Database Editor、Results 与 Bayes 的
+      独立窗口/panel UI 迁入各自 `modules/*/internal/ui`，由根 `public.ts` 向 app 动态路由、UI host
+      和 root panel registry 暴露窄入口；同步 nested Logs Dockview 与 chart/plot 架构门禁的最终路径。

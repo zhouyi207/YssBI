@@ -165,7 +165,7 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/views/LogView/LogDomainDockviewHost.tsx",
+    "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
     `
     import { DockviewReact } from 'dockview-react';
     export const LogDomainDockviewHost = () => <DockviewReact />;
@@ -186,7 +186,7 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/views/LogView/OtherLogWorkspace.tsx",
+    "src/modules/logs/internal/ui/OtherLogWorkspace.tsx",
     `
     import { DockviewReact } from 'dockview-react';
     export const OtherLogWorkspace = () => <DockviewReact />;
@@ -279,7 +279,7 @@ describe("frontend semantic architecture", () => {
         },
         {
           ruleId: "frontend.dockview.nested-constructor",
-          sourceFile: "src/views/LogView/OtherLogWorkspace.tsx",
+          sourceFile: "src/modules/logs/internal/ui/OtherLogWorkspace.tsx",
           dependencyKind: "constructor",
           canonicalOriginTarget: "external:dockview-react",
         },

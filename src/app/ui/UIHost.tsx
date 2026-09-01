@@ -1,9 +1,11 @@
 import { applicationUi, useApplicationUiRead } from "@/features/application/ui/applicationUi";
-import { ExcelSheetSelectModal } from "@/views/DataImport/ExcelSheetSelectModal";
-import { ImportModal } from "@/views/DataImport/ImportModal";
-import { SqlConnectionModal } from "@/views/DataImport/SqlConnectionModal";
-import { SqliteTableSelectModal } from "@/views/DataImport/SqliteTableSelectModal";
-import { SqlRemoteTableSelectModal } from "@/views/DataImport/SqlRemoteTableSelectModal";
+import {
+  ExcelSheetSelectModal,
+  ImportModal,
+  SqlConnectionModal,
+  SqliteTableSelectModal,
+  SqlRemoteTableSelectModal,
+} from "@/modules/data-explorer/public";
 
 import { InputModal, MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
 

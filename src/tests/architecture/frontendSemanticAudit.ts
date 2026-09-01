@@ -29,7 +29,7 @@ import type {
 const RAW_INVOKE_ADAPTER = "src/services/ipc/invokeCommand.ts";
 const RAW_DIALOG_ADAPTER = "src/services/platform/pathDialog.ts";
 const ROOT_DOCKVIEW_CONSUMER = "src/views/EditorView/Layout/RootDockviewHost.tsx";
-const NESTED_DOCKVIEW_CONSUMER = "src/views/LogView/LogDomainDockviewHost.tsx";
+const NESTED_DOCKVIEW_CONSUMER = "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx";
 
 const PUBLICATION_MEMBERS = new Set([
   "applyProjection",
@@ -348,7 +348,7 @@ function dockviewRule(sourceFile: string): {
   ruleId: "frontend.dockview.root-constructor" | "frontend.dockview.nested-constructor";
   allowedPath: string;
 } {
-  return sourceFile.startsWith("src/views/LogView/")
+  return sourceFile.startsWith("src/modules/logs/")
     ? { ruleId: "frontend.dockview.nested-constructor", allowedPath: NESTED_DOCKVIEW_CONSUMER }
     : { ruleId: "frontend.dockview.root-constructor", allowedPath: ROOT_DOCKVIEW_CONSUMER };
 }

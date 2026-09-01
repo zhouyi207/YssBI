@@ -9,23 +9,23 @@ import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
 import { UIHost } from "./ui/UIHost";
 
 const PlotWindow = React.lazy(() =>
-  import("@/views/PlotView/PlotWindow").then((m) => ({ default: m.PlotWindow })),
+  import("@/modules/results/public").then((m) => ({ default: m.PlotWindow })),
 );
 const DatabaseEditorWindow = React.lazy(() =>
-  import("@/views/DatabaseEditor/DatabaseEditorWindow").then((m) => ({
+  import("@/modules/database-editor/public").then((m) => ({
     default: m.DatabaseEditorWindow,
   })),
 );
 const SourceInspectorWindow = React.lazy(() =>
-  import("@/views/SourceInspector/SourceInspectorWindow").then((m) => ({
+  import("@/modules/results/public").then((m) => ({
     default: m.SourceInspectorWindow,
   })),
 );
 const LogWindow = React.lazy(() =>
-  import("@/views/LogView/LogWindow").then((m) => ({ default: m.LogWindow })),
+  import("@/modules/logs/public").then((m) => ({ default: m.LogWindow })),
 );
 const InfoWindow = React.lazy(() =>
-  import("@/views/InfoView/InfoWindow").then((m) => ({ default: m.InfoWindow })),
+  import("@/modules/results/public").then((m) => ({ default: m.InfoWindow })),
 );
 const WorkbenchComposition = React.lazy(() =>
   import("./windows/workbench/WorkbenchComposition").then((m) => ({
@@ -33,10 +33,10 @@ const WorkbenchComposition = React.lazy(() =>
   })),
 );
 const BayesView = React.lazy(() =>
-  import("@/views/BayesView/BayesView").then((m) => ({ default: m.BayesView })),
+  import("@/modules/bayes/public").then((m) => ({ default: m.BayesView })),
 );
 const ProjectPickerScreen = React.lazy(() =>
-  import("@/views/ProjectView/ProjectPickerScreen").then((m) => ({
+  import("@/modules/project-explorer/public").then((m) => ({
     default: m.ProjectPickerScreen,
   })),
 );

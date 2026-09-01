@@ -4,6 +4,8 @@ docs/superpowers/
 
 # Logs
 logs
+!src/modules/logs/
+!src/modules/logs/**
 *.log
 npm-debug.log*
 yarn-debug.log*

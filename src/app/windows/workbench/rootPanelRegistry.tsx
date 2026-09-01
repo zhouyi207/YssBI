@@ -1,4 +1,4 @@
-import { AssistantPanel } from "@/views/AssistantView/AssistantPanel";
+import { AssistantPanel } from "@/modules/assistant/public";
 import { EditorResourceDockPanel } from "@/views/EditorView/Layout/EditorResourceDockPanel";
 import { DetailsPane } from "@/views/EditorView/Layout/Detail/DetailsPane";
 import { InspectPane } from "@/views/EditorView/Layout/Detail/InspectPane";
@@ -11,9 +11,7 @@ import type {
   RootDockviewPanelComponent,
   RootPanelRegistry,
 } from "@/views/EditorView/Layout/RootDockviewHost";
-import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
-import { LogDomainDockviewHost } from "@/views/LogView/LogDomainDockviewHost";
-import { OutputPanel } from "@/views/LogView/OutputPanel";
+import { DiagnosticsPanel, LogDomainDockviewHost, OutputPanel } from "@/modules/logs/public";
 import { editorRendererRegistry } from "./editorRendererRegistry";
 
 const EditorResourcePanel: RootDockviewPanelComponent = (props) => {

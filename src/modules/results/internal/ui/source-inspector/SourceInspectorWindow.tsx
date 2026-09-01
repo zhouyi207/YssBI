@@ -3,7 +3,7 @@ import { VscPreview } from "react-icons/vsc";
 import { usePresentationWindow } from "@/features/application/presentation";
 import { UnifiedResultView } from "@/features/application/results";
 import { PresentationWindowShell } from "@/features/application/window/PresentationWindowShell";
-import { ReportView } from "@/views/InfoView/ReportView";
+import { ReportView } from "../info/ReportView";
 
 export const SourceInspectorWindow: React.FC = () => {
   const { t } = useTranslation();
