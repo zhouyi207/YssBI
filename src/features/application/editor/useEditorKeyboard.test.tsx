@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   groupPanels: [] as TestPanel[],
   history: { canUndo: false, canRedo: false, pending: false },
   interaction: { type: "idle" } as { type: string },
+  detailFocus: null as null | { kind: "node"; id: string; graphPath: string },
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
   setModifierKeys: vi.fn(),
   resetModifierKeys: vi.fn(),
@@ -99,6 +100,7 @@ vi.mock("@/features/core/history", () => ({
 vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     getActivePanel: () => mocks.activePanel ?? undefined,
+    listPanels: () => mocks.groupPanels,
     listGroupPanels: (groupId: string) =>
       mocks.groupPanels.filter((panel) => panel.groupId === groupId),
   },
@@ -137,7 +139,12 @@ vi.mock("@/features/core/canvas/canvasInteractionCleanup", () => ({
   cancelCanvasInteraction: mocks.cancelCanvasInteraction,
 }));
 vi.mock("@/features/core/editor", () => ({
-  useEditorStore: { getState: () => ({ setContextMenu: vi.fn() }) },
+  useEditorStore: {
+    getState: () => ({
+      setContextMenu: vi.fn(),
+      detailFocus: mocks.detailFocus,
+    }),
+  },
 }));
 const callbacks = mocks.commands;
 const editorPanel = (): TestPanel => ({
@@ -182,6 +189,11 @@ describe("useEditorKeyboard", () => {
     mocks.groupPanels = [editorPanel(), resultPanel(), logsPanel()];
     mocks.history = { canUndo: false, canRedo: false, pending: false };
     mocks.interaction = { type: "idle" };
+    mocks.detailFocus = {
+      kind: "node",
+      id: "node-a",
+      graphPath: "events/main.yssbi-event",
+    };
     mocks.selection = { nodeIds: new Set(), connectionIds: new Set() };
     callbacks.selectAllNodes.mockResolvedValue(true);
     callbacks.focusSelectedNodes.mockReturnValue(true);
@@ -354,5 +366,14 @@ describe("useEditorKeyboard", () => {
     expect(mocks.toggleActivityWorkbenchGroup).toHaveBeenCalledOnce();
     expect(mocks.toggleWorkbenchView).toHaveBeenCalledWith("inspect");
     expect(mocks.toggleBottomWorkbenchGroup).toHaveBeenCalledOnce();
+  });
+
+  it("does not create Inspect from the keyboard without node context", () => {
+    mocks.detailFocus = null;
+
+    const event = keydown("i", { ctrlKey: true });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(mocks.toggleWorkbenchView).not.toHaveBeenCalled();
   });
 });

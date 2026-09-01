@@ -12,8 +12,6 @@ import type {
   WorkbenchPanelInfo,
 } from "../dockview/workbenchTypes";
 import type { WorkbenchPanelMetadata, WorkbenchViewId } from "../dockview/workbenchPanelModel";
-import { useEditorStore } from "@/features/core/editor";
-import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
@@ -593,8 +591,6 @@ beforeEach(() => {
       return operation(mocks.transaction);
     },
   );
-  useEditorStore.setState({ detailFocus: null, variablesGraphScopePath: null });
-  useGraphSessionStore.getState().reset();
 });
 
 describe("semantic workbench layout actions", () => {
@@ -650,16 +646,22 @@ describe("semantic workbench layout actions", () => {
     });
   });
 
-  it("creates permanent Details without context but still requires node context for Inspect", async () => {
+  it("creates missing Details and Inspect views without reading business context", async () => {
     const createdDetails = viewPanel(
       "details-created",
       "details",
       "edge-right",
       edgeLocation("right"),
     );
-    mocks.ensureView.mockResolvedValueOnce(createdDetails);
+    const createdInspect = viewPanel(
+      "inspect-created",
+      "inspect",
+      "edge-right",
+      edgeLocation("right"),
+    );
+    mocks.ensureView.mockResolvedValueOnce(createdDetails).mockResolvedValueOnce(createdInspect);
     await expect(revealWorkbenchView("details")).resolves.toEqual(createdDetails);
-    await expect(revealWorkbenchView("inspect")).resolves.toBeNull();
+    await expect(revealWorkbenchView("inspect")).resolves.toEqual(createdInspect);
     expect(mocks.ensureView).toHaveBeenCalledWith({
       viewId: "details",
       title: "panel.details",
@@ -670,20 +672,7 @@ describe("semantic workbench layout actions", () => {
     await expect(revealWorkbenchView("details")).resolves.toEqual(openDetails);
     expect(mocks.reveal).toHaveBeenCalledWith("details-open");
 
-    mocks.panels.splice(0);
-    useEditorStore.setState({ detailFocus: { kind: "variable", id: "variable-1" } });
-    await revealWorkbenchView("details");
-    useEditorStore.setState({
-      detailFocus: {
-        kind: "node",
-        id: "node-1",
-        graphPath: "events/Main.yssbi-event",
-      },
-    });
-    await revealWorkbenchView("inspect");
-
     expect(mocks.ensureView.mock.calls.map(([request]) => request.viewId)).toEqual([
-      "details",
       "details",
       "inspect",
     ]);
@@ -845,10 +834,6 @@ describe("resetWorkbenchLayout", () => {
     const beforeIds = initial.map((candidate) => candidate.panelInstanceId).sort();
     const harness = createTransactionHarness(initial, groups, nestedGridLayout(groups));
     mocks.transaction = harness.tx;
-    useGraphSessionStore.setState({
-      focusedSession: { groupId: "edge-left", graphPath: "events/LeftA.yssbi-event" },
-    });
-
     await resetWorkbenchLayout();
 
     expect(harness.panelIds().sort()).toEqual(
@@ -934,7 +919,7 @@ describe("resetWorkbenchLayout", () => {
     expect(harness.groupPanelIds("grid-only")).toEqual(["editor-left", "editor-top"]);
   });
 
-  it("reactivates the validated recent editor when a Result is physically active", async () => {
+  it("reactivates the deterministic editor when a Result is physically active", async () => {
     const groups: GroupSeed[] = [
       {
         groupId: "grid-a",
@@ -955,10 +940,6 @@ describe("resetWorkbenchLayout", () => {
     ];
     const harness = createTransactionHarness(initial, groups);
     mocks.transaction = harness.tx;
-    useGraphSessionStore.setState({
-      focusedSession: { groupId: "grid-a", graphPath: "events/Main.yssbi-event" },
-    });
-
     await resetWorkbenchLayout();
 
     expect(harness.activePanelId()).toBe("editor-a");

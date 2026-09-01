@@ -270,7 +270,12 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "i") {
         event.preventDefault();
-        void toggleWorkbenchView("inspect");
+        const inspectOpen = workbenchDockviewRead
+          .listPanels()
+          .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "inspect");
+        if (inspectOpen || useEditorStore.getState().detailFocus?.kind === "node") {
+          void toggleWorkbenchView("inspect");
+        }
         return;
       }
 

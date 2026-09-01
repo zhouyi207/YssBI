@@ -361,10 +361,14 @@ describe("frontend architecture model", () => {
         sourceByPath.get("src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx") ?? "";
       const dragOverlay =
         sourceByPath.get("src/modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx") ?? "";
+      const layoutActions =
+        sourceByPath.get("src/modules/workbench/internal/application/workbenchLayoutActions.ts") ??
+        "";
 
       expect(rootHost).not.toMatch(/\b(?:synchronizeActiveEditorPanel|useSettingsRead)\b/u);
       expect(tabRenderer).not.toMatch(/from\s+["']@\/features\//u);
       expect(dragOverlay).not.toMatch(/from\s+["']@\/features\//u);
+      expect(layoutActions).not.toMatch(/\b(?:useEditorStore|useGraphSessionStore)\b/u);
 
       expect(
         sourceByPath.get("src/app/windows/workbench/integrations/panelActivationCoordinator.ts"),

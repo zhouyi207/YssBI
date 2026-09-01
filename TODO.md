@@ -941,3 +941,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Workbench 初始化、project/locale sync、keyboard/close lifecycle、菜单与状态栏 projection
       迁入 app composition；新增 `menuContributionRegistry`，WorkbenchWindow/MenuBar/StatusBar/About
       仅消费显式 props/slots，并由生产架构门禁阻止 feature workflow 回流。
+- [x] 删除 layout reset 通过 graph session 的 `groupId + graphPath` 反推 active Dockview panel，以及
+      Workbench view reveal 对 editor detail store 的读取；reset 仅依据物理 Dockview snapshot，Inspect
+      可用性继续由 keyboard/menubar/right-sidebar application workflow 管理。

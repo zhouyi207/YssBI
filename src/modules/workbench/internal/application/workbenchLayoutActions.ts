@@ -14,8 +14,6 @@ import {
   isWorkbenchPersistentViewMetadata,
   type WorkbenchViewId,
 } from "../dockview/workbenchPanelModel";
-import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { closeWorkbenchViewPanel } from "./panelCommands";
 import { workbenchLayoutController } from "./workbenchLayoutController";
 import { showWorkbenchLayoutError } from "./workbenchLayoutErrorFeedback";
@@ -37,12 +35,6 @@ function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefi
   return workbenchDockviewRead
     .listPanels()
     .find((panel) => panel.metadata.role === "view" && panel.metadata.viewId === viewId);
-}
-
-function hasContextFor(viewId: WorkbenchViewId): boolean {
-  const focus = useEditorStore.getState().detailFocus;
-  if (viewId === "inspect") return focus?.kind === "node";
-  return true;
 }
 
 function viewRequest(viewId: WorkbenchViewId) {
@@ -84,7 +76,6 @@ export async function revealWorkbenchView(
     if (existing) {
       return (await workbenchDockviewControl.reveal(existing.panelInstanceId)) ? existing : null;
     }
-    if (!hasContextFor(viewId)) return null;
     if (viewId === "assistant") return await createAssistantAtDefaultHome();
     return await workbenchDockviewControl.ensureView(viewRequest(viewId));
   } catch (error) {
@@ -185,18 +176,9 @@ export async function resetWorkbenchLayout(): Promise<void> {
       ).map((panelId) => beforeById.get(panelId)!);
 
       const physicallyActive = tx.getActivePanel();
-      const focused = useGraphSessionStore.getState().focusedSession;
       const editorToRestore =
-        (physicallyActive?.metadata.role === "editor"
-          ? physicallyActive
-          : focused
-            ? before.find(
-                (panel) =>
-                  panel.metadata.role === "editor" &&
-                  panel.groupId === focused.groupId &&
-                  panel.metadata.resourceRef === focused.graphPath,
-              )
-            : undefined) ?? ordered.find((panel) => panel.metadata.role === "editor");
+        (physicallyActive?.metadata.role === "editor" ? physicallyActive : undefined) ??
+        ordered.find((panel) => panel.metadata.role === "editor");
 
       const editors = ordered.filter((panel) => panel.metadata.role === "editor");
       const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
