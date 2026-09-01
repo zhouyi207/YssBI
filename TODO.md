@@ -911,3 +911,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 建立 `modules/chart` 与 `modules/workbench` 的根 `public.ts` 边界，将 Chart UI 直接迁入模块内部，
       并让 app 与其他业务代码只通过模块 public API 获取 `ChartEditor` 和 editor panel contract；新增
       production architecture gate，禁止模块外 deep import 并要求每个模块具备根 public API。
+- [x] 将 Graph Canvas、Node、Pin、ContextMenu、NodePalette 与 overlay UI 迁入
+      `modules/graph-editor/internal/ui`，保持 Controller/View 和显式 slot 边界，并仅通过模块根
+      `public.ts` 向 app composition 暴露 `GraphDocumentEditor` 与 `WatermarkView`。

@@ -21,7 +21,7 @@ import { getConnectPreview, subscribeConnectPreview } from "@/features/core/canv
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { EdgeData } from "@/features/domain/canvas/edgeData";
-import { ConnectionContextMenu } from "@/views/EditorView/ContextMenu";
+import { ConnectionContextMenu } from "../../ContextMenu";
 
 export function replacementEdgeAttributes(
   connectionId: string,

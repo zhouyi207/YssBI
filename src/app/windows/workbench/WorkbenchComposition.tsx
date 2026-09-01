@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { WorkbenchWindow } from "@/views/EditorView/WorkbenchWindow";
-import { WatermarkView } from "@/views/EditorView/Canvas/overlays/WatermarkView";
+import { WatermarkView } from "@/modules/graph-editor/public";
 import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
 import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
 import { rootPanelRegistry } from "./rootPanelRegistry";

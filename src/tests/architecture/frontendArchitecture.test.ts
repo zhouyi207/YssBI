@@ -420,7 +420,7 @@ describe("frontend architecture model", () => {
       const paths = new Set(sources.map(({ path }) => path));
       const retiredFiles = [
         "src/features/core/workbench/workbenchStore.ts",
-        "src/views/EditorView/Canvas/core/GraphEditor.tsx",
+        "src/modules/graph-editor/internal/ui/Canvas/core/GraphEditor.tsx",
         "src/views/EditorView/Layout/BottomBar.tsx",
         "src/views/EditorView/Layout/WorkbenchDockviewTab.tsx",
         "src/views/LogView/LogWorkspaceDockview.tsx",
@@ -429,7 +429,7 @@ describe("frontend architecture model", () => {
 
       const finalFiles = [
         "src/features/core/workbench/workbenchUiStore.ts",
-        "src/views/EditorView/Canvas/core/GraphDocumentEditor.tsx",
+        "src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx",
         "src/views/EditorView/Layout/RootPanelTabRenderer.tsx",
         "src/views/EditorView/Layout/StatusBar.tsx",
         "src/views/LogView/LogDomainDockviewHost.tsx",
@@ -596,23 +596,23 @@ describe("frontend architecture model", () => {
       const sourceByPath = new Map(sources.map(({ path, source }) => [path, source]));
       const retiredGraphUiFiles = new Set([
         "src/features/application/editor/CanvasContextMenuContext.tsx",
-        "src/views/EditorView/Canvas/core/Canvas.tsx",
-        "src/views/EditorView/Nodes/CanvasNode.tsx",
-        "src/views/EditorView/Nodes/Node.tsx",
-        "src/views/EditorView/Nodes/NodeContainer.tsx",
-        "src/views/EditorView/Pins/Pin.tsx",
+        "src/modules/graph-editor/internal/ui/Canvas/core/Canvas.tsx",
+        "src/modules/graph-editor/internal/ui/Nodes/CanvasNode.tsx",
+        "src/modules/graph-editor/internal/ui/Nodes/Node.tsx",
+        "src/modules/graph-editor/internal/ui/Nodes/NodeContainer.tsx",
+        "src/modules/graph-editor/internal/ui/Pins/Pin.tsx",
       ]);
       expect(
         sources.map(({ path }) => path).filter((path) => retiredGraphUiFiles.has(path)),
       ).toEqual([]);
 
       const requiredGraphUiFiles = [
-        "src/views/EditorView/Canvas/core/GraphCanvasController.tsx",
-        "src/views/EditorView/Canvas/core/GraphCanvasView.tsx",
-        "src/views/EditorView/Nodes/GraphNodeController.tsx",
-        "src/views/EditorView/Nodes/GraphNodeView.tsx",
-        "src/views/EditorView/Pins/GraphPinController.tsx",
-        "src/views/EditorView/Pins/GraphPinView.tsx",
+        "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx",
+        "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx",
+        "src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx",
+        "src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx",
+        "src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx",
+        "src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx",
       ];
       expect(requiredGraphUiFiles.filter((path) => !sourceByPath.has(path))).toEqual([]);
 
@@ -631,15 +631,15 @@ describe("frontend architecture model", () => {
 
       const viewContracts = [
         {
-          path: "src/views/EditorView/Canvas/core/GraphCanvasView.tsx",
+          path: "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx",
           slots: ["viewportGridSlot", "connectionPreviewSlot", "graphContentSlot", "overlaySlot"],
         },
         {
-          path: "src/views/EditorView/Nodes/GraphNodeView.tsx",
+          path: "src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx",
           slots: ["contentSlot", "executionBadgeSlot", "diagnosticBadgeSlot", "contextMenuSlot"],
         },
         {
-          path: "src/views/EditorView/Pins/GraphPinView.tsx",
+          path: "src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx",
           slots: ["inputSlot", "contextMenuSlot"],
         },
       ];
@@ -651,17 +651,19 @@ describe("frontend architecture model", () => {
       }
 
       const canvasController =
-        sourceByPath.get("src/views/EditorView/Canvas/core/GraphCanvasController.tsx") ?? "";
+        sourceByPath.get(
+          "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx",
+        ) ?? "";
       expect(canvasController).toContain(
         "contextMenuActions={interactive ? contextMenuActions : null}",
       );
       expect(canvasController).toContain("overlaySlot=");
-      expect(sourceByPath.get("src/views/EditorView/Nodes/GraphNodeController.tsx")).toContain(
-        "executionBadgeSlot=",
-      );
-      expect(sourceByPath.get("src/views/EditorView/Pins/GraphPinController.tsx")).toContain(
-        "contextMenuSlot=",
-      );
+      expect(
+        sourceByPath.get("src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx"),
+      ).toContain("executionBadgeSlot=");
+      expect(
+        sourceByPath.get("src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx"),
+      ).toContain("contextMenuSlot=");
     });
   });
 

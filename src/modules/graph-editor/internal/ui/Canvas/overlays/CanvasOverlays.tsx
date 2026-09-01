@@ -4,7 +4,7 @@ import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creat
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 import { ActionMenu } from "@/shared/ui/actionMenu";
-import { NodePalette } from "../../Layout/NodePalette";
+import { NodePalette } from "../../NodePalette";
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 

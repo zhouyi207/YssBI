@@ -1,4 +1,4 @@
-import { GraphDocumentEditor } from "@/views/EditorView/Canvas/core/GraphDocumentEditor";
+import { GraphDocumentEditor } from "@/modules/graph-editor/public";
 import { ChartEditor } from "@/modules/chart/public";
 import type { EditorRendererRegistry } from "@/modules/workbench/public";
 
