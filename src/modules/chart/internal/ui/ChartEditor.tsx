@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useChartRead } from "@/features/core/chart/read";
-import type { EditorPanelScope } from "@/views/EditorView/Layout/editorRenderer";
+import type { EditorPanelScope } from "@/modules/workbench/public";
 import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { ChartPreview } from "./ChartPreview";
 

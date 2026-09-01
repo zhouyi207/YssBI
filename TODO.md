@@ -908,3 +908,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将工作台组合根迁入 `app/windows/workbench`，由唯一 `rootPanelRegistry` 组合业务面板，并新增
       app-owned `editorRendererRegistry` 完成 event/function/chart 到具体编辑器的映射；通用
       `EditorResourceDockPanel` 只向编辑器传递显式 panel scope，不再依赖具体业务编辑器或 Graph Dockview API。
+- [x] 建立 `modules/chart` 与 `modules/workbench` 的根 `public.ts` 边界，将 Chart UI 直接迁入模块内部，
+      并让 app 与其他业务代码只通过模块 public API 获取 `ChartEditor` 和 editor panel contract；新增
+      production architecture gate，禁止模块外 deep import 并要求每个模块具备根 public API。

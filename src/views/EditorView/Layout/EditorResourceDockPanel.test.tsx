@@ -6,8 +6,8 @@ import type { IDockviewPanelProps } from "dockview-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkbenchPanelParams } from "@/features/core/dockview";
+import type { EditorPanelScope, EditorRendererRegistry } from "@/modules/workbench/public";
 import { EditorResourceDockPanel } from "./EditorResourceDockPanel";
-import type { EditorPanelScope, EditorRendererRegistry } from "./editorRenderer";
 
 const rendererCalls = {
   event: vi.fn(),

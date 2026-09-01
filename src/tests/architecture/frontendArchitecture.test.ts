@@ -363,10 +363,38 @@ describe("frontend architecture model", () => {
       expect(leftovers).toEqual([]);
 
       const chartEditor = productionTypeScriptSources(context).find(
-        ({ path }) => path === "src/views/EditorView/Chart/ChartEditor.tsx",
+        ({ path }) => path === "src/modules/chart/internal/ui/ChartEditor.tsx",
       )?.source;
       expect(chartEditor).toContain("resourceRef");
       expect(chartEditor).not.toMatch(/\b(?:GroupContext|activeTabId|useEditorGroupWorkspace)\b/u);
+    });
+  });
+
+  it("keeps module internals private behind root public APIs", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const paths = new Set(sources.map(({ path }) => path));
+      const moduleNames = new Set<string>();
+      const deepImports: string[] = [];
+
+      for (const { path, source } of sources) {
+        const ownerMatch = /^src\/modules\/([^/]+)\//u.exec(path);
+        if (ownerMatch) moduleNames.add(ownerMatch[1]);
+
+        for (const match of source.matchAll(/["']@\/modules\/([^/"']+)\/([^"']+)["']/gu)) {
+          const [, moduleName, subpath] = match;
+          if (subpath === "public" || path.startsWith(`src/modules/${moduleName}/`)) continue;
+          deepImports.push(`${path}:@/modules/${moduleName}/${subpath}`);
+        }
+      }
+
+      expect(deepImports).toEqual([]);
+      expect(
+        [...moduleNames]
+          .map((moduleName) => `src/modules/${moduleName}/public.ts`)
+          .filter((path) => !paths.has(path))
+          .sort(),
+      ).toEqual([]);
     });
   });
 
@@ -661,6 +689,23 @@ describe("frontend architecture model", () => {
     const report = classifyFrontendSources(
       [
         { path: "src\\app\\fixture.ts", source: "export const fixture = true;" },
+        { path: "src/modules/chart/public.ts", source: "export const chart = true;" },
+        {
+          path: "src/modules/chart/internal/ui/ChartEditor.tsx",
+          source: "export const editor = true;",
+        },
+        {
+          path: "src/modules/chart/internal/application/chartCommands.ts",
+          source: "export const commands = true;",
+        },
+        {
+          path: "src/modules/chart/internal/state/chartStore.ts",
+          source: "export const store = true;",
+        },
+        {
+          path: "src/modules/chart/internal/domain/ChartDocument.ts",
+          source: "export const document = true;",
+        },
         { path: "src/shared/platform/testAdapter.ts", source: "export const adapter = true;" },
         { path: "src/unowned/fixture.ts", source: "export const fixture = true;" },
         { path: "src/shared/overlap.ts", source: "export const overlap = true;" },
@@ -670,6 +715,11 @@ describe("frontend architecture model", () => {
 
     expect([...report.classification]).toEqual([
       ["src/app/fixture.ts", "app-composition"],
+      ["src/modules/chart/internal/application/chartCommands.ts", "application"],
+      ["src/modules/chart/internal/domain/ChartDocument.ts", "domain"],
+      ["src/modules/chart/internal/state/chartStore.ts", "core"],
+      ["src/modules/chart/internal/ui/ChartEditor.tsx", "views"],
+      ["src/modules/chart/public.ts", "views"],
       ["src/shared/platform/testAdapter.ts", "services"],
     ]);
     expect(report.errors).toEqual([

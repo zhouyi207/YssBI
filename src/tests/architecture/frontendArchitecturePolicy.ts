@@ -622,16 +622,44 @@ function isSharedWireSource(path: string): boolean {
   return path.startsWith("src/shared/types/dto/");
 }
 
+function isModuleInternalLayer(path: string, layer: "application" | "state" | "domain"): boolean {
+  return path.startsWith("src/modules/") && path.includes(`/internal/${layer}/`);
+}
+
+function isModuleViewSource(path: string): boolean {
+  return (
+    path.startsWith("src/modules/") &&
+    !isModuleInternalLayer(path, "application") &&
+    !isModuleInternalLayer(path, "state") &&
+    !isModuleInternalLayer(path, "domain")
+  );
+}
+
 const PRODUCTION_LITERAL_OVERRIDE_PATHS = new Set(
   FRONTEND_LAYERS.flatMap((layer) => FRONTEND_LITERAL_POLICY_MEMBERSHIP[layer]),
 );
 
 export const FRONTEND_BASE_RULES: readonly FrontendBaseRule[] = [
   { layer: "app-composition", matches: (path) => path.startsWith("src/app/") },
-  { layer: "views", matches: (path) => path.startsWith("src/views/") },
-  { layer: "application", matches: (path) => path.startsWith("src/features/application/") },
-  { layer: "core", matches: (path) => path.startsWith("src/features/core/") },
-  { layer: "domain", matches: (path) => path.startsWith("src/features/domain/") },
+  {
+    layer: "views",
+    matches: (path) => path.startsWith("src/views/") || isModuleViewSource(path),
+  },
+  {
+    layer: "application",
+    matches: (path) =>
+      path.startsWith("src/features/application/") || isModuleInternalLayer(path, "application"),
+  },
+  {
+    layer: "core",
+    matches: (path) =>
+      path.startsWith("src/features/core/") || isModuleInternalLayer(path, "state"),
+  },
+  {
+    layer: "domain",
+    matches: (path) =>
+      path.startsWith("src/features/domain/") || isModuleInternalLayer(path, "domain"),
+  },
   { layer: "services", matches: (path) => path.startsWith("src/services/") },
   {
     layer: "components-ui",

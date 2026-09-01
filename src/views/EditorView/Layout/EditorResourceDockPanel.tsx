@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
 
 import type { WorkbenchPanelParams } from "@/features/core/dockview";
-import type { EditorRendererRegistry } from "./editorRenderer";
+import type { EditorRendererRegistry } from "@/modules/workbench/public";
 
 function useLivePanelGroupId(api: IDockviewPanelProps<WorkbenchPanelParams>["api"]): string {
   const [groupId, setGroupId] = useState(() => api.group.id);
