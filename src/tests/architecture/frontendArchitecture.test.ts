@@ -332,13 +332,20 @@ describe("frontend architecture model", () => {
       );
       expect(legacyEditorComponentIds).toEqual([]);
 
-      const registryConsumers = sources.filter(
-        ({ path, source }) =>
-          path !== "src/views/EditorView/Layout/RootDockviewHost.tsx" &&
-          /\bcreateRootPanelRegistry\s*\(/u.test(source),
+      const rootPanelRegistryOwners = sources
+        .filter(({ source }) => /\brootPanelRegistry\b/u.test(source))
+        .map(({ path }) => path)
+        .sort();
+      expect(rootPanelRegistryOwners).toEqual([
+        "src/app/windows/workbench/WorkbenchComposition.tsx",
+        "src/app/windows/workbench/rootPanelRegistry.tsx",
+      ]);
+
+      const concreteEditorRegistryOwners = sources.filter(
+        ({ source }) => /\bGraphDocumentEditor\b/u.test(source) && /\bChartEditor\b/u.test(source),
       );
-      expect(registryConsumers.map(({ path }) => path)).toEqual([
-        "src/app/WorkbenchComposition.tsx",
+      expect(concreteEditorRegistryOwners.map(({ path }) => path)).toEqual([
+        "src/app/windows/workbench/editorRendererRegistry.ts",
       ]);
     });
   });
@@ -487,7 +494,7 @@ describe("frontend architecture model", () => {
           ).length > 1,
       );
       expect(multiPanelConsumers.map(({ path }) => path)).toEqual([
-        "src/app/WorkbenchComposition.tsx",
+        "src/app/windows/workbench/rootPanelRegistry.tsx",
       ]);
 
       const rootDockviewHost = sources.find(
@@ -498,7 +505,8 @@ describe("frontend architecture model", () => {
       );
 
       const dndCoordinator = sources.find(
-        ({ path }) => path === "src/app/integrations/activityEditorDndCoordinator.ts",
+        ({ path }) =>
+          path === "src/app/windows/workbench/integrations/activityEditorDndCoordinator.ts",
       )?.source;
       expect(dndCoordinator).toMatch(/\bexecuteEditorDragEnd\b/u);
       expect(dndCoordinator).toMatch(/["']pointermove["']/u);
@@ -537,15 +545,16 @@ describe("frontend architecture model", () => {
 
       const coordinatorConsumers = sources.filter(
         ({ path, source }) =>
-          path !== "src/app/integrations/workbenchCommandCoordinator.ts" &&
+          path !== "src/app/windows/workbench/integrations/workbenchCommandCoordinator.ts" &&
           /\buseWorkbenchCommandCoordinator\s*\(/u.test(source),
       );
       expect(coordinatorConsumers.map(({ path }) => path)).toEqual([
-        "src/app/WorkbenchComposition.tsx",
+        "src/app/windows/workbench/WorkbenchComposition.tsx",
       ]);
 
       const coordinator = sources.find(
-        ({ path }) => path === "src/app/integrations/workbenchCommandCoordinator.ts",
+        ({ path }) =>
+          path === "src/app/windows/workbench/integrations/workbenchCommandCoordinator.ts",
       )?.source;
       expect(coordinator).toMatch(/\buseEditorOperations\s*\(/u);
       expect(coordinator).toMatch(/\buseGraphManagement\s*\(/u);

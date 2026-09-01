@@ -28,7 +28,9 @@ const InfoWindow = React.lazy(() =>
   import("@/views/InfoView/InfoWindow").then((m) => ({ default: m.InfoWindow })),
 );
 const WorkbenchComposition = React.lazy(() =>
-  import("./WorkbenchComposition").then((m) => ({ default: m.WorkbenchComposition })),
+  import("./windows/workbench/WorkbenchComposition").then((m) => ({
+    default: m.WorkbenchComposition,
+  })),
 );
 const BayesView = React.lazy(() =>
   import("@/views/BayesView/BayesView").then((m) => ({ default: m.BayesView })),

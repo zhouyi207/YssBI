@@ -1,14 +1,10 @@
 import { useEffect } from "react";
 import { useChartRead } from "@/features/core/chart/read";
+import type { EditorPanelScope } from "@/views/EditorView/Layout/editorRenderer";
 import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { ChartPreview } from "./ChartPreview";
 
-export interface ChartEditorProps {
-  readonly panelInstanceId: string;
-  readonly groupId: string;
-  readonly resourceRef: string;
-  readonly resourceKind: "chart";
-}
+export type ChartEditorProps = EditorPanelScope<"chart">;
 
 export function ChartEditor(props: ChartEditorProps) {
   const chartPath = props.resourceRef;

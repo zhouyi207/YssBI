@@ -6,14 +6,10 @@ import { useGraphRead } from "@/features/core/graph/read";
 import { useProjectProjection } from "@/features/application/project/projectProjection";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
-import type { EditorResourceKind } from "@/features/core/dockview";
+import type { EditorPanelScope } from "@/views/EditorView/Layout/editorRenderer";
+import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
 
-export interface GraphDocumentEditorProps {
-  panelInstanceId: string;
-  groupId: string;
-  graphPath: string;
-  graphKind: Exclude<EditorResourceKind, "chart">;
-}
+export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function">;
 
 /**
  * Graph editor shell per Dockview panel.
@@ -22,9 +18,11 @@ export interface GraphDocumentEditorProps {
 export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   panelInstanceId,
   groupId,
-  graphPath,
-  graphKind,
+  resourceRef: graphPath,
+  resourceKind: graphKind,
+  isVisible,
 }: GraphDocumentEditorProps) {
+  useVisibleGraphPanel(isVisible, { groupId, graphPath });
   const mode = useIsActiveEditorPanel(panelInstanceId) ? "interactive" : "preview";
   const { graphLoadStatus: graphLoads } = useProjectProjection();
   const graphLoadStatus = graphLoads[graphPath];

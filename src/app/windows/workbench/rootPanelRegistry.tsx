@@ -1,5 +1,3 @@
-import { useCallback } from "react";
-
 import { AssistantPanel } from "@/views/AssistantView/AssistantPanel";
 import { EditorResourceDockPanel } from "@/views/EditorView/Layout/EditorResourceDockPanel";
 import { DetailsPane } from "@/views/EditorView/Layout/Detail/DetailsPane";
@@ -9,21 +7,25 @@ import { commandsActivityPanelContribution } from "@/views/EditorView/Layout/act
 import { dataActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/data/public";
 import { nodeCatalogActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/nodes/public";
 import { projectActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/project/public";
-import { createRootPanelRegistry } from "@/views/EditorView/Layout/RootDockviewHost";
-import { WorkbenchWindow } from "@/views/EditorView/WorkbenchWindow";
-import { WatermarkView } from "@/views/EditorView/Canvas/overlays/WatermarkView";
+import type {
+  RootDockviewPanelComponent,
+  RootPanelRegistry,
+} from "@/views/EditorView/Layout/RootDockviewHost";
 import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
 import { LogDomainDockviewHost } from "@/views/LogView/LogDomainDockviewHost";
 import { OutputPanel } from "@/views/LogView/OutputPanel";
-import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
-import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
+import { editorRendererRegistry } from "./editorRendererRegistry";
+
+const EditorResourcePanel: RootDockviewPanelComponent = (props) => {
+  return <EditorResourceDockPanel {...props} rendererRegistry={editorRendererRegistry} />;
+};
 
 function MainLogsDockPanel() {
   return <LogDomainDockviewHost layout={{ kind: "main" }} />;
 }
 
-const rootPanelRegistry = createRootPanelRegistry({
-  EditorResource: EditorResourceDockPanel,
+export const rootPanelRegistry = {
+  EditorResource: EditorResourcePanel,
   Project: projectActivityPanelContribution,
   Nodes: nodeCatalogActivityPanelContribution,
   Data: dataActivityPanelContribution,
@@ -35,19 +37,4 @@ const rootPanelRegistry = createRootPanelRegistry({
   Logs: MainLogsDockPanel,
   Output: OutputPanel,
   Diagnostics: DiagnosticsPanel,
-});
-
-export function WorkbenchComposition() {
-  const dndCoordinator = useActivityEditorDndCoordinator();
-  const commands = useWorkbenchCommandCoordinator();
-  const watermarkComponent = useCallback(() => <WatermarkView commands={commands} />, [commands]);
-
-  return (
-    <WorkbenchWindow
-      panelRegistry={rootPanelRegistry}
-      dndCoordinator={dndCoordinator}
-      commands={commands}
-      watermarkComponent={watermarkComponent}
-    />
-  );
-}
+} satisfies RootPanelRegistry;

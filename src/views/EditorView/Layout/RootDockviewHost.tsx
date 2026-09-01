@@ -40,10 +40,6 @@ export interface RootDockviewDndCoordinator {
   readonly onDragEnd: (event: DragEndEvent) => void;
 }
 
-export function createRootPanelRegistry(registry: RootPanelRegistry): RootPanelRegistry {
-  return registry;
-}
-
 function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): void {
   if (event.key !== "Delete" && event.key !== "Backspace") return;
   if (!(event.target instanceof Element)) return;
