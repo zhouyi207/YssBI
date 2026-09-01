@@ -1,6 +1,5 @@
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
-import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
 import { revealWorkbenchView, updateEditorGroupSelectedNodeIds } from "@/modules/workbench/public";
 import type { EditorResourceKind } from "@/modules/workbench/public";
 
@@ -20,7 +19,7 @@ export function setDetailContext(focus: DetailFocus | null): void {
   else store.clearDetailFocus();
 
   if (focus?.kind === "event" || focus?.kind === "function") {
-    setVariablesGraphScopeFromResource(focus.path);
+    store.setVariablesGraphScope(focus.path);
   }
 }
 
@@ -32,7 +31,7 @@ export function setPassiveDetailContext(focus: DetailFocus): void {
     current?.kind === "node" &&
     current.graphPath === focus.path;
   if (preservesNodeFocus) {
-    setVariablesGraphScopeFromResource(focus.path);
+    useEditorStore.getState().setVariablesGraphScope(focus.path);
     return;
   }
   setDetailContext(focus);

@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
   ensureView: vi.fn(),
   reveal: vi.fn(),
-  setVariablesGraphScopeFromResource: vi.fn(),
 }));
 
 vi.mock("i18next", () => ({
@@ -48,10 +47,6 @@ vi.mock("@/features/application/editor/workbenchPanelClose", () => ({
 
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: vi.fn(),
-}));
-
-vi.mock("@/features/core/editor/detail/variablesGraphScope", () => ({
-  setVariablesGraphScopeFromResource: mocks.setVariablesGraphScopeFromResource,
 }));
 
 import {
@@ -100,9 +95,7 @@ describe("right sidebar context actions", () => {
       kind: "function",
       path: "functions/F.yssbi-function",
     });
-    expect(mocks.setVariablesGraphScopeFromResource).toHaveBeenCalledWith(
-      "functions/F.yssbi-function",
-    );
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe("functions/F.yssbi-function");
 
     setInspectionContext("events/Main.yssbi-event", ["node-1"]);
     expect(useEditorStore.getState().detailFocus).toEqual({

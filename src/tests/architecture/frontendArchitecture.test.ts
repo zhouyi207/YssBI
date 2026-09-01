@@ -678,6 +678,7 @@ describe("frontend architecture model", () => {
         "src/features/core/editor/hooks/useEditorGroups.ts",
         "src/features/core/editor/hooks/useEditorUIState.ts",
         "src/features/core/editor/editorGroupSelection.ts",
+        "src/features/core/editor/detail/variablesGraphScope.ts",
       ];
       expect(
         sources.map(({ path }) => path).filter((path) => retiredEditorFacadeFiles.includes(path)),

@@ -4,6 +4,7 @@ import type {
   WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
 } from "@/modules/workbench/internal/dockview/workbenchRead";
+import { useEditorStore } from "@/features/core/editor";
 
 const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
@@ -57,9 +58,6 @@ vi.mock("./graphSessionLifecycle", () => ({
 vi.mock("./graphPanelSession", () => ({
   activateGraphPanelSession: vi.fn(async () => true),
 }));
-vi.mock("@/features/core/editor/detail/variablesGraphScope", () => ({
-  syncVariablesGraphScopeFromActiveTab: vi.fn(),
-}));
 vi.mock("./rightSidebarActions", () => ({
   detailFocusForEditorResource: (
     resourceKind: "event" | "function" | "chart",
@@ -112,6 +110,7 @@ describe("editor panel Dockview synchronization", () => {
     mocks.panels = [editorPanel("panel-a", "events/A", true)];
     mocks.groups = [group()];
     mocks.rootActivePanelInstanceId = "panel-a";
+    useEditorStore.setState({ variablesGraphScopePath: null });
   });
 
   it("does not write to Dockview while passively focusing its already active group", () => {
@@ -127,6 +126,7 @@ describe("editor panel Dockview synchronization", () => {
       kind: "event",
       path: "events/A",
     });
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe("events/A");
   });
 
   it("physically activates an editor that is only active inside its inactive group", async () => {

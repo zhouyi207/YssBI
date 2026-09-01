@@ -959,3 +959,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 group-to-active-panel selection read/write 迁回 Workbench pane state owner，Canvas 与 editor
       workflows 统一消费 Workbench public capability；删除 `features/core/editor` selection owner/barrel，
       并由 production gate 禁止旧路径回流。
+- [x] 将 variables graph scope 同步内联到 editor panel activation 与 detail context workflows，删除
+      Core 中反向读取 Workbench 的 `ActiveTab` facade、零调用 close 分支和空 detail barrel；production
+      代码不再保留 active-tab 语义。

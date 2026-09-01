@@ -1,6 +1,6 @@
 import { workbenchDockviewControl } from "@/modules/workbench/public";
 import { workbenchDockviewRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
-import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
+import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
 import { activateGraphPanelSession } from "./graphPanelSession";
@@ -61,7 +61,7 @@ async function synchronizePanelSession(
     );
     const loaded = await activateGraphPanelSession(metadata.resourceRef, groupId);
     if (!loaded || request !== latestPanelActivationRequest) return false;
-    syncVariablesGraphScopeFromActiveTab();
+    useEditorStore.getState().setVariablesGraphScope(metadata.resourceRef);
     return true;
   }
 
