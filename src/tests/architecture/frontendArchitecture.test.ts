@@ -778,6 +778,13 @@ describe("frontend architecture model", () => {
         for (const slot of slots) expect(source, `${path}:${slot}`).toContain(slot);
       }
 
+      const watermarkView =
+        sourceByPath.get(
+          "src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx",
+        ) ?? "";
+      expect(watermarkView).not.toMatch(/from\s+["']@\/features\/application\//u);
+      expect(watermarkView).toContain("interface WatermarkCommands");
+
       const canvasController =
         sourceByPath.get(
           "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx",

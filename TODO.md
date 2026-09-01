@@ -962,3 +962,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 variables graph scope 同步内联到 editor panel activation 与 detail context workflows，删除
       Core 中反向读取 Workbench 的 `ActiveTab` facade、零调用 close 分支和空 detail barrel；production
       代码不再保留 active-tab 语义。
+- [x] 让 `WatermarkView` 声明自身三个按钮所需的最小 command props，不再从 application
+      `WorkbenchCommandCapability` 反向 Pick；通过 Graph View architecture gate 保持该入口为纯 props。

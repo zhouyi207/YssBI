@@ -1,14 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { VscFolderOpened, VscNewFile, VscSymbolMethod } from "react-icons/vsc";
-import type { WorkbenchCommandCapability } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BrandMark } from "@/shared/ui/BrandMark";
 
-type WatermarkCommands = Pick<
-  WorkbenchCommandCapability,
-  "addEvent" | "addFunction" | "importGraph"
->;
+export interface WatermarkCommands {
+  addEvent(name?: string, options?: { readonly openAfterCreate?: boolean }): Promise<void>;
+  addFunction(name?: string, options?: { readonly openAfterCreate?: boolean }): Promise<void>;
+  importGraph(): Promise<void>;
+}
 
 export const WatermarkView = ({ commands }: { readonly commands: WatermarkCommands }) => {
   const { t } = useTranslation();
