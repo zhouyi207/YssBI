@@ -8,8 +8,11 @@ import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorPanelScope } from "@/modules/workbench/public";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
+import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
 
-export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function">;
+export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & {
+  readonly catalogRowRenderer: NodePaletteCatalogRowRenderer;
+};
 
 /**
  * Graph editor shell per Dockview panel.
@@ -21,6 +24,7 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   resourceRef: graphPath,
   resourceKind: graphKind,
   isVisible,
+  catalogRowRenderer,
 }: GraphDocumentEditorProps) {
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
   const mode = useIsActiveEditorPanel(panelInstanceId) ? "interactive" : "preview";
@@ -58,6 +62,7 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
               groupId={groupId}
               graphPath={graphPath}
               graphKind={graphKind}
+              catalogRowRenderer={catalogRowRenderer}
             />
           ) : graphUnavailable ? (
             <div className="absolute inset-0" role="alert" data-graph-load-error />

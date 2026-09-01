@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -8,10 +16,21 @@ import { nodeCatalogErrorText } from "@/features/application/nodeCatalog/nodeCat
 import { useCompatibleNodeCatalog } from "@/features/application/nodeCatalog/useCompatibleNodeCatalog";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
+import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/localizedCatalogTree";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { useDismissableOverlay } from "@/shared/ui/positionedOverlay";
-import { LocalizedCatalogTreeRow } from "@/modules/node-catalog/public";
 import { SidebarTreeSearchInput } from "@/modules/workbench/public";
+
+export interface NodePaletteCatalogRowProps {
+  readonly row: LocalizedCatalogBrowserRow;
+  readonly expanded: boolean;
+  readonly interactionDisabled?: boolean;
+  readonly active?: boolean;
+  readonly onExpandedChange: (expanded: boolean) => void;
+  readonly onItemSelect?: (descriptor: NodeCreationDescriptor) => void;
+}
+
+export type NodePaletteCatalogRowRenderer = ComponentType<NodePaletteCatalogRowProps>;
 
 export function NodePalette({
   x,
@@ -19,6 +38,7 @@ export function NodePalette({
   graphPath = null,
   graphRevision = null,
   sourcePort = null,
+  catalogRowRenderer: CatalogRowRenderer,
   onSelect,
   onClose,
 }: {
@@ -27,6 +47,7 @@ export function NodePalette({
   graphPath?: string | null;
   graphRevision?: number | null;
   sourcePort?: PortAddressDto | null;
+  catalogRowRenderer: NodePaletteCatalogRowRenderer;
   onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
   onClose?: () => void;
 }) {
@@ -189,7 +210,7 @@ export function NodePalette({
             ) : (
               <div className="flex flex-col gap-0.5 pr-1">
                 {projection.rows.map((row) => (
-                  <LocalizedCatalogTreeRow
+                  <CatalogRowRenderer
                     key={row.rowKey}
                     row={row}
                     expanded={

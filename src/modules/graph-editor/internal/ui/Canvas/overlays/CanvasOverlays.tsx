@@ -4,7 +4,7 @@ import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creat
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 import { ActionMenu } from "@/shared/ui/actionMenu";
-import { NodePalette } from "../../NodePalette";
+import { NodePalette, type NodePaletteCatalogRowRenderer } from "../../NodePalette";
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
@@ -55,7 +55,13 @@ export interface CanvasOverlaysModel {
   execution: CanvasExecutionOverlayModel;
 }
 
-export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }) {
+export default function CanvasOverlays({
+  model,
+  catalogRowRenderer,
+}: {
+  model: CanvasOverlaysModel;
+  catalogRowRenderer: NodePaletteCatalogRowRenderer;
+}) {
   const { t } = useTranslation();
   const { graph, palette, variable, execution } = model;
 
@@ -84,6 +90,7 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
               graphPath={palette.graphPath}
               graphRevision={palette.graphRevision}
               sourcePort={palette.sourcePort}
+              catalogRowRenderer={catalogRowRenderer}
               onSelect={palette.onSelect}
               onClose={palette.onClose}
             />,

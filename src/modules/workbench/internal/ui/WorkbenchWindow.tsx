@@ -19,7 +19,7 @@ import {
 import { useWorkbenchWindowGeometryPersistence } from "@/features/application/window";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
-interface WorkbenchWindowProps {
+export interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
   readonly dndCoordinator: RootDockviewDndCoordinator;
   readonly commands: WorkbenchCommandCapability;

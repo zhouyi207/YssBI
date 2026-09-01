@@ -5,7 +5,7 @@ export type {
   RootPanelRegistry,
 } from "./internal/dockview/panelContribution";
 export type { RootDockviewDndCoordinator } from "./internal/dockview/RootDockviewHost";
-export { WorkbenchWindow } from "./internal/ui/WorkbenchWindow";
+export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
 export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";

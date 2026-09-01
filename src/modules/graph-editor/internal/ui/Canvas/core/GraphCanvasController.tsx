@@ -17,6 +17,7 @@ import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creat
 import type { Pin } from "@/shared/types/domain";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { GraphNodeController } from "../../Nodes/GraphNodeController";
+import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
 import CanvasOverlays, { type CanvasOverlaysModel } from "../overlays/CanvasOverlays";
 import { ConnectionLine } from "./ConnectionLine";
 import { EdgesOverlay } from "./EdgesOverlay";
@@ -32,6 +33,7 @@ export interface GraphCanvasControllerProps {
   groupId: string;
   graphPath: string;
   graphKind: "event" | "function";
+  catalogRowRenderer: NodePaletteCatalogRowRenderer;
 }
 
 export function GraphCanvasController({
@@ -40,6 +42,7 @@ export function GraphCanvasController({
   groupId,
   graphPath,
   graphKind,
+  catalogRowRenderer,
 }: GraphCanvasControllerProps) {
   const interactive = mode === "interactive";
   const scope = useMemo<EditorCanvasScope>(
@@ -344,7 +347,11 @@ export function GraphCanvasController({
       viewportGridSlot={<ViewportGrid viewportScope={viewportScope} />}
       connectionPreviewSlot={connectionPreviewSlot}
       graphContentSlot={graphContentSlot}
-      overlaySlot={interactive ? <CanvasOverlays model={overlayModel} /> : null}
+      overlaySlot={
+        interactive ? (
+          <CanvasOverlays model={overlayModel} catalogRowRenderer={catalogRowRenderer} />
+        ) : null
+      }
       onCanvasPointerDown={onCanvasPointerDown}
       onCanvasContextMenu={interactive ? handleContextMenu : undefined}
     />

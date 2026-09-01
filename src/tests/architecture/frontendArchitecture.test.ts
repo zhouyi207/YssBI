@@ -376,25 +376,56 @@ describe("frontend architecture model", () => {
       const paths = new Set(sources.map(({ path }) => path));
       const moduleNames = new Set<string>();
       const deepImports: string[] = [];
+      const moduleDependencies = new Map<string, Set<string>>();
+      const directBusinessImports: string[] = [];
 
       for (const { path, source } of sources) {
         const ownerMatch = /^src\/modules\/([^/]+)\//u.exec(path);
-        if (ownerMatch) moduleNames.add(ownerMatch[1]);
+        const ownerModule = ownerMatch?.[1] ?? null;
+        if (ownerModule) {
+          moduleNames.add(ownerModule);
+          moduleDependencies.set(ownerModule, moduleDependencies.get(ownerModule) ?? new Set());
+        }
 
         for (const match of source.matchAll(/["']@\/modules\/([^/"']+)\/([^"']+)["']/gu)) {
           const [, moduleName, subpath] = match;
           if (subpath === "public" || path.startsWith(`src/modules/${moduleName}/`)) continue;
           deepImports.push(`${path}:@/modules/${moduleName}/${subpath}`);
         }
+
+        if (!ownerModule) continue;
+        for (const match of source.matchAll(/["']@\/modules\/([^/"']+)\/public["']/gu)) {
+          const targetModule = match[1];
+          if (targetModule === ownerModule) continue;
+          moduleDependencies.get(ownerModule)?.add(targetModule);
+          if (targetModule !== "workbench") {
+            directBusinessImports.push(`${path}:${ownerModule}->${targetModule}`);
+          }
+        }
       }
 
       expect(deepImports).toEqual([]);
+      expect(directBusinessImports).toEqual([]);
       expect(
         [...moduleNames]
           .map((moduleName) => `src/modules/${moduleName}/public.ts`)
           .filter((path) => !paths.has(path))
           .sort(),
       ).toEqual([]);
+
+      const cyclicModules = [...moduleNames].filter((startModule) => {
+        const pending = [...(moduleDependencies.get(startModule) ?? [])];
+        const visited = new Set<string>();
+        while (pending.length > 0) {
+          const current = pending.pop();
+          if (!current || visited.has(current)) continue;
+          if (current === startModule) return true;
+          visited.add(current);
+          pending.push(...(moduleDependencies.get(current) ?? []));
+        }
+        return false;
+      });
+      expect(cyclicModules.sort()).toEqual([]);
     });
   });
 

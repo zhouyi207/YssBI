@@ -926,3 +926,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 清空旧 `src/views` 生产目录：将 Workbench window、root Dockview adapter、菜单、状态栏与拖放 UI
       迁入 `modules/workbench/internal`，将 Settings、Node Documentation 与 Plugin UI 迁入各自模块；
       Workbench 仅接收 typed overlay registry 和 activity action slot，由 `WorkbenchComposition` 唯一组合业务 UI。
+- [x] 删除 `graph-editor` 对 `node-catalog` UI 的直接导入，由 app-owned `editorRendererRegistry`
+      注入 typed catalog row renderer；新增 production gate 禁止非 Workbench 跨业务模块导入并检测模块级循环，
+      同时以 lazy Workbench window entry 保持公共 UI primitives 的导入无应用初始化副作用。

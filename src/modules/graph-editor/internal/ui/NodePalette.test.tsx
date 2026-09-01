@@ -8,6 +8,7 @@ import type { LocalizedCatalogResponse } from "@/features/core/nodeCatalog/nodeC
 import { useNodeCatalogTreeStore } from "@/features/core/nodeCatalog/nodeCatalogTreeStore";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LocalizedCatalogTreeRow } from "@/modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow";
 import { NodePalette } from "./NodePalette";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -204,7 +205,13 @@ describe("NodePalette", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <NodePalette x={12} y={34} onSelect={onSelect} onClose={onClose} />
+          <NodePalette
+            x={12}
+            y={34}
+            catalogRowRenderer={LocalizedCatalogTreeRow}
+            onSelect={onSelect}
+            onClose={onClose}
+          />
         </TooltipProvider>,
       ),
     );
@@ -357,6 +364,7 @@ describe("NodePalette", () => {
               nodeId: "00000000-0000-0000-0000-000000000101",
               portKey: "value",
             }}
+            catalogRowRenderer={LocalizedCatalogTreeRow}
             onSelect={onSelect}
           />
         </TooltipProvider>,
@@ -559,7 +567,12 @@ describe("NodePalette", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <NodePalette x={12} y={34} onSelect={onSelect} />
+          <NodePalette
+            x={12}
+            y={34}
+            catalogRowRenderer={LocalizedCatalogTreeRow}
+            onSelect={onSelect}
+          />
         </TooltipProvider>,
       ),
     );
@@ -582,7 +595,12 @@ describe("NodePalette", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <NodePalette x={12} y={34} onSelect={onSelect} />
+          <NodePalette
+            x={12}
+            y={34}
+            catalogRowRenderer={LocalizedCatalogTreeRow}
+            onSelect={onSelect}
+          />
         </TooltipProvider>,
       ),
     );
