@@ -8,7 +8,7 @@ import {
 import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
 import { setViewportLive, editorViewportScope } from "@/features/core/viewport";
 
-/** Bottom bar command handlers — keeps BottomBar presentational. */
+/** Status bar command handlers — keeps StatusBar presentational. */
 export function useStatusBarActions() {
   const { t } = useTranslation();
 

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { FunctionComponent } from "react";
 
-import { BottomBar } from "./Layout/BottomBar";
+import { StatusBar } from "./Layout/StatusBar";
 import { Menubar } from "./Layout/Menubar";
 import {
   RootDockviewHost,
@@ -52,7 +52,7 @@ function WorkbenchWindowReady({
           watermarkComponent={watermarkComponent}
         />
       </div>
-      <BottomBar />
+      <StatusBar />
       <WorkbenchOverlayHost />
     </div>
   );

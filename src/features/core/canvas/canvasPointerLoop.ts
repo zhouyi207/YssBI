@@ -34,7 +34,7 @@ import {
 
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
-  activeTabIdRef: RefObject<string | null>;
+  activeResourceRefRef: RefObject<string | null>;
   panelInstanceId: string;
   viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (
@@ -114,7 +114,7 @@ function installPointerLoop(): () => void {
       session.groupId === scope.groupId &&
       session.pointerId === scope.pointerId &&
       deps.panelInstanceId === scope.panelInstanceId &&
-      resolveTabId(deps.activeTabIdRef) === scope.graphPath &&
+      resolveTabId(deps.activeResourceRefRef) === scope.graphPath &&
       queryCanvasElement(scope.panelInstanceId) !== null
     );
   };

@@ -18,23 +18,21 @@ import { LogDomainPanel } from "./LogDomainPanel";
 import { LogWorkspaceActions } from "./LogWorkspaceActions";
 import { LogWorkspaceProvider } from "./logWorkspaceContext";
 
-const LOG_WORKSPACE_COMPONENTS = {
+const LOG_DOMAIN_COMPONENTS = {
   [LOGS_DOCKVIEW_COMPONENT_ID]: LogDomainPanel,
 };
 
-export type LogWorkspaceLayoutLifecycle =
-  | { readonly kind: "main" }
-  | { readonly kind: "ephemeral" };
+export type LogDomainLayoutLifecycle = { readonly kind: "main" } | { readonly kind: "ephemeral" };
 
-export interface LogWorkspaceDockviewProps {
-  readonly layout: LogWorkspaceLayoutLifecycle;
+export interface LogDomainDockviewHostProps {
+  readonly layout: LogDomainLayoutLifecycle;
 }
 
 interface BoundMainLayout {
   readonly token: LogsDockviewBindingToken;
 }
 
-function LogWorkspaceTab({ api }: IDockviewPanelHeaderProps) {
+function LogDomainTab({ api }: IDockviewPanelHeaderProps) {
   const [title, setTitle] = useState(api.title);
 
   useEffect(() => {
@@ -61,7 +59,7 @@ function restrictLogsTabDrop(event: DockviewWillDropEvent): void {
   if (!isSameGroupTabDrop) event.preventDefault();
 }
 
-export function LogWorkspaceDockview({ layout }: LogWorkspaceDockviewProps) {
+export function LogDomainDockviewHost({ layout }: LogDomainDockviewHostProps) {
   const boundMainLayoutRef = useRef<BoundMainLayout | null>(null);
   const themeMode = useSettingsRead((state) => state.theme.mode);
   const isMainLayout = layout.kind === "main";
@@ -94,9 +92,9 @@ export function LogWorkspaceDockview({ layout }: LogWorkspaceDockviewProps) {
       <div data-yssbi-logs-dockview className="h-full min-h-0 w-full min-w-0">
         <DockviewReact
           className="yssbi-logs-dockview-instance h-full w-full"
-          components={LOG_WORKSPACE_COMPONENTS}
+          components={LOG_DOMAIN_COMPONENTS}
           rightHeaderActionsComponent={LogWorkspaceActions}
-          defaultTabComponent={LogWorkspaceTab}
+          defaultTabComponent={LogDomainTab}
           disableFloatingGroups
           theme={resolveYssbiLogsDockviewTheme(themeMode)}
           onWillDrop={restrictLogsTabDrop}

@@ -4,7 +4,7 @@ import type { StatusBarRenderContext } from "@/features/core/statusBar";
 
 const ctx: StatusBarRenderContext = {
   t: ((key: string) => key) as StatusBarRenderContext["t"],
-  activeTabId: "graph/a",
+  activeResourceRef: "graph/a",
   activeEditorGroupId: "editor",
   selectedCount: 2,
   nodeCount: 5,

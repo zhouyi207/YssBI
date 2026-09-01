@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_WORKBENCH_UI_STATE, useWorkbenchStore } from "./workbenchStore";
+import { DEFAULT_WORKBENCH_UI_STATE, useWorkbenchUiStore } from "./workbenchUiStore";
 
 function uiState() {
-  const { isSettingsOpen, isNodeDocumentationOpen } = useWorkbenchStore.getState();
+  const { isSettingsOpen, isNodeDocumentationOpen } = useWorkbenchUiStore.getState();
 
   return {
     isSettingsOpen,
@@ -10,13 +10,13 @@ function uiState() {
   };
 }
 
-describe("workbenchStore", () => {
+describe("workbenchUiStore", () => {
   beforeEach(() => {
-    useWorkbenchStore.getState().resetWorkbenchUIState();
+    useWorkbenchUiStore.getState().resetWorkbenchUiState();
   });
 
   it("keeps only non-placement workbench UI state", () => {
-    const state = useWorkbenchStore.getState();
+    const state = useWorkbenchUiStore.getState();
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
 
@@ -29,7 +29,7 @@ describe("workbenchStore", () => {
   });
 
   it("updates modal state, then resets it", () => {
-    const commands = useWorkbenchStore.getState();
+    const commands = useWorkbenchUiStore.getState();
 
     commands.openSettings();
     commands.setNodeDocumentationOpen(true);
@@ -40,7 +40,7 @@ describe("workbenchStore", () => {
     });
 
     commands.closeSettings();
-    commands.resetWorkbenchUIState();
+    commands.resetWorkbenchUiState();
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
   });

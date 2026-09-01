@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { LogWorkspaceDockview } from "./LogWorkspaceDockview";
+import { LogDomainDockviewHost } from "./LogDomainDockviewHost";
 import {
   useCurrentWindowActions,
   useCustomTitleBar,
@@ -58,7 +58,7 @@ export const LogWindow = () => {
 
       {/* 内容区域 */}
       <div className="min-h-0 flex-1">
-        <LogWorkspaceDockview layout={{ kind: "ephemeral" }} />
+        <LogDomainDockviewHost layout={{ kind: "ephemeral" }} />
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenc
 
 export interface EditorGroupPlacementSlice {
   panelInstanceIds: string[];
-  activeTabId: string | null;
+  activeResourceRef: string | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
   panels: readonly WorkbenchEditorPanelInfo[];
@@ -31,7 +31,7 @@ export function useEditorGroupPlacement(
   return useMemo(() => {
     return {
       panelInstanceIds: panels.map((panel) => panel.panelInstanceId),
-      activeTabId: activePanel?.metadata.resourceRef ?? null,
+      activeResourceRef: activePanel?.metadata.resourceRef ?? null,
       selectedNodeIds: selection?.selectedNodeIds ?? [],
       selectedConnectionIds: selection?.selectedConnectionIds ?? [],
       panels,

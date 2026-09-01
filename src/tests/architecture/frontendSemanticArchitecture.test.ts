@@ -165,10 +165,10 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/views/LogView/LogWorkspaceDockview.tsx",
+    "src/views/LogView/LogDomainDockviewHost.tsx",
     `
     import { DockviewReact } from 'dockview-react';
-    export const LogWorkspaceDockview = () => <DockviewReact />;
+    export const LogDomainDockviewHost = () => <DockviewReact />;
   `,
   ],
   [

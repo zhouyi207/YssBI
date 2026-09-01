@@ -26,7 +26,7 @@ import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModi
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
-import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
+import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
 import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
 
 export type RootDockviewPanelComponent = FunctionComponent<
@@ -107,7 +107,7 @@ export const RootDockviewHost = forwardRef<
           <DockviewReact
             className="yssbi-root-dockview-instance h-full w-full"
             components={panelRegistry}
-            defaultTabComponent={WorkbenchDockviewTab}
+            defaultTabComponent={RootPanelTabRenderer}
             rightHeaderActionsComponent={WorkbenchActivityActions}
             watermarkComponent={watermarkComponent}
             disableFloatingGroups

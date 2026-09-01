@@ -1,19 +1,19 @@
 import { useSyncExternalStore } from "react";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { useWorkbenchStore } from "./workbenchStore";
-import type { WorkbenchUIState } from "./workbenchTypes";
+import { useWorkbenchUiStore } from "./workbenchUiStore";
+import type { WorkbenchUiState } from "./workbenchTypes";
 
 export interface WorkbenchUiCapability {
-  readonly getSnapshot: () => DeepReadonly<WorkbenchUIState>;
+  readonly getSnapshot: () => DeepReadonly<WorkbenchUiState>;
   readonly subscribe: (listener: () => void) => () => void;
   readonly setSettingsOpen: (open: boolean) => void;
   readonly setNodeDocumentationOpen: (open: boolean) => void;
   readonly openSettings: () => void;
 }
 
-function snapshot(): DeepReadonly<WorkbenchUIState> {
-  const state = useWorkbenchStore.getState();
+function snapshot(): DeepReadonly<WorkbenchUiState> {
+  const state = useWorkbenchUiStore.getState();
   return Object.freeze({
     isSettingsOpen: state.isSettingsOpen,
     isNodeDocumentationOpen: state.isNodeDocumentationOpen,
@@ -23,12 +23,12 @@ function snapshot(): DeepReadonly<WorkbenchUIState> {
 let currentSnapshot = snapshot();
 const listeners = new Set<() => void>();
 
-useWorkbenchStore.subscribe(() => {
+useWorkbenchUiStore.subscribe(() => {
   currentSnapshot = snapshot();
   for (const listener of listeners) listener();
 });
 
-export function getWorkbenchUiSnapshot(): DeepReadonly<WorkbenchUIState> {
+export function getWorkbenchUiSnapshot(): DeepReadonly<WorkbenchUiState> {
   return currentSnapshot;
 }
 
@@ -37,7 +37,7 @@ export function subscribeWorkbenchUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useWorkbenchUi<T>(selector: (state: DeepReadonly<WorkbenchUIState>) => T): T {
+export function useWorkbenchUi<T>(selector: (state: DeepReadonly<WorkbenchUiState>) => T): T {
   const state = useSyncExternalStore(
     subscribeWorkbenchUi,
     getWorkbenchUiSnapshot,
@@ -49,7 +49,7 @@ export function useWorkbenchUi<T>(selector: (state: DeepReadonly<WorkbenchUIStat
 export const workbenchUi: WorkbenchUiCapability = {
   getSnapshot: getWorkbenchUiSnapshot,
   subscribe: subscribeWorkbenchUi,
-  setSettingsOpen: (open) => useWorkbenchStore.getState().setSettingsOpen(open),
-  setNodeDocumentationOpen: (open) => useWorkbenchStore.getState().setNodeDocumentationOpen(open),
-  openSettings: () => useWorkbenchStore.getState().openSettings(),
+  setSettingsOpen: (open) => useWorkbenchUiStore.getState().setSettingsOpen(open),
+  setNodeDocumentationOpen: (open) => useWorkbenchUiStore.getState().setNodeDocumentationOpen(open),
+  openSettings: () => useWorkbenchUiStore.getState().openSettings(),
 };

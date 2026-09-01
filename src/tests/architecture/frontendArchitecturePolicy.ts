@@ -579,7 +579,7 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
       sourceLayer: "views",
       canonicalModule: "src/features/core/dockview/logsRootBinding.ts",
       exportedSymbols: ["logsDockviewRootBinding", "LogsDockviewBindingToken"],
-      exactConsumers: ["src/views/LogView/LogWorkspaceDockview.tsx"],
+      exactConsumers: ["src/views/LogView/LogDomainDockviewHost.tsx"],
       memberCapabilities: null,
     },
   ],

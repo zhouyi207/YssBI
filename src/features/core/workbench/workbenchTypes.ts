@@ -1,15 +1,15 @@
 /** Non-placement workbench UI state; the root Dockview owns layout and visibility. */
-export interface WorkbenchUIState {
+export interface WorkbenchUiState {
   isSettingsOpen: boolean;
   isNodeDocumentationOpen: boolean;
 }
 
-export interface WorkbenchUICommands {
+export interface WorkbenchUiCommands {
   openSettings(): void;
   closeSettings(): void;
   setSettingsOpen(open: boolean): void;
   setNodeDocumentationOpen(open: boolean): void;
-  resetWorkbenchUIState(): void;
+  resetWorkbenchUiState(): void;
 }
 
-export type WorkbenchStore = WorkbenchUIState & WorkbenchUICommands;
+export type WorkbenchUiStore = WorkbenchUiState & WorkbenchUiCommands;

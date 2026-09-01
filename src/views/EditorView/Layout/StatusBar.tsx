@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useStatusBarItems } from "@/features/application/statusBar/useStatusBarItems";
 import { StatusBarItem } from "./StatusBarItem";
 
-export function BottomBar() {
+export function StatusBar() {
   const { t } = useTranslation();
   const { left, right } = useStatusBarItems();
 

@@ -3,7 +3,7 @@ import type { IDockviewPanelProps } from "dockview-react";
 
 import type { WorkbenchPanelParams } from "@/features/core/dockview";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
-import { GraphEditor } from "../Canvas/core/GraphEditor";
+import { GraphDocumentEditor } from "../Canvas/core/GraphDocumentEditor";
 import { ChartEditor } from "../Chart/ChartEditor";
 
 function useLivePanelGroupId(api: IDockviewPanelProps<WorkbenchPanelParams>["api"]): string {
@@ -69,7 +69,7 @@ function GraphEditorPanel({
 }) {
   useVisibleGraphPanel(api, { groupId, graphPath });
   return (
-    <GraphEditor
+    <GraphDocumentEditor
       panelInstanceId={panelInstanceId}
       groupId={groupId}
       graphPath={graphPath}

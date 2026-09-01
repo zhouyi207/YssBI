@@ -70,7 +70,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
+import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -122,7 +122,7 @@ function resultParams(): WorkbenchPanelParams {
   };
 }
 
-describe("WorkbenchDockviewTab", () => {
+describe("RootPanelTabRenderer", () => {
   let host: HTMLDivElement;
   let root: Root;
   let api: DockviewApi | null;
@@ -167,7 +167,7 @@ describe("WorkbenchDockviewTab", () => {
               Diagnostics: TestPanel,
               Result: TestPanel,
             }}
-            defaultTabComponent={WorkbenchDockviewTab}
+            defaultTabComponent={RootPanelTabRenderer}
             onReady={({ api: readyApi }) => {
               api = readyApi;
               initialize(readyApi);

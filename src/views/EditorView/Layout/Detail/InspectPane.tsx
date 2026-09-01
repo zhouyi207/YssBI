@@ -27,8 +27,8 @@ function InspectEmpty({ title, description }: { title: string; description: stri
 
 export function InspectPane() {
   const { t } = useTranslation();
-  const { activeTabId, panels, selectedNodeIds } = useActiveEditorGroup();
-  const activePanel = panels.find((panel) => panel.metadata.resourceRef === activeTabId);
+  const { activeResourceRef, panels, selectedNodeIds } = useActiveEditorGroup();
+  const activePanel = panels.find((panel) => panel.metadata.resourceRef === activeResourceRef);
   const graphPath =
     activePanel?.metadata.resourceKind === "event" ||
     activePanel?.metadata.resourceKind === "function"

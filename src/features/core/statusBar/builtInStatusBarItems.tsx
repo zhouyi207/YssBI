@@ -131,7 +131,7 @@ export function createBuiltInStatusBarItems(
       render: (ctx) => (
         <>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
-          {actions.renderViewportStatus(ctx.activeEditorGroupId ?? "", ctx.activeTabId)}
+          {actions.renderViewportStatus(ctx.activeEditorGroupId ?? "", ctx.activeResourceRef)}
         </>
       ),
     },

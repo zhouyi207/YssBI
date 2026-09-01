@@ -43,7 +43,7 @@ export type MenuItem = MenubarMenuItem;
 export function buildEditMenuItems(
   translate: (key: string) => string,
   state: {
-    activeTabId: string | null;
+    activeResourceRef: string | null;
     canUndo: boolean;
     canRedo: boolean;
     editorCommandAuthorized: boolean;
@@ -267,7 +267,7 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
     addFunction,
     addChart,
   } = commands;
-  const { canUndo, canRedo, activeTabId } = useEditorHistoryAvailability();
+  const { canUndo, canRedo, activeResourceRef } = useEditorHistoryAvailability();
   const {
     openSettings,
     editorCommandAuthorized,
@@ -315,7 +315,7 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
 
   const editItems = buildEditMenuItems(
     t,
-    { activeTabId, canUndo, canRedo, editorCommandAuthorized },
+    { activeResourceRef, canUndo, canRedo, editorCommandAuthorized },
     {
       undo: () => void undo(),
       redo: () => void redo(),

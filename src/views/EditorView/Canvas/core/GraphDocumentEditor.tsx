@@ -8,7 +8,7 @@ import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorResourceKind } from "@/features/core/dockview";
 
-export interface GraphEditorProps {
+export interface GraphDocumentEditorProps {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
@@ -19,12 +19,12 @@ export interface GraphEditorProps {
  * Graph editor shell per Dockview panel.
  * Each panel renders its own resource; only the physically active panel is interactive.
  */
-export const GraphEditor = memo(function GraphEditor({
+export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   panelInstanceId,
   groupId,
   graphPath,
   graphKind,
-}: GraphEditorProps) {
+}: GraphDocumentEditorProps) {
   const mode = useIsActiveEditorPanel(panelInstanceId) ? "interactive" : "preview";
   const { graphLoadStatus: graphLoads } = useProjectProjection();
   const graphLoadStatus = graphLoads[graphPath];
@@ -72,4 +72,4 @@ export const GraphEditor = memo(function GraphEditor({
   );
 });
 
-export default GraphEditor;
+export default GraphDocumentEditor;

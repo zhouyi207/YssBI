@@ -13,13 +13,13 @@ import { createRootPanelRegistry } from "@/views/EditorView/Layout/RootDockviewH
 import { WorkbenchWindow } from "@/views/EditorView/WorkbenchWindow";
 import { WatermarkView } from "@/views/EditorView/Canvas/overlays/WatermarkView";
 import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
-import { LogWorkspaceDockview } from "@/views/LogView/LogWorkspaceDockview";
+import { LogDomainDockviewHost } from "@/views/LogView/LogDomainDockviewHost";
 import { OutputPanel } from "@/views/LogView/OutputPanel";
 import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
 import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
 
 function MainLogsDockPanel() {
-  return <LogWorkspaceDockview layout={{ kind: "main" }} />;
+  return <LogDomainDockviewHost layout={{ kind: "main" }} />;
 }
 
 const rootPanelRegistry = createRootPanelRegistry({

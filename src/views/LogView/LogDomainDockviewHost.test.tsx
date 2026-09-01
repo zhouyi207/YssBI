@@ -382,7 +382,7 @@ import { logsDockviewRootBinding } from "@/features/core/dockview/logsRootBindin
 import { logDomainPanelId } from "@/features/domain/log/logDomains";
 import { logBuffer } from "@/features/application/log/logBuffer";
 import { useLogStore } from "@/features/application/log/logStore";
-import { LogWorkspaceDockview, type LogWorkspaceLayoutLifecycle } from "./LogWorkspaceDockview";
+import { LogDomainDockviewHost, type LogDomainLayoutLifecycle } from "./LogDomainDockviewHost";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -419,7 +419,7 @@ function panelList(group: Element): HTMLElement {
   return list;
 }
 
-describe("LogWorkspaceDockview", () => {
+describe("LogDomainDockviewHost", () => {
   let host: HTMLDivElement;
   let root: Root | null;
 
@@ -462,11 +462,11 @@ describe("LogWorkspaceDockview", () => {
     vi.restoreAllMocks();
   });
 
-  const renderWorkspace = (layout: LogWorkspaceLayoutLifecycle) => {
+  const renderWorkspace = (layout: LogDomainLayoutLifecycle) => {
     act(() => {
       root?.render(
         <TooltipProvider>
-          <LogWorkspaceDockview layout={layout} />
+          <LogDomainDockviewHost layout={layout} />
         </TooltipProvider>,
       );
     });

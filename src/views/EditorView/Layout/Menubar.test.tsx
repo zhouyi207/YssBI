@@ -15,11 +15,11 @@ function menuActions() {
 }
 
 describe("Menubar editor command authorization", () => {
-  it("does not authorize mutations from a stale activeTabId", () => {
+  it("does not authorize mutations from a stale activeResourceRef", () => {
     const items = buildEditMenuItems(
       translate,
       {
-        activeTabId: "events/Stale.yssbi-event",
+        activeResourceRef: "events/Stale.yssbi-event",
         canUndo: true,
         canRedo: true,
         editorCommandAuthorized: false,

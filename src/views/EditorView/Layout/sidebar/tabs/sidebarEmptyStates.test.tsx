@@ -7,7 +7,7 @@ import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatal
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const historyAvailability = vi.hoisted(() => ({
-  activeTabId: null as string | null,
+  activeResourceRef: null as string | null,
   canUndo: false,
   canRedo: false,
   pending: false,
@@ -187,7 +187,7 @@ describe("Sidebar tab-level empty states", () => {
   });
 
   it("uses the shared empty state when Commands has no active graph", () => {
-    historyAvailability.activeTabId = null;
+    historyAvailability.activeResourceRef = null;
     act(() => root.render(<SidebarCommandsTab />));
     expect(host.textContent).toContain("No active graph open");
     expect(host.textContent).toContain("Open a graph to view commands");
@@ -195,7 +195,7 @@ describe("Sidebar tab-level empty states", () => {
   });
 
   it("keeps command controls when an active graph exists", () => {
-    historyAvailability.activeTabId = "events/Main.yssbi-event";
+    historyAvailability.activeResourceRef = "events/Main.yssbi-event";
     act(() => root.render(<SidebarCommandsTab />));
     expect(host.textContent).toContain("Undo");
     expect(host.textContent).toContain("Redo");

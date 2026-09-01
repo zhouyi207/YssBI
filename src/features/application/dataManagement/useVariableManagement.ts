@@ -22,9 +22,9 @@ export interface VariableCreationOptions {
  * Binds UI state and delegates CRUD to variable application actions.
  */
 export function useVariableManagement() {
-  const { activeTabId, panels } = useActiveEditorGroup();
+  const { activeResourceRef, panels } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
-  const localGraphPath = variablesGraphScopePath ?? activeTabId;
+  const localGraphPath = variablesGraphScopePath ?? activeResourceRef;
   const graphTypeFromPanel = localGraphPath
     ? panels.find((panel) => panel.metadata.resourceRef === localGraphPath)?.metadata.resourceKind
     : undefined;

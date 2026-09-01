@@ -21,9 +21,9 @@ type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
 export function useEditorActions(active: ActiveEditorGroup) {
   const editorGroupId = active.groupId;
   const activeGroupIdRef = useRef<string | null>(editorGroupId);
-  const activeTabIdRef = useRef<string | null>(active.activeTabId);
+  const activeResourceRefRef = useRef<string | null>(active.activeResourceRef);
   activeGroupIdRef.current = editorGroupId;
-  activeTabIdRef.current = active.activeTabId;
+  activeResourceRefRef.current = active.activeResourceRef;
 
   const setCanvas = useCallback(
     (
@@ -31,7 +31,7 @@ export function useEditorActions(active: ActiveEditorGroup) {
       targetGraphPath?: string,
     ) => {
       const groupId = activeGroupIdRef.current;
-      const graphPath = targetGraphPath ?? activeTabIdRef.current;
+      const graphPath = targetGraphPath ?? activeResourceRefRef.current;
       if (!groupId || !graphPath) return;
       const scope = editorViewportScope(groupId, graphPath);
       setViewportLive(scope, updater);
@@ -42,8 +42,8 @@ export function useEditorActions(active: ActiveEditorGroup) {
   const uiActions = useEditorUIActions();
 
   const viewportScope =
-    editorGroupId && active.activeTabId
-      ? editorViewportScope(editorGroupId, active.activeTabId)
+    editorGroupId && active.activeResourceRef
+      ? editorViewportScope(editorGroupId, active.activeResourceRef)
       : null;
 
   const viewportRef = useRef(viewportScope ? getViewport(viewportScope) : DEFAULT_VIEWPORT);
@@ -58,7 +58,7 @@ export function useEditorActions(active: ActiveEditorGroup) {
 
   return {
     activeGroupIdRef,
-    activeTabIdRef,
+    activeResourceRefRef,
     viewportRef,
     setCanvas,
     ...uiActions,

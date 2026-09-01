@@ -66,7 +66,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const editor = useMemo(
     () => ({
       activeEditorGroupId: graphTarget?.groupId ?? null,
-      activeTabId: graphTarget?.resourceRef ?? null,
+      activeResourceRef: graphTarget?.resourceRef ?? null,
       selectedCount: selectedNodeIds?.length ?? 0,
     }),
     [graphTarget, selectedNodeIds],
@@ -74,13 +74,16 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
 
   const graphStats = useGraphDataStore(
     useShallow((state) => {
-      if (!editor.activeTabId) return { nodeCount: 0, connectionCount: 0 };
+      if (!editor.activeResourceRef) return { nodeCount: 0, connectionCount: 0 };
 
-      const nodeIds = state.getGraphNodeIds(editor.activeTabId);
+      const nodeIds = state.getGraphNodeIds(editor.activeResourceRef);
       const connectionIds = new Set<string>();
       for (const nodeId of nodeIds) {
-        for (const pinId of state.getGraphNodePins(editor.activeTabId, nodeId)) {
-          for (const connectionId of state.getGraphPinConnections(editor.activeTabId, pinId)) {
+        for (const pinId of state.getGraphNodePins(editor.activeResourceRef, nodeId)) {
+          for (const connectionId of state.getGraphPinConnections(
+            editor.activeResourceRef,
+            pinId,
+          )) {
             connectionIds.add(connectionId);
           }
         }
@@ -94,13 +97,13 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   );
 
   const executionStatus = useExecutionStore((state) =>
-    editor.activeTabId ? (state.graphs[editor.activeTabId]?.status ?? "idle") : "idle",
+    editor.activeResourceRef ? (state.graphs[editor.activeResourceRef]?.status ?? "idle") : "idle",
   );
 
   const ctx = useMemo<StatusBarRenderContext>(
     () => ({
       t,
-      activeTabId: editor.activeTabId,
+      activeResourceRef: editor.activeResourceRef,
       activeEditorGroupId: editor.activeEditorGroupId,
       selectedCount: editor.selectedCount,
       nodeCount: graphStats.nodeCount,

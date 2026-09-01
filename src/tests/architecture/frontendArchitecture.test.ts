@@ -363,6 +363,46 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps final workbench and panel vocabulary", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const retiredIdentifiers = [
+        "BottomBar",
+        "GraphEditor",
+        "LogWorkspaceDockview",
+        "WorkbenchDockviewTab",
+        "WorkbenchStore",
+        "activeTabId",
+      ];
+      expect(
+        sources.flatMap(({ path, source }) =>
+          retiredIdentifiers
+            .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
+            .map((identifier) => `${path}:${identifier}`),
+        ),
+      ).toEqual([]);
+
+      const paths = new Set(sources.map(({ path }) => path));
+      const retiredFiles = [
+        "src/features/core/workbench/workbenchStore.ts",
+        "src/views/EditorView/Canvas/core/GraphEditor.tsx",
+        "src/views/EditorView/Layout/BottomBar.tsx",
+        "src/views/EditorView/Layout/WorkbenchDockviewTab.tsx",
+        "src/views/LogView/LogWorkspaceDockview.tsx",
+      ];
+      expect(retiredFiles.filter((path) => paths.has(path))).toEqual([]);
+
+      const finalFiles = [
+        "src/features/core/workbench/workbenchUiStore.ts",
+        "src/views/EditorView/Canvas/core/GraphDocumentEditor.tsx",
+        "src/views/EditorView/Layout/RootPanelTabRenderer.tsx",
+        "src/views/EditorView/Layout/StatusBar.tsx",
+        "src/views/LogView/LogDomainDockviewHost.tsx",
+      ];
+      expect(finalFiles.filter((path) => !paths.has(path))).toEqual([]);
+    });
+  });
+
   it("keeps shared packages limited to reusable contracts and presentation", () => {
     withProductionTypeScriptProject((context) => {
       const paths = productionTypeScriptSources(context).map(({ path }) => path);

@@ -73,7 +73,7 @@ export function useCanvasOverlayHandlers({
   canvasElementRef,
   panelInstanceId,
   groupId,
-  activeTabId,
+  activeResourceRef,
   pendingConnection,
   setContextMenu,
   setPendingConnection,
@@ -81,7 +81,7 @@ export function useCanvasOverlayHandlers({
   canvasElementRef: RefObject<HTMLDivElement | null>;
   panelInstanceId: string;
   groupId: string;
-  activeTabId: string | null;
+  activeResourceRef: string | null;
   pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
@@ -93,21 +93,21 @@ export function useCanvasOverlayHandlers({
       contextMenu: { x: number; y: number },
     ) => {
       const canvasElement = canvasElementRef.current;
-      if (!canvasElement || !activeTabId) return;
+      if (!canvasElement || !activeResourceRef) return;
 
       if (!EDITOR_MUTATION_CAPABILITIES.catalogDescriptors) return;
 
       const position = clientToWorldInCanvas(
         canvasElement,
         groupId,
-        activeTabId,
+        activeResourceRef,
         contextMenu.x,
         contextMenu.y,
       );
       try {
         const sourceAddress = getPendingConnectionAddress(pendingConnection);
         const outcome = await createNodeFromDescriptor({
-          graphPath: activeTabId,
+          graphPath: activeResourceRef,
           locale,
           descriptor,
           position,
@@ -118,7 +118,7 @@ export function useCanvasOverlayHandlers({
           !interactionStillMatches(
             panelInstanceId,
             groupId,
-            activeTabId,
+            activeResourceRef,
             contextMenu,
             sourceAddress,
           )
@@ -129,7 +129,7 @@ export function useCanvasOverlayHandlers({
       } catch (error) {
         const message = formatErrorMessage(error, "Unknown mutation error");
         logger.graph.error(
-          `Failed to create node '${descriptor.nodeTypeId}' in '${activeTabId}': ${message}`,
+          `Failed to create node '${descriptor.nodeTypeId}' in '${activeResourceRef}': ${message}`,
           "NodePalette",
         );
       }
@@ -138,7 +138,7 @@ export function useCanvasOverlayHandlers({
       canvasElementRef,
       panelInstanceId,
       groupId,
-      activeTabId,
+      activeResourceRef,
       pendingConnection,
       setContextMenu,
       setPendingConnection,

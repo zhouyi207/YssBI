@@ -12,7 +12,7 @@ import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import type { WorkbenchViewId } from "@/features/core/dockview/workbenchPanelModel";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import { useWorkbenchStore } from "@/features/core/workbench/workbenchStore";
+import { useWorkbenchUiStore } from "@/features/core/workbench/workbenchUiStore";
 import type { MenubarViewState } from "./menubarViewItems";
 
 function openViewIds(): ReadonlySet<WorkbenchViewId> {
@@ -25,7 +25,7 @@ function openViewIds(): ReadonlySet<WorkbenchViewId> {
 
 /** Menubar model projected from live root Dockview state and semantic application actions. */
 export function useMenubar() {
-  const openSettings = useWorkbenchStore((state) => state.openSettings);
+  const openSettings = useWorkbenchUiStore((state) => state.openSettings);
   const inspectContextValid = useEditorStore((state) => state.detailFocus?.kind === "node");
   const dockviewSnapshot = useSyncExternalStore(
     workbenchDockviewRead.subscribe,

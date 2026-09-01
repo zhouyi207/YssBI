@@ -70,7 +70,7 @@ export function resolvePinPointerAction(
 
 interface UseCanvasInteractionProps {
   activeGroupIdRef: React.RefObject<string>;
-  activeTabIdRef: React.RefObject<string | null>;
+  activeResourceRefRef: React.RefObject<string | null>;
   panelInstanceId: string;
   viewportRef: React.RefObject<EditorViewport>;
   setSelectedNodeIds: (
@@ -85,7 +85,7 @@ interface UseCanvasInteractionProps {
 
 export function useCanvasInteraction({
   activeGroupIdRef,
-  activeTabIdRef,
+  activeResourceRefRef,
   panelInstanceId,
   viewportRef,
   setSelectedNodeIds,
@@ -97,13 +97,14 @@ export function useCanvasInteraction({
   const contextMenu = useEditorStore((state) => {
     if (!uiEnabled) return null;
     const menu = state.contextMenu;
-    return menu?.panelInstanceId === panelInstanceId && menu.graphPath === activeTabIdRef.current
+    return menu?.panelInstanceId === panelInstanceId &&
+      menu.graphPath === activeResourceRefRef.current
       ? menu
       : null;
   });
   const storeSetContextMenu = useEditorStore((state) => state.setContextMenu);
   const setContextMenu = setContextMenuOverride ?? storeSetContextMenu;
-  const activeGraphPath = activeTabIdRef.current;
+  const activeGraphPath = activeResourceRefRef.current;
   const pendingConnection = useGraphInteractionStore((state) => {
     if (!activeGraphPath) return null;
     const interaction = getCanvasInteraction(state, activeGraphPath, activeGroupIdRef.current);
@@ -115,16 +116,16 @@ export function useCanvasInteraction({
   const persistViewport = useCallback(
     (pane?: { groupId: string; graphPath: string } | null) => {
       const groupId = pane?.groupId ?? activeGroupIdRef.current;
-      const graphPath = pane?.graphPath ?? activeTabIdRef.current;
+      const graphPath = pane?.graphPath ?? activeResourceRefRef.current;
       if (groupId && graphPath) persistGraphViewport(editorViewportScope(groupId, graphPath));
     },
-    [activeGroupIdRef, activeTabIdRef],
+    [activeGroupIdRef, activeResourceRefRef],
   );
 
   const setPendingConnection = useCallback(
     (pin: Pin | null) => {
       const groupId = activeGroupIdRef.current;
-      const graphPath = resolveTabId(activeTabIdRef);
+      const graphPath = resolveTabId(activeResourceRefRef);
       if (!graphPath) return;
       if (!pin) {
         cancelCanvasInteraction(graphPath, groupId);
@@ -142,7 +143,7 @@ export function useCanvasInteraction({
         },
       });
     },
-    [activeGroupIdRef, activeTabIdRef],
+    [activeGroupIdRef, activeResourceRefRef],
   );
 
   const insertRerouteAtConnection = useCallback(
@@ -153,7 +154,7 @@ export function useCanvasInteraction({
       groupId: string,
       selection: DoubleClickSelectionSnapshot,
     ) => {
-      if (activeTabIdRef.current !== graphPath) return false;
+      if (activeResourceRefRef.current !== graphPath) return false;
       let outcome;
       try {
         outcome = await handlers.insertRerouteAtConnection({ graphPath, connectionId, position });
@@ -161,7 +162,7 @@ export function useCanvasInteraction({
         outcome = false as const;
       }
       if (
-        activeTabIdRef.current !== graphPath ||
+        activeResourceRefRef.current !== graphPath ||
         !selectionMatches(getEditorGroupGraphSelection(groupId), selection.temporary)
       )
         return outcome;
@@ -176,13 +177,13 @@ export function useCanvasInteraction({
       }
       return outcome;
     },
-    [activeTabIdRef, handlers],
+    [activeResourceRefRef, handlers],
   );
 
   const onCanvasPointerDown = useCallback(
     (event: React.PointerEvent, groupId?: string) => {
       const gid = groupId ?? activeGroupIdRef.current;
-      const graphPath = resolveTabId(activeTabIdRef);
+      const graphPath = resolveTabId(activeResourceRefRef);
       if (!graphPath) return;
       if (event.button === 1 || event.button === 2 || (event.button === 0 && event.altKey)) {
         registerCanvasPointerScope({
@@ -224,7 +225,7 @@ export function useCanvasInteraction({
         });
       }
     },
-    [activeGroupIdRef, activeTabIdRef, panelInstanceId],
+    [activeGroupIdRef, activeResourceRefRef, panelInstanceId],
   );
 
   const onNodePointerDown = useCallback(
@@ -232,7 +233,7 @@ export function useCanvasInteraction({
       event.stopPropagation();
       if (event.button !== 0) return;
       const gid = groupId ?? activeGroupIdRef.current;
-      const graphPath = resolveTabId(activeTabIdRef);
+      const graphPath = resolveTabId(activeResourceRefRef);
       if (!graphPath) return;
       const selected = [...getEditorGroupGraphSelection(gid).nodeIds];
       const toggleSelection = event.shiftKey || event.ctrlKey || event.metaKey;
@@ -262,7 +263,7 @@ export function useCanvasInteraction({
         },
       });
     },
-    [activeGroupIdRef, activeTabIdRef, panelInstanceId],
+    [activeGroupIdRef, activeResourceRefRef, panelInstanceId],
   );
 
   const onPinPointerDown = useCallback(
@@ -270,7 +271,7 @@ export function useCanvasInteraction({
       event.stopPropagation();
       if (event.button !== 0) return;
       const gid = groupId ?? activeGroupIdRef.current;
-      const graphPath = resolveTabId(activeTabIdRef);
+      const graphPath = resolveTabId(activeResourceRefRef);
       const projected = pin as PinData;
       if (!graphPath || !projected.connections || !projected.address) return;
       const action = resolvePinPointerAction(event, projected.connections);
@@ -310,14 +311,14 @@ export function useCanvasInteraction({
         },
       });
     },
-    [activeGroupIdRef, activeTabIdRef, handlers, panelInstanceId],
+    [activeGroupIdRef, activeResourceRefRef, handlers, panelInstanceId],
   );
 
   useEffect(() => {
     if (!enabled) return;
     return attachCanvasPointerLoop({
       activeGroupIdRef,
-      activeTabIdRef,
+      activeResourceRefRef,
       panelInstanceId,
       viewportRef,
       setSelectedNodeIds: (updater, groupId) => setSelectedNodeIdsRef.current(updater, groupId),
@@ -329,7 +330,7 @@ export function useCanvasInteraction({
   }, [
     enabled,
     activeGroupIdRef,
-    activeTabIdRef,
+    activeResourceRefRef,
     panelInstanceId,
     viewportRef,
     persistViewport,

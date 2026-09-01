@@ -5,7 +5,7 @@ export type StatusBarAlignment = "left" | "right";
 
 export interface StatusBarRenderContext {
   t: TFunction;
-  activeTabId: string | null;
+  activeResourceRef: string | null;
   activeEditorGroupId: string | null;
   selectedCount: number;
   nodeCount: number;

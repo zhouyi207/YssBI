@@ -77,10 +77,10 @@ export function GraphCanvasController({
       insertRerouteAtConnection,
     },
   } = useEditorCanvas({ mode, scope });
-  const activeTabId = activeGraph?.graphPath ?? null;
+  const activeResourceRef = activeGraph?.graphPath ?? null;
   const gesturePinData = useGraphInteractionUi((state) => {
-    if (!interactive || !activeTabId) return null;
-    const interaction = state.interactions[activeTabId];
+    if (!interactive || !activeResourceRef) return null;
+    const interaction = state.interactions[activeResourceRef];
     if (!interaction || interaction.type === "idle" || interaction.session.groupId !== groupId) {
       return null;
     }
@@ -91,38 +91,41 @@ export function GraphCanvasController({
   const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
   const viewportScope = useMemo(
-    () => (activeTabId ? editorViewportScope(groupId, activeTabId) : null),
-    [activeTabId, groupId],
+    () => (activeResourceRef ? editorViewportScope(groupId, activeResourceRef) : null),
+    [activeResourceRef, groupId],
   );
 
   useNodeDragPreview(
     canvasElementRef,
     interactive ? groupId : null,
-    interactive ? activeTabId : null,
+    interactive ? activeResourceRef : null,
   );
   useSelectionBoxPreview(
     selectionBoxRef,
     canvasElementRef,
-    interactive ? (activeTabId ?? undefined) : undefined,
+    interactive ? (activeResourceRef ?? undefined) : undefined,
     interactive ? groupId : undefined,
   );
-  useExecutionVisualBinder(canvasElementRef, interactive ? (activeTabId ?? undefined) : undefined);
+  useExecutionVisualBinder(
+    canvasElementRef,
+    interactive ? (activeResourceRef ?? undefined) : undefined,
+  );
 
   const selectedNodeIdsSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
   const graphNodeIds = useGraphRead((snapshot) =>
-    activeTabId
-      ? (snapshot.graphEntities[activeTabId]?.graphNodes ?? EMPTY_NODE_IDS)
+    activeResourceRef
+      ? (snapshot.graphEntities[activeResourceRef]?.graphNodes ?? EMPTY_NODE_IDS)
       : EMPTY_NODE_IDS,
   );
   const graphRevision = useGraphRead((snapshot) =>
-    interactive && activeTabId
-      ? (snapshot.graphEntities[activeTabId]?.sourceRevision ?? null)
+    interactive && activeResourceRef
+      ? (snapshot.graphEntities[activeResourceRef]?.sourceRevision ?? null)
       : null,
   );
   const { getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
     groupId,
-    activeTabId,
+    activeResourceRef,
   );
   useCanvasWheelZoom(canvasElementRef, viewportScope, interactive);
   const {
@@ -137,7 +140,7 @@ export function GraphCanvasController({
     canvasElementRef,
     panelInstanceId,
     groupId,
-    graphPath: activeTabId,
+    graphPath: activeResourceRef,
     variables,
     setContextMenu,
     setPendingConnection,
@@ -148,7 +151,7 @@ export function GraphCanvasController({
     canvasElementRef,
     panelInstanceId,
     groupId,
-    activeTabId,
+    activeResourceRef,
     pendingConnection,
     setContextMenu,
     setPendingConnection,
@@ -174,11 +177,11 @@ export function GraphCanvasController({
   );
   const handleSelectedConnectionIdsChange = useCallback(
     (connectionIds: string[], targetGraphPath: string, targetGroupId: string) => {
-      if (targetGraphPath === activeTabId && targetGroupId === groupId) {
+      if (targetGraphPath === activeResourceRef && targetGroupId === groupId) {
         setSelectedConnectionIds(connectionIds, targetGroupId);
       }
     },
-    [activeTabId, groupId, setSelectedConnectionIds],
+    [activeResourceRef, groupId, setSelectedConnectionIds],
   );
   const closePalette = useCallback(() => {
     setContextMenu(null);
@@ -194,7 +197,7 @@ export function GraphCanvasController({
             kind: "visible",
             x: contextMenu.x,
             y: contextMenu.y,
-            graphPath: activeTabId,
+            graphPath: activeResourceRef,
             graphRevision,
             sourcePort,
             onSelect: handlePaletteSelect,
@@ -235,7 +238,7 @@ export function GraphCanvasController({
     }),
     [
       activeGraph,
-      activeTabId,
+      activeResourceRef,
       cancelGraphExecution,
       clearGraphArtifacts,
       closePalette,
@@ -292,7 +295,7 @@ export function GraphCanvasController({
       {interactive ? (
         <EdgesOverlay
           mode="interactive"
-          graphPath={activeTabId ?? ""}
+          graphPath={activeResourceRef ?? ""}
           groupId={groupId}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
@@ -306,7 +309,7 @@ export function GraphCanvasController({
       ) : (
         <EdgesOverlay
           mode="preview"
-          graphPath={activeTabId ?? ""}
+          graphPath={activeResourceRef ?? ""}
           groupId={groupId}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
@@ -317,7 +320,7 @@ export function GraphCanvasController({
         <GraphNodeController
           key={nodeId}
           id={nodeId}
-          graphPath={activeTabId ?? undefined}
+          graphPath={activeResourceRef ?? undefined}
           groupId={groupId}
           selected={interactive && selectedNodeIdsSet.has(nodeId)}
           activePin={activePin}
@@ -336,7 +339,7 @@ export function GraphCanvasController({
       canvasElementRef={canvasElementRef}
       selectionBoxRef={selectionBoxRef}
       panelInstanceId={panelInstanceId}
-      graphPath={activeTabId ?? undefined}
+      graphPath={activeResourceRef ?? undefined}
       graphKind={graphKind}
       viewportGridSlot={<ViewportGrid viewportScope={viewportScope} />}
       connectionPreviewSlot={connectionPreviewSlot}

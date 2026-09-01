@@ -4,8 +4,8 @@ import { getViewport, editorViewportScope } from "@/features/core/viewport";
 
 import { queryCanvasElement } from "./selectionHitTargets";
 
-export function resolveTabId(activeTabIdRef: RefObject<string | null>): string | null {
-  return activeTabIdRef.current ?? null;
+export function resolveTabId(activeResourceRefRef: RefObject<string | null>): string | null {
+  return activeResourceRefRef.current ?? null;
 }
 
 export function getCanvasWorldPoint(

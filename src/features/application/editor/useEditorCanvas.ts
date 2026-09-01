@@ -118,7 +118,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
 
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: groupIdRef as RefObject<string>,
-    activeTabIdRef: graphPathRef,
+    activeResourceRefRef: graphPathRef,
     panelInstanceId: scope.panelInstanceId,
     viewportRef,
     setSelectedNodeIds,

@@ -14,12 +14,12 @@ import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const activeEditor = vi.hoisted(() => ({
-  activeTabId: "events/Main.yssbi-event" as string | null,
+  activeResourceRef: "events/Main.yssbi-event" as string | null,
 }));
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 
 vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
-  useActiveEditorGroup: () => ({ activeTabId: activeEditor.activeTabId }),
+  useActiveEditorGroup: () => ({ activeResourceRef: activeEditor.activeResourceRef }),
 }));
 vi.mock("@/services/nodeSystem/historyService", () => ({
   HistoryService: {
@@ -43,7 +43,7 @@ describe("useEditorHistoryAvailability", () => {
     vi.clearAllMocks();
     resetHistoryCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    activeEditor.activeTabId = "events/Main.yssbi-event";
+    activeEditor.activeResourceRef = "events/Main.yssbi-event";
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -73,7 +73,7 @@ describe("useEditorHistoryAvailability", () => {
     act(() => root.render(createElement(Harness)));
 
     expect(current).toEqual({
-      activeTabId: "events/Main.yssbi-event",
+      activeResourceRef: "events/Main.yssbi-event",
       canUndo: true,
       canRedo: true,
       pending: false,
@@ -82,8 +82,13 @@ describe("useEditorHistoryAvailability", () => {
     act(() => useHistoryStore.setState({ pending: true }));
     expect(current).toMatchObject({ canUndo: false, canRedo: false, pending: true });
 
-    activeEditor.activeTabId = null;
+    activeEditor.activeResourceRef = null;
     act(() => root.render(createElement(Harness)));
-    expect(current).toEqual({ activeTabId: null, canUndo: false, canRedo: false, pending: true });
+    expect(current).toEqual({
+      activeResourceRef: null,
+      canUndo: false,
+      canRedo: false,
+      pending: true,
+    });
   });
 });

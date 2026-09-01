@@ -12,7 +12,7 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
   return {
     groupId,
     focusedEditorGroupId,
-    activeTabId: placement.activeTabId,
+    activeResourceRef: placement.activeResourceRef,
     panels: placement.panels,
     selectedNodeIds: placement.selectedNodeIds,
     selectedConnectionIds: placement.selectedConnectionIds,

@@ -4,21 +4,21 @@ import type { EditorViewport } from "@/features/core/viewport";
 
 export function useEditorCanvasActions(
   activeGroupIdRef: RefObject<string>,
-  activeTabIdRef: RefObject<string | null>,
+  activeResourceRefRef: RefObject<string | null>,
 ) {
   const setCanvas = useCallback(
     (
       updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
       targetGraphPath?: string,
     ) => {
-      const graphPath = targetGraphPath ?? activeTabIdRef.current;
+      const graphPath = targetGraphPath ?? activeResourceRefRef.current;
       const groupId = activeGroupIdRef.current;
       if (!graphPath || !groupId) return;
       const scope = editorViewportScope(groupId, graphPath);
       setViewportLive(scope, updater);
       commitViewport(scope);
     },
-    [activeGroupIdRef, activeTabIdRef],
+    [activeGroupIdRef, activeResourceRefRef],
   );
 
   return { setCanvas };

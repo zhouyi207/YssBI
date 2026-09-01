@@ -5,7 +5,7 @@ import {
 } from "@/features/core/editor/editorGroupSelection";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
-import { useWorkbenchStore } from "@/features/core/workbench";
+import { useWorkbenchUiStore } from "@/features/core/workbench";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { useHistoryStore } from "@/features/core/history";
 import {
@@ -114,7 +114,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (event.key === "F1") {
         event.preventDefault();
-        useWorkbenchStore.getState().setNodeDocumentationOpen(true);
+        useWorkbenchUiStore.getState().setNodeDocumentationOpen(true);
         return;
       }
 

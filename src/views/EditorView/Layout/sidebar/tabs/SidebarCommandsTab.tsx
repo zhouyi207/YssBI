@@ -5,9 +5,9 @@ import { SidebarTabPanel } from "../sections/SidebarTabPanel";
 
 export function SidebarCommandsTab() {
   const { t } = useTranslation();
-  const { activeTabId, canUndo, canRedo, pending } = useEditorHistoryAvailability();
+  const { activeResourceRef, canUndo, canRedo, pending } = useEditorHistoryAvailability();
 
-  if (!activeTabId) {
+  if (!activeResourceRef) {
     return (
       <SidebarTabPanel>
         <SidebarEmptyState

@@ -902,3 +902,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 收紧前端 shared 所有权边界：将 graph、detail、execution 与 application UI 运行时类型迁回所属
       feature，把 `ChartModel` 收入 source-independent `shared/charts`，将数据导入业务弹窗迁入 View，
       并删除非 IPC DTO、废弃 store/state 类型及对应兼容入口。
+- [ ] 完成前端最终命名直接切换：使用 `GraphDocumentEditor`、`RootPanelTabRenderer`、
+      `LogDomainDockviewHost`、`StatusBar`、`WorkbenchUiStore` 与 `activeResourceRef`，并以 production
+      architecture audit 禁止旧术语和旧文件路径回流。

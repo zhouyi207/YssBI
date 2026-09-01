@@ -173,7 +173,7 @@ function genericContextMenuSections(
   ];
 }
 
-export function WorkbenchDockviewTab(props: IDockviewPanelHeaderProps<WorkbenchPanelParams>) {
+export function RootPanelTabRenderer(props: IDockviewPanelHeaderProps<WorkbenchPanelParams>) {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);

@@ -126,7 +126,7 @@ vi.mock("@/features/core/viewport", () => ({
   editorViewportScope: (groupId: string, graphPath: string) => ({ groupId, graphPath }),
 }));
 vi.mock("@/features/core/workbench", () => ({
-  useWorkbenchStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
+  useWorkbenchUiStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
 }));
 vi.mock("@/features/core/graphInteraction/graphInteractionStore", () => ({
   getCanvasInteraction: () => mocks.interaction,

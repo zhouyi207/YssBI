@@ -5,11 +5,11 @@ import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEdit
 
 /** Backend-derived undo/redo availability for the focused editor group's active tab. */
 export function useEditorHistoryAvailability() {
-  const { activeTabId } = useActiveEditorGroup();
+  const { activeResourceRef } = useActiveEditorGroup();
   const canUndoFromBackend = useHistoryStore((state) => state.canUndo);
   const canRedoFromBackend = useHistoryStore((state) => state.canRedo);
   const pending = useHistoryStore((state) => state.pending);
-  const available = Boolean(activeTabId) && !pending;
+  const available = Boolean(activeResourceRef) && !pending;
 
   useEffect(() => {
     void ensureHistoryStatus().catch(() => undefined);
@@ -19,6 +19,6 @@ export function useEditorHistoryAvailability() {
     canUndo: available && canUndoFromBackend,
     canRedo: available && canRedoFromBackend,
     pending,
-    activeTabId,
+    activeResourceRef,
   };
 }
