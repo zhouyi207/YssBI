@@ -292,7 +292,12 @@ pub(crate) fn open_graph_in_session(
         Default::default(),
     );
     let graph_basis = graph_compilation_basis(&basis);
-    let analysis = captured.graph().analyze(&candidate_document, &graph_basis);
+    let analysis = captured.graph().analyze(
+        &candidate_document,
+        &graph_basis,
+        project.resources().entries(),
+        request.locale(),
+    );
 
     // This is the final staged commit gate. A replacement that wins before
     // it suppresses the candidate; once it passes, the old Project load has

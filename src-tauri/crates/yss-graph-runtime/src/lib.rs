@@ -1,13 +1,15 @@
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::{Barrier, Mutex};
 
 use thiserror::Error;
-use yss_graph_analysis::{GraphAnalysis, GraphAnalysisInput, analyze, projection_facts};
-use yss_graph_analysis_contract::CompilationBasis;
+use yss_graph_analysis::{
+    GraphAnalysis, GraphAnalysisInput, GraphProjectionFacts, analyze, projection_facts,
+};
+use yss_graph_analysis_contract::{CompilationBasis, DiagnosticArguments, LocalizationLookup};
 use yss_graph_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_graph_document::{GraphDocument, GraphResourcePath, NodeId, PortAddress};
 use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
@@ -204,12 +206,18 @@ impl GraphRuntimeState {
         &self,
         document: &GraphDocument,
         basis: &CompilationBasis<yss_graph_document::GraphRevision>,
+        resources: &[CatalogResourceEntry],
+        locale: &str,
     ) -> GraphAnalysis {
         let analysis = analyze(GraphAnalysisInput { document, basis });
-        analysis.with_projection_facts(projection_facts(
+        let facts = localize_projection_facts(
             document,
             self.components.registry.as_ref(),
-        ))
+            resources,
+            &self.components.catalog.localization(locale),
+            projection_facts(document, self.components.registry.as_ref()),
+        );
+        analysis.with_projection_facts(facts)
     }
 
     pub fn materialize_open_candidate(
@@ -276,6 +284,67 @@ impl GraphRuntimeState {
     }
 }
 
+fn localize_projection_facts(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    resources: &[CatalogResourceEntry],
+    localization: &dyn LocalizationLookup,
+    facts: GraphProjectionFacts,
+) -> GraphProjectionFacts {
+    let arguments = DiagnosticArguments::new();
+    let resource_names = resources
+        .iter()
+        .map(|entry| {
+            (
+                (entry.node_type_id.as_str(), entry.resource_path.as_str()),
+                entry.name.as_ref(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let nodes = facts.nodes().iter().cloned().map(|mut node_facts| {
+        let Some(protocol) = registry.protocol(&node_facts.node_type) else {
+            return node_facts;
+        };
+        node_facts.title = localization.text(&protocol.catalog.title_key, &arguments);
+        node_facts.instance_title = document
+            .nodes
+            .get(&node_facts.node_id)
+            .and_then(|node| {
+                node.parameters
+                    .values()
+                    .filter_map(|value| value.as_str())
+                    .find_map(|resource_path| {
+                        resource_names
+                            .get(&(node.node_type.as_str(), resource_path))
+                            .map(|name| Box::<str>::from(*name))
+                    })
+            })
+            .or(node_facts.instance_title);
+
+        for parameter in &mut node_facts.parameters {
+            let Some(spec) = protocol
+                .parameters
+                .parameters
+                .iter()
+                .find(|spec| spec.key == parameter.key)
+            else {
+                continue;
+            };
+            parameter.title = localization.text(&spec.title_key, &arguments);
+            parameter.description = spec
+                .description_key
+                .as_ref()
+                .map(|key| localization.text(key, &arguments));
+        }
+        node_facts
+    });
+    GraphProjectionFacts::new(
+        nodes,
+        facts.diagnostics().iter().cloned(),
+        facts.outcome().clone(),
+    )
+}
+
 #[derive(Debug, Error)]
 #[error("compatible source port is invalid")]
 pub struct GraphRuntimeCatalogError;
@@ -293,7 +362,11 @@ impl GraphMaterializationError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use yss_graph_analysis_contract::CompilationBasis;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_document::{DocumentNode, GraphRevision, NodePosition, ParameterValues};
+    use yss_graph_registry::RegistryFingerprint;
 
     fn components() -> GraphRuntimeComponents {
         let builtin = build_builtin_node_system().expect("built-in graph system must be valid");
@@ -339,5 +412,44 @@ mod tests {
                 .is_err()
         );
         assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
+    }
+
+    #[test]
+    fn analysis_localizes_editor_node_titles() {
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let node_id = NodeId::new();
+        let node_type = runtime
+            .registry()
+            .iter()
+            .map(|(node_type, _)| node_type)
+            .find(|node_type| node_type.as_str() == "yssbi.constant.bool")
+            .cloned()
+            .expect("built-in node type is registered");
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        let basis = CompilationBasis {
+            graph_revision: GraphRevision::INITIAL,
+            registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        };
+
+        let analysis = runtime.analyze(&document, &basis, &[], "zh-CN");
+        let node = analysis
+            .projection_facts()
+            .and_then(|facts| facts.nodes().first())
+            .expect("editor projection facts include the node");
+
+        assert_eq!(node.title.as_ref(), "布尔常量");
     }
 }

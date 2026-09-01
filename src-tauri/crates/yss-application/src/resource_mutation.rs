@@ -244,7 +244,12 @@ fn build_graph_projection_replacement(
         Default::default(),
     );
     let graph_basis = graph_compilation_basis(&basis);
-    let analysis = captured.graph().analyze(document, &graph_basis);
+    let analysis = captured.graph().analyze(
+        document,
+        &graph_basis,
+        project.resources().entries(),
+        locale,
+    );
     let model = build_editor_projection(EditorProjectionInput {
         graph_path,
         document,
@@ -268,7 +273,6 @@ fn build_graph_projection_replacement(
                 },
             )
         })?;
-    let _ = locale;
     Ok(GraphProjectionReplacement {
         graph_path: graph_path.as_str().into(),
         projection: model,
