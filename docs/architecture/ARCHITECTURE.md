@@ -191,23 +191,34 @@ Rust 与 React 的职责单向流动：Rust 保存 domain authority，React 只�
 前端依赖方向是：
 
 ```text
-views
+app composition / routing / providers
+  → modules/*/public
+      → module internal UI / controllers
+          → features/application
+          → audited features/core and features/domain contracts
   → features/application
-      → features/domain
       → features/core
+      → features/domain
       → services
-components/ui and shared/ui
+components/ui and shared presentation
 ```
 
-- `views/` 组合 screen/window，不直接拥有后端 workflow。
+- `app/` 负责路由、provider 和跨业务模块组合；主窗口的唯一组合根位于
+  `src/app/windows/workbench/`。
+- `modules/` 拥有窗口、panel、editor 与业务 UI。模块外只能导入根 `public.ts`；不同业务模块
+  不直接导入，通用 Workbench contract 是唯一框架例外。
 - `features/application/` 编排用户用例与生命周期。
 - `features/core/` 保存 domain-scoped Zustand 投影和共享基础设施。
+- `features/domain/` 保存无 UI/runtime 依赖的前端 domain 规则。
 - `services/` 是普通 Tauri invoke 的 adapter；统一经 `src/services/ipc/invokeCommand.ts` 解析 `{ code, details, incidentId }`。
 - `components/ui/` 使用 shadcn primitives；用户可见滚动使用 `ScrollArea`。
 
-主窗口 chrome 的层级固定为：顶部 `Menubar`（包含 title/menu/window controls），中部 flex row 中只有一个 root `DockviewReact`，底部 `BottomBar` status bar。Settings 与 node documentation dialogs 作为 overlay 留在工作台之外。
+`WorkbenchComposition` 通过 app-owned `rootPanelRegistry`、`editorRendererRegistry`、menu/status
+contribution 和 integrations 组装多个业务模块。`WorkbenchWindow` 本身只接收显式 slots 与 typed
+capabilities；顶部是 `WorkbenchMenuBar`，中部只有一个 root `DockviewReact`，底部是 `StatusBar`，
+Settings 与 node documentation 由 `WorkbenchOverlayHost` 承载。
 
-`Workspace` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Diagnostics 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
+`RootDockviewHost` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Diagnostics 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
 
 - Zustand 只保存 modal 等非 placement UI 状态，不镜像任何 panel placement、visibility 或 Activity active tab。
 - `Details` 是常驻的 permanent root singleton，固定在 canonical right edge，不能移动、split、关闭，也不能通过拖动包含它的整个 group 绕过限制。
@@ -225,7 +236,9 @@ Rust scientific modules 与 result payloads 拥有统计计算、canonical order
 - `src/shared/charts/ChartRenderer.tsx` 是唯一的 generic `ChartModel` dispatcher。其 registry 将 model kinds 映射到 final leaf renderers；已有窄 presentation contract 的 specialized report composition 可以直接导入 leaf renderer。
 - `src/shared/charts/core/` 拥有共享 sizing、theme、geometry、stable SVG layers 与 tooltip behavior。`cartesian/` 拥有 generic Cartesian marks/axes；`statistical/` 拥有 domain-specific statistical visual grammars。两个 renderer categories 不互相依赖，category/core modules 也不导入 root public barrel。
 - 当前 D3/SVG renderers 通过 keyed incremental joins 更新 stable named layers，不清空整个 SVG；`core/useChartContainerSize.ts` 是 chart production modules 中唯一创建 `ResizeObserver` 的位置。
-- `views/PlotView/PlotWindow.tsx` 只保留 standalone window shell/router。Reusable renderers 不位于 `views/`，obsolete compatibility paths 直接删除而不包装。
+- `src/modules/results/internal/ui/plot/PlotWindow.tsx` 是 standalone plot window；app router 只通过
+  `modules/results/public.ts` 懒加载它。Reusable renderers 不位于 window module，obsolete
+  compatibility paths 直接删除而不包装。
 - Canvas 与 ECharts 是需要 profiling 和显式设计决策的未实现 future options；两者都不是当前 renderer 或 project dependency。
 
 ## 4. yss-api Commands → application → domain

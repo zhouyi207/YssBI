@@ -283,7 +283,10 @@ interface RunOutputEvent {
 
 Frontend `runOutputProjection` 最多保留 258 条（256 text + 2 status），拒绝重复/倒序，并在 sequence gap 或本地容量丢失时设置 `projectionDropped`。
 
-Output 面板位于 `src/views/LogView/OutputPanel.tsx`，但它只复用 workbench panel 位置，不读取 diagnostic store。来源路径是 opaque resource path；nested function 输出必须携带实际 `sourceGraphPath`，不能按 root graph 或 node UUID 猜测。
+Output 面板位于 `src/modules/logs/internal/ui/OutputPanel.tsx`，并通过 `modules/logs/public.ts`
+贡献给 app-owned root panel registry；它只复用 Workbench panel 位置，不读取 diagnostic store。
+来源路径是 opaque resource path；nested function 输出必须携带实际 `sourceGraphPath`，不能按
+root graph 或 node UUID 猜测。
 
 ## 7. Review checklist
 

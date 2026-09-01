@@ -964,3 +964,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       代码不再保留 active-tab 语义。
 - [x] 让 `WatermarkView` 声明自身三个按钮所需的最小 command props，不再从 application
       `WorkbenchCommandCapability` 反向 Pick；通过 Graph View architecture gate 保持该入口为纯 props。
+- [x] 同步维护文档中的最终前端实现地图：以 app composition、`modules/*/public.ts`、
+      `WorkbenchWindow`、`RootDockviewHost`、`StatusBar` 和当前 Workbench internal paths 替换旧
+      views/EditorWindow/Workspace/BottomBar 与 Core Dockview 描述。

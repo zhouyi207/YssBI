@@ -20,8 +20,10 @@
       的权威状态属于 Rust；React 只保存交互状态和后端投影。
 - [ ] 确认 React 状态应进入领域 store、临时组件状态还是 `localStorage`，不复制
       Dockview 或 Rust 已拥有的事实。
-- [ ] 前端代码按职责放入 `views/`、`features/application/`、`features/domain/`、
-      `features/core/`、`services/` 或通用 `components/`，保持依赖单向流动。
+- [ ] 前端 window/panel/editor UI 放入 `modules/<name>/internal` 并只从根 `public.ts` 暴露；
+      跨业务组合放入 `app/`，workflow、domain、projection/runtime state 分别进入
+      `features/application/`、`features/domain/`、`features/core/`，IPC adapter 进入 `services/`，
+      保持依赖单向流动。
 - [ ] Rust 工作流由 application/domain owner 承担；Tauri command 只负责输入校验、
       调用、DTO 映射和事件发送，不承载文件 I/O 或长流程。
 - [ ] 明确基础设施依赖的注入位置，避免 domain 反向依赖 UI、Tauri 或具体 adapter。

@@ -4,13 +4,13 @@
 
 ## 1. 渲染层级与 authority
 
-`EditorWindow` 的 chrome 层级固定为：
+`WorkbenchComposition` 组装的 chrome 层级固定为：
 
 ```text
-EditorWindow
-├─ Menubar
+WorkbenchWindow
+├─ WorkbenchMenuBar slot
 ├─ body
-│  └─ root Dockview
+│  └─ RootDockviewHost                 # 唯一 root DockviewReact
 │     ├─ native left Activity edge group
 │     │  ├─ Project
 │     │  ├─ Nodes
@@ -21,10 +21,15 @@ EditorWindow
 │     └─ native bottom edge group
 │        ├─ 上方 content：Logs、Output 或 Diagnostics
 │        └─ 下方 tabs：Logs、Output、Diagnostics
-└─ Status Bar
+├─ StatusBar slot
+└─ WorkbenchOverlayHost
 ```
 
-Menubar、Status Bar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Diagnostics。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Diagnostics。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+
+`src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
+`editorRendererRegistry.ts` 是唯一把 event/function/chart 映射到具体 editor 的位置。Workbench module
+只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
 
 root Dockview 是以下物理事实的唯一 authority：
 
@@ -34,7 +39,7 @@ root Dockview 是以下物理事实的唯一 authority：
 - active group 与 active panel；
 - edge group 的位置、可见性、尺寸和 collapsed state。
 
-`useWorkbenchStore` 只保存 Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、Activity active tab 或 edge collapse 的镜像。
+`useWorkbenchUiStore` 只保存 Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、Activity active tab 或 edge collapse 的镜像。
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
@@ -42,20 +47,20 @@ root Dockview 是以下物理事实的唯一 authority：
 
 root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
 
-| 角色               | 内容                            | deterministic home                  |
-| ------------------ | ------------------------------- | ----------------------------------- |
-| `editor`           | Graph/Function/Chart editor | 当前 central grid group             |
-| `view:project`     | Project activity panel          | left Activity edge                  |
-| `view:nodes`       | Nodes activity panel            | left Activity edge                  |
-| `view:data`        | Data activity panel             | left Activity edge                  |
-| `view:commands`    | Commands activity panel         | left Activity edge                  |
-| `view:details`     | permanent fixed Details         | right edge index 0                  |
-| `view:assistant`   | movable/closable Assistant      | right edge index 1 on default/reset |
-| `view:inspect`     | contextual Inspect              | right edge                          |
-| `result`           | 一个可检查结果                  | right edge                          |
-| `view:logs`        | Logs workspace                  | bottom edge                         |
-| `view:output`      | Run Output                      | bottom edge                         |
-| `view:diagnostics` | Compiler/runtime diagnostics    | bottom edge                         |
+| 角色               | 内容                         | deterministic home                  |
+| ------------------ | ---------------------------- | ----------------------------------- |
+| `editor`           | Graph/Function/Chart editor  | 当前 central grid group             |
+| `view:project`     | Project activity panel       | left Activity edge                  |
+| `view:nodes`       | Nodes activity panel         | left Activity edge                  |
+| `view:data`        | Data activity panel          | left Activity edge                  |
+| `view:commands`    | Commands activity panel      | left Activity edge                  |
+| `view:details`     | permanent fixed Details      | right edge index 0                  |
+| `view:assistant`   | movable/closable Assistant   | right edge index 1 on default/reset |
+| `view:inspect`     | contextual Inspect           | right edge                          |
+| `result`           | 一个可检查结果               | right edge                          |
+| `view:logs`        | Logs workspace               | bottom edge                         |
+| `view:output`      | Run Output                   | bottom edge                         |
+| `view:diagnostics` | Compiler/runtime diagnostics | bottom edge                         |
 
 默认空布局建立 central grid group，并放置：
 
@@ -122,8 +127,9 @@ Singleton 与 multi-instance contract：
 
 ### 5.1 Public seam
 
-Core Dockview 将 public 能力拆成独立的 `workbenchDockviewRead`、`workbenchDockviewControl`
-和 `workbenchDockviewRootBinding`。它们提供 role-aware semantic operations：
+`src/modules/workbench/public.ts` 将能力拆成独立的 `workbenchDockviewRead`、
+`workbenchDockviewControl` 和 `workbenchDockviewRootBinding`。它们提供 role-aware semantic
+operations：
 
 - `openEditor`、`setEditorPinned`；
 - `ensureView`、`upsertResult`；
@@ -136,11 +142,11 @@ singleton、Result upsert、home edge 或 reveal 规则。
 
 ### 5.2 Internal seam
 
-`src/features/core/dockview/workbenchDockviewInternal.ts` 保存 bind/hydration、committed
-removal、layout transaction 与 publication transaction。它不从
-`src/features/core/dockview/index.ts` barrel export；这些能力不属于普通 View 或普通 Core
-caller 的 public interface。Application `workbenchLayoutController` 负责 window-scoped
-bind、startup hydration、persistence flush 与 project-generation invalidation。
+`src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts` 保存 hydration、committed
+removal、layout transaction 与 publication transaction。它不从 Workbench root `public.ts`
+导出；这些能力不属于普通 module 或 application caller 的 public interface。
+`modules/workbench/internal/application/workbenchLayoutController.ts` 负责 window-scoped bind、
+startup hydration、persistence flush 与 project-generation invalidation。
 
 root `fromJSON` 只由 startup `workbenchLayoutController` 在空 root 上执行。运行时 reset、project cleanup、publication 和复合布局修改都使用 FIFO 中的 `ShadowWorkbenchModel` transaction：先从 live snapshot 构造 shadow、执行同步语义命令并验证 identity/topology/currentness，再把 buffered commands 应用到 live Dockview。运行时不使用 root `fromJSON` 重建布局。
 
