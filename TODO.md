@@ -938,3 +938,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 root Dockview 的主题读取、editor activation、tab dirty/close/context-menu 与 sidebar drag overlay
       业务协调迁入 `app/windows/workbench`；Workbench adapter 仅接收 typed capability，继续独占 Dockview
       event、tab chrome 与 edge topology 行为。
+- [x] 将 Workbench 初始化、project/locale sync、keyboard/close lifecycle、菜单与状态栏 projection
+      迁入 app composition；新增 `menuContributionRegistry`，WorkbenchWindow/MenuBar/StatusBar/About
+      仅消费显式 props/slots，并由生产架构门禁阻止 feature workflow 回流。

@@ -378,6 +378,36 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps Workbench chrome prop-driven and app-composed", () => {
+    withProductionTypeScriptProject((context) => {
+      const sourceByPath = new Map(
+        productionTypeScriptSources(context).map(({ path, source }) => [path, source]),
+      );
+      const pureChromeFiles = [
+        "src/modules/workbench/internal/ui/WorkbenchWindow.tsx",
+        "src/modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx",
+        "src/modules/workbench/internal/ui/menu/AboutModal.tsx",
+        "src/modules/workbench/internal/ui/status/StatusBar.tsx",
+        "src/modules/workbench/internal/ui/status/StatusBarItem.tsx",
+      ];
+      for (const path of pureChromeFiles) {
+        expect(sourceByPath.get(path) ?? "", path).not.toMatch(/from\s+["']@\/features\//u);
+      }
+
+      const composition =
+        sourceByPath.get("src/app/windows/workbench/WorkbenchComposition.tsx") ?? "";
+      expect(composition).toMatch(/\buseAppInitialization\b/u);
+      expect(composition).toMatch(/\buseProjectSync\b/u);
+      expect(composition).toMatch(/\buseEditorKeyboard\b/u);
+      expect(
+        sourceByPath.get("src/app/windows/workbench/menuContributionRegistry.tsx") ?? "",
+      ).toMatch(/\buseMenubar\b/u);
+      expect(
+        sourceByPath.get("src/app/windows/workbench/statusBarContributionRegistry.tsx") ?? "",
+      ).toMatch(/\buseStatusBarItems\b/u);
+    });
+  });
+
   it("keeps the chart resource cutover single-path", () => {
     withProductionTypeScriptProject((context) => {
       const retiredResourceTerm = ["work", "sheet"].join("");

@@ -2,16 +2,13 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StatusBarItem } from "./StatusBarItem";
-import type { StatusBarItemViewModel } from "@/features/core/statusBar";
+import { StatusBarItem, type WorkbenchStatusBarItem } from "./StatusBarItem";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function interactiveItem(overrides: Partial<StatusBarItemViewModel> = {}): StatusBarItemViewModel {
+function interactiveItem(overrides: Partial<WorkbenchStatusBarItem> = {}): WorkbenchStatusBarItem {
   return {
     id: "execution-status",
-    alignment: "right",
-    priority: 40,
     content: "Idle",
     ariaLabel: "Open logs panel",
     tooltip: "Open logs panel",
@@ -61,8 +58,6 @@ describe("StatusBarItem", () => {
         <StatusBarItem
           item={{
             id: "node-count",
-            alignment: "right",
-            priority: 10,
             content: "5 Nodes",
           }}
         />,

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { VscGithub } from "react-icons/vsc";
-import { APP_DISPLAY_NAME, APP_LINKS, APP_VERSION } from "@/shared/appLinks";
+import { APP_DISPLAY_NAME, APP_VERSION } from "@/shared/appLinks";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,14 +9,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { openExternalUrlWithDialog } from "@/features/application/window";
 
 interface AboutModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenRepository: () => void;
+  onReportIssue: () => void;
 }
 
-export function AboutModal({ open, onOpenChange }: AboutModalProps) {
+export function AboutModal({
+  open,
+  onOpenChange,
+  onOpenRepository,
+  onReportIssue,
+}: AboutModalProps) {
   const { t } = useTranslation();
 
   return (
@@ -46,17 +52,12 @@ export function AboutModal({ open, onOpenChange }: AboutModalProps) {
             type="button"
             variant="outline"
             className="w-full justify-center gap-2"
-            onClick={() => void openExternalUrlWithDialog(APP_LINKS.repository, t)}
+            onClick={onOpenRepository}
           >
             <VscGithub size={16} />
             {t("menubar.githubRepository")}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => void openExternalUrlWithDialog(APP_LINKS.reportIssue, t)}
-          >
+          <Button type="button" variant="outline" className="w-full" onClick={onReportIssue}>
             {t("menubar.reportIssue")}
           </Button>
           <Button type="button" className="w-full" onClick={() => onOpenChange(false)}>

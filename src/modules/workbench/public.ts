@@ -49,6 +49,16 @@ export {
 export { showWorkbenchLayoutError } from "./internal/application/workbenchLayoutErrorFeedback";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
 export { SidebarDragOverlay } from "./internal/ui/dnd/SidebarDragOverlay";
+export { AboutModal } from "./internal/ui/menu/AboutModal";
+export {
+  WorkbenchMenuBar,
+  WorkbenchSemanticMenu,
+  type WorkbenchMenuDefinition,
+  type WorkbenchMenuItem,
+  type WorkbenchThemeToggle,
+  type WorkbenchWindowControls,
+} from "./internal/ui/menu/WorkbenchMenuBar";
+export { StatusBar } from "./internal/ui/status/StatusBar";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";
 export { SidebarSectionEmptyState } from "./internal/ui/sidebar/SidebarSectionEmptyState";

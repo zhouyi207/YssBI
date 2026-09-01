@@ -1,8 +1,18 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { StatusBarItemViewModel } from "@/features/core/statusBar";
 
-export function StatusBarItem({ item }: { item: StatusBarItemViewModel }) {
+export interface WorkbenchStatusBarItem {
+  readonly id: string;
+  readonly content: ReactNode;
+  readonly ariaLabel?: string;
+  readonly tooltip?: string;
+  readonly onClick?: () => void;
+  readonly className?: string;
+}
+
+export function StatusBarItem({ item }: { item: WorkbenchStatusBarItem }) {
   const interactive = Boolean(item.onClick);
   const accessibleName = item.ariaLabel ?? item.tooltip;
   const cell = (

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildEditMenuItems, buildFileMenuItems, buildWindowMenuItems } from "./Menubar";
+import {
+  buildEditMenuItems,
+  buildFileMenuItems,
+  buildWindowMenuItems,
+} from "./menuContributionRegistry";
 
 const translate = (key: string) => key;
 

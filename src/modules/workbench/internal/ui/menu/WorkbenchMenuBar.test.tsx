@@ -3,12 +3,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EditorMenuBar } from "./Menubar";
+import { WorkbenchSemanticMenu } from "./WorkbenchMenuBar";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-describe("Editor Menubar", () => {
+describe("WorkbenchMenuBar", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -27,7 +27,7 @@ describe("Editor Menubar", () => {
     const labels = ["File", "Edit", "Data", "View", "Window", "Tools", "Help"];
     act(() =>
       root.render(
-        <EditorMenuBar menus={labels.map((label) => ({ id: label, label, items: [] }))} />,
+        <WorkbenchSemanticMenu menus={labels.map((label) => ({ id: label, label, items: [] }))} />,
       ),
     );
 

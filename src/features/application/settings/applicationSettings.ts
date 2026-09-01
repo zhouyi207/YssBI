@@ -8,6 +8,16 @@ export function useApplicationThemeMode() {
   return useSettingsRead((state) => state.theme.mode);
 }
 
+export function useApplicationAppearance() {
+  const themeMode = useSettingsRead((state) => state.theme.mode ?? "dark");
+  const appearance = useSettingsRead((state) => state.appearance);
+  return {
+    themeMode,
+    appearance,
+    updateAppearance: settingsUi.updateAppearance,
+  };
+}
+
 /** Settings read/actions needed by the application composition effects. */
 export function useApplicationSettings() {
   const snapshot = useSettingsRead((state) => state);

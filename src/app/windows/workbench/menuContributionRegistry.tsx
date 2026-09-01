@@ -1,44 +1,31 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+
 import {
   useEditorHistoryAvailability,
   type WorkbenchCommandCapability,
 } from "@/features/application/editor";
 import { EDITOR_MUTATION_CAPABILITIES } from "@/features/application/editor/editorMutationAvailability";
 import { useMenubar } from "@/features/application/menubar";
-import {
-  buildViewMenuItems,
-  type MenubarMenuItem,
-} from "@/features/application/menubar/menubarViewItems";
+import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
+import { useActiveProjectPath } from "@/features/application/project/projectSession";
+import { useApplicationAppearance } from "@/features/application/settings/applicationSettings";
 import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
 import {
   openExternalUrlWithDialog,
   useCurrentWindowActions,
   useCustomTitleBar,
 } from "@/features/application/window";
-import { useActiveProjectPath } from "@/features/application/project/projectSession";
-import { useSettingsRead } from "@/features/core/settings/read";
-import { settingsUi } from "@/features/core/settings/ui";
-import { APP_LINKS } from "@/shared/config-default";
 import {
-  Menubar as ShadcnMenubar,
-  MenubarCheckboxItem,
-  MenubarContent,
-  MenubarGroup,
-  MenubarItem,
-  MenubarMenu,
-  MenubarSeparator,
-  MenubarShortcut,
-  MenubarTrigger,
-} from "@/components/ui/menubar";
-import { BrandLockup } from "@/shared/ui/BrandMark";
-import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
-import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
-import { WindowMenuBar } from "@/shared/ui/WindowChrome";
-import { AboutModal } from "./AboutModal";
+  AboutModal,
+  WorkbenchMenuBar,
+  type WorkbenchMenuDefinition,
+  type WorkbenchMenuItem,
+} from "@/modules/workbench/public";
+import { APP_LINKS } from "@/shared/config-default";
 
-export type MenuItem = MenubarMenuItem;
+export type MenuItem = WorkbenchMenuItem;
 
 export function buildEditMenuItems(
   translate: (key: string) => string,
@@ -164,92 +151,11 @@ export function buildWindowMenuItems(
   ];
 }
 
-interface MenuButtonProps {
-  id: string;
-  label: string;
-  items: MenuItem[];
-}
-
-function selectMenuItem(event: Event, onClick: (() => void) | undefined): void {
-  if (!onClick) {
-    event.preventDefault();
-    return;
-  }
-  onClick();
-}
-
-const MenuButton = ({ id, label, items }: MenuButtonProps) => {
-  const sections = items.reduce<MenuItem[][]>(
-    (groups, item) => {
-      if (item.type === "separator" || item.label === "-") {
-        if (groups[groups.length - 1]?.length) groups.push([]);
-        return groups;
-      }
-
-      groups[groups.length - 1]?.push(item);
-      return groups;
-    },
-    [[]],
-  );
-
-  return (
-    <MenubarMenu value={id}>
-      <MenubarTrigger>{label}</MenubarTrigger>
-      <MenubarContent>
-        {sections.map((section, sectionIndex) => (
-          <Fragment key={`${id}-section-${sectionIndex}`}>
-            {sectionIndex > 0 ? <MenubarSeparator /> : null}
-            <MenubarGroup>
-              {section.map((item, itemIndex) => {
-                const content = (
-                  <>
-                    <span className="flex-1">{item.label}</span>
-                    {item.shortcut ? <MenubarShortcut>{item.shortcut}</MenubarShortcut> : null}
-                  </>
-                );
-
-                if (item.type === "checkbox") {
-                  return (
-                    <MenubarCheckboxItem
-                      key={`${id}-${sectionIndex}-${itemIndex}`}
-                      checked={item.checked}
-                      disabled={!item.onClick}
-                      onSelect={(event) => selectMenuItem(event, item.onClick)}
-                    >
-                      {content}
-                    </MenubarCheckboxItem>
-                  );
-                }
-
-                return (
-                  <MenubarItem
-                    key={`${id}-${sectionIndex}-${itemIndex}`}
-                    disabled={!item.onClick}
-                    onSelect={(event) => selectMenuItem(event, item.onClick)}
-                  >
-                    {content}
-                  </MenubarItem>
-                );
-              })}
-            </MenubarGroup>
-          </Fragment>
-        ))}
-      </MenubarContent>
-    </MenubarMenu>
-  );
-};
-
-export function EditorMenuBar({ menus }: { menus: readonly MenuButtonProps[] }) {
-  return (
-    <ShadcnMenubar className="border-0">
-      {menus.map((menu) => (
-        <MenuButton key={menu.id} {...menu} />
-      ))}
-    </ShadcnMenubar>
-  );
-}
-
-export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapability }) {
+export function WorkbenchMenuContribution({
+  commands,
+}: {
+  readonly commands: WorkbenchCommandCapability;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -279,14 +185,11 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
     handleDatabaseEditor,
     handleOpenLogs,
   } = useMenubar();
-
   const currentPath = useActiveProjectPath();
   const projectAvailable = Boolean(currentPath);
-  const themeMode = useSettingsRead((state) => state.theme.mode ?? "dark");
-  const appearance = useSettingsRead((state) => state.appearance);
-  const updateAppearance = settingsUi.updateAppearance;
+  const { themeMode, appearance, updateAppearance } = useApplicationAppearance();
   const isLightTheme = themeMode === "light";
-  const windowActions = useCurrentWindowActions();
+  const windowControls = useCurrentWindowActions();
   const customChrome = useCustomTitleBar();
 
   const toggleThemeMode = () => {
@@ -335,20 +238,17 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
     { label: t("menubar.schemaViewer") },
   ];
 
-  const viewItems = buildViewMenuItems(t, viewState, viewActions);
   const windowItems = buildWindowMenuItems(t, editorCommandAuthorized, {
     splitRight: handleSplitRight,
     splitDown: handleSplitDown,
     openLogsWindow: handleOpenLogs,
   });
-
   const toolItems: MenuItem[] = [
     { label: t("menubar.debugger") },
     { label: t("menubar.profiler") },
     { label: "-", type: "separator" },
     { label: t("menubar.settings"), shortcut: "Ctrl+,", onClick: openSettings },
   ];
-
   const helpItems: MenuItem[] = [
     {
       label: t("menubar.documentation"),
@@ -370,11 +270,11 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
     { label: "-", type: "separator" },
     { label: t("menubar.about"), onClick: () => setAboutOpen(true) },
   ];
-  const menus: MenuButtonProps[] = [
+  const menus: WorkbenchMenuDefinition[] = [
     { id: "file", label: t("menubar.file"), items: fileItems },
     { id: "edit", label: t("menubar.edit"), items: editItems },
     { id: "data", label: t("menubar.data"), items: dataItems },
-    { id: "view", label: t("menubar.view"), items: viewItems },
+    { id: "view", label: t("menubar.view"), items: buildViewMenuItems(t, viewState, viewActions) },
     { id: "window", label: t("menubar.window"), items: windowItems },
     { id: "tools", label: t("menubar.tools"), items: toolItems },
     { id: "help", label: t("menubar.help"), items: helpItems },
@@ -382,55 +282,22 @@ export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapab
 
   return (
     <>
-      <WindowMenuBar
+      <WorkbenchMenuBar
+        menus={menus}
         customChrome={customChrome}
-        toolbar={
-          <>
-            <ToolbarIconButton
-              variant="ghost"
-              size="icon-lg"
-              onClick={toggleThemeMode}
-              className="self-center text-muted-foreground"
-              tooltip={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
-              aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
-            >
-              {isLightTheme ? (
-                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 12.8A8.5 8.5 0 1111.2 3a7 7 0 009.8 9.8z"
-                  />
-                </svg>
-              ) : (
-                <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64"
-                  />
-                  <circle cx="12" cy="12" r="4" strokeWidth={2} />
-                </svg>
-              )}
-            </ToolbarIconButton>
-          </>
-        }
-        windowActions={
-          <WindowChromeControls
-            maximized={windowActions.maximized}
-            minimize={windowActions.minimize}
-            toggleMaximize={windowActions.toggleMaximize}
-            close={windowActions.close}
-          />
-        }
-      >
-        <BrandLockup className="pointer-events-none self-center px-4" />
-
-        <EditorMenuBar menus={menus} />
-      </WindowMenuBar>
-      <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
+        themeToggle={{
+          isLightTheme,
+          label: isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight"),
+          onToggle: toggleThemeMode,
+        }}
+        windowControls={windowControls}
+      />
+      <AboutModal
+        open={aboutOpen}
+        onOpenChange={setAboutOpen}
+        onOpenRepository={() => void openExternalUrlWithDialog(APP_LINKS.repository, t)}
+        onReportIssue={() => void openExternalUrlWithDialog(APP_LINKS.reportIssue, t)}
+      />
     </>
   );
 }
