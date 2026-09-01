@@ -119,6 +119,7 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/database/read.ts", ["useDatabaseRead"]),
   viewCoreCapability("src/features/core/dataStore/graphEntityAccess.ts", ["GraphEntitiesState"]),
   viewCoreCapability("src/features/core/dataStore/nodeView.ts", [
+    "UINode",
     "uiNodeHasNoHeader",
     "uiNodeIsReroute",
   ]),
@@ -152,6 +153,11 @@ const VIEW_CORE_CAPABILITIES = [
     ],
   }),
   viewCoreCapability("src/features/core/editor/ui.ts", ["useEditorUi"]),
+  viewCoreCapability("src/features/core/editor/detail/detailTypes.ts", ["DetailTarget"]),
+  viewCoreCapability("src/features/core/execution/executionTypes.ts", [
+    "PinHistoryProjection",
+    "RunOutputProjection",
+  ]),
   viewCoreCapability("src/features/core/execution/executionVisualSession.ts", [
     "connectionKey",
     "getExecutionVisual",
@@ -324,6 +330,16 @@ const VIEW_DOMAIN_CAPABILITIES = [
     "pinDisplayTitle",
     "resolveNodePinDisplayLabel",
   ]),
+  viewCoreCapability("src/features/domain/editorProjection/connectionRules.ts", [
+    "isPinCompatible",
+    "resolveConnectionCompatibility",
+  ]),
+  viewCoreCapability("src/features/domain/editorProjection/graphRuntimeTypes.ts", [
+    "ConnectionData",
+    "NodeData",
+    "PinData",
+    "PinView",
+  ]),
   viewCoreCapability("src/features/domain/log/logDomains.ts", ["isLogDomainId", "LogDomainId"]),
   viewCoreCapability("src/features/domain/node/utils/nodeClassNames.ts", [
     "getNodeBackgroundStyle",
@@ -370,7 +386,6 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
         "ColumnInfo",
         "DatabaseDocumentDto",
         "DatabaseImportSourceDTO",
-        "DatabaseRecord",
         "DatabaseRow",
         "LoadDatabaseResult",
       ],

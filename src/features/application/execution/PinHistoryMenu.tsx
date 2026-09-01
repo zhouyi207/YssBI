@@ -12,7 +12,7 @@ import { pinHistoryCacheKey, useExecutionStore } from "@/features/core/execution
 import { resultRef } from "@/features/application/results";
 import { ResultService } from "@/services/result/resultService";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import type { PinHistoryProjection } from "@/shared/types/ui";
+import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import { openInspectableResult } from "./openInspectableResult";
 
 interface PinHistoryMenuProps {

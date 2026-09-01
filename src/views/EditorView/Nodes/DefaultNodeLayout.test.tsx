@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { UINode } from "@/shared/types/ui";
+import type { UINode } from "@/features/core/dataStore/nodeView";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 
 vi.mock("react-i18next", () => ({

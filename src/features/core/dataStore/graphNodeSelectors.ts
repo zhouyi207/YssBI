@@ -1,4 +1,4 @@
-import type { NodeData } from "@/shared/types/store/graph";
+import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 import { useGraphDataStore } from "./graphDataStore";
 

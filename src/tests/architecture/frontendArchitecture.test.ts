@@ -363,6 +363,53 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps shared packages limited to reusable contracts and presentation", () => {
+    withProductionTypeScriptProject((context) => {
+      const paths = productionTypeScriptSources(context).map(({ path }) => path);
+      const pathSet = new Set(paths);
+      const retiredPrefixes = [
+        "src/shared/types/state/",
+        "src/shared/types/store/",
+        "src/shared/types/visualization/",
+      ];
+      const retiredFiles = new Set([
+        "src/shared/types/dto/graphCommands.ts",
+        "src/shared/types/dto/graphConverters.ts",
+        "src/shared/types/dto/graphModel.ts",
+        "src/shared/types/dto/pinHydrate.ts",
+        "src/shared/types/ui/application.ts",
+        "src/shared/types/ui/detail.ts",
+        "src/shared/types/ui/editor.ts",
+        "src/shared/types/ui/execution.ts",
+        "src/shared/ui/ExcelSheetSelectModal.tsx",
+        "src/shared/ui/ImportModal.tsx",
+        "src/shared/ui/SqlConnectionModal.tsx",
+        "src/shared/ui/SqliteTableSelectModal.tsx",
+        "src/shared/ui/SqlRemoteTableSelectModal.tsx",
+        "src/shared/utils/pinCompatibility.ts",
+      ]);
+
+      expect(
+        paths.filter(
+          (path) =>
+            retiredPrefixes.some((prefix) => path.startsWith(prefix)) || retiredFiles.has(path),
+        ),
+      ).toEqual([]);
+
+      const ownerFiles = [
+        "src/features/core/dataStore/nodeView.ts",
+        "src/features/core/editor/detail/detailTypes.ts",
+        "src/features/core/execution/executionTypes.ts",
+        "src/features/core/ui/applicationUiTypes.ts",
+        "src/features/domain/editorProjection/connectionRules.ts",
+        "src/features/domain/editorProjection/graphRuntimeTypes.ts",
+        "src/shared/charts/ChartModel.ts",
+        "src/views/DataImport/ImportModal.tsx",
+      ];
+      expect(ownerFiles.filter((path) => !pathSet.has(path))).toEqual([]);
+    });
+  });
+
   it("keeps Activity panels independently contributed and DnD composed by the app", () => {
     withProductionTypeScriptProject((context) => {
       const sources = productionTypeScriptSources(context);

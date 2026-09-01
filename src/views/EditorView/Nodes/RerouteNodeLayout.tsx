@@ -1,7 +1,7 @@
 import type React from "react";
 import type { Pin as PinModel } from "@/shared/types/domain";
 import type { PortKindDto } from "@/shared/types/domain/editorProjection";
-import type { UINode } from "@/shared/types/ui";
+import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import {
   REROUTE_GRIP_SIZE_PX,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGraphSnapshot } from "./projectSnapshot";
-import type { GraphData } from "@/shared/types/store/graph";
+import type { GraphData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 function makeAccess(overrides: Partial<Parameters<typeof buildGraphSnapshot>[0]> = {}) {
   const node: GraphData["nodes"][number] = {

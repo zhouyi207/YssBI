@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DatabaseRecord } from "@/shared/types/dto/database";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { DataDetailPanel } from "./DataDetailPanel";
 
 vi.mock("react-i18next", () => ({

@@ -1,4 +1,4 @@
-import type { ExecutionEvent } from "@/shared/types/ui/execution";
+import type { ExecutionEvent } from "@/features/core/execution/executionTypes";
 import { applyExecutionVisualEvent } from "./executionVisualSession";
 
 let rafId: number | null = null;

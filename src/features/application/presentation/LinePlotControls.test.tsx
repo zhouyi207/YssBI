@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChartThemeContextProvider, type ChartThemeValue } from "@/shared/charts/core/theme";
-import type { ChartModel } from "@/shared/types/visualization/chartModel";
+import type { ChartModel } from "@/shared/charts/ChartModel";
 import { LinePlotControls } from "./LinePlotControls";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

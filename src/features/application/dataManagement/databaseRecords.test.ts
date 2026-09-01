@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDatabaseRecord, normalizeDatabases, type DatabaseRecord } from "./database";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import { normalizeDatabaseRecord, normalizeDatabases } from "./databaseRecords";
 
 describe("normalizeDatabaseRecord", () => {
   it("derives display name from csv engine path when name is missing", () => {

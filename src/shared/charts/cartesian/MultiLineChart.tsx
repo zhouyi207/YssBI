@@ -12,7 +12,7 @@ import { DEFAULT_CARTESIAN_MARGIN } from "@/shared/charts/core/margins";
 import { useChartTheme } from "@/shared/charts/core/theme";
 import type { ChartMargin } from "@/shared/charts/core/types";
 import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
-import type { XYPoint } from "@/shared/types/visualization/chartModel";
+import type { XYPoint } from "@/shared/charts/ChartModel";
 
 export interface MultiLineSeries {
   id: string;

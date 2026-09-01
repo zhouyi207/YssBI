@@ -1,6 +1,10 @@
 import type { DiagnosticDto, DiagnosticLocationDto } from "@/shared/types/domain/editorProjection";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import type { ConnectionData, NodeData, PinData } from "@/shared/types/store/graph";
+import type {
+  ConnectionData,
+  NodeData,
+  PinData,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,

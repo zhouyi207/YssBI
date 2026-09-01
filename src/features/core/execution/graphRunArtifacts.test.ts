@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { graphHasClearableArtifacts } from "./graphRunArtifacts";
-import type { GraphExecutionState } from "@/shared/types/ui";
+import type { GraphExecutionState } from "./executionTypes";
 
 function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
   return {

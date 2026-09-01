@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 import { VscAdd, VscRemove } from "react-icons/vsc";
 
 import { Button } from "@/components/ui/button";
-import type { NodeData, PinData, ConnectionData } from "@/shared/types/store/graph";
+import type {
+  NodeData,
+  PinData,
+  ConnectionData,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { GraphMutationCommandResult } from "@/features/core/history/types";
 import { Select } from "@/shared/ui/Select";
 import { graphMutationErrorMessageKey } from "@/features/application/editorMutation/graphMutationError";

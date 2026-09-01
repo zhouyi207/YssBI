@@ -8,7 +8,7 @@ import { useChartTheme } from "./core/theme";
 import type { ChartSurfaceVariant } from "./core/types";
 import { CorrelationMatrixChart } from "./statistical/CorrelationMatrixChart";
 import { CorrelogramChart } from "./statistical/CorrelogramChart";
-import type { ChartModel } from "@/shared/types/visualization/chartModel";
+import type { ChartModel } from "@/shared/charts/ChartModel";
 
 type ChartModelKind = ChartModel["kind"];
 type ChartRendererMap = {

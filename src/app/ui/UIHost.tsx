@@ -1,16 +1,11 @@
 import { applicationUi, useApplicationUiRead } from "@/features/application/ui/applicationUi";
+import { ExcelSheetSelectModal } from "@/views/DataImport/ExcelSheetSelectModal";
+import { ImportModal } from "@/views/DataImport/ImportModal";
+import { SqlConnectionModal } from "@/views/DataImport/SqlConnectionModal";
+import { SqliteTableSelectModal } from "@/views/DataImport/SqliteTableSelectModal";
+import { SqlRemoteTableSelectModal } from "@/views/DataImport/SqlRemoteTableSelectModal";
 
-import {
-  ExcelSheetSelectModal,
-  ImportModal,
-  InputModal,
-  MessageDialog,
-  Modal,
-  ProgressOverlay,
-  SqlConnectionModal,
-  SqliteTableSelectModal,
-  SqlRemoteTableSelectModal,
-} from "@/shared/ui";
+import { InputModal, MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
 
 export const UIHost = () => {
   const { modals, progress } = useApplicationUiRead();

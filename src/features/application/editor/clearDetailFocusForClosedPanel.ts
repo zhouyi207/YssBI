@@ -1,5 +1,5 @@
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import type { DetailFocus } from "@/shared/types/ui/detail";
+import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 
 export function clearDetailFocusForClosedPanel(resourceRef: string): void {
   const focus = useEditorStore.getState().detailFocus;

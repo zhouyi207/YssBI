@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PinData } from "@/shared/types/store/graph";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
   CONNECTION_SNAP_RADIUS_PX,
   resolveConnectionFeedback,

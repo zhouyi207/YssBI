@@ -1,7 +1,7 @@
 import { lookupGraphResourceByKind } from "@/features/domain/resource/resourceQueries";
 import type { ProjectResourceMeta, ResourceKey } from "@/features/domain/resource/resourceTypes";
 import { isCallFunctionNodeType } from "@/features/domain/nodeCatalog";
-import type { NodeData } from "@/shared/types/store/graph";
+import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 export type CallFunctionIssueKind = "empty_target" | "missing_target";
 

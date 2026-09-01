@@ -1,9 +1,9 @@
 import React, { useCallback } from "react";
 import { GraphPinController } from "../Pins/GraphPinController";
 import { Pin as PinModel } from "@/shared/types/domain";
-import type { UINode } from "@/shared/types/ui";
+import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
-import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
 

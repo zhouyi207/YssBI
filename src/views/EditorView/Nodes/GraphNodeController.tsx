@@ -13,7 +13,7 @@ import {
   getNodeMinSize,
 } from "@/features/domain/node/utils";
 import type { Pin as PinModel } from "@/shared/types/domain";
-import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NodeContextMenu } from "../ContextMenu";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SqliteTableSelectDialogOptions } from "@/shared/types/ui";
+import type { SqliteTableSelectDialogOptions } from "@/features/application/ui/applicationUi";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const SqliteTableSelectModal = ({

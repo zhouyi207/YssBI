@@ -8,9 +8,8 @@
  */
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { UINode } from "@/shared/types/ui";
 import { useGraphDataStore } from "./graphDataStore";
-import { toUiNode } from "./nodeView";
+import { toUiNode, type UINode } from "./nodeView";
 
 export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
   const nodeData = useGraphDataStore((s) =>

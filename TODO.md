@@ -899,3 +899,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Graph Canvas、Node 与 Pin 分别拆为 `Graph*Controller` 和 prop-only `Graph*View`，删除隐藏的
       `CanvasContextMenuContext` 与旧组件入口，并让 ContextMenu、overlay、execution/diagnostic badge 仅通过
       显式 capability 和 slot 组合。
+- [ ] 收紧前端 shared 所有权边界：将 graph、detail、execution 与 application UI 运行时类型迁回所属
+      feature，把 `ChartModel` 收入 source-independent `shared/charts`，将数据导入业务弹窗迁入 View，
+      并删除非 IPC DTO、废弃 store/state 类型及对应兼容入口。

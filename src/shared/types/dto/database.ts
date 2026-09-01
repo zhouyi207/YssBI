@@ -1,10 +1,7 @@
-/**
- * IPC database names are retained here as a stable import surface. The
- * structural contract and normalization policy live in the domain owner so
- * Application, Core, and Views do not need to depend on this wire module.
- */
+/** Database structures exchanged with the Tauri backend. */
 export type {
   ColumnInfo,
+  CsvEngineConfig,
   DatabaseCellValue,
   DatabaseDecl,
   DatabaseDeclDTO,
@@ -13,21 +10,11 @@ export type {
   DatabaseEngineSqlDTO,
   DatabaseImportSourceDTO,
   DatabaseImportSqlEngineDTO,
-  DatabaseRecord,
   DatabaseRow,
-  CsvEngineConfig,
   DuckDbEngineConfig,
   ExcelEngineConfig,
   InMemoryEngineConfig,
   LoadDatabaseResult,
   ParquetEngineConfig,
   SqlEngineConfig,
-} from "../domain/database";
-
-export {
-  databaseRecordFromLoad,
-  databaseSourcePath,
-  displayNameFromEngine,
-  normalizeDatabaseRecord,
-  normalizeDatabases,
-} from "../domain/database";
+} from "@/shared/types/domain/database";

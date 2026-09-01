@@ -7,7 +7,7 @@ import {
 export { outputPinRef, resultRef };
 export type { InspectableResultRef };
 import type { PinResultEntry, ResultDescriptor } from "./types";
-import type { PinHistoryProjection } from "@/shared/types/ui/execution";
+import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,

@@ -32,7 +32,7 @@ import {
   scalarPinInputKey,
 } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import type { PinHistoryProjection } from "@/shared/types/ui";
+import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import { PinContextMenu } from "../ContextMenu";
 import { GraphPinView, type GraphPinConnectionFeedbackViewModel } from "./GraphPinView";
 import { PinInput } from "./PinInput";

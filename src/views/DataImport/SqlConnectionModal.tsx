@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SqlConnectionDialogOptions } from "@/shared/types/ui";
+import type { SqlConnectionDialogOptions } from "@/features/application/ui/applicationUi";
 
 const DEFAULT_PORTS = { postgres: 5432, mysql: 3306, mariadb: 3306 } as const;
 

@@ -1,4 +1,4 @@
-import type { GraphExecutionState } from "@/shared/types/ui";
+import type { GraphExecutionState } from "./executionTypes";
 
 /** Clear frontend execution projections without touching backend result history. */
 export function clearedRunProjectionsPatch(

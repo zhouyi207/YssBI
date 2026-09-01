@@ -1,5 +1,5 @@
-import type { PinData } from "@/shared/types/store/graph";
-import { resolveConnectionCompatibility } from "@/shared/utils/pinCompatibility";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
 
 export const CONNECTION_SNAP_RADIUS_PX = 18;
 

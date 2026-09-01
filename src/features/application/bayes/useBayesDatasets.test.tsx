@@ -8,7 +8,8 @@ import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import type { DatabaseRecord, LoadDatabaseResult } from "@/shared/types/dto/database";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { LoadDatabaseResult } from "@/shared/types/dto/database";
 import { DatabaseService } from "@/services/database/databaseService";
 import { useBayesDatasets, type BayesDatasetsModel } from "./useBayesDatasets";
 

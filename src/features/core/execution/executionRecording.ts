@@ -1,5 +1,5 @@
 import { useExecutionStore } from "./useExecutionStore";
-import type { RecordedEvent } from "@/shared/types/ui/execution";
+import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 
 /** Prefer `executionComplete.hasError`; fall back to `nodeError` if the run aborted early. */
 export function recordingHadError(recording: RecordedEvent[]): boolean {

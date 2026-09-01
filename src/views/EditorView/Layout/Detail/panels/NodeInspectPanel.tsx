@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useGraphRead } from "@/features/core/graph/read";
-import type { NodeData } from "@/shared/types/store/graph";
+import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailForm } from "../shared/DetailForm";
 import { DetailText } from "../shared/DetailText";

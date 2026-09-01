@@ -9,7 +9,7 @@ import type {
   PinHistoryProjection,
   PinPreviewState,
   RunOutputProjection,
-} from "@/shared/types/ui/execution";
+} from "@/features/core/execution/executionTypes";
 
 export interface GraphExecutionProjection {
   readonly status: ExecutionStatus;
@@ -17,7 +17,7 @@ export interface GraphExecutionProjection {
   readonly nodeStates: ReadonlyMap<string, NodeExecutionState>;
   readonly completedConnections: ReadonlySet<string>;
   readonly flowingConnections: ReadonlySet<string>;
-  readonly recording: readonly import("@/shared/types/ui/execution").RecordedEvent[];
+  readonly recording: readonly import("@/features/core/execution/executionTypes").RecordedEvent[];
   readonly graphDirty: boolean;
   readonly runOutput: DeepReadonly<RunOutputProjection>;
   readonly pinHistories: ReadonlyMap<string, DeepReadonly<PinHistoryProjection>>;

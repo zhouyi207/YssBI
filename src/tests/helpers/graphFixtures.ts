@@ -1,6 +1,6 @@
 import type { PinDirection } from "@/shared/types/domain/pin";
 import type { DataType } from "@/shared/types/domain/dataType";
-import type { GraphData, PinData } from "@/shared/types/store/graph";
+import type { GraphData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 export interface MakeTestGraphOptions {
   path: string;

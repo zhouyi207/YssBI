@@ -6,7 +6,7 @@ import { useExecutionRead } from "@/features/core/execution/read";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import { resolveNodePinDisplayLabel } from "@/features/domain/editorProjection";
-import type { RunOutputProjection } from "@/shared/types/ui";
+import type { RunOutputProjection } from "@/features/core/execution/executionTypes";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 
 const EMPTY_RUN_OUTPUT: RunOutputProjection = {

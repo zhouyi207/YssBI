@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinHistoryProjection } from "@/shared/types/ui";
+import type { PinHistoryProjection } from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { pinPreviewCacheKey } from "./pinResultIndex";
 import {

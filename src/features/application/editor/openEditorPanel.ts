@@ -1,5 +1,5 @@
 import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
-import type { DetailFocus } from "@/shared/types/ui/detail";
+import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import type { EditorResourceTarget } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import {

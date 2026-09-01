@@ -13,7 +13,7 @@ import {
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
 import type { Pin } from "@/shared/types/domain";
-import type { PinData } from "@/shared/types/store/graph";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { EditorViewport } from "@/features/core/viewport";
 
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";

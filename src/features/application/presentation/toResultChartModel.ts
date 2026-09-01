@@ -1,5 +1,5 @@
 import type { ParsedPlotPayload, XySeriesPlotDTO } from "@/shared/types/dto/plotPayload";
-import type { AxisModel, ChartModel } from "@/shared/types/visualization";
+import type { AxisModel, ChartModel } from "@/shared/charts/ChartModel";
 
 function axes(data: XySeriesPlotDTO): { xAxis: AxisModel; yAxis: AxisModel } {
   return {

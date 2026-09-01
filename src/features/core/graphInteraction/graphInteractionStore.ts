@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { GraphPath, NodeId, PinData } from "@/shared/types";
+import type { GraphPath, NodeId } from "@/shared/types";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { ConnectionFeedback } from "@/features/core/canvas/connectionInteraction";
 
 export interface NodePosition {

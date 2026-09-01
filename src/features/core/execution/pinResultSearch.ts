@@ -2,7 +2,7 @@ import {
   resultRef,
   type InspectableResultRef,
 } from "@/features/domain/result/inspectableResultRef";
-import type { PinHistoryProjection } from "@/shared/types/ui";
+import type { PinHistoryProjection } from "./executionTypes";
 import { pinHistoryCacheKey } from "./pinResultIndex";
 
 export interface PinResultSearchEntry {

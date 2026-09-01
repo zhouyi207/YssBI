@@ -34,7 +34,7 @@ import {
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
 import { getExecutionEventGraph, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
-import type { RecordedEvent } from "@/shared/types/ui/execution";
+import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 import { ensureGraphExecutionTerminal } from "@/features/core/execution/executionRecording";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";

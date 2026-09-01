@@ -1,15 +1,15 @@
 /**
- * Store-layer graph data structures.
+ * Normalized editor-projection runtime structures.
  *
  * `graphDataStore` buckets are editor projections. `replaceProjection` is the
  * only bucket creation path and always installs projection basis, revision,
  * request generation, and diagnostics together with normalized entities.
  */
 
-import type { NodeId, PinId, GraphPath, ConnectionId } from "../domain/ids";
+import type { ConnectionId, GraphPath, NodeId, PinId } from "@/shared/types/domain/ids";
 export type { NodeId, PinId, GraphPath, ConnectionId };
-import type { PinDirection, PinUI, RuntimePinKind } from "../domain/pin";
-import type { DataType } from "../domain/dataType";
+import type { PinDirection, PinUI, RuntimePinKind } from "@/shared/types/domain/pin";
+import type { DataType } from "@/shared/types/domain/dataType";
 import type {
   DiagnosticDto,
   EditorInputBindingDto,
@@ -24,7 +24,7 @@ import type {
   ResolvedPortStatusDto,
   SchemaSummaryDto,
   TypeSummaryDto,
-} from "../domain/editorProjection";
+} from "@/shared/types/domain/editorProjection";
 
 // ==================== NodeData ====================
 /** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */
@@ -109,8 +109,8 @@ export interface GraphData {
   path: string;
   name: string;
   type: "event" | "function";
-  functionInputs?: import("../domain/graph").FunctionSignaturePin[];
-  functionOutputs?: import("../domain/graph").FunctionSignaturePin[];
+  functionInputs?: import("@/shared/types/domain/graph").FunctionSignaturePin[];
+  functionOutputs?: import("@/shared/types/domain/graph").FunctionSignaturePin[];
   nodes: NodeData[];
   pins: PinData[];
   connections: ConnectionData[];

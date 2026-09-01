@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NodeData, PinData } from "@/shared/types/store/graph";
+import type { NodeData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { REROUTE_NODE_STYLE_ID, toUiNode, uiNodeIsReroute } from "./nodeView";
 
 const baseNode: NodeData = {

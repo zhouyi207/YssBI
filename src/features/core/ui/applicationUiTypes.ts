@@ -1,14 +1,46 @@
 import type {
   DialogOptions,
-  ExcelSheetSelectDialogOptions,
-  ImportDialogOptions,
   InputDialogOptions,
   MessageDialogOptions,
   ProgressState,
-  SqlConnectionDialogOptions,
-  SqliteTableSelectDialogOptions,
-  SqlRemoteTableSelectDialogOptions,
-} from "./types";
+} from "@/shared/types/ui/types";
+
+export type ImportDataSourceType =
+  | "csv"
+  | "xlsx"
+  | "sqlite"
+  | "postgres"
+  | "mysql"
+  | "mariadb"
+  | "api";
+
+export interface ImportDialogOptions {
+  onSelect: (type: ImportDataSourceType) => void;
+}
+
+export interface SqliteTableSelectDialogOptions {
+  dbPath: string;
+  tables: string[];
+  onSelect: (table: string) => void;
+}
+
+export interface ExcelSheetSelectDialogOptions {
+  filePath: string;
+  sheets: string[];
+  onSelect: (sheet: string) => void;
+}
+
+export interface SqlConnectionDialogOptions {
+  engine: "postgres" | "mysql" | "mariadb";
+  onConnect: (connectionString: string) => void;
+}
+
+export interface SqlRemoteTableSelectDialogOptions {
+  connectionString: string;
+  engine: "postgres" | "mysql" | "mariadb";
+  tables: string[];
+  onSelect: (table: string) => void;
+}
 
 /** UI state exposed to the application composition root for rendering global overlays. */
 export type ApplicationUiModal =

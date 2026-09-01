@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { recordingHadError, firstNodeErrorMessage } from "./executionRecording";
-import type { RecordedEvent } from "@/shared/types/ui/execution";
+import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 
 function entry(event: RecordedEvent["event"]): RecordedEvent {
   return { event, timestamp: 0 };

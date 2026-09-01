@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { VscTable, VscClose } from "react-icons/vsc";
+import { VscDatabase, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,19 +10,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExcelSheetSelectDialogOptions } from "@/shared/types/ui";
+import type { SqlRemoteTableSelectDialogOptions } from "@/features/application/ui/applicationUi";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export const ExcelSheetSelectModal = ({
+const LABELS: Record<string, string> = {
+  postgres: "PostgreSQL",
+  mysql: "MySQL",
+  mariadb: "MariaDB",
+};
+
+export const SqlRemoteTableSelectModal = ({
   options,
   onClose,
 }: {
-  options: ExcelSheetSelectDialogOptions;
+  options: SqlRemoteTableSelectDialogOptions;
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
-  const { filePath, sheets, onSelect } = options;
-  const fileName = filePath.replace(/^.*[/\\]/, "");
+  const { connectionString, engine, tables, onSelect } = options;
+  const label = LABELS[engine] ?? engine;
+  const displayName = connectionString.includes("@")
+    ? connectionString.replace(/^[^@]+@/, "").replace(/\/.*$/, "")
+    : connectionString;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -30,7 +39,7 @@ export const ExcelSheetSelectModal = ({
         <DialogHeader className="border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="flex items-center gap-2">
-              <VscTable className="text-emerald-400" size={18} /> {t("importModal.selectSheet")}
+              <VscDatabase className="text-blue-400" size={18} /> {t("importModal.selectTable")}
             </DialogTitle>
             <Button
               type="button"
@@ -47,28 +56,30 @@ export const ExcelSheetSelectModal = ({
         <div className="p-6">
           <Tooltip>
             <TooltipTrigger asChild>
-              <p className="mb-3 truncate text-xs text-muted-foreground">{fileName}</p>
+              <p className="mb-3 truncate text-xs text-muted-foreground">
+                {label} · {displayName}
+              </p>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="max-w-sm break-all">
-              {filePath}
+              {connectionString}
             </TooltipContent>
           </Tooltip>
           <ScrollArea className="max-h-60">
             <div className="flex flex-col gap-2">
-              {sheets.map((sheet) => (
+              {tables.map((table) => (
                 <Button
-                  key={sheet}
+                  key={table}
                   type="button"
                   variant="outline"
                   size="lg"
                   onClick={() => {
-                    onSelect(sheet);
+                    onSelect(table);
                     onClose();
                   }}
                   className="h-auto justify-start gap-3 px-4 py-3 text-left"
                 >
-                  <Badge variant="success">Sheet</Badge>
-                  <span className="text-sm font-medium text-foreground">{sheet}</span>
+                  <Badge variant="default">Table</Badge>
+                  <span className="text-sm font-medium text-foreground">{table}</span>
                 </Button>
               ))}
             </div>
@@ -77,7 +88,7 @@ export const ExcelSheetSelectModal = ({
 
         <DialogFooter className="justify-center">
           <p className="text-[10px] font-medium text-muted-foreground">
-            {t("importModal.sheetHint")}
+            {t("importModal.tableHint")}
           </p>
         </DialogFooter>
       </DialogContent>

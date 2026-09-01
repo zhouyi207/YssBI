@@ -1,4 +1,4 @@
-import type { DetailTarget, DetailTargetInput } from "@/shared/types/ui/detail";
+import type { DetailTarget, DetailTargetInput } from "@/features/core/editor/detail/detailTypes";
 
 export function resolveDetailTarget(input: DetailTargetInput): DetailTarget | null {
   const { detailFocus, selectedLog } = input;

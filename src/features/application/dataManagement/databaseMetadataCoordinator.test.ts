@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatabaseRecord } from "@/shared/types/dto/database";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type {
   DatabaseMetadataCoordinatorDependencies,
   DatabaseMetadataOutcome,

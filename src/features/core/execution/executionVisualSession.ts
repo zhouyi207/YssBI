@@ -1,4 +1,4 @@
-import type { ExecutionEvent } from "@/shared/types/ui/execution";
+import type { ExecutionEvent } from "@/features/core/execution/executionTypes";
 
 export type ExecutionVisualSnapshot = {
   active: boolean;
@@ -145,11 +145,14 @@ export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEve
 
 export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
   status: ExecutionVisualSnapshot["status"];
-  nodeStates: Map<string, import("@/shared/types/ui/execution").NodeExecutionState>;
+  nodeStates: Map<string, import("@/features/core/execution/executionTypes").NodeExecutionState>;
   completedConnections: Set<string>;
   flowingConnections: Set<string>;
 } {
-  const nodeStates = new Map<string, import("@/shared/types/ui/execution").NodeExecutionState>();
+  const nodeStates = new Map<
+    string,
+    import("@/features/core/execution/executionTypes").NodeExecutionState
+  >();
   const now = Date.now();
 
   for (const nodeId of snap.executedNodeIds) {

@@ -12,7 +12,7 @@ import {
   getDataTypeCompatibility,
   getPinCompatibility,
   type ConnectionCandidatePin,
-} from "./pinCompatibility";
+} from "./connectionRules";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 const FLOAT64: DataType = { kind: "Float64" };

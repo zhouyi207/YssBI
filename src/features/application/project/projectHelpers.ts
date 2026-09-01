@@ -1,7 +1,7 @@
 /** Application-owned project queries used by editor and execution workflows. */
 
 import { resourceKey, useResourceStore } from "@/features/core/resource";
-import type { GraphSnapshotData } from "@/shared/types/store/graph";
+import type { GraphSnapshotData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { buildGraphSnapshot } from "@/features/core/dataStore/projectSnapshot";

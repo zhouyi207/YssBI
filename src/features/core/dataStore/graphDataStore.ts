@@ -7,7 +7,7 @@ import type {
   NodeId,
   PinData,
   PinId,
-} from "@/shared/types";
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,

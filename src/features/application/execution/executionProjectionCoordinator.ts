@@ -1,6 +1,6 @@
 import type { ExecutionUi } from "@/features/core/execution/ui";
 import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
-import type { PinHistoryProjection, RecordedEvent } from "@/shared/types/ui/execution";
+import type { PinHistoryProjection, RecordedEvent } from "@/features/core/execution/executionTypes";
 
 export interface ExecutionProjectionPublication {
   readonly startRun: (graphPath: string, runId: string) => void;

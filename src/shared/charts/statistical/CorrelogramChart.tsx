@@ -12,7 +12,7 @@ import {
 } from "@/shared/charts/core/tooltip";
 import type { ChartMargin } from "@/shared/charts/core/types";
 import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
-import { type CorrelogramBarDTO, hasLjungBoxStats } from "@/shared/types/report/correlogram";
+import type { CorrelogramPoint } from "@/shared/charts/ChartModel";
 
 const CORRELOGRAM_MARGIN: ChartMargin = {
   top: 28,
@@ -35,7 +35,7 @@ interface ConfidenceReference {
 }
 
 export interface CorrelogramChartProps {
-  data: CorrelogramBarDTO[];
+  data: CorrelogramPoint[];
   ciHalfWidth: number;
   title?: string;
   color?: string;
@@ -44,6 +44,12 @@ export interface CorrelogramChartProps {
 
 function formatPValueDisplay(pValue: number): string {
   return pValue < 0.0001 ? pValue.toExponential(2) : pValue.toFixed(4);
+}
+
+function hasLjungBoxStats(
+  point: CorrelogramPoint,
+): point is CorrelogramPoint & { qStat: number; pValue: number } {
+  return Number.isFinite(point.qStat) && Number.isFinite(point.pValue);
 }
 
 export function CorrelogramChart({
@@ -87,7 +93,7 @@ export function CorrelogramChart({
         .data([])
         .join("line");
       layers.marks
-        .selectAll<SVGRectElement, CorrelogramBarDTO>("rect.correlogram-bar")
+        .selectAll<SVGRectElement, CorrelogramPoint>("rect.correlogram-bar")
         .data([], (bar) => String(bar.lag))
         .join("rect");
       return;
@@ -161,7 +167,7 @@ export function CorrelogramChart({
       .raise();
 
     const bars = layers.marks
-      .selectAll<SVGRectElement, CorrelogramBarDTO>("rect.correlogram-bar")
+      .selectAll<SVGRectElement, CorrelogramPoint>("rect.correlogram-bar")
       .data(data, (bar) => String(bar.lag))
       .join("rect")
       .attr("class", "correlogram-bar")
@@ -176,7 +182,7 @@ export function CorrelogramChart({
       .attr("rx", 2)
       .style("cursor", "pointer");
 
-    const detachTooltip = attachMarkTooltip(bars as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
+    const detachTooltip = attachMarkTooltip(bars as D3Onable<SVGRectElement, CorrelogramPoint>, {
       tooltip,
       position: "anchor",
       getHtml: (bar) =>

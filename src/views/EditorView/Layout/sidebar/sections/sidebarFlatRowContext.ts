@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { DetailTarget } from "@/shared/types/ui/detail";
+import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
 import type { SidebarSectionActionConfig, SidebarSectionKey } from "@/features/core/sidebar";
 
 export type SidebarFlatRowContextValue = {

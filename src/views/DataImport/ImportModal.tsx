@@ -8,7 +8,6 @@ import {
   VscCloudDownload,
   VscChevronRight,
 } from "react-icons/vsc";
-import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
+import type {
+  ImportDataSourceType,
+  ImportDialogOptions,
+} from "@/features/application/ui/applicationUi";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type CategoryId = "file" | "sql" | "other";
@@ -39,7 +41,7 @@ const CATEGORIES: { id: CategoryId; icon: React.ReactNode; tone: string }[] = [
   },
   {
     id: "sql",
-    icon: <BsDatabaseFill size={15} />,
+    icon: <VscDatabase size={16} />,
     tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
   },
   {
@@ -67,25 +69,25 @@ const FILE_TYPES: ImportTypeConfig[] = [
 const SQL_TYPES: ImportTypeConfig[] = [
   {
     id: "sqlite",
-    icon: <BsDatabaseFill size={19} />,
+    icon: <VscDatabase size={19} />,
     tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
     comingSoon: false,
   },
   {
     id: "postgres",
-    icon: <BsDatabaseFill size={19} />,
+    icon: <VscDatabase size={19} />,
     tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300",
     comingSoon: false,
   },
   {
     id: "mysql",
-    icon: <BsDatabaseFill size={19} />,
+    icon: <VscDatabase size={19} />,
     tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300",
     comingSoon: false,
   },
   {
     id: "mariadb",
-    icon: <BsDatabaseFill size={19} />,
+    icon: <VscDatabase size={19} />,
     tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300",
     comingSoon: false,
   },

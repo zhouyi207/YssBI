@@ -6,7 +6,7 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { fetchChartPreview } from "@/services/chart/chartPreviewDataService";
 import type { ChartDocument, ChartPreviewPayload } from "@/shared/types/domain";
-import type { ChartModel } from "@/shared/types/visualization";
+import type { ChartModel } from "@/shared/charts/ChartModel";
 import { ChartPreview } from "./ChartPreview";
 
 vi.mock("@/services/chart/chartPreviewDataService", () => ({ fetchChartPreview: vi.fn() }));

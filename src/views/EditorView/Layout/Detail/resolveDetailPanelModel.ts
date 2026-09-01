@@ -1,4 +1,4 @@
-import type { DetailTarget } from "@/shared/types/ui/detail";
+import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
 import type { FunctionResourceView } from "@/features/core/resource/functionResourceView";
 import type { GraphResourceRecord } from "@/features/core/resource/resourceSelectors";
 import type { FunctionPinSpec } from "@/shared/types/domain/graph";

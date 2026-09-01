@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { XYPoint } from "@/shared/types/visualization/chartModel";
+import type { XYPoint } from "@/shared/charts/ChartModel";
 
 import {
   StatCard,

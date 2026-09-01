@@ -19,7 +19,7 @@ import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useEdgeDragPreview } from "@/features/core/canvas";
 import { getConnectPreview, subscribeConnectPreview } from "@/features/core/canvas/connectPreview";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import type { ConnectionData, PinData } from "@/shared/types";
+import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { EdgeData } from "@/features/domain/canvas/edgeData";
 import { ConnectionContextMenu } from "@/views/EditorView/ContextMenu";
 

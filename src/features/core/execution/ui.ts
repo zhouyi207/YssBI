@@ -1,5 +1,5 @@
-import type { RecordedEvent } from "@/shared/types/ui/execution";
-import type { PinHistoryProjection } from "@/shared/types/ui/execution";
+import type { RecordedEvent } from "@/features/core/execution/executionTypes";
+import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { pinHistoryCacheKey } from "./pinResultIndex";
 
@@ -20,7 +20,7 @@ export const executionUi: ExecutionUi = {
 
 export interface ExecutionResultUi {
   readonly recordPinHistory: (
-    projection: import("@/shared/types/ui/execution").PinHistoryProjection,
+    projection: import("@/features/core/execution/executionTypes").PinHistoryProjection,
   ) => void;
   readonly getPinHistory: (
     graphPath: string,

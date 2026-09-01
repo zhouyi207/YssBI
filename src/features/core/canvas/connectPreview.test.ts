@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction/graphInteractionStore";
-import type { PinData } from "@/shared/types/store/graph";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { getConnectPreview } from "./connectPreview";
 
 const sourcePin = {

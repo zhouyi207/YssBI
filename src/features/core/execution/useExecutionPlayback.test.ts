@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { useExecutionStore } from "./useExecutionStore";
 import { resetExecutionVisual } from "./executionVisualSession";
-import type { RecordedEvent } from "@/shared/types/ui/execution";
+import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 
 const SAMPLE_RECORDING: RecordedEvent[] = [
   { event: { event: "executionStart" }, timestamp: 0 },

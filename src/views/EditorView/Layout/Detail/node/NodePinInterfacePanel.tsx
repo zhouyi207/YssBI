@@ -1,7 +1,11 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useGraphRead } from "@/features/core/graph/read";
-import type { ConnectionData, NodeData, PinData } from "@/shared/types/store/graph";
+import type {
+  ConnectionData,
+  NodeData,
+  PinData,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
 import { detailEmptyHintClass } from "../shared/detailStyles";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";

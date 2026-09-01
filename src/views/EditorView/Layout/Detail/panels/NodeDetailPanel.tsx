@@ -6,7 +6,7 @@ import { useGraphRead } from "@/features/core/graph/read";
 import { derivePinConnectionView } from "@/features/core/dataStore/pinLinks";
 import { formatDiagnosticLocationLabel } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 
-import type { PinData, PinView } from "@/shared/types/store/graph";
+import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";

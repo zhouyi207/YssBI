@@ -1,5 +1,5 @@
 import { timeFormat } from "d3";
-import type { AxisValueType } from "@/shared/types/visualization";
+import type { AxisValueType } from "@/shared/charts/ChartModel";
 
 /** 将 plot 轴数值转为 Date（date=天数, datetime=微秒） */
 export function numToPlotDate(v: number, format: "date" | "datetime"): Date {

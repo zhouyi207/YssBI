@@ -2,9 +2,36 @@
  * Store `NodeData` + pin 切片 → 画布 `UINode` 单点桥接
  */
 
-import type { NodeData, PinData, PinView } from "@/shared/types/store/graph";
-import type { UINode } from "@/shared/types/ui";
+import type {
+  NodeData,
+  PinData,
+  PinView,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { Node as DomainNode } from "@/shared/types/domain/node";
+import type {
+  DiagnosticDto,
+  NodeDisplayDto,
+  ParameterEditorDto,
+} from "@/shared/types/domain/editorProjection";
 import { derivePinConnectionView } from "./pinLinks";
+
+export interface UINode extends Omit<DomainNode, "inputs" | "outputs"> {
+  uiStyle: string;
+  position: { x: number; y: number };
+  isInternal?: boolean;
+  paramsKind?: "none" | "variable" | "subGraph" | "dataFrame";
+  variableId?: string;
+  variableName?: string;
+  variableType?: string;
+  subGraphPath?: string;
+  dataframeId?: string;
+  display?: NodeDisplayDto;
+  parameterEditors?: ParameterEditorDto[];
+  diagnostics?: DiagnosticDto[];
+  centerSymbol?: string;
+  inputs: PinView[];
+  outputs: PinView[];
+}
 
 export const REROUTE_NODE_STYLE_ID = "builtin.reroute";
 

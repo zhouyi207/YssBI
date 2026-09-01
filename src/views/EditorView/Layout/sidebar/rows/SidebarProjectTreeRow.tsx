@@ -2,7 +2,7 @@ import { VscAdd } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { ProjectResourceBrowserRow } from "@/features/application/sidebar/projectResourceBrowser";
-import type { DetailTarget } from "@/shared/types/ui/detail";
+import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
 import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import { SIDEBAR_ROW_ICON_SIZE, SidebarTreeCategoryRow } from "../../sidebarUi";

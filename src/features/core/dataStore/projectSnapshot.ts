@@ -1,5 +1,8 @@
 import type { FunctionSignaturePin } from "@/shared/types/domain/graph";
-import type { GraphData, GraphSnapshotData } from "@/shared/types/store/graph";
+import type {
+  GraphData,
+  GraphSnapshotData,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { ProjectResourceMeta } from "@/features/core/resource/resourceTypes";
 
 export type FunctionSignatureSnapshot = {

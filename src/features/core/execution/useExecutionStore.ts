@@ -2,9 +2,9 @@ import { create } from "zustand";
 import type {
   ExecutionState,
   GraphExecutionState,
-  RecordedEvent,
   PinHistoryProjection,
-} from "@/shared/types/ui";
+  RecordedEvent,
+} from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
 import { flushLiveExecutionEventsNow } from "./executionLiveFeed";

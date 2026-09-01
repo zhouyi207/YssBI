@@ -18,7 +18,7 @@ import {
 } from "@/shared/charts/core/tooltip";
 import type { ChartMargin, ChartSurfaceVariant } from "@/shared/charts/core/types";
 import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
-import type { HistogramBin } from "@/shared/types/domain/dataframe";
+import type { HistogramBin } from "@/shared/charts/ChartModel";
 
 const COMPACT_HISTOGRAM_MARGIN: ChartMargin = {
   top: 4,
@@ -30,7 +30,7 @@ const COMPACT_HISTOGRAM_MARGIN: ChartMargin = {
 const CHART_TOOLTIP_CLASS =
   "absolute pointer-events-none rounded px-2 py-1 bg-popover text-popover-foreground border border-border shadow-lg opacity-0 transition-opacity duration-100 z-10 whitespace-nowrap";
 
-export type { HistogramBin } from "@/shared/types/domain/dataframe";
+export type { HistogramBin } from "@/shared/charts/ChartModel";
 
 export interface HistogramChartProps {
   data: HistogramBin[];

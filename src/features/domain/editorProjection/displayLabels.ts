@@ -1,5 +1,5 @@
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import type { NodeData, PinData } from "@/shared/types/store/graph";
+import type { NodeData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "./portAddressKey";
 
 type NodeLabelSource = Pick<NodeData, "title" | "display">;

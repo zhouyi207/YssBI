@@ -17,7 +17,7 @@ import { openInspectableResult } from "@/features/application/execution/openInsp
 import { resultRef } from "@/features/application/results";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
-import type { PinData } from "@/shared/types/store/graph";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
 import {

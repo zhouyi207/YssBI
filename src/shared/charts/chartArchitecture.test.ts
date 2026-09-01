@@ -9,6 +9,7 @@ const sourceRoot = resolve(repositoryRoot, "src");
 
 const forbiddenRules = [
   { from: /^src\/shared\/charts\//, to: /^@\/(?:views|services|features)\// },
+  { from: /^src\/shared\/charts\//, to: /^@\/shared\/types(?:\/|$)/ },
   { from: /^src\/shared\/charts\/cartesian\//, to: /^@\/shared\/charts\/statistical(?:\/|$)/ },
   { from: /^src\/shared\/charts\/statistical\//, to: /^@\/shared\/charts\/cartesian(?:\/|$)/ },
   { from: /^src\/shared\/charts\/(?:core|cartesian|statistical)\//, to: /^@\/shared\/charts$/ },

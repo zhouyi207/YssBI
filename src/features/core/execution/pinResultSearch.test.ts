@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PinHistoryProjection } from "@/shared/types/ui";
+import type { PinHistoryProjection } from "./executionTypes";
 import { pinHistoryCacheKey } from "./pinResultIndex";
 import {
   buildPinResultSearchEntry,

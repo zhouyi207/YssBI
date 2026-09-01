@@ -4,7 +4,7 @@ import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import type { PinDataTypeDefinition, PinSlot, PinDefinitionDTO } from "@/shared/types/domain/node";
 import { structCanAccept } from "@/shared/types/domain/typeSystem";
-import type { PinData } from "@/shared/types/store/graph";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
 export type ConnectionCandidatePin = Pin &
   Partial<Pick<PinData, "connections" | "kind" | "orphan" | "resolvedType">>;

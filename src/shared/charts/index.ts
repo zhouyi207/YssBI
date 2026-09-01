@@ -1,5 +1,13 @@
 export { ChartRenderer } from "./ChartRenderer";
 export type { ChartRendererProps } from "./ChartRenderer";
+export type {
+  AxisModel,
+  AxisValueType,
+  ChartModel,
+  CorrelogramPoint,
+  HistogramBin,
+  XYPoint,
+} from "./ChartModel";
 export { DEFAULT_CARTESIAN_MARGIN } from "./core/margins";
 export type { ChartMargin } from "./core/types";
 export { KdeChart } from "./cartesian/KdeChart";

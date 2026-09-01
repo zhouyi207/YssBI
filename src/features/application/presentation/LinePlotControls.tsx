@@ -2,7 +2,7 @@ import { useCallback, useId, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { LineChart } from "@/shared/charts/cartesian/LineChart";
-import type { ChartModel } from "@/shared/types/visualization/chartModel";
+import type { ChartModel } from "@/shared/charts/ChartModel";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 
 type LineChartModel = Extract<ChartModel, { kind: "line" }>;

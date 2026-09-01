@@ -5,8 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PortKindDto } from "@/shared/types/dto/editorProjection";
-import type { PinView } from "@/shared/types/store/graph";
-import type { UINode } from "@/shared/types/ui";
+import type { PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { UINode } from "@/features/core/dataStore/nodeView";
 import { GraphNodeView } from "./GraphNodeView";
 import { RerouteNodeLayout } from "./RerouteNodeLayout";
 

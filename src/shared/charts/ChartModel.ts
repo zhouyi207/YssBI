@@ -1,5 +1,3 @@
-import type { PlotCorrelogramBarDTO } from "@/shared/types/report";
-
 export type AxisValueType = "number" | "date" | "datetime";
 
 export interface XYPoint {
@@ -10,6 +8,18 @@ export interface XYPoint {
 export interface AxisModel {
   label?: string;
   valueType: AxisValueType;
+}
+
+export interface CorrelogramPoint {
+  lag: number;
+  value: number;
+  qStat?: number;
+  pValue?: number;
+}
+
+export interface HistogramBin {
+  label: string;
+  count: number;
 }
 
 export type ChartModel =
@@ -31,7 +41,7 @@ export type ChartModel =
     }
   | {
       kind: "histogram";
-      bins: { label: string; count: number }[];
+      bins: HistogramBin[];
       xLabel?: string;
       yLabel?: string;
       compact?: boolean;
@@ -46,7 +56,7 @@ export type ChartModel =
     }
   | {
       kind: "correlogram";
-      acf: PlotCorrelogramBarDTO[];
-      pacf: PlotCorrelogramBarDTO[];
+      acf: CorrelogramPoint[];
+      pacf: CorrelogramPoint[];
       ciHalfWidth: number;
     };

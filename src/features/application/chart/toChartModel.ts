@@ -1,5 +1,5 @@
 import type { ChartPreviewPayload } from "@/shared/types/domain";
-import type { ChartModel } from "@/shared/types/visualization";
+import type { ChartModel } from "@/shared/charts/ChartModel";
 
 export function toChartModel(payload: ChartPreviewPayload): ChartModel | null {
   switch (payload.kind) {

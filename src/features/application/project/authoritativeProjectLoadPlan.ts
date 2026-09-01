@@ -16,7 +16,7 @@ import {
 } from "@/features/core/resource";
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import type { ChartIndexEntry } from "@/shared/types/domain/chart";
-import type { DetailFocus } from "@/shared/types/ui/detail";
+import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import { LoadStatus } from "@/shared/types/ui/common";
 

@@ -2,16 +2,18 @@ import {
   DialogOptions,
   InputDialogOptions,
   MessageDialogOptions,
-  ImportDialogOptions,
-  SqliteTableSelectDialogOptions,
-  ExcelSheetSelectDialogOptions,
-  SqlConnectionDialogOptions,
-  SqlRemoteTableSelectDialogOptions,
   ConfirmTriResult,
   ProgressState,
 } from "@/shared/types/ui";
-
-import type { ApplicationUiModal, ApplicationUiState } from "@/shared/types/ui";
+import type {
+  ApplicationUiModal,
+  ApplicationUiState,
+  ExcelSheetSelectDialogOptions,
+  ImportDialogOptions,
+  SqlConnectionDialogOptions,
+  SqliteTableSelectDialogOptions,
+  SqlRemoteTableSelectDialogOptions,
+} from "./applicationUiTypes";
 
 type UIModal = ApplicationUiModal;
 type UIState = ApplicationUiState;

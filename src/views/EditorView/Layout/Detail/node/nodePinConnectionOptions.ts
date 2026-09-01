@@ -1,5 +1,9 @@
-import { resolveConnectionCompatibility } from "@/shared/utils/pinCompatibility";
-import type { ConnectionData, NodeData, PinData } from "@/shared/types/store/graph";
+import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
+import type {
+  ConnectionData,
+  NodeData,
+  PinData,
+} from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,

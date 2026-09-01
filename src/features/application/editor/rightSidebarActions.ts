@@ -1,4 +1,4 @@
-import type { DetailFocus } from "@/shared/types/ui/detail";
+import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
 import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
 import { updateEditorGroupSelectedNodeIds } from "@/features/core/editor";
