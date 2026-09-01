@@ -1,8 +1,8 @@
 import React, { useCallback } from "react";
-import { Pin } from "../Pins/Pin";
+import { GraphPinController } from "../Pins/GraphPinController";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
-import { useNodeStyle } from "@/features/core/node";
+import type { GraphContextMenuActions } from "@/features/application/editor";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ interface MathNodeLayoutProps {
   activePin?: PinModel | null;
   graphPath?: string;
   groupId?: string;
+  contextMenuActions?: GraphContextMenuActions | null;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -33,13 +34,14 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   activePin,
   graphPath,
   groupId,
+  contextMenuActions,
   onAddInput,
   onRemovePin,
   onPinClick,
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const { centerSymbol } = useNodeStyle(node);
+  const centerSymbol = node.centerSymbol;
 
   const inputsExec = node.inputs.filter(isExecPin);
   const inputsData = node.inputs.filter((p) => !isExecPin(p));
@@ -89,11 +91,12 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
         <div className="flex gap-4 px-2 pt-2 z-10 items-start">
           <div className="flex flex-col gap-1 items-start flex-1">
             {inputsExec.map((pin) => (
-              <Pin
+              <GraphPinController
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
                 groupId={groupId}
+                contextMenuActions={contextMenuActions}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -105,11 +108,12 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
           <div className="flex-1" />
           <div className="flex flex-col gap-1 items-end flex-1">
             {outputsExec.map((pin) => (
-              <Pin
+              <GraphPinController
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
                 groupId={groupId}
+                contextMenuActions={contextMenuActions}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -125,11 +129,12 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
       <div className="flex-1 flex gap-4 px-2 py-2 items-center z-10">
         <div className="flex flex-col gap-1 items-start flex-1">
           {inputsData.map((pin) => (
-            <Pin
+            <GraphPinController
               key={pin.id}
               {...pin}
               graphPath={graphPath}
               groupId={groupId}
+              contextMenuActions={contextMenuActions}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
@@ -157,11 +162,12 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
         <div className="flex-1" />
         <div className="flex flex-col gap-1 items-end flex-1">
           {outputsData.map((pin) => (
-            <Pin
+            <GraphPinController
               key={pin.id}
               {...pin}
               graphPath={graphPath}
               groupId={groupId}
+              contextMenuActions={contextMenuActions}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}

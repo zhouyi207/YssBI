@@ -466,6 +466,81 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps Graph UI stateful controllers separate from prop-only views", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const sourceByPath = new Map(sources.map(({ path, source }) => [path, source]));
+      const retiredGraphUiFiles = new Set([
+        "src/features/application/editor/CanvasContextMenuContext.tsx",
+        "src/views/EditorView/Canvas/core/Canvas.tsx",
+        "src/views/EditorView/Nodes/CanvasNode.tsx",
+        "src/views/EditorView/Nodes/Node.tsx",
+        "src/views/EditorView/Nodes/NodeContainer.tsx",
+        "src/views/EditorView/Pins/Pin.tsx",
+      ]);
+      expect(
+        sources.map(({ path }) => path).filter((path) => retiredGraphUiFiles.has(path)),
+      ).toEqual([]);
+
+      const requiredGraphUiFiles = [
+        "src/views/EditorView/Canvas/core/GraphCanvasController.tsx",
+        "src/views/EditorView/Canvas/core/GraphCanvasView.tsx",
+        "src/views/EditorView/Nodes/GraphNodeController.tsx",
+        "src/views/EditorView/Nodes/GraphNodeView.tsx",
+        "src/views/EditorView/Pins/GraphPinController.tsx",
+        "src/views/EditorView/Pins/GraphPinView.tsx",
+      ];
+      expect(requiredGraphUiFiles.filter((path) => !sourceByPath.has(path))).toEqual([]);
+
+      const retiredContextIdentifiers = [
+        "CanvasContextMenuProvider",
+        "useCanvasContextMenuActions",
+        "useCanvasContextMenuActionsOptional",
+      ];
+      expect(
+        sources.flatMap(({ path, source }) =>
+          retiredContextIdentifiers
+            .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
+            .map((identifier) => `${path}:${identifier}`),
+        ),
+      ).toEqual([]);
+
+      const viewContracts = [
+        {
+          path: "src/views/EditorView/Canvas/core/GraphCanvasView.tsx",
+          slots: ["viewportGridSlot", "connectionPreviewSlot", "graphContentSlot", "overlaySlot"],
+        },
+        {
+          path: "src/views/EditorView/Nodes/GraphNodeView.tsx",
+          slots: ["contentSlot", "executionBadgeSlot", "diagnosticBadgeSlot", "contextMenuSlot"],
+        },
+        {
+          path: "src/views/EditorView/Pins/GraphPinView.tsx",
+          slots: ["inputSlot", "contextMenuSlot"],
+        },
+      ];
+      for (const { path, slots } of viewContracts) {
+        const source = sourceByPath.get(path) ?? "";
+        expect(source, path).not.toMatch(/from\s+["']@\/(?:features|services)\//u);
+        expect(source, path).not.toMatch(/\buse[A-Z]\w*\s*\(/u);
+        for (const slot of slots) expect(source, `${path}:${slot}`).toContain(slot);
+      }
+
+      const canvasController =
+        sourceByPath.get("src/views/EditorView/Canvas/core/GraphCanvasController.tsx") ?? "";
+      expect(canvasController).toContain(
+        "contextMenuActions={interactive ? contextMenuActions : null}",
+      );
+      expect(canvasController).toContain("overlaySlot=");
+      expect(sourceByPath.get("src/views/EditorView/Nodes/GraphNodeController.tsx")).toContain(
+        "executionBadgeSlot=",
+      );
+      expect(sourceByPath.get("src/views/EditorView/Pins/GraphPinController.tsx")).toContain(
+        "contextMenuSlot=",
+      );
+    });
+  });
+
   it("classifies every frontend production source exactly once", () => {
     const emptyMembership = Object.fromEntries(
       [

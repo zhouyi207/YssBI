@@ -18,7 +18,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { resetResultQueryProject } from "@/features/application/results";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { Pin, pinConnectionFeedbackAttributes } from "./Pin";
+import { GraphPinController } from "./GraphPinController";
+import { pinConnectionFeedbackAttributes } from "./GraphPinView";
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
@@ -50,10 +51,12 @@ describe("Pin connection feedback", () => {
     expect(pinConnectionFeedbackAttributes({ kind: "append" })).toEqual({
       "data-connection-feedback": "append",
     });
-    expect(pinConnectionFeedbackAttributes({ kind: "invalid", reason: "capacity" })).toEqual({
-      "data-connection-feedback": "invalid",
-      "data-connection-invalid-reason": "capacity",
-    });
+    expect(pinConnectionFeedbackAttributes({ kind: "invalid", invalidReason: "capacity" })).toEqual(
+      {
+        "data-connection-feedback": "invalid",
+        "data-connection-invalid-reason": "capacity",
+      },
+    );
   });
 });
 
@@ -107,7 +110,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <Pin {...pin} graphPath={graphPath} />
+          <GraphPinController {...pin} graphPath={graphPath} />
         </TooltipProvider>,
       ),
     );
@@ -170,7 +173,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <Pin {...pin} graphPath={graphPath} />
+          <GraphPinController {...pin} graphPath={graphPath} />
         </TooltipProvider>,
       ),
     );
@@ -230,7 +233,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <Pin {...pin} graphPath={functionPath} />
+          <GraphPinController {...pin} graphPath={functionPath} />
         </TooltipProvider>,
       ),
     );

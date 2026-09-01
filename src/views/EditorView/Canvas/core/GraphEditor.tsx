@@ -1,5 +1,5 @@
 import { memo } from "react";
-import Canvas from "./Canvas";
+import { GraphCanvasController } from "./GraphCanvasController";
 import { useIsActiveEditorPanel } from "@/features/application/editor";
 import { CanvasDropZone } from "./CanvasDropZone";
 import { useGraphRead } from "@/features/core/graph/read";
@@ -54,7 +54,7 @@ export const GraphEditor = memo(function GraphEditor({
           mode={mode}
         >
           {graphReady ? (
-            <Canvas
+            <GraphCanvasController
               mode={mode}
               panelInstanceId={panelInstanceId}
               groupId={groupId}

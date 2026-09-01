@@ -1,7 +1,8 @@
 import React, { useCallback } from "react";
-import { Pin } from "../Pins/Pin";
+import { GraphPinController } from "../Pins/GraphPinController";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
+import type { GraphContextMenuActions } from "@/features/application/editor";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ interface DefaultNodeLayoutProps {
   activePin?: PinModel | null;
   graphPath?: string;
   groupId?: string;
+  contextMenuActions?: GraphContextMenuActions | null;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -38,6 +40,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   activePin,
   graphPath,
   groupId,
+  contextMenuActions,
   onAddInput,
   onRemovePin,
   onPinClick,
@@ -110,11 +113,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
               {inputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
                 return (
-                  <Pin
+                  <GraphPinController
                     key={pin.id}
                     {...pin}
                     graphPath={graphPath}
                     groupId={groupId}
+                    contextMenuActions={contextMenuActions}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -130,11 +134,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
               {outputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
                 return (
-                  <Pin
+                  <GraphPinController
                     key={pin.id}
                     {...pin}
                     graphPath={graphPath}
                     groupId={groupId}
+                    contextMenuActions={contextMenuActions}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -154,11 +159,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             {inputsData.map((pin) => {
               const ds = getPinDragState(pin);
               return (
-                <Pin
+                <GraphPinController
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
                   groupId={groupId}
+                  contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}
@@ -174,11 +180,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             {outputsData.map((pin) => {
               const ds = getPinDragState(pin);
               return (
-                <Pin
+                <GraphPinController
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
                   groupId={groupId}
+                  contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}

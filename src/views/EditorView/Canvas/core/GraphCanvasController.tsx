@@ -5,28 +5,28 @@ import {
   useCanvasViewport,
   useCanvasWheelZoom,
   useEditorCanvas,
+  type EditorCanvasScope,
+  type GraphContextMenuActions,
 } from "@/features/application/editor";
-import type { EditorCanvasScope } from "@/features/application/editor";
-import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
-import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useNodeDragPreview, useSelectionBoxPreview } from "@/features/core/canvas";
-import { useGraphRead } from "@/features/core/graph/read";
 import { useExecutionVisualBinder } from "@/features/core/execution";
-import { editorViewportScope } from "@/features/core/viewport/viewportScope";
+import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
+import { editorViewportScope } from "@/features/core/viewport/viewportScope";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { Pin } from "@/shared/types/domain";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import { CanvasNode } from "../../Nodes/CanvasNode";
+import { GraphNodeController } from "../../Nodes/GraphNodeController";
 import CanvasOverlays, { type CanvasOverlaysModel } from "../overlays/CanvasOverlays";
 import { ConnectionLine } from "./ConnectionLine";
 import { EdgesOverlay } from "./EdgesOverlay";
+import { GraphCanvasView } from "./GraphCanvasView";
 import { TransformContainer } from "./TransformContainer";
 import { ViewportGrid } from "./ViewportGrid";
 
 const EMPTY_NODE_IDS: string[] = [];
 
-export interface CanvasProps {
+export interface GraphCanvasControllerProps {
   mode: "interactive" | "preview";
   panelInstanceId: string;
   groupId: string;
@@ -34,13 +34,13 @@ export interface CanvasProps {
   graphKind: "event" | "function";
 }
 
-export default function Canvas({
+export function GraphCanvasController({
   mode,
   panelInstanceId,
   groupId,
   graphPath,
   graphKind,
-}: CanvasProps) {
+}: GraphCanvasControllerProps) {
   const interactive = mode === "interactive";
   const scope = useMemo<EditorCanvasScope>(
     () => ({ panelInstanceId, groupId, graphPath, graphKind }),
@@ -78,7 +78,6 @@ export default function Canvas({
     },
   } = useEditorCanvas({ mode, scope });
   const activeTabId = activeGraph?.graphPath ?? null;
-
   const gesturePinData = useGraphInteractionUi((state) => {
     if (!interactive || !activeTabId) return null;
     const interaction = state.interactions[activeTabId];
@@ -89,10 +88,8 @@ export default function Canvas({
       ? interaction.session.source
       : null;
   });
-
   const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
-
   const viewportScope = useMemo(
     () => (activeTabId ? editorViewportScope(groupId, activeTabId) : null),
     [activeTabId, groupId],
@@ -112,7 +109,6 @@ export default function Canvas({
   useExecutionVisualBinder(canvasElementRef, interactive ? (activeTabId ?? undefined) : undefined);
 
   const selectedNodeIdsSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
-
   const graphNodeIds = useGraphRead((snapshot) =>
     activeTabId
       ? (snapshot.graphEntities[activeTabId]?.graphNodes ?? EMPTY_NODE_IDS)
@@ -123,14 +119,12 @@ export default function Canvas({
       ? (snapshot.graphEntities[activeTabId]?.sourceRevision ?? null)
       : null,
   );
-
   const { getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
     groupId,
     activeTabId,
   );
   useCanvasWheelZoom(canvasElementRef, viewportScope, interactive);
-
   const {
     variableDropMenu,
     setVariableDropMenu,
@@ -150,7 +144,6 @@ export default function Canvas({
     createNode,
     enabled: interactive,
   });
-
   const { handleNodePaletteSelect } = useCanvasOverlayHandlers({
     canvasElementRef,
     panelInstanceId,
@@ -160,20 +153,17 @@ export default function Canvas({
     setContextMenu,
     setPendingConnection,
   });
-
   const activePin = useMemo<Pin | null>(() => {
     if (!interactive) return null;
     if (gesturePinData) return structuredClone(gesturePinData) as unknown as Pin;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
     return null;
   }, [contextMenu, gesturePinData, interactive, pendingConnection]);
-
   const sourcePort =
     pendingConnection && "address" in pendingConnection
       ? ((pendingConnection as typeof pendingConnection & { address?: PortAddressDto }).address ??
         null)
       : null;
-
   const handlePaletteSelect = useCallback(
     (descriptor: NodeCreationDescriptor, locale: string) => {
       if (contextMenu?.visible) {
@@ -182,21 +172,18 @@ export default function Canvas({
     },
     [contextMenu, handleNodePaletteSelect],
   );
-
   const handleSelectedConnectionIdsChange = useCallback(
-    (connectionIds: string[], graphPath: string, targetGroupId: string) => {
-      if (graphPath === activeTabId && targetGroupId === groupId) {
+    (connectionIds: string[], targetGraphPath: string, targetGroupId: string) => {
+      if (targetGraphPath === activeTabId && targetGroupId === groupId) {
         setSelectedConnectionIds(connectionIds, targetGroupId);
       }
     },
     [activeTabId, groupId, setSelectedConnectionIds],
   );
-
   const closePalette = useCallback(() => {
     setContextMenu(null);
     setPendingConnection(null);
   }, [setContextMenu, setPendingConnection]);
-
   const overlayModel = useMemo(
     (): CanvasOverlaysModel => ({
       graph: activeGraph
@@ -263,10 +250,8 @@ export default function Canvas({
       variableDropMenu,
     ],
   );
-
-  const isDraggingPin = activePin != null;
   const contextMenuActions = useMemo(
-    (): CanvasContextMenuActions => ({
+    (): GraphContextMenuActions => ({
       selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
       copyNode: (nodeId) => copyNodes([nodeId]),
       cutNode: (nodeId) => cutNodes([nodeId]),
@@ -292,83 +277,73 @@ export default function Canvas({
       setSelectedNodeIds,
     ],
   );
-
-  const canvasElement = (
-    <div
-      ref={canvasElementRef}
-      data-editor-panel-instance-id={panelInstanceId}
-      data-editor-graph-path={activeTabId ?? undefined}
-      data-editor-graph-kind={graphKind}
-      className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
-    >
-      <ViewportGrid viewportScope={viewportScope} />
-
-      <div
-        className="absolute inset-0"
-        onPointerDown={onCanvasPointerDown}
-        onContextMenu={interactive ? handleContextMenu : undefined}
-      >
-        <ConnectionLine
-          viewportScope={viewportScope}
+  const isDraggingPin = activePin != null;
+  const connectionPreviewSlot = (
+    <ConnectionLine
+      viewportScope={viewportScope}
+      getPinWorldPos={getPinWorldPos}
+      getCanvasLocalPoint={getCanvasLocalPoint}
+      pendingConnection={interactive ? pendingConnection : null}
+      menuPos={interactive ? contextMenu : null}
+    />
+  );
+  const graphContentSlot = (
+    <TransformContainer viewportScope={viewportScope}>
+      {interactive ? (
+        <EdgesOverlay
+          mode="interactive"
+          graphPath={activeTabId ?? ""}
+          groupId={groupId}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
-          pendingConnection={interactive ? pendingConnection : null}
-          menuPos={interactive ? contextMenu : null}
+          dimmed={isDraggingPin}
+          selectedNodeIds={selectedNodeIds}
+          selectedConnectionIds={selectedConnectionIds}
+          onSelectedConnectionIdsChange={handleSelectedConnectionIdsChange}
+          onBreakConnections={breakConnectionsById}
+          onEdgeDoubleClick={insertRerouteAtConnection}
         />
-
-        <TransformContainer viewportScope={viewportScope}>
-          {mode === "interactive" ? (
-            <EdgesOverlay
-              mode="interactive"
-              graphPath={activeTabId ?? ""}
-              groupId={groupId}
-              getPinWorldPos={getPinWorldPos}
-              getCanvasLocalPoint={getCanvasLocalPoint}
-              dimmed={isDraggingPin}
-              selectedNodeIds={selectedNodeIds}
-              selectedConnectionIds={selectedConnectionIds}
-              onSelectedConnectionIdsChange={handleSelectedConnectionIdsChange}
-              onBreakConnections={breakConnectionsById}
-              onEdgeDoubleClick={insertRerouteAtConnection}
-            />
-          ) : (
-            <EdgesOverlay
-              mode="preview"
-              graphPath={activeTabId ?? ""}
-              groupId={groupId}
-              getPinWorldPos={getPinWorldPos}
-              getCanvasLocalPoint={getCanvasLocalPoint}
-              dimmed={isDraggingPin}
-            />
-          )}
-          {graphNodeIds.map((nodeId) => (
-            <CanvasNode
-              key={nodeId}
-              id={nodeId}
-              graphPath={activeTabId ?? undefined}
-              groupId={groupId}
-              selected={interactive && selectedNodeIdsSet.has(nodeId)}
-              activePin={activePin}
-              onPointerDown={onNodePointerDown}
-              onAddInput={handleNodeAddInput}
-              onRemovePin={handleNodeRemovePin}
-              onPinPointerDown={onPinPointerDown}
-            />
-          ))}
-        </TransformContainer>
-      </div>
-
-      <div ref={selectionBoxRef} aria-hidden />
-
-      {mode === "interactive" ? <CanvasOverlays model={overlayModel} /> : null}
-    </div>
+      ) : (
+        <EdgesOverlay
+          mode="preview"
+          graphPath={activeTabId ?? ""}
+          groupId={groupId}
+          getPinWorldPos={getPinWorldPos}
+          getCanvasLocalPoint={getCanvasLocalPoint}
+          dimmed={isDraggingPin}
+        />
+      )}
+      {graphNodeIds.map((nodeId) => (
+        <GraphNodeController
+          key={nodeId}
+          id={nodeId}
+          graphPath={activeTabId ?? undefined}
+          groupId={groupId}
+          selected={interactive && selectedNodeIdsSet.has(nodeId)}
+          activePin={activePin}
+          contextMenuActions={interactive ? contextMenuActions : null}
+          onPointerDown={onNodePointerDown}
+          onAddInput={handleNodeAddInput}
+          onRemovePin={handleNodeRemovePin}
+          onPinPointerDown={onPinPointerDown}
+        />
+      ))}
+    </TransformContainer>
   );
 
-  return interactive ? (
-    <CanvasContextMenuProvider value={contextMenuActions}>
-      {canvasElement}
-    </CanvasContextMenuProvider>
-  ) : (
-    canvasElement
+  return (
+    <GraphCanvasView
+      canvasElementRef={canvasElementRef}
+      selectionBoxRef={selectionBoxRef}
+      panelInstanceId={panelInstanceId}
+      graphPath={activeTabId ?? undefined}
+      graphKind={graphKind}
+      viewportGridSlot={<ViewportGrid viewportScope={viewportScope} />}
+      connectionPreviewSlot={connectionPreviewSlot}
+      graphContentSlot={graphContentSlot}
+      overlaySlot={interactive ? <CanvasOverlays model={overlayModel} /> : null}
+      onCanvasPointerDown={onCanvasPointerDown}
+      onCanvasContextMenu={interactive ? handleContextMenu : undefined}
+    />
   );
 }

@@ -40,9 +40,9 @@ Pin 值遵循三层优先级（后端实现）：
 ### 前端使用
 
 ```tsx
-import { Pin } from "./Pins/Pin";
+import { GraphPinController } from "./Pins/GraphPinController";
 
-<Pin
+<GraphPinController
   {...pinData}
   graphPath="event-1" // 必需：当前图资源路径
   nodeId="node-123" // 必需：节点 ID（通过 Pin 的 nodeId 属性）
@@ -76,7 +76,8 @@ await invoke("clear_pin_user_value", {
 ## 组件结构
 
 ```
-Pin.tsx
+GraphPinController.tsx
+├── GraphPinView.tsx (prop-only rendering)
 ├── Pin 图标和标签
 └── PinInput.tsx (条件渲染)
     ├── 数字输入框 (int/float)

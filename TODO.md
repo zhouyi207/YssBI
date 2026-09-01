@@ -896,3 +896,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       删除宽 `WorkbenchActivityPanelsProvider`，并由 app integration 唯一协调 sidebar-to-editor DnD。
 - [ ] 删除全局 `EditorSessionCommands`/Provider 与宽资源切片，让 Graph、Project、Data、Details 使用
       caller-shaped capability，并由 app integration 唯一组装 Menubar、快捷键与欢迎页的跨模块命令。
+- [ ] 将 Graph Canvas、Node 与 Pin 分别拆为 `Graph*Controller` 和 prop-only `Graph*View`，删除隐藏的
+      `CanvasContextMenuContext` 与旧组件入口，并让 ContextMenu、overlay、execution/diagnostic badge 仅通过
+      显式 capability 和 slot 组合。

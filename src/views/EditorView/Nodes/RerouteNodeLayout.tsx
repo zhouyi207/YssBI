@@ -2,12 +2,13 @@ import type React from "react";
 import type { Pin as PinModel } from "@/shared/types/domain";
 import type { PortKindDto } from "@/shared/types/domain/editorProjection";
 import type { UINode } from "@/shared/types/ui";
+import type { GraphContextMenuActions } from "@/features/application/editor";
 import {
   REROUTE_GRIP_SIZE_PX,
   REROUTE_NODE_HEIGHT_PX,
   REROUTE_NODE_WIDTH_PX,
 } from "@/features/domain/node/utils/nodeClassNames";
-import { Pin } from "../Pins/Pin";
+import { GraphPinController } from "../Pins/GraphPinController";
 
 export { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX };
 
@@ -16,6 +17,7 @@ interface RerouteNodeLayoutProps {
   activePinId?: string | null;
   graphPath?: string;
   groupId?: string;
+  contextMenuActions?: GraphContextMenuActions | null;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (event: React.PointerEvent, pin: PinModel) => void;
 }
@@ -39,6 +41,7 @@ export function RerouteNodeLayout({
   activePinId,
   graphPath,
   groupId,
+  contextMenuActions,
   onPinClick,
   onPinPointerDown,
 }: RerouteNodeLayoutProps) {
@@ -54,10 +57,11 @@ export function RerouteNodeLayout({
     >
       {input ? (
         <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 [&_.pin-container]:h-5 [&_.pin-container>span]:hidden [&_.pin-circle]:m-0 [&_.pin-circle]:h-5 [&_.pin-circle]:w-5">
-          <Pin
+          <GraphPinController
             {...input}
             graphPath={graphPath}
             groupId={groupId}
+            contextMenuActions={contextMenuActions}
             isActive={activePinId === input.id}
             onPinClick={onPinClick}
             onPinPointerDown={onPinPointerDown}
@@ -72,10 +76,11 @@ export function RerouteNodeLayout({
       />
       {output ? (
         <div className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 [&_.pin-container]:h-5 [&_.pin-container>span]:hidden [&_.pin-circle]:m-0 [&_.pin-circle]:h-5 [&_.pin-circle]:w-5">
-          <Pin
+          <GraphPinController
             {...output}
             graphPath={graphPath}
             groupId={groupId}
+            contextMenuActions={contextMenuActions}
             isActive={activePinId === output.id}
             onPinClick={onPinClick}
             onPinPointerDown={onPinPointerDown}

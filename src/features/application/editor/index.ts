@@ -38,12 +38,7 @@ export { useDetailTarget } from "./useDetailTarget";
 export { resolveDetailTarget } from "./resolveDetailTarget";
 export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel";
 export { useIsActiveEditorPanel } from "./useIsActiveEditorPanel";
-export {
-  CanvasContextMenuProvider,
-  useCanvasContextMenuActions,
-  useCanvasContextMenuActionsOptional,
-} from "./CanvasContextMenuContext";
-export type { CanvasContextMenuActions } from "./CanvasContextMenuContext";
+export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";
 export { useCanvasWheelZoom } from "./useCanvasWheelZoom";
 export { useCanvasDrop } from "./useCanvasDrop";

@@ -10,8 +10,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ i18n: { resolvedLanguage: "en-US", language: "en" } }),
 }));
 
-vi.mock("../Pins/Pin", () => ({
-  Pin: ({ name }: { name: string }) => <span data-testid="pin-name">{name}</span>,
+vi.mock("../Pins/GraphPinController", () => ({
+  GraphPinController: ({ name }: { name: string }) => <span data-testid="pin-name">{name}</span>,
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

@@ -186,7 +186,6 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/history/types.ts", ["GraphMutationCommandResult"]),
   viewCoreCapability("src/features/core/keyboard/ui.ts", ["keyboardUi"]),
   viewCoreCapability("src/features/core/node/useNodeExecution.ts", ["useNodeExecution"]),
-  viewCoreCapability("src/features/core/node/useNodeStyle.ts", ["useNodeStyle"]),
   viewCoreCapability("src/features/core/pin/usePinInput.ts", ["usePinInput"]),
   viewCoreCapability("src/features/core/pin/useRepeatablePinRemovable.ts", [
     "useRepeatablePinRemovable",

@@ -7,7 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PortKindDto } from "@/shared/types/dto/editorProjection";
 import type { PinView } from "@/shared/types/store/graph";
 import type { UINode } from "@/shared/types/ui";
-import { Node } from "./Node";
+import { GraphNodeView } from "./GraphNodeView";
+import { RerouteNodeLayout } from "./RerouteNodeLayout";
 
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
@@ -70,12 +71,13 @@ function renderNode(node: UINode, onPinPointerDown = vi.fn(), onPointerDown = vi
   act(() =>
     root.render(
       <TooltipProvider>
-        <Node
-          id={node.id}
-          node={node}
-          selected
-          onPointerDown={onPointerDown}
-          onPinPointerDown={onPinPointerDown}
+        <GraphNodeView
+          nodeId={node.id}
+          className=""
+          style={{}}
+          contentSlot={<RerouteNodeLayout node={node} onPinPointerDown={onPinPointerDown} />}
+          onPointerDown={(event) => onPointerDown(node.id, event)}
+          onContextMenu={vi.fn()}
         />
       </TooltipProvider>,
     ),
