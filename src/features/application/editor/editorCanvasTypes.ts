@@ -1,10 +1,7 @@
 import type { useNodeManagement } from "@/features/application/dataManagement/useNodeManagement";
 import type { CanvasMutationOutcome } from "@/features/core/canvas";
-import type {
-  EditorContextMenuState,
-  EditorVariables,
-  GraphSelection,
-} from "@/features/core/editor";
+import type { EditorContextMenuState, EditorVariables } from "@/features/core/editor";
+import type { GraphSelection } from "@/modules/workbench/public";
 import type { Pin } from "@/shared/types/domain/pin";
 import type { EditorCommandTarget } from "./editorCommandFocus";
 import type { useEditorOperations } from "./useEditorOperations";

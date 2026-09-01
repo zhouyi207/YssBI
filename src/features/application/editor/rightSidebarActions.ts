@@ -1,8 +1,7 @@
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
 import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
-import { updateEditorGroupSelectedNodeIds } from "@/features/core/editor";
-import { revealWorkbenchView } from "@/modules/workbench/public";
+import { revealWorkbenchView, updateEditorGroupSelectedNodeIds } from "@/modules/workbench/public";
 import type { EditorResourceKind } from "@/modules/workbench/public";
 
 export function detailFocusForEditorResource(

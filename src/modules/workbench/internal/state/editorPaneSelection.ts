@@ -1,5 +1,5 @@
-import { getPaneSelection, useEditorPaneStateStore } from "@/modules/workbench/public";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { getPaneSelection, useEditorPaneStateStore } from "../dockview/editorPaneStateStore";
+import { workbenchDockviewRead } from "../dockview/workbenchRead";
 
 export interface GraphSelection {
   nodeIds: Set<string>;
@@ -32,7 +32,7 @@ export interface UpdatedGraphNodeSelection {
 }
 
 export function updateEditorGroupSelectedNodeIds(
-  updater: string[] | ((prev: string[]) => string[]),
+  updater: string[] | ((previous: string[]) => string[]),
   targetGroupId?: string | null,
 ): UpdatedGraphNodeSelection | null {
   const groupId = resolveEditorGroupId(targetGroupId);
@@ -50,7 +50,7 @@ export interface UpdatedGraphConnectionSelection {
 }
 
 export function updateEditorGroupSelectedConnectionIds(
-  updater: string[] | ((prev: string[]) => string[]),
+  updater: string[] | ((previous: string[]) => string[]),
   targetGroupId?: string | null,
 ): UpdatedGraphConnectionSelection | null {
   const groupId = resolveEditorGroupId(targetGroupId);

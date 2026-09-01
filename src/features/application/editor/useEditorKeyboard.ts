@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   clearEditorGroupGraphSelection,
   getEditorGroupGraphSelection,
-} from "@/features/core/editor/editorGroupSelection";
+} from "@/modules/workbench/public";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";

@@ -8,11 +8,3 @@ export type {
   EditorFunctions,
   EditorVariables,
 } from "./editorCollections";
-export {
-  clearEditorGroupGraphSelection,
-  createGraphSelection,
-  getEditorGroupGraphSelection,
-  updateEditorGroupSelectedConnectionIds,
-  updateEditorGroupSelectedNodeIds,
-} from "./editorGroupSelection";
-export type { GraphSelection } from "./editorGroupSelection";

@@ -956,3 +956,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 active editor group projection 收敛到唯一 application hook，删除 Core 中重复的 placement/groups
       facade，以及零调用的 editor actions、canvas actions 和 UI state hooks；保留 pane-local selection 的
       Workbench authority，不再通过多层 hook 镜像物理 group 状态。
+- [x] 将 group-to-active-panel selection read/write 迁回 Workbench pane state owner，Canvas 与 editor
+      workflows 统一消费 Workbench public capability；删除 `features/core/editor` selection owner/barrel，
+      并由 production gate 禁止旧路径回流。

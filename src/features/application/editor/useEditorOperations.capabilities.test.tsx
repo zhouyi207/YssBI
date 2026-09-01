@@ -48,7 +48,8 @@ vi.mock("./editorCommandFocus", () => ({
     target.panelInstanceId === `editor-${target.groupId}` &&
     mocks.activeResourceByGroup.get(target.groupId) === target.resourceRef,
 }));
-vi.mock("@/features/core/editor", () => ({
+vi.mock("@/modules/workbench/public", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/workbench/public")>()),
   getEditorGroupGraphSelection: (groupId: string) => ({
     nodeIds: new Set(mocks.selectionByGroup.get(groupId) ?? []),
     connectionIds: new Set<string>(),

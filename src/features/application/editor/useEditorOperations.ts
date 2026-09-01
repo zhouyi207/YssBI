@@ -10,8 +10,8 @@ import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
-} from "@/features/core/editor";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+  workbenchDockviewRead,
+} from "@/modules/workbench/public";
 import { executeCommand, executeCommandWithResult } from "@/features/core/history";
 import type { GraphMutationCommandResult } from "@/features/core/history/types";
 import {

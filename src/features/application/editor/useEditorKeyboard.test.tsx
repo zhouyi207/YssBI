@@ -119,16 +119,14 @@ vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () =>
   toggleActivityWorkbenchGroup: mocks.toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup: mocks.toggleBottomWorkbenchGroup,
 }));
-vi.mock("@/features/core/editor/editorGroupSelection", () => ({
-  clearEditorGroupGraphSelection: mocks.clearSelection,
-  getEditorGroupGraphSelection: () => mocks.selection,
-}));
 vi.mock("@/features/core/viewport", () => ({
   getViewport: () => ({ x: 0, y: 0, scale: 1 }),
   editorViewportScope: (groupId: string, graphPath: string) => ({ groupId, graphPath }),
 }));
 vi.mock("@/modules/workbench/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/modules/workbench/public")>()),
+  clearEditorGroupGraphSelection: mocks.clearSelection,
+  getEditorGroupGraphSelection: () => mocks.selection,
   useWorkbenchUiStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
 }));
 vi.mock("@/features/core/graphInteraction/graphInteractionStore", () => ({
