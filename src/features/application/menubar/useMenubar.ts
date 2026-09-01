@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import { captureActiveEditorCommandTarget } from "@/features/application/editor/editorCommandFocus";
-import { splitEditorAtEdge } from "@/features/application/editor/editorGroupCommands";
+import { splitEditorPanel } from "@/features/application/editor/editorGroupCommands";
 import {
   resetWorkbenchLayout,
   toggleActivityWorkbenchGroup,
@@ -59,12 +59,12 @@ export function useMenubar() {
 
   const handleSplitRight = useCallback(() => {
     const target = captureActiveEditorCommandTarget();
-    if (target) void splitEditorAtEdge(target.groupId, "right");
+    if (target) void splitEditorPanel(target.groupId, "right");
   }, []);
 
   const handleSplitDown = useCallback(() => {
     const target = captureActiveEditorCommandTarget();
-    if (target) void splitEditorAtEdge(target.groupId, "bottom");
+    if (target) void splitEditorPanel(target.groupId, "bottom");
   }, []);
 
   const handleDatabaseEditor = useCallback(() => {

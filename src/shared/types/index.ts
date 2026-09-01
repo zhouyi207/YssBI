@@ -27,14 +27,7 @@ export * from "./domain";
 
 // ==================== UI Types ====================
 // UI 状态类型 - 前端专用
-export type {
-  LayoutTab,
-  LayoutTabType,
-  LayoutTabComponent,
-  EditorGroupSnapshot,
-  LoadStatus,
-  ExecutionStatus,
-} from "./ui";
+export type { LoadStatus, ExecutionStatus } from "./ui";
 export type { Position, Size, Rect } from "./ui/common";
 
 // ==================== Store Types ====================

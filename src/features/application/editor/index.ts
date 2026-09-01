@@ -12,33 +12,34 @@ export { useEditorOperations } from "./useEditorOperations";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";
 export { useEditorKeyboard } from "./useEditorKeyboard";
 export { useEditorWindowCloseGuard } from "./useEditorWindowCloseGuard";
-export { useTabManagement } from "./useTabManagement";
+export { useEditorPanelCommands } from "./useEditorPanelCommands";
 export {
-  switchEditorTab,
+  activateEditorPanelAndSyncSession,
   activateEditorGroup,
-  activateCurrentEditorTab,
+  activateCurrentEditorPanel,
   focusEditorGroupSync,
   hydrateEditorGroup,
-} from "./switchEditorTab";
+} from "./activateEditorPanelAndSyncSession";
 export {
   prepareEditorGroupForInteraction,
   shouldSkipEditorGroupShellActivation,
 } from "./editorGroupInteraction";
 export {
-  closeTab,
+  requestCloseEditorPanel,
+  requestCloseEditorPanels,
   closeEditorGroup,
   splitEditorGroup,
-  closeOtherTabs,
-  closeAllTabsInGroup,
-  closeSavedTabsInGroup,
-} from "./tabCommands";
-export { resolveTabDisplayName } from "./resolveTabDisplayName";
-export { reconcileOpenLayoutTabsWithResources } from "./reconcileOpenLayoutTabs";
+  requestCloseOtherEditorPanels,
+  requestCloseAllEditorPanelsInGroup,
+  requestCloseSavedEditorPanelsInGroup,
+} from "./editorPanelCloseCommands";
+export { resolveResourceDisplayName } from "./resolveResourceDisplayName";
+export { reconcileOpenEditorPanelsWithResources } from "./reconcileOpenEditorPanels";
 export { useProjectOperations } from "./useProjectOperations";
 export { useEditorCanvas } from "./useEditorCanvas";
 export { useDetailTarget } from "./useDetailTarget";
 export { resolveDetailTarget } from "./resolveDetailTarget";
-export { clearDetailFocusForClosedTab } from "./clearDetailFocusForClosedTab";
+export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel";
 export { useIsActiveEditorPanel } from "./useIsActiveEditorPanel";
 export {
   CanvasContextMenuProvider,

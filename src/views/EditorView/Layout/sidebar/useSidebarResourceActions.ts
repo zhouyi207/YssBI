@@ -17,7 +17,7 @@ import { ui } from "@/features/core/ui/ui";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import { useVariableRead } from "@/features/core/variable/read";
 import { useDatabaseRead } from "@/features/core/database/read";
-import { getActiveLayoutTab } from "@/features/core/layout";
+import { workbenchDockviewRead } from "@/features/core/dockview";
 import type { GraphResourceType } from "../sidebarContextMenu/sidebarContextMenuTypes";
 
 type OpenInputDialog = (
@@ -33,12 +33,12 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
   const variables = useVariableRead((snapshot) => snapshot.variables);
   const databases = useDatabaseRead((snapshot) => snapshot.databases);
-  const activeTab = focusedSession
-    ? (getActiveLayoutTab(focusedSession.groupId)?.tab ?? null)
+  const activeEditor = focusedSession
+    ? (workbenchDockviewRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata ?? null)
     : null;
   const activeProjectGraph = useMemo(
-    () => resolveActiveProjectGraph({ events, functions, activeTab }),
-    [activeTab, events, functions],
+    () => resolveActiveProjectGraph({ events, functions, activeEditor }),
+    [activeEditor, events, functions],
   );
   const {
     renameGraph,

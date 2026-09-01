@@ -1,6 +1,6 @@
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { createGraphSelection } from "@/features/core/layout/layoutTabQueries";
+import { createGraphSelection } from "../editorGroupSelection";
 import { useEditorGroupPlacement } from "./useEditorGroupPlacement";
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
@@ -13,7 +13,7 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
     groupId,
     focusedEditorGroupId,
     activeTabId: placement.activeTabId,
-    tabs: placement.tabs,
+    panels: placement.panels,
     selectedNodeIds: placement.selectedNodeIds,
     selectedConnectionIds: placement.selectedConnectionIds,
     selection: createGraphSelection(placement.selectedNodeIds, placement.selectedConnectionIds),

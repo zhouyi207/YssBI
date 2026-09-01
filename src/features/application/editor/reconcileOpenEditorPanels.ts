@@ -5,7 +5,7 @@ import type { WorkbenchPanelCommitToken } from "@/features/core/dockview/workben
 import { resourceKey, useResourceStore } from "@/features/core/resource";
 
 /** Atomically remove restored editors whose project resources are absent after hydration. */
-export async function reconcileOpenLayoutTabsWithResources(): Promise<void> {
+export async function reconcileOpenEditorPanelsWithResources(): Promise<void> {
   const resources = useResourceStore.getState().resources;
   const stalePanels = workbenchDockviewRead.listPanels().filter((panel) => {
     if (panel.metadata.role !== "editor") return false;

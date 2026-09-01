@@ -9,8 +9,7 @@ import { captureProjectCommandContext } from "@/features/application/projectComm
 
 import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
-import { buildWorksheetLayoutTab } from "@/features/core/layout/layoutTabModel";
-import { isEditorOpenRejectionHandled, openEditorTab } from "./openEditorTab";
+import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
 import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
 import { showBlockingIpcError } from "./blockingErrorDialog";
 
@@ -177,9 +176,12 @@ export function useOpenWorksheet() {
     }
 
     try {
-      await openEditorTab(buildWorksheetLayoutTab(worksheetPath), {
-        focusDetail: { kind: "worksheet", worksheetPath },
-      });
+      await openEditorPanel(
+        { resourceRef: worksheetPath, resourceKind: "worksheet", pinned: true },
+        {
+          focusDetail: { kind: "worksheet", worksheetPath },
+        },
+      );
       void revealWorkbenchView("project");
       useSidebarStore
         .getState()

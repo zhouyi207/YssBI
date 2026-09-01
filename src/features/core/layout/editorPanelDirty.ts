@@ -1,4 +1,3 @@
-import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import {
@@ -6,13 +5,12 @@ import {
   markResourceDirty,
   useResourceStore,
 } from "@/features/core/resource";
-import { layoutTabResourceRef } from "./layoutTabModel";
+import type { ResourceRef } from "@/features/core/resource";
 
-export function markGraphTabDirty(graphPath: string): void {
+export function markGraphEditorPanelDirty(graphPath: string): void {
   const panel = workbenchDockviewRead.findEditorPanelsByResource(graphPath)[0];
-  if (!panel || panel.metadata.role !== "editor") return;
+  if (!panel) return;
 
-  const tab = layoutTabFromEditorMetadata(panel.metadata);
   markResourceDirty(
     {
       id: panel.metadata.resourceRef,
@@ -20,24 +18,20 @@ export function markGraphTabDirty(graphPath: string): void {
     },
     true,
   );
-  if (tab.pinned === false) {
+  if (panel.metadata.pinned === false) {
     void workbenchDockviewControl.setEditorPinned(panel.panelInstanceId, true);
   }
 }
 
-function resolveCoreTabDisplayName(
-  ref: ReturnType<typeof layoutTabResourceRef>,
-  fallbackId: string,
-): string {
-  if (!ref) return fallbackId || "Untitled";
+function resolveResourceDisplayName(ref: ResourceRef, fallbackId: string): string {
   const resource = useResourceStore.getState().resources[`${ref.kind}:${ref.id}`];
   return resource?.name ?? fallbackId ?? ref.id;
 }
 
-export interface DirtyTabSnapshot {
-  /** Layout container that owns the tab (editor group node id). */
-  nodeId: string;
-  /** Graph path or worksheet id == tab id. */
+export interface DirtyEditorPanelSnapshot {
+  /** Dockview group that owns the editor panel. */
+  groupId: string;
+  /** Graph path or worksheet resource reference. */
   graphPath: string;
   /** Display title for prompts. */
   title: string;
@@ -47,19 +41,19 @@ export interface DirtyTabSnapshot {
  * Collect every dirty editor tab (Event/Function/Worksheet) across all editor groups,
  * deduplicated by graphPath. DocumentState is the single source of truth for dirty.
  */
-export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
+export function collectDirtyEditorPanels(): DirtyEditorPanelSnapshot[] {
   const seen = new Set<string>();
-  const out: DirtyTabSnapshot[] = [];
+  const out: DirtyEditorPanelSnapshot[] = [];
   for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
-    const tab = layoutTabFromEditorMetadata(panel.metadata);
-    if (seen.has(tab.id)) continue;
-    if (!isGraphResourceDirty(tab.id, panel.metadata.resourceKind)) continue;
-    seen.add(tab.id);
+    const { resourceKind, resourceRef } = panel.metadata;
+    if (seen.has(resourceRef)) continue;
+    if (!isGraphResourceDirty(resourceRef, resourceKind)) continue;
+    seen.add(resourceRef);
     out.push({
-      nodeId: panel.groupId,
-      graphPath: tab.id,
-      title: resolveCoreTabDisplayName(layoutTabResourceRef(tab), tab.id),
+      groupId: panel.groupId,
+      graphPath: resourceRef,
+      title: resolveResourceDisplayName({ id: resourceRef, kind: resourceKind }, resourceRef),
     });
   }
   return out;

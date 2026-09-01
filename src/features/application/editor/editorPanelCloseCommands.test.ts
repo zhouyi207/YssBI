@@ -9,7 +9,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/features/core/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
-    listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
+    listEditorPanelsInGroup: (groupId: string) =>
+      mocks.panels.flatMap((panel) =>
+        panel.groupId === groupId && panel.metadata.role === "editor"
+          ? [{ ...panel, metadata: panel.metadata }]
+          : [],
+      ),
     getActiveEditorPanel: () => undefined,
   },
 }));
@@ -25,7 +30,7 @@ vi.mock("@/features/core/resource", () => ({
 }));
 
 vi.mock("./editorGroupCommands", () => ({
-  splitEditorAtEdge: vi.fn(async () => undefined),
+  splitEditorPanel: vi.fn(async () => undefined),
 }));
 
 vi.mock("./rightSidebarActions", () => ({
@@ -43,7 +48,7 @@ vi.mock("./workbenchPanelClose", () => ({
   requestCloseWorkbenchPanels: mocks.requestCloseWorkbenchPanels,
 }));
 
-import { closeOtherTabs, closeTab } from "./tabCommands";
+import { requestCloseEditorPanel, requestCloseOtherEditorPanels } from "./editorPanelCloseCommands";
 
 function editorPanel(panelInstanceId: string, resourceRef: string): WorkbenchPanelInfo {
   return {
@@ -61,7 +66,7 @@ function editorPanel(panelInstanceId: string, resourceRef: string): WorkbenchPan
   };
 }
 
-describe("tabCommands physical tab targeting", () => {
+describe("editor panel close commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.panels = [];
@@ -75,7 +80,7 @@ describe("tabCommands physical tab targeting", () => {
       editorPanel("panel-c", "events/Other.yssbi-event"),
     ];
 
-    await expect(closeOtherTabs("group-a", "panel-a")).resolves.toBe(true);
+    await expect(requestCloseOtherEditorPanels("group-a", "panel-a")).resolves.toBe(true);
 
     expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith(["panel-b", "panel-c"]);
   });
@@ -86,7 +91,7 @@ describe("tabCommands physical tab targeting", () => {
       editorPanel("panel-b", "events/Main.yssbi-event"),
     ];
 
-    await expect(closeTab("panel-b")).resolves.toBe(true);
+    await expect(requestCloseEditorPanel("panel-b")).resolves.toBe(true);
 
     expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith(["panel-b"]);
   });

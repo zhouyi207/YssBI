@@ -9,3 +9,11 @@ export type {
   EditorVariables,
 } from "./editorCollections";
 export { GroupContext } from "./context/GroupContext";
+export {
+  clearEditorGroupGraphSelection,
+  createGraphSelection,
+  getEditorGroupGraphSelection,
+  updateEditorGroupSelectedConnectionIds,
+  updateEditorGroupSelectedNodeIds,
+} from "./editorGroupSelection";
+export type { GraphSelection } from "./editorGroupSelection";

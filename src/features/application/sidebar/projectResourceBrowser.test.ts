@@ -89,7 +89,7 @@ describe("project resource browser", () => {
     });
   });
 
-  it("resolves only active Event and Function tabs to project graphs", () => {
+  it("resolves only active Event and Function editors to project graphs", () => {
     const resources = {
       events: { "events/Main": { name: "Main event" } },
       functions: { "functions/Compute": { name: "Compute" } },
@@ -98,19 +98,19 @@ describe("project resource browser", () => {
     expect(
       resolveActiveProjectGraph({
         ...resources,
-        activeTab: { id: "events/Main", type: "event", component: "GraphEditor" },
+        activeEditor: { resourceRef: "events/Main", resourceKind: "event" },
       }),
     ).toEqual({ path: "events/Main", kind: "event", name: "Main event" });
     expect(
       resolveActiveProjectGraph({
         ...resources,
-        activeTab: { id: "functions/Compute", type: "function", component: "GraphEditor" },
+        activeEditor: { resourceRef: "functions/Compute", resourceKind: "function" },
       }),
     ).toEqual({ path: "functions/Compute", kind: "function", name: "Compute" });
     expect(
       resolveActiveProjectGraph({
         ...resources,
-        activeTab: { id: "worksheets/Chart", type: "worksheet", component: "WorksheetEditor" },
+        activeEditor: { resourceRef: "worksheets/Chart", resourceKind: "worksheet" },
       }),
     ).toBeNull();
   });

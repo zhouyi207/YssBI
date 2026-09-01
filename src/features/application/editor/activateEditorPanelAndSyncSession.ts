@@ -1,16 +1,17 @@
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
-import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import {
+  workbenchDockviewRead,
+  type WorkbenchEditorPanelInfo,
+} from "@/features/core/dockview/workbenchRead";
 import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
-import type { LayoutTab } from "@/shared/types/ui";
 
-import { activateGraphTab } from "./activateGraphTab";
+import { activateGraphPanelSession } from "./graphPanelSession";
 import { suspendEditorGroupGraphSession } from "./graphSessionLifecycle";
 import { detailFocusForEditorResource, setPassiveDetailContext } from "./rightSidebarActions";
 
 let editorGroupSessionChain: Promise<void> = Promise.resolve();
-let latestTabSwitchRequest = 0;
+let latestPanelActivationRequest = 0;
 const pendingGroupSuspensions = new Set<string>();
 
 function scheduleSuspendPreviousGroup(prevGroupId: string): void {
@@ -23,9 +24,7 @@ function scheduleSuspendPreviousGroup(prevGroupId: string): void {
 }
 
 function groupContainsEditor(groupId: string): boolean {
-  return workbenchDockviewRead
-    .listGroupPanels(groupId)
-    .some((panel) => panel.metadata.role === "editor");
+  return workbenchDockviewRead.listEditorPanelsInGroup(groupId).length > 0;
 }
 
 /** Synchronize application session focus without writing layout focus back to Dockview. */
@@ -46,24 +45,28 @@ export async function awaitEditorGroupSessionChain(): Promise<void> {
 
 export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
   await editorGroupSessionChain;
-  return activateCurrentEditorTab(groupId);
+  return activateCurrentEditorPanel(groupId);
 }
 
-async function synchronizeTabSession(
+async function synchronizePanelSession(
   request: number,
-  groupId: string,
-  tab: LayoutTab,
+  panel: WorkbenchEditorPanelInfo,
 ): Promise<boolean> {
-  if (tab.type === "event" || tab.type === "function") {
-    setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
-    const loaded = await activateGraphTab(tab.id, groupId);
-    if (!loaded || request !== latestTabSwitchRequest) return false;
+  const { groupId, metadata } = panel;
+  if (metadata.resourceKind === "event" || metadata.resourceKind === "function") {
+    setPassiveDetailContext(
+      detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
+    );
+    const loaded = await activateGraphPanelSession(metadata.resourceRef, groupId);
+    if (!loaded || request !== latestPanelActivationRequest) return false;
     syncVariablesGraphScopeFromActiveTab();
     return true;
   }
 
-  if (tab.type === "worksheet") {
-    setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
+  if (metadata.resourceKind === "worksheet") {
+    setPassiveDetailContext(
+      detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
+    );
     const sessionStore = useGraphSessionStore.getState();
     if (sessionStore.getFocusedGroupId() === groupId) {
       sessionStore.clearFocusedSession(groupId);
@@ -74,53 +77,47 @@ async function synchronizeTabSession(
 }
 
 /** Synchronize a user-originated Dockview activation without writing back to Dockview. */
-export async function synchronizeActiveEditorTab(
-  groupId: string,
-  tab: LayoutTab,
+export async function synchronizeActiveEditorPanel(
+  panel: WorkbenchEditorPanelInfo,
 ): Promise<boolean> {
-  const request = ++latestTabSwitchRequest;
-  focusEditorGroupSync(groupId);
+  const request = ++latestPanelActivationRequest;
+  focusEditorGroupSync(panel.groupId);
   await editorGroupSessionChain;
-  if (request !== latestTabSwitchRequest) return false;
-  return synchronizeTabSession(request, groupId, tab);
+  if (request !== latestPanelActivationRequest) return false;
+  return synchronizePanelSession(request, panel);
 }
 
 /** Activate an application-requested editor, then synchronize its business session. */
-export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
-  const request = ++latestTabSwitchRequest;
-  focusEditorGroupSync(groupId);
+export async function activateEditorPanelAndSyncSession(
+  panel: WorkbenchEditorPanelInfo,
+): Promise<boolean> {
+  const request = ++latestPanelActivationRequest;
+  focusEditorGroupSync(panel.groupId);
   await editorGroupSessionChain;
-  if (request !== latestTabSwitchRequest) return false;
+  if (request !== latestPanelActivationRequest) return false;
 
-  const panel = workbenchDockviewRead
-    .findEditorPanelsByResource(tab.id)
-    .find(
-      (candidate) =>
-        candidate.groupId === groupId &&
-        candidate.metadata.role === "editor" &&
-        candidate.metadata.resourceKind === tab.type,
-    );
-  if (!panel) return false;
+  const current = workbenchDockviewRead.getPanel(panel.panelInstanceId);
+  if (current?.metadata.role !== "editor" || current.groupId !== panel.groupId) return false;
   if (
     workbenchDockviewRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId &&
     !(await workbenchDockviewControl.activate(panel.panelInstanceId))
   )
     return false;
-  if (request !== latestTabSwitchRequest) return false;
-  return synchronizeTabSession(request, groupId, tab);
+  if (request !== latestPanelActivationRequest) return false;
+  return synchronizePanelSession(request, { ...current, metadata: current.metadata });
 }
 
-export async function activateCurrentEditorTab(groupId: string): Promise<boolean> {
-  const active = getActiveLayoutTab(groupId);
+export async function activateCurrentEditorPanel(groupId: string): Promise<boolean> {
+  const active = workbenchDockviewRead.getActiveEditorPanelInGroup(groupId);
   if (!active) {
     useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;
   }
-  const request = ++latestTabSwitchRequest;
-  return synchronizeTabSession(request, groupId, active.tab);
+  const request = ++latestPanelActivationRequest;
+  return synchronizePanelSession(request, active);
 }
 
 export async function activateEditorGroup(groupId: string): Promise<boolean> {
-  const active = getActiveLayoutTab(groupId);
-  return active ? switchEditorTab(groupId, active.tab) : false;
+  const active = workbenchDockviewRead.getActiveEditorPanelInGroup(groupId);
+  return active ? activateEditorPanelAndSyncSession(active) : false;
 }

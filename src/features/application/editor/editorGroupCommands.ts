@@ -1,26 +1,17 @@
-import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 
-import { switchEditorTab } from "./switchEditorTab";
-
-function activeEditorPanelInGroup(groupId: string) {
-  const panels = workbenchDockviewRead
-    .listGroupPanels(groupId)
-    .filter((panel) => panel.metadata.role === "editor");
-  const activePanelInstanceId = workbenchDockviewRead
-    .listGroups()
-    .find((group) => group.groupId === groupId)?.activePanelInstanceId;
-  return panels.find((panel) => panel.panelInstanceId === activePanelInstanceId) ?? panels[0];
-}
+import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 
 /** Split the active canonical editor right or down; native Dockview DnD owns moves/order. */
-export async function splitEditorAtEdge(
+export async function splitEditorPanel(
   groupId: string,
   edge: "right" | "bottom",
 ): Promise<string | null> {
-  const panel = activeEditorPanelInGroup(groupId);
-  if (!panel || panel.metadata.role !== "editor") return null;
+  const panel =
+    workbenchDockviewRead.getActiveEditorPanelInGroup(groupId) ??
+    workbenchDockviewRead.listEditorPanelsInGroup(groupId)[0];
+  if (!panel) return null;
 
   const split = await workbenchDockviewControl.split({
     panelInstanceId: panel.panelInstanceId,
@@ -31,6 +22,6 @@ export async function splitEditorAtEdge(
 
   const moved = workbenchDockviewRead.getPanel(panel.panelInstanceId);
   if (moved?.metadata.role !== "editor") return null;
-  await switchEditorTab(moved.groupId, layoutTabFromEditorMetadata(moved.metadata));
+  await activateEditorPanelAndSyncSession({ ...moved, metadata: moved.metadata });
   return moved.groupId;
 }

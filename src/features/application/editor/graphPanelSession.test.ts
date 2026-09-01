@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { activateGraphTab, deactivateGraphTab } from "./activateGraphTab";
+import { activateGraphPanelSession, deactivateGraphPanelSession } from "./graphPanelSession";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
@@ -20,7 +20,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe("activateGraphTab", () => {
+describe("activateGraphPanelSession", () => {
   const graphPath = "events/Main.yssbi-event";
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe("activateGraphTab", () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
 
-    const ok = await activateGraphTab(graphPath, "editor-1");
+    const ok = await activateGraphPanelSession(graphPath, "editor-1");
 
     expect(ok).toBe(true);
     expect(loadGraph).toHaveBeenCalledTimes(1);
@@ -51,7 +51,7 @@ describe("activateGraphTab", () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
 
-    const ok = await activateGraphTab(graphPath, "editor-1");
+    const ok = await activateGraphPanelSession(graphPath, "editor-1");
 
     expect(ok).toBe(false);
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
@@ -74,7 +74,7 @@ describe("activateGraphTab", () => {
       }),
     });
 
-    await expect(activateGraphTab(graphPath, "editor-1")).resolves.toBe(true);
+    await expect(activateGraphPanelSession(graphPath, "editor-1")).resolves.toBe(true);
 
     await vi.waitFor(() => expect(unloadGraphDocument).toHaveBeenCalledWith(previousPath));
     expect(order).toEqual(["load", "unload"]);
@@ -93,8 +93,8 @@ describe("activateGraphTab", () => {
       ),
     });
 
-    const activationB = activateGraphTab(pathB, "editor-1");
-    await expect(activateGraphTab(pathC, "editor-1")).resolves.toBe(true);
+    const activationB = activateGraphPanelSession(pathB, "editor-1");
+    await expect(activateGraphPanelSession(pathC, "editor-1")).resolves.toBe(true);
     pendingB.resolve(false);
     await expect(activationB).resolves.toBe(false);
 
@@ -105,7 +105,7 @@ describe("activateGraphTab", () => {
     const loadGraph = vi.fn(async () => false);
     useProjectIOStore.setState({ loadGraph });
 
-    const ok = await activateGraphTab(graphPath, "editor-1");
+    const ok = await activateGraphPanelSession(graphPath, "editor-1");
 
     expect(ok).toBe(false);
     expect(loadGraph).toHaveBeenCalledTimes(1);
@@ -113,7 +113,7 @@ describe("activateGraphTab", () => {
   });
 });
 
-describe("deactivateGraphTab", () => {
+describe("deactivateGraphPanelSession", () => {
   beforeEach(() => {
     useGraphSessionStore.getState().reset();
   });
@@ -121,7 +121,7 @@ describe("deactivateGraphTab", () => {
   it("clears session when the closed tab owned the focused graph", () => {
     useGraphSessionStore.getState().setFocusedSession("editor", "g1");
 
-    deactivateGraphTab("editor", "g1");
+    deactivateGraphPanelSession("editor", "g1");
 
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
   });
@@ -129,7 +129,7 @@ describe("deactivateGraphTab", () => {
   it("keeps session when a background tab is closed", () => {
     useGraphSessionStore.getState().setFocusedSession("editor", "g1");
 
-    deactivateGraphTab("editor", "g2");
+    deactivateGraphPanelSession("editor", "g2");
 
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe("g1");
   });

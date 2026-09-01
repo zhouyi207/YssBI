@@ -20,7 +20,7 @@ function buildEditorState(
     activeEditorGroupId: active.focusedEditorGroupId ?? active.groupId,
     activeTabId: active.activeTabId,
     groupId: active.groupId,
-    tabs: active.tabs,
+    panels: active.panels,
     selectedNodeIds: active.selectedNodeIds,
     ...collections,
     groups,

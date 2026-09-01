@@ -13,7 +13,6 @@ import {
   useEditorKeyboard,
   useEditorWindowCloseGuard,
 } from "@/features/application/editor";
-import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 
 import { useEditorWindowGeometryPersistence } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -26,7 +25,6 @@ function EditorWindowReady() {
   const isNodeDocumentationOpen = useWorkbenchUi((state) => state.isNodeDocumentationOpen);
   const setSettingsOpen = workbenchUi.setSettingsOpen;
   const setNodeDocumentationOpen = workbenchUi.setNodeDocumentationOpen;
-  useWorkbenchLayout();
   useProjectSync();
   useProjectionLocaleSync();
 

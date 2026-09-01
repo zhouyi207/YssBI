@@ -1,12 +1,12 @@
 import type { DetailFocus } from "@/shared/types/ui/detail";
 import { useEditorStore } from "@/features/core/editor";
 import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
-import { updateEditorGroupSelectedNodeIds } from "@/features/core/layout";
+import { updateEditorGroupSelectedNodeIds } from "@/features/core/editor";
 import { revealWorkbenchView } from "@/features/application/layout/workbenchLayoutActions";
-import type { LayoutTabType } from "@/shared/types/ui";
+import type { EditorResourceKind } from "@/features/core/dockview";
 
 export function detailFocusForEditorResource(
-  resourceKind: LayoutTabType,
+  resourceKind: EditorResourceKind,
   resourceRef: string,
 ): DetailFocus {
   if (resourceKind === "worksheet") {

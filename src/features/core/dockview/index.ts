@@ -11,13 +11,13 @@ export {
   isWorkbenchActivityViewId,
   isWorkbenchPanelMetadata,
   isWorkbenchPersistentViewMetadata,
-  layoutTabFromEditorMetadata,
   WORKBENCH_ACTIVITY_VIEW_IDS,
   WORKBENCH_VIEW_IDS,
 } from "./workbenchPanelModel";
 export type {
   EditorPanelMetadata,
   EditorResourceKind,
+  EditorResourceTarget,
   ResultPanelMetadata,
   ViewPanelMetadata,
   WorkbenchComponentId,
@@ -60,6 +60,7 @@ export type {
   UpsertResultRequest,
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
+  WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
   WorkbenchLayoutErrorCode,
   WorkbenchPanelInfo,

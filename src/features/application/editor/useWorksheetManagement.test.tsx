@@ -25,7 +25,7 @@ function createDeferred<T>(): Deferred<T> {
 }
 
 const mocks = vi.hoisted(() => ({
-  openEditorTab: vi.fn(),
+  openEditorPanel: vi.fn(),
   revealWorkbenchView: vi.fn(),
   setProjectTreeCategoryExpanded: vi.fn(),
   handledRejection: undefined as unknown,
@@ -34,8 +34,8 @@ const mocks = vi.hoisted(() => ({
   } as Record<string, unknown>,
 }));
 
-vi.mock("./openEditorTab", () => ({
-  openEditorTab: mocks.openEditorTab,
+vi.mock("./openEditorPanel", () => ({
+  openEditorPanel: mocks.openEditorPanel,
   isEditorOpenRejectionHandled: (error: unknown) => error === mocks.handledRejection,
 }));
 
@@ -125,7 +125,7 @@ describe("useOpenWorksheet", () => {
 
   it("awaits the editor open before revealing the worksheet in the project tree", async () => {
     const deferred = createDeferred<WorkbenchPanelInfo>();
-    mocks.openEditorTab.mockReturnValueOnce(deferred.promise);
+    mocks.openEditorPanel.mockReturnValueOnce(deferred.promise);
 
     let opening!: Promise<void>;
     await act(async () => {
@@ -145,7 +145,7 @@ describe("useOpenWorksheet", () => {
   it("contains an editor-open rejection whose feedback was already presented", async () => {
     const handled = new Error("layout feedback already presented");
     mocks.handledRejection = handled;
-    mocks.openEditorTab.mockRejectedValueOnce(handled);
+    mocks.openEditorPanel.mockRejectedValueOnce(handled);
 
     await expect(
       openWorksheet("worksheets/Summary.yssbi-worksheet", "Summary"),

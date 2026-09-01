@@ -1,10 +1,10 @@
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
-import { buildGraphLayoutTab } from "@/features/core/layout/layoutTabModel";
+import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
 import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
 import { logger } from "@/features/application/observability/appLogger";
+import { isValidGraphResourceTabId } from "@/shared/types/domain/graphResourcePath";
 
-import { isEditorOpenRejectionHandled, openEditorTab } from "./openEditorTab";
-import { switchEditorTab } from "./switchEditorTab";
+import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
+import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 
 export interface OpenGraphInEditorOptions {
   /** `false` = preview tab (sidebar single-click). Default: pinned. */
@@ -19,19 +19,21 @@ export async function openGraphInEditor(
   type: "event" | "function",
   targetGroupId?: string,
   options?: OpenGraphInEditorOptions,
-): Promise<WorkbenchPanelInfo | null> {
+): Promise<WorkbenchEditorPanelInfo | null> {
   logger.graph.trace(
     `openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`,
-    "TabManagement",
+    "EditorPanelCommands",
   );
 
+  if (!isValidGraphResourceTabId(graphPath, type)) {
+    throw new Error(`Invalid graph resource path for ${type}: ${graphPath}`);
+  }
   const pinned = options?.pinned !== false;
-  const tab = buildGraphLayoutTab(graphPath, type, { pinned });
-  let panel: WorkbenchPanelInfo;
+  const target = { resourceRef: graphPath, resourceKind: type, pinned } as const;
+  let panel: WorkbenchEditorPanelInfo;
   try {
-    panel = await openEditorTab(tab, {
+    panel = await openEditorPanel(target, {
       targetGroupId,
-      pinned,
       insertIndex: options?.insertIndex,
     });
   } catch (error) {
@@ -40,6 +42,6 @@ export async function openGraphInEditor(
   }
 
   ensureEditorViewport(editorViewportScope(panel.groupId, graphPath));
-  await switchEditorTab(panel.groupId, tab);
+  await activateEditorPanelAndSyncSession(panel);
   return panel;
 }

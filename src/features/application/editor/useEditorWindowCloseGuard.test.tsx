@@ -37,8 +37,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
-vi.mock("@/features/core/layout/tabDirty", () => ({
-  collectDirtyGraphTabs: () => mocks.dirty,
+vi.mock("@/features/core/layout/editorPanelDirty", () => ({
+  collectDirtyEditorPanels: () => mocks.dirty,
 }));
 vi.mock("@/features/core/ui/UIStore", () => ({
   uiStore: { confirm3: mocks.confirm3 },

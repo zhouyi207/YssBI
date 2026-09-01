@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useActiveEditorGroup, useEditorActions } from "@/features/core/editor";
 import { useEditorOperations } from "./useEditorOperations";
 import { useGraphCanvasCommands } from "./useGraphCanvasCommands";
-import { useTabManagement } from "./useTabManagement";
+import { useEditorPanelCommands } from "./useEditorPanelCommands";
 import { useOpenWorksheet, useWorksheetManagement } from "./useWorksheetManagement";
 import { useProjectOperations } from "./useProjectOperations";
 import {
@@ -31,12 +31,12 @@ export function useEditorSessionCommands(): EditorSessionCommands {
 
   const editorOps = useEditorOperations();
   const canvasCommands = useGraphCanvasCommands();
-  const tabMgmt = useTabManagement();
+  const panelCommands = useEditorPanelCommands();
   const openWorksheet = useOpenWorksheet();
   const worksheetMgmt = useWorksheetManagement(openWorksheet);
   const projectOps = useProjectOperations();
 
-  const graphMgmt = useGraphManagement(tabMgmt.openGraph);
+  const graphMgmt = useGraphManagement(panelCommands.openGraph);
   const variableMgmt = useVariableManagement();
   const dataFrameMgmt = useDatabaseManagement();
   const nodeMgmt = useNodeManagement();
@@ -53,7 +53,7 @@ export function useEditorSessionCommands(): EditorSessionCommands {
     ...layoutBindings,
     ...editorOps,
     ...canvasCommands,
-    ...tabMgmt,
+    ...panelCommands,
     openWorksheet,
     ...worksheetMgmt,
     ...projectOps,

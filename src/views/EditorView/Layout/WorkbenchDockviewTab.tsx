@@ -24,11 +24,11 @@ import {
   requestCloseWorkbenchPanel,
   requestCloseWorkbenchPanels,
 } from "@/features/application/editor/workbenchPanelClose";
-import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
+import { buildEditorPanelTabMenu } from "@/features/application/editor/editorPanelTabMenu";
+import { requestCloseEditorPanel } from "@/features/application/editor/editorPanelCloseCommands";
 import {
   isWorkbenchActivityViewId,
   isWorkbenchPersistentViewMetadata,
-  layoutTabFromEditorMetadata,
   workbenchDockviewRead,
 } from "@/features/core/dockview";
 import type {
@@ -194,8 +194,9 @@ export function WorkbenchDockviewTab(props: IDockviewPanelHeaderProps<WorkbenchP
   const tabContentRef = useRef<HTMLDivElement>(null);
 
   const requestClose = useCallback(() => {
-    void requestCloseWorkbenchPanel(props.api.id);
-  }, [props.api]);
+    if (metadata.role === "editor") void requestCloseEditorPanel(props.api.id);
+    else void requestCloseWorkbenchPanel(props.api.id);
+  }, [metadata.role, props.api]);
 
   useEffect(() => {
     const tabContent = tabContentRef.current;
@@ -296,11 +297,10 @@ export function WorkbenchDockviewTab(props: IDockviewPanelHeaderProps<WorkbenchP
 
   const contextMenuSections = contextMenu
     ? contextMenu.target.metadata.role === "editor"
-      ? buildTabContextMenuSections(
+      ? buildEditorPanelTabMenu(
           {
             panelInstanceId: contextMenu.target.panelInstanceId,
             groupId: contextMenu.target.groupId,
-            tab: layoutTabFromEditorMetadata(contextMenu.target.metadata),
           },
           t,
         )

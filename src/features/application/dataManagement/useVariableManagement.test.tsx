@@ -22,7 +22,15 @@ vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
 vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
   useActiveEditorGroup: () => ({
     activeTabId: "functions/Detail.yssbi-function",
-    tabs: [{ id: "functions/Detail.yssbi-function", type: "function" }],
+    panels: [
+      {
+        metadata: {
+          role: "editor",
+          resourceRef: "functions/Detail.yssbi-function",
+          resourceKind: "function",
+        },
+      },
+    ],
   }),
 }));
 

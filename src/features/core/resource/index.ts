@@ -5,7 +5,7 @@ export * from "./functionResourceView";
 export * from "./resourceSelectors";
 export * from "./resourceSnapshotReconcile";
 export * from "./resourceStore";
-export { buildGraphResourceMeta, resourceKey, resourceRefFromLayoutTab } from "./resourceTypes";
+export { buildGraphResourceMeta, resourceKey } from "./resourceTypes";
 export type {
   BackendProjectResourceMeta,
   ProjectResourceMeta,

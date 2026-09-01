@@ -1,5 +1,5 @@
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
-import { activateCurrentEditorTab } from "./switchEditorTab";
+import { workbenchDockviewRead } from "@/features/core/dockview";
+import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 150;
@@ -22,10 +22,10 @@ export async function bootstrapEditorGraphSession(
 ): Promise<boolean> {
   const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = options?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
-  if (!getActiveLayoutTab(groupId)) return true;
+  if (!workbenchDockviewRead.getActiveEditorPanelInGroup(groupId)) return true;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const loaded = await activateCurrentEditorTab(groupId);
+    const loaded = await activateCurrentEditorPanel(groupId);
     if (loaded) return true;
     if (attempt < maxAttempts) {
       await sleep(retryDelayMs);

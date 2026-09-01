@@ -13,7 +13,7 @@ import {
   workbenchDockviewRead,
 } from "@/features/core/dockview/workbenchRead";
 import type { WorkbenchPanelCommitToken } from "@/features/core/dockview/workbenchTypes";
-import { clearDetailFocusForClosedTab } from "@/features/application/editor/clearDetailFocusForClosedTab";
+import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
 import {
   clearResourceDocumentState,
   isResourceDocumentDirty,
@@ -39,10 +39,10 @@ import {
 } from "@/features/application/projectCommandContext";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { saveWorksheetDocument as saveWorksheetDraft } from "@/features/application/worksheet/saveWorksheetDocument";
-import { deactivateGraphTab } from "./activateGraphTab";
+import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { unloadGraphDocument } from "./graphDocumentUnload";
-import { resolveTabDisplayName } from "./resolveTabDisplayName";
+import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 
 type EditorDocument = {
   readonly key: string;
@@ -159,7 +159,7 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
       key,
       resourceRef: metadata.resourceRef,
       resourceKind: metadata.resourceKind,
-      name: resolveTabDisplayName(ref, panel.title ?? metadata.resourceRef),
+      name: resolveResourceDisplayName(ref, panel.title ?? metadata.resourceRef),
       dirty: isResourceDocumentDirty(ref),
     });
   }
@@ -295,7 +295,7 @@ function finalizeClosedPanels(
       if (!hasSameScope && !releasedViewportScopes.has(scopeKey)) {
         releasedViewportScopes.add(scopeKey);
         releaseEditorViewport(editorViewportScope(panel.groupId, metadata.resourceRef));
-        deactivateGraphTab(panel.groupId, metadata.resourceRef);
+        deactivateGraphPanelSession(panel.groupId, metadata.resourceRef);
       }
     }
 
@@ -307,7 +307,7 @@ function finalizeClosedPanels(
       continue;
     }
     finalizedDocuments.add(key);
-    clearDetailFocusForClosedTab(metadata.resourceRef);
+    clearDetailFocusForClosedPanel(metadata.resourceRef);
     if (metadata.resourceKind === "worksheet") {
       evictWorksheetDocument(metadata.resourceRef);
       continue;

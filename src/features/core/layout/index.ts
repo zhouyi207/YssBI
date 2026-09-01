@@ -1,24 +1,4 @@
-export { collectDirtyGraphTabs } from "./tabDirty";
-export {
-  locateLayoutTab,
-  getActiveLayoutTab,
-  resolveEditorGroupId,
-  resolveEditorTargetGroupId,
-  createGraphSelection,
-  getEditorGroupGraphSelection,
-  updateEditorGroupSelectedNodeIds,
-  updateEditorGroupSelectedConnectionIds,
-  clearEditorGroupGraphSelection,
-} from "./layoutTabQueries";
-export type { GraphSelection, LocatedLayoutTab, LayoutGroupContext } from "./layoutTabQueries";
-
-export {
-  buildGraphLayoutTab,
-  buildWorksheetLayoutTab,
-  findPreviewTabInTabs,
-  isWorksheetLayoutTab,
-  layoutTabResourceRef,
-} from "./layoutTabModel";
+export { collectDirtyEditorPanels } from "./editorPanelDirty";
 export {
   readEditorPartOptions,
   preferSplitVerticallyFromDirection,
@@ -29,4 +9,4 @@ export type {
   OpenSideBySideDirection,
   EditorSplitSizingMode,
 } from "./editorPartOptions";
-export { isGraphOpenInAnyTab } from "./graphTabQueries";
+export { isGraphOpenInAnyEditorPanel } from "./graphPanelQueries";

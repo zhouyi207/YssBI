@@ -44,18 +44,6 @@ vi.mock("@/features/application/worksheet/saveWorksheetDocument", () => ({
   saveWorksheetDocument: mocks.saveWorksheet,
 }));
 
-vi.mock("@/features/core/layout/layoutTabQueries", () => ({
-  resolveEditorGroupId: () => "group-later",
-  getActiveLayoutTab: () => ({
-    activeTabId: "events/Later.yssbi-event",
-    tab: {
-      id: "events/Later.yssbi-event",
-      type: "event",
-      component: "GraphEditor",
-    },
-  }),
-}));
-
 vi.mock("@/features/core/worksheet/worksheetStore", () => ({
   useWorksheetStore: {
     getState: () => ({ saveDocument: mocks.saveWorksheet }),

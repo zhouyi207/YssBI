@@ -7,11 +7,11 @@ import {
 } from "@/features/core/dataStore/graphNodeSelectors";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import {
-  getActiveLayoutTab,
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
-} from "@/features/core/layout";
+} from "@/features/core/editor";
+import { workbenchDockviewRead } from "@/features/core/dockview";
 import { executeCommand, executeCommandWithResult } from "@/features/core/history";
 import type { GraphMutationCommandResult } from "@/features/core/history/types";
 import {
@@ -112,9 +112,12 @@ export function useEditorOperations() {
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
       const update = updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
       if (!update) return;
-      const active = getActiveLayoutTab(update.groupId);
-      if (active?.tab.type === "event" || active?.tab.type === "function") {
-        setInspectionContext(active.activeTabId, []);
+      const active = workbenchDockviewRead.getActiveEditorPanelInGroup(update.groupId);
+      if (
+        active?.metadata.resourceKind === "event" ||
+        active?.metadata.resourceKind === "function"
+      ) {
+        setInspectionContext(active.metadata.resourceRef, []);
       }
     },
     [],
@@ -124,9 +127,12 @@ export function useEditorOperations() {
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
       const update = updateEditorGroupSelectedNodeIds(updater, targetGroupId);
       if (!update) return;
-      const active = getActiveLayoutTab(update.groupId);
-      if (active?.tab.type === "event" || active?.tab.type === "function") {
-        setInspectionContext(active.activeTabId, update.nodeIds);
+      const active = workbenchDockviewRead.getActiveEditorPanelInGroup(update.groupId);
+      if (
+        active?.metadata.resourceKind === "event" ||
+        active?.metadata.resourceKind === "function"
+      ) {
+        setInspectionContext(active.metadata.resourceRef, update.nodeIds);
       }
     },
     [],

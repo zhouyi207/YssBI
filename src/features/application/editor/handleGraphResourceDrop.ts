@@ -1,10 +1,9 @@
 import type { GraphResourceDragData } from "@/features/core/dnd";
-import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 
 import { openGraphInEditor } from "./openGraphInEditor";
-import { switchEditorTab } from "./switchEditorTab";
+import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 
 /** Handle sidebar graph-resource drops without participating in Dockview's native tab DnD. */
 export async function handleGraphResourceDrop(
@@ -30,5 +29,5 @@ export async function handleGraphResourceDrop(
 
   const moved = workbenchDockviewRead.getPanel(opened.panelInstanceId);
   if (moved?.metadata.role !== "editor") return;
-  await switchEditorTab(moved.groupId, layoutTabFromEditorMetadata(moved.metadata));
+  await activateEditorPanelAndSyncSession({ ...moved, metadata: moved.metadata });
 }

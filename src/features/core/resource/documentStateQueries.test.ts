@@ -9,7 +9,7 @@ import {
   isGraphResourceDirty,
   resourceKey,
 } from "@/features/core/resource";
-import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
+import { collectDirtyEditorPanels } from "@/features/core/layout/editorPanelDirty";
 
 describe("document state queries", () => {
   beforeEach(() => {
@@ -45,17 +45,17 @@ describe("document state queries", () => {
   });
 });
 
-describe("collectDirtyGraphTabs", () => {
+describe("collectDirtyEditorPanels", () => {
   beforeEach(() => {
     useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
   });
 
-  it("reads dirty from DocumentState not LayoutTab.isDirty", () => {
+  it("reads dirty from DocumentState instead of panel metadata", () => {
     const path = "events/A.yssbi-event";
     useResourceStore.getState().upsertResource(buildGraphResourceMeta("event", path, "A"));
     markResourceDirty({ id: path, kind: "event" }, true);
 
-    expect(collectDirtyGraphTabs()).toEqual([]);
+    expect(collectDirtyEditorPanels()).toEqual([]);
   });
 });

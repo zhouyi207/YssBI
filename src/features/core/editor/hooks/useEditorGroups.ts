@@ -6,9 +6,9 @@
 import { useMemo } from "react";
 import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { EditorGroupSnapshot } from "@/shared/types";
+import type { WorkbenchGroupInfo } from "@/features/core/dockview/workbenchRead";
 
-export function useEditorGroups(): EditorGroupSnapshot[] {
+export function useEditorGroups(): WorkbenchGroupInfo[] {
   const { revision } = useDockviewPortSnapshot(workbenchDockviewRead);
 
   return useMemo(() => {
@@ -18,9 +18,6 @@ export function useEditorGroups(): EditorGroupSnapshot[] {
         .filter((panel) => panel.metadata.role === "editor")
         .map((panel) => panel.groupId),
     );
-    return workbenchDockviewRead
-      .listGroups()
-      .filter((group) => editorGroupIds.has(group.groupId))
-      .map(({ groupId }): EditorGroupSnapshot => ({ id: groupId }));
+    return workbenchDockviewRead.listGroups().filter((group) => editorGroupIds.has(group.groupId));
   }, [revision]);
 }

@@ -31,7 +31,7 @@ type OpenGraphFn = (
  *
  * 作为编辑器 UI 的 graph 操作门面：
  * - graph resource CRUD 委托给 resourceActions（file-first：创建写盘 + refreshResourceIndex）
- * - 创建后自动打开时，经 openGraphInEditor → switchEditorTab 从文件加载正文
+ * - 创建后自动打开时，经 openGraphInEditor → panel session activation 从文件加载正文
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
 export function useGraphManagement(openGraph: OpenGraphFn) {

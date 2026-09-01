@@ -282,6 +282,42 @@ function stylesheetAssetDependency(
 }
 
 describe("frontend architecture model", () => {
+  it("keeps Dockview as the sole editor panel topology authority", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const obsoleteIdentifiers = [
+        "LayoutTab",
+        "LayoutTabType",
+        "LayoutTabComponent",
+        "EditorGroupSnapshot",
+        "layoutTabFromEditorMetadata",
+        "useTabManagement",
+      ];
+      const violations = sources.flatMap(({ path, source }) =>
+        obsoleteIdentifiers
+          .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
+          .map((identifier) => `${path}:${identifier}`),
+      );
+      expect(violations).toEqual([]);
+
+      const obsoleteFiles = new Set([
+        "src/features/core/layout/layoutTabModel.ts",
+        "src/features/core/layout/layoutTabQueries.ts",
+        "src/features/application/editor/dockviewTabProjection.ts",
+      ]);
+      expect(sources.map(({ path }) => path).filter((path) => obsoleteFiles.has(path))).toEqual([]);
+
+      const layoutConsumers = sources.filter(
+        ({ path, source }) =>
+          path !== "src/features/application/layout/useWorkbenchLayout.ts" &&
+          /\buseWorkbenchLayout\s*\(/u.test(source),
+      );
+      expect(layoutConsumers.map(({ path }) => path)).toEqual([
+        "src/views/EditorView/Layout/Workspace.tsx",
+      ]);
+    });
+  });
+
   it("classifies every frontend production source exactly once", () => {
     const emptyMembership = Object.fromEntries(
       [
@@ -350,9 +386,11 @@ describe("frontend architecture model", () => {
             "getPanel",
             "getActivePanel",
             "getActiveEditorPanel",
+            "getActiveEditorPanelInGroup",
             "listPanels",
             "listGroups",
             "listGroupPanels",
+            "listEditorPanelsInGroup",
             "findEditorPanelsByResource",
             "getEdgeState",
           ],

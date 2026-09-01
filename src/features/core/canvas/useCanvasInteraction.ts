@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
-} from "@/features/core/layout/layoutTabQueries";
-import type { GraphSelection } from "@/features/core/layout";
+} from "@/features/core/editor/editorGroupSelection";
+import type { GraphSelection } from "@/features/core/editor/editorGroupSelection";
 
 import { persistGraphViewport, editorViewportScope } from "@/features/core/viewport";
 import { useEditorStore } from "@/features/core/editor";

@@ -7,12 +7,12 @@ import type { RefObject } from "react";
 import type { buildEditorState } from "@/features/core/editor/hooks/useEditorState";
 import type { useEditorActions } from "@/features/core/editor/hooks/useEditorActions";
 import type { EditorViewport } from "@/features/core/viewport";
-import type { GraphSelection } from "@/features/core/layout";
+import type { GraphSelection } from "@/features/core/editor";
 import type { CanvasMutationOutcome } from "@/features/core/canvas";
 import type { Pin } from "@/shared/types/domain/pin";
 import type { EditorCommandTarget } from "./editorCommandFocus";
 import type { useEditorOperations } from "./useEditorOperations";
-import type { useTabManagement } from "./useTabManagement";
+import type { useEditorPanelCommands } from "./useEditorPanelCommands";
 import type { useOpenWorksheet, useWorksheetManagement } from "./useWorksheetManagement";
 import type { useProjectOperations } from "./useProjectOperations";
 import type { useGraphManagement } from "@/features/application/dataManagement/useGraphManagement";
@@ -51,7 +51,7 @@ export type EditorSessionHistoryAvailability = {
   canRedo: boolean;
   pending: boolean;
 };
-export type EditorSessionTabActions = ReturnType<typeof useTabManagement>;
+export type EditorSessionPanelActions = ReturnType<typeof useEditorPanelCommands>;
 export type EditorSessionWorksheetActions = ReturnType<typeof useWorksheetManagement> & {
   openWorksheet: ReturnType<typeof useOpenWorksheet>;
 };

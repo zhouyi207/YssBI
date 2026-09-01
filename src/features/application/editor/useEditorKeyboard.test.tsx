@@ -44,8 +44,6 @@ const mocks = vi.hoisted(() => ({
     saveGraphAs: vi.fn(),
     importGraph: vi.fn(),
     addEvent: vi.fn(),
-    closeTab: vi.fn(),
-    setActiveTabId: vi.fn(),
     splitEditorRight: vi.fn(),
     selectAllNodes: vi.fn(async () => true),
     focusSelectedNodes: vi.fn(() => true),
@@ -117,7 +115,7 @@ vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
   toggleActivityWorkbenchGroup: mocks.toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup: mocks.toggleBottomWorkbenchGroup,
 }));
-vi.mock("@/features/core/layout/layoutTabQueries", () => ({
+vi.mock("@/features/core/editor/editorGroupSelection", () => ({
   clearEditorGroupGraphSelection: mocks.clearSelection,
   getEditorGroupGraphSelection: () => mocks.selection,
 }));
@@ -309,7 +307,6 @@ describe("useEditorKeyboard", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(mocks.requestCloseWorkbenchPanel).toHaveBeenCalledWith("result-a");
-    expect(callbacks.closeTab).not.toHaveBeenCalled();
   });
 
   it("cycles every physical panel in active-group order in both directions", () => {

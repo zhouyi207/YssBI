@@ -1,5 +1,4 @@
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { markResourceLoaded } from "@/features/core/resource";
@@ -21,7 +20,7 @@ function scheduleGraphCleanup(previousGraphPath?: string): void {
     .catch((error) => {
       logger.graph.warn(
         `Background graph cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
-        "activateGraphTab",
+        "graphPanelSession",
       );
     });
 }
@@ -35,11 +34,10 @@ function finishGraphEditorActivation(groupId: string, graphPath: string): void {
 }
 
 /** Session bookkeeping + single loadGraph entry + editor activation. */
-export async function activateGraphTab(
+export async function activateGraphPanelSession(
   graphPath: string,
-  targetGroupId?: string,
+  groupId: string,
 ): Promise<boolean> {
-  const groupId = resolveEditorTargetGroupId(targetGroupId);
   const sessionStore = useGraphSessionStore.getState();
   const previous = sessionStore.setFocusedSession(groupId, graphPath);
 
@@ -63,8 +61,11 @@ export async function activateGraphTab(
   return true;
 }
 
-/** Clear session only when the closed tab owned the focused graph (background tabs keep protection). */
-export function deactivateGraphTab(groupId: string, closedGraphPath?: string | null): void {
+/** Clear session only when the closed panel owned the focused graph. */
+export function deactivateGraphPanelSession(
+  groupId: string,
+  closedGraphPath?: string | null,
+): void {
   const store = useGraphSessionStore.getState();
   const focused = store.focusedSession;
   if (focused?.groupId !== groupId) return;

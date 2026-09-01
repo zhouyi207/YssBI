@@ -1,7 +1,7 @@
 import { useContext, useMemo } from "react";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { createGraphSelection } from "@/features/core/layout/layoutTabQueries";
+import { createGraphSelection } from "../editorGroupSelection";
 import { GroupContext } from "../context/GroupContext";
 import { useEditorGroupPlacement } from "./useEditorGroupPlacement";
 
@@ -18,7 +18,7 @@ export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   return useMemo(
     () => ({
       groupId,
-      tabs: placement.tabs,
+      panels: placement.panels,
       activeTabId: placement.activeTabId,
       selectedNodeIds: placement.selectedNodeIds,
       selectedConnectionIds: placement.selectedConnectionIds,

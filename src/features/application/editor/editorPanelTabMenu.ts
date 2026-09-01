@@ -1,33 +1,33 @@
 import { createElement } from "react";
 import type { TFunction } from "i18next";
 import { VscCheckAll, VscClearAll, VscClose, VscCloseAll } from "react-icons/vsc";
-import { isGraphResourceDirty } from "@/features/core/resource";
+import { isResourceDocumentDirty } from "@/features/core/resource";
 import type { ActionMenuSection } from "@/shared/ui/actionMenu";
-import type { LayoutTab } from "@/shared/types/ui";
+import { workbenchDockviewRead } from "@/features/core/dockview";
 import {
-  closeAllTabsInGroup,
-  closeOtherTabs,
-  closeSavedTabsInGroup,
-  closeTab,
-} from "./tabCommands";
-import { listDockviewGroupTabs } from "./dockviewTabProjection";
+  requestCloseAllEditorPanelsInGroup,
+  requestCloseEditorPanel,
+  requestCloseOtherEditorPanels,
+  requestCloseSavedEditorPanelsInGroup,
+} from "./editorPanelCloseCommands";
 
-export interface TabContextMenuTarget {
+export interface EditorPanelTabMenuTarget {
   readonly panelInstanceId: string;
   readonly groupId: string;
-  readonly tab: LayoutTab;
 }
 
-function groupHasSavedTabs(groupId: string): boolean {
-  return listDockviewGroupTabs(groupId).some(
-    (tab) =>
-      (tab.type === "event" || tab.type === "function" || tab.type === "worksheet") &&
-      !isGraphResourceDirty(tab.id, tab.type),
+function groupHasSavedEditorPanels(groupId: string): boolean {
+  return workbenchDockviewRead.listEditorPanelsInGroup(groupId).some(
+    (panel) =>
+      !isResourceDocumentDirty({
+        id: panel.metadata.resourceRef,
+        kind: panel.metadata.resourceKind,
+      }),
   );
 }
 
-export function buildTabContextMenuSections(
-  target: TabContextMenuTarget,
+export function buildEditorPanelTabMenu(
+  target: EditorPanelTabMenuTarget,
   t: TFunction,
 ): ActionMenuSection[] {
   const { groupId, panelInstanceId } = target;
@@ -38,7 +38,7 @@ export function buildTabContextMenuSections(
           id: "close",
           label: t("tabBar.contextMenu.close"),
           icon: createElement(VscClose, { size: 12 }),
-          onClick: () => void closeTab(panelInstanceId),
+          onClick: () => void requestCloseEditorPanel(panelInstanceId),
         },
       ],
     },
@@ -48,20 +48,20 @@ export function buildTabContextMenuSections(
           id: "close-others",
           label: t("tabBar.contextMenu.closeOthers"),
           icon: createElement(VscCloseAll, { size: 12 }),
-          onClick: () => void closeOtherTabs(groupId, panelInstanceId),
+          onClick: () => void requestCloseOtherEditorPanels(groupId, panelInstanceId),
         },
         {
           id: "close-saved",
           label: t("tabBar.contextMenu.closeSaved"),
           icon: createElement(VscCheckAll, { size: 12 }),
-          disabled: !groupHasSavedTabs(groupId),
-          onClick: () => void closeSavedTabsInGroup(groupId),
+          disabled: !groupHasSavedEditorPanels(groupId),
+          onClick: () => void requestCloseSavedEditorPanelsInGroup(groupId),
         },
         {
           id: "close-all",
           label: t("tabBar.contextMenu.closeAll"),
           icon: createElement(VscClearAll, { size: 12 }),
-          onClick: () => void closeAllTabsInGroup(groupId),
+          onClick: () => void requestCloseAllEditorPanelsInGroup(groupId),
         },
       ],
     },

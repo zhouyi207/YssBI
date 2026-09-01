@@ -1,6 +1,7 @@
 import type { SerializedDockview } from "dockview-react";
 
 import type {
+  EditorPanelMetadata,
   EditorResourceKind,
   ResultPanelMetadata,
   WorkbenchComponentId,
@@ -22,6 +23,10 @@ export interface WorkbenchPanelInfo {
   readonly location:
     | { readonly type: "grid" }
     | { readonly type: "edge"; readonly position: WorkbenchEdgePosition };
+}
+
+export interface WorkbenchEditorPanelInfo extends WorkbenchPanelInfo {
+  readonly metadata: EditorPanelMetadata;
 }
 
 export interface WorkbenchGroupInfo {
@@ -118,11 +123,13 @@ export interface WorkbenchDockviewReadContract {
   getSnapshot(): Readonly<{ revision: number; ready: boolean; hydrated: boolean }>;
   getPanel(panelInstanceId: string): WorkbenchPanelInfo | undefined;
   getActivePanel(): WorkbenchPanelInfo | undefined;
-  getActiveEditorPanel(): WorkbenchPanelInfo | undefined;
+  getActiveEditorPanel(): WorkbenchEditorPanelInfo | undefined;
+  getActiveEditorPanelInGroup(groupId: string): WorkbenchEditorPanelInfo | undefined;
   listPanels(): readonly WorkbenchPanelInfo[];
   listGroups(): readonly WorkbenchGroupInfo[];
   listGroupPanels(groupId: string): readonly WorkbenchPanelInfo[];
-  findEditorPanelsByResource(resourceRef: string): readonly WorkbenchPanelInfo[];
+  listEditorPanelsInGroup(groupId: string): readonly WorkbenchEditorPanelInfo[];
+  findEditorPanelsByResource(resourceRef: string): readonly WorkbenchEditorPanelInfo[];
   getEdgeState(position: WorkbenchEdgePosition): WorkbenchEdgeState;
 }
 

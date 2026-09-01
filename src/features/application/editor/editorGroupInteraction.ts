@@ -1,4 +1,4 @@
-import { focusEditorGroupSync, hydrateEditorGroup } from "./switchEditorTab";
+import { focusEditorGroupSync, hydrateEditorGroup } from "./activateEditorPanelAndSyncSession";
 
 export const EDITOR_GROUP_TAB_CHROME_SELECTOR =
   "[data-tab-id], [data-tab-strip], [data-tabbar-drop], [data-editor-group-actions]";

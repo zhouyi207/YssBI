@@ -3,7 +3,6 @@ import {
   type GraphOutputRefDto,
   type ResultPresentation,
 } from "@/shared/types/domain/result";
-import type { LayoutTab } from "@/shared/types/layout/layout";
 
 export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "data", "nodes", "commands"] as const;
 
@@ -21,6 +20,12 @@ export const WORKBENCH_VIEW_IDS = [
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
 export type EditorResourceKind = "event" | "function" | "worksheet";
+export interface EditorResourceTarget {
+  readonly resourceRef: string;
+  readonly resourceKind: EditorResourceKind;
+  readonly pinned?: boolean;
+  readonly sticky?: boolean;
+}
 export type WorkbenchComponentId =
   | "GraphEditor"
   | "WorksheetEditor"
@@ -36,12 +41,8 @@ export type WorkbenchComponentId =
   | "Output"
   | "Diagnostics";
 
-export type EditorPanelMetadata = {
+export type EditorPanelMetadata = EditorResourceTarget & {
   readonly role: "editor";
-  readonly resourceRef: string;
-  readonly resourceKind: EditorResourceKind;
-  readonly pinned?: boolean;
-  readonly sticky?: boolean;
 };
 
 export type ViewPanelMetadata = {
@@ -226,14 +227,4 @@ export function componentForWorkbenchMetadata(
   }
   if (metadata.role === "result") return "Result";
   return COMPONENT_BY_VIEW_ID[metadata.viewId];
-}
-
-export function layoutTabFromEditorMetadata(metadata: EditorPanelMetadata): LayoutTab {
-  return {
-    id: metadata.resourceRef,
-    type: metadata.resourceKind,
-    component: metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor",
-    ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
-    ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
-  };
 }

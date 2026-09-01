@@ -9,7 +9,7 @@
  * Persisted graphs: `events/...` / `functions/...` relative paths.
  *
  * `GraphResourceUri` is the logical URI form (`yssbi://graph/{kind}/{encodedPath}`).
- * `Graph.path` / `LayoutTab.id` / `ResourceRef.id` use the persisted relative path.
+ * `Graph.path` / editor panel `resourceRef` / `ResourceRef.id` use the persisted relative path.
  */
 
 export type GraphResourceKind = "event" | "function";

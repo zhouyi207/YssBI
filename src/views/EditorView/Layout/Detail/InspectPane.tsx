@@ -27,10 +27,13 @@ function InspectEmpty({ title, description }: { title: string; description: stri
 
 export function InspectPane() {
   const { t } = useTranslation();
-  const { activeTabId, tabs, selectedNodeIds } = useActiveEditorGroup();
-  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const { activeTabId, panels, selectedNodeIds } = useActiveEditorGroup();
+  const activePanel = panels.find((panel) => panel.metadata.resourceRef === activeTabId);
   const graphPath =
-    activeTab?.type === "event" || activeTab?.type === "function" ? activeTab.id : null;
+    activePanel?.metadata.resourceKind === "event" ||
+    activePanel?.metadata.resourceKind === "function"
+      ? activePanel.metadata.resourceRef
+      : null;
   const target = resolveNodeInspectionTarget(graphPath, selectedNodeIds);
 
   if (target.kind === "node") {

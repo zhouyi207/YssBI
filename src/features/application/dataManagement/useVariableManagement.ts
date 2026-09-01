@@ -22,16 +22,16 @@ export interface VariableCreationOptions {
  * Binds UI state and delegates CRUD to variable application actions.
  */
 export function useVariableManagement() {
-  const { activeTabId, tabs } = useActiveEditorGroup();
+  const { activeTabId, panels } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
   const localGraphPath = variablesGraphScopePath ?? activeTabId;
-  const graphTypeFromTab = localGraphPath
-    ? tabs.find((t) => t.id === localGraphPath)?.type
+  const graphTypeFromPanel = localGraphPath
+    ? panels.find((panel) => panel.metadata.resourceRef === localGraphPath)?.metadata.resourceKind
     : undefined;
   const graphTypeFromResource = useResourceStore((s) =>
     localGraphPath ? lookupGraphResourceKind(s.resources, localGraphPath) : undefined,
   );
-  const rawType = graphTypeFromTab || graphTypeFromResource;
+  const rawType = graphTypeFromPanel || graphTypeFromResource;
   const graphType = (rawType === "event" || rawType === "function" ? rawType : undefined) as
     | "event"
     | "function"

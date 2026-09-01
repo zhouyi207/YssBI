@@ -13,7 +13,7 @@ import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";
 
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
-import { resolveTabDisplayName } from "./resolveTabDisplayName";
+import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 
 interface DirtyEditorDocument {
   resourceRef: string;
@@ -35,7 +35,7 @@ function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
     dirty.push({
       resourceRef,
       resourceKind,
-      title: resolveTabDisplayName(
+      title: resolveResourceDisplayName(
         { id: resourceRef, kind: resourceKind },
         panel.title ?? resourceRef,
       ),

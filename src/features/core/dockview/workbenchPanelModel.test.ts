@@ -4,14 +4,13 @@ import type { GraphOutputRefDto } from "@/shared/types/domain/result";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
-  layoutTabFromEditorMetadata,
   type ResultPanelMetadata,
   type ViewPanelMetadata,
   type WorkbenchComponentId,
 } from "./workbenchPanelModel";
 
 describe("workbench panel metadata", () => {
-  it("keeps canonical identity, component selection, and editor projection in one place", () => {
+  it("keeps canonical editor identity and component selection in one place", () => {
     const metadata = {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
@@ -22,14 +21,6 @@ describe("workbench panel metadata", () => {
 
     expect(isWorkbenchPanelMetadata(metadata)).toBe(true);
     expect(componentForWorkbenchMetadata(metadata)).toBe("GraphEditor");
-    expect(layoutTabFromEditorMetadata(metadata)).toEqual({
-      id: "events/Main.yssbi-event",
-      type: "event",
-      component: "GraphEditor",
-      pinned: false,
-      sticky: true,
-    });
-    expect(metadata).not.toHaveProperty("layoutTab");
 
     expect(
       componentForWorkbenchMetadata({

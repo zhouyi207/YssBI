@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useFunctionCatalog } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { workbenchDockviewRead } from "@/features/core/dockview";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useGraphResourcesByKind } from "@/features/core/resource";
@@ -33,12 +33,12 @@ export function useProjectResourceBrowser() {
   const resetProjectTreeQuery = useSidebarStore((state) => state.resetProjectTreeQuery);
   const previousProjectInstanceId = useRef<string | null | undefined>(undefined);
 
-  const activeTab = focusedSession
-    ? (getActiveLayoutTab(focusedSession.groupId)?.tab ?? null)
+  const activeEditor = focusedSession
+    ? (workbenchDockviewRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata ?? null)
     : null;
   const activeGraph = useMemo(
-    () => resolveActiveProjectGraph({ events, functions, activeTab }),
-    [activeTab, events, functions],
+    () => resolveActiveProjectGraph({ events, functions, activeEditor }),
+    [activeEditor, events, functions],
   );
   const { global: globalVariables, local: localVariables } = useMemo(
     () =>

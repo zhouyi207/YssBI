@@ -3,7 +3,7 @@ import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
 } from "@/features/core/sidebar/projectTreeState";
-import type { LayoutTab } from "@/shared/types";
+import type { EditorResourceTarget } from "@/features/core/dockview";
 
 export interface ActiveProjectGraph {
   path: string;
@@ -98,14 +98,26 @@ export interface ProjectResourceBrowserProjection {
 export function resolveActiveProjectGraph(input: {
   events: Readonly<Record<string, { name: string }>>;
   functions: Readonly<Record<string, { name: string }>>;
-  activeTab: LayoutTab | null;
+  activeEditor: EditorResourceTarget | null;
 }): ActiveProjectGraph | null {
-  const { activeTab } = input;
-  if (!activeTab || (activeTab.type !== "event" && activeTab.type !== "function")) return null;
+  const { activeEditor } = input;
+  if (
+    !activeEditor ||
+    (activeEditor.resourceKind !== "event" && activeEditor.resourceKind !== "function")
+  )
+    return null;
 
   const graph =
-    activeTab.type === "event" ? input.events[activeTab.id] : input.functions[activeTab.id];
-  return graph ? { path: activeTab.id, kind: activeTab.type, name: graph.name } : null;
+    activeEditor.resourceKind === "event"
+      ? input.events[activeEditor.resourceRef]
+      : input.functions[activeEditor.resourceRef];
+  return graph
+    ? {
+        path: activeEditor.resourceRef,
+        kind: activeEditor.resourceKind,
+        name: graph.name,
+      }
+    : null;
 }
 
 interface Category {

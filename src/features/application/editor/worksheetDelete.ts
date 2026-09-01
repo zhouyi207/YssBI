@@ -11,7 +11,7 @@ import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { WorksheetService } from "@/services/worksheet/worksheetService";
 
 import { showBlockingIpcError } from "./blockingErrorDialog";
-import { resolveTabDisplayName } from "./resolveTabDisplayName";
+import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 
 export async function performWorksheetDelete(
   worksheetPath: string,
@@ -33,7 +33,7 @@ export async function performWorksheetDelete(
 }
 
 export async function deleteWorksheetWithConfirm(worksheetPath: string): Promise<boolean> {
-  const name = resolveTabDisplayName({ id: worksheetPath, kind: "worksheet" }, worksheetPath);
+  const name = resolveResourceDisplayName({ id: worksheetPath, kind: "worksheet" }, worksheetPath);
   const context = captureProjectCommandContext();
   const confirmed = await uiStore.confirm({
     title: "删除工作表",

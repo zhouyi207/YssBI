@@ -48,11 +48,7 @@ vi.mock("./editorCommandFocus", () => ({
     target.panelInstanceId === `editor-${target.groupId}` &&
     mocks.activeResourceByGroup.get(target.groupId) === target.resourceRef,
 }));
-vi.mock("@/features/core/layout", () => ({
-  getActiveLayoutTab: (groupId: string) => {
-    const activeTabId = mocks.activeResourceByGroup.get(groupId);
-    return activeTabId ? { activeTabId, tab: { id: activeTabId, type: "event" } } : null;
-  },
+vi.mock("@/features/core/editor", () => ({
   getEditorGroupGraphSelection: (groupId: string) => ({
     nodeIds: new Set(mocks.selectionByGroup.get(groupId) ?? []),
     connectionIds: new Set<string>(),
@@ -67,6 +63,23 @@ vi.mock("@/features/core/layout", () => ({
     return { groupId, nodeIds };
   },
   updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
+}));
+vi.mock("@/features/core/dockview", () => ({
+  workbenchDockviewRead: {
+    getActiveEditorPanelInGroup: (groupId: string) => {
+      const resourceRef = mocks.activeResourceByGroup.get(groupId);
+      return resourceRef
+        ? {
+            panelInstanceId: `editor-${groupId}`,
+            groupId,
+            component: "GraphEditor" as const,
+            metadata: { role: "editor" as const, resourceRef, resourceKind: "event" as const },
+            active: true,
+            location: { type: "grid" as const },
+          }
+        : undefined;
+    },
+  },
 }));
 vi.mock("@/features/core/dataStore/graphNodeSelectors", () => ({
   canCopyNode: mocks.canCopyNode,

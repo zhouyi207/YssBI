@@ -11,10 +11,10 @@ import {
 } from "@dnd-kit/core";
 
 import { executeEditorDragEnd } from "@/features/application/editor/editorDragDropActions";
-import { synchronizeActiveEditorTab } from "@/features/application/editor/switchEditorTab";
+import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
-import { layoutTabFromEditorMetadata, workbenchDockviewRead } from "@/features/core/dockview";
+import { workbenchDockviewRead } from "@/features/core/dockview";
 import {
   buildSidebarDragState,
   isSidebarSpawnDrag,
@@ -76,10 +76,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
 
         const activePanel = workbenchDockviewRead.getActivePanel();
         if (activePanel?.metadata.role !== "editor") return;
-        void synchronizeActiveEditorTab(
-          activePanel.groupId,
-          layoutTabFromEditorMetadata(activePanel.metadata),
-        );
+        void synchronizeActiveEditorPanel({ ...activePanel, metadata: activePanel.metadata });
       });
     },
     [bindWorkbenchLayout],

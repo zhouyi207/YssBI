@@ -4,6 +4,7 @@ import { workbenchDockviewRuntime } from "./workbenchDockviewInternal";
 import type {
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
+  WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
 } from "./workbenchTypes";
@@ -16,14 +17,24 @@ export interface WorkbenchDockviewRead {
   getSnapshot(): DeepReadonly<{ revision: number; ready: boolean; hydrated: boolean }>;
   getPanel(panelInstanceId: string): DeepReadonly<WorkbenchPanelInfo> | undefined;
   getActivePanel(): DeepReadonly<WorkbenchPanelInfo> | undefined;
-  getActiveEditorPanel(): DeepReadonly<WorkbenchPanelInfo> | undefined;
+  getActiveEditorPanel(): DeepReadonly<WorkbenchEditorPanelInfo> | undefined;
+  getActiveEditorPanelInGroup(groupId: string): DeepReadonly<WorkbenchEditorPanelInfo> | undefined;
   listPanels(): readonly DeepReadonly<WorkbenchPanelInfo>[];
   listGroups(): readonly DeepReadonly<WorkbenchGroupInfo>[];
   listGroupPanels(groupId: string): readonly DeepReadonly<WorkbenchPanelInfo>[];
-  findEditorPanelsByResource(resourceRef: string): readonly DeepReadonly<WorkbenchPanelInfo>[];
+  listEditorPanelsInGroup(groupId: string): readonly DeepReadonly<WorkbenchEditorPanelInfo>[];
+  findEditorPanelsByResource(
+    resourceRef: string,
+  ): readonly DeepReadonly<WorkbenchEditorPanelInfo>[];
   getEdgeState(position: WorkbenchEdgePosition): DeepReadonly<WorkbenchEdgeState>;
 }
 
 export const workbenchDockviewRead: WorkbenchDockviewRead = workbenchDockviewRuntime.read;
 
-export type { WorkbenchEdgePosition, WorkbenchEdgeState, WorkbenchGroupInfo, WorkbenchPanelInfo };
+export type {
+  WorkbenchEdgePosition,
+  WorkbenchEdgeState,
+  WorkbenchEditorPanelInfo,
+  WorkbenchGroupInfo,
+  WorkbenchPanelInfo,
+};

@@ -53,10 +53,10 @@ const mocks = vi.hoisted(() => {
   const warnBeforeSave = vi.fn();
   const releasePane = vi.fn();
   const releaseEditorViewport = vi.fn();
-  const clearDetailFocusForClosedTab = vi.fn();
-  const deactivateGraphTab = vi.fn();
+  const clearDetailFocusForClosedPanel = vi.fn();
+  const deactivateGraphPanelSession = vi.fn();
   const unloadGraphDocument = vi.fn();
-  const resolveTabDisplayName = vi.fn();
+  const resolveResourceDisplayName = vi.fn();
   const applyWorksheetState = (update: unknown) => {
     const patch =
       typeof update === "function"
@@ -126,10 +126,10 @@ const mocks = vi.hoisted(() => {
       warnBeforeSave,
       releasePane,
       releaseEditorViewport,
-      clearDetailFocusForClosedTab,
-      deactivateGraphTab,
+      clearDetailFocusForClosedPanel,
+      deactivateGraphPanelSession,
       unloadGraphDocument,
-      resolveTabDisplayName,
+      resolveResourceDisplayName,
       setWorksheetState,
       commitRemove,
       runPublicationTransaction,
@@ -150,7 +150,7 @@ const mocks = vi.hoisted(() => {
     isGraphSaveRevisionCurrent.mockReturnValue(true);
     unloadGraphDocument.mockResolvedValue(undefined);
     setWorksheetState.mockImplementation(applyWorksheetState);
-    resolveTabDisplayName.mockImplementation((_ref: unknown, fallback: string) => {
+    resolveResourceDisplayName.mockImplementation((_ref: unknown, fallback: string) => {
       const segments = fallback.split("/");
       const leaf = segments[segments.length - 1] ?? fallback;
       return leaf.replace(/\.yssbi-(event|function|worksheet)$/, "");
@@ -199,10 +199,10 @@ const mocks = vi.hoisted(() => {
     warnBeforeSave,
     releasePane,
     releaseEditorViewport,
-    clearDetailFocusForClosedTab,
-    deactivateGraphTab,
+    clearDetailFocusForClosedPanel,
+    deactivateGraphPanelSession,
     unloadGraphDocument,
-    resolveTabDisplayName,
+    resolveResourceDisplayName,
     setWorksheetState,
     commitRemove,
     runPublicationTransaction,
@@ -309,20 +309,20 @@ vi.mock("@/features/core/viewport", () => ({
   releaseEditorViewport: mocks.releaseEditorViewport,
 }));
 
-vi.mock("@/features/application/editor/clearDetailFocusForClosedTab", () => ({
-  clearDetailFocusForClosedTab: mocks.clearDetailFocusForClosedTab,
+vi.mock("@/features/application/editor/clearDetailFocusForClosedPanel", () => ({
+  clearDetailFocusForClosedPanel: mocks.clearDetailFocusForClosedPanel,
 }));
 
-vi.mock("./activateGraphTab", () => ({
-  deactivateGraphTab: mocks.deactivateGraphTab,
+vi.mock("./graphPanelSession", () => ({
+  deactivateGraphPanelSession: mocks.deactivateGraphPanelSession,
 }));
 
 vi.mock("./graphDocumentUnload", () => ({
   unloadGraphDocument: mocks.unloadGraphDocument,
 }));
 
-vi.mock("./resolveTabDisplayName", () => ({
-  resolveTabDisplayName: mocks.resolveTabDisplayName,
+vi.mock("./resolveResourceDisplayName", () => ({
+  resolveResourceDisplayName: mocks.resolveResourceDisplayName,
 }));
 
 import { requestCloseWorkbenchPanel, requestCloseWorkbenchPanels } from "./workbenchPanelClose";
@@ -480,8 +480,8 @@ describe("workbench panel close coordinator", () => {
       groupId: "group-b",
       graphPath,
     });
-    expect(mocks.clearDetailFocusForClosedTab).toHaveBeenCalledWith(graphPath);
-    expect(mocks.clearDetailFocusForClosedTab).toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(graphPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(worksheetPath);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledTimes(2);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: graphPath,
@@ -509,7 +509,7 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.confirm3).not.toHaveBeenCalled();
     expect(mocks.releasePane).toHaveBeenCalledWith("editor-a");
     expect(mocks.releaseEditorViewport).not.toHaveBeenCalled();
-    expect(mocks.clearDetailFocusForClosedTab).not.toHaveBeenCalled();
+    expect(mocks.clearDetailFocusForClosedPanel).not.toHaveBeenCalled();
     expect(mocks.clearResourceDocumentState).not.toHaveBeenCalled();
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalled();
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["editor-b"]);
@@ -532,9 +532,9 @@ describe("workbench panel close coordinator", () => {
       groupId: "group-a",
       graphPath,
     });
-    expect(mocks.deactivateGraphTab).toHaveBeenCalledOnce();
-    expect(mocks.deactivateGraphTab).toHaveBeenCalledWith("group-a", graphPath);
-    expect(mocks.clearDetailFocusForClosedTab).not.toHaveBeenCalled();
+    expect(mocks.deactivateGraphPanelSession).toHaveBeenCalledOnce();
+    expect(mocks.deactivateGraphPanelSession).toHaveBeenCalledWith("group-a", graphPath);
+    expect(mocks.clearDetailFocusForClosedPanel).not.toHaveBeenCalled();
     expect(mocks.clearResourceDocumentState).not.toHaveBeenCalled();
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalled();
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["editor-b"]);
@@ -684,9 +684,9 @@ describe("workbench panel close coordinator", () => {
       groupId: "group-a",
       graphPath: firstPath,
     });
-    expect(mocks.deactivateGraphTab).toHaveBeenCalledWith("group-a", firstPath);
-    expect(mocks.clearDetailFocusForClosedTab).toHaveBeenCalledWith(firstPath);
-    expect(mocks.clearDetailFocusForClosedTab).not.toHaveBeenCalledWith(secondPath);
+    expect(mocks.deactivateGraphPanelSession).toHaveBeenCalledWith("group-a", firstPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(firstPath);
+    expect(mocks.clearDetailFocusForClosedPanel).not.toHaveBeenCalledWith(secondPath);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: firstPath,
       kind: "event",
@@ -757,7 +757,7 @@ describe("workbench panel close coordinator", () => {
       id: worksheetPath,
       kind: "worksheet",
     });
-    expect(mocks.clearDetailFocusForClosedTab).toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(worksheetPath);
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalled();
   });
 

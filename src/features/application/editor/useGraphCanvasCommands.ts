@@ -7,7 +7,7 @@ import { useGraphDataStore } from "@/features/core/dataStore";
 import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedNodeIds,
-} from "@/features/core/layout/layoutTabQueries";
+} from "@/features/core/editor/editorGroupSelection";
 import { getDocumentState } from "@/features/core/resource";
 import {
   commitViewport,

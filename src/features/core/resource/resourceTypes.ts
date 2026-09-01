@@ -1,4 +1,3 @@
-import type { LayoutTab } from "@/shared/types/ui";
 import {
   toGraphResourceUri,
   type GraphResourceKind,
@@ -58,11 +57,4 @@ export function buildGraphResourceMeta(
     hasConflictDocument: false,
     ...overrides,
   };
-}
-
-export function resourceRefFromLayoutTab(tab: LayoutTab): ResourceRef | null {
-  if (tab.type === "event" || tab.type === "function" || tab.type === "worksheet") {
-    return { id: tab.id, kind: tab.type };
-  }
-  return null;
 }

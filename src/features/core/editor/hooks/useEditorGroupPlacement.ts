@@ -1,16 +1,15 @@
 import { useMemo } from "react";
 import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
 import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
-import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
-import type { LayoutTab } from "@/shared/types";
+import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
 
 export interface EditorGroupPlacementSlice {
-  tabIds: string[];
+  panelInstanceIds: string[];
   activeTabId: string | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
-  tabs: LayoutTab[];
+  panels: readonly WorkbenchEditorPanelInfo[];
 }
 
 /** Read-only projection of a Dockview group plus pane-local canvas selection. */
@@ -21,11 +20,7 @@ export function useEditorGroupPlacement(
   const group = groupId
     ? workbenchDockviewRead.listGroups().find((candidate) => candidate.groupId === groupId)
     : undefined;
-  const panels = groupId
-    ? workbenchDockviewRead
-        .listGroupPanels(groupId)
-        .filter((panel) => panel.metadata.role === "editor")
-    : [];
+  const panels = groupId ? workbenchDockviewRead.listEditorPanelsInGroup(groupId) : [];
   const activePanel = panels.find(
     (panel) => panel.panelInstanceId === group?.activePanelInstanceId,
   );
@@ -34,19 +29,12 @@ export function useEditorGroupPlacement(
   );
 
   return useMemo(() => {
-    const tabs = panels
-      .map((panel) => {
-        if (panel.metadata.role !== "editor") return null;
-        return layoutTabFromEditorMetadata(panel.metadata);
-      })
-      .filter((tab): tab is LayoutTab => tab !== null);
     return {
-      tabIds: tabs.map((tab) => tab.id),
-      activeTabId:
-        activePanel?.metadata.role === "editor" ? activePanel.metadata.resourceRef : null,
+      panelInstanceIds: panels.map((panel) => panel.panelInstanceId),
+      activeTabId: activePanel?.metadata.resourceRef ?? null,
       selectedNodeIds: selection?.selectedNodeIds ?? [],
       selectedConnectionIds: selection?.selectedConnectionIds ?? [],
-      tabs,
+      panels,
     };
   }, [activePanel, panels, selection]);
 }

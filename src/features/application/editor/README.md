@@ -13,7 +13,7 @@ features/application/editor/
 ├── useEditorSessionSlices.ts  # Direct resource subscriptions and detail actions
 ├── useEditorCanvas.ts         # Panel-scoped Canvas commands/workspace/resources/interaction
 ├── useEditorOperations.ts     # Clipboard, history, node ops
-├── useTabManagement.ts        # Tab open/close/switch
+├── useEditorPanelCommands.ts  # Narrow panel open/split facade
 └── index.ts
 
 features/core/editor/

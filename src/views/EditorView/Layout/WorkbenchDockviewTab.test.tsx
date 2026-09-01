@@ -19,8 +19,9 @@ const mocks = vi.hoisted(() => ({
   groupPanels: [] as Array<{ panelInstanceId: string }>,
   requestCloseWorkbenchPanel: vi.fn(() => Promise.resolve(false)),
   requestCloseWorkbenchPanels: vi.fn(() => Promise.resolve(false)),
+  requestCloseEditorPanel: vi.fn(() => Promise.resolve(false)),
   listGroupPanels: vi.fn(),
-  buildTabContextMenuSections: vi.fn(() => [
+  buildEditorPanelTabMenu: vi.fn(() => [
     {
       items: [{ id: "document-action", label: "document-action" }],
     },
@@ -32,8 +33,12 @@ vi.mock("@/features/application/editor/workbenchPanelClose", () => ({
   requestCloseWorkbenchPanels: mocks.requestCloseWorkbenchPanels,
 }));
 
-vi.mock("@/features/application/editor/tabContextMenu", () => ({
-  buildTabContextMenuSections: mocks.buildTabContextMenuSections,
+vi.mock("@/features/application/editor/editorPanelCloseCommands", () => ({
+  requestCloseEditorPanel: mocks.requestCloseEditorPanel,
+}));
+
+vi.mock("@/features/application/editor/editorPanelTabMenu", () => ({
+  buildEditorPanelTabMenu: mocks.buildEditorPanelTabMenu,
 }));
 
 vi.mock("@/features/core/dockview", () => ({
@@ -41,18 +46,6 @@ vi.mock("@/features/core/dockview", () => ({
     ["project", "nodes", "data", "commands"].includes(viewId),
   isWorkbenchPersistentViewMetadata: (metadata: { role: string; viewId?: string }) =>
     metadata.role === "view" && metadata.viewId === "details",
-  layoutTabFromEditorMetadata: (metadata: {
-    resourceRef: string;
-    resourceKind: "event" | "function" | "worksheet";
-    pinned?: boolean;
-    sticky?: boolean;
-  }) => ({
-    id: metadata.resourceRef,
-    type: metadata.resourceKind,
-    component: metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor",
-    ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
-    ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
-  }),
   workbenchDockviewRead: {
     listGroupPanels: mocks.listGroupPanels,
   },
@@ -249,7 +242,7 @@ describe("WorkbenchDockviewTab", () => {
     act(() => closeButton.dispatchEvent(closeEvent));
 
     expect(closeEvent.defaultPrevented).toBe(true);
-    expect(mocks.requestCloseWorkbenchPanel).toHaveBeenNthCalledWith(1, "editor-a");
+    expect(mocks.requestCloseEditorPanel).toHaveBeenNthCalledWith(1, "editor-a");
     expect(api?.getPanel("editor-a")).toBeDefined();
 
     const tab = tabHeaderHost("editor-a");
@@ -270,7 +263,7 @@ describe("WorkbenchDockviewTab", () => {
 
     expect(pointerDown.defaultPrevented).toBe(true);
     expect(pointerUp.defaultPrevented).toBe(true);
-    expect(mocks.requestCloseWorkbenchPanel).toHaveBeenNthCalledWith(2, "editor-a");
+    expect(mocks.requestCloseEditorPanel).toHaveBeenNthCalledWith(2, "editor-a");
     expect(api?.getPanel("editor-a")).toBeDefined();
   });
 
@@ -294,16 +287,10 @@ describe("WorkbenchDockviewTab", () => {
     act(() => tabHeaderHost("editor-a").dispatchEvent(event));
 
     expect(event.defaultPrevented).toBe(true);
-    expect(mocks.buildTabContextMenuSections).toHaveBeenCalledWith(
+    expect(mocks.buildEditorPanelTabMenu).toHaveBeenCalledWith(
       {
         panelInstanceId: "editor-a",
         groupId: panel?.group.id,
-        tab: {
-          id: "events/Main.yssbi-event",
-          type: "event",
-          component: "GraphEditor",
-          pinned: true,
-        },
       },
       expect.any(Function),
     );
@@ -351,16 +338,10 @@ describe("WorkbenchDockviewTab", () => {
 
     expect(splitPanel?.group.id).not.toBe(sourceGroupId);
     expect(event.defaultPrevented).toBe(true);
-    expect(mocks.buildTabContextMenuSections).toHaveBeenCalledWith(
+    expect(mocks.buildEditorPanelTabMenu).toHaveBeenCalledWith(
       {
         panelInstanceId: "editor-a",
         groupId: splitPanel?.group.id,
-        tab: {
-          id: "events/Main.yssbi-event",
-          type: "event",
-          component: "GraphEditor",
-          pinned: true,
-        },
       },
       expect.any(Function),
     );

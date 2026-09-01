@@ -37,6 +37,7 @@ import type {
   WorkbenchDockviewControlContract,
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
+  WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
   WorkbenchLayoutErrorCode,
   WorkbenchPanelCommitToken,
@@ -186,6 +187,10 @@ function panelInfo(panel: IDockviewPanel | undefined): WorkbenchPanelInfo | unde
     ...(typeof visible === "boolean" ? { visible } : {}),
     location,
   };
+}
+
+function isEditorPanelInfo(panel: WorkbenchPanelInfo): panel is WorkbenchEditorPanelInfo {
+  return panel.metadata.role === "editor";
 }
 
 function groupInfo(api: DockviewApi, group: IDockviewGroupPanel): WorkbenchGroupInfo | undefined {
@@ -1593,7 +1598,12 @@ export function createWorkbenchDockviewRuntime(): {
     getActivePanel: () => panelInfo(api?.activePanel),
     getActiveEditorPanel: () => {
       const active = panelInfo(api?.activePanel);
-      return active?.metadata.role === "editor" ? active : undefined;
+      return active && isEditorPanelInfo(active) ? active : undefined;
+    },
+    getActiveEditorPanelInGroup: (groupId) => {
+      const group = api?.getGroup(groupId);
+      const active = panelInfo(group?.activePanel);
+      return active && isEditorPanelInfo(active) ? active : undefined;
     },
     listPanels: () => (api ? listPanelInfo(api) : []),
     listGroups: () => (api ? listGroupInfo(api) : []),
@@ -1605,11 +1615,19 @@ export function createWorkbenchDockviewRuntime(): {
         return info ? [info] : [];
       });
     },
+    listEditorPanelsInGroup: (groupId) => {
+      const group = api?.getGroup(groupId);
+      if (!group) return [];
+      return group.panels.flatMap((panel) => {
+        const info = panelInfo(panel);
+        return info && isEditorPanelInfo(info) ? [info] : [];
+      });
+    },
     findEditorPanelsByResource: (resourceRef) =>
       api
         ? listPanelInfo(api).filter(
-            (panel) =>
-              panel.metadata.role === "editor" && panel.metadata.resourceRef === resourceRef,
+            (panel): panel is WorkbenchEditorPanelInfo =>
+              isEditorPanelInfo(panel) && panel.metadata.resourceRef === resourceRef,
           )
         : [],
     getEdgeState: (position) =>

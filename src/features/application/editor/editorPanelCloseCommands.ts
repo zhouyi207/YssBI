@@ -2,14 +2,12 @@ import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 
-import { splitEditorAtEdge } from "./editorGroupCommands";
+import { splitEditorPanel } from "./editorGroupCommands";
 import { requestCloseWorkbenchPanels } from "./workbenchPanelClose";
 import { detailFocusForEditorResource, setDetailContext } from "./rightSidebarActions";
 
 function editorPanelsInGroup(groupId: string) {
-  return workbenchDockviewRead
-    .listGroupPanels(groupId)
-    .filter((panel) => panel.metadata.role === "editor");
+  return workbenchDockviewRead.listEditorPanelsInGroup(groupId);
 }
 
 function applyPassiveCloseFallback(): void {
@@ -21,35 +19,45 @@ function applyPassiveCloseFallback(): void {
   setDetailContext(detailFocusForEditorResource(resourceKind, resourceRef));
 }
 
-async function closePanelIds(panelInstanceIds: readonly string[]): Promise<boolean> {
+async function requestClosePanelsAndApplyFallback(
+  panelInstanceIds: readonly string[],
+): Promise<boolean> {
   if (panelInstanceIds.length === 0) return true;
   const closed = await requestCloseWorkbenchPanels(panelInstanceIds);
   if (closed) applyPassiveCloseFallback();
   return closed;
 }
 
-export function closeTab(panelInstanceId: string): Promise<boolean> {
-  return closePanelIds([panelInstanceId]);
+export function requestCloseEditorPanels(panelInstanceIds: readonly string[]): Promise<boolean> {
+  return requestClosePanelsAndApplyFallback(panelInstanceIds);
 }
 
-export function closeOtherTabs(groupId: string, keepPanelInstanceId: string): Promise<boolean> {
-  return closePanelIds(
+export function requestCloseEditorPanel(panelInstanceId: string): Promise<boolean> {
+  return requestCloseEditorPanels([panelInstanceId]);
+}
+
+export function requestCloseOtherEditorPanels(
+  groupId: string,
+  keepPanelInstanceId: string,
+): Promise<boolean> {
+  return requestCloseEditorPanels(
     editorPanelsInGroup(groupId)
       .filter((panel) => panel.panelInstanceId !== keepPanelInstanceId)
       .map((panel) => panel.panelInstanceId),
   );
 }
 
-export function closeAllTabsInGroup(groupId: string): Promise<boolean> {
-  return closePanelIds(editorPanelsInGroup(groupId).map((panel) => panel.panelInstanceId));
+export function requestCloseAllEditorPanelsInGroup(groupId: string): Promise<boolean> {
+  return requestCloseEditorPanels(
+    editorPanelsInGroup(groupId).map((panel) => panel.panelInstanceId),
+  );
 }
 
-export function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
-  return closePanelIds(
+export function requestCloseSavedEditorPanelsInGroup(groupId: string): Promise<boolean> {
+  return requestCloseEditorPanels(
     editorPanelsInGroup(groupId)
       .filter(
         (panel) =>
-          panel.metadata.role === "editor" &&
           !isResourceDocumentDirty({
             id: panel.metadata.resourceRef,
             kind: panel.metadata.resourceKind,
@@ -61,7 +69,7 @@ export function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
 
 /** Physical Close Group owns every canonical panel currently in that Dockview group. */
 export function closeEditorGroup(groupId: string): Promise<boolean> {
-  return closePanelIds(
+  return requestClosePanelsAndApplyFallback(
     workbenchDockviewRead.listGroupPanels(groupId).map((panel) => panel.panelInstanceId),
   );
 }
@@ -70,5 +78,5 @@ export async function splitEditorGroup(
   groupId: string,
   direction: "row" | "col" = "row",
 ): Promise<void> {
-  await splitEditorAtEdge(groupId, direction === "row" ? "right" : "bottom");
+  await splitEditorPanel(groupId, direction === "row" ? "right" : "bottom");
 }

@@ -3,7 +3,7 @@ import { i18n } from "@/app/i18n";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
 import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
-import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
+import { collectDirtyEditorPanels } from "@/features/core/layout/editorPanelDirty";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/features/application/observability/appLogger";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
@@ -28,7 +28,7 @@ export function useEditorWindowCloseGuard(): void {
           if (inFlight) return "prevent";
           inFlight = true;
 
-          const dirty = collectDirtyGraphTabs();
+          const dirty = collectDirtyEditorPanels();
           if (dirty.length > 0) {
             const titles = dirty.map((tab) => `• ${tab.title}`).join("\n");
             const choice = await uiStore.confirm3({

@@ -6,7 +6,7 @@ import type {
   EditorSessionLayoutBindings,
   EditorSessionNodeActions,
   EditorSessionProjectActions,
-  EditorSessionTabActions,
+  EditorSessionPanelActions,
   EditorSessionVariableActions,
   EditorSessionWorksheetActions,
 } from "./editorSessionTypes";
@@ -15,7 +15,7 @@ import type {
 export type EditorSessionCommands = EditorSessionLayoutBindings &
   EditorSessionHistoryActions &
   EditorSessionCanvasActions &
-  EditorSessionTabActions &
+  EditorSessionPanelActions &
   EditorSessionWorksheetActions &
   EditorSessionProjectActions &
   EditorSessionGraphActions &

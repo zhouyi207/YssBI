@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   hydrateEditorGroup: vi.fn(),
 }));
 
-vi.mock("./switchEditorTab", () => ({
+vi.mock("./activateEditorPanelAndSyncSession", () => ({
   focusEditorGroupSync: mocks.focusEditorGroupSync,
   hydrateEditorGroup: mocks.hydrateEditorGroup,
 }));

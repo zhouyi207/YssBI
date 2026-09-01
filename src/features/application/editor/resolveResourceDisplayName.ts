@@ -3,7 +3,7 @@ import type { ResourceRef } from "@/features/core/resource/resourceTypes";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 
 /** Display label for tabs / close-save prompts — ResourceStore is the source of truth. */
-export function resolveTabDisplayName(ref: ResourceRef | null, fallbackId = ""): string {
+export function resolveResourceDisplayName(ref: ResourceRef | null, fallbackId = ""): string {
   if (!ref) return fallbackId || "Untitled";
 
   if (ref.kind === "event" || ref.kind === "function") {

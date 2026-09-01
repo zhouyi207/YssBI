@@ -2,69 +2,7 @@ import {
   getPaneSelection,
   useEditorPaneStateStore,
 } from "@/features/core/dockview/editorPaneStateStore";
-import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
-import {
-  workbenchDockviewRead,
-  type WorkbenchPanelInfo,
-} from "@/features/core/dockview/workbenchRead";
-import type { LayoutTab } from "@/shared/types";
-
-export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
-export interface LayoutGroupContext {
-  activeEditorGroupId: string | null;
-}
-
-function panelTab(panel: WorkbenchPanelInfo | undefined): LayoutTab | null {
-  return panel?.metadata.role === "editor" ? layoutTabFromEditorMetadata(panel.metadata) : null;
-}
-
-function activeEditorPanelInGroup(groupId: string): WorkbenchPanelInfo | undefined {
-  const activePanelInstanceId = workbenchDockviewRead
-    .listGroups()
-    .find((group) => group.groupId === groupId)?.activePanelInstanceId;
-  if (!activePanelInstanceId) return undefined;
-  return workbenchDockviewRead
-    .listGroupPanels(groupId)
-    .find(
-      (panel) =>
-        panel.panelInstanceId === activePanelInstanceId && panel.metadata.role === "editor",
-    );
-}
-
-export function resolveEditorTargetGroupId(explicitGroupId?: string | null): string {
-  const groupIds = new Set(workbenchDockviewRead.listGroups().map((group) => group.groupId));
-  if (explicitGroupId && groupIds.has(explicitGroupId)) return explicitGroupId;
-  const activeEditorGroupId = workbenchDockviewRead.getActiveEditorPanel()?.groupId;
-  return activeEditorGroupId && groupIds.has(activeEditorGroupId) ? activeEditorGroupId : "";
-}
-
-export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
-  const panel = workbenchDockviewRead
-    .findEditorPanelsByResource(tabId)
-    .find((candidate) => nodeId === undefined || candidate.groupId === nodeId);
-  const tab = panelTab(panel);
-  return panel && tab ? { nodeId: panel.groupId, tab } : null;
-}
-
-export function getActiveLayoutTab(
-  groupId: string,
-): { activeTabId: string; tab: LayoutTab } | null {
-  const panel = activeEditorPanelInGroup(groupId);
-  const tab = panelTab(panel);
-  return panel && tab ? { activeTabId: tab.id, tab } : null;
-}
-
-export function resolveEditorGroupId(
-  groupId?: string | null,
-  context?: LayoutGroupContext,
-): string | null {
-  return (
-    groupId ??
-    context?.activeEditorGroupId ??
-    workbenchDockviewRead.getActiveEditorPanel()?.groupId ??
-    null
-  );
-}
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 
 export interface GraphSelection {
   nodeIds: Set<string>;
@@ -78,8 +16,12 @@ export function createGraphSelection(
   return { nodeIds: new Set(nodeIds), connectionIds: new Set(connectionIds) };
 }
 
+function resolveEditorGroupId(groupId?: string | null): string | null {
+  return groupId ?? workbenchDockviewRead.getActiveEditorPanel()?.groupId ?? null;
+}
+
 function activePanelInstanceId(groupId: string): string | undefined {
-  return activeEditorPanelInGroup(groupId)?.panelInstanceId;
+  return workbenchDockviewRead.getActiveEditorPanelInGroup(groupId)?.panelInstanceId;
 }
 
 export function getEditorGroupGraphSelection(groupId: string): GraphSelection {

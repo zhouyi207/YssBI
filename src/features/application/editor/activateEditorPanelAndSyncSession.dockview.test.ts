@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  WorkbenchEditorPanelInfo,
   WorkbenchGroupInfo,
-  WorkbenchPanelInfo,
 } from "@/features/core/dockview/workbenchRead";
 
 const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
   groups: [] as WorkbenchGroupInfo[],
-  panels: [] as WorkbenchPanelInfo[],
+  panels: [] as WorkbenchEditorPanelInfo[],
   rootActivePanelInstanceId: null as string | null,
   getFocusedGroupId: vi.fn(),
   clearFocusedSession: vi.fn(),
@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/features/core/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listGroups: () => mocks.groups,
-    listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
+    listEditorPanelsInGroup: (groupId: string) =>
+      mocks.panels.filter((panel) => panel.groupId === groupId),
     findEditorPanelsByResource: (resourceRef: string) =>
       mocks.panels.filter(
         (panel) => panel.metadata.role === "editor" && panel.metadata.resourceRef === resourceRef,
@@ -26,6 +27,14 @@ vi.mock("@/features/core/dockview/workbenchRead", () => ({
     getActivePanel: () =>
       mocks.panels.find((panel) => panel.panelInstanceId === mocks.rootActivePanelInstanceId),
     getActiveEditorPanel: () => mocks.panels.find((panel) => panel.active),
+    getActiveEditorPanelInGroup: (groupId: string) => {
+      const activePanelInstanceId = mocks.groups.find(
+        (group) => group.groupId === groupId,
+      )?.activePanelInstanceId;
+      return mocks.panels.find((panel) => panel.panelInstanceId === activePanelInstanceId);
+    },
+    getPanel: (panelInstanceId: string) =>
+      mocks.panels.find((panel) => panel.panelInstanceId === panelInstanceId),
   },
 }));
 
@@ -45,7 +54,9 @@ vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
 vi.mock("./graphSessionLifecycle", () => ({
   suspendEditorGroupGraphSession: vi.fn(async () => undefined),
 }));
-vi.mock("./activateGraphTab", () => ({ activateGraphTab: vi.fn(async () => true) }));
+vi.mock("./graphPanelSession", () => ({
+  activateGraphPanelSession: vi.fn(async () => true),
+}));
 vi.mock("@/features/core/editor/detail/variablesGraphScope", () => ({
   syncVariablesGraphScopeFromActiveTab: vi.fn(),
 }));
@@ -61,18 +72,18 @@ vi.mock("./rightSidebarActions", () => ({
 }));
 
 import {
-  activateCurrentEditorTab,
+  activateCurrentEditorPanel,
+  activateEditorPanelAndSyncSession,
   focusEditorGroupSync,
-  switchEditorTab,
-  synchronizeActiveEditorTab,
-} from "./switchEditorTab";
+  synchronizeActiveEditorPanel,
+} from "./activateEditorPanelAndSyncSession";
 
 function editorPanel(
   panelInstanceId: string,
   resourceRef: string,
   active = false,
   resourceKind: "event" | "function" | "worksheet" = "event",
-): WorkbenchPanelInfo {
+): WorkbenchEditorPanelInfo {
   return {
     panelInstanceId,
     groupId: "group-a",
@@ -94,7 +105,7 @@ function group(activePanelInstanceId = "panel-a"): WorkbenchGroupInfo {
   };
 }
 
-describe("editor tab Dockview synchronization", () => {
+describe("editor panel Dockview synchronization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getFocusedGroupId.mockReturnValue("group-a");
@@ -109,11 +120,7 @@ describe("editor tab Dockview synchronization", () => {
   });
 
   it("synchronizes a Dockview activation with passive detail context only", async () => {
-    await synchronizeActiveEditorTab("group-a", {
-      id: "events/A",
-      type: "event",
-      component: "GraphEditor",
-    });
+    await synchronizeActiveEditorPanel(mocks.panels[0]);
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({
@@ -125,13 +132,7 @@ describe("editor tab Dockview synchronization", () => {
   it("physically activates an editor that is only active inside its inactive group", async () => {
     mocks.rootActivePanelInstanceId = null;
 
-    await expect(
-      switchEditorTab("group-a", {
-        id: "events/A",
-        type: "event",
-        component: "GraphEditor",
-      }),
-    ).resolves.toBe(true);
+    await expect(activateEditorPanelAndSyncSession(mocks.panels[0])).resolves.toBe(true);
 
     expect(mocks.activate).toHaveBeenCalledOnce();
     expect(mocks.activate).toHaveBeenCalledWith("panel-a");
@@ -141,16 +142,8 @@ describe("editor tab Dockview synchronization", () => {
     mocks.panels = [editorPanel("panel-a", "events/A"), editorPanel("panel-b", "events/B")];
     mocks.groups = [group("panel-a")];
 
-    const first = switchEditorTab("group-a", {
-      id: "events/A",
-      type: "event",
-      component: "GraphEditor",
-    });
-    const second = switchEditorTab("group-a", {
-      id: "events/B",
-      type: "event",
-      component: "GraphEditor",
-    });
+    const first = activateEditorPanelAndSyncSession(mocks.panels[0]);
+    const second = activateEditorPanelAndSyncSession(mocks.panels[1]);
     await Promise.all([first, second]);
 
     expect(mocks.activate).toHaveBeenCalledTimes(1);
@@ -167,7 +160,7 @@ describe("editor tab Dockview synchronization", () => {
     ];
     mocks.groups = [group("worksheet-panel")];
 
-    await expect(activateCurrentEditorTab("group-a")).resolves.toBe(true);
+    await expect(activateCurrentEditorPanel("group-a")).resolves.toBe(true);
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({

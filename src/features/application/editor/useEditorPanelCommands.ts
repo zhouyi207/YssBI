@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 
 import { openGraphInEditor } from "./openGraphInEditor";
-import { splitEditorAtEdge } from "./editorGroupCommands";
+import { splitEditorPanel } from "./editorGroupCommands";
 
 /** Tab Management Hook — thin React facade over canonical editor commands. */
-export function useTabManagement() {
+export function useEditorPanelCommands() {
   const openGraph = useCallback(
     async (
       id: string,
@@ -18,7 +18,7 @@ export function useTabManagement() {
   );
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
-    void splitEditorAtEdge(sourceGroupId, "right");
+    void splitEditorPanel(sourceGroupId, "right");
   }, []);
 
   return { openGraph, splitEditorRight };

@@ -2,7 +2,7 @@ import { workbenchDockviewControl } from "@/features/core/dockview/workbenchCont
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 
 /** Activate a canonical editor panel by resource identity within an editor group. */
-export function applyEditorTabSelection(groupId: string, resourceId: string | null): void {
+export function applyEditorPanelSelection(groupId: string, resourceId: string | null): void {
   if (!resourceId) return;
   const panel = workbenchDockviewRead
     .findEditorPanelsByResource(resourceId)

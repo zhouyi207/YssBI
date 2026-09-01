@@ -1,34 +1,29 @@
 import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
 import type { DetailFocus } from "@/shared/types/ui/detail";
-import type { EditorResourceKind } from "@/features/core/dockview/workbenchPanelModel";
+import type { EditorResourceTarget } from "@/features/core/dockview/workbenchPanelModel";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import {
   workbenchDockviewRead,
+  type WorkbenchEditorPanelInfo,
   type WorkbenchPanelInfo,
 } from "@/features/core/dockview/workbenchRead";
 import { WorkbenchLayoutError } from "@/features/core/dockview/workbenchTypes";
-import type { LayoutTab } from "@/shared/types";
 
 import { resolveEditorOpenTargetGroupId } from "./editorOpenTarget";
-import { requestCloseWorkbenchPanels } from "./workbenchPanelClose";
-import { resolveTabDisplayName } from "./resolveTabDisplayName";
+import { requestCloseEditorPanels } from "./editorPanelCloseCommands";
+import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 import { revealDetails } from "./rightSidebarActions";
 
-export interface OpenEditorTabOptions {
+export interface OpenEditorPanelOptions {
   targetGroupId?: string;
   insertIndex?: number;
   focusDetail?: DetailFocus;
-  /** `false` opens in the preview slot. Default: pinned. */
-  pinned?: boolean;
 }
 
 const handledOpenRejections = new WeakSet<Error>();
 
-function editorResourceKind(tab: LayoutTab): EditorResourceKind {
-  if (tab.type === "event" || tab.type === "function" || tab.type === "worksheet") {
-    return tab.type;
-  }
-  throw new WorkbenchLayoutError("invalid_panel_metadata");
+function isEditorPanelInfo(panel: WorkbenchPanelInfo): panel is WorkbenchEditorPanelInfo {
+  return panel.metadata.role === "editor";
 }
 
 function markOpenRejectionHandled(error: Error): Error {
@@ -53,54 +48,60 @@ export function isEditorOpenRejectionHandled(error: unknown): boolean {
   return error instanceof Error && handledOpenRejections.has(error);
 }
 
-async function replacePreviewPanel(tab: LayoutTab, targetGroupId: string): Promise<string> {
-  const groupPanels = workbenchDockviewRead.listGroupPanels(targetGroupId);
+async function replacePreviewPanel(
+  target: EditorResourceTarget,
+  targetGroupId: string,
+): Promise<string> {
+  const groupPanels = workbenchDockviewRead.listEditorPanelsInGroup(targetGroupId);
   const preview = groupPanels.find(
-    (panel) =>
-      panel.metadata.role === "editor" &&
-      panel.metadata.resourceRef !== tab.id &&
-      panel.metadata.pinned === false,
+    (panel) => panel.metadata.resourceRef !== target.resourceRef && panel.metadata.pinned === false,
   );
   if (!preview) return targetGroupId;
 
   const wasSolePanel = groupPanels.length === 1;
-  if (!(await requestCloseWorkbenchPanels([preview.panelInstanceId]))) {
+  if (!(await requestCloseEditorPanels([preview.panelInstanceId]))) {
     throw handledPreviewCloseRejection();
   }
   return wasSolePanel ? resolveEditorOpenTargetGroupId(targetGroupId) : targetGroupId;
 }
 
 /** Open or activate an editor panel through the canonical workbench authority. */
-export async function openEditorTab(
-  tab: LayoutTab,
-  options?: OpenEditorTabOptions,
-): Promise<WorkbenchPanelInfo> {
-  const requestedPinned = options?.pinned !== false;
-  let panel: WorkbenchPanelInfo;
+export async function openEditorPanel(
+  target: EditorResourceTarget,
+  options?: OpenEditorPanelOptions,
+): Promise<WorkbenchEditorPanelInfo> {
+  const requestedPinned = target.pinned !== false;
+  let panel: WorkbenchEditorPanelInfo;
 
   try {
     let targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
-    const existing = workbenchDockviewRead.findEditorPanelsByResource(tab.id)[0];
+    const existing = workbenchDockviewRead.findEditorPanelsByResource(target.resourceRef)[0];
     if (!requestedPinned && !existing) {
-      targetGroupId = await replacePreviewPanel(tab, targetGroupId);
+      targetGroupId = await replacePreviewPanel(target, targetGroupId);
     }
 
-    const preserveExistingPreviewState = !requestedPinned && existing?.metadata.role === "editor";
+    const preserveExistingPreviewState = !requestedPinned && existing !== undefined;
     const pinned = preserveExistingPreviewState
       ? (existing.metadata.pinned ?? false)
       : requestedPinned;
-    const sticky = preserveExistingPreviewState ? existing.metadata.sticky : tab.sticky;
-    const resourceKind = editorResourceKind(tab);
-    panel = await workbenchDockviewControl.openEditor({
-      resourceRef: tab.id,
-      resourceKind,
-      title: resolveTabDisplayName({ id: tab.id, kind: resourceKind }, tab.id),
+    const sticky = preserveExistingPreviewState ? existing.metadata.sticky : target.sticky;
+    const opened = await workbenchDockviewControl.openEditor({
+      resourceRef: target.resourceRef,
+      resourceKind: target.resourceKind,
+      title: resolveResourceDisplayName(
+        { id: target.resourceRef, kind: target.resourceKind },
+        target.resourceRef,
+      ),
       pinned,
       ...(sticky === undefined ? {} : { sticky }),
       targetGroupId,
       index: options?.insertIndex,
       mode: "reuse-resource",
     });
+    if (!isEditorPanelInfo(opened)) {
+      throw new WorkbenchLayoutError("invalid_panel_metadata");
+    }
+    panel = opened;
   } catch (error) {
     throw presentOpenRejection(error);
   }

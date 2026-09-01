@@ -881,6 +881,9 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 
 ## 2026.09.01
 
+- [ ] 删除前端 `LayoutTab` 平行模型、Dockview→Tab 投影与旧 tab workflow，统一使用
+      `EditorResourceTarget`、`WorkbenchPanelInfo` 和 panel 语义命令，并确保 root Dockview read port
+      唯一提供 editor panel/group 查询。
 - [ ] 修复 editor 仅在 group 内激活却未成为 root physical target、以及 preview canvas 注销 drop route
       的问题；保持 editor command focus gate 并恢复节点拖动与创建。
 - [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复

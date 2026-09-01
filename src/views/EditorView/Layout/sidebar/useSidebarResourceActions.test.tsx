@@ -51,14 +51,16 @@ vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
   ),
 }));
 
-vi.mock("@/features/core/layout", () => ({
-  getActiveLayoutTab: () => ({
-    tab: {
-      id: "worksheets/Report.yssbi-worksheet",
-      type: "worksheet",
-      component: "WorksheetEditor",
-    },
-  }),
+vi.mock("@/features/core/dockview", () => ({
+  workbenchDockviewRead: {
+    getActiveEditorPanelInGroup: () => ({
+      metadata: {
+        role: "editor",
+        resourceRef: "worksheets/Report.yssbi-worksheet",
+        resourceKind: "worksheet",
+      },
+    }),
+  },
 }));
 
 vi.mock("@/features/core/resource", () => ({

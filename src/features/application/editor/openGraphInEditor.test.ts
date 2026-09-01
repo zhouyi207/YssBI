@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchEditorPanelInfo } from "@/features/core/dockview/workbenchRead";
 import { ensureEditorViewport } from "@/features/core/viewport";
-import { openEditorTab } from "./openEditorTab";
-import { switchEditorTab } from "./switchEditorTab";
+import { openEditorPanel } from "./openEditorPanel";
+import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 import { openGraphInEditor } from "./openGraphInEditor";
 
-const openedPanel: WorkbenchPanelInfo = {
+const openedPanel: WorkbenchEditorPanelInfo = {
   panelInstanceId: "panel-returned",
   groupId: "group-returned",
   component: "GraphEditor",
@@ -26,13 +26,13 @@ vi.mock("@/features/core/viewport", () => ({
   editorViewportScope: (groupId: string, graphPath: string) => ({ groupId, graphPath }),
 }));
 
-vi.mock("./openEditorTab", () => ({
-  openEditorTab: vi.fn(),
+vi.mock("./openEditorPanel", () => ({
+  openEditorPanel: vi.fn(),
   isEditorOpenRejectionHandled: vi.fn(() => false),
 }));
 
-vi.mock("./switchEditorTab", () => ({
-  switchEditorTab: vi.fn(async () => true),
+vi.mock("./activateEditorPanelAndSyncSession", () => ({
+  activateEditorPanelAndSyncSession: vi.fn(async () => true),
 }));
 
 vi.mock("@/features/application/observability/appLogger", () => ({
@@ -42,7 +42,7 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 describe("openGraphInEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(openEditorTab).mockResolvedValue(openedPanel);
+    vi.mocked(openEditorPanel).mockResolvedValue(openedPanel);
   });
 
   it("uses the authoritative panel and group returned by the awaited editor open", async () => {
@@ -50,16 +50,14 @@ describe("openGraphInEditor", () => {
       openGraphInEditor("events/Main.yssbi-event", "Main", "event", "requested-group"),
     ).resolves.toBe(openedPanel);
 
-    expect(openEditorTab).toHaveBeenCalledWith(
+    expect(openEditorPanel).toHaveBeenCalledWith(
       {
-        id: "events/Main.yssbi-event",
-        type: "event",
-        component: "GraphEditor",
+        resourceRef: "events/Main.yssbi-event",
+        resourceKind: "event",
         pinned: true,
       },
       {
         targetGroupId: "requested-group",
-        pinned: true,
         insertIndex: undefined,
       },
     );
@@ -67,13 +65,8 @@ describe("openGraphInEditor", () => {
       groupId: "group-returned",
       graphPath: "events/Main.yssbi-event",
     });
-    expect(switchEditorTab).toHaveBeenCalledWith("group-returned", {
-      id: "events/Main.yssbi-event",
-      type: "event",
-      component: "GraphEditor",
-      pinned: true,
-    });
-    expect(vi.mocked(openEditorTab).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(activateEditorPanelAndSyncSession).toHaveBeenCalledWith(openedPanel);
+    expect(vi.mocked(openEditorPanel).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(ensureEditorViewport).mock.invocationCallOrder[0],
     );
   });
