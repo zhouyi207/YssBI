@@ -1,30 +1,23 @@
-import { useWorkbenchUi, workbenchUi } from "@/features/core/workbench/ui";
 import { useTranslation } from "react-i18next";
 
 import { BottomBar } from "./Layout/BottomBar";
 import { Menubar } from "./Layout/Menubar";
-import { Workspace } from "./Layout/Workspace";
+import { RootDockviewHost, type RootPanelRegistry } from "./Layout/RootDockviewHost";
 import { WorkbenchActivityPanelsProvider } from "./Layout/WorkbenchActivityPanels";
+import { WorkbenchOverlayHost } from "./Layout/WorkbenchOverlayHost";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSync } from "@/features/application/initialization";
 import {
   EditorSessionProvider,
   useEditorKeyboard,
-  useEditorWindowCloseGuard,
+  useWorkbenchWindowCloseGuard,
 } from "@/features/application/editor";
 
-import { useEditorWindowGeometryPersistence } from "@/features/application/window";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { SettingsView } from "./Layout/SettingsView";
-import { NodeDocumentationModal } from "./Layout/NodeDocumentationModal";
+import { useWorkbenchWindowGeometryPersistence } from "@/features/application/window";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
-function EditorWindowReady() {
-  const isSettingsOpen = useWorkbenchUi((state) => state.isSettingsOpen);
-  const isNodeDocumentationOpen = useWorkbenchUi((state) => state.isNodeDocumentationOpen);
-  const setSettingsOpen = workbenchUi.setSettingsOpen;
-  const setNodeDocumentationOpen = workbenchUi.setNodeDocumentationOpen;
+function WorkbenchWindowReady({ panelRegistry }: { readonly panelRegistry: RootPanelRegistry }) {
   useProjectSync();
   useProjectionLocaleSync();
 
@@ -38,38 +31,21 @@ function EditorWindowReady() {
       <Menubar />
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
         <WorkbenchActivityPanelsProvider>
-          <Workspace />
+          <RootDockviewHost panelRegistry={panelRegistry} />
         </WorkbenchActivityPanelsProvider>
       </div>
       <BottomBar />
-      <NodeDocumentationModal
-        open={isNodeDocumentationOpen}
-        onOpenChange={setNodeDocumentationOpen}
-      />
-      <Dialog
-        open={isSettingsOpen}
-        onOpenChange={(open) => {
-          if (open) setSettingsOpen(true);
-        }}
-      >
-        <DialogContent
-          explicitClose
-          onEscapeKeyDown={(event) => event.preventDefault()}
-          className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0 max-[720px]:h-[92vh] max-[720px]:max-w-[96vw]"
-        >
-          <SettingsView onRequestClose={() => setSettingsOpen(false)} />
-        </DialogContent>
-      </Dialog>
+      <WorkbenchOverlayHost />
     </div>
   );
 }
 
-export const EditorWindow = () => {
+export function WorkbenchWindow({ panelRegistry }: { readonly panelRegistry: RootPanelRegistry }) {
   const { t } = useTranslation();
   const { status, error } = useAppInitialization();
 
-  useEditorWindowGeometryPersistence();
-  useEditorWindowCloseGuard();
+  useWorkbenchWindowGeometryPersistence();
+  useWorkbenchWindowCloseGuard();
 
   if (status !== LoadStatus.Ready) {
     return (
@@ -86,7 +62,7 @@ export const EditorWindow = () => {
 
   return (
     <EditorSessionProvider>
-      <EditorWindowReady />
+      <WorkbenchWindowReady panelRegistry={panelRegistry} />
     </EditorSessionProvider>
   );
-};
+}

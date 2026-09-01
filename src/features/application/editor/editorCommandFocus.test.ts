@@ -46,7 +46,7 @@ function editorPanel(overrides: Partial<WorkbenchPanelInfo> = {}): WorkbenchPane
   return {
     panelInstanceId: "editor-a",
     groupId: "group-a",
-    component: "GraphEditor",
+    component: "EditorResource",
     title: "Main",
     metadata: {
       role: "editor",

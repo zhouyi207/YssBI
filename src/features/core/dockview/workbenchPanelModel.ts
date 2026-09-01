@@ -27,8 +27,7 @@ export interface EditorResourceTarget {
   readonly sticky?: boolean;
 }
 export type WorkbenchComponentId =
-  | "GraphEditor"
-  | "WorksheetEditor"
+  | "EditorResource"
   | "Project"
   | "Nodes"
   | "Data"
@@ -222,9 +221,7 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
 export function componentForWorkbenchMetadata(
   metadata: WorkbenchPanelMetadata,
 ): WorkbenchComponentId {
-  if (metadata.role === "editor") {
-    return metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor";
-  }
+  if (metadata.role === "editor") return "EditorResource";
   if (metadata.role === "result") return "Result";
   return COMPONENT_BY_VIEW_ID[metadata.viewId];
 }

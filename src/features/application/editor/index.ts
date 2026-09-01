@@ -11,7 +11,7 @@ export { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 export { useEditorOperations } from "./useEditorOperations";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";
 export { useEditorKeyboard } from "./useEditorKeyboard";
-export { useEditorWindowCloseGuard } from "./useEditorWindowCloseGuard";
+export { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";
 export { useEditorPanelCommands } from "./useEditorPanelCommands";
 export {
   activateEditorPanelAndSyncSession,

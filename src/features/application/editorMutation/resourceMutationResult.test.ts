@@ -140,7 +140,7 @@ function editorPanel(panelInstanceId: string, resourceRef: string): WorkbenchPan
   return {
     panelInstanceId,
     groupId: "editor-group",
-    component: "GraphEditor",
+    component: "EditorResource",
     title: resourceRef,
     metadata: { role: "editor", resourceRef, resourceKind: "function" },
     active: false,

@@ -313,7 +313,32 @@ describe("frontend architecture model", () => {
           /\buseWorkbenchLayout\s*\(/u.test(source),
       );
       expect(layoutConsumers.map(({ path }) => path)).toEqual([
+        "src/views/EditorView/Layout/RootDockviewHost.tsx",
+      ]);
+
+      const obsoleteShellFiles = new Set([
+        "src/views/EditorView/EditorWindow.tsx",
         "src/views/EditorView/Layout/Workspace.tsx",
+        "src/views/EditorView/Layout/WorkbenchDockviewPanels.tsx",
+      ]);
+      expect(
+        sources.map(({ path }) => path).filter((path) => obsoleteShellFiles.has(path)),
+      ).toEqual([]);
+
+      const legacyEditorComponentIds = sources.flatMap(({ path, source }) =>
+        [...source.matchAll(/["'](?:GraphEditor|WorksheetEditor)["']/gu)].map(
+          ([componentId]) => `${path}:${componentId}`,
+        ),
+      );
+      expect(legacyEditorComponentIds).toEqual([]);
+
+      const registryConsumers = sources.filter(
+        ({ path, source }) =>
+          path !== "src/views/EditorView/Layout/RootDockviewHost.tsx" &&
+          /\bcreateRootPanelRegistry\s*\(/u.test(source),
+      );
+      expect(registryConsumers.map(({ path }) => path)).toEqual([
+        "src/app/WorkbenchComposition.tsx",
       ]);
     });
   });

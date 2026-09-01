@@ -1,5 +1,12 @@
-import { forwardRef, useCallback, useEffect, useRef, type KeyboardEvent } from "react";
-import { DockviewReact, type DockviewReadyEvent, type IWatermarkPanelProps } from "dockview-react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useRef,
+  type FunctionComponent,
+  type KeyboardEvent,
+} from "react";
+import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview-react";
 import {
   DndContext,
   DragOverlay,
@@ -15,6 +22,7 @@ import { synchronizeActiveEditorPanel } from "@/features/application/editor/acti
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
 import { workbenchDockviewRead } from "@/features/core/dockview";
+import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core/dockview";
 import {
   buildSidebarDragState,
   isSidebarSpawnDrag,
@@ -29,11 +37,20 @@ import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { WatermarkView } from "../Canvas/overlays/WatermarkView";
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
 import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
-import { workbenchDockviewComponents } from "./WorkbenchDockviewPanels";
-import { WorkspaceDragOverlay } from "./WorkspaceDragOverlay";
+import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
 
-function WorkbenchDockviewWatermark(_: IWatermarkPanelProps) {
+function WorkbenchDockviewWatermark() {
   return <WatermarkView />;
+}
+
+export type RootDockviewPanelComponent = FunctionComponent<
+  IDockviewPanelProps<WorkbenchPanelParams>
+>;
+
+export type RootPanelRegistry = Record<WorkbenchComponentId, RootDockviewPanelComponent>;
+
+export function createRootPanelRegistry(registry: RootPanelRegistry): RootPanelRegistry {
+  return registry;
 }
 
 function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): void {
@@ -46,7 +63,10 @@ function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): vo
   event.stopPropagation();
 }
 
-export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref) => {
+export const RootDockviewHost = forwardRef<
+  HTMLDivElement,
+  { readonly panelRegistry: RootPanelRegistry }
+>(({ panelRegistry }, ref) => {
   const setActiveDrag = sidebarDragUi.setActiveDrag;
   const updatePosition = sidebarDragUi.updatePosition;
   const setModifierKeys = keyboardUi.setModifierKeys;
@@ -121,7 +141,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
         >
           <DockviewReact
             className="yssbi-root-dockview-instance h-full w-full"
-            components={workbenchDockviewComponents}
+            components={panelRegistry}
             defaultTabComponent={WorkbenchDockviewTab}
             rightHeaderActionsComponent={WorkbenchActivityActions}
             watermarkComponent={WorkbenchDockviewWatermark}
@@ -132,10 +152,10 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
         </div>
       </div>
       <DragOverlay dropAnimation={null} modifiers={[snapTopLeftToCursor]}>
-        <WorkspaceDragOverlay />
+        <RootDockviewDragOverlay />
       </DragOverlay>
     </DndContext>
   );
 });
 
-Workspace.displayName = "Workspace";
+RootDockviewHost.displayName = "RootDockviewHost";

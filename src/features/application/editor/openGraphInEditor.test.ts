@@ -9,7 +9,7 @@ import { openGraphInEditor } from "./openGraphInEditor";
 const openedPanel: WorkbenchEditorPanelInfo = {
   panelInstanceId: "panel-returned",
   groupId: "group-returned",
-  component: "GraphEditor",
+  component: "EditorResource",
   title: "Main",
   metadata: {
     role: "editor",

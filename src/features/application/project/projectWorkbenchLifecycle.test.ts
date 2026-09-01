@@ -78,9 +78,7 @@ function panel(
 ): WorkbenchPanelInfo {
   const component =
     metadata.role === "editor"
-      ? metadata.resourceKind === "worksheet"
-        ? "WorksheetEditor"
-        : "GraphEditor"
+      ? "EditorResource"
       : metadata.role === "result"
         ? "Result"
         : (

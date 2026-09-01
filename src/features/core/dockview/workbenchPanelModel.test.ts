@@ -20,7 +20,7 @@ describe("workbench panel metadata", () => {
     } as const;
 
     expect(isWorkbenchPanelMetadata(metadata)).toBe(true);
-    expect(componentForWorkbenchMetadata(metadata)).toBe("GraphEditor");
+    expect(componentForWorkbenchMetadata(metadata)).toBe("EditorResource");
 
     expect(
       componentForWorkbenchMetadata({
@@ -28,7 +28,7 @@ describe("workbench panel metadata", () => {
         resourceRef: "worksheets/Model.yssbi-worksheet",
         resourceKind: "worksheet",
       }),
-    ).toBe("WorksheetEditor");
+    ).toBe("EditorResource");
   });
 
   it("accepts every view and canonical result presentation/source variant", () => {

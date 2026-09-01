@@ -866,10 +866,10 @@ describe("workbench Dockview port", () => {
 
     expect(port.listPanels()).toHaveLength(1);
     expect(port.getPanel(existing.panelInstanceId)).toMatchObject({
-      component: "GraphEditor",
+      component: "EditorResource",
       metadata: { resourceKind: "event" },
     });
-    expect(fake.panel(existing.panelInstanceId).panel.api.component).toBe("GraphEditor");
+    expect(fake.panel(existing.panelInstanceId).panel.api.component).toBe("EditorResource");
   });
 
   it("revalidates commit tokens inside the FIFO and resolves whenIdle after queued work", async () => {
@@ -1502,7 +1502,7 @@ describe("workbench Dockview port", () => {
     internal.completeHydration();
     fake.api.addPanel({
       id: "foreign-panel",
-      component: "GraphEditor",
+      component: "EditorResource",
       params: {},
       position: { referenceGroup: "grid-main" },
     });

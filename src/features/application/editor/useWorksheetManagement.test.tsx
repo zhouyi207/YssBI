@@ -85,7 +85,7 @@ vi.mock("./blockingErrorDialog", () => ({
 const openedPanel: WorkbenchPanelInfo = {
   panelInstanceId: "worksheet-panel",
   groupId: "editor-group",
-  component: "WorksheetEditor",
+  component: "EditorResource",
   title: "Summary",
   metadata: {
     role: "editor",

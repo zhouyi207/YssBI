@@ -64,7 +64,7 @@ function cyclePhysicalPanel(backward: boolean): boolean {
   return true;
 }
 
-/** Mounts the editor window's single ordered global keyboard shortcut listener set. */
+/** Mounts the workbench window's single ordered global keyboard shortcut listener set. */
 export function useEditorKeyboard(): void {
   const commands = useEditorSessionCommandsContext();
   const lastMousePosRef = useRef({ x: 0, y: 0 });

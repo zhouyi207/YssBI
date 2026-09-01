@@ -87,7 +87,7 @@ function editorPanel(
   return {
     panelInstanceId,
     groupId: "group-a",
-    component: resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor",
+    component: "EditorResource",
     title: resourceRef,
     metadata: { role: "editor", resourceRef, resourceKind },
     active,

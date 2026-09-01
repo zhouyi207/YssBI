@@ -66,7 +66,7 @@ function getOnlyGridGroup(layout: SerializedDockview): MutableGroup {
 function rootLayout(
   panels: Readonly<Record<string, TestPanel>> = {
     editor: {
-      component: "GraphEditor",
+      component: "EditorResource",
       metadata: {
         role: "editor",
         resourceRef: "events/Main.yssbi-event",
@@ -233,7 +233,7 @@ describe("workbench layout persistence", () => {
     expect(missingLogsResult?.logs.status).toBe("invalid");
 
     const invalidRoot = structuredClone(validRoot);
-    invalidRoot.panels.editor.contentComponent = "WorksheetEditor";
+    invalidRoot.panels.editor.contentComponent = "Project";
     const logsPreserved = parsePersistedWorkbenchLayout(payload(invalidRoot, validLogs));
     expect(logsPreserved).not.toBeNull();
     expect(logsPreserved?.root).toEqual({ status: "invalid" });
@@ -431,7 +431,7 @@ describe("workbench layout persistence", () => {
   it("strips transients and clears maximization when pruning a transient-only leaf", () => {
     const layout = rootLayout({
       editor: {
-        component: "GraphEditor",
+        component: "EditorResource",
         metadata: {
           role: "editor",
           resourceRef: "events/Main.yssbi-event",
@@ -576,7 +576,7 @@ describe("workbench layout persistence", () => {
   it("scrubs project-scoped panels while preserving tool panel topology", () => {
     const layout = rootLayout({
       editor: {
-        component: "GraphEditor",
+        component: "EditorResource",
         metadata: {
           role: "editor",
           resourceRef: "events/Main.yssbi-event",
@@ -738,7 +738,7 @@ describe("workbench layout persistence", () => {
   it("preserves nested branch depth and sizes when pruning a transient sibling", () => {
     const layout = rootLayout({
       editor: {
-        component: "GraphEditor",
+        component: "EditorResource",
         metadata: {
           role: "editor",
           resourceRef: "events/Main.yssbi-event",

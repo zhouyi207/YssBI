@@ -6,7 +6,7 @@ Editor UI orchestration lives under `features/application/editor/`. Core editor 
 
 ```
 features/application/editor/
-├── EditorSessionContext.tsx   # Stable command provider per Editor window
+├── EditorSessionContext.tsx   # Stable command provider per Workbench window
 ├── editorSessionCommands.ts   # Explicit intersection of stable command slices
 ├── editorSessionTypes.ts      # Named caller-shaped contracts
 ├── useEditorSessionCommands.ts
@@ -24,13 +24,13 @@ features/core/editor/
 
 ## Usage
 
-### Editor window shell
+### Workbench window shell
 
 ```tsx
 import { EditorSessionProvider } from "@/features/application/editor";
 
 <EditorSessionProvider>
-  <EditorWindowReady />
+  <WorkbenchWindowReady />
 </EditorSessionProvider>;
 ```
 
@@ -65,7 +65,7 @@ const commands = useEditorSessionCommandsContext();
 
 | Hook                                | Interface                                                                                            | Mount/caller                             |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `EditorSessionProvider`             | Stable command context                                                                               | `EditorWindow` root                      |
+| `EditorSessionProvider`             | Stable command context                                                                               | `WorkbenchWindow` root                   |
 | `useEditorSessionCommandsContext()` | Explicit command-slice intersection                                                                  | Application consumers that need commands |
 | `useEditorSessionResources()`       | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists                |
 | `useEditorSessionDetailActions()`   | Variable/DataFrame update commands                                                                   | Detail panels                            |

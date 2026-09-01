@@ -1,6 +1,6 @@
 /**
  * Store for registering the Canvas drop handler per Dockview panel.
- * Workspace calls this when a sidebar item is dropped on the canvas.
+ * RootDockviewHost calls this when a sidebar item is dropped on the canvas.
  */
 import { createStore } from "zustand/vanilla";
 import type { SidebarDragState } from "@/features/core/dnd";

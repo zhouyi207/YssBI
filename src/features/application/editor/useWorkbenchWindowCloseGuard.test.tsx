@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import type { AppWindowHandle } from "@/services/platform/appWindow";
 import { WorkbenchLayoutError } from "@/features/core/dockview/workbenchTypes";
-import { useEditorWindowCloseGuard } from "./useEditorWindowCloseGuard";
+import { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -64,7 +64,7 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 }));
 
 function Harness(): null {
-  useEditorWindowCloseGuard();
+  useWorkbenchWindowCloseGuard();
   return null;
 }
 
@@ -98,7 +98,7 @@ function installWindowMock() {
   };
 }
 
-describe("useEditorWindowCloseGuard", () => {
+describe("useWorkbenchWindowCloseGuard", () => {
   let host: HTMLDivElement;
   let root: Root | null;
 

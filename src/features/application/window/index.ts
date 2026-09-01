@@ -1,5 +1,5 @@
 export { usePersistedWindow } from "./usePersistedWindow";
-export { useEditorWindowGeometryPersistence } from "./useEditorWindowGeometryPersistence";
+export { useWorkbenchWindowGeometryPersistence } from "./useWorkbenchWindowGeometryPersistence";
 export {
   readSecondaryWindowFallbackPosition,
   readSecondaryWindowState,

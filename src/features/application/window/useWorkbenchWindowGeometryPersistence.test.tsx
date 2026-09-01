@@ -4,18 +4,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import type { AppWindowHandle } from "@/services/platform/appWindow";
-import { useEditorWindowGeometryPersistence } from "./useEditorWindowGeometryPersistence";
+import { useWorkbenchWindowGeometryPersistence } from "./useWorkbenchWindowGeometryPersistence";
 
 vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
 
 function Harness(): null {
-  useEditorWindowGeometryPersistence();
+  useWorkbenchWindowGeometryPersistence();
   return null;
 }
 
-describe("useEditorWindowGeometryPersistence", () => {
+describe("useWorkbenchWindowGeometryPersistence", () => {
   let host: HTMLDivElement;
   let root: Root;
 

@@ -165,7 +165,7 @@ function projectRootLayout(): SerializedDockview {
     panels: {
       "editor-old-project": {
         id: "editor-old-project",
-        contentComponent: "GraphEditor",
+        contentComponent: "EditorResource",
         title: "Shared graph",
         params: {
           metadata: {
@@ -437,7 +437,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
     return {
       panelInstanceId: `editor:${request.resourceRef}`,
       groupId: "grid-main",
-      component: "GraphEditor",
+      component: "EditorResource",
       title: request.title,
       metadata: {
         role: "editor",

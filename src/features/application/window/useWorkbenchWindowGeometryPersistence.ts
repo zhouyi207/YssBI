@@ -6,14 +6,14 @@ import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCaptur
 import { readSecondaryWindowState, saveSecondaryWindowState } from "./secondaryWindowGeometryStore";
 
 /**
- * Editor workbench window geometry on close:
+ * Workbench window geometry on close:
  * - `main` → backend `window_state.json` via `WindowStateService`
  * - secondary labels → per-label localStorage (`yssbi-secondary-window-*`)
  *
  * Mount-time geometry is applied at window creation (Rust setup / `createPersistedWindow`),
  * not here, to avoid resize flicker.
  */
-export function useEditorWindowGeometryPersistence(): void {
+export function useWorkbenchWindowGeometryPersistence(): void {
   useEffect(() => {
     let cancelled = false;
     let unlistenClose: (() => void) | null = null;
@@ -50,10 +50,10 @@ export function useEditorWindowGeometryPersistence(): void {
         } else if (subscription.ok) {
           unlistenClose = subscription.value;
         } else {
-          logger.app.warn("editor window close listener unavailable", "Window");
+          logger.app.warn("workbench window close listener unavailable", "Window");
         }
       } catch {
-        logger.app.warn("editor window close listener unavailable", "Window");
+        logger.app.warn("workbench window close listener unavailable", "Window");
       }
     };
 

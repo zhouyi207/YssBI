@@ -138,7 +138,7 @@ const gridLocation = { type: "grid" as const };
 
 function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["component"] {
   if (metadata.role === "editor") {
-    return metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor";
+    return "EditorResource";
   }
   if (metadata.role === "result") return "Result";
   return (

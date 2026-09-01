@@ -72,7 +72,7 @@ vi.mock("@/features/core/dockview", () => ({
         ? {
             panelInstanceId: `editor-${groupId}`,
             groupId,
-            component: "GraphEditor" as const,
+            component: "EditorResource" as const,
             metadata: { role: "editor" as const, resourceRef, resourceKind: "event" as const },
             active: true,
             location: { type: "grid" as const },

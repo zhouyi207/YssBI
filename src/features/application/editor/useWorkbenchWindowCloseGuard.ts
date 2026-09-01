@@ -8,8 +8,8 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/features/application/observability/appLogger";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 
-/** Flushes layout and protects dirty documents before the editor window closes. */
-export function useEditorWindowCloseGuard(): void {
+/** Flushes layout and protects dirty documents before the workbench window closes. */
+export function useWorkbenchWindowCloseGuard(): void {
   useEffect(() => {
     const appWindow = currentAppWindow();
     let cancelled = false;
@@ -69,7 +69,7 @@ export function useEditorWindowCloseGuard(): void {
           allowDestructiveClose = true;
           const closeResult = await appWindow.close();
           if (!closeResult.ok) {
-            logger.app.error("window close after confirmation failed", "EditorWindow");
+            logger.app.error("window close after confirmation failed", "WorkbenchWindow");
             allowDestructiveClose = false;
             inFlight = false;
           }
@@ -81,10 +81,10 @@ export function useEditorWindowCloseGuard(): void {
         } else if (subscription.ok) {
           unlistenClose = subscription.value;
         } else {
-          logger.app.warn("editor window close guard unavailable", "EditorWindow");
+          logger.app.warn("workbench window close guard unavailable", "WorkbenchWindow");
         }
       } catch {
-        logger.app.warn("editor window close guard unavailable", "EditorWindow");
+        logger.app.warn("workbench window close guard unavailable", "WorkbenchWindow");
       }
     };
 

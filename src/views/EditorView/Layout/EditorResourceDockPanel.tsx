@@ -1,24 +1,11 @@
-import { useEffect, useState, type FunctionComponent } from "react";
+import { useEffect, useState } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
 
-import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core/dockview";
+import type { WorkbenchPanelParams } from "@/features/core/dockview";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
 import { GroupContext } from "@/features/application/editor/editorGroupContext";
-import { AssistantPanel } from "@/views/AssistantView/AssistantPanel";
-import { LogWorkspaceDockview } from "@/views/LogView/LogWorkspaceDockview";
-import { OutputPanel } from "@/views/LogView/OutputPanel";
-import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
 import { GraphEditor } from "../Canvas/core/GraphEditor";
 import { WorksheetEditor } from "../Worksheet/WorksheetEditor";
-import { DetailsPane } from "./Detail/DetailsPane";
-import { InspectPane } from "./Detail/InspectPane";
-import {
-  WorkbenchCommandsPanel,
-  WorkbenchDataPanel,
-  WorkbenchNodesPanel,
-  WorkbenchProjectPanel,
-} from "./WorkbenchActivityPanels";
-import { ResultPanel } from "./result/ResultPanel";
 
 function useLivePanelGroupId(api: IDockviewPanelProps<WorkbenchPanelParams>["api"]): string {
   const [groupId, setGroupId] = useState(() => api.group.id);
@@ -33,7 +20,7 @@ function useLivePanelGroupId(api: IDockviewPanelProps<WorkbenchPanelParams>["api
   return groupId;
 }
 
-export function WorkbenchEditorPanel(props: IDockviewPanelProps<WorkbenchPanelParams>) {
+export function EditorResourceDockPanel(props: IDockviewPanelProps<WorkbenchPanelParams>) {
   const groupId = useLivePanelGroupId(props.api);
   const metadata = props.params.metadata;
   if (metadata.role !== "editor") return null;
@@ -91,25 +78,3 @@ function GraphEditorPanel({
     />
   );
 }
-
-function MainLogsPanel() {
-  return <LogWorkspaceDockview layout={{ kind: "main" }} />;
-}
-
-type WorkbenchDockviewComponent = FunctionComponent<IDockviewPanelProps<WorkbenchPanelParams>>;
-
-export const workbenchDockviewComponents = {
-  GraphEditor: WorkbenchEditorPanel,
-  WorksheetEditor: WorkbenchEditorPanel,
-  Project: WorkbenchProjectPanel,
-  Nodes: WorkbenchNodesPanel,
-  Data: WorkbenchDataPanel,
-  Commands: WorkbenchCommandsPanel,
-  Details: DetailsPane,
-  Assistant: AssistantPanel,
-  Inspect: InspectPane,
-  Result: ResultPanel,
-  Logs: MainLogsPanel,
-  Output: OutputPanel,
-  Diagnostics: DiagnosticsPanel,
-} satisfies Record<WorkbenchComponentId, WorkbenchDockviewComponent>;

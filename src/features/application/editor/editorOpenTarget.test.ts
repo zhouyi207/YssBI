@@ -43,7 +43,7 @@ function editorPanel(
   return {
     panelInstanceId,
     groupId,
-    component: "GraphEditor",
+    component: "EditorResource",
     title: resourceRef,
     metadata: {
       role: "editor",

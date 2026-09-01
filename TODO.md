@@ -888,3 +888,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       的问题；保持 editor command focus gate 并恢复节点拖动与创建。
 - [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复
       资源绑定节点的实例显示名。
+- [ ] 将主窗口壳收敛为 `WorkbenchWindow`、`RootDockviewHost` 与 `WorkbenchOverlayHost`，由
+      `WorkbenchComposition` 唯一组装 `RootPanelRegistry`，并统一使用 `EditorResource` Dockview component。

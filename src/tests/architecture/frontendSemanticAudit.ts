@@ -28,7 +28,7 @@ import type {
 
 const RAW_INVOKE_ADAPTER = "src/services/ipc/invokeCommand.ts";
 const RAW_DIALOG_ADAPTER = "src/services/platform/pathDialog.ts";
-const ROOT_DOCKVIEW_CONSUMER = "src/views/EditorView/Layout/Workspace.tsx";
+const ROOT_DOCKVIEW_CONSUMER = "src/views/EditorView/Layout/RootDockviewHost.tsx";
 const NESTED_DOCKVIEW_CONSUMER = "src/views/LogView/LogWorkspaceDockview.tsx";
 
 const PUBLICATION_MEMBERS = new Set([

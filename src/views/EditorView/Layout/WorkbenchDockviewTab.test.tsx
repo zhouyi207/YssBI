@@ -155,7 +155,7 @@ describe("WorkbenchDockviewTab", () => {
         <div style={{ width: 640, height: 480 }}>
           <DockviewReact
             components={{
-              GraphEditor: TestPanel,
+              EditorResource: TestPanel,
               Project: TestPanel,
               Nodes: TestPanel,
               Data: TestPanel,
@@ -222,7 +222,7 @@ describe("WorkbenchDockviewTab", () => {
     renderDockview((readyApi) => {
       readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-a",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Main",
         params: editorParams(),
       });
@@ -271,7 +271,7 @@ describe("WorkbenchDockviewTab", () => {
     renderDockview((readyApi) => {
       readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-a",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Main",
         params: editorParams(),
       });
@@ -303,14 +303,14 @@ describe("WorkbenchDockviewTab", () => {
     renderDockview((readyApi) => {
       const movedPanel = readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-a",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Main",
         params: editorParams(),
       });
       sourceGroupId = movedPanel.group.id;
       readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-b",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Secondary",
         params: editorParams(),
         position: { referenceGroup: movedPanel.group, direction: "within" },
@@ -428,7 +428,7 @@ describe("WorkbenchDockviewTab", () => {
     renderDockview((readyApi) => {
       const centralPanel = readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-b",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Secondary",
         params: editorParams(),
       });
@@ -441,7 +441,7 @@ describe("WorkbenchDockviewTab", () => {
       if (!bottomGroup) throw new Error("Missing bottom edge group");
       readyApi.addPanel<WorkbenchPanelParams>({
         id: "editor-a",
-        component: "GraphEditor",
+        component: "EditorResource",
         title: "Main",
         params: editorParams(),
         position: { referenceGroup: bottomGroup, direction: "within" },

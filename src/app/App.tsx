@@ -27,8 +27,8 @@ const LogWindow = React.lazy(() =>
 const InfoWindow = React.lazy(() =>
   import("@/views/InfoView/InfoWindow").then((m) => ({ default: m.InfoWindow })),
 );
-const EditorWindow = React.lazy(() =>
-  import("@/views/EditorView/EditorWindow").then((m) => ({ default: m.EditorWindow })),
+const WorkbenchComposition = React.lazy(() =>
+  import("./WorkbenchComposition").then((m) => ({ default: m.WorkbenchComposition })),
 );
 const BayesView = React.lazy(() =>
   import("@/views/BayesView/BayesView").then((m) => ({ default: m.BayesView })),
@@ -45,7 +45,7 @@ function AppRouter() {
       <Routes>
         <Route path="/" element={<ProjectPickerScreen />} />
         <Route path="/projects" element={<ProjectPickerScreen />} />
-        <Route path="/editor" element={<EditorWindow />} />
+        <Route path="/editor" element={<WorkbenchComposition />} />
         <Route path="/plot" element={<PlotWindow />} />
         <Route path="/database" element={<DatabaseEditorWindow />} />
         <Route path="/inspect" element={<SourceInspectorWindow />} />

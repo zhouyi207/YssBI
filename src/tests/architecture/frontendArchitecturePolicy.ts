@@ -558,7 +558,7 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
       sourceLayer: "views",
       canonicalModule: "src/features/core/dockview/workbenchRootBinding.ts",
       exportedSymbols: ["workbenchRootBinding"],
-      exactConsumers: ["src/views/EditorView/Layout/Workspace.tsx"],
+      exactConsumers: ["src/views/EditorView/Layout/RootDockviewHost.tsx"],
       memberCapabilities: null,
     },
     {
