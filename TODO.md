@@ -883,3 +883,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
   同时移除当前 wire 文档中的过时 legacy 表述。
 - [ ] 清理根 composition entry 的 Tauri runtime 终止失败路径：移除模板式生产 `expect`，直接记录 typed
   `tauri::Error` 与稳定 diagnostic event 后返回，并以架构门禁禁止启动 panic 回流。
+
+## 2026.09.01
+
+- [ ] 修复 editor 仅在 group 内激活却未成为 root physical target、以及 preview canvas 注销 drop route
+  的问题；保持 editor command focus gate 并恢复节点拖动与创建。
+- [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复
+  资源绑定节点的实例显示名。
