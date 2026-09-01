@@ -1,10 +1,12 @@
 import type { TFunction } from "i18next";
 import { describe, expect, it, vi } from "vitest";
-import { buildSidebarContextMenuSections } from "./buildSidebarContextMenuSections";
+
+import { buildDataSidebarContextMenuSections } from "./buildDataSidebarContextMenuSections";
+import { buildProjectSidebarContextMenuSections } from "./buildProjectSidebarContextMenuSections";
 
 const t = ((key: string) => key) as TFunction;
 
-function sidebarActions() {
+function projectActions() {
   return {
     openGraph: vi.fn(),
     createGraph: vi.fn(),
@@ -17,10 +19,6 @@ function sidebarActions() {
     promoteVariable: vi.fn(),
     demoteVariable: vi.fn(),
     canDemoteVariable: true,
-    openDatabase: vi.fn(),
-    renameDatabaseItem: vi.fn(),
-    deleteDatabaseItem: vi.fn(),
-    importData: vi.fn(),
     openChart: vi.fn(),
     renameChartItem: vi.fn(),
     duplicateChart: vi.fn(),
@@ -30,10 +28,10 @@ function sidebarActions() {
   };
 }
 
-describe("buildSidebarContextMenuSections", () => {
+describe("activity context menu sections", () => {
   it("disables demotion with a reason when no graph scope is active", () => {
-    const actions = { ...sidebarActions(), canDemoteVariable: false };
-    const sections = buildSidebarContextMenuSections(
+    const actions = { ...projectActions(), canDemoteVariable: false };
+    const sections = buildProjectSidebarContextMenuSections(
       {
         x: 10,
         y: 20,
@@ -49,8 +47,8 @@ describe("buildSidebarContextMenuSections", () => {
   });
 
   it("offers both variable scopes from the Variables folder", () => {
-    const actions = sidebarActions();
-    const sections = buildSidebarContextMenuSections(
+    const actions = projectActions();
+    const sections = buildProjectSidebarContextMenuSections(
       {
         x: 10,
         y: 20,
@@ -70,8 +68,8 @@ describe("buildSidebarContextMenuSections", () => {
   });
 
   it("exposes authoritative chart rename with the opaque path and Rust-provided name", () => {
-    const actions = sidebarActions();
-    const sections = buildSidebarContextMenuSections(
+    const actions = projectActions();
+    const sections = buildProjectSidebarContextMenuSections(
       {
         x: 10,
         y: 20,
@@ -96,5 +94,23 @@ describe("buildSidebarContextMenuSections", () => {
 
     items.find((item) => item.id === "rename")?.onClick?.();
     expect(actions.renameChartItem).toHaveBeenCalledWith("charts/Report.yssbi-chart", "Report");
+  });
+
+  it("keeps data actions out of the Project contribution", () => {
+    const actions = {
+      openDatabase: vi.fn(),
+      renameDatabaseItem: vi.fn(),
+      deleteDatabaseItem: vi.fn(),
+      importData: vi.fn(),
+      revealInExplorer: vi.fn(),
+    };
+    const sections = buildDataSidebarContextMenuSections(
+      { x: 10, y: 20, target: { type: "dataSection" } },
+      actions,
+      t,
+    );
+
+    sections[0]?.items[0]?.onClick?.();
+    expect(actions.importData).toHaveBeenCalledOnce();
   });
 });

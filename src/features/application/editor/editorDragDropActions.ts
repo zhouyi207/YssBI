@@ -1,4 +1,4 @@
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
 import { handleGraphResourceDrop } from "./handleGraphResourceDrop";
 
@@ -10,6 +10,7 @@ import {
   type CanvasDropTarget,
 } from "./dropFunctionIntoEventEditor";
 import { canvasDropHandlerStore, useSidebarDragStore } from "@/features/core/sidebarDrag";
+import { sidebarDragUi } from "@/features/core/sidebarDrag/ui";
 import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import type { SidebarDragPayload } from "@/features/core/dnd";
 import {
@@ -23,9 +24,30 @@ import {
   isSidebarSpawnDrag,
   parseCanvasDragPayload,
   readDragModifiers,
+  buildSidebarDragState,
 } from "@/features/core/dnd";
+import { keyboardUi } from "@/features/core/keyboard/ui";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
+
+export function beginActivityEditorDrag(event: DragStartEvent): boolean {
+  const activeData = parseCanvasDragPayload(event.active.data.current);
+  if (!isSidebarSpawnDrag(activeData)) return false;
+  const activatorEvent = event.activatorEvent as PointerEvent;
+  sidebarDragUi.setActiveDrag(
+    buildSidebarDragState(activeData, activatorEvent?.clientX ?? 0, activatorEvent?.clientY ?? 0),
+  );
+  return true;
+}
+
+export function updateActivityEditorDragPointer(event: PointerEvent): void {
+  sidebarDragUi.updatePosition(event.clientX, event.clientY);
+  keyboardUi.setModifierKeys(event);
+}
+
+export function finishActivityEditorDrag(): void {
+  sidebarDragUi.setActiveDrag(null);
+}
 
 export function readEditorDragModifiers(event: DragEndEvent): {
   altKey: boolean;

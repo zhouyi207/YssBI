@@ -892,3 +892,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       `WorkbenchComposition` 唯一组装 `RootPanelRegistry`，并统一使用 `EditorResource` Dockview component。
 - [ ] 将 Worksheet 资源协议全栈直接切换为 Chart：统一 Rust owner、Project 生命周期、Tauri wire、
       前端 service/state/UI、`charts/*.yssbi-chart` 与 i18n，并删除旧双路径。
+- [ ] 将 Project、Node Catalog、Data 与 Commands Activity panel 拆为独立 controller/public contribution，
+      删除宽 `WorkbenchActivityPanelsProvider`，并由 app integration 唯一协调 sidebar-to-editor DnD。

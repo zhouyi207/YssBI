@@ -3,17 +3,22 @@ import type { PositionedActionMenuState } from "@/shared/ui/actionMenu";
 
 export type GraphResourceType = "event" | "function";
 
-export type SidebarContextMenuTarget =
+export type ProjectSidebarContextMenuTarget =
   | { type: "graph"; id: string; name: string; graphType: GraphResourceType }
   | { type: "section"; graphType: GraphResourceType }
   | { type: "variable"; id: string; name: string; isGlobal: boolean }
   | { type: "variableSection"; isGlobal?: boolean }
-  | { type: "database"; id: string; name: string }
-  | { type: "dataSection" }
   | { type: "chartSection" }
   | { type: "chart"; chartPath: string; name: string };
 
-export type SidebarContextMenuState = PositionedActionMenuState<SidebarContextMenuTarget>;
+export type DataSidebarContextMenuTarget =
+  | { type: "database"; id: string; name: string }
+  | { type: "dataSection" };
+
+export type ProjectSidebarContextMenuState =
+  PositionedActionMenuState<ProjectSidebarContextMenuTarget>;
+
+export type DataSidebarContextMenuState = PositionedActionMenuState<DataSidebarContextMenuTarget>;
 
 export interface SidebarInputDialogState {
   title: string;
@@ -23,7 +28,7 @@ export interface SidebarInputDialogState {
   onSubmit: (value: string) => void | Promise<void>;
 }
 
-export interface SidebarContextMenuActions {
+export interface ProjectSidebarContextMenuActions {
   openGraph: (id: string, name: string, type: GraphResourceType) => void;
   createGraph: (type: GraphResourceType) => unknown | Promise<unknown>;
   renameGraphItem: (id: string, name: string, type: GraphResourceType) => void;
@@ -35,14 +40,18 @@ export interface SidebarContextMenuActions {
   promoteVariable: (id: string) => unknown | Promise<unknown>;
   demoteVariable: (id: string) => unknown | Promise<unknown>;
   canDemoteVariable: boolean;
-  openDatabase: (id: string) => void;
-  renameDatabaseItem: (id: string, name: string) => void;
-  deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
-  importData: () => void;
   openChart: (chartPath: string, name: string) => unknown | Promise<unknown>;
   renameChartItem: (chartPath: string, name: string) => void;
   duplicateChart: (chartPath: string) => unknown | Promise<unknown>;
   deleteChart: (chartPath: string) => unknown | Promise<unknown>;
   addChart: () => unknown | Promise<unknown>;
+  revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
+}
+
+export interface DataSidebarContextMenuActions {
+  openDatabase: (id: string) => void;
+  renameDatabaseItem: (id: string, name: string) => void;
+  deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
+  importData: () => void;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }

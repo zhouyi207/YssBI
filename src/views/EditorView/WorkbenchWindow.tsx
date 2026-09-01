@@ -2,8 +2,11 @@ import { useTranslation } from "react-i18next";
 
 import { BottomBar } from "./Layout/BottomBar";
 import { Menubar } from "./Layout/Menubar";
-import { RootDockviewHost, type RootPanelRegistry } from "./Layout/RootDockviewHost";
-import { WorkbenchActivityPanelsProvider } from "./Layout/WorkbenchActivityPanels";
+import {
+  RootDockviewHost,
+  type RootDockviewDndCoordinator,
+  type RootPanelRegistry,
+} from "./Layout/RootDockviewHost";
 import { WorkbenchOverlayHost } from "./Layout/WorkbenchOverlayHost";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
@@ -17,7 +20,12 @@ import {
 import { useWorkbenchWindowGeometryPersistence } from "@/features/application/window";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
-function WorkbenchWindowReady({ panelRegistry }: { readonly panelRegistry: RootPanelRegistry }) {
+interface WorkbenchWindowProps {
+  readonly panelRegistry: RootPanelRegistry;
+  readonly dndCoordinator: RootDockviewDndCoordinator;
+}
+
+function WorkbenchWindowReady({ panelRegistry, dndCoordinator }: WorkbenchWindowProps) {
   useProjectSync();
   useProjectionLocaleSync();
 
@@ -30,9 +38,7 @@ function WorkbenchWindowReady({ panelRegistry }: { readonly panelRegistry: RootP
     >
       <Menubar />
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
-        <WorkbenchActivityPanelsProvider>
-          <RootDockviewHost panelRegistry={panelRegistry} />
-        </WorkbenchActivityPanelsProvider>
+        <RootDockviewHost panelRegistry={panelRegistry} dndCoordinator={dndCoordinator} />
       </div>
       <BottomBar />
       <WorkbenchOverlayHost />
@@ -40,7 +46,7 @@ function WorkbenchWindowReady({ panelRegistry }: { readonly panelRegistry: RootP
   );
 }
 
-export function WorkbenchWindow({ panelRegistry }: { readonly panelRegistry: RootPanelRegistry }) {
+export function WorkbenchWindow({ panelRegistry, dndCoordinator }: WorkbenchWindowProps) {
   const { t } = useTranslation();
   const { status, error } = useAppInitialization();
 
@@ -62,7 +68,7 @@ export function WorkbenchWindow({ panelRegistry }: { readonly panelRegistry: Roo
 
   return (
     <EditorSessionProvider>
-      <WorkbenchWindowReady panelRegistry={panelRegistry} />
+      <WorkbenchWindowReady panelRegistry={panelRegistry} dndCoordinator={dndCoordinator} />
     </EditorSessionProvider>
   );
 }

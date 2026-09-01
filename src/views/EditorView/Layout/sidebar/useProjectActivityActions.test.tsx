@@ -2,7 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useSidebarResourceActions } from "./useSidebarResourceActions";
+
+import { useProjectActivityActions } from "./useProjectActivityActions";
 
 const mocks = vi.hoisted(() => ({
   addVariable: vi.fn(),
@@ -22,33 +23,16 @@ vi.mock("@/features/application/editor", () => ({
   }),
 }));
 
-vi.mock("@/features/application/window", () => ({
-  openDatabaseEditorWindow: vi.fn(),
-}));
-
-vi.mock("@/features/core/editor", () => ({
-  useFunctionCatalog: () => ({}),
-}));
-
-vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
-  useGraphSessionStore: Object.assign(
-    (selector: (state: { focusedSession: { groupId: string; graphPath: string } }) => unknown) =>
-      selector({
-        focusedSession: {
-          groupId: "group-1",
-          graphPath: "charts/Report.yssbi-chart",
-        },
-      }),
-    {
-      getState: () => ({
-        focusedSession: {
-          groupId: "group-1",
-          graphPath: "charts/Report.yssbi-chart",
-        },
-      }),
-      subscribe: () => () => {},
-    },
-  ),
+vi.mock("@/features/core/graphSession/ui", () => ({
+  useGraphSessionUi: (
+    selector: (state: { focusedSession: { groupId: string; graphPath: string } }) => unknown,
+  ) =>
+    selector({
+      focusedSession: {
+        groupId: "group-1",
+        graphPath: "charts/Report.yssbi-chart",
+      },
+    }),
 }));
 
 vi.mock("@/features/core/dockview", () => ({
@@ -63,16 +47,17 @@ vi.mock("@/features/core/dockview", () => ({
   },
 }));
 
-vi.mock("@/features/core/resource", () => ({
-  useGraphResourcesByKind: () => ({}),
+vi.mock("@/features/core/variable/read", () => ({
+  useVariableRead: (selector: (state: { variables: Record<string, never> }) => unknown) =>
+    selector({ variables: {} }),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe("useSidebarResourceActions", () => {
+describe("useProjectActivityActions", () => {
   let root: Root;
   let host: HTMLDivElement;
-  let actions: ReturnType<typeof useSidebarResourceActions>;
+  let actions: ReturnType<typeof useProjectActivityActions>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,7 +65,7 @@ describe("useSidebarResourceActions", () => {
     document.body.appendChild(host);
     root = createRoot(host);
     function Harness() {
-      actions = useSidebarResourceActions(vi.fn());
+      actions = useProjectActivityActions(vi.fn());
       return null;
     }
     act(() => root.render(<Harness />));
@@ -91,7 +76,7 @@ describe("useSidebarResourceActions", () => {
     host.remove();
   });
 
-  it("does not expose local Project actions for a chart active tab", async () => {
+  it("does not expose local Project actions for a chart active panel", async () => {
     expect(actions.canDemoteVariable).toBe(false);
 
     await act(async () => {

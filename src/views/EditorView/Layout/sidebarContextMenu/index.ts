@@ -1,9 +1,13 @@
-export { buildSidebarContextMenuSections } from "./buildSidebarContextMenuSections";
+export { buildDataSidebarContextMenuSections } from "./buildDataSidebarContextMenuSections";
+export { buildProjectSidebarContextMenuSections } from "./buildProjectSidebarContextMenuSections";
 export { useSidebarContextMenu } from "../sidebar/useSidebarContextMenu";
 export type {
+  DataSidebarContextMenuActions,
+  DataSidebarContextMenuState,
+  DataSidebarContextMenuTarget,
   GraphResourceType,
-  SidebarContextMenuActions,
-  SidebarContextMenuState,
-  SidebarContextMenuTarget,
+  ProjectSidebarContextMenuActions,
+  ProjectSidebarContextMenuState,
+  ProjectSidebarContextMenuTarget,
   SidebarInputDialogState,
 } from "./sidebarContextMenuTypes";

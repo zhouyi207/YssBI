@@ -1,23 +1,22 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+
+import { updateVariableAction } from "@/features/application/dataManagement/variableActions";
+import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
 import {
   useEditorSessionCommandsContext,
   useEditorSessionResources,
 } from "@/features/application/editor";
-import { resolveActiveProjectGraph } from "@/features/application/sidebar";
-import { updateVariableAction } from "@/features/application/dataManagement/variableActions";
 import { renameResource } from "@/features/application/resource/resourceActions";
+import { resolveActiveProjectGraph } from "@/features/application/sidebar";
 import {
   renameChartResource,
   revealProjectResourceInExplorer,
 } from "@/features/application/sidebar/sidebarResourceActions";
-import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
-import { openDatabaseEditorWindow } from "@/features/application/window";
-import { ui } from "@/features/core/ui/ui";
-import { useGraphSessionUi } from "@/features/core/graphSession/ui";
-import { useVariableRead } from "@/features/core/variable/read";
-import { useDatabaseRead } from "@/features/core/database/read";
 import { workbenchDockviewRead } from "@/features/core/dockview";
+import { useGraphSessionUi } from "@/features/core/graphSession/ui";
+import { ui } from "@/features/core/ui/ui";
+import { useVariableRead } from "@/features/core/variable/read";
 import type { GraphResourceType } from "../sidebarContextMenu/sidebarContextMenuTypes";
 
 type OpenInputDialog = (
@@ -27,12 +26,11 @@ type OpenInputDialog = (
   submitLabel?: string,
 ) => void;
 
-export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
+export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
   const { events, functions } = useEditorSessionResources();
   const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
   const variables = useVariableRead((snapshot) => snapshot.variables);
-  const databases = useDatabaseRead((snapshot) => snapshot.databases);
   const activeEditor = focusedSession
     ? (workbenchDockviewRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata ?? null)
     : null;
@@ -46,7 +44,6 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     deleteEvent,
     deleteFunction,
     deleteVariable,
-    deleteDataFrame,
     addVariable,
     addEvent,
     addFunction,
@@ -55,7 +52,6 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     openChart,
     duplicateChart,
     addChart,
-    triggerImportData,
   } = useEditorSessionCommandsContext();
 
   const renameGraphItem = useCallback(
@@ -155,35 +151,6 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     [activeProjectGraph, addVariable],
   );
 
-  const renameDatabaseItem = useCallback(
-    (id: string, name: string) => {
-      openInputDialog(
-        t("contextMenu.dialog.renameDataTitle"),
-        name,
-        async (nextName) => {
-          await renameResource({ id, kind: "database" }, nextName);
-        },
-        t("contextMenu.dialog.renameSubmit"),
-      );
-    },
-    [openInputDialog, t],
-  );
-
-  const deleteDatabaseItem = useCallback(
-    async (id: string, name: string) => {
-      const confirmed = await ui.confirm({
-        title: t("sidebar.deleteDataTitle"),
-        message: t("sidebar.deleteDataMessage", { name }),
-        confirmText: t("contextMenu.sidebar.delete"),
-        cancelText: t("common.cancel"),
-        type: "danger",
-      });
-      if (!confirmed) return;
-      await deleteDataFrame(id);
-    },
-    [deleteDataFrame, t],
-  );
-
   const renameChartItem = useCallback(
     (chartPath: string, name: string) => {
       openInputDialog(
@@ -218,13 +185,6 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     [variables],
   );
 
-  const resolveDatabaseName = useCallback(
-    (id: string, fallback: string) => {
-      return databases[id]?.name ?? fallback;
-    },
-    [databases],
-  );
-
   return {
     renameGraphItem,
     deleteGraphItem,
@@ -234,13 +194,10 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     promoteVariable,
     demoteVariable,
     canDemoteVariable: activeProjectGraph !== null,
-    renameDatabaseItem,
-    deleteDatabaseItem,
     renameChartItem,
     deleteChartItem,
     revealInExplorer,
     openVariableContextMenuTarget,
-    resolveDatabaseName,
     addVariable: addProjectVariable,
     addEvent,
     addFunction,
@@ -249,7 +206,5 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     openChart,
     duplicateChart,
     addChart,
-    triggerImportData,
-    openDatabaseEditorWindow,
   };
 }

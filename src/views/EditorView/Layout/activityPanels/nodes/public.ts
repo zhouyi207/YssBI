@@ -1,0 +1,1 @@
+export { nodeCatalogActivityPanelContribution } from "./NodeCatalogActivityPanelController";

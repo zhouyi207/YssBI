@@ -363,6 +363,61 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps Activity panels independently contributed and DnD composed by the app", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const retiredActivityFiles = new Set([
+        "src/views/EditorView/Layout/WorkbenchActivityPanels.tsx",
+        "src/views/EditorView/Layout/sidebar/useSidebarResourceActions.ts",
+      ]);
+      expect(
+        sources.map(({ path }) => path).filter((path) => retiredActivityFiles.has(path)),
+      ).toEqual([]);
+
+      const retiredIdentifiers = [
+        "WorkbenchActivityPanelsProvider",
+        "WorkbenchActivityPanelsContext",
+        "useSidebarResourceActions",
+      ];
+      expect(
+        sources.flatMap(({ path, source }) =>
+          retiredIdentifiers
+            .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
+            .map((identifier) => `${path}:${identifier}`),
+        ),
+      ).toEqual([]);
+
+      const contributions = [
+        "projectActivityPanelContribution",
+        "nodeCatalogActivityPanelContribution",
+        "dataActivityPanelContribution",
+        "commandsActivityPanelContribution",
+      ];
+      const multiPanelConsumers = sources.filter(
+        ({ source }) =>
+          contributions.filter((contribution) =>
+            new RegExp(`\\b${contribution}\\b`, "u").test(source),
+          ).length > 1,
+      );
+      expect(multiPanelConsumers.map(({ path }) => path)).toEqual([
+        "src/app/WorkbenchComposition.tsx",
+      ]);
+
+      const rootDockviewHost = sources.find(
+        ({ path }) => path === "src/views/EditorView/Layout/RootDockviewHost.tsx",
+      )?.source;
+      expect(rootDockviewHost).not.toMatch(
+        /\b(?:beginActivityEditorDrag|executeEditorDragEnd|sidebarDragUi)\b|["']pointermove["']/u,
+      );
+
+      const dndCoordinator = sources.find(
+        ({ path }) => path === "src/app/integrations/activityEditorDndCoordinator.ts",
+      )?.source;
+      expect(dndCoordinator).toMatch(/\bexecuteEditorDragEnd\b/u);
+      expect(dndCoordinator).toMatch(/["']pointermove["']/u);
+    });
+  });
+
   it("classifies every frontend production source exactly once", () => {
     const emptyMembership = Object.fromEntries(
       [

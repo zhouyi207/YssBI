@@ -17,23 +17,14 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
-import { executeEditorDragEnd } from "@/features/application/editor/editorDragDropActions";
 import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
 import { workbenchDockviewRead } from "@/features/core/dockview";
 import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core/dockview";
-import {
-  buildSidebarDragState,
-  isSidebarSpawnDrag,
-  parseCanvasDragPayload,
-} from "@/features/core/dnd";
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
-import { keyboardUi } from "@/features/core/keyboard/ui";
 import { useSettingsRead } from "@/features/core/settings/read";
-import { sidebarDragUi } from "@/features/core/sidebarDrag/ui";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
-import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { WatermarkView } from "../Canvas/overlays/WatermarkView";
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
 import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
@@ -48,6 +39,11 @@ export type RootDockviewPanelComponent = FunctionComponent<
 >;
 
 export type RootPanelRegistry = Record<WorkbenchComponentId, RootDockviewPanelComponent>;
+
+export interface RootDockviewDndCoordinator {
+  readonly onDragStart: (event: DragStartEvent) => void;
+  readonly onDragEnd: (event: DragEndEvent) => void;
+}
 
 export function createRootPanelRegistry(registry: RootPanelRegistry): RootPanelRegistry {
   return registry;
@@ -65,23 +61,20 @@ function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): vo
 
 export const RootDockviewHost = forwardRef<
   HTMLDivElement,
-  { readonly panelRegistry: RootPanelRegistry }
->(({ panelRegistry }, ref) => {
-  const setActiveDrag = sidebarDragUi.setActiveDrag;
-  const updatePosition = sidebarDragUi.updatePosition;
-  const setModifierKeys = keyboardUi.setModifierKeys;
+  {
+    readonly panelRegistry: RootPanelRegistry;
+    readonly dndCoordinator: RootDockviewDndCoordinator;
+  }
+>(({ panelRegistry, dndCoordinator }, ref) => {
   const themeMode = useSettingsRead((state) => state.theme.mode);
   const bindWorkbenchLayout = useWorkbenchLayout();
   const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
-  const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   useEffect(
     () => () => {
       activationDisposableRef.current?.dispose();
       activationDisposableRef.current = null;
-      pointerMoveCleanupRef.current?.();
-      pointerMoveCleanupRef.current = null;
     },
     [],
   );
@@ -102,36 +95,12 @@ export const RootDockviewHost = forwardRef<
     [bindWorkbenchLayout],
   );
 
-  const finishSidebarDrag = useCallback(() => {
-    pointerMoveCleanupRef.current?.();
-    pointerMoveCleanupRef.current = null;
-    setActiveDrag(null);
-  }, [setActiveDrag]);
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const activeData = parseCanvasDragPayload(event.active.data.current);
-    if (!isSidebarSpawnDrag(activeData)) return;
-    const activatorEvent = event.activatorEvent as PointerEvent;
-    setActiveDrag(
-      buildSidebarDragState(activeData, activatorEvent?.clientX ?? 0, activatorEvent?.clientY ?? 0),
-    );
-    pointerMoveCleanupRef.current?.();
-    pointerMoveCleanupRef.current = addGlobalEventListener(
-      document,
-      "pointermove",
-      (pointerEvent) => {
-        updatePosition(pointerEvent.clientX, pointerEvent.clientY);
-        setModifierKeys(pointerEvent);
-      },
-    );
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    void executeEditorDragEnd(event, { finishSidebarDrag });
-  };
-
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={dndCoordinator.onDragStart}
+      onDragEnd={dndCoordinator.onDragEnd}
+    >
       <div ref={ref} className="relative flex min-w-0 flex-1 overflow-hidden">
         <div
           data-yssbi-root-dockview
