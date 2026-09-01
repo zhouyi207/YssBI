@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
   groups: [] as WorkbenchGroupInfo[],
   panels: [] as WorkbenchPanelInfo[],
+  rootActivePanelInstanceId: null as string | null,
   getFocusedGroupId: vi.fn(),
   clearFocusedSession: vi.fn(),
   setDetailContext: vi.fn(),
@@ -22,6 +23,9 @@ vi.mock('@/features/core/dockview/workbenchRead', () => ({
     findEditorPanelsByResource: (resourceRef: string) =>
       mocks.panels.filter((panel) =>
         panel.metadata.role === 'editor' && panel.metadata.resourceRef === resourceRef),
+      getActivePanel: () => mocks.panels.find(
+        (panel) => panel.panelInstanceId === mocks.rootActivePanelInstanceId,
+      ),
       getActiveEditorPanel: () => mocks.panels.find((panel) => panel.active),
   },
 }));
@@ -95,6 +99,7 @@ describe('editor tab Dockview synchronization', () => {
     mocks.getFocusedGroupId.mockReturnValue('group-a');
     mocks.panels = [editorPanel('panel-a', 'events/A', true)];
     mocks.groups = [group()];
+    mocks.rootActivePanelInstanceId = 'panel-a';
   });
 
   it('does not write to Dockview while passively focusing its already active group', () => {
@@ -112,6 +117,17 @@ describe('editor tab Dockview synchronization', () => {
       kind: 'event',
       path: 'events/A',
     });
+  });
+
+  it('physically activates an editor that is only active inside its inactive group', async () => {
+    mocks.rootActivePanelInstanceId = null;
+
+    await expect(switchEditorTab('group-a', {
+      id: 'events/A', type: 'event', component: 'GraphEditor',
+    })).resolves.toBe(true);
+
+    expect(mocks.activate).toHaveBeenCalledOnce();
+    expect(mocks.activate).toHaveBeenCalledWith('panel-a');
   });
 
   it('lets only the latest rapid application switch activate a canonical editor panel', async () => {

@@ -104,7 +104,8 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
         && candidate.metadata.role === 'editor'
         && candidate.metadata.resourceKind === tab.type);
   if (!panel) return false;
-  if (!panel.active && !await workbenchDockviewControl.activate(panel.panelInstanceId)) return false;
+  if (workbenchDockviewRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId
+    && !await workbenchDockviewControl.activate(panel.panelInstanceId)) return false;
   if (request !== latestTabSwitchRequest) return false;
   return synchronizeTabSession(request, groupId, tab);
 }

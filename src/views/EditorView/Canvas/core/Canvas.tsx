@@ -144,7 +144,7 @@ export default function Canvas({
     canvasElementRef,
     panelInstanceId,
     groupId,
-    graphPath: interactive ? activeTabId : null,
+    graphPath: activeTabId,
     variables,
     setContextMenu,
     setPendingConnection,

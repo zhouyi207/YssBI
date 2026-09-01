@@ -37,7 +37,7 @@ interface UseCanvasDropParams {
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
-  /** When false, skip drop handlers and global dismiss listeners (preview canvases). */
+  /** Preview canvases skip pointer-only listeners but keep their activatable drop route. */
   enabled?: boolean;
 }
 
@@ -185,10 +185,9 @@ export function useCanvasDrop({
   );
 
   useEffect(() => {
-    if (!enabled) return;
     canvasDropHandlerStore.setHandler(panelInstanceId, (dragState) => handleSidebarCanvasDrop(dragState));
     return () => canvasDropHandlerStore.setHandler(panelInstanceId, null);
-  }, [enabled, handleSidebarCanvasDrop, panelInstanceId]);
+  }, [handleSidebarCanvasDrop, panelInstanceId]);
 
   return {
     variableDropMenu,

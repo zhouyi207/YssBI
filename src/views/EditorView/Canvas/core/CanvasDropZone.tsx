@@ -24,7 +24,6 @@ export function CanvasDropZone({
   const { setNodeRef } = useDroppable({
     id: getCanvasDropZoneId(panelInstanceId),
     data: { dropType: DROP_TYPES.CANVAS, panelInstanceId, groupId, graphPath, graphKind },
-    disabled: !interactive,
   });
 
   return (
