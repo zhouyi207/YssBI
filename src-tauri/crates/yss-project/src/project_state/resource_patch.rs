@@ -82,7 +82,7 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             let mut graph_revisions = self.graph_revisions.write().unwrap();
             let mut variable_revisions = self.variable_revisions.write().unwrap();
-            let mut worksheet_revisions = self.worksheet_revisions.write().unwrap();
+            let mut chart_revisions = self.chart_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
             self.ensure_project_operational()?;
             validate_context_revisions(
@@ -90,19 +90,15 @@ impl ProjectState {
                 &data,
                 &graph_revisions,
                 &variable_revisions,
-                &worksheet_revisions,
+                &chart_revisions,
             )?;
             normalize_function_patch_revisions(&mut patch, &data, &graph_revisions)?;
-            let (worksheet_deltas, worksheet_history) = worksheet_history_publication(
-                context.operation_id,
-                &patch,
-                &data,
-                &worksheet_revisions,
-            )?;
+            let (chart_deltas, chart_history) =
+                chart_history_publication(context.operation_id, &patch, &data, &chart_revisions)?;
             let publication_advance = publication.prepare_resource_revision()?;
             let mut deltas =
                 canonical_resource_lifecycle_events(context, &patch, &graph_revisions)?;
-            deltas.extend(worksheet_deltas);
+            deltas.extend(chart_deltas);
             let moves = match &patch {
                 ProjectDataPatch::MoveGraph {
                     from, to, moved, ..
@@ -119,11 +115,11 @@ impl ProjectState {
                     },
                     name: moved.name.clone().into_boxed_str(),
                 }],
-                ProjectDataPatch::MoveWorksheet { from, to, .. } => {
+                ProjectDataPatch::MoveChart { from, to, .. } => {
                     vec![crate::project_writers::ProjectResourceMove {
                         from: from.as_str().into(),
                         to: to.as_str().into(),
-                        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
+                        kind: yss_project_history::ResourceLifecycleKind::Chart,
                         name: to.display_name().as_str().into(),
                     }]
                 }
@@ -158,7 +154,7 @@ impl ProjectState {
                         }
                     })?,
                 )),
-                _ => worksheet_history,
+                _ => chart_history,
             };
             let projection_paths = patch_projection_paths(&patch, &data);
             if let Some((undo, expected_history_id)) = &history_head {
@@ -335,9 +331,9 @@ impl ProjectState {
                     data.variables.extend(updates);
                     *variable_revisions = next_revisions;
                 }
-                ProjectDataPatch::UpsertWorksheet { path, mut document } => {
-                    validate_worksheet_path_insertion(&data, &path)?;
-                    let retained_revision = worksheet_revisions.get(&path).copied();
+                ProjectDataPatch::UpsertChart { path, mut document } => {
+                    validate_chart_path_insertion(&data, &path)?;
+                    let retained_revision = chart_revisions.get(&path).copied();
                     let revision = match retained_revision {
                         Some(retained) => checked_resource_revision(path.as_str(), retained)?,
                         None => ResourceRevision::INITIAL,
@@ -346,7 +342,7 @@ impl ProjectState {
                     {
                         return Err(ProjectFilesystemError::ResourceRevisionConflict {
                             message: format!(
-                                "worksheet '{}' submitted revision {} but authority requires {}",
+                                "chart '{}' submitted revision {} but authority requires {}",
                                 path.as_str(),
                                 document.revision.get(),
                                 revision.get()
@@ -354,25 +350,25 @@ impl ProjectState {
                         });
                     }
                     document.revision = revision;
-                    data.worksheets.insert(path.clone(), document);
-                    worksheet_revisions.insert(path, revision);
+                    data.charts.insert(path.clone(), document);
+                    chart_revisions.insert(path, revision);
                 }
-                ProjectDataPatch::RemoveWorksheet { path, revision } => {
+                ProjectDataPatch::RemoveChart { path, revision } => {
                     let next_revision = checked_resource_revision(path.as_str(), revision)?;
-                    data.worksheets.remove(&path);
-                    worksheet_revisions.insert(path, next_revision);
+                    data.charts.remove(&path);
+                    chart_revisions.insert(path, next_revision);
                 }
-                ProjectDataPatch::MoveWorksheet {
+                ProjectDataPatch::MoveChart {
                     from,
                     to,
                     mut moved,
                 } => {
                     let revision = moved.revision;
-                    data.worksheets.remove(&from);
+                    data.charts.remove(&from);
                     moved.revision = revision;
-                    data.worksheets.insert(to.clone(), moved);
-                    worksheet_revisions.insert(from, revision);
-                    worksheet_revisions.insert(to, revision);
+                    data.charts.insert(to.clone(), moved);
+                    chart_revisions.insert(from, revision);
+                    chart_revisions.insert(to, revision);
                 }
             }
 

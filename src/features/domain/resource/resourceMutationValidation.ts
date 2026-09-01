@@ -22,7 +22,7 @@ function isResourceKind(value: unknown): value is ResourceDeltaDto["resource"]["
     value === "function" ||
     value === "variable" ||
     value === "database" ||
-    value === "worksheet"
+    value === "chart"
   );
 }
 
@@ -30,7 +30,7 @@ function isPayloadKind(value: unknown): value is ResourceDocumentPatchDto["kind"
   return (
     value === "graph" ||
     value === "function" ||
-    value === "worksheet" ||
+    value === "chart" ||
     value === "resource_lifecycle" ||
     value === "resource_move" ||
     value === "variable" ||
@@ -136,7 +136,7 @@ export function validateResourceMutationResult(
         move.name.trim().length === 0
       )
         return true;
-      if (move.kind === "worksheet") return false;
+      if (move.kind === "chart") return false;
       if (move.kind !== "event" && move.kind !== "function") return true;
       return !isGraphResourcePath(move.from) || !isGraphResourcePath(move.to);
     })

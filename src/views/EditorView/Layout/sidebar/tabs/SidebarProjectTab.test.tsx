@@ -41,13 +41,13 @@ vi.mock("@dnd-kit/core", () => ({
 const actions = {
   onAddEvent: vi.fn(),
   onAddFunction: vi.fn(),
-  onAddWorksheet: vi.fn(),
+  onAddChart: vi.fn(),
   onAddVariable: vi.fn(),
   onCategoryContextMenu: vi.fn(),
   onGraphContextMenu: vi.fn(),
   onVariableContextMenu: vi.fn(),
-  onWorksheetContextMenu: vi.fn(),
-  onOpenWorksheet: vi.fn(),
+  onChartContextMenu: vi.fn(),
+  onOpenChart: vi.fn(),
 };
 
 function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserRow {
@@ -76,7 +76,7 @@ function renderBrowser({
   const categoryIds = [
     PROJECT_TREE_CATEGORY_IDS.events,
     PROJECT_TREE_CATEGORY_IDS.functions,
-    PROJECT_TREE_CATEGORY_IDS.worksheets,
+    PROJECT_TREE_CATEGORY_IDS.charts,
     PROJECT_TREE_CATEGORY_IDS.variables,
     PROJECT_TREE_CATEGORY_IDS.localVariables,
     PROJECT_TREE_CATEGORY_IDS.globalVariables,
@@ -147,7 +147,7 @@ describe("SidebarProjectTab", () => {
     expect(categoryLabels(host)).toEqual([
       `Projected ${PROJECT_TREE_CATEGORY_IDS.events}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.functions}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.worksheets}`,
+      `Projected ${PROJECT_TREE_CATEGORY_IDS.charts}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.variables}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.globalVariables}`,

@@ -18,8 +18,8 @@ import {
 import { parseViewportScopeKey, viewportScopeKey } from "@/features/core/viewport/viewportScope";
 import { useViewportStore } from "@/features/core/viewport/useViewportStore";
 import type { EditorViewport } from "@/features/core/viewport/editorViewport";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
-import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
+import type { ChartDocument, ChartIndexEntry } from "@/shared/types/domain/chart";
 
 export interface PreparedResourceMoveSnapshot {
   readonly fromKey: ResourceKey;
@@ -68,18 +68,18 @@ export interface PreparedGraphResourceMove {
   readonly viewportSnapshot: PreparedViewportMoveSnapshot;
 }
 
-export interface PreparedWorksheetResourceMove {
-  readonly kind: "worksheet";
+export interface PreparedChartResourceMove {
+  readonly kind: "chart";
   readonly from: string;
   readonly to: string;
   readonly name: string;
-  readonly documents: Record<string, WorksheetDocument>;
-  readonly index: WorksheetIndexEntry[];
+  readonly documents: Record<string, ChartDocument>;
+  readonly index: ChartIndexEntry[];
   readonly resources: Record<ResourceKey, ProjectResourceMeta>;
   readonly documentStates: Record<ResourceKey, DocumentState>;
 }
 
-export type PreparedResourceMove = PreparedGraphResourceMove | PreparedWorksheetResourceMove;
+export type PreparedResourceMove = PreparedGraphResourceMove | PreparedChartResourceMove;
 
 function assertMove(
   move: ResourceMoveDto,
@@ -110,46 +110,45 @@ function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot
   return { before, after };
 }
 
-function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetResourceMove {
+function prepareChartResourceMove(move: ResourceMoveDto): PreparedChartResourceMove {
   if (
     !move.from ||
     !move.to ||
     move.from === move.to ||
-    move.kind !== "worksheet" ||
+    move.kind !== "chart" ||
     !move.name.trim()
   ) {
-    throw new Error("worksheet resource move is malformed");
+    throw new Error("chart resource move is malformed");
   }
-  const fromKey = resourceKey({ id: move.from, kind: "worksheet" });
-  const toKey = resourceKey({ id: move.to, kind: "worksheet" });
+  const fromKey = resourceKey({ id: move.from, kind: "chart" });
+  const toKey = resourceKey({ id: move.to, kind: "chart" });
   const resources = structuredClone(useResourceStore.getState().resources) as Record<
     ResourceKey,
     ProjectResourceMeta
   >;
   const source = resources[fromKey];
-  if (!source || source.id !== move.from || source.kind !== "worksheet") {
+  if (!source || source.id !== move.from || source.kind !== "chart") {
     throw new Error(`missing source resource identity '${move.from}'`);
   }
   if (resources[toKey]) throw new Error(`destination resource '${move.to}' already exists`);
   resources[toKey] = { ...source, id: move.to, name: move.name, uri: toKey };
   delete resources[fromKey];
 
-  const worksheet = useWorksheetStore.getState();
-  const documents = structuredClone(worksheet.documents);
-  if (documents[move.to])
-    throw new Error(`destination worksheet document '${move.to}' already exists`);
+  const chart = useChartDocumentStore.getState();
+  const documents = structuredClone(chart.documents);
+  if (documents[move.to]) throw new Error(`destination chart document '${move.to}' already exists`);
   if (documents[move.from]) {
     documents[move.to] = documents[move.from];
     delete documents[move.from];
   }
-  if (worksheet.index.some((entry) => entry.worksheetPath === move.to)) {
-    throw new Error(`destination worksheet index '${move.to}' already exists`);
+  if (chart.index.some((entry) => entry.chartPath === move.to)) {
+    throw new Error(`destination chart index '${move.to}' already exists`);
   }
-  const sourceIndex = worksheet.index.find((entry) => entry.worksheetPath === move.from);
-  if (!sourceIndex) throw new Error(`missing source worksheet index '${move.from}'`);
-  const index = worksheet.index.map((entry) =>
-    entry.worksheetPath === move.from
-      ? { ...entry, worksheetPath: move.to, name: move.name }
+  const sourceIndex = chart.index.find((entry) => entry.chartPath === move.from);
+  if (!sourceIndex) throw new Error(`missing source chart index '${move.from}'`);
+  const index = chart.index.map((entry) =>
+    entry.chartPath === move.from
+      ? { ...entry, chartPath: move.to, name: move.name }
       : structuredClone(entry),
   );
 
@@ -164,7 +163,7 @@ function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetR
   }
 
   return Object.freeze({
-    kind: "worksheet",
+    kind: "chart",
     from: move.from,
     to: move.to,
     name: move.name,
@@ -179,11 +178,11 @@ export function prepareResourceMove(
   move: ResourceMoveDto,
   hasAuthoritativeDestinationReplacement: boolean,
 ): PreparedResourceMove {
-  if (move.kind === "worksheet") {
+  if (move.kind === "chart") {
     if (hasAuthoritativeDestinationReplacement) {
-      throw new Error(`worksheet move '${move.from}' cannot own a graph projection replacement`);
+      throw new Error(`chart move '${move.from}' cannot own a graph projection replacement`);
     }
-    return prepareWorksheetResourceMove(move);
+    return prepareChartResourceMove(move);
   }
   return prepareGraphResourceMove(move, hasAuthoritativeDestinationReplacement);
 }

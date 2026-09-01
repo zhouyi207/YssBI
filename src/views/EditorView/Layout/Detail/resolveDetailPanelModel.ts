@@ -3,7 +3,7 @@ import type { FunctionResourceView } from "@/features/core/resource/functionReso
 import type { GraphResourceRecord } from "@/features/core/resource/resourceSelectors";
 import type { FunctionPinSpec } from "@/shared/types/domain/graph";
 import type { Variable } from "@/shared/types/domain/variable";
-import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
+import type { ChartDocument } from "@/shared/types/domain/chart";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
 
@@ -18,7 +18,7 @@ export interface DetailCatalogSnapshot {
 export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
   target: DetailTarget | null;
   selectedLog: DiagnosticRecordDto | null;
-  worksheetDocument: WorksheetDocument | null;
+  chartDocument: ChartDocument | null;
 }
 
 export type FunctionDetailModel = {
@@ -35,13 +35,12 @@ export type DetailPanelModel =
   | { kind: "variable"; id: string; variable: Variable }
   | { kind: "event"; path: string; event: { name: string } }
   | { kind: "function"; path: string; fn: FunctionDetailModel }
-  | { kind: "worksheet"; document: WorksheetDocument }
+  | { kind: "chart"; document: ChartDocument }
   | { kind: "data"; id: string; dataframe: DatabaseRecord };
 
 /** target + 目录快照 → Detail 面板判别联合（无回调，纯数据） */
 export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailPanelModel {
-  const { target, selectedLog, variables, events, functions, dataframes, worksheetDocument } =
-    input;
+  const { target, selectedLog, variables, events, functions, dataframes, chartDocument } = input;
 
   if (!target) return { kind: "empty" };
 
@@ -75,10 +74,8 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
         },
       };
     }
-    case "worksheet":
-      return worksheetDocument
-        ? { kind: "worksheet", document: worksheetDocument }
-        : { kind: "empty" };
+    case "chart":
+      return chartDocument ? { kind: "chart", document: chartDocument } : { kind: "empty" };
     case "data": {
       const dataframe = dataframes[target.id];
       return dataframe ? { kind: "data", id: target.id, dataframe } : { kind: "empty" };

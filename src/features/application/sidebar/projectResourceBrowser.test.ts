@@ -14,13 +14,13 @@ import type { VariableListEntry } from "@/features/core/variable/variableScopeSe
 const labels: ProjectResourceBrowserInput["labels"] = {
   events: "Events",
   functions: "Functions",
-  worksheets: "Worksheets",
+  charts: "Charts",
   variables: "Variables",
   localVariables: "Local",
   globalVariables: "Global variables",
   noEvents: "No events",
   noFunctions: "No functions",
-  noWorksheets: "No worksheets",
+  noCharts: "No charts",
   noLocalVariables: "No local variables",
   noGlobalVariables: "No global variables",
 };
@@ -39,7 +39,7 @@ function input(overrides: Partial<ProjectResourceBrowserInput> = {}): ProjectRes
   return {
     events: {},
     functions: {},
-    worksheets: [],
+    charts: [],
     localVariables: {},
     globalVariables: {},
     activeGraph: null,
@@ -60,7 +60,7 @@ describe("project resource browser", () => {
       input({
         events: { "events/Main": { name: "Main event" } },
         functions: { "functions/Compute": { name: "Compute" } },
-        worksheets: [{ worksheetPath: "worksheets/Chart", name: "Chart" }],
+        charts: [{ chartPath: "charts/Chart", name: "Chart" }],
         activeGraph: { path: "events/Main", kind: "event", name: "Main event" },
         globalVariables: { global: variable("global", "Shared value") },
         expandedCategoryIds: new Set(Object.values(PROJECT_TREE_CATEGORY_IDS)),
@@ -72,7 +72,7 @@ describe("project resource browser", () => {
     ).toEqual([
       PROJECT_TREE_CATEGORY_IDS.events,
       PROJECT_TREE_CATEGORY_IDS.functions,
-      PROJECT_TREE_CATEGORY_IDS.worksheets,
+      PROJECT_TREE_CATEGORY_IDS.charts,
       PROJECT_TREE_CATEGORY_IDS.variables,
       PROJECT_TREE_CATEGORY_IDS.localVariables,
       PROJECT_TREE_CATEGORY_IDS.globalVariables,
@@ -110,7 +110,7 @@ describe("project resource browser", () => {
     expect(
       resolveActiveProjectGraph({
         ...resources,
-        activeEditor: { resourceRef: "worksheets/Chart", resourceKind: "worksheet" },
+        activeEditor: { resourceRef: "charts/Chart", resourceKind: "chart" },
       }),
     ).toBeNull();
   });

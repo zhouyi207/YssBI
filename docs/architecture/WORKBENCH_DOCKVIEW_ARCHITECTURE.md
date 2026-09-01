@@ -44,7 +44,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 
 | 角色               | 内容                            | deterministic home                  |
 | ------------------ | ------------------------------- | ----------------------------------- |
-| `editor`           | Graph/Function/Worksheet editor | 当前 central grid group             |
+| `editor`           | Graph/Function/Chart editor | 当前 central grid group             |
 | `view:project`     | Project activity panel          | left Activity edge                  |
 | `view:nodes`       | Nodes activity panel            | left Activity edge                  |
 | `view:data`        | Data activity panel             | left Activity edge                  |
@@ -159,7 +159,7 @@ Coordinator 按顺序执行：
 3. 对 dirty document 执行 save/discard/cancel confirmation。
 4. 在 FIFO 内重新校验 token 与 project identity。
 5. 通过 internal `commitRemove` 执行物理 close。
-6. 仅对已经物理移除的 panel 释放 pane、viewport、graph session 或 worksheet document state。
+6. 仅对已经物理移除的 panel 释放 pane、viewport、graph session 或 chart document state。
 
 并发 close workflow 串行化；取消、stale token 或 project replacement 都不会提前释放 domain state。
 

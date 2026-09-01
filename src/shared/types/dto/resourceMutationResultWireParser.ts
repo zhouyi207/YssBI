@@ -250,7 +250,7 @@ function isDatabasePatchShape(value: unknown): boolean {
   );
 }
 
-function isWorksheetDocumentStateShape(value: unknown): boolean {
+function isChartDocumentStateShape(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["databaseId", "chartType", "encodings"]) &&
@@ -259,12 +259,12 @@ function isWorksheetDocumentStateShape(value: unknown): boolean {
   );
 }
 
-function isWorksheetPatchShape(value: unknown): boolean {
+function isChartPatchShape(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["before", "after"]) &&
-    isWorksheetDocumentStateShape(value.before) &&
-    isWorksheetDocumentStateShape(value.after)
+    isChartDocumentStateShape(value.before) &&
+    isChartDocumentStateShape(value.after)
   );
 }
 
@@ -275,8 +275,8 @@ function isResourcePayloadShape(value: unknown): boolean {
       return isGraphPatchShape(value.patch);
     case "function":
       return isFunctionPatchShape(value.patch);
-    case "worksheet":
-      return isWorksheetPatchShape(value.patch);
+    case "chart":
+      return isChartPatchShape(value.patch);
     case "resource_lifecycle":
       return isLifecyclePatchShape(value.patch);
     case "resource_move":
@@ -311,8 +311,8 @@ function cloneResourceKey(resource: ResourceKeyDto): ResourceKeyDto {
       return { kind: "variable", key: resource.key };
     case "database":
       return { kind: "database", key: resource.key };
-    case "worksheet":
-      return { kind: "worksheet", key: resource.key };
+    case "chart":
+      return { kind: "chart", key: resource.key };
     default:
       return assertNever(resource);
   }
@@ -324,8 +324,8 @@ function cloneResourcePayload(payload: ResourceDocumentPatchDto): ResourceDocume
       return { kind: "graph", patch: structuredClone(payload.patch) };
     case "function":
       return { kind: "function", patch: structuredClone(payload.patch) };
-    case "worksheet":
-      return { kind: "worksheet", patch: structuredClone(payload.patch) };
+    case "chart":
+      return { kind: "chart", patch: structuredClone(payload.patch) };
     case "resource_lifecycle":
       return { kind: "resource_lifecycle", patch: structuredClone(payload.patch) };
     case "resource_move":
@@ -362,7 +362,7 @@ function parseMoves(value: unknown): ResourceMoveDto[] {
       !hasExactKeys(move, ["from", "to", "kind", "name"]) ||
       typeof move.from !== "string" ||
       typeof move.to !== "string" ||
-      (move.kind !== "event" && move.kind !== "function" && move.kind !== "worksheet") ||
+      (move.kind !== "event" && move.kind !== "function" && move.kind !== "chart") ||
       typeof move.name !== "string"
     )
       throw new Error("resource moves are malformed");

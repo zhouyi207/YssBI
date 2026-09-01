@@ -48,7 +48,7 @@ import {
   type PendingProjectLifecycleOperation,
 } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
-import { saveWorksheetDocument } from "@/features/application/worksheet/saveWorksheetDocument";
+import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import {
   captureActiveEditorCommandTarget,
@@ -172,13 +172,13 @@ export function useProjectOperations() {
           return;
         }
 
-        if (target.resourceKind === "worksheet") {
-          const saved = await saveWorksheetDocument(target.resourceRef);
+        if (target.resourceKind === "chart") {
+          const saved = await saveChartDocument(target.resourceRef);
           if (!isEditorCommandTargetCurrent(target)) return;
           if (!saved) {
             showBlockingMessage(
               t("notifications.project.saveFailed", {
-                error: "worksheet_save_not_committed",
+                error: "chart_save_not_committed",
               }),
             );
           }

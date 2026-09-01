@@ -12,7 +12,7 @@ thiserror.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-project-identity = { path = "../yss-project-identity" }
-yss-worksheet-document = { path = "../yss-worksheet-document" }
+yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 uuid.workspace = true

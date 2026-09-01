@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 use thiserror::Error;
+use yss_chart_document::{ChartResourcePath, ChartResourcePathError};
 use yss_graph_document::GraphResourcePath;
 use yss_resource_naming::ResourceNameValidationError;
-use yss_worksheet_document::{WorksheetResourcePath, WorksheetResourcePathError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
     #[error("invalid resource name: {0}")]
     InvalidResourceName(#[from] ResourceNameValidationError),
-    #[error("invalid worksheet resource path: {0}")]
-    InvalidWorksheetResourcePath(#[from] WorksheetResourcePathError),
+    #[error("invalid chart resource path: {0}")]
+    InvalidChartResourcePath(#[from] ChartResourcePathError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
     #[error("graph resource '{path}' is structurally invalid")]
@@ -30,8 +30,8 @@ pub enum ProjectFilesystemError {
     ResourceRevisionOverflow { resource: String, retained: u64 },
     #[error("resource name conflict: {message}")]
     ResourceNameConflict { message: String },
-    #[error("worksheet resource '{}' was not found", path.as_str())]
-    WorksheetNotFound { path: WorksheetResourcePath },
+    #[error("chart resource '{}' was not found", path.as_str())]
+    ChartNotFound { path: ChartResourcePath },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -65,8 +65,8 @@ impl ProjectFilesystemError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),
-            Self::InvalidWorksheetResourcePath(source) => match source {
-                WorksheetResourcePathError::InvalidName(source) => resource_name_error_code(source),
+            Self::InvalidChartResourcePath(source) => match source {
+                ChartResourcePathError::InvalidName(source) => resource_name_error_code(source),
                 _ => "invalid_resource_name",
             },
             Self::InvalidRoot { .. } => "invalid_project_root",
@@ -77,7 +77,7 @@ impl ProjectFilesystemError {
             Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceNameConflict { .. } => "resource_name_conflict",
-            Self::WorksheetNotFound { .. } => "resource_not_found",
+            Self::ChartNotFound { .. } => "resource_not_found",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
@@ -132,9 +132,9 @@ const fn resource_name_error_code(error: &ResourceNameValidationError) -> &'stat
 #[cfg(test)]
 mod tests {
     use super::ProjectFilesystemError;
+    use yss_chart_document::ChartResourcePathError;
     use yss_resource_lifecycle::ResourceLifecycleError;
     use yss_resource_naming::ResourceNameValidationError;
-    use yss_worksheet_document::WorksheetResourcePathError;
 
     #[test]
     fn resource_name_errors_have_stable_ipc_codes() {
@@ -170,11 +170,11 @@ mod tests {
 
     #[test]
     fn resource_path_errors_preserve_name_error_ipc_codes() {
-        let not_normalized = ProjectFilesystemError::InvalidWorksheetResourcePath(
-            WorksheetResourcePathError::InvalidName(ResourceNameValidationError::NotNfc),
+        let not_normalized = ProjectFilesystemError::InvalidChartResourcePath(
+            ChartResourcePathError::InvalidName(ResourceNameValidationError::NotNfc),
         );
-        let structurally_invalid = ProjectFilesystemError::InvalidWorksheetResourcePath(
-            WorksheetResourcePathError::WrongDirectory,
+        let structurally_invalid = ProjectFilesystemError::InvalidChartResourcePath(
+            ChartResourcePathError::WrongDirectory,
         );
 
         assert_eq!(not_normalized.code(), "resource_name_not_normalized");

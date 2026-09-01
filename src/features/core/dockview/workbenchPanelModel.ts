@@ -19,7 +19,7 @@ export const WORKBENCH_VIEW_IDS = [
 ] as const;
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
-export type EditorResourceKind = "event" | "function" | "worksheet";
+export type EditorResourceKind = "event" | "function" | "chart";
 export interface EditorResourceTarget {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
@@ -64,7 +64,7 @@ export interface WorkbenchPanelParams extends Record<string, unknown> {
   readonly metadata: WorkbenchPanelMetadata;
 }
 
-const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>(["event", "function", "worksheet"]);
+const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>(["event", "function", "chart"]);
 const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
   WORKBENCH_ACTIVITY_VIEW_IDS,
 );

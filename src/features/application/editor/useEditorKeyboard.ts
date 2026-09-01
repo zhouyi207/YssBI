@@ -91,7 +91,7 @@ export function useEditorKeyboard(): void {
 
       if (event.key === "Escape") {
         const target = currentEditorCommandTarget();
-        if (!target || target.resourceKind === "worksheet") return;
+        if (!target || target.resourceKind === "chart") return;
         const interaction = getCanvasInteraction(
           useGraphInteractionStore.getState(),
           target.resourceRef,

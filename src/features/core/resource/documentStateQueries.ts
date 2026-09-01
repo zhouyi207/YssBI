@@ -10,7 +10,7 @@ export function isResourceDocumentDirty(ref: ResourceRef): boolean {
   return getDocumentState(ref)?.dirty ?? false;
 }
 
-export type PathDocumentResourceKind = "event" | "function" | "worksheet";
+export type PathDocumentResourceKind = "event" | "function" | "chart";
 
 export function isPathResourceDirty(resourcePath: string, kind: PathDocumentResourceKind): boolean {
   return isResourceDocumentDirty({ id: resourcePath, kind });

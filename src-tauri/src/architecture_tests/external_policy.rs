@@ -1097,13 +1097,13 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-worksheet-document",
+        owning_package: "yss-chart-document",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-worksheet-document",
+        owning_package: "yss-chart-document",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
         target_condition: None,

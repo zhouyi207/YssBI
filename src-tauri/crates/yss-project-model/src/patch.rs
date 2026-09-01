@@ -1,9 +1,9 @@
 use crate::GraphResourceDocument;
 use std::collections::{BTreeMap, BTreeSet};
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ResourceRevision;
 use yss_variable_contract::{VariableId, VariableInstance};
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 /// An atomic candidate change to the in-memory [`crate::ProjectData`] aggregate.
 ///
@@ -43,17 +43,17 @@ pub enum ProjectDataPatch {
         updates: BTreeMap<VariableId, VariableInstance>,
         removals: BTreeSet<VariableId>,
     },
-    UpsertWorksheet {
-        path: WorksheetResourcePath,
-        document: WorksheetDocument,
+    UpsertChart {
+        path: ChartResourcePath,
+        document: ChartDocument,
     },
-    RemoveWorksheet {
-        path: WorksheetResourcePath,
+    RemoveChart {
+        path: ChartResourcePath,
         revision: ResourceRevision,
     },
-    MoveWorksheet {
-        from: WorksheetResourcePath,
-        to: WorksheetResourcePath,
-        moved: WorksheetDocument,
+    MoveChart {
+        from: ChartResourcePath,
+        to: ChartResourcePath,
+        moved: ChartDocument,
     },
 }

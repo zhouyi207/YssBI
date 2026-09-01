@@ -2,6 +2,8 @@
 
 pub mod bayes;
 pub mod catalog_query;
+pub mod chart;
+pub mod chart_plot;
 pub mod computation_settings;
 pub mod database;
 pub(crate) mod database_mutation;
@@ -20,7 +22,5 @@ pub mod project_query;
 pub mod resource_mutation;
 pub mod statistics;
 pub mod variable_mutation;
-pub mod worksheet;
-pub mod worksheet_plot;
 
 pub mod events;

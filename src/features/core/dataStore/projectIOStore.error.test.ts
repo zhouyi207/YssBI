@@ -78,7 +78,7 @@ describe("projectIOStore error references", () => {
       projectName: "Initial project",
       graphs: [],
       variables: [],
-      worksheets: [],
+      charts: [],
       databases: [],
       exportTime: "",
     });

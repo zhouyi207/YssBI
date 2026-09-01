@@ -315,7 +315,7 @@ function isResourcePathMovePatch(value: unknown, graphPath: boolean): boolean {
   );
 }
 
-function isWorksheetDocumentState(value: unknown): boolean {
+function isChartDocumentState(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["databaseId", "chartType", "encodings"]) &&
@@ -329,19 +329,19 @@ function isWorksheetDocumentState(value: unknown): boolean {
   );
 }
 
-function isWorksheetPatch(value: unknown): boolean {
+function isChartPatch(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["before", "after"]) &&
-    isWorksheetDocumentState(value.before) &&
-    isWorksheetDocumentState(value.after)
+    isChartDocumentState(value.before) &&
+    isChartDocumentState(value.after)
   );
 }
 
 function isResourceLifecycleState(
   value: unknown,
   path: string,
-  resourceKind: "graph" | "worksheet",
+  resourceKind: "graph" | "chart",
 ): boolean {
   if (
     !isRecord(value) ||
@@ -353,15 +353,15 @@ function isResourceLifecycleState(
     value.name.length === 0
   )
     return false;
-  return resourceKind === "worksheet"
-    ? value.kind === "worksheet"
+  return resourceKind === "chart"
+    ? value.kind === "chart"
     : value.kind === inferGraphResourceKind(path);
 }
 
 function isResourceLifecyclePatch(
   value: unknown,
   path: string,
-  resourceKind: "graph" | "worksheet",
+  resourceKind: "graph" | "chart",
 ): boolean {
   if (!isRecord(value) || !hasExactKeys(value, ["before", "after"])) return false;
   const beforeValid =
@@ -409,12 +409,12 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
           isResourcePathMovePatch(value.payload.patch, true)))
     );
   }
-  if (kind === "worksheet") {
+  if (kind === "chart") {
     return (
       isNonEmptyPath(key) &&
-      ((value.payload.kind === "worksheet" && isWorksheetPatch(value.payload.patch)) ||
+      ((value.payload.kind === "chart" && isChartPatch(value.payload.patch)) ||
         (value.payload.kind === "resource_lifecycle" &&
-          isResourceLifecyclePatch(value.payload.patch, key, "worksheet")) ||
+          isResourceLifecyclePatch(value.payload.patch, key, "chart")) ||
         (value.payload.kind === "resource_move" &&
           isResourcePathMovePatch(value.payload.patch, false)))
     );

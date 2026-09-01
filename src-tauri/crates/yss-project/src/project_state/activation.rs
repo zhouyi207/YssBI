@@ -10,8 +10,8 @@ struct ActivationGarbage {
         std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
     _variable_revisions:
         std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
-    _worksheet_revisions:
-        std::collections::HashMap<WorksheetResourcePath, yss_project_identity::ResourceRevision>,
+    _chart_revisions:
+        std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectAuthorityExpectation,
     _recovery_message: Option<String>,
@@ -94,7 +94,7 @@ impl ProjectState {
             store,
             graph_revisions,
             variable_revisions,
-            worksheet_revisions,
+            chart_revisions,
             authority_basis,
             requires_final_rebuild: _,
         } = prepared;
@@ -152,8 +152,8 @@ impl ProjectState {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
-            let (mut current_worksheet_revisions, worksheet_revisions_recovered) =
-                match self.worksheet_revisions.write() {
+            let (mut current_chart_revisions, chart_revisions_recovered) =
+                match self.chart_revisions.write() {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
@@ -201,10 +201,7 @@ impl ProjectState {
                     &mut *current_variable_revisions,
                     variable_revisions,
                 ),
-                _worksheet_revisions: std::mem::replace(
-                    &mut *current_worksheet_revisions,
-                    worksheet_revisions,
-                ),
+                _chart_revisions: std::mem::replace(&mut *current_chart_revisions, chart_revisions),
                 _identity: std::mem::replace(&mut *current_identity, next_identity),
                 _recovery_message: std::mem::take(&mut *recovery),
                 _history: std::mem::take(&mut *history),
@@ -241,8 +238,8 @@ impl ProjectState {
             if variable_revisions_recovered {
                 self.variable_revisions.clear_poison();
             }
-            if worksheet_revisions_recovered {
-                self.worksheet_revisions.clear_poison();
+            if chart_revisions_recovered {
+                self.chart_revisions.clear_poison();
             }
             if identity_recovered {
                 self.activation_identity.clear_poison();

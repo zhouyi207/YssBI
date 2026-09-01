@@ -10,4 +10,3 @@ export { useEditorUIActions } from "./useEditorUIActions";
 export { useEditorActions } from "./useEditorActions";
 
 export { useEditorGroupPlacement } from "./useEditorGroupPlacement";
-export { useEditorGroupWorkspace } from "./useEditorGroupWorkspace";

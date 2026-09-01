@@ -23,13 +23,13 @@ import type {
   VariableDocumentPatchDto,
 } from "@/shared/types/domain/editorMutation";
 import type { Variable } from "@/shared/types/domain/variable";
-import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
+import type { ChartDocument, ChartIndexEntry } from "@/shared/types/domain/chart";
 import { installFunctionEditorProjection } from "@/features/application/graphDocument/functionSignatureSync";
 import {
   remapGraphNonViewportUiState,
-  remapWorksheetNonViewportUiState,
+  remapChartNonViewportUiState,
 } from "@/features/application/editor/cascadeGraphPathReferences";
-import { invalidateWorksheetPreviewCacheForMove } from "@/services/worksheet/worksheetPreviewCache";
+import { invalidateChartPreviewCacheForMove } from "@/services/chart/chartPreviewCache";
 
 import type {
   PreparedFunctionDeltaInstall,
@@ -37,7 +37,7 @@ import type {
   PreparePublicationContext,
   PreparedVariableDeltaInstall,
 } from "./projectPublicationCoordinator";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
   buildGraphResourceMeta,
   resourceKey,
@@ -294,8 +294,8 @@ interface PublicationAggregate {
   databaseRevisions: ReturnType<typeof useDatabaseStore.getState>["revisions"];
   variables: ReturnType<typeof useVariableStore.getState>["variables"];
   variableRevisions: ReturnType<typeof useVariableStore.getState>["revisions"];
-  worksheetIndex: WorksheetIndexEntry[];
-  worksheetDocuments: Record<string, WorksheetDocument>;
+  chartIndex: ChartIndexEntry[];
+  chartDocuments: Record<string, ChartDocument>;
   focusedSession?: ReturnType<typeof useGraphSessionStore.getState>["focusedSession"];
   viewports?: ReturnType<typeof useViewportStore.getState>["viewports"];
 }
@@ -303,7 +303,7 @@ interface PublicationAggregate {
 function createPublicationAggregate(
   graphProjectionPlan?: NonNullable<PreparedProjectPublication["graphProjectionPlan"]>,
 ): PublicationAggregate {
-  const worksheet = useWorksheetStore.getState();
+  const chart = useChartDocumentStore.getState();
   const graphOwnedState = graphProjectionPlan
     ? {
         graphEntities: structuredClone(graphProjectionPlan.graphEntities) as Record<
@@ -330,8 +330,8 @@ function createPublicationAggregate(
     databaseRevisions: structuredClone(useDatabaseStore.getState().revisions),
     variables: structuredClone(useVariableStore.getState().variables),
     variableRevisions: structuredClone(useVariableStore.getState().revisions),
-    worksheetIndex: structuredClone(worksheet.index),
-    worksheetDocuments: structuredClone(worksheet.documents),
+    chartIndex: structuredClone(chart.index),
+    chartDocuments: structuredClone(chart.documents),
   };
 }
 
@@ -351,13 +351,13 @@ function remapAggregateViewports(
   }
 }
 
-function collectRemovedWorksheetPaths(deltas: readonly ResourceDeltaDto[]): ReadonlySet<string> {
+function collectRemovedChartPaths(deltas: readonly ResourceDeltaDto[]): ReadonlySet<string> {
   return new Set(
     deltas.flatMap((delta) => {
       if (
-        delta.resource.kind !== "worksheet" ||
+        delta.resource.kind !== "chart" ||
         delta.payload.kind !== "resource_lifecycle" ||
-        delta.payload.patch.before?.kind !== "worksheet" ||
+        delta.payload.patch.before?.kind !== "chart" ||
         delta.payload.patch.after !== null
       )
         return [];
@@ -375,21 +375,21 @@ function applyResourceLifecycleDeltasToAggregate(
     const { before, after } = delta.payload.patch;
     const state = before ?? after;
     if (!state) throw new Error(`resource lifecycle delta for '${delta.resource.key}' is empty`);
-    if (state.kind === "worksheet") {
-      if (delta.resource.kind !== "worksheet") {
-        throw new Error(`worksheet lifecycle delta for '${state.path}' has mismatched identity`);
+    if (state.kind === "chart") {
+      if (delta.resource.kind !== "chart") {
+        throw new Error(`chart lifecycle delta for '${state.path}' has mismatched identity`);
       }
-      const key = resourceKey({ id: state.path, kind: "worksheet" });
+      const key = resourceKey({ id: state.path, kind: "chart" });
       if (before === null) {
         if (aggregate.resources[key]) {
-          throw new Error(`worksheet lifecycle insert target '${state.path}' already exists`);
+          throw new Error(`chart lifecycle insert target '${state.path}' already exists`);
         }
-        const document = aggregate.worksheetDocuments[state.path];
+        const document = aggregate.chartDocuments[state.path];
         if (!document) {
-          throw new Error(`worksheet lifecycle insert source '${state.path}' is not loaded`);
+          throw new Error(`chart lifecycle insert source '${state.path}' is not loaded`);
         }
-        if (aggregate.worksheetIndex.some((entry) => entry.worksheetPath === state.path)) {
-          throw new Error(`worksheet lifecycle insert index '${state.path}' already exists`);
+        if (aggregate.chartIndex.some((entry) => entry.chartPath === state.path)) {
+          throw new Error(`chart lifecycle insert index '${state.path}' already exists`);
         }
         const previousDocumentState = aggregate.documents[key];
         aggregate.documents[key] = {
@@ -405,7 +405,7 @@ function applyResourceLifecycleDeltasToAggregate(
         };
         aggregate.resources[key] = {
           id: state.path,
-          kind: "worksheet",
+          kind: "chart",
           name: state.name,
           uri: key,
           revision: state.revision,
@@ -415,8 +415,8 @@ function applyResourceLifecycleDeltasToAggregate(
           hasStaleDocument: false,
           hasConflictDocument: false,
         };
-        aggregate.worksheetIndex.push({
-          worksheetPath: state.path,
+        aggregate.chartIndex.push({
+          chartPath: state.path,
           name: state.name,
           databaseId: document.databaseId,
           chartType: document.chartType,
@@ -425,13 +425,13 @@ function applyResourceLifecycleDeltasToAggregate(
       } else {
         const current = aggregate.resources[key];
         if (!current) {
-          throw new Error(`worksheet lifecycle remove source '${state.path}' is inconsistent`);
+          throw new Error(`chart lifecycle remove source '${state.path}' is inconsistent`);
         }
         delete aggregate.resources[key];
         delete aggregate.documents[key];
-        delete aggregate.worksheetDocuments[state.path];
-        aggregate.worksheetIndex = aggregate.worksheetIndex.filter(
-          (candidate) => candidate.worksheetPath !== state.path,
+        delete aggregate.chartDocuments[state.path];
+        aggregate.chartIndex = aggregate.chartIndex.filter(
+          (candidate) => candidate.chartPath !== state.path,
         );
       }
       continue;
@@ -486,9 +486,9 @@ function applyMovesToAggregate(
   deltas: readonly ResourceDeltaDto[],
 ): void {
   for (const move of moves) {
-    if (move.kind === "worksheet") {
-      const fromKey = resourceKey({ id: move.from, kind: "worksheet" });
-      const toKey = resourceKey({ id: move.to, kind: "worksheet" });
+    if (move.kind === "chart") {
+      const fromKey = resourceKey({ id: move.from, kind: "chart" });
+      const toKey = resourceKey({ id: move.to, kind: "chart" });
       const source = aggregate.resources[fromKey];
       const destination = move.resources[toKey];
       if (!source || aggregate.resources[toKey] || !destination) {
@@ -496,22 +496,22 @@ function applyMovesToAggregate(
       }
       const moveDelta = deltas.find(
         (delta) =>
-          delta.resource.kind === "worksheet" &&
+          delta.resource.kind === "chart" &&
           delta.resource.key === move.to &&
           delta.payload.kind === "resource_move" &&
           delta.payload.patch.from === move.from &&
           delta.payload.patch.to === move.to,
       );
-      if (!moveDelta) throw new Error(`worksheet move '${move.from}' has no correlated delta`);
+      if (!moveDelta) throw new Error(`chart move '${move.from}' has no correlated delta`);
       const destinationDocument = move.documents[move.to];
       if (destinationDocument && destinationDocument.revision !== moveDelta.fromRevision) {
         throw new Error(
-          `worksheet move document revision for '${move.from}' does not match fromRevision`,
+          `chart move document revision for '${move.from}' does not match fromRevision`,
         );
       }
       if (destination.revision !== moveDelta.fromRevision) {
         throw new Error(
-          `worksheet move resource revision for '${move.from}' does not match fromRevision`,
+          `chart move resource revision for '${move.from}' does not match fromRevision`,
         );
       }
       delete aggregate.resources[fromKey];
@@ -519,18 +519,18 @@ function applyMovesToAggregate(
       delete aggregate.documents[fromKey];
       const destinationState = move.documentStates[toKey];
       if (destinationState) aggregate.documents[toKey] = destinationState;
-      delete aggregate.worksheetDocuments[move.from];
+      delete aggregate.chartDocuments[move.from];
       if (destinationDocument) {
-        aggregate.worksheetDocuments[move.to] = {
+        aggregate.chartDocuments[move.to] = {
           ...destinationDocument,
           revision: moveDelta.toRevision,
         };
       }
-      aggregate.worksheetIndex = aggregate.worksheetIndex.map((entry) =>
-        entry.worksheetPath === move.from
+      aggregate.chartIndex = aggregate.chartIndex.map((entry) =>
+        entry.chartPath === move.from
           ? {
               ...entry,
-              worksheetPath: move.to,
+              chartPath: move.to,
               name: move.name,
               revision: moveDelta.toRevision,
             }
@@ -593,9 +593,9 @@ function markPreparedVariableScopeDirty(
   if (document) aggregate.documents[key] = { ...document, dirty: true };
 }
 
-function worksheetMatchesPatchState(
-  document: WorksheetDocument,
-  state: Extract<ResourceDeltaDto["payload"], { kind: "worksheet" }>["patch"]["before"],
+function chartMatchesPatchState(
+  document: ChartDocument,
+  state: Extract<ResourceDeltaDto["payload"], { kind: "chart" }>["patch"]["before"],
 ): boolean {
   return (
     document.databaseId === state.databaseId &&
@@ -604,27 +604,27 @@ function worksheetMatchesPatchState(
   );
 }
 
-function applyWorksheetDeltasToAggregate(
+function applyChartDeltasToAggregate(
   aggregate: PublicationAggregate,
   deltas: readonly ResourceDeltaDto[],
 ): void {
   for (const delta of deltas) {
-    if (delta.resource.kind !== "worksheet" || delta.payload.kind !== "worksheet") continue;
+    if (delta.resource.kind !== "chart" || delta.payload.kind !== "chart") continue;
     const id = delta.resource.key;
-    const existing = aggregate.worksheetDocuments[id];
-    const key = resourceKey({ id, kind: "worksheet" });
+    const existing = aggregate.chartDocuments[id];
+    const key = resourceKey({ id, kind: "chart" });
     if (!existing || existing.revision !== delta.fromRevision) {
-      throw new Error(`worksheet delta for '${id}' is inconsistent`);
+      throw new Error(`chart delta for '${id}' is inconsistent`);
     }
     const documentState = aggregate.documents[key];
     const resource = aggregate.resources[key];
     if (!documentState || !resource) {
-      throw new Error(`worksheet delta for '${id}' has incomplete projection state`);
+      throw new Error(`chart delta for '${id}' has incomplete projection state`);
     }
-    const hasMatchingBefore = worksheetMatchesPatchState(existing, delta.payload.patch.before);
-    const hasMatchingAfter = worksheetMatchesPatchState(existing, delta.payload.patch.after);
+    const hasMatchingBefore = chartMatchesPatchState(existing, delta.payload.patch.before);
+    const hasMatchingAfter = chartMatchesPatchState(existing, delta.payload.patch.after);
     if (!hasMatchingBefore && !hasMatchingAfter && documentState?.dirty !== true) {
-      throw new Error(`worksheet delta for '${id}' is inconsistent`);
+      throw new Error(`chart delta for '${id}' is inconsistent`);
     }
     const matchesAuthoritativeSave = hasMatchingBefore || hasMatchingAfter;
     const after = hasMatchingBefore
@@ -634,9 +634,9 @@ function applyWorksheetDeltasToAggregate(
           revision: delta.toRevision,
         }
       : { ...existing, revision: delta.toRevision };
-    aggregate.worksheetDocuments[id] = after;
-    aggregate.worksheetIndex = aggregate.worksheetIndex.map((candidate) =>
-      candidate.worksheetPath === id
+    aggregate.chartDocuments[id] = after;
+    aggregate.chartIndex = aggregate.chartIndex.map((candidate) =>
+      candidate.chartPath === id
         ? {
             ...candidate,
             databaseId: after.databaseId,
@@ -668,7 +668,7 @@ function hasGraphOwnedPublicationWork(
   return (
     result.projectionReplacements.length > 0 ||
     declaredGraphPaths.length > 0 ||
-    context.moves.some((move) => move.kind !== "worksheet") ||
+    context.moves.some((move) => move.kind !== "chart") ||
     result.deltas.some(
       (delta) =>
         delta.resource.kind === "graph" ||
@@ -741,7 +741,7 @@ export function prepareSynchronousPublicationCommit(
     }
     const graphEntities = { ...preparedGraph.plan.graphEntities };
     for (const move of context.moves) {
-      if (move.kind !== "worksheet") delete graphEntities[move.from];
+      if (move.kind !== "chart") delete graphEntities[move.from];
     }
     graphProjectionPlan = { ...preparedGraph.plan, graphEntities };
   }
@@ -792,7 +792,7 @@ export function prepareSynchronousPublicationCommit(
     }
   }
   applyDatabaseDeltasToAggregate(aggregate, result.deltas);
-  applyWorksheetDeltasToAggregate(aggregate, result.deltas);
+  applyChartDeltasToAggregate(aggregate, result.deltas);
 
   return {
     projectInstanceId: context.projectInstanceId,
@@ -801,7 +801,7 @@ export function prepareSynchronousPublicationCommit(
     fingerprint: context.fingerprint,
     affectedGraphPaths: context.affectedGraphPaths,
     moves: context.moves,
-    removedWorksheetPaths: collectRemovedWorksheetPaths(result.deltas),
+    removedChartPaths: collectRemovedChartPaths(result.deltas),
     ...(graphProjectionPlan && aggregate.graphEntities
       ? { graphProjectionPlan: { ...graphProjectionPlan, graphEntities: aggregate.graphEntities } }
       : {}),
@@ -817,8 +817,8 @@ export function prepareSynchronousPublicationCommit(
       databaseRevisions: aggregate.databaseRevisions,
       variables: aggregate.variables,
       variableRevisions: aggregate.variableRevisions,
-      worksheetIndex: aggregate.worksheetIndex,
-      worksheetDocuments: aggregate.worksheetDocuments,
+      chartIndex: aggregate.chartIndex,
+      chartDocuments: aggregate.chartDocuments,
       ...("focusedSession" in aggregate ? { focusedSession: aggregate.focusedSession } : {}),
       ...(aggregate.viewports ? { viewports: aggregate.viewports } : {}),
     },
@@ -847,9 +847,9 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
       variables: plan.storeState.variables,
       revisions: plan.storeState.variableRevisions,
     });
-    useWorksheetStore.setState({
-      index: plan.storeState.worksheetIndex,
-      documents: plan.storeState.worksheetDocuments,
+    useChartDocumentStore.setState({
+      index: plan.storeState.chartIndex,
+      documents: plan.storeState.chartDocuments,
     });
     if ("focusedSession" in plan.storeState) {
       useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession ?? null });
@@ -858,16 +858,13 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
       useViewportStore.setState({ viewports: plan.storeState.viewports });
     }
     const detailFocus = useEditorStore.getState().detailFocus;
-    if (
-      detailFocus?.kind === "worksheet" &&
-      plan.removedWorksheetPaths.has(detailFocus.worksheetPath)
-    ) {
+    if (detailFocus?.kind === "chart" && plan.removedChartPaths.has(detailFocus.chartPath)) {
       useEditorStore.getState().clearDetailFocus();
     }
     for (const move of plan.moves) {
-      if (move.kind === "worksheet") {
-        remapWorksheetNonViewportUiState(move.from, move.to);
-        invalidateWorksheetPreviewCacheForMove(plan.projectInstanceId, move.from, move.to);
+      if (move.kind === "chart") {
+        remapChartNonViewportUiState(move.from, move.to);
+        invalidateChartPreviewCacheForMove(plan.projectInstanceId, move.from, move.to);
       } else {
         remapGraphNonViewportUiState(move.from, move.to);
       }

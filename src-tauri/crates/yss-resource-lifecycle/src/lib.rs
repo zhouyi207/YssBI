@@ -5,9 +5,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use thiserror::Error;
+use yss_chart_document::ChartResourcePath;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
-use yss_worksheet_document::WorksheetResourcePath;
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ResourceLifecycleError {
@@ -20,7 +20,7 @@ pub enum ResourceLifecycleError {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum LifecycleResourcePath {
     Graph(GraphResourcePath),
-    Worksheet(WorksheetResourcePath),
+    Chart(ChartResourcePath),
 }
 
 impl From<&GraphResourcePath> for LifecycleResourcePath {
@@ -29,9 +29,9 @@ impl From<&GraphResourcePath> for LifecycleResourcePath {
     }
 }
 
-impl From<&WorksheetResourcePath> for LifecycleResourcePath {
-    fn from(path: &WorksheetResourcePath) -> Self {
-        Self::Worksheet(path.clone())
+impl From<&ChartResourcePath> for LifecycleResourcePath {
+    fn from(path: &ChartResourcePath) -> Self {
+        Self::Chart(path.clone())
     }
 }
 
@@ -45,7 +45,7 @@ impl std::fmt::Display for LifecycleResourcePath {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Graph(path) => formatter.write_str(path.as_str()),
-            Self::Worksheet(path) => formatter.write_str(path.as_str()),
+            Self::Chart(path) => formatter.write_str(path.as_str()),
         }
     }
 }
@@ -470,30 +470,25 @@ mod tests {
     }
 
     #[test]
-    fn graph_and_worksheet_paths_have_independent_lifecycle_owners() {
+    fn graph_and_chart_paths_have_independent_lifecycle_owners() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("independent-resource-kinds");
         let graph = super::LifecycleResourcePath::Graph(
             GraphResourcePath::new("events/Shared.yssbi-event").unwrap(),
         );
-        let worksheet = super::LifecycleResourcePath::Worksheet(
-            WorksheetResourcePath::parse("worksheets/Shared.yssbi-worksheet").unwrap(),
+        let chart = super::LifecycleResourcePath::Chart(
+            ChartResourcePath::parse("charts/Shared.yssbi-chart").unwrap(),
         );
 
         let graph_guard = registry
             .register(&session, &graph, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
-        let worksheet_guard = registry
-            .register(
-                &session,
-                &worksheet,
-                1,
-                super::ResourceLifecycleIntent::Rename,
-            )
+        let chart_guard = registry
+            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
 
         registry.validate(graph_guard.owner()).unwrap();
-        registry.validate(worksheet_guard.owner()).unwrap();
+        registry.validate(chart_guard.owner()).unwrap();
         assert_eq!(registry.entry_count(), 2);
     }
 
@@ -501,66 +496,46 @@ mod tests {
     fn client_tokens_are_monotonic_per_resource_path() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("monotonic-resource-token");
-        let worksheet = super::LifecycleResourcePath::Worksheet(
-            WorksheetResourcePath::parse("worksheets/Report.yssbi-worksheet").unwrap(),
+        let chart = super::LifecycleResourcePath::Chart(
+            ChartResourcePath::parse("charts/Report.yssbi-chart").unwrap(),
         );
         let first = registry
-            .register(
-                &session,
-                &worksheet,
-                7,
-                super::ResourceLifecycleIntent::Rename,
-            )
+            .register(&session, &chart, 7, super::ResourceLifecycleIntent::Rename)
             .unwrap();
         drop(first);
 
         let error = registry
-            .register(
-                &session,
-                &worksheet,
-                7,
-                super::ResourceLifecycleIntent::Rename,
-            )
+            .register(&session, &chart, 7, super::ResourceLifecycleIntent::Rename)
             .unwrap_err();
 
         assert_stale(error);
         registry
-            .register(
-                &session,
-                &worksheet,
-                8,
-                super::ResourceLifecycleIntent::Rename,
-            )
+            .register(&session, &chart, 8, super::ResourceLifecycleIntent::Rename)
             .unwrap();
     }
 
     #[test]
-    fn clearing_project_removes_graph_and_worksheet_lifecycle_ownership() {
+    fn clearing_project_removes_graph_and_chart_lifecycle_ownership() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("clear-shared-lifecycle");
         let graph = super::LifecycleResourcePath::Graph(
             GraphResourcePath::new("events/Clear.yssbi-event").unwrap(),
         );
-        let worksheet = super::LifecycleResourcePath::Worksheet(
-            WorksheetResourcePath::parse("worksheets/Clear.yssbi-worksheet").unwrap(),
+        let chart = super::LifecycleResourcePath::Chart(
+            ChartResourcePath::parse("charts/Clear.yssbi-chart").unwrap(),
         );
         let graph_guard = registry
             .register(&session, &graph, 1, super::ResourceLifecycleIntent::Load)
             .unwrap();
-        let worksheet_guard = registry
-            .register(
-                &session,
-                &worksheet,
-                1,
-                super::ResourceLifecycleIntent::Rename,
-            )
+        let chart_guard = registry
+            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
 
         registry.clear_for_project(&session);
 
         assert_eq!(registry.entry_count(), 0);
         assert_stale(registry.validate(graph_guard.owner()).unwrap_err());
-        assert_stale(registry.validate(worksheet_guard.owner()).unwrap_err());
+        assert_stale(registry.validate(chart_guard.owner()).unwrap_err());
     }
 
     #[test]
@@ -570,28 +545,23 @@ mod tests {
         let graph = super::LifecycleResourcePath::Graph(
             GraphResourcePath::new("events/Report.yssbi-event").unwrap(),
         );
-        let worksheet = super::LifecycleResourcePath::Worksheet(
-            WorksheetResourcePath::parse("worksheets/Report.yssbi-worksheet").unwrap(),
+        let chart = super::LifecycleResourcePath::Chart(
+            ChartResourcePath::parse("charts/Report.yssbi-chart").unwrap(),
         );
-        let other_worksheet = super::LifecycleResourcePath::Worksheet(
-            WorksheetResourcePath::parse("worksheets/Other.yssbi-worksheet").unwrap(),
+        let other_chart = super::LifecycleResourcePath::Chart(
+            ChartResourcePath::parse("charts/Other.yssbi-chart").unwrap(),
         );
 
         registry
             .register(&session, &graph, 40, super::ResourceLifecycleIntent::Load)
             .unwrap();
         registry
-            .register(
-                &session,
-                &worksheet,
-                1,
-                super::ResourceLifecycleIntent::Rename,
-            )
+            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
         registry
             .register(
                 &session,
-                &other_worksheet,
+                &other_chart,
                 1,
                 super::ResourceLifecycleIntent::Rename,
             )

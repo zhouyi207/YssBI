@@ -4,32 +4,26 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
+use yss_chart_document::{ChartResourcePath, ChartResourcePathError};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 use yss_graph_document::GraphResourcePath;
-use yss_worksheet_document::{WorksheetResourcePath, WorksheetResourcePathError};
 
 use super::{ProjectError, ProjectState};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum RevealProjectResourceRequest {
-    Graph {
-        graph_path: String,
-    },
-    Database {
-        database_id: String,
-    },
-    Worksheet {
-        worksheet_path: WorksheetResourcePath,
-    },
+    Graph { graph_path: String },
+    Database { database_id: String },
+    Chart { chart_path: ChartResourcePath },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RevealProjectResourceError {
     #[error("unknown project resource kind '{kind}'")]
     UnknownKind { kind: Box<str> },
-    #[error("worksheet resource path is invalid")]
-    InvalidWorksheetPath(#[from] WorksheetResourcePathError),
+    #[error("chart resource path is invalid")]
+    InvalidChartPath(#[from] ChartResourcePathError),
 }
 
 impl RevealProjectResourceRequest {
@@ -41,8 +35,8 @@ impl RevealProjectResourceRequest {
             "database" => Ok(Self::Database {
                 database_id: resource_id,
             }),
-            "worksheet" => WorksheetResourcePath::parse(&resource_id)
-                .map(|worksheet_path| Self::Worksheet { worksheet_path })
+            "chart" => ChartResourcePath::parse(&resource_id)
+                .map(|chart_path| Self::Chart { chart_path })
                 .map_err(RevealProjectResourceError::from),
             other => Err(RevealProjectResourceError::UnknownKind { kind: other.into() }),
         }
@@ -74,14 +68,14 @@ pub fn resolve_reveal_path(
         RevealProjectResourceRequest::Database { database_id } => {
             absolute_path_for_database(root, &data.databases, &database_id)
         }
-        RevealProjectResourceRequest::Worksheet { worksheet_path } => data
-            .worksheets
-            .contains_key(&worksheet_path)
-            .then(|| root.join(worksheet_path.relative_path()))
+        RevealProjectResourceRequest::Chart { chart_path } => data
+            .charts
+            .contains_key(&chart_path)
+            .then(|| root.join(chart_path.relative_path()))
             .ok_or_else(|| {
                 ProjectError::InvalidProjectFormat(format!(
-                    "Worksheet '{}' not found",
-                    worksheet_path.as_str()
+                    "Chart '{}' not found",
+                    chart_path.as_str()
                 ))
             }),
     }
@@ -141,9 +135,9 @@ mod tests {
             Err(RevealProjectResourceError::UnknownKind { kind }) if kind.as_ref() == "unknown"
         ));
         assert!(matches!(
-            RevealProjectResourceRequest::from_parts("worksheet", "outside".into()),
-            Err(RevealProjectResourceError::InvalidWorksheetPath(
-                WorksheetResourcePathError::WrongDirectory
+            RevealProjectResourceRequest::from_parts("chart", "outside".into()),
+            Err(RevealProjectResourceError::InvalidChartPath(
+                ChartResourcePathError::WrongDirectory
             ))
         ));
     }

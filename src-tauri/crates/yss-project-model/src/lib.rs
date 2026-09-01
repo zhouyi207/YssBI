@@ -1,6 +1,6 @@
 //! Canonical in-memory project aggregate.
 //!
-//! Persisted manifest, graph, worksheet, database, and variable wire formats
+//! Persisted manifest, graph, chart, database, and variable wire formats
 //! remain owned by their dedicated crates and Project I/O adapters. This model
 //! deliberately does not read the clock or expose monolithic JSON persistence.
 
@@ -10,12 +10,12 @@ pub use patch::ProjectDataPatch;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_project_history::{FunctionDocument, FunctionSignature};
 use yss_variable_contract::{VariableId, VariableInstance};
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +59,7 @@ pub struct ProjectData {
     pub computation_settings: ProjectComputationSettings,
     pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
-    pub worksheets: HashMap<WorksheetResourcePath, WorksheetDocument>,
+    pub charts: HashMap<ChartResourcePath, ChartDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }
@@ -104,7 +104,7 @@ mod tests {
         assert!(project.metadata.export_time.is_empty());
         assert!(project.variables.is_empty());
         assert!(project.graphs.is_empty());
-        assert!(project.worksheets.is_empty());
+        assert!(project.charts.is_empty());
         assert!(project.databases.is_empty());
     }
 

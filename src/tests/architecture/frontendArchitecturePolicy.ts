@@ -291,9 +291,9 @@ const VIEW_CORE_CAPABILITIES = [
     ],
   }),
   viewCoreCapability("src/features/core/workbench/ui.ts", ["useWorkbenchUi"]),
-  viewCoreCapability("src/features/core/worksheet/read.ts", ["useWorksheetRead"]),
-  viewCoreCapability("src/features/core/worksheet/ui.ts", ["worksheetUi"], {
-    worksheetUi: ["updateDraft", "discardDraft"],
+  viewCoreCapability("src/features/core/chart/read.ts", ["useChartRead"]),
+  viewCoreCapability("src/features/core/chart/ui.ts", ["chartUi"], {
+    chartUi: ["updateDraft", "discardDraft"],
   }),
 ];
 

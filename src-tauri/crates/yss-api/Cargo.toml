@@ -46,7 +46,7 @@ yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-variable-contract = { path = "../yss-variable-contract" }
 yss-window-state = { path = "../yss-window-state" }
-yss-worksheet-document = { path = "../yss-worksheet-document" }
+yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

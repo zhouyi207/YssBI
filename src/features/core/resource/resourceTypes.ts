@@ -30,8 +30,8 @@ function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
     case "event":
     case "function":
       return toGraphResourceUri(ref.kind, ref.id);
-    case "worksheet":
-      return `yssbi://worksheet/${ref.id}`;
+    case "chart":
+      return `yssbi://chart/${ref.id}`;
     case "database":
       return `yssbi://database/${ref.id}`;
     case "variable":

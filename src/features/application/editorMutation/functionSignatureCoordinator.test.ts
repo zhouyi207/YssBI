@@ -332,7 +332,7 @@ describe("executeFunctionSignatureMutation", () => {
       ],
       databases: [],
       variables: [],
-      worksheets: [],
+      charts: [],
     });
 
     const outcome = await executeFunctionSignatureMutation(

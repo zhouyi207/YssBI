@@ -64,7 +64,7 @@ function projectIndex(): Record<string, unknown> {
         },
       },
     ],
-    worksheets: [],
+    charts: [],
     variables: [],
     databases: [],
   };
@@ -74,9 +74,9 @@ function functionRow(index: Record<string, unknown>): Record<string, unknown> {
   return (index.graphs as Array<Record<string, unknown>>)[0];
 }
 
-function worksheetRow(): Record<string, unknown> {
+function chartRow(): Record<string, unknown> {
   return {
-    worksheetPath: "worksheets/Opaque Path With Spaces.yssbi-worksheet",
+    chartPath: "charts/Opaque Path With Spaces.yssbi-chart",
     name: "Rust supplied label",
     databaseId: "database-1",
     chartType: "scatter",
@@ -331,15 +331,15 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     );
   });
 
-  it("strictly parses worksheet path identity and authoritative metadata", async () => {
+  it("strictly parses chart path identity and authoritative metadata", async () => {
     const index = projectIndex();
-    index.worksheets = [worksheetRow()];
+    index.charts = [chartRow()];
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
-      worksheets: [
+      charts: [
         {
-          worksheetPath: "worksheets/Opaque Path With Spaces.yssbi-worksheet",
+          chartPath: "charts/Opaque Path With Spaces.yssbi-chart",
           name: "Rust supplied label",
           databaseId: "database-1",
           chartType: "scatter",
@@ -365,8 +365,8 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     [
       "obsolete id",
       (row: Record<string, unknown>) => {
-        row.id = row.worksheetPath;
-        delete row.worksheetPath;
+        row.id = row.chartPath;
+        delete row.chartPath;
       },
     ],
     [
@@ -387,11 +387,11 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
         row.chartType = "pie";
       },
     ],
-  ])("rejects worksheet rows with %s", async (_case, mutate) => {
+  ])("rejects chart rows with %s", async (_case, mutate) => {
     const index = projectIndex();
-    const row = worksheetRow();
+    const row = chartRow();
     mutate(row);
-    index.worksheets = [row];
+    index.charts = [row];
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(

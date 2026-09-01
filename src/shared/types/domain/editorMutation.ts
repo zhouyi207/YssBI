@@ -1,4 +1,4 @@
-import type { WorksheetDocumentState } from "@/shared/types/domain/worksheet";
+import type { ChartDocumentState } from "@/shared/types/domain/chart";
 import type { DatabaseDocumentDto } from "@/shared/types/domain/database";
 import type { NodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import type {
@@ -13,7 +13,7 @@ export type ResourceKeyDto =
   | { kind: "function"; key: string }
   | { kind: "variable"; key: string }
   | { kind: "database"; key: string }
-  | { kind: "worksheet"; key: string };
+  | { kind: "chart"; key: string };
 
 export interface MutationRequestDto<TPayload> {
   resource: ResourceKeyDto;
@@ -188,9 +188,9 @@ export interface DatabaseDocumentPatchDto {
   after: DatabaseDocumentDto | null;
 }
 
-export interface WorksheetDocumentPatchDto {
-  before: WorksheetDocumentState;
-  after: WorksheetDocumentState;
+export interface ChartDocumentPatchDto {
+  before: ChartDocumentState;
+  after: ChartDocumentState;
 }
 
 export interface ResourcePathMovePatchDto {
@@ -198,7 +198,7 @@ export interface ResourcePathMovePatchDto {
   to: string;
 }
 
-export type ResourceLifecycleKindDto = "event" | "function" | "worksheet";
+export type ResourceLifecycleKindDto = "event" | "function" | "chart";
 
 export interface ResourceLifecycleStateDto {
   revision: number;
@@ -215,7 +215,7 @@ export interface ResourceLifecyclePatchDto {
 export type ResourceDocumentPatchDto =
   | { kind: "graph"; patch: GraphDocumentPatchDto }
   | { kind: "function"; patch: FunctionDocumentPatchDto }
-  | { kind: "worksheet"; patch: WorksheetDocumentPatchDto }
+  | { kind: "chart"; patch: ChartDocumentPatchDto }
   | { kind: "resource_lifecycle"; patch: ResourceLifecyclePatchDto }
   | { kind: "resource_move"; patch: ResourcePathMovePatchDto }
   | { kind: "variable"; patch: VariableDocumentPatchDto }

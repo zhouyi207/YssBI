@@ -80,7 +80,7 @@ members = [
   "crates/yss-variable-contract",
   "crates/yss-variable-value",
   "crates/yss-window-state",
-  "crates/yss-worksheet-document",
+  "crates/yss-chart-document",
 ]
 
 [workspace.package]

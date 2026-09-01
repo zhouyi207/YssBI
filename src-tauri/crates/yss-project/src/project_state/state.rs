@@ -20,12 +20,9 @@ pub struct ProjectState {
     pub(crate) variable_revisions: Arc<
         RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,
     >,
-    pub(crate) worksheet_revisions: Arc<
+    pub(crate) chart_revisions: Arc<
         RwLock<
-            std::collections::HashMap<
-                WorksheetResourcePath,
-                yss_project_identity::ResourceRevision,
-            >,
+            std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
         >,
     >,
     pub(crate) database_authority_revisions: Arc<RwLock<std::collections::HashMap<String, u64>>>,
@@ -80,7 +77,7 @@ impl ProjectState {
             activation_identity: Arc::new(RwLock::new(activation_identity)),
             graph_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             variable_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            worksheet_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            chart_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             database_authority_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
 
             #[cfg(any(test, feature = "test-support"))]

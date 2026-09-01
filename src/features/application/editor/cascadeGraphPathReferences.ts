@@ -25,11 +25,11 @@ function remapEditorGraphPaths(from: string, to: string): void {
   }
 }
 
-export function remapWorksheetNonViewportUiState(from: string, to: string): void {
+export function remapChartNonViewportUiState(from: string, to: string): void {
   if (from === to) return;
   const store = useEditorStore.getState();
-  if (store.detailFocus?.kind === "worksheet" && store.detailFocus.worksheetPath === from) {
-    store.setDetailFocus({ kind: "worksheet", worksheetPath: to });
+  if (store.detailFocus?.kind === "chart" && store.detailFocus.chartPath === from) {
+    store.setDetailFocus({ kind: "chart", chartPath: to });
   }
 }
 

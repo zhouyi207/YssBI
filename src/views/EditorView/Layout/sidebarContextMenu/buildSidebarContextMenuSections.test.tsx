@@ -21,11 +21,11 @@ function sidebarActions() {
     renameDatabaseItem: vi.fn(),
     deleteDatabaseItem: vi.fn(),
     importData: vi.fn(),
-    openWorksheet: vi.fn(),
-    renameWorksheetItem: vi.fn(),
-    duplicateWorksheet: vi.fn(),
-    deleteWorksheet: vi.fn(),
-    addWorksheet: vi.fn(),
+    openChart: vi.fn(),
+    renameChartItem: vi.fn(),
+    duplicateChart: vi.fn(),
+    deleteChart: vi.fn(),
+    addChart: vi.fn(),
     revealInExplorer: vi.fn(),
   };
 }
@@ -69,15 +69,15 @@ describe("buildSidebarContextMenuSections", () => {
     expect(actions.addVariable).toHaveBeenNthCalledWith(2, "New Variable", "Int64", true);
   });
 
-  it("exposes authoritative worksheet rename with the opaque path and Rust-provided name", () => {
+  it("exposes authoritative chart rename with the opaque path and Rust-provided name", () => {
     const actions = sidebarActions();
     const sections = buildSidebarContextMenuSections(
       {
         x: 10,
         y: 20,
         target: {
-          type: "worksheet",
-          worksheetPath: "worksheets/Report.yssbi-worksheet",
+          type: "chart",
+          chartPath: "charts/Report.yssbi-chart",
           name: "Report",
         },
       },
@@ -95,9 +95,6 @@ describe("buildSidebarContextMenuSections", () => {
     ]);
 
     items.find((item) => item.id === "rename")?.onClick?.();
-    expect(actions.renameWorksheetItem).toHaveBeenCalledWith(
-      "worksheets/Report.yssbi-worksheet",
-      "Report",
-    );
+    expect(actions.renameChartItem).toHaveBeenCalledWith("charts/Report.yssbi-chart", "Report");
   });
 });

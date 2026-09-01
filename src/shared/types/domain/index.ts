@@ -34,7 +34,7 @@ export * from "./projectComputationSettings";
 export * from "./database";
 export * from "./dataframe";
 
-export * from "./worksheet";
+export * from "./chart";
 export type * from "./editorProjection";
 export type * from "./editorMutation";
 export * from "./nodeCreationDescriptor";

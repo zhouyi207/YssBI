@@ -8,7 +8,6 @@ export type {
   EditorFunctions,
   EditorVariables,
 } from "./editorCollections";
-export { GroupContext } from "./context/GroupContext";
 export {
   clearEditorGroupGraphSelection,
   createGraphSelection,

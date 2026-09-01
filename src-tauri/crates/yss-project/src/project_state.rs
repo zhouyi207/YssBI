@@ -6,6 +6,7 @@ use crate::{
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_computation_settings::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
     ComputationSettingsSnapshot,
@@ -24,7 +25,6 @@ use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
 use yss_project_manifest::ProjectManifest;
 use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_resource_lifecycle::ResourceLifecycleRegistry;
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 mod activation;
 mod authority;
@@ -52,10 +52,9 @@ use history::GraphMoveHistoryPayload;
 pub(super) use history::{project_documents, replace_project_documents};
 use resource_history::{
     affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, checked_graph_revision,
+    canonical_resource_lifecycle_events, chart_history_publication, checked_graph_revision,
     normalize_function_patch_revisions, patch_projection_paths, preflight_resource_patch_graphs,
-    validate_worksheet_path_insertion, variable_scope_references_path,
-    worksheet_history_publication,
+    validate_chart_path_insertion, variable_scope_references_path,
 };
 pub(super) use resource_history::{checked_resource_revision, validate_context_revisions};
 use resource_patch::CommittedResourceMutation;
@@ -416,7 +415,7 @@ impl ProjectState {
             yss_variable_contract::VariableId,
             yss_project_identity::ResourceRevision,
         >,
-        std::collections::HashMap<WorksheetResourcePath, yss_project_identity::ResourceRevision>,
+        std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     ) {
         (
             self.graph_revisions.read().unwrap().clone(),
@@ -426,7 +425,7 @@ impl ProjectState {
                 .iter()
                 .map(|(id, entry)| (*id, entry.revision))
                 .collect(),
-            self.worksheet_revisions.read().unwrap().clone(),
+            self.chart_revisions.read().unwrap().clone(),
         )
     }
 
@@ -445,13 +444,13 @@ impl ProjectState {
             })
     }
 
-    pub fn worksheet_creation_snapshot(
+    pub fn chart_creation_snapshot(
         &self,
     ) -> Result<(Vec<String>, Option<String>), ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let data = self.project_data.read().unwrap();
         Ok((
-            data.worksheets
+            data.charts
                 .keys()
                 .map(|path| path.display_name().as_str().to_string())
                 .collect(),

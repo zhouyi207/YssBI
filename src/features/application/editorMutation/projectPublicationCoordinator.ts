@@ -9,8 +9,8 @@ import type {
 import type {
   FunctionSignaturePin,
   Variable,
-  WorksheetDocument,
-  WorksheetIndexEntry,
+  ChartDocument,
+  ChartIndexEntry,
 } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphDataStore";
@@ -30,9 +30,9 @@ import type { DocumentState, ProjectResourceMeta, ResourceKey } from "@/features
 import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { ProjectService } from "@/services/project/projectService";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
-import { clearWorksheetPreviewCache } from "@/services/worksheet/worksheetPreviewCache";
+import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphProjectionForPublication } from "@/features/application/editorProjection/graphProjectionCoordinator";
-import { clearWorksheetLifecycleProjects } from "@/features/application/editor/worksheetLifecycleCoordinator";
+import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useHistoryStore } from "@/features/core/history";
 import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
@@ -46,7 +46,7 @@ import { validateResourceMutationResult } from "@/features/domain/resource/resou
 import { prepareResourceMove, type PreparedResourceMove } from "./projectPublicationMovePlan";
 import {
   buildProjectRecoveryPathRemaps,
-  buildProjectRecoveryWorksheetPathRemaps,
+  buildProjectRecoveryChartPathRemaps,
   collectProjectRecoveryGraphPaths,
   commitPreparedProjectRecovery,
   prepareProjectRecoveryCommit,
@@ -108,8 +108,8 @@ export interface PreparedPublicationStoreState {
   readonly databaseRevisions: Readonly<Record<string, number>>;
   readonly variables: Readonly<Record<string, Variable>>;
   readonly variableRevisions: Readonly<Record<string, number>>;
-  readonly worksheetIndex: WorksheetIndexEntry[];
-  readonly worksheetDocuments: Readonly<Record<string, WorksheetDocument>>;
+  readonly chartIndex: ChartIndexEntry[];
+  readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
   readonly focusedSession?: FocusedGraphSession | null;
   readonly viewports?: Readonly<Record<string, EditorViewport>>;
 }
@@ -129,7 +129,7 @@ export interface PreparedProjectPublication {
   readonly fingerprint: string;
   readonly affectedGraphPaths: ReadonlySet<string>;
   readonly moves: readonly PreparedResourceMove[];
-  readonly removedWorksheetPaths: ReadonlySet<string>;
+  readonly removedChartPaths: ReadonlySet<string>;
   readonly graphProjectionPlan?: PreparedGraphProjectionReplacements;
   readonly projectionReplacements: readonly GraphProjectionReplacementDto[];
   readonly functionInstalls: readonly PreparedFunctionDeltaInstall[];
@@ -146,7 +146,7 @@ export interface ProjectRecoveryPreparation {
   readonly projections: ReadonlyMap<string, EditorGraphProjectionDto>;
   readonly graphPathsLoadedAtStart: ReadonlySet<string>;
   readonly pathRemaps: ReadonlyMap<string, string>;
-  readonly worksheetPathRemaps?: ReadonlyMap<string, string>;
+  readonly chartPathRemaps?: ReadonlyMap<string, string>;
 }
 
 export interface PreparedProjectRecoveryStoreState extends PreparedPublicationStoreState {
@@ -242,8 +242,8 @@ export class ProjectPublicationCoordinator {
 
   startProject(projectInstanceId: string, appliedRevision: number): void {
     this.validateProjectStart(projectInstanceId, appliedRevision);
-    clearWorksheetPreviewCache();
-    clearWorksheetLifecycleProjects();
+    clearChartPreviewCache();
+    clearChartLifecycleProjects();
     startProjectLifecycle(projectInstanceId);
     this.resetPublicationState(appliedRevision);
   }
@@ -259,16 +259,16 @@ export class ProjectPublicationCoordinator {
     const result = acceptProjectLifecycleActivation(projectInstanceId, activationRevision);
     if (result === "stale") return false;
     if (result === "activated") {
-      clearWorksheetPreviewCache();
-      clearWorksheetLifecycleProjects();
+      clearChartPreviewCache();
+      clearChartLifecycleProjects();
       this.resetPublicationState(0);
     }
     return true;
   }
 
   cancelProject(): void {
-    clearWorksheetPreviewCache();
-    clearWorksheetLifecycleProjects();
+    clearChartPreviewCache();
+    clearChartLifecycleProjects();
     clearProjectLifecycle();
     this.resetPublicationState(0);
   }
@@ -577,14 +577,12 @@ export class ProjectPublicationCoordinator {
       }
 
       const authoritativeGraphPaths = new Set(index.graphs.map((graph) => graph.path));
-      const authoritativeWorksheetPaths = new Set(
-        index.worksheets.map((worksheet) => worksheet.worksheetPath),
-      );
+      const authoritativeChartPaths = new Set(index.charts.map((chart) => chart.chartPath));
       const projections = new Map<string, EditorGraphProjectionDto>();
       let owned: PendingPublication[] = initiallyOwned;
       let queuedResults: ResourceMutationResultDto[] = [];
       let pathRemaps: ReadonlyMap<string, string> = new Map();
-      let worksheetPathRemaps: ReadonlyMap<string, string> = new Map();
+      let chartPathRemaps: ReadonlyMap<string, string> = new Map();
       for (;;) {
         const observedVersion = this.recoveryVersion;
         owned = [...this.state.pendingByRevision.values()].filter(
@@ -594,8 +592,8 @@ export class ProjectPublicationCoordinator {
         );
         queuedResults = owned.map((pending) => pending.input.result);
         pathRemaps = buildProjectRecoveryPathRemaps(authoritativeGraphPaths, queuedResults);
-        worksheetPathRemaps = buildProjectRecoveryWorksheetPathRemaps(
-          authoritativeWorksheetPaths,
+        chartPathRemaps = buildProjectRecoveryChartPathRemaps(
+          authoritativeChartPaths,
           queuedResults,
         );
         const recoveryPaths = collectProjectRecoveryGraphPaths(
@@ -623,7 +621,7 @@ export class ProjectPublicationCoordinator {
         projections,
         graphPathsLoadedAtStart,
         pathRemaps,
-        worksheetPathRemaps,
+        chartPathRemaps,
       };
       const plan = this.dependencies.prepareRecovery(recoveryPreparation);
       const committed = this.dependencies.commitRecovery(plan);

@@ -36,14 +36,14 @@ vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
       selector({
         focusedSession: {
           groupId: "group-1",
-          graphPath: "worksheets/Report.yssbi-worksheet",
+          graphPath: "charts/Report.yssbi-chart",
         },
       }),
     {
       getState: () => ({
         focusedSession: {
           groupId: "group-1",
-          graphPath: "worksheets/Report.yssbi-worksheet",
+          graphPath: "charts/Report.yssbi-chart",
         },
       }),
       subscribe: () => () => {},
@@ -56,8 +56,8 @@ vi.mock("@/features/core/dockview", () => ({
     getActiveEditorPanelInGroup: () => ({
       metadata: {
         role: "editor",
-        resourceRef: "worksheets/Report.yssbi-worksheet",
-        resourceKind: "worksheet",
+        resourceRef: "charts/Report.yssbi-chart",
+        resourceKind: "chart",
       },
     }),
   },
@@ -91,7 +91,7 @@ describe("useSidebarResourceActions", () => {
     host.remove();
   });
 
-  it("does not expose local Project actions for a worksheet active tab", async () => {
+  it("does not expose local Project actions for a chart active tab", async () => {
     expect(actions.canDemoteVariable).toBe(false);
 
     await act(async () => {

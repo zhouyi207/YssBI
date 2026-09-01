@@ -62,11 +62,11 @@ vi.mock("@/features/core/editor/detail/variablesGraphScope", () => ({
 }));
 vi.mock("./rightSidebarActions", () => ({
   detailFocusForEditorResource: (
-    resourceKind: "event" | "function" | "worksheet",
+    resourceKind: "event" | "function" | "chart",
     resourceRef: string,
   ) =>
-    resourceKind === "worksheet"
-      ? { kind: "worksheet", worksheetPath: resourceRef }
+    resourceKind === "chart"
+      ? { kind: "chart", chartPath: resourceRef }
       : { kind: resourceKind, path: resourceRef },
   setPassiveDetailContext: mocks.setDetailContext,
 }));
@@ -82,7 +82,7 @@ function editorPanel(
   panelInstanceId: string,
   resourceRef: string,
   active = false,
-  resourceKind: "event" | "function" | "worksheet" = "event",
+  resourceKind: "event" | "function" | "chart" = "event",
 ): WorkbenchEditorPanelInfo {
   return {
     panelInstanceId,
@@ -154,18 +154,16 @@ describe("editor panel Dockview synchronization", () => {
     });
   });
 
-  it("hydrates a restored worksheet with passive context and no Dockview write-back", async () => {
-    mocks.panels = [
-      editorPanel("worksheet-panel", "worksheets/Summary.yssbi-worksheet", true, "worksheet"),
-    ];
-    mocks.groups = [group("worksheet-panel")];
+  it("hydrates a restored chart with passive context and no Dockview write-back", async () => {
+    mocks.panels = [editorPanel("chart-panel", "charts/Summary.yssbi-chart", true, "chart")];
+    mocks.groups = [group("chart-panel")];
 
     await expect(activateCurrentEditorPanel("group-a")).resolves.toBe(true);
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({
-      kind: "worksheet",
-      worksheetPath: "worksheets/Summary.yssbi-worksheet",
+      kind: "chart",
+      chartPath: "charts/Summary.yssbi-chart",
     });
     expect(mocks.clearFocusedSession).toHaveBeenCalledWith("group-a");
   });

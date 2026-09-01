@@ -3367,8 +3367,8 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "src-tauri/crates/yss-application/src/database_session.rs",
         "src-tauri/crates/yss-application/src/execution/session_slot.rs",
         "src-tauri/crates/yss-application/src/graph_contracts.rs",
-        "src-tauri/crates/yss-application/src/worksheet_plot.rs",
-        "src-tauri/crates/yss-api/src/commands/command_worksheet.rs",
+        "src-tauri/crates/yss-application/src/chart_plot.rs",
+        "src-tauri/crates/yss-api/src/commands/command_chart.rs",
         "src-tauri/crates/yss-api/src/schema/catalog.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -4923,8 +4923,8 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "pub const EVENT_EXTENSION",
         "pub const FUNCTIONS_DIR",
         "pub const FUNCTION_EXTENSION",
-        "pub const WORKSHEETS_DIR",
-        "pub const WORKSHEET_EXTENSION",
+        "pub const CHARTS_DIR",
+        "pub const CHART_EXTENSION",
         "pub const DATABASE_DIR",
         "pub const PROJECT_DUCKDB_FILE",
         "pub const PROJECT_CONTENT_DIRECTORIES",
@@ -4944,7 +4944,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
 
     for relative in [
         "src-tauri/crates/yss-graph-document/Cargo.toml",
-        "src-tauri/crates/yss-worksheet-document/Cargo.toml",
+        "src-tauri/crates/yss-chart-document/Cargo.toml",
     ] {
         let manifest = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -4957,13 +4957,13 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
     for relative in [
         "src-tauri/crates/yss-project-discovery/src/lib.rs",
         "src-tauri/crates/yss-graph-document/src/resource_path.rs",
-        "src-tauri/crates/yss-worksheet-document/src/lib.rs",
+        "src-tauri/crates/yss-chart-document/src/lib.rs",
         "src-tauri/crates/yss-project/src/graph_resource_index.rs",
         "src-tauri/crates/yss-project-change/src/lib.rs",
         "src-tauri/crates/yss-project/src/project_io.rs",
         "src-tauri/crates/yss-project/src/project_lifecycle.rs",
         "src-tauri/crates/yss-project-registry/src/lib.rs",
-        "src-tauri/crates/yss-project/src/worksheet_io.rs",
+        "src-tauri/crates/yss-project/src/chart_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
@@ -4991,8 +4991,8 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
             "const EVENTS_DIR",
         ),
         (
-            "src-tauri/crates/yss-worksheet-document/src/lib.rs",
-            "pub const WORKSHEETS_DIR",
+            "src-tauri/crates/yss-chart-document/src/lib.rs",
+            "pub const CHARTS_DIR",
         ),
     ] {
         let source = std::fs::read_to_string(root.join(relative))
@@ -5570,7 +5570,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "yss-project-history = { path = \"../yss-project-history\" }",
         "yss-project-identity = { path = \"../yss-project-identity\" }",
         "yss-variable-contract = { path = \"../yss-variable-contract\" }",
-        "yss-worksheet-document = { path = \"../yss-worksheet-document\" }",
+        "yss-chart-document = { path = \"../yss-chart-document\" }",
     ] {
         assert!(
             manifest.contains(dependency),
@@ -5596,7 +5596,7 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "export_time: String::new()",
         "pub computation_settings: ProjectComputationSettings",
         "pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>",
-        "pub worksheets: HashMap<WorksheetResourcePath, WorksheetDocument>",
+        "pub charts: HashMap<ChartResourcePath, ChartDocument>",
     ] {
         assert!(
             owner.contains(contract),
@@ -5723,7 +5723,7 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
         "MoveGraph",
         "moved_before: Box<GraphResourceDocument>",
         "PatchVariables",
-        "UpsertWorksheet",
+        "UpsertChart",
     ] {
         assert!(
             patch_owner.contains(contract),
@@ -5781,7 +5781,7 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
 
     for relative in [
         "src-tauri/crates/yss-project/src/project_writers.rs",
-        "src-tauri/crates/yss-project/src/project_writers/worksheets.rs",
+        "src-tauri/crates/yss-project/src/project_writers/charts.rs",
         "src-tauri/crates/yss-project/src/project_state/history_moves.rs",
         "src-tauri/crates/yss-project/src/project_state/resource_history.rs",
         "src-tauri/crates/yss-project/src/project_state/resource_patch.rs",
@@ -6126,7 +6126,7 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         "thiserror.workspace = true",
         "yss-graph-document = { path = \"../yss-graph-document\" }",
         "yss-project-identity = { path = \"../yss-project-identity\" }",
-        "yss-worksheet-document = { path = \"../yss-worksheet-document\" }",
+        "yss-chart-document = { path = \"../yss-chart-document\" }",
     ] {
         assert!(
             manifest.contains(dependency),
@@ -6301,8 +6301,8 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
             "use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};",
         ),
         (
-            "src-tauri/crates/yss-project/src/project_writers/worksheets.rs",
-            "yss_resource_lifecycle::LifecycleResourcePath::Worksheet",
+            "src-tauri/crates/yss-project/src/project_writers/charts.rs",
+            "yss_resource_lifecycle::LifecycleResourcePath::Chart",
         ),
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -6619,29 +6619,29 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
 }
 
 #[test]
-fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
+fn chart_document_has_one_strict_pure_crate_owner_without_project_facade() {
     let root = repository_root();
     for relative in [
-        "src-tauri/crates/yss-worksheet-document/Cargo.toml",
-        "src-tauri/crates/yss-worksheet-document/src/lib.rs",
+        "src-tauri/crates/yss-chart-document/Cargo.toml",
+        "src-tauri/crates/yss-chart-document/src/lib.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
-            "worksheet document owner must exist at {relative}"
+            "chart document owner must exist at {relative}"
         );
     }
     assert!(
         !root
-            .join("src-tauri/crates/yss-project/src/worksheet_resource_path.rs")
+            .join("src-tauri/crates/yss-project/src/chart_resource_path.rs")
             .exists(),
-        "Project must not retain the old worksheet resource-path owner"
+        "Project must not retain the old chart resource-path owner"
     );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
-        "\"crates/yss-worksheet-document\"",
-        "yss-worksheet-document = { path = \"./crates/yss-worksheet-document\" }",
+        "\"crates/yss-chart-document\"",
+        "yss-chart-document = { path = \"./crates/yss-chart-document\" }",
     ] {
         assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
@@ -6650,76 +6650,76 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
             .expect("the root project module must be readable");
     for facade in [
-        "mod worksheet_resource_path",
-        "pub use worksheet_resource_path",
-        "pub use yss_worksheet_document",
+        "mod chart_resource_path",
+        "pub use chart_resource_path",
+        "pub use yss_chart_document",
     ] {
         assert!(
             !project_module.contains(facade),
-            "Project must not restore worksheet compatibility facade '{facade}'"
+            "Project must not restore chart compatibility facade '{facade}'"
         );
     }
 
     let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-worksheet-document/src/lib.rs"))
-            .expect("worksheet document owner must be readable");
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-chart-document/src/lib.rs"))
+            .expect("chart document owner must be readable");
     for contract in [
-        "pub const CURRENT_WORKSHEET_SCHEMA_VERSION",
-        "pub struct WorksheetDocument",
-        "pub struct WorksheetEncodings",
-        "pub struct WorksheetResourcePath",
-        "pub enum WorksheetResourcePathError",
+        "pub const CURRENT_CHART_SCHEMA_VERSION",
+        "pub struct ChartDocument",
+        "pub struct ChartEncodings",
+        "pub struct ChartResourcePath",
+        "pub enum ChartResourcePathError",
         "deserialize_current_schema_version",
     ] {
         assert!(
             owner.contains(contract),
-            "worksheet document crate must own canonical contract '{contract}'"
+            "chart document crate must own canonical contract '{contract}'"
         );
     }
-    for layout_mirror in ["pub const WORKSHEETS_DIR", "pub const WORKSHEET_EXTENSION"] {
+    for layout_mirror in ["pub const CHARTS_DIR", "pub const CHART_EXTENSION"] {
         assert!(
             !owner.contains(layout_mirror),
-            "worksheet document must consume project layout without restoring '{layout_mirror}'"
+            "chart document must consume project layout without restoring '{layout_mirror}'"
         );
     }
     assert!(
         owner.contains("yss_project_layout"),
-        "worksheet resource paths must consume the canonical project layout"
+        "chart resource paths must consume the canonical project layout"
     );
     assert!(
         owner.matches("deny_unknown_fields").count() >= 2,
-        "worksheet document and nested encodings must both reject unknown fields"
+        "chart document and nested encodings must both reject unknown fields"
     );
     assert!(
         !owner.contains("pub schema_version: u32"),
-        "callers must not construct an unsupported worksheet schema version"
+        "callers must not construct an unsupported chart schema version"
     );
     for forbidden in ["std::fs", "tauri"] {
         assert!(
             !owner.contains(forbidden),
-            "worksheet document contract must remain platform-neutral without '{forbidden}'"
+            "chart document contract must remain platform-neutral without '{forbidden}'"
         );
     }
 
-    let worksheet_io =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/worksheet_io.rs"))
-            .expect("worksheet IO adapter must be readable");
+    let chart_io =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/chart_io.rs"))
+            .expect("chart IO adapter must be readable");
     for removed_owner in [
-        "pub struct WorksheetDocument {",
-        "pub struct WorksheetEncodings {",
-        "pub struct WorksheetResourcePath {",
-        "pub const WORKSHEETS_DIR",
-        "pub const WORKSHEET_EXTENSION",
+        "pub struct ChartDocument {",
+        "pub struct ChartEncodings {",
+        "pub struct ChartResourcePath {",
+        "pub const CHARTS_DIR",
+        "pub const CHART_EXTENSION",
     ] {
         assert!(
-            !worksheet_io.contains(removed_owner),
-            "Project IO must not restore worksheet contract '{removed_owner}'"
+            !chart_io.contains(removed_owner),
+            "Project IO must not restore chart contract '{removed_owner}'"
         );
     }
 
     for relative in [
-        "src-tauri/crates/yss-application/src/worksheet.rs",
-        "src-tauri/crates/yss-api/src/commands/command_worksheet.rs",
+        "src-tauri/crates/yss-application/src/chart.rs",
+        "src-tauri/crates/yss-api/src/commands/command_chart.rs",
         "src-tauri/crates/yss-project-history/src/lib.rs",
         "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_activation.rs",
@@ -6732,22 +6732,22 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/crates/yss-resource-lifecycle/src/lib.rs",
         "src-tauri/crates/yss-project-model/src/patch.rs",
         "src-tauri/crates/yss-project/src/resource_reveal.rs",
-        "src-tauri/crates/yss-project/src/worksheet_io.rs",
+        "src-tauri/crates/yss-project/src/chart_io.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
             .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
         assert!(
-            consumer.contains("yss_worksheet_document"),
-            "{relative} must consume the worksheet document owner directly"
+            consumer.contains("yss_chart_document"),
+            "{relative} must consume the chart document owner directly"
         );
         for removed_path in [
-            "crate::project::WorksheetEncodings",
-            "crate::project::WorksheetResourcePath",
-            "crate::project::WORKSHEET_",
+            "crate::project::ChartEncodings",
+            "crate::project::ChartResourcePath",
+            "crate::project::CHART_",
         ] {
             assert!(
                 !consumer.contains(removed_path),
-                "{relative} must not restore removed worksheet path '{removed_path}'"
+                "{relative} must not restore removed chart path '{removed_path}'"
             );
         }
     }
@@ -6755,18 +6755,66 @@ fn worksheet_document_has_one_strict_pure_crate_owner_without_project_facade() {
     let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
         .expect("Rust architecture policy must be readable");
     assert!(
-        policy.contains("| \"yss-worksheet-document\""),
-        "worksheet document must be classified as a Pure Leaf"
+        policy.contains("| \"yss-chart-document\""),
+        "chart document must be classified as a Pure Leaf"
     );
     for removed_capability in [
-        "yss_project::worksheet_io::WorksheetDocument",
-        "yss_project::worksheet_resource_path::WorksheetResourcePath",
+        "yss_project::chart_io::ChartDocument",
+        "yss_project::chart_resource_path::ChartResourcePath",
     ] {
         assert!(
             !policy.contains(removed_capability),
             "Commands must not retain Project capability '{removed_capability}'"
         );
     }
+}
+
+#[test]
+fn chart_resource_cutover_does_not_keep_a_retired_rust_path() {
+    fn inspect(path: &Path, root: &Path, retired: &str) {
+        for entry in std::fs::read_dir(path).expect("Rust source directory must be readable") {
+            let entry = entry.expect("Rust source entry must be readable");
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name == "target") {
+                    continue;
+                }
+                inspect(&path, root, retired);
+                continue;
+            }
+
+            let relative = path
+                .strip_prefix(root)
+                .expect("Rust source path must remain inside the repository")
+                .to_string_lossy()
+                .replace('\\', "/");
+            if relative == "src-tauri/crates/yss-tabular-io/src/excel.rs" {
+                continue;
+            }
+            assert!(
+                !relative.to_lowercase().contains(retired),
+                "retired chart resource path remains at {relative}"
+            );
+
+            let is_contract_source = matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("rs" | "toml")
+            ) || path.file_name().is_some_and(|name| name == "Cargo.lock");
+            if !is_contract_source {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+            assert!(
+                !source.to_lowercase().contains(retired),
+                "retired chart resource symbol remains in {relative}"
+            );
+        }
+    }
+
+    let root = repository_root();
+    let retired_resource_term = ["work", "sheet"].concat();
+    inspect(&root.join("src-tauri"), &root, &retired_resource_term);
 }
 
 #[test]

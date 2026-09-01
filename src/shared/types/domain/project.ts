@@ -6,7 +6,7 @@ import type { FunctionEditorProjectionDto } from "./editorProjection";
 import type { FunctionSignatureDto, HistoryStatusDto, ResourceKeyDto } from "./editorMutation";
 import type { DataType } from "./dataType";
 import type { DataValue } from "./dataValue";
-import type { WorksheetChartType } from "./worksheet";
+import type { ChartType } from "./chart";
 
 /**
  * Domain Types - Project
@@ -108,11 +108,11 @@ export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
 
 export type ProjectGraphIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
 
-export interface ProjectWorksheetIndexRow {
-  worksheetPath: string;
+export interface ProjectChartIndexRow {
+  chartPath: string;
   name: string;
   databaseId: string;
-  chartType: WorksheetChartType;
+  chartType: ChartType;
   revision: number;
 }
 
@@ -148,7 +148,7 @@ export interface ProjectIndexRow {
   publicationRevision: number;
   history: HistoryStatusDto;
   graphs: ProjectGraphIndexRow[];
-  worksheets: ProjectWorksheetIndexRow[];
+  charts: ProjectChartIndexRow[];
   variables: ProjectVariableIndexRow[];
   databases: ProjectDatabaseIndexRow[];
 }

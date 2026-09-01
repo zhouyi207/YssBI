@@ -1,6 +1,7 @@
 use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use yss_chart_document::ChartDocument;
 use yss_project_discovery::normalize_project_name;
 use yss_project_filesystem::{
     NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemTransaction,
@@ -10,12 +11,11 @@ use yss_project_filesystem::{
 };
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
-    GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE, WORKSHEET_EXTENSION,
-    WORKSHEETS_DIR,
+    CHART_EXTENSION, CHARTS_DIR, GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES,
+    PROJECT_METADATA_FILE,
 };
 use yss_project_manifest::ProjectManifest;
 use yss_project_model::ProjectData;
-use yss_worksheet_document::WorksheetDocument;
 
 pub struct PreparedProjectCopy {
     pub metadata_path: PathBuf,
@@ -391,7 +391,7 @@ fn copy_mutations(
     let mut files = source_tree.files;
     files.remove(Path::new(PROJECT_METADATA_FILE));
     files.remove(Path::new(GLOBAL_VARIABLES_FILE));
-    files.retain(|path, _| !path.starts_with(WORKSHEETS_DIR));
+    files.retain(|path, _| !path.starts_with(CHARTS_DIR));
     files.insert(
         PathBuf::from(PROJECT_METADATA_FILE),
         crate::serialize_project_manifest(authority).map_err(prepare_error)?,
@@ -405,9 +405,8 @@ fn copy_mutations(
             crate::serialize_graph_document(authority, graph_path).map_err(prepare_error)?;
         files.insert(path, contents);
     }
-    for (worksheet_path, worksheet) in &authority.worksheets {
-        let (path, contents) =
-            crate::serialize_worksheet(worksheet_path, worksheet).map_err(prepare_error)?;
+    for (chart_path, chart) in &authority.charts {
+        let (path, contents) = crate::serialize_chart(chart_path, chart).map_err(prepare_error)?;
         files.insert(path, contents);
     }
     let mut mutations = directories
@@ -438,7 +437,7 @@ fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String
         Some("yssbi-vars") => serde_json::from_slice::<crate::GlobalVariablesDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
-        Some(WORKSHEET_EXTENSION) => serde_json::from_slice::<WorksheetDocument>(contents)
+        Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
         _ => Ok(()),

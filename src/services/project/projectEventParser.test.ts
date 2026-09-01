@@ -22,7 +22,7 @@ const projectSavedResult = {
   projectInstanceId,
   operationId,
   publicationRevision: 2,
-  affectedResources: [{ kind: "worksheet", key: "worksheets/Sales.yssbi-worksheet" }],
+  affectedResources: [{ kind: "chart", key: "charts/Sales.yssbi-chart" }],
   indexInvalidated: true,
   history: { canUndo: true, canRedo: false },
 };

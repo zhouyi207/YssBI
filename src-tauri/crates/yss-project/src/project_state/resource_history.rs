@@ -27,8 +27,8 @@ pub(crate) fn validate_context_revisions(
         yss_variable_contract::VariableId,
         VariableRevisionEntry,
     >,
-    worksheet_revisions: &std::collections::HashMap<
-        WorksheetResourcePath,
+    chart_revisions: &std::collections::HashMap<
+        ChartResourcePath,
         yss_project_identity::ResourceRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
@@ -67,9 +67,9 @@ pub(crate) fn validate_context_revisions(
                 .map(yss_variable_contract::VariableId::from)
                 .and_then(|id| variable_revisions.get(&id).map(|entry| entry.revision)),
             ResourceKey::Database(_) => None,
-            ResourceKey::Worksheet(path) => WorksheetResourcePath::parse(path.0.as_ref())
+            ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
                 .ok()
-                .and_then(|path| worksheet_revisions.get(&path).copied()),
+                .and_then(|path| chart_revisions.get(&path).copied()),
         };
         if actual != Some(*expected) {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
@@ -103,9 +103,9 @@ pub(crate) fn validate_context_revisions(
                 .0
                 .strip_prefix("databases/")
                 .is_some_and(|id| data.databases.contains_key(id)),
-            ResourceKey::Worksheet(path) => WorksheetResourcePath::parse(path.0.as_ref())
+            ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
                 .ok()
-                .is_some_and(|path| data.worksheets.contains_key(&path)),
+                .is_some_and(|path| data.charts.contains_key(&path)),
         };
         if present {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
@@ -116,18 +116,18 @@ pub(crate) fn validate_context_revisions(
     Ok(())
 }
 
-pub(super) fn validate_worksheet_path_insertion(
+pub(super) fn validate_chart_path_insertion(
     data: &ProjectData,
-    worksheet_path: &WorksheetResourcePath,
+    chart_path: &ChartResourcePath,
 ) -> Result<(), ProjectFilesystemError> {
-    let portable_key = worksheet_path.display_name().portable_key();
-    if data.worksheets.keys().any(|existing| {
-        existing != worksheet_path && existing.display_name().portable_key() == portable_key
+    let portable_key = chart_path.display_name().portable_key();
+    if data.charts.keys().any(|existing| {
+        existing != chart_path && existing.display_name().portable_key() == portable_key
     }) {
         return Err(ProjectFilesystemError::ResourceRevisionConflict {
             message: format!(
-                "worksheet path '{}' conflicts with an existing portable name",
-                worksheet_path.as_str()
+                "chart path '{}' conflicts with an existing portable name",
+                chart_path.as_str()
             ),
         });
     }
@@ -255,40 +255,40 @@ pub(super) fn normalize_function_patch_revisions(
         }
         ProjectDataPatch::UnloadGraph { .. }
         | ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertWorksheet { .. }
-        | ProjectDataPatch::RemoveWorksheet { .. }
-        | ProjectDataPatch::MoveWorksheet { .. } => {}
+        | ProjectDataPatch::UpsertChart { .. }
+        | ProjectDataPatch::RemoveChart { .. }
+        | ProjectDataPatch::MoveChart { .. } => {}
     }
     Ok(())
 }
 
-pub(super) fn worksheet_document_state(
-    document: &WorksheetDocument,
-) -> yss_project_history::WorksheetDocumentState {
-    yss_project_history::WorksheetDocumentState {
+pub(super) fn chart_document_state(
+    document: &ChartDocument,
+) -> yss_project_history::ChartDocumentState {
+    yss_project_history::ChartDocumentState {
         database_id: document.database_id.clone(),
         chart_type: document.chart_type.clone(),
         encodings: document.encodings.clone(),
     }
 }
 
-pub(super) fn worksheet_lifecycle_state(
-    path: &WorksheetResourcePath,
+pub(super) fn chart_lifecycle_state(
+    path: &ChartResourcePath,
     revision: ResourceRevision,
 ) -> yss_project_history::ResourceLifecycleState {
     yss_project_history::ResourceLifecycleState {
         revision,
         path: path.as_str().into(),
-        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
+        kind: yss_project_history::ResourceLifecycleKind::Chart,
         name: path.display_name().as_str().to_string(),
     }
 }
 
-pub(super) fn worksheet_history_publication(
+pub(super) fn chart_history_publication(
     operation_id: OperationId,
     patch: &ProjectDataPatch,
     data: &ProjectData,
-    revisions: &std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
+    revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
 ) -> Result<
     (
         Vec<yss_project_history::ResourceDeltaEvent>,
@@ -296,14 +296,12 @@ pub(super) fn worksheet_history_publication(
     ),
     ProjectFilesystemError,
 > {
-    let worksheet_key = |path: &WorksheetResourcePath| {
-        ResourceKey::Worksheet(yss_project_history::WorksheetResourceKey(
-            path.as_str().into(),
-        ))
+    let chart_key = |path: &ChartResourcePath| {
+        ResourceKey::Chart(yss_project_history::ChartResourceKey(path.as_str().into()))
     };
     match patch {
-        ProjectDataPatch::UpsertWorksheet { path, document } => {
-            let before = data.worksheets.get(path);
+        ProjectDataPatch::UpsertChart { path, document } => {
+            let before = data.charts.get(path);
             let retained = revisions.get(path).copied();
             let revision = match retained {
                 Some(retained) => checked_resource_revision(path.as_str(), retained)?,
@@ -312,17 +310,17 @@ pub(super) fn worksheet_history_publication(
             let mut after = document.clone();
             after.revision = revision;
             let (from_revision, payload, transaction) = if let Some(before) = before {
-                let forward = yss_project_history::WorksheetDocumentPatch {
-                    before: worksheet_document_state(before),
-                    after: worksheet_document_state(&after),
+                let forward = yss_project_history::ChartDocumentPatch {
+                    before: chart_document_state(before),
+                    after: chart_document_state(&after),
                 };
                 (
                     before.revision,
-                    yss_project_history::ResourceDocumentPatch::Worksheet(forward.clone()),
+                    yss_project_history::ResourceDocumentPatch::Chart(forward.clone()),
                     ProjectHistoryTransaction::new(
                         operation_id,
-                        vec![yss_project_history::ResourcePatch::worksheet(
-                            yss_project_history::WorksheetResourceKey(path.as_str().into()),
+                        vec![yss_project_history::ResourcePatch::chart(
+                            yss_project_history::ChartResourceKey(path.as_str().into()),
                             before.revision,
                             forward,
                         )],
@@ -331,7 +329,7 @@ pub(super) fn worksheet_history_publication(
             } else {
                 let forward = yss_project_history::ResourceLifecyclePatch {
                     before: None,
-                    after: Some(worksheet_lifecycle_state(path, revision)),
+                    after: Some(chart_lifecycle_state(path, revision)),
                 };
                 (
                     retained.unwrap_or(revision),
@@ -339,7 +337,7 @@ pub(super) fn worksheet_history_publication(
                     ProjectHistoryTransaction::resource_lifecycle(
                         operation_id,
                         forward,
-                        yss_project_history::ResourceLifecycleHistoryPayload::Worksheet {
+                        yss_project_history::ResourceLifecycleHistoryPayload::Chart {
                             document: after.clone(),
                         },
                     ),
@@ -347,7 +345,7 @@ pub(super) fn worksheet_history_publication(
             };
             Ok((
                 vec![yss_project_history::ResourceDeltaEvent {
-                    resource: worksheet_key(path),
+                    resource: chart_key(path),
                     from_revision,
                     to_revision: revision,
                     caused_by: Some(operation_id),
@@ -356,19 +354,19 @@ pub(super) fn worksheet_history_publication(
                 Some(transaction),
             ))
         }
-        ProjectDataPatch::RemoveWorksheet { path, revision } => {
-            let document = data.worksheets.get(path).cloned().ok_or_else(|| {
+        ProjectDataPatch::RemoveChart { path, revision } => {
+            let document = data.charts.get(path).cloned().ok_or_else(|| {
                 ProjectFilesystemError::ResourceRevisionConflict {
-                    message: format!("worksheet '{}' is absent", path.as_str()),
+                    message: format!("chart '{}' is absent", path.as_str()),
                 }
             })?;
             let forward = yss_project_history::ResourceLifecyclePatch {
-                before: Some(worksheet_lifecycle_state(path, *revision)),
+                before: Some(chart_lifecycle_state(path, *revision)),
                 after: None,
             };
             Ok((
                 vec![yss_project_history::ResourceDeltaEvent {
-                    resource: worksheet_key(path),
+                    resource: chart_key(path),
                     from_revision: *revision,
                     to_revision: checked_resource_revision(path.as_str(), *revision)?,
                     caused_by: Some(operation_id),
@@ -379,13 +377,13 @@ pub(super) fn worksheet_history_publication(
                 Some(ProjectHistoryTransaction::resource_lifecycle(
                     operation_id,
                     forward,
-                    yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { document },
+                    yss_project_history::ResourceLifecycleHistoryPayload::Chart { document },
                 )),
             ))
         }
-        ProjectDataPatch::MoveWorksheet { from, to, moved } => Ok((
+        ProjectDataPatch::MoveChart { from, to, moved } => Ok((
             vec![yss_project_history::ResourceDeltaEvent {
-                resource: worksheet_key(to),
+                resource: chart_key(to),
                 from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
                 to_revision: moved.revision,
                 caused_by: Some(operation_id),
@@ -396,7 +394,7 @@ pub(super) fn worksheet_history_publication(
                     },
                 ),
             }],
-            Some(ProjectHistoryTransaction::worksheet_resource_move(
+            Some(ProjectHistoryTransaction::chart_resource_move(
                 operation_id,
                 from.as_str(),
                 to.as_str(),
@@ -500,9 +498,9 @@ pub(super) fn canonical_resource_lifecycle_events(
         }
         ProjectDataPatch::MoveGraph { .. } => {}
         ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertWorksheet { .. }
-        | ProjectDataPatch::RemoveWorksheet { .. }
-        | ProjectDataPatch::MoveWorksheet { .. } => return Ok(Vec::new()),
+        | ProjectDataPatch::UpsertChart { .. }
+        | ProjectDataPatch::RemoveChart { .. }
+        | ProjectDataPatch::MoveChart { .. } => return Ok(Vec::new()),
     }
     let ProjectDataPatch::MoveGraph {
         from,
@@ -596,9 +594,9 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
             );
         }
         ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertWorksheet { .. }
-        | ProjectDataPatch::RemoveWorksheet { .. }
-        | ProjectDataPatch::MoveWorksheet { .. } => {}
+        | ProjectDataPatch::UpsertChart { .. }
+        | ProjectDataPatch::RemoveChart { .. }
+        | ProjectDataPatch::MoveChart { .. } => {}
     }
     paths.into_iter().collect()
 }
@@ -632,9 +630,9 @@ pub(super) fn preflight_resource_patch_graphs(
         | ProjectDataPatch::RemoveGraph { .. }
         | ProjectDataPatch::UnloadGraph { .. }
         | ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertWorksheet { .. }
-        | ProjectDataPatch::RemoveWorksheet { .. }
-        | ProjectDataPatch::MoveWorksheet { .. } => {}
+        | ProjectDataPatch::UpsertChart { .. }
+        | ProjectDataPatch::RemoveChart { .. }
+        | ProjectDataPatch::MoveChart { .. } => {}
     }
     Ok(())
 }
@@ -657,7 +655,7 @@ pub(super) fn affected_projection_paths(
             yss_project_history::ResourceKey::Function(path) => Some(path.0.to_string()),
             yss_project_history::ResourceKey::Variable(_)
             | yss_project_history::ResourceKey::Database(_)
-            | yss_project_history::ResourceKey::Worksheet(_) => None,
+            | yss_project_history::ResourceKey::Chart(_) => None,
         })
         .collect::<std::collections::BTreeSet<_>>();
     if !changed_functions.is_empty() {

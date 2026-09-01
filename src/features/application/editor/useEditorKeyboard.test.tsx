@@ -10,7 +10,7 @@ type TestPanel = {
   panelInstanceId: string;
   groupId: string;
   metadata:
-    | { role: "editor"; resourceRef: string; resourceKind: "event" | "function" | "worksheet" }
+    | { role: "editor"; resourceRef: string; resourceKind: "event" | "function" | "chart" }
     | { role: "result"; resultId: string }
     | { role: "view"; viewId: string };
 };

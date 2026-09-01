@@ -1,10 +1,10 @@
 use crate::{ProjectIndex, ProjectSession, ProjectState};
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 impl ProjectState {
     pub fn read_project_index(
@@ -16,22 +16,20 @@ impl ProjectState {
         })
     }
 
-    pub fn load_worksheet_document(
+    pub fn load_chart_document(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        worksheet_path: &WorksheetResourcePath,
-    ) -> Result<WorksheetDocument, ProjectFilesystemError> {
+        chart_path: &ChartResourcePath,
+    ) -> Result<ChartDocument, ProjectFilesystemError> {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let (_, _, _, data) = self.coherent_project_read_snapshot(&session)?;
-        let document = data
-            .worksheets
-            .get(worksheet_path)
-            .cloned()
-            .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
-                path: worksheet_path.clone(),
-            })?;
+        let document = data.charts.get(chart_path).cloned().ok_or_else(|| {
+            ProjectFilesystemError::ChartNotFound {
+                path: chart_path.clone(),
+            }
+        })?;
         self.validate_project_session(&session)?;
         Ok(document)
     }
@@ -264,20 +262,18 @@ fn overlay_authoritative_project_index(
     index
         .databases
         .sort_by(|left, right| left.id.cmp(&right.id));
-    index.worksheets = data
-        .worksheets
+    index.charts = data
+        .charts
         .iter()
-        .map(|(path, worksheet)| crate::ProjectWorksheetIndexEntry {
-            worksheet_path: path.clone(),
+        .map(|(path, chart)| crate::ProjectChartIndexEntry {
+            chart_path: path.clone(),
             name: path.display_name().as_str().to_string(),
-            database_id: worksheet.database_id.clone(),
-            chart_type: worksheet.chart_type.clone(),
-            revision: worksheet.revision,
+            database_id: chart.database_id.clone(),
+            chart_type: chart.chart_type.clone(),
+            revision: chart.revision,
         })
         .collect();
-    index
-        .worksheets
-        .sort_by_key(|entry| entry.name.to_lowercase());
+    index.charts.sort_by_key(|entry| entry.name.to_lowercase());
     for entry in &mut index.graphs {
         let Ok(path) = yss_graph_document::GraphResourcePath::new(&entry.path) else {
             continue;

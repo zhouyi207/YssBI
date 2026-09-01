@@ -2,6 +2,7 @@ use crate::{ProjectSession, ProjectState, ProjectStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use yss_chart_document::ChartResourcePath;
 use yss_graph_document::GraphResourcePath;
 use yss_project_filesystem::{NormalizedProjectRoot, ProjectFilesystemError};
 use yss_project_identity::ProjectInstanceId;
@@ -9,7 +10,6 @@ use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
 use yss_variable_contract::VariableId;
 use yss_variable_value::normalize_variable_tabular;
-use yss_worksheet_document::WorksheetResourcePath;
 
 #[derive(Clone, Default)]
 pub(crate) struct ProjectActivationCoordinator {
@@ -74,7 +74,7 @@ pub struct PreparedProjectActivation {
     pub store: ProjectStore,
     pub(crate) variable_revisions: HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     pub(crate) graph_revisions: HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
-    pub(crate) worksheet_revisions: HashMap<WorksheetResourcePath, ResourceRevision>,
+    pub(crate) chart_revisions: HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
 }
@@ -111,8 +111,8 @@ impl PreparedProjectActivation {
                 )
             })
             .collect();
-        let worksheet_revisions = data
-            .worksheets
+        let chart_revisions = data
+            .charts
             .iter()
             .map(|(path, document)| (path.clone(), document.revision))
             .collect();
@@ -122,7 +122,7 @@ impl PreparedProjectActivation {
             store,
             variable_revisions,
             graph_revisions,
-            worksheet_revisions,
+            chart_revisions,
             authority_basis,
             requires_final_rebuild,
         })

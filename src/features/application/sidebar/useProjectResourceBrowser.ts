@@ -6,7 +6,7 @@ import { workbenchDockviewRead } from "@/features/core/dockview";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useGraphResourcesByKind } from "@/features/core/resource";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { partitionVariableCatalog } from "@/features/core/variable/variableScopeSelectors";
 import { useSidebarStore, type ProjectTreeCategoryId } from "@/features/core/sidebar";
 import { buildProjectResourceBrowser, resolveActiveProjectGraph } from "./projectResourceBrowser";
@@ -16,7 +16,7 @@ export function useProjectResourceBrowser() {
   const events = useGraphResourcesByKind("event");
   const functions = useFunctionCatalog();
   const variables = useVariableStore((state) => state.variables);
-  const worksheets = useWorksheetStore((state) => state.index);
+  const charts = useChartDocumentStore((state) => state.index);
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const focusedSession = useGraphSessionStore((state) => state.focusedSession);
   const projectTreeQuery = useSidebarStore((state) => state.projectTreeQuery);
@@ -64,7 +64,7 @@ export function useProjectResourceBrowser() {
       buildProjectResourceBrowser({
         events,
         functions,
-        worksheets,
+        charts,
         localVariables,
         globalVariables,
         activeGraph,
@@ -77,13 +77,13 @@ export function useProjectResourceBrowser() {
         labels: {
           events: t("sidebar.projectTree.categories.events"),
           functions: t("sidebar.projectTree.categories.functions"),
-          worksheets: t("sidebar.projectTree.categories.worksheets"),
+          charts: t("sidebar.projectTree.categories.charts"),
           variables: t("sidebar.projectTree.categories.variables"),
           localVariables: t("sidebar.projectTree.categories.localVariables"),
           globalVariables: t("sidebar.projectTree.categories.globalVariables"),
           noEvents: t("sidebar.noEvents"),
           noFunctions: t("sidebar.noFunctions"),
-          noWorksheets: t("chartsSidebar.noWorksheets"),
+          noCharts: t("chartsSidebar.noCharts"),
           noLocalVariables: t("sidebar.noLocalVariables"),
           noGlobalVariables: t("sidebar.noGlobalVariables"),
         },
@@ -97,7 +97,7 @@ export function useProjectResourceBrowser() {
       projectTreeExpandedCategories,
       projectTreeQuery,
       t,
-      worksheets,
+      charts,
     ],
   );
 

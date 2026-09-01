@@ -84,7 +84,7 @@ function iconForMetadata(metadata: WorkbenchPanelMetadata): {
   if (metadata.role === "editor") {
     if (metadata.resourceKind === "event") return { Icon: VscSymbolEvent, key: "event" };
     if (metadata.resourceKind === "function") return { Icon: VscSymbolMethod, key: "function" };
-    return { Icon: VscGraphLine, key: "worksheet" };
+    return { Icon: VscGraphLine, key: "chart" };
   }
   if (metadata.role === "result") return { Icon: VscPreview, key: "result" };
   return { Icon: VIEW_ICONS[metadata.viewId], key: metadata.viewId };

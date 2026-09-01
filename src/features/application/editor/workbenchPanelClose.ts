@@ -27,7 +27,7 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { editorViewportScope, releaseEditorViewport } from "@/features/core/viewport";
 import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";
@@ -38,7 +38,7 @@ import {
   type GraphSaveCommandContext,
 } from "@/features/application/projectCommandContext";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
-import { saveWorksheetDocument as saveWorksheetDraft } from "@/features/application/worksheet/saveWorksheetDocument";
+import { saveChartDocument as saveChartDraft } from "@/features/application/chart/saveChartDocument";
 import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { unloadGraphDocument } from "./graphDocumentUnload";
@@ -177,24 +177,24 @@ function closeDialogOptions(document: EditorDocument) {
   };
 }
 
-async function saveWorksheetDocument(
+async function saveChartDocument(
   document: EditorDocument,
   identity: ProjectIdentitySnapshot,
 ): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return false;
   try {
-    const saved = await saveWorksheetDraft(document.resourceRef);
+    const saved = await saveChartDraft(document.resourceRef);
     if (!isCurrentProjectIdentity(identity)) return false;
     if (saved) return true;
     showBlockingMessage(
       i18n.t("notifications.editor.documentSaveFailed", {
         title: document.name,
-        error: "worksheet_save_not_committed",
+        error: "chart_save_not_committed",
       }),
     );
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
-    showBlockingIpcError(error, "save_worksheet", (code) =>
+    showBlockingIpcError(error, "save_chart", (code) =>
       i18n.t("notifications.editor.documentSaveFailed", {
         title: document.name,
         error: code,
@@ -248,8 +248,8 @@ function saveEditorDocument(
   document: EditorDocument,
   identity: ProjectIdentitySnapshot,
 ): Promise<boolean> {
-  return document.resourceKind === "worksheet"
-    ? saveWorksheetDocument(document, identity)
+  return document.resourceKind === "chart"
+    ? saveChartDocument(document, identity)
     : saveGraphDocument(document, identity);
 }
 
@@ -257,14 +257,14 @@ function isCloseSnapshotCurrent(snapshot: CloseSnapshot): boolean {
   return !snapshot.projectIdentity || isCurrentProjectIdentity(snapshot.projectIdentity);
 }
 
-function evictWorksheetDocument(worksheetPath: string): void {
-  useWorksheetStore.setState((state) => {
-    if (!Object.prototype.hasOwnProperty.call(state.documents, worksheetPath)) return {};
+function evictChartDocument(chartPath: string): void {
+  useChartDocumentStore.setState((state) => {
+    if (!Object.prototype.hasOwnProperty.call(state.documents, chartPath)) return {};
     const documents = { ...state.documents };
-    delete documents[worksheetPath];
+    delete documents[chartPath];
     return { documents };
   });
-  clearResourceDocumentState({ id: worksheetPath, kind: "worksheet" });
+  clearResourceDocumentState({ id: chartPath, kind: "chart" });
 }
 
 function finalizeClosedPanels(
@@ -285,7 +285,7 @@ function finalizeClosedPanels(
     if (metadata.role !== "editor") continue;
     paneState.release(panel.panelInstanceId);
 
-    if (metadata.resourceKind !== "worksheet") {
+    if (metadata.resourceKind !== "chart") {
       const hasSameScope = remainingEditors.some(
         (candidate: EditorPanelInfo) =>
           candidate.groupId === panel.groupId &&
@@ -308,8 +308,8 @@ function finalizeClosedPanels(
     }
     finalizedDocuments.add(key);
     clearDetailFocusForClosedPanel(metadata.resourceRef);
-    if (metadata.resourceKind === "worksheet") {
-      evictWorksheetDocument(metadata.resourceRef);
+    if (metadata.resourceKind === "chart") {
+      evictChartDocument(metadata.resourceRef);
       continue;
     }
 

@@ -38,7 +38,7 @@ yss-resource-lifecycle = { path = "../yss-resource-lifecycle" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-variable-contract = { path = "../yss-variable-contract" }
 yss-variable-value = { path = "../yss-variable-value" }
-yss-worksheet-document = { path = "../yss-worksheet-document" }
+yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

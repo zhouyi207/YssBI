@@ -9105,6 +9105,7 @@ dependencies = [
  "yss-bayes-artifact-contract",
  "yss-bayes-model",
  "yss-bayes-result",
+ "yss-chart-document",
  "yss-computation-settings",
  "yss-data-contract",
  "yss-database-contract",
@@ -9141,7 +9142,6 @@ dependencies = [
  "yss-tracing",
  "yss-variable-contract",
  "yss-window-state",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9162,6 +9162,7 @@ dependencies = [
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker",
+ "yss-chart-document",
  "yss-computation-settings",
  "yss-data-contract",
  "yss-database-contract",
@@ -9203,7 +9204,6 @@ dependencies = [
  "yss-tabular-contract",
  "yss-tabular-io",
  "yss-variable-contract",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9275,6 +9275,18 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "yss-chart-document"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-project-identity",
+ "yss-project-layout",
+ "yss-resource-naming",
 ]
 
 [[package]]
@@ -9605,6 +9617,7 @@ dependencies = [
  "tracing",
  "trash",
  "uuid",
+ "yss-chart-document",
  "yss-computation-settings",
  "yss-data-contract",
  "yss-database-contract",
@@ -9627,7 +9640,6 @@ dependencies = [
  "yss-resource-naming",
  "yss-variable-contract",
  "yss-variable-value",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9657,12 +9669,12 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "windows-sys 0.61.2",
+ "yss-chart-document",
  "yss-graph-document",
  "yss-project-identity",
  "yss-project-layout",
  "yss-resource-lifecycle",
  "yss-resource-naming",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9673,10 +9685,10 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "uuid",
+ "yss-chart-document",
  "yss-database-contract",
  "yss-graph-document",
  "yss-project-identity",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9708,13 +9720,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "yss-chart-document",
  "yss-computation-settings",
  "yss-database-contract",
  "yss-graph-document",
  "yss-project-history",
  "yss-project-identity",
  "yss-variable-contract",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9792,9 +9804,9 @@ name = "yss-resource-lifecycle"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
+ "yss-chart-document",
  "yss-graph-document",
  "yss-project-identity",
- "yss-worksheet-document",
 ]
 
 [[package]]
@@ -9934,18 +9946,6 @@ dependencies = [
  "thiserror 2.0.20",
  "uuid",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "yss-worksheet-document"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "yss-project-identity",
- "yss-project-layout",
- "yss-resource-naming",
 ]
 
 [[package]]

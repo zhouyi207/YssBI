@@ -20,8 +20,8 @@ pub mod project_writers;
 pub mod project_state_variable;
 pub mod project_store;
 
+pub mod chart_io;
 pub mod resource_reveal;
-pub mod worksheet_io;
 
 pub use graph_resource_index::*;
 pub use project_error::*;
@@ -37,8 +37,8 @@ pub use project_session::*;
 pub use project_state::*;
 pub use project_store::*;
 
+pub use chart_io::*;
 pub use resource_reveal::*;
-pub use worksheet_io::*;
 
 use yss_graph_document::GraphResourcePath;
 
@@ -46,8 +46,8 @@ use yss_graph_document::GraphResourcePath;
 pub mod fixtures {
     use super::{GraphResourcePath, ProjectError};
     use std::path::{Path, PathBuf};
+    use yss_chart_document::{ChartDocument, ChartResourcePath};
     use yss_project_model::ProjectData;
-    use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
     pub struct TempProject {
         state: Option<super::ProjectState>,
@@ -102,20 +102,20 @@ pub mod fixtures {
         Ok(relative_path.to_string_lossy().replace('\\', "/"))
     }
 
-    pub fn worksheet(name: &str, database_id: &str) -> (WorksheetResourcePath, WorksheetDocument) {
+    pub fn chart(name: &str, database_id: &str) -> (ChartResourcePath, ChartDocument) {
         let name = yss_resource_naming::ResourceName::parse(name).unwrap();
         (
-            WorksheetResourcePath::from_name(&name),
-            WorksheetDocument::new(database_id),
+            ChartResourcePath::from_name(&name),
+            ChartDocument::new(database_id),
         )
     }
 
-    pub fn write_worksheet(
+    pub fn write_chart(
         root: &Path,
-        path: &WorksheetResourcePath,
-        document: &WorksheetDocument,
+        path: &ChartResourcePath,
+        document: &ChartDocument,
     ) -> Result<(), ProjectError> {
-        let (relative_path, contents) = super::worksheet_io::serialize_worksheet(path, document)?;
+        let (relative_path, contents) = super::chart_io::serialize_chart(path, document)?;
         let target = root.join(relative_path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;

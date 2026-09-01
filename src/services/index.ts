@@ -1,7 +1,7 @@
 export * from "./project";
 export * from "./nodeSystem";
 export { DatabaseService } from "./database/databaseService";
-export { WorksheetService } from "./worksheet/worksheetService";
+export { ChartService } from "./chart/chartService";
 
 export * from "./stats";
 export * from "./bayes";

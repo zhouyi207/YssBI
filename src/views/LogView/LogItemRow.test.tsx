@@ -14,8 +14,8 @@ const LOG: DiagnosticRecordDto = {
   level: "info",
   origin: "frontend",
   domain: "application",
-  target: "worksheet",
-  source: "worksheet",
+  target: "chart",
+  source: "chart",
   message: "Rendered chart successfully",
   fields: {},
 };
@@ -55,7 +55,7 @@ describe("LogItemRow", () => {
     expect(button.textContent).toContain("12:34:56");
     expect(button.textContent).toContain("info");
     expect(button.textContent).toContain("APP");
-    expect(button.textContent).toContain("[worksheet]");
+    expect(button.textContent).toContain("[chart]");
     expect(button.textContent).toContain("Rendered chart successfully");
   });
 

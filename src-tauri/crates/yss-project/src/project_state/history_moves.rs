@@ -159,7 +159,7 @@ impl ProjectState {
                 &data,
                 &graph_revisions,
                 &revisions,
-                &self.worksheet_revisions.read().unwrap(),
+                &self.chart_revisions.read().unwrap(),
             )
             .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
             let current_history = self.history.read().unwrap();
@@ -256,7 +256,7 @@ impl ProjectState {
         }
     }
 
-    pub(super) fn commit_worksheet_move_history_direction(
+    pub(super) fn commit_chart_move_history_direction(
         &self,
         project_instance_id: &ProjectInstanceId,
         undo: bool,
@@ -267,25 +267,25 @@ impl ProjectState {
         let move_patch = transaction.resource_move.ok_or_else(|| {
             ProjectHistoryMutationError::History("resource move history patch is missing".into())
         })?;
-        if move_patch.kind != yss_project_history::ResourceLifecycleKind::Worksheet {
+        if move_patch.kind != yss_project_history::ResourceLifecycleKind::Chart {
             return Err(ProjectHistoryMutationError::History(
-                "worksheet move history has a non-worksheet kind".into(),
+                "chart move history has a non-chart kind".into(),
             ));
         }
-        let yss_project_history::ResourceMoveHistoryPayload::Worksheet { document } =
+        let yss_project_history::ResourceMoveHistoryPayload::Chart { document } =
             move_patch.payload
         else {
             return Err(ProjectHistoryMutationError::History(
-                "worksheet move history has a non-worksheet payload".into(),
+                "chart move history has a non-chart payload".into(),
             ));
         };
-        let source = WorksheetResourcePath::parse(if undo {
+        let source = ChartResourcePath::parse(if undo {
             move_patch.to.as_ref()
         } else {
             move_patch.from.as_ref()
         })
         .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
-        let target = WorksheetResourcePath::parse(if undo {
+        let target = ChartResourcePath::parse(if undo {
             move_patch.from.as_ref()
         } else {
             move_patch.to.as_ref()
@@ -296,7 +296,7 @@ impl ProjectState {
             .map_err(history_project_error)?;
         if session.instance_id != *project_instance_id {
             return Err(ProjectHistoryMutationError::StaleProjectLifecycle(
-                "caller project changed before worksheet move History preparation".into(),
+                "caller project changed before chart move History preparation".into(),
             ));
         }
         let lease = self
@@ -309,26 +309,26 @@ impl ProjectState {
             .project_data
             .read()
             .unwrap()
-            .worksheets
+            .charts
             .get(&source)
             .cloned()
             .ok_or_else(|| {
                 ProjectHistoryMutationError::History(
-                    format!("worksheet '{}' is absent", source.as_str()).into(),
+                    format!("chart '{}' is absent", source.as_str()).into(),
                 )
             })?;
         let current_revision = self
-            .worksheet_revisions
+            .chart_revisions
             .read()
             .unwrap()
             .get(&source)
             .copied()
             .ok_or_else(|| {
                 ProjectHistoryMutationError::History(
-                    format!("worksheet '{}' has no revision authority", source.as_str()).into(),
+                    format!("chart '{}' has no revision authority", source.as_str()).into(),
                 )
             })?;
-        let expected_resource = ResourceKey::Worksheet(yss_project_history::WorksheetResourceKey(
+        let expected_resource = ResourceKey::Chart(yss_project_history::ChartResourceKey(
             source.as_str().into(),
         ));
         if request.resource != expected_resource {
@@ -349,20 +349,20 @@ impl ProjectState {
         let context = ProjectTransactionContext {
             session,
             operation_id: request.operation_id,
-            affected_resources: vec![ResourceKey::Worksheet(
-                yss_project_history::WorksheetResourceKey(source.as_str().into()),
-            )],
+            affected_resources: vec![ResourceKey::Chart(yss_project_history::ChartResourceKey(
+                source.as_str().into(),
+            ))],
             expected_revisions: [(
-                ResourceKey::Worksheet(yss_project_history::WorksheetResourceKey(
+                ResourceKey::Chart(yss_project_history::ChartResourceKey(
                     source.as_str().into(),
                 )),
                 current_revision,
             )]
             .into_iter()
             .collect(),
-            expected_absent_resources: [ResourceKey::Worksheet(
-                yss_project_history::WorksheetResourceKey(target.as_str().into()),
-            )]
+            expected_absent_resources: [ResourceKey::Chart(yss_project_history::ChartResourceKey(
+                target.as_str().into(),
+            ))]
             .into_iter()
             .collect(),
             recovery_marker: Some(self.project_recovery_marker()),
@@ -379,7 +379,7 @@ impl ProjectState {
         let committed_filesystem = prepared.commit().map_err(history_project_error)?;
         let publication = self.apply_resource_document_patch_internal(
             &context,
-            ProjectDataPatch::MoveWorksheet {
+            ProjectDataPatch::MoveChart {
                 from: source,
                 to: target,
                 moved: {

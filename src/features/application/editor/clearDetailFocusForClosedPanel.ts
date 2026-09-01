@@ -15,8 +15,8 @@ function shouldClearFocus(focus: DetailFocus, resourceRef: string): boolean {
   if (focus.kind === "event" || focus.kind === "function") {
     return focus.path === resourceRef;
   }
-  if (focus.kind === "worksheet") {
-    return focus.worksheetPath === resourceRef;
+  if (focus.kind === "chart") {
+    return focus.chartPath === resourceRef;
   }
   return false;
 }

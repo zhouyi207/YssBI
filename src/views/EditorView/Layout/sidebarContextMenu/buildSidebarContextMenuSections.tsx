@@ -225,22 +225,22 @@ export function buildSidebarContextMenuSections(
     ];
   }
 
-  if (target.type === "worksheetSection") {
+  if (target.type === "chartSection") {
     return [
       {
         items: [
           {
-            id: "new-worksheet",
-            label: t("contextMenu.sidebar.newWorksheet"),
+            id: "new-chart",
+            label: t("contextMenu.sidebar.newChart"),
             icon: <VscAdd size={12} />,
-            onClick: () => void actions.addWorksheet(),
+            onClick: () => void actions.addChart(),
           },
         ],
       },
     ];
   }
 
-  if (target.type === "worksheet") {
+  if (target.type === "chart") {
     return [
       {
         items: [
@@ -248,7 +248,7 @@ export function buildSidebarContextMenuSections(
             id: "open",
             label: t("contextMenu.sidebar.open"),
             icon: <VscChevronRight size={12} />,
-            onClick: () => actions.openWorksheet(target.worksheetPath, target.name),
+            onClick: () => actions.openChart(target.chartPath, target.name),
           },
           {
             id: "reveal-in-explorer",
@@ -256,21 +256,21 @@ export function buildSidebarContextMenuSections(
             icon: <VscFolderOpened size={12} />,
             onClick: () =>
               void actions.revealInExplorer({
-                kind: "worksheet",
-                resourceId: target.worksheetPath,
+                kind: "chart",
+                resourceId: target.chartPath,
               }),
           },
           {
             id: "rename",
             label: t("contextMenu.sidebar.rename"),
             icon: <VscEdit size={12} />,
-            onClick: () => actions.renameWorksheetItem(target.worksheetPath, target.name),
+            onClick: () => actions.renameChartItem(target.chartPath, target.name),
           },
           {
             id: "duplicate",
             label: t("contextMenu.sidebar.duplicate"),
             icon: <VscCopy size={12} />,
-            onClick: () => void actions.duplicateWorksheet(target.worksheetPath),
+            onClick: () => void actions.duplicateChart(target.chartPath),
           },
         ],
       },
@@ -281,7 +281,7 @@ export function buildSidebarContextMenuSections(
             label: t("contextMenu.sidebar.delete"),
             icon: <VscTrash size={12} />,
             danger: true,
-            onClick: () => void actions.deleteWorksheet(target.worksheetPath),
+            onClick: () => void actions.deleteChart(target.chartPath),
           },
         ],
       },

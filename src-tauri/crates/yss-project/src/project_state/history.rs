@@ -252,7 +252,7 @@ impl ProjectState {
             let data = self.project_data.read().unwrap().clone();
             let graph_revisions = self.graph_revisions.read().unwrap().clone();
             let variable_revisions = self.variable_revisions.read().unwrap().clone();
-            let worksheet_revisions = self.worksheet_revisions.read().unwrap().clone();
+            let chart_revisions = self.chart_revisions.read().unwrap().clone();
             let history = self.history.read().unwrap().clone();
             let transaction = if undo {
                 history.next_undo()
@@ -288,7 +288,7 @@ impl ProjectState {
                 data,
                 graph_revisions,
                 variable_revisions,
-                worksheet_revisions,
+                chart_revisions,
                 history,
             )?
         };
@@ -364,8 +364,8 @@ impl ProjectState {
                             request,
                             transaction,
                         ),
-                    Some(yss_project_history::ResourceMoveHistoryPayload::Worksheet { .. }) => self
-                        .commit_worksheet_move_history_direction(
+                    Some(yss_project_history::ResourceMoveHistoryPayload::Chart { .. }) => self
+                        .commit_chart_move_history_direction(
                             project_instance_id,
                             undo,
                             request,
@@ -385,18 +385,20 @@ impl ProjectState {
                 );
             }
             yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave => {
-                let touches_worksheet = transaction.resource_lifecycle.as_ref().is_some_and(
-                    |patch| {
+                let touches_chart = transaction
+                    .resource_lifecycle
+                    .as_ref()
+                    .is_some_and(|patch| {
                         matches!(
                             patch.payload,
-                            yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. }
+                            yss_project_history::ResourceLifecycleHistoryPayload::Chart { .. }
                         )
-                    },
-                ) || transaction
-                    .changes
-                    .iter()
-                    .any(|change| matches!(change.resource, ResourceKey::Worksheet(_)));
-                if touches_worksheet
+                    })
+                    || transaction
+                        .changes
+                        .iter()
+                        .any(|change| matches!(change.resource, ResourceKey::Chart(_)));
+                if touches_chart
                     || self.history_transaction_contains_unloaded_graph(&transaction, undo)?
                 {
                     let prepared = self.prepare_history_documents(
@@ -406,7 +408,7 @@ impl ProjectState {
                         &transaction.history_id,
                         transaction.persistence,
                     )?;
-                    debug_assert!(touches_worksheet || prepared.contains_unloaded_graph);
+                    debug_assert!(touches_chart || prepared.contains_unloaded_graph);
                     return self.commit_durable_history_documents(prepared, request);
                 }
             }
@@ -576,7 +578,7 @@ impl ProjectState {
             })
             .collect::<Result<Vec<_>, ProjectHistoryMutationError>>()?;
         if let Some(lifecycle) = &prepared.transaction.resource_lifecycle
-            && let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. } =
+            && let yss_project_history::ResourceLifecycleHistoryPayload::Chart { .. } =
                 lifecycle.payload
         {
             let mut forward = if prepared.basis.undo {
@@ -590,30 +592,29 @@ impl ProjectState {
                 .or(forward.after.as_ref())
                 .ok_or_else(|| {
                     ProjectHistoryMutationError::History(
-                        "Worksheet lifecycle History has neither a before nor an after state"
-                            .into(),
+                        "Chart lifecycle History has neither a before nor an after state".into(),
                     )
                 })?;
-            let worksheet_key = yss_project_history::WorksheetResourceKey(state.path.clone());
-            let resource = ResourceKey::Worksheet(worksheet_key.clone());
+            let chart_key = yss_project_history::ChartResourceKey(state.path.clone());
+            let resource = ResourceKey::Chart(chart_key.clone());
             let from_revision = prepared
                 .before
-                .worksheet_revisions
-                .get(&worksheet_key)
+                .chart_revisions
+                .get(&chart_key)
                 .copied()
                 .ok_or_else(|| {
                     ProjectHistoryMutationError::History(
-                        format!("Worksheet '{}' has no before revision", worksheet_key.0).into(),
+                        format!("Chart '{}' has no before revision", chart_key.0).into(),
                     )
                 })?;
             let to_revision = prepared
                 .after
-                .worksheet_revisions
-                .get(&worksheet_key)
+                .chart_revisions
+                .get(&chart_key)
                 .copied()
                 .ok_or_else(|| {
                     ProjectHistoryMutationError::History(
-                        format!("Worksheet '{}' has no after revision", worksheet_key.0).into(),
+                        format!("Chart '{}' has no after revision", chart_key.0).into(),
                     )
                 })?;
             if let Some(before) = forward.before.as_mut() {
@@ -683,7 +684,7 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             let mut graph_revisions = self.graph_revisions.write().unwrap();
             let mut variable_revisions = self.variable_revisions.write().unwrap();
-            let mut worksheet_revisions = self.worksheet_revisions.write().unwrap();
+            let mut chart_revisions = self.chart_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
             let current_head = if prepared.basis.undo {
                 history.next_undo()
@@ -753,11 +754,11 @@ impl ProjectState {
                                 .is_some_and(|document| document.value.is_some());
                             (entry.is_present() == expected_present).then_some(entry.revision)
                         }),
-                    ResourceKey::Worksheet(key) => {
-                        let path = WorksheetResourcePath::parse(key.0.as_ref()).ok();
+                    ResourceKey::Chart(key) => {
+                        let path = ChartResourcePath::parse(key.0.as_ref()).ok();
                         let revision = path
                             .as_ref()
-                            .and_then(|path| worksheet_revisions.get(path).copied());
+                            .and_then(|path| chart_revisions.get(path).copied());
                         let expected_present = prepared
                             .transaction
                             .resource_lifecycle
@@ -777,10 +778,10 @@ impl ProjectState {
                                     lifecycle.forward.before.is_some()
                                 }
                             })
-                            .unwrap_or_else(|| prepared.before.worksheets.contains_key(key));
+                            .unwrap_or_else(|| prepared.before.charts.contains_key(key));
                         let actual_present = path
                             .as_ref()
-                            .is_some_and(|path| data.worksheets.contains_key(path));
+                            .is_some_and(|path| data.charts.contains_key(path));
                         (expected_present == actual_present)
                             .then_some(revision)
                             .flatten()
@@ -803,7 +804,7 @@ impl ProjectState {
                 graph_revisions.insert(path, revision);
             }
             *variable_revisions = prepared.after_variable_revisions;
-            *worksheet_revisions = prepared.after_worksheet_revisions;
+            *chart_revisions = prepared.after_chart_revisions;
             *history = prepared.proposed_history;
             let publication_revision = publication.commit_prepared(publication_advance);
             debug_assert_eq!(publication.authority_generation(), projected_generation);
@@ -891,18 +892,18 @@ pub(crate) fn project_documents(
             .collect(),
         variables,
     );
-    documents.worksheets = data
-        .worksheets
+    documents.charts = data
+        .charts
         .iter()
         .map(|(path, document)| {
             (
-                yss_project_history::WorksheetResourceKey(path.as_str().into()),
+                yss_project_history::ChartResourceKey(path.as_str().into()),
                 document.clone(),
             )
         })
         .collect();
-    documents.worksheet_revisions = documents
-        .worksheets
+    documents.chart_revisions = documents
+        .charts
         .iter()
         .map(|(key, document)| (key.clone(), document.revision))
         .collect();
@@ -926,10 +927,7 @@ pub(super) fn try_project_document_revision(
             .variables
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Worksheet(key) => documents
-            .worksheets
-            .get(key)
-            .map(|document| document.revision),
+        ResourceKey::Chart(key) => documents.charts.get(key).map(|document| document.revision),
         ResourceKey::Database(_) => None,
     }
 }
@@ -953,13 +951,13 @@ pub(crate) fn replace_project_documents(
     >,
     mut documents: ProjectDocumentState,
 ) -> Result<(), ProjectHistoryMutationError> {
-    let worksheets = documents
-        .worksheets
+    let charts = documents
+        .charts
         .into_iter()
         .map(|(key, document)| {
-            let path = WorksheetResourcePath::parse(key.0.as_ref()).map_err(|error| {
+            let path = ChartResourcePath::parse(key.0.as_ref()).map_err(|error| {
                 ProjectHistoryMutationError::History(
-                    format!("invalid Worksheet history path '{}': {error}", key.0).into(),
+                    format!("invalid Chart history path '{}': {error}", key.0).into(),
                 )
             })?;
             Ok((path, document))
@@ -1005,7 +1003,7 @@ pub(crate) fn replace_project_documents(
             graph.function = Some(function);
         }
     }
-    data.worksheets = worksheets;
+    data.charts = charts;
     for (variable_id, revision, value) in variables {
         let presence = match value {
             Some(variable) => {

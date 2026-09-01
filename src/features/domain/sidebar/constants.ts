@@ -46,5 +46,5 @@ export const TYPE_ICON_COLORS: Record<string, string> = {
   variable: "var(--muted-foreground)",
   variableGlobal: "var(--status-warning)",
   data: "var(--status-success)",
-  worksheet: "var(--pin-temporal)",
+  chart: "var(--pin-temporal)",
 };

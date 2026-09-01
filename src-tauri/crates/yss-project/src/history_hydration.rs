@@ -1,18 +1,18 @@
 use crate::ProjectSession;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_project_filesystem::{ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet};
 use yss_project_history::{
-    HistoryMutation, HistoryPersistencePolicy, MutationRequest, ProjectDocumentState,
-    ProjectHistory, ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
-    VariableDocument, VariableResourceKey, WorksheetResourceKey,
+    ChartResourceKey, HistoryMutation, HistoryPersistencePolicy, MutationRequest,
+    ProjectDocumentState, ProjectHistory, ProjectHistoryMutationError, ProjectHistoryTransaction,
+    ResourceKey, VariableDocument, VariableResourceKey,
 };
 use yss_project_identity::{HistoryEntryId, ResourceRevision};
-use yss_project_layout::{GLOBAL_VARIABLES_FILE, WORKSHEET_EXTENSION};
+use yss_project_layout::{CHART_EXTENSION, GLOBAL_VARIABLES_FILE};
 use yss_project_model::ProjectData;
 use yss_variable_contract::{VariableInstance, VariableScope};
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HistoryGraphResidency {
@@ -43,8 +43,7 @@ pub(super) struct PreparedHistoryDocuments {
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
-    pub after_worksheet_revisions:
-        std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
+    pub after_chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     pub transaction: ProjectHistoryTransaction,
     pub proposed_history: ProjectHistory,
     pub touched_graphs: BTreeSet<GraphResourcePath>,
@@ -62,7 +61,7 @@ pub(super) struct HistoryPreparationSnapshot {
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
-    worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
+    chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     history: ProjectHistory,
     data: ProjectData,
     documents: ProjectDocumentState,
@@ -74,7 +73,7 @@ pub(super) struct TouchedHistoryResources {
     pub graphs: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
     pub local_variable_owners: BTreeMap<VariableResourceKey, GraphResourcePath>,
     pub global_variables: BTreeSet<VariableResourceKey>,
-    pub worksheets: BTreeSet<WorksheetResourceKey>,
+    pub charts: BTreeSet<ChartResourceKey>,
 }
 
 pub(super) fn discover_touched_resources(
@@ -87,7 +86,7 @@ pub(super) fn discover_touched_resources(
         graphs: BTreeMap::new(),
         local_variable_owners: BTreeMap::new(),
         global_variables: BTreeSet::new(),
-        worksheets: BTreeSet::new(),
+        charts: BTreeSet::new(),
     };
 
     for change in &transaction.changes {
@@ -138,8 +137,8 @@ pub(super) fn discover_touched_resources(
                     }
                 }
             }
-            ResourceKey::Worksheet(key) => {
-                touched.worksheets.insert(key.clone());
+            ResourceKey::Chart(key) => {
+                touched.charts.insert(key.clone());
             }
             ResourceKey::Database(_) => {}
         }
@@ -150,12 +149,10 @@ pub(super) fn discover_touched_resources(
             .before
             .as_ref()
             .or(lifecycle.forward.after.as_ref());
-        if let Some(state) = state
-            .filter(|state| state.kind == yss_project_history::ResourceLifecycleKind::Worksheet)
+        if let Some(state) =
+            state.filter(|state| state.kind == yss_project_history::ResourceLifecycleKind::Chart)
         {
-            touched
-                .worksheets
-                .insert(WorksheetResourceKey(state.path.clone()));
+            touched.charts.insert(ChartResourceKey(state.path.clone()));
         }
     }
 
@@ -178,16 +175,16 @@ pub(super) fn capture_history_preparation_snapshot(
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
-    worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
+    chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     history: ProjectHistory,
 ) -> Result<HistoryPreparationSnapshot, ProjectHistoryMutationError> {
     let known_graphs = graph_revisions.keys().cloned().collect();
     let touched = discover_touched_resources(&transaction, undo, &data, &known_graphs)
         .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
     let mut documents = super::project_state::project_documents(&data, &variable_revisions)?;
-    documents.worksheet_revisions = worksheet_revisions
+    documents.chart_revisions = chart_revisions
         .iter()
-        .map(|(path, revision)| (WorksheetResourceKey(path.as_str().into()), *revision))
+        .map(|(path, revision)| (ChartResourceKey(path.as_str().into()), *revision))
         .collect();
     retain_required_documents(&mut documents, &transaction, anchor, &touched.graphs);
     let graph_revisions = graph_revisions
@@ -201,7 +198,7 @@ pub(super) fn capture_history_preparation_snapshot(
         transaction,
         graph_revisions,
         variable_revisions,
-        worksheet_revisions,
+        chart_revisions,
         history,
         data,
         documents,
@@ -242,8 +239,8 @@ fn retain_required_documents(
                 .and_then(|variable| variable_owner_path(&variable))
                 .is_some_and(|path| touched_graphs.contains_key(&path))
     });
-    documents.worksheets.retain(|key, _| {
-        required.contains(&ResourceKey::Worksheet(key.clone()))
+    documents.charts.retain(|key, _| {
+        required.contains(&ResourceKey::Chart(key.clone()))
             || transaction
                 .resource_lifecycle
                 .as_ref()
@@ -290,7 +287,7 @@ pub(super) fn hydrate_history_preparation(
     }
     validate_loaded_graph_revisions(&snapshot)?;
     install_touched_variable_tombstones(&mut snapshot)?;
-    install_touched_worksheet_tombstone(&mut snapshot)?;
+    install_touched_chart_tombstone(&mut snapshot)?;
     let expected_revisions = expected_revisions(&snapshot)?;
     let current_revision =
         document_revision(&snapshot.documents, &request.resource).ok_or_else(|| {
@@ -323,31 +320,31 @@ pub(super) fn hydrate_history_preparation(
             "history head changed during preparation".into(),
         ));
     }
-    let mut after_worksheet_revisions = snapshot.worksheet_revisions.clone();
-    for key in &snapshot.touched.worksheets {
-        let path = WorksheetResourcePath::parse(key.0.as_ref())
+    let mut after_chart_revisions = snapshot.chart_revisions.clone();
+    for key in &snapshot.touched.charts {
+        let path = ChartResourcePath::parse(key.0.as_ref())
             .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let revision = snapshot
-            .worksheet_revisions
+            .chart_revisions
             .get(&path)
             .copied()
             .ok_or_else(|| {
                 ProjectHistoryMutationError::History(
-                    format!("Worksheet '{}' has no revision authority", key.0).into(),
+                    format!("Chart '{}' has no revision authority", key.0).into(),
                 )
             })?
             .checked_next()
             .map_err(|error| {
                 ProjectHistoryMutationError::History(
                     format!(
-                        "Worksheet '{}' revision is exhausted at {}",
+                        "Chart '{}' revision is exhausted at {}",
                         key.0, error.retained
                     )
                     .into(),
                 )
             })?;
-        after_worksheet_revisions.insert(path, revision);
-        if let Some(document) = after.worksheets.get_mut(key) {
+        after_chart_revisions.insert(path, revision);
+        if let Some(document) = after.charts.get_mut(key) {
             document.revision = revision;
         }
     }
@@ -392,7 +389,7 @@ pub(super) fn hydrate_history_preparation(
         after_data,
         loaded_after_data,
         after_variable_revisions: snapshot.variable_revisions,
-        after_worksheet_revisions,
+        after_chart_revisions,
         transaction,
         proposed_history,
         touched_graphs,
@@ -617,13 +614,13 @@ fn install_touched_variable_tombstones(
     Ok(())
 }
 
-fn install_touched_worksheet_tombstone(
+fn install_touched_chart_tombstone(
     snapshot: &mut HistoryPreparationSnapshot,
 ) -> Result<(), ProjectHistoryMutationError> {
     let Some(lifecycle) = &snapshot.transaction.resource_lifecycle else {
         return Ok(());
     };
-    let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { document } =
+    let yss_project_history::ResourceLifecycleHistoryPayload::Chart { document } =
         &lifecycle.payload
     else {
         return Ok(());
@@ -636,29 +633,29 @@ fn install_touched_worksheet_tombstone(
         .ok_or_else(|| {
             ProjectHistoryMutationError::History("resource lifecycle patch is empty".into())
         })?;
-    if state.kind != yss_project_history::ResourceLifecycleKind::Worksheet {
+    if state.kind != yss_project_history::ResourceLifecycleKind::Chart {
         return Err(ProjectHistoryMutationError::History(
-            "worksheet lifecycle payload has a non-worksheet kind".into(),
+            "chart lifecycle payload has a non-chart kind".into(),
         ));
     }
-    let key = WorksheetResourceKey(state.path.clone());
-    if snapshot.documents.worksheets.contains_key(&key) {
+    let key = ChartResourceKey(state.path.clone());
+    if snapshot.documents.charts.contains_key(&key) {
         return Ok(());
     }
-    let path = WorksheetResourcePath::parse(state.path.as_ref())
+    let path = ChartResourcePath::parse(state.path.as_ref())
         .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
     let revision = snapshot
-        .worksheet_revisions
+        .chart_revisions
         .get(&path)
         .copied()
         .ok_or_else(|| {
             ProjectHistoryMutationError::History(
-                format!("Worksheet '{}' has no tombstone revision", state.path).into(),
+                format!("Chart '{}' has no tombstone revision", state.path).into(),
             )
         })?;
     let mut document = document.clone();
     document.revision = revision;
-    snapshot.documents.worksheets.insert(key, document);
+    snapshot.documents.charts.insert(key, document);
     Ok(())
 }
 
@@ -675,19 +672,19 @@ fn expected_revisions(
             })?;
         revisions.insert(change.resource.clone(), revision);
     }
-    for key in &snapshot.touched.worksheets {
-        let path = WorksheetResourcePath::parse(key.0.as_ref())
+    for key in &snapshot.touched.charts {
+        let path = ChartResourcePath::parse(key.0.as_ref())
             .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
         let revision = snapshot
-            .worksheet_revisions
+            .chart_revisions
             .get(&path)
             .copied()
             .ok_or_else(|| {
                 ProjectHistoryMutationError::History(
-                    format!("Worksheet '{}' has no revision authority", key.0).into(),
+                    format!("Chart '{}' has no revision authority", key.0).into(),
                 )
             })?;
-        revisions.insert(ResourceKey::Worksheet(key.clone()), revision);
+        revisions.insert(ResourceKey::Chart(key.clone()), revision);
     }
     Ok(revisions)
 }
@@ -709,10 +706,7 @@ fn document_revision(
             .variables
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Worksheet(key) => documents
-            .worksheets
-            .get(key)
-            .map(|document| document.revision),
+        ResourceKey::Chart(key) => documents.charts.get(key).map(|document| document.revision),
         ResourceKey::Database(_) => None,
     }
 }
@@ -735,17 +729,17 @@ pub(super) fn durable_filesystem_mutations(
         .changes
         .iter()
         .filter_map(|change| {
-            let ResourceKey::Worksheet(key) = &change.resource else {
+            let ResourceKey::Chart(key) = &change.resource else {
                 return None;
             };
             Some(key.clone())
         })
         .collect::<BTreeSet<_>>()
     {
-        push_worksheet_filesystem_mutation(&mut mutations, &prepared.after, key)?;
+        push_chart_filesystem_mutation(&mut mutations, &prepared.after, key)?;
     }
     if let Some(lifecycle) = &prepared.transaction.resource_lifecycle
-        && let yss_project_history::ResourceLifecycleHistoryPayload::Worksheet { .. } =
+        && let yss_project_history::ResourceLifecycleHistoryPayload::Chart { .. } =
             lifecycle.payload
     {
         let state = lifecycle
@@ -754,10 +748,10 @@ pub(super) fn durable_filesystem_mutations(
             .as_ref()
             .or(lifecycle.forward.after.as_ref())
             .ok_or_else(|| history_conflict("resource lifecycle patch is empty"))?;
-        push_worksheet_filesystem_mutation(
+        push_chart_filesystem_mutation(
             &mut mutations,
             &prepared.after,
-            &WorksheetResourceKey(state.path.clone()),
+            &ChartResourceKey(state.path.clone()),
         )?;
     }
     if prepared.transaction.changes.iter().any(|change| {
@@ -783,16 +777,16 @@ pub(super) fn durable_filesystem_mutations(
     Ok(mutations)
 }
 
-fn push_worksheet_filesystem_mutation(
+fn push_chart_filesystem_mutation(
     mutations: &mut Vec<yss_project_filesystem::StagedFilesystemMutation>,
     documents: &ProjectDocumentState,
-    key: &WorksheetResourceKey,
+    key: &ChartResourceKey,
 ) -> Result<(), ProjectHistoryMutationError> {
-    let path = WorksheetResourcePath::parse(key.0.as_ref())
+    let path = ChartResourcePath::parse(key.0.as_ref())
         .map_err(|error| history_conflict(error.to_string()))?;
-    if let Some(document) = documents.worksheets.get(key) {
+    if let Some(document) = documents.charts.get(key) {
         let (relative_path, contents) =
-            crate::serialize_worksheet(&path, document).map_err(history_conflict)?;
+            crate::serialize_chart(&path, document).map_err(history_conflict)?;
         mutations.push(yss_project_filesystem::StagedFilesystemMutation::Write {
             relative_path,
             contents,
@@ -814,9 +808,9 @@ pub(super) fn validate_durable_history_document(
     if relative_path
         .extension()
         .and_then(|extension| extension.to_str())
-        == Some(WORKSHEET_EXTENSION)
+        == Some(CHART_EXTENSION)
     {
-        return serde_json::from_slice::<WorksheetDocument>(contents)
+        return serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string());
     }

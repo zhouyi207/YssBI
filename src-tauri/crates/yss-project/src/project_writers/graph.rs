@@ -60,18 +60,18 @@ impl ProjectState {
                 contents,
             });
         }
-        let mut worksheet_paths = snapshot.data.worksheets.keys().cloned().collect::<Vec<_>>();
-        worksheet_paths.sort();
-        for path in worksheet_paths {
-            let document = snapshot.data.worksheets.get(&path).ok_or_else(|| {
+        let mut chart_paths = snapshot.data.charts.keys().cloned().collect::<Vec<_>>();
+        chart_paths.sort();
+        for path in chart_paths {
+            let document = snapshot.data.charts.get(&path).ok_or_else(|| {
                 prepare_error(format!(
-                    "Worksheet '{}' disappeared from the save snapshot",
+                    "Chart '{}' disappeared from the save snapshot",
                     path.as_str()
                 ))
             })?;
-            expected.insert(worksheet_key(&path), document.revision);
+            expected.insert(chart_key(&path), document.revision);
             let (relative_path, contents) =
-                crate::serialize_worksheet(&path, document).map_err(prepare_error)?;
+                crate::serialize_chart(&path, document).map_err(prepare_error)?;
             mutations.push(StagedFilesystemMutation::Write {
                 relative_path,
                 contents,

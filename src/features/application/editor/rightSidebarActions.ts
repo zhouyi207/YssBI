@@ -9,8 +9,8 @@ export function detailFocusForEditorResource(
   resourceKind: EditorResourceKind,
   resourceRef: string,
 ): DetailFocus {
-  if (resourceKind === "worksheet") {
-    return { kind: "worksheet", worksheetPath: resourceRef };
+  if (resourceKind === "chart") {
+    return { kind: "chart", chartPath: resourceRef };
   }
   return { kind: resourceKind, path: resourceRef };
 }

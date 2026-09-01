@@ -8,7 +8,7 @@ import type {
   EditorSessionProjectActions,
   EditorSessionPanelActions,
   EditorSessionVariableActions,
-  EditorSessionWorksheetActions,
+  EditorSessionChartActions,
 } from "./editorSessionTypes";
 
 /** Stable command-only surface assembled by EditorSessionProvider. */
@@ -16,7 +16,7 @@ export type EditorSessionCommands = EditorSessionLayoutBindings &
   EditorSessionHistoryActions &
   EditorSessionCanvasActions &
   EditorSessionPanelActions &
-  EditorSessionWorksheetActions &
+  EditorSessionChartActions &
   EditorSessionProjectActions &
   EditorSessionGraphActions &
   EditorSessionVariableActions &

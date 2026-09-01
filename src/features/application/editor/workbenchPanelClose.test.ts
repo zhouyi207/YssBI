@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => {
   const panels: FakePanel[] = [];
   const dirty = new Set<string>();
   const project = { projectInstanceId: "project-a", epoch: 1, available: true };
-  const worksheetState = {
+  const chartState = {
     index: [] as Array<Record<string, unknown>>,
     documents: {} as Record<string, unknown>,
   };
@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => {
 
   const confirm3 = vi.fn();
   const saveProjectGraph = vi.fn();
-  const saveWorksheet = vi.fn();
+  const saveChart = vi.fn();
   const captureGraphSaveContext = vi.fn();
   const isGraphSaveRevisionCurrent = vi.fn();
   const markResourceDirty = vi.fn();
@@ -57,16 +57,14 @@ const mocks = vi.hoisted(() => {
   const deactivateGraphPanelSession = vi.fn();
   const unloadGraphDocument = vi.fn();
   const resolveResourceDisplayName = vi.fn();
-  const applyWorksheetState = (update: unknown) => {
+  const applyChartState = (update: unknown) => {
     const patch =
       typeof update === "function"
-        ? (update as (state: typeof worksheetState) => Partial<typeof worksheetState>)(
-            worksheetState,
-          )
-        : (update as Partial<typeof worksheetState>);
-    Object.assign(worksheetState, patch);
+        ? (update as (state: typeof chartState) => Partial<typeof chartState>)(chartState)
+        : (update as Partial<typeof chartState>);
+    Object.assign(chartState, patch);
   };
-  const setWorksheetState = vi.fn(applyWorksheetState);
+  const setChartState = vi.fn(applyChartState);
 
   const isAuthorized = (authorize?: () => boolean): boolean => {
     if (!authorize) return true;
@@ -109,14 +107,14 @@ const mocks = vi.hoisted(() => {
     project.projectInstanceId = "project-a";
     project.epoch = 1;
     project.available = true;
-    worksheetState.index = [];
-    worksheetState.documents = {};
+    chartState.index = [];
+    chartState.documents = {};
     fifo = Promise.resolve();
 
     for (const mock of [
       confirm3,
       saveProjectGraph,
-      saveWorksheet,
+      saveChart,
       captureGraphSaveContext,
       isGraphSaveRevisionCurrent,
       markResourceDirty,
@@ -130,7 +128,7 @@ const mocks = vi.hoisted(() => {
       deactivateGraphPanelSession,
       unloadGraphDocument,
       resolveResourceDisplayName,
-      setWorksheetState,
+      setChartState,
       commitRemove,
       runPublicationTransaction,
     ]) {
@@ -139,7 +137,7 @@ const mocks = vi.hoisted(() => {
 
     confirm3.mockResolvedValue("discard");
     saveProjectGraph.mockResolvedValue(undefined);
-    saveWorksheet.mockResolvedValue(true);
+    saveChart.mockResolvedValue(true);
     captureGraphSaveContext.mockResolvedValue({
       projectInstanceId: "project-a",
       projectEpoch: 1,
@@ -149,11 +147,11 @@ const mocks = vi.hoisted(() => {
     });
     isGraphSaveRevisionCurrent.mockReturnValue(true);
     unloadGraphDocument.mockResolvedValue(undefined);
-    setWorksheetState.mockImplementation(applyWorksheetState);
+    setChartState.mockImplementation(applyChartState);
     resolveResourceDisplayName.mockImplementation((_ref: unknown, fallback: string) => {
       const segments = fallback.split("/");
       const leaf = segments[segments.length - 1] ?? fallback;
-      return leaf.replace(/\.yssbi-(event|function|worksheet)$/, "");
+      return leaf.replace(/\.yssbi-(event|function|chart)$/, "");
     });
     commitRemove.mockImplementation((tokens: readonly Token[], authorize?: () => boolean) =>
       enqueue(() => {
@@ -185,11 +183,11 @@ const mocks = vi.hoisted(() => {
     panels,
     dirty,
     project,
-    worksheetState,
+    chartState,
     dirtyKey,
     confirm3,
     saveProjectGraph,
-    saveWorksheet,
+    saveChart,
     captureGraphSaveContext,
     isGraphSaveRevisionCurrent,
     markResourceDirty,
@@ -203,7 +201,7 @@ const mocks = vi.hoisted(() => {
     deactivateGraphPanelSession,
     unloadGraphDocument,
     resolveResourceDisplayName,
-    setWorksheetState,
+    setChartState,
     commitRemove,
     runPublicationTransaction,
     reset,
@@ -252,18 +250,18 @@ vi.mock("@/services/graph/graphService", () => ({
   GraphService: { saveProjectGraph: mocks.saveProjectGraph },
 }));
 
-vi.mock("@/features/core/worksheet/worksheetStore", () => ({
-  useWorksheetStore: {
+vi.mock("@/features/core/chart/chartDocumentStore", () => ({
+  useChartDocumentStore: {
     getState: () => ({
-      ...mocks.worksheetState,
-      saveDocument: mocks.saveWorksheet,
+      ...mocks.chartState,
+      saveDocument: mocks.saveChart,
     }),
-    setState: mocks.setWorksheetState,
+    setState: mocks.setChartState,
   },
 }));
 
-vi.mock("@/features/application/worksheet/saveWorksheetDocument", () => ({
-  saveWorksheetDocument: mocks.saveWorksheet,
+vi.mock("@/features/application/chart/saveChartDocument", () => ({
+  saveChartDocument: mocks.saveChart,
 }));
 
 vi.mock("@/features/application/projectCommandContext", () => ({
@@ -434,11 +432,11 @@ describe("workbench panel close coordinator", () => {
 
   it("prompts once for duplicate editors and finalizes only committed resources", async () => {
     const graphPath = "events/Main.yssbi-event";
-    const worksheetPath = "worksheets/Summary.yssbi-worksheet";
+    const chartPath = "charts/Summary.yssbi-chart";
     seedPanels([
       editorPanel("editor-a", graphPath, "event", "group-a"),
       editorPanel("editor-b", graphPath, "event", "group-b"),
-      editorPanel("worksheet-a", worksheetPath, "worksheet", "group-b"),
+      editorPanel("chart-a", chartPath, "chart", "group-b"),
       viewPanel("logs-a", "logs", "group-b"),
       resultPanel("result-a", "group-b"),
     ]);
@@ -449,7 +447,7 @@ describe("workbench panel close coordinator", () => {
       requestCloseWorkbenchPanels([
         "editor-a",
         "editor-b",
-        "worksheet-a",
+        "chart-a",
         "logs-a",
         "result-a",
         "editor-a",
@@ -462,14 +460,14 @@ describe("workbench panel close coordinator", () => {
     expect(tokens.map(({ panelInstanceId, groupId }) => ({ panelInstanceId, groupId }))).toEqual([
       { panelInstanceId: "editor-a", groupId: "group-a" },
       { panelInstanceId: "editor-b", groupId: "group-b" },
-      { panelInstanceId: "worksheet-a", groupId: "group-b" },
+      { panelInstanceId: "chart-a", groupId: "group-b" },
       { panelInstanceId: "logs-a", groupId: "group-b" },
       { panelInstanceId: "result-a", groupId: "group-b" },
     ]);
     expect(mocks.releasePane.mock.calls.map(([panelId]) => panelId)).toEqual([
       "editor-a",
       "editor-b",
-      "worksheet-a",
+      "chart-a",
     ]);
     expect(mocks.releaseEditorViewport).toHaveBeenCalledTimes(2);
     expect(mocks.releaseEditorViewport).toHaveBeenCalledWith({
@@ -481,19 +479,19 @@ describe("workbench panel close coordinator", () => {
       graphPath,
     });
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(graphPath);
-    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(chartPath);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledTimes(2);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: graphPath,
       kind: "event",
     });
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
-      id: worksheetPath,
-      kind: "worksheet",
+      id: chartPath,
+      kind: "chart",
     });
     expect(mocks.unloadGraphDocument).toHaveBeenCalledOnce();
     expect(mocks.unloadGraphDocument).toHaveBeenCalledWith(graphPath);
-    expect(mocks.unloadGraphDocument).not.toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.unloadGraphDocument).not.toHaveBeenCalledWith(chartPath);
   });
 
   it("does not preflight or release shared state when another editor for the resource remains", async () => {
@@ -721,16 +719,16 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.panels).toHaveLength(2);
   });
 
-  it("removes nothing when the existing worksheet save lifecycle does not commit", async () => {
-    const worksheetPath = "worksheets/Summary.yssbi-worksheet";
-    seedPanels([editorPanel("worksheet-a", worksheetPath, "worksheet")]);
-    markDirty(worksheetPath, "worksheet");
+  it("removes nothing when the existing chart save lifecycle does not commit", async () => {
+    const chartPath = "charts/Summary.yssbi-chart";
+    seedPanels([editorPanel("chart-a", chartPath, "chart")]);
+    markDirty(chartPath, "chart");
     mocks.confirm3.mockResolvedValueOnce("confirm");
-    mocks.saveWorksheet.mockResolvedValueOnce(false);
+    mocks.saveChart.mockResolvedValueOnce(false);
 
-    await expect(requestCloseWorkbenchPanel("worksheet-a")).resolves.toBe(false);
+    await expect(requestCloseWorkbenchPanel("chart-a")).resolves.toBe(false);
 
-    expect(mocks.saveWorksheet).toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.saveChart).toHaveBeenCalledWith(chartPath);
     expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
     expect(mocks.showBlockingMessage).toHaveBeenCalledOnce();
     expect(mocks.commitRemove).not.toHaveBeenCalled();
@@ -739,25 +737,25 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.panels).toHaveLength(1);
   });
 
-  it("evicts the last discarded worksheet document while preserving its index entry", async () => {
-    const worksheetPath = "worksheets/Summary.yssbi-worksheet";
-    const indexEntry = { worksheetPath, name: "Summary" };
+  it("evicts the last discarded chart document while preserving its index entry", async () => {
+    const chartPath = "charts/Summary.yssbi-chart";
+    const indexEntry = { chartPath, name: "Summary" };
     const document = { revision: 7, chartType: "scatter" };
-    mocks.worksheetState.index = [indexEntry];
-    mocks.worksheetState.documents = { [worksheetPath]: document };
-    seedPanels([editorPanel("worksheet-a", worksheetPath, "worksheet")]);
-    markDirty(worksheetPath, "worksheet");
+    mocks.chartState.index = [indexEntry];
+    mocks.chartState.documents = { [chartPath]: document };
+    seedPanels([editorPanel("chart-a", chartPath, "chart")]);
+    markDirty(chartPath, "chart");
     mocks.confirm3.mockResolvedValueOnce("discard");
 
-    await expect(requestCloseWorkbenchPanel("worksheet-a")).resolves.toBe(true);
+    await expect(requestCloseWorkbenchPanel("chart-a")).resolves.toBe(true);
 
-    expect(mocks.worksheetState.documents).not.toHaveProperty(worksheetPath);
-    expect(mocks.worksheetState.index).toEqual([indexEntry]);
+    expect(mocks.chartState.documents).not.toHaveProperty(chartPath);
+    expect(mocks.chartState.index).toEqual([indexEntry]);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
-      id: worksheetPath,
-      kind: "worksheet",
+      id: chartPath,
+      kind: "chart",
     });
-    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(worksheetPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(chartPath);
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalled();
   });
 

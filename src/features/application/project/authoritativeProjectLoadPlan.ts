@@ -15,7 +15,7 @@ import {
   type ResourceKey,
 } from "@/features/core/resource";
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
-import type { WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
+import type { ChartIndexEntry } from "@/shared/types/domain/chart";
 import type { DetailFocus } from "@/shared/types/ui/detail";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import { LoadStatus } from "@/shared/types/ui/common";
@@ -34,7 +34,7 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
     readonly variables: Record<string, Variable>;
     readonly variableRevisions: Record<string, number>;
     readonly graphMeta: Record<string, GraphMeta>;
-    readonly worksheetIndex: WorksheetIndexEntry[];
+    readonly chartIndex: ChartIndexEntry[];
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
     readonly detailFocus: DetailFocus | null;
@@ -65,7 +65,7 @@ export interface AuthoritativeProjectLoadPlanDependencies {
   prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta>;
   prepareResourceState(input: {
     graphs: ProjectGraphIndexRow[];
-    worksheets: WorksheetIndexEntry[];
+    charts: ChartIndexEntry[];
     variables: Record<string, Variable>;
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
@@ -105,23 +105,23 @@ function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, Gr
 
 export function buildProjectResourceState(input: {
   graphs: ProjectGraphIndexRow[];
-  worksheets: WorksheetIndexEntry[];
+  charts: ChartIndexEntry[];
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
-  loadedWorksheetPaths?: ReadonlySet<string>;
+  loadedChartPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
   const resources: ProjectResourceMeta[] = input.graphs.map((graph) =>
     buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }),
   );
-  for (const worksheet of input.worksheets) {
+  for (const chart of input.charts) {
     resources.push({
-      id: worksheet.worksheetPath,
-      kind: "worksheet",
-      name: worksheet.name,
-      uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
-      revision: worksheet.revision,
+      id: chart.chartPath,
+      kind: "chart",
+      name: chart.name,
+      uri: `yssbi://chart/${chart.chartPath}`,
+      revision: chart.revision,
       exists: true,
-      loaded: input.loadedWorksheetPaths?.has(worksheet.worksheetPath) ?? false,
+      loaded: input.loadedChartPaths?.has(chart.chartPath) ?? false,
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -177,27 +177,25 @@ export function buildAuthoritativeProjectLoadPlan(
     ]),
   );
   const variableState = dependencies.normalizeVariables(source.index);
-  const worksheetIndex = source.index.worksheets.map((worksheet) => ({
-    worksheetPath: worksheet.worksheetPath,
-    name: worksheet.name,
-    databaseId: worksheet.databaseId,
-    chartType: worksheet.chartType as WorksheetIndexEntry["chartType"],
-    revision: worksheet.revision,
+  const chartIndex = source.index.charts.map((chart) => ({
+    chartPath: chart.chartPath,
+    name: chart.name,
+    databaseId: chart.databaseId,
+    chartType: chart.chartType as ChartIndexEntry["chartType"],
+    revision: chart.revision,
   }));
   const graphMeta = dependencies.prepareFunctionState(source.index.graphs);
   const resourceState = dependencies.prepareResourceState({
     graphs: source.index.graphs,
-    worksheets: worksheetIndex,
+    charts: chartIndex,
     variables: variableState.variables,
     databases,
   });
-  const authoritativeWorksheetPaths = new Set(
-    worksheetIndex.map((worksheet) => worksheet.worksheetPath),
-  );
+  const authoritativeChartPaths = new Set(chartIndex.map((chart) => chart.chartPath));
 
   const detailFocus =
-    context.detailFocus?.kind === "worksheet" &&
-    authoritativeWorksheetPaths.has(context.detailFocus.worksheetPath)
+    context.detailFocus?.kind === "chart" &&
+    authoritativeChartPaths.has(context.detailFocus.chartPath)
       ? structuredClone(context.detailFocus)
       : null;
   dependencies.validateCoordinatorStart(
@@ -221,7 +219,7 @@ export function buildAuthoritativeProjectLoadPlan(
       variables: variableState.variables,
       variableRevisions: variableState.revisions,
       graphMeta,
-      worksheetIndex,
+      chartIndex,
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,
       detailFocus,

@@ -171,7 +171,7 @@ function recoveryIndex(graphPaths: string[]): ProjectIndexRow {
           },
     ),
     variables: [],
-    worksheets: [],
+    charts: [],
     databases: [],
   };
 }

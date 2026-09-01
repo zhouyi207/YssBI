@@ -1,6 +1,6 @@
 import { lookupGraphResource, useResourceStore } from "@/features/core/resource";
 import type { ResourceRef } from "@/features/core/resource/resourceTypes";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 
 /** Display label for tabs / close-save prompts — ResourceStore is the source of truth. */
 export function resolveResourceDisplayName(ref: ResourceRef | null, fallbackId = ""): string {
@@ -11,10 +11,10 @@ export function resolveResourceDisplayName(ref: ResourceRef | null, fallbackId =
     return meta?.name ?? fallbackId ?? ref.id;
   }
 
-  if (ref.kind === "worksheet") {
-    const indexEntry = useWorksheetStore
+  if (ref.kind === "chart") {
+    const indexEntry = useChartDocumentStore
       .getState()
-      .index.find((worksheet) => worksheet.worksheetPath === ref.id);
+      .index.find((chart) => chart.chartPath === ref.id);
     return indexEntry?.name ?? fallbackId ?? ref.id;
   }
 

@@ -12,7 +12,7 @@ import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
   buildGraphResourceMeta,
   useResourceStore,
@@ -131,11 +131,11 @@ function normalizeVariables(
 
 function buildResourceIndex(params: {
   graphs: Array<{ path: string; name: string; type: "event" | "function"; revision?: number }>;
-  worksheets: Array<{
-    worksheetPath: string;
+  charts: Array<{
+    chartPath: string;
     name: string;
     databaseId: string;
-    chartType: import("@/shared/types/domain/worksheet").WorksheetChartType;
+    chartType: import("@/shared/types/domain/chart").ChartType;
     revision: number;
   }>;
   variables: Record<string, Variable>;
@@ -149,15 +149,15 @@ function buildResourceIndex(params: {
       }),
     );
   }
-  for (const worksheet of params.worksheets) {
+  for (const chart of params.charts) {
     resources.push({
-      id: worksheet.worksheetPath,
-      kind: "worksheet",
-      name: worksheet.name,
-      uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
-      revision: worksheet.revision,
+      id: chart.chartPath,
+      kind: "chart",
+      name: chart.name,
+      uri: `yssbi://chart/${chart.chartPath}`,
+      revision: chart.revision,
       exists: true,
-      loaded: Boolean(useWorksheetStore.getState().documents[worksheet.worksheetPath]),
+      loaded: Boolean(useChartDocumentStore.getState().documents[chart.chartPath]),
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -231,19 +231,18 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
 
     const graphOrder = index.graphs.map((graph) => graph.path);
 
-    const worksheetIndex = index.worksheets.map((worksheet) => ({
-      worksheetPath: worksheet.worksheetPath,
-      name: worksheet.name,
-      databaseId: worksheet.databaseId,
-      chartType:
-        worksheet.chartType as import("@/shared/types/domain/worksheet").WorksheetChartType,
-      revision: worksheet.revision,
+    const chartIndex = index.charts.map((chart) => ({
+      chartPath: chart.chartPath,
+      name: chart.name,
+      databaseId: chart.databaseId,
+      chartType: chart.chartType as import("@/shared/types/domain/chart").ChartType,
+      revision: chart.revision,
     }));
-    useWorksheetStore.getState().setIndex(worksheetIndex);
+    useChartDocumentStore.getState().setIndex(chartIndex);
 
     const incoming = buildResourceIndex({
       graphs: index.graphs,
-      worksheets: worksheetIndex,
+      charts: chartIndex,
       variables: variableCatalog,
       databases: useDatabaseStore.getState().databases,
     });
@@ -382,9 +381,9 @@ export async function commitPreparedAuthoritativeProjectLoad(
       revisions: prepared.storeState.variableRevisions,
     }),
   );
-  commitProjectLoadStep("worksheet", () =>
-    useWorksheetStore.setState({
-      index: prepared.storeState.worksheetIndex,
+  commitProjectLoadStep("chart", () =>
+    useChartDocumentStore.setState({
+      index: prepared.storeState.chartIndex,
       documents: {},
     }),
   );
@@ -544,7 +543,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
               name: graph.name,
               type: graph.type,
             })),
-            worksheets: [],
+            charts: [],
             variables: normalizedVariables,
             databases: normalizedDatabases,
           }),

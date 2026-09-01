@@ -265,7 +265,7 @@ export function Menubar() {
     deleteSelected,
     addEvent,
     addFunction,
-    addWorksheet,
+    addChart,
   } = useEditorSessionCommandsContext();
   const { canUndo, canRedo, activeTabId } = useEditorHistoryAvailability();
   const {
@@ -330,7 +330,7 @@ export function Menubar() {
     { label: t("menubar.manageVariables") },
     { label: t("menubar.importData"), onClick: handleImportData },
     { label: t("menubar.databaseEditor"), onClick: handleDatabaseEditor },
-    { label: t("menubar.newWorksheet"), onClick: () => void addWorksheet() },
+    { label: t("menubar.newChart"), onClick: () => void addChart() },
     { label: "-", type: "separator" },
     { label: t("menubar.schemaViewer") },
   ];

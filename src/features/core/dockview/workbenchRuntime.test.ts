@@ -855,8 +855,8 @@ describe("workbench Dockview port", () => {
     await expect(
       port.openEditor({
         ...editorRequest,
-        resourceKind: "worksheet",
-        title: "Shared worksheet",
+        resourceKind: "chart",
+        title: "Shared chart",
         mode: "reuse-resource",
       }),
     ).rejects.toMatchObject({

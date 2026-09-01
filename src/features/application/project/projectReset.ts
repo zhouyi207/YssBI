@@ -2,7 +2,7 @@ import type { ProjectLifecycleStateSnapshot } from "@/features/core/projectLifec
 import { isProjectLifecycleStateCurrent } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
-import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 import { useColumnStatsStore } from "@/features/core/dataStore/columnStatsStore";
 import { useColumnDistributionStore } from "@/features/core/dataStore/columnDistributionStore";
@@ -50,7 +50,7 @@ export async function resetClientProjectState(
   if (!runOwnedReset(owner, () => useColumnStatsStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useColumnDistributionStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useDatasetOverviewStore.getState().clear())) return;
-  if (!runOwnedReset(owner, () => useWorksheetStore.getState().clear())) return;
+  if (!runOwnedReset(owner, () => useChartDocumentStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useResourceStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useDocumentStateStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useGraphMetaStore.getState().clear())) return;

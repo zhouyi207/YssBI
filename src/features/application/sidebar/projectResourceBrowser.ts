@@ -14,7 +14,7 @@ export interface ActiveProjectGraph {
 export interface ProjectResourceBrowserInput {
   events: Readonly<Record<string, { name: string }>>;
   functions: Readonly<Record<string, { name: string }>>;
-  worksheets: readonly { worksheetPath: string; name: string }[];
+  charts: readonly { chartPath: string; name: string }[];
   localVariables: Readonly<Record<string, VariableListEntry>>;
   globalVariables: Readonly<Record<string, VariableListEntry>>;
   activeGraph: ActiveProjectGraph | null;
@@ -23,13 +23,13 @@ export interface ProjectResourceBrowserInput {
   labels: {
     events: string;
     functions: string;
-    worksheets: string;
+    charts: string;
     variables: string;
     localVariables: string;
     globalVariables: string;
     noEvents: string;
     noFunctions: string;
-    noWorksheets: string;
+    noCharts: string;
     noLocalVariables: string;
     noGlobalVariables: string;
   };
@@ -72,11 +72,11 @@ export type ProjectResourceVariableRow = {
   isGlobal: boolean;
 };
 
-export type ProjectResourceWorksheetRow = {
-  kind: "worksheet";
+export type ProjectResourceChartRow = {
+  kind: "chart";
   rowKey: string;
   level: number;
-  worksheetPath: string;
+  chartPath: string;
   name: string;
 };
 
@@ -85,7 +85,7 @@ export type ProjectResourceBrowserRow =
   | ProjectResourceBrowserEmptyRow
   | ProjectResourceGraphRow
   | ProjectResourceVariableRow
-  | ProjectResourceWorksheetRow;
+  | ProjectResourceChartRow;
 
 export interface ProjectResourceBrowserProjection {
   rows: ProjectResourceBrowserRow[];
@@ -124,7 +124,7 @@ interface Category {
   id: ProjectTreeCategoryId;
   label: string;
   emptyMessage?: string;
-  leaves: Array<ProjectResourceGraphRow | ProjectResourceVariableRow | ProjectResourceWorksheetRow>;
+  leaves: Array<ProjectResourceGraphRow | ProjectResourceVariableRow | ProjectResourceChartRow>;
   children?: Category[];
 }
 
@@ -171,15 +171,15 @@ function buildCategories(input: ProjectResourceBrowserInput): Category[] {
       leaves: graphRows(input.functions, "function"),
     },
     {
-      id: PROJECT_TREE_CATEGORY_IDS.worksheets,
-      label: input.labels.worksheets,
-      emptyMessage: input.labels.noWorksheets,
-      leaves: input.worksheets.map((worksheet): ProjectResourceWorksheetRow => ({
-        kind: "worksheet",
-        rowKey: `worksheet:${worksheet.worksheetPath}`,
+      id: PROJECT_TREE_CATEGORY_IDS.charts,
+      label: input.labels.charts,
+      emptyMessage: input.labels.noCharts,
+      leaves: input.charts.map((chart): ProjectResourceChartRow => ({
+        kind: "chart",
+        rowKey: `chart:${chart.chartPath}`,
         level: 0,
-        worksheetPath: worksheet.worksheetPath,
-        name: worksheet.name,
+        chartPath: chart.chartPath,
+        name: chart.name,
       })),
     },
   ];

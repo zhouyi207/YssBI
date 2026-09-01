@@ -93,12 +93,12 @@ const activeProjectCommandIdentityFields = {
   get_variable: "projectInstanceId",
   update_variable: "projectInstanceId",
   delete_variable: "projectInstanceId",
-  create_worksheet: "projectInstanceId",
-  duplicate_worksheet: "projectInstanceId",
-  load_worksheet: "projectInstanceId",
-  save_worksheet: "projectInstanceId",
-  rename_worksheet_resource: "projectInstanceId",
-  remove_worksheet: "projectInstanceId",
+  create_chart: "projectInstanceId",
+  duplicate_chart: "projectInstanceId",
+  load_chart: "projectInstanceId",
+  save_chart: "projectInstanceId",
+  rename_chart_resource: "projectInstanceId",
+  remove_chart: "projectInstanceId",
   get_plot_column_pair: "projectInstanceId",
   ...projectDatabaseIdentityFields,
   ...lifecycleOwnedNodeCommandIdentityFields,
@@ -463,11 +463,11 @@ const workflowFiles = [
   "src/features/application/project/projectIOStore.ts",
   "src/features/application/editorProjection/graphProjectionCoordinator.ts",
   "src/features/application/editor/graphDocumentUnload.ts",
-  "src/features/application/editor/worksheetDelete.ts",
+  "src/features/application/editor/chartDelete.ts",
   "src/features/application/editor/saveAllDirtyGraphs.ts",
 
   "src/features/application/editor/useProjectOperations.ts",
-  "src/features/application/editor/useWorksheetManagement.ts",
+  "src/features/application/editor/useChartManagement.ts",
   "src/features/application/dataManagement/variableActions.ts",
   "src/features/application/resource/resourceActions.ts",
   "src/features/application/project/useProjectPicker.ts",
@@ -762,7 +762,7 @@ describe("projectFilesystemContract", () => {
     const offenders = workflowFiles.filter((path) => {
       const source = readFileSync(resolve(path), "utf8");
       if (
-        !/await\s+(?:ProjectService|GraphService|GraphProjectionService|VariableService|WorksheetService)\./.test(
+        !/await\s+(?:ProjectService|GraphService|GraphProjectionService|VariableService|ChartService)\./.test(
           source,
         )
       ) {

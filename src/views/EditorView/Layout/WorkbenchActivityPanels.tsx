@@ -97,11 +97,11 @@ export function WorkbenchActivityPanelsProvider({ children }: { children: ReactN
           renameDatabaseItem: actions.renameDatabaseItem,
           deleteDatabaseItem: actions.deleteDatabaseItem,
           importData: actions.triggerImportData,
-          openWorksheet: actions.openWorksheet,
-          renameWorksheetItem: actions.renameWorksheetItem,
-          duplicateWorksheet: actions.duplicateWorksheet,
-          deleteWorksheet: actions.deleteWorksheetItem,
-          addWorksheet: actions.addWorksheet,
+          openChart: actions.openChart,
+          renameChartItem: actions.renameChartItem,
+          duplicateChart: actions.duplicateChart,
+          deleteChart: actions.deleteChartItem,
+          addChart: actions.addChart,
           revealInExplorer: actions.revealInExplorer,
         },
         t,
@@ -144,9 +144,9 @@ export function WorkbenchActivityPanelsProvider({ children }: { children: ReactN
     [openActionMenu],
   );
 
-  const openWorksheetContextMenu = useCallback(
-    (event: MouseEvent, worksheetPath: string, name: string) => {
-      openActionMenu(event, { type: "worksheet", worksheetPath, name });
+  const openChartContextMenu = useCallback(
+    (event: MouseEvent, chartPath: string, name: string) => {
+      openActionMenu(event, { type: "chart", chartPath, name });
     },
     [openActionMenu],
   );
@@ -160,8 +160,8 @@ export function WorkbenchActivityPanelsProvider({ children }: { children: ReactN
         case PROJECT_TREE_CATEGORY_IDS.functions:
           openActionMenu(event, { type: "section", graphType: "function" });
           return;
-        case PROJECT_TREE_CATEGORY_IDS.worksheets:
-          openActionMenu(event, { type: "worksheetSection" });
+        case PROJECT_TREE_CATEGORY_IDS.charts:
+          openActionMenu(event, { type: "chartSection" });
           return;
         case PROJECT_TREE_CATEGORY_IDS.variables:
           openActionMenu(event, { type: "variableSection" });
@@ -181,20 +181,20 @@ export function WorkbenchActivityPanelsProvider({ children }: { children: ReactN
     () => ({
       onAddEvent: () => void actions.addEvent(),
       onAddFunction: () => void actions.addFunction(),
-      onAddWorksheet: () => void actions.addWorksheet(),
+      onAddChart: () => void actions.addChart(),
       onAddVariable: (isGlobal) => void actions.addVariable(undefined, "Int64", isGlobal),
       onCategoryContextMenu: openProjectCategoryContextMenu,
       onGraphContextMenu: openGraphContextMenu,
       onVariableContextMenu: openVariableContextMenu,
-      onWorksheetContextMenu: openWorksheetContextMenu,
-      onOpenWorksheet: actions.openWorksheet,
+      onChartContextMenu: openChartContextMenu,
+      onOpenChart: actions.openChart,
     }),
     [
       actions,
       openGraphContextMenu,
       openProjectCategoryContextMenu,
       openVariableContextMenu,
-      openWorksheetContextMenu,
+      openChartContextMenu,
     ],
   );
 

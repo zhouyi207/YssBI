@@ -143,7 +143,7 @@ function parseResourceKey(value: unknown): ResourceKeyDto | null {
     value.kind !== "function" &&
     value.kind !== "variable" &&
     value.kind !== "database" &&
-    value.kind !== "worksheet"
+    value.kind !== "chart"
   ) {
     return null;
   }

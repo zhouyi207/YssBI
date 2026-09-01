@@ -3,7 +3,7 @@ import { useActiveEditorGroup, useEditorActions } from "@/features/core/editor";
 import { useEditorOperations } from "./useEditorOperations";
 import { useGraphCanvasCommands } from "./useGraphCanvasCommands";
 import { useEditorPanelCommands } from "./useEditorPanelCommands";
-import { useOpenWorksheet, useWorksheetManagement } from "./useWorksheetManagement";
+import { useOpenChart, useChartManagement } from "./useChartManagement";
 import { useProjectOperations } from "./useProjectOperations";
 import {
   useGraphManagement,
@@ -32,8 +32,8 @@ export function useEditorSessionCommands(): EditorSessionCommands {
   const editorOps = useEditorOperations();
   const canvasCommands = useGraphCanvasCommands();
   const panelCommands = useEditorPanelCommands();
-  const openWorksheet = useOpenWorksheet();
-  const worksheetMgmt = useWorksheetManagement(openWorksheet);
+  const openChart = useOpenChart();
+  const chartMgmt = useChartManagement(openChart);
   const projectOps = useProjectOperations();
 
   const graphMgmt = useGraphManagement(panelCommands.openGraph);
@@ -54,8 +54,8 @@ export function useEditorSessionCommands(): EditorSessionCommands {
     ...editorOps,
     ...canvasCommands,
     ...panelCommands,
-    openWorksheet,
-    ...worksheetMgmt,
+    openChart,
+    ...chartMgmt,
     ...projectOps,
     ...graphMgmt,
     ...variableMgmt,

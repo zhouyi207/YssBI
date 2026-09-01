@@ -890,3 +890,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       资源绑定节点的实例显示名。
 - [ ] 将主窗口壳收敛为 `WorkbenchWindow`、`RootDockviewHost` 与 `WorkbenchOverlayHost`，由
       `WorkbenchComposition` 唯一组装 `RootPanelRegistry`，并统一使用 `EditorResource` Dockview component。
+- [ ] 将 Worksheet 资源协议全栈直接切换为 Chart：统一 Rust owner、Project 生命周期、Tauri wire、
+      前端 service/state/UI、`charts/*.yssbi-chart` 与 i18n，并删除旧双路径。

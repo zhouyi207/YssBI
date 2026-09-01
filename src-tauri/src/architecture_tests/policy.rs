@@ -929,21 +929,21 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_worksheet.rs",
-        fully_qualified_owner: "yss_api::commands::command_worksheet",
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_chart.rs",
+        fully_qualified_owner: "yss_api::commands::command_chart",
         canonical_origin_targets: &[
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::SessionCaptureError",
             "yss_application::execution::session_slot::SessionCaptureError::Inactive",
             "yss_application::execution::session_slot::SessionCaptureError::Recovering",
             "yss_application::execution::session_slot::SessionCaptureError::Replacing",
-            "yss_application::worksheet::WorksheetApplicationError",
-            "yss_application::worksheet_plot::WorksheetPlotApplicationError",
-            "yss_application::worksheet_plot::WorksheetPlotQuery",
-            "yss_application::worksheet_plot::PlotAxisFormat",
-            "yss_application::worksheet_plot::PlotAxisFormat::Date",
-            "yss_application::worksheet_plot::PlotAxisFormat::Datetime",
-            "yss_application::worksheet_plot::PlotAxisFormat::Number",
+            "yss_application::chart::ChartApplicationError",
+            "yss_application::chart_plot::ChartPlotApplicationError",
+            "yss_application::chart_plot::ChartPlotQuery",
+            "yss_application::chart_plot::PlotAxisFormat",
+            "yss_application::chart_plot::PlotAxisFormat::Date",
+            "yss_application::chart_plot::PlotAxisFormat::Datetime",
+            "yss_application::chart_plot::PlotAxisFormat::Number",
             "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind",
             "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed",
             "yss_database_runtime::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed",
@@ -1488,7 +1488,7 @@ fn non_build_memberships(
             | "yss-tabular-contract"
             | "yss-variable-contract"
             | "yss-variable-value"
-            | "yss-worksheet-document"
+            | "yss-chart-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
     } else if matches!(package, "yss-application" | "yss-project-watcher") {

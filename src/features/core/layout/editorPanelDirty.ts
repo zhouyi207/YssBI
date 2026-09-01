@@ -31,14 +31,14 @@ function resolveResourceDisplayName(ref: ResourceRef, fallbackId: string): strin
 export interface DirtyEditorPanelSnapshot {
   /** Dockview group that owns the editor panel. */
   groupId: string;
-  /** Graph path or worksheet resource reference. */
+  /** Graph path or chart resource reference. */
   graphPath: string;
   /** Display title for prompts. */
   title: string;
 }
 
 /**
- * Collect every dirty editor tab (Event/Function/Worksheet) across all editor groups,
+ * Collect every dirty editor tab (Event/Function/Chart) across all editor groups,
  * deduplicated by graphPath. DocumentState is the single source of truth for dirty.
  */
 export function collectDirtyEditorPanels(): DirtyEditorPanelSnapshot[] {

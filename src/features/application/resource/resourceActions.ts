@@ -4,15 +4,15 @@ import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAc
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
-import { WorksheetService } from "@/services/worksheet/worksheetService";
+import { ChartService } from "@/services/chart/chartService";
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from "@/shared/constants/defaultResourceNames";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
 import { beginGraphRenameLifecycle } from "@/features/application/editorProjection/graphProjectionCoordinator";
 import {
-  beginWorksheetRenameLifecycle,
-  isWorksheetLifecycleCurrent,
-} from "@/features/application/editor/worksheetLifecycleCoordinator";
+  beginChartRenameLifecycle,
+  isChartLifecycleCurrent,
+} from "@/features/application/editor/chartLifecycleCoordinator";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 
 import type { GraphResourceKind } from "@/shared/types/domain/graphResourcePath";
@@ -38,12 +38,12 @@ function graphRevision(graphPath: string): number {
   return resource.revision;
 }
 
-function worksheetRevision(worksheetPath: string): number {
+function chartRevision(chartPath: string): number {
   const resource = Object.values(useResourceStore.getState().resources).find(
-    (candidate) => candidate.id === worksheetPath && candidate.kind === "worksheet",
+    (candidate) => candidate.id === chartPath && candidate.kind === "chart",
   );
   if (resource?.revision == null) {
-    throw new Error(`Worksheet resource '${worksheetPath}' has no authoritative revision`);
+    throw new Error(`Chart resource '${chartPath}' has no authoritative revision`);
   }
   return resource.revision;
 }
@@ -96,11 +96,11 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
     return;
   }
 
-  if (ref.kind === "worksheet") {
+  if (ref.kind === "chart") {
     const context = captureProjectCommandContext();
-    const expectedRevision = worksheetRevision(ref.id);
-    const lifecycleToken = beginWorksheetRenameLifecycle(context.projectInstanceId, ref.id);
-    const result = await WorksheetService.renameWorksheet(
+    const expectedRevision = chartRevision(ref.id);
+    const lifecycleToken = beginChartRenameLifecycle(context.projectInstanceId, ref.id);
+    const result = await ChartService.renameChart(
       context.projectInstanceId,
       context.operationId,
       ref.id,
@@ -109,8 +109,8 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
       lifecycleToken,
     );
     context.assertCurrent();
-    if (!isWorksheetLifecycleCurrent(context.projectInstanceId, ref.id, lifecycleToken)) {
-      throw Object.assign(new Error(`stale resource lifecycle for worksheet '${ref.id}'`), {
+    if (!isChartLifecycleCurrent(context.projectInstanceId, ref.id, lifecycleToken)) {
+      throw Object.assign(new Error(`stale resource lifecycle for chart '${ref.id}'`), {
         code: "stale_resource_lifecycle",
       });
     }

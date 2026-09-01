@@ -13,7 +13,7 @@ yss-graph-document = { path = "../yss-graph-document" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-variable-contract = { path = "../yss-variable-contract" }
-yss-worksheet-document = { path = "../yss-worksheet-document" }
+yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 serde_json.workspace = true

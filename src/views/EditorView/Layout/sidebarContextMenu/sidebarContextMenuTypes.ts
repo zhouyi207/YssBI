@@ -10,8 +10,8 @@ export type SidebarContextMenuTarget =
   | { type: "variableSection"; isGlobal?: boolean }
   | { type: "database"; id: string; name: string }
   | { type: "dataSection" }
-  | { type: "worksheetSection" }
-  | { type: "worksheet"; worksheetPath: string; name: string };
+  | { type: "chartSection" }
+  | { type: "chart"; chartPath: string; name: string };
 
 export type SidebarContextMenuState = PositionedActionMenuState<SidebarContextMenuTarget>;
 
@@ -39,10 +39,10 @@ export interface SidebarContextMenuActions {
   renameDatabaseItem: (id: string, name: string) => void;
   deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
   importData: () => void;
-  openWorksheet: (worksheetPath: string, name: string) => unknown | Promise<unknown>;
-  renameWorksheetItem: (worksheetPath: string, name: string) => void;
-  duplicateWorksheet: (worksheetPath: string) => unknown | Promise<unknown>;
-  deleteWorksheet: (worksheetPath: string) => unknown | Promise<unknown>;
-  addWorksheet: () => unknown | Promise<unknown>;
+  openChart: (chartPath: string, name: string) => unknown | Promise<unknown>;
+  renameChartItem: (chartPath: string, name: string) => void;
+  duplicateChart: (chartPath: string) => unknown | Promise<unknown>;
+  deleteChart: (chartPath: string) => unknown | Promise<unknown>;
+  addChart: () => unknown | Promise<unknown>;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }

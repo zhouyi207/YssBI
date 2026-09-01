@@ -2,34 +2,33 @@ import { useMemo } from "react";
 import { useEditorSessionResources } from "@/features/application/editor";
 import { useEditorUi } from "@/features/core/editor/ui";
 import { useLogStore } from "@/features/application/log";
-import { useWorksheetRead } from "@/features/core/worksheet/read";
-import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
+import { useChartRead } from "@/features/core/chart/read";
+import type { ChartDocument } from "@/shared/types/domain/chart";
 import { resolveDetailPanelModel } from "./resolveDetailPanelModel";
 import type { DetailPanelModel } from "./resolveDetailPanelModel";
 
 export function useDetailPanelModel(): {
   model: DetailPanelModel;
-  worksheetPath: string | null;
-  worksheetName: string | null;
-  worksheetDocument: WorksheetDocument | null;
+  chartPath: string | null;
+  chartName: string | null;
+  chartDocument: ChartDocument | null;
 } {
   const { variables, events, functions, dataframes } = useEditorSessionResources();
   const target = useEditorUi((snapshot) => snapshot.detailFocus);
   const selectedLog = useLogStore((s) => s.selectedLog);
 
-  const worksheetPath = target?.kind === "worksheet" ? target.worksheetPath : null;
+  const chartPath = target?.kind === "chart" ? target.chartPath : null;
 
-  const worksheetDocument = useWorksheetRead((snapshot) =>
-    worksheetPath
-      ? snapshot.documents[worksheetPath]
-        ? (structuredClone(snapshot.documents[worksheetPath]) as WorksheetDocument)
+  const chartDocument = useChartRead((snapshot) =>
+    chartPath
+      ? snapshot.documents[chartPath]
+        ? (structuredClone(snapshot.documents[chartPath]) as ChartDocument)
         : null
       : null,
   );
-  const worksheetName = useWorksheetRead((snapshot) =>
-    worksheetPath
-      ? (snapshot.index.find((worksheet) => worksheet.worksheetPath === worksheetPath)?.name ??
-        null)
+  const chartName = useChartRead((snapshot) =>
+    chartPath
+      ? (snapshot.index.find((chart) => chart.chartPath === chartPath)?.name ?? null)
       : null,
   );
 
@@ -42,10 +41,10 @@ export function useDetailPanelModel(): {
         events,
         functions,
         dataframes,
-        worksheetDocument,
+        chartDocument,
       }),
-    [target, selectedLog, variables, events, functions, dataframes, worksheetDocument],
+    [target, selectedLog, variables, events, functions, dataframes, chartDocument],
   );
 
-  return { model, worksheetPath, worksheetName, worksheetDocument };
+  return { model, chartPath, chartName, chartDocument };
 }

@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    GraphResourceIndex, GraphResourcePath, ProjectError, ProjectWorksheetIndexEntry,
-    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
+    GraphResourceIndex, GraphResourcePath, ProjectChartIndexEntry, ProjectError,
+    load_charts_from_root, read_chart_index_entries, scan_graph_resource_index,
 };
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_duckdb::{list_data_tables, read_display_name};
@@ -125,7 +125,7 @@ pub struct ProjectIndex {
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
     #[serde(default)]
-    pub worksheets: Vec<ProjectWorksheetIndexEntry>,
+    pub charts: Vec<ProjectChartIndexEntry>,
     #[serde(default)]
     pub variables: Vec<ProjectVariableIndexEntry>,
     #[serde(default)]
@@ -292,8 +292,8 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
-    for (worksheet_path, worksheet) in &project_data.worksheets {
-        let (relative_path, contents) = super::serialize_worksheet(worksheet_path, worksheet)?;
+    for (chart_path, chart) in &project_data.charts {
+        let (relative_path, contents) = super::serialize_chart(chart_path, chart)?;
         let target = root.join(relative_path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
@@ -316,7 +316,7 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.metadata.export_time = export_time;
     project_data.computation_settings = computation_settings;
     project_data.databases = discover_databases_from_root(root.as_path())?;
-    project_data.worksheets = load_worksheets_from_root(root.as_path())?;
+    project_data.charts = load_charts_from_root(root.as_path())?;
 
     let variables_path = root.join(GLOBAL_VARIABLES_FILE);
     if variables_path.exists() {
@@ -351,7 +351,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         GraphResourceKind::Function,
         &graph_resources,
     )?);
-    let worksheets = read_worksheet_index_entries(root)?;
+    let charts = read_chart_index_entries(root)?;
     let variables = read_variable_index_entries(root)?;
 
     let (project_name, export_time, _) = manifest.into_parts();
@@ -363,7 +363,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         project_name,
         export_time,
         graphs,
-        worksheets,
+        charts,
         variables,
         databases: Vec::new(),
     })

@@ -8,10 +8,10 @@ import { resolveActiveProjectGraph } from "@/features/application/sidebar";
 import { updateVariableAction } from "@/features/application/dataManagement/variableActions";
 import { renameResource } from "@/features/application/resource/resourceActions";
 import {
-  renameWorksheetResource,
+  renameChartResource,
   revealProjectResourceInExplorer,
 } from "@/features/application/sidebar/sidebarResourceActions";
-import { deleteWorksheetWithConfirm } from "@/features/application/editor/worksheetDelete";
+import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
 import { openDatabaseEditorWindow } from "@/features/application/window";
 import { ui } from "@/features/core/ui/ui";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
@@ -52,9 +52,9 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     addFunction,
     createGraph,
     openGraph,
-    openWorksheet,
-    duplicateWorksheet,
-    addWorksheet,
+    openChart,
+    duplicateChart,
+    addChart,
     triggerImportData,
   } = useEditorSessionCommandsContext();
 
@@ -184,13 +184,13 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     [deleteDataFrame, t],
   );
 
-  const renameWorksheetItem = useCallback(
-    (worksheetPath: string, name: string) => {
+  const renameChartItem = useCallback(
+    (chartPath: string, name: string) => {
       openInputDialog(
-        t("contextMenu.dialog.renameWorksheetTitle"),
+        t("contextMenu.dialog.renameChartTitle"),
         name,
         async (nextName) => {
-          await renameWorksheetResource(worksheetPath, nextName);
+          await renameChartResource(chartPath, nextName);
         },
         t("contextMenu.dialog.renameSubmit"),
       );
@@ -198,8 +198,8 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     [openInputDialog, t],
   );
 
-  const deleteWorksheetItem = useCallback(async (worksheetPath: string) => {
-    await deleteWorksheetWithConfirm(worksheetPath);
+  const deleteChartItem = useCallback(async (chartPath: string) => {
+    await deleteChartWithConfirm(chartPath);
   }, []);
 
   const revealInExplorer = useCallback(
@@ -236,8 +236,8 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     canDemoteVariable: activeProjectGraph !== null,
     renameDatabaseItem,
     deleteDatabaseItem,
-    renameWorksheetItem,
-    deleteWorksheetItem,
+    renameChartItem,
+    deleteChartItem,
     revealInExplorer,
     openVariableContextMenuTarget,
     resolveDatabaseName,
@@ -246,9 +246,9 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     addFunction,
     createGraph,
     openGraph,
-    openWorksheet,
-    duplicateWorksheet,
-    addWorksheet,
+    openChart,
+    duplicateChart,
+    addChart,
     triggerImportData,
     openDatabaseEditorWindow,
   };

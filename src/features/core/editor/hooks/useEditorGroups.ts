@@ -1,6 +1,6 @@
 /**
  * Stable editor group ids for shared session context.
- * Volatile tab/selection state lives in Dockview and pane state — use useEditorGroupWorkspace instead.
+ * Volatile tab/selection state lives in Dockview and pane state.
  */
 
 import { useMemo } from "react";

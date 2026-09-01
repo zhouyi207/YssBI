@@ -14,14 +14,14 @@ pub const EVENT_EXTENSION: &str = "yssbi-event";
 pub const FUNCTIONS_DIR: &str = "functions";
 pub const FUNCTION_EXTENSION: &str = "yssbi-function";
 
-pub const WORKSHEETS_DIR: &str = "worksheets";
-pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
+pub const CHARTS_DIR: &str = "charts";
+pub const CHART_EXTENSION: &str = "yssbi-chart";
 
 pub const DATABASE_DIR: &str = "database";
 pub const PROJECT_DUCKDB_FILE: &str = "project.duckdb";
 
 pub const PROJECT_CONTENT_DIRECTORIES: [&str; 4] =
-    [EVENTS_DIR, FUNCTIONS_DIR, WORKSHEETS_DIR, DATABASE_DIR];
+    [EVENTS_DIR, FUNCTIONS_DIR, CHARTS_DIR, DATABASE_DIR];
 
 /// Returns whether a safe project-relative path can change the project index.
 pub fn is_project_index_input_path(path: &Path) -> bool {
@@ -40,7 +40,7 @@ pub fn is_project_index_input_path(path: &Path) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
     normalized == PROJECT_METADATA_FILE
         || normalized == GLOBAL_VARIABLES_FILE
-        || [EVENTS_DIR, FUNCTIONS_DIR, WORKSHEETS_DIR, DATABASE_DIR]
+        || [EVENTS_DIR, FUNCTIONS_DIR, CHARTS_DIR, DATABASE_DIR]
             .into_iter()
             .any(|directory| is_descendant(&normalized, directory))
 }
@@ -63,8 +63,8 @@ mod tests {
         assert_eq!(EVENT_EXTENSION, "yssbi-event");
         assert_eq!(FUNCTIONS_DIR, "functions");
         assert_eq!(FUNCTION_EXTENSION, "yssbi-function");
-        assert_eq!(WORKSHEETS_DIR, "worksheets");
-        assert_eq!(WORKSHEET_EXTENSION, "yssbi-worksheet");
+        assert_eq!(CHARTS_DIR, "charts");
+        assert_eq!(CHART_EXTENSION, "yssbi-chart");
         assert_eq!(DATABASE_DIR, "database");
         assert_eq!(PROJECT_DUCKDB_FILE, "project.duckdb");
     }
@@ -77,7 +77,7 @@ mod tests {
             "events/Main.yssbi-event",
             r"events\Main.yssbi-event",
             "functions/Mean.yssbi-function",
-            "worksheets/Sales.yssbi-worksheet",
+            "charts/Sales.yssbi-chart",
             "database/project.duckdb",
         ] {
             assert!(is_project_index_input_path(Path::new(path)), "{path}");

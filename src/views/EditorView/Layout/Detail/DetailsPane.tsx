@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useEditorSessionDetailActions } from "@/features/application/editor";
 import { updateFunctionSignature } from "@/features/application/graphDocument/graphDocumentActions";
-import { loadWorksheetDocumentForView } from "@/features/application/worksheet/worksheetViewActions";
+import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { DetailEmptyState } from "./DetailEmptyState";
 import { DataDetailPanel } from "./panels/DataDetailPanel";
 import { EventDetailPanel } from "./panels/EventDetailPanel";
@@ -10,17 +10,17 @@ import { LogDetailPanel } from "./panels/LogDetailPanel";
 import { NodeDefinitionDetailPanel } from "./panels/NodeDefinitionDetailPanel";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
 import { VariableDetailPanel } from "./panels/VariableDetailPanel";
-import { WorksheetDetailPanel } from "./panels/WorksheetDetailPanel";
+import { ChartDetailPanel } from "./panels/ChartDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
   const { updateVariable } = useEditorSessionDetailActions();
-  const { model, worksheetPath, worksheetName, worksheetDocument } = useDetailPanelModel();
+  const { model, chartPath, chartName, chartDocument } = useDetailPanelModel();
 
   useEffect(() => {
-    if (!worksheetPath || worksheetDocument) return;
-    void loadWorksheetDocumentForView(worksheetPath);
-  }, [worksheetPath, worksheetDocument]);
+    if (!chartPath || chartDocument) return;
+    void loadChartDocumentForView(chartPath);
+  }, [chartPath, chartDocument]);
 
   switch (model.kind) {
     case "log":
@@ -47,13 +47,9 @@ export function DetailsPane() {
           }}
         />
       );
-    case "worksheet":
+    case "chart":
       return (
-        <WorksheetDetailPanel
-          worksheetPath={worksheetPath!}
-          name={worksheetName ?? ""}
-          document={model.document}
-        />
+        <ChartDetailPanel chartPath={chartPath!} name={chartName ?? ""} document={model.document} />
       );
     case "data":
       return <DataDetailPanel dataframe={model.dataframe} />;

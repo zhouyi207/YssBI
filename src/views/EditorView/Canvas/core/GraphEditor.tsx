@@ -12,7 +12,7 @@ export interface GraphEditorProps {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: Exclude<EditorResourceKind, "worksheet">;
+  graphKind: Exclude<EditorResourceKind, "chart">;
 }
 
 /**

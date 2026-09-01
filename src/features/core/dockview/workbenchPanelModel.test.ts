@@ -25,8 +25,8 @@ describe("workbench panel metadata", () => {
     expect(
       componentForWorkbenchMetadata({
         role: "editor",
-        resourceRef: "worksheets/Model.yssbi-worksheet",
-        resourceKind: "worksheet",
+        resourceRef: "charts/Model.yssbi-chart",
+        resourceKind: "chart",
       }),
     ).toBe("EditorResource");
   });

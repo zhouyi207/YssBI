@@ -306,14 +306,14 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let graph_revisions = self.graph_revisions.read().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
-        let worksheet_revisions = self.worksheet_revisions.read().unwrap();
+        let chart_revisions = self.chart_revisions.read().unwrap();
         let mut history = self.history.write().unwrap();
         crate::project_state::validate_context_revisions(
             context,
             &data,
             &graph_revisions,
             &variable_revisions,
-            &worksheet_revisions,
+            &chart_revisions,
         )?;
         let publication_advance = publication.prepare_resource_revision()?;
         let patch = staged.history_patch().clone();

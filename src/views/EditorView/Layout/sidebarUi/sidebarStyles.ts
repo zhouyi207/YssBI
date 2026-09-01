@@ -29,7 +29,7 @@ function sidebarItemRowBaseClass(isSelected = false) {
   );
 }
 
-/** Leaf row: data / graph / variable / worksheet items. */
+/** Leaf row: data / graph / variable / chart items. */
 export function sidebarItemRowClass(isSelected = false) {
   return sidebarItemRowBaseClass(isSelected);
 }

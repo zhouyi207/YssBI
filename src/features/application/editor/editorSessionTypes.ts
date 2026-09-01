@@ -13,7 +13,7 @@ import type { Pin } from "@/shared/types/domain/pin";
 import type { EditorCommandTarget } from "./editorCommandFocus";
 import type { useEditorOperations } from "./useEditorOperations";
 import type { useEditorPanelCommands } from "./useEditorPanelCommands";
-import type { useOpenWorksheet, useWorksheetManagement } from "./useWorksheetManagement";
+import type { useOpenChart, useChartManagement } from "./useChartManagement";
 import type { useProjectOperations } from "./useProjectOperations";
 import type { useGraphManagement } from "@/features/application/dataManagement/useGraphManagement";
 import type { useVariableManagement } from "@/features/application/dataManagement/useVariableManagement";
@@ -52,8 +52,8 @@ export type EditorSessionHistoryAvailability = {
   pending: boolean;
 };
 export type EditorSessionPanelActions = ReturnType<typeof useEditorPanelCommands>;
-export type EditorSessionWorksheetActions = ReturnType<typeof useWorksheetManagement> & {
-  openWorksheet: ReturnType<typeof useOpenWorksheet>;
+export type EditorSessionChartActions = ReturnType<typeof useChartManagement> & {
+  openChart: ReturnType<typeof useOpenChart>;
 };
 export type EditorSessionProjectActions = ReturnType<typeof useProjectOperations>;
 export type EditorSessionGraphActions = ReturnType<typeof useGraphManagement>;

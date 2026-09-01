@@ -1,30 +1,30 @@
 use crate::{GraphDocument, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
 use yss_project_filesystem::{
     ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
 use yss_project_history::{
-    FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey,
+    ChartResourceKey, FunctionResourceKey, ResourceKey, VariableResourceKey,
 };
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
-use yss_project_layout::{PROJECT_METADATA_FILE, WORKSHEET_EXTENSION};
+use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
 use yss_project_manifest::ProjectManifest;
 use yss_project_model::{ProjectData, ProjectDataPatch};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
 use yss_variable_value::default_value_for;
-use yss_worksheet_document::{WorksheetDocument, WorksheetResourcePath};
 
+#[path = "project_writers/charts.rs"]
+mod charts;
 #[path = "project_writers/graph.rs"]
 mod graph;
 #[path = "project_writers/variables.rs"]
 mod variables;
-#[path = "project_writers/worksheets.rs"]
-mod worksheets;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectSaveResult {
@@ -181,37 +181,35 @@ impl VariableMutationResult {
     }
 }
 
-fn worksheet_document_state(
-    document: &WorksheetDocument,
-) -> yss_project_history::WorksheetDocumentState {
-    yss_project_history::WorksheetDocumentState {
+fn chart_document_state(document: &ChartDocument) -> yss_project_history::ChartDocumentState {
+    yss_project_history::ChartDocumentState {
         database_id: document.database_id.clone(),
         chart_type: document.chart_type.clone(),
         encodings: document.encodings.clone(),
     }
 }
 
-fn worksheet_lifecycle_state(
-    path: &WorksheetResourcePath,
+fn chart_lifecycle_state(
+    path: &ChartResourcePath,
     revision: ResourceRevision,
 ) -> yss_project_history::ResourceLifecycleState {
     yss_project_history::ResourceLifecycleState {
         revision,
         path: path.as_str().into(),
-        kind: yss_project_history::ResourceLifecycleKind::Worksheet,
+        kind: yss_project_history::ResourceLifecycleKind::Chart,
         name: path.display_name().as_str().to_string(),
     }
 }
 
-fn worksheet_move_delta(
-    from: &WorksheetResourcePath,
-    to: &WorksheetResourcePath,
+fn chart_move_delta(
+    from: &ChartResourcePath,
+    to: &ChartResourcePath,
     operation_id: OperationId,
     from_revision: ResourceRevision,
     to_revision: ResourceRevision,
 ) -> yss_project_history::ResourceDeltaEvent {
     yss_project_history::ResourceDeltaEvent {
-        resource: worksheet_key(to),
+        resource: chart_key(to),
         from_revision,
         to_revision,
         caused_by: Some(operation_id),
@@ -224,21 +222,21 @@ fn worksheet_move_delta(
     }
 }
 
-fn worksheet_resource_delta(
-    path: &WorksheetResourcePath,
+fn chart_resource_delta(
+    path: &ChartResourcePath,
     operation_id: OperationId,
     retained_revision: Option<ResourceRevision>,
-    before: Option<&WorksheetDocument>,
-    after: Option<&WorksheetDocument>,
+    before: Option<&ChartDocument>,
+    after: Option<&ChartDocument>,
 ) -> Result<yss_project_history::ResourceDeltaEvent, ProjectFilesystemError> {
     let (from_revision, to_revision, payload) = match (before, after) {
         (Some(before), Some(after)) => (
             before.revision,
             after.revision,
-            yss_project_history::ResourceDocumentPatch::Worksheet(
-                yss_project_history::WorksheetDocumentPatch {
-                    before: worksheet_document_state(before),
-                    after: worksheet_document_state(after),
+            yss_project_history::ResourceDocumentPatch::Chart(
+                yss_project_history::ChartDocumentPatch {
+                    before: chart_document_state(before),
+                    after: chart_document_state(after),
                 },
             ),
         ),
@@ -248,7 +246,7 @@ fn worksheet_resource_delta(
             yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
                 yss_project_history::ResourceLifecyclePatch {
                     before: None,
-                    after: Some(worksheet_lifecycle_state(path, after.revision)),
+                    after: Some(chart_lifecycle_state(path, after.revision)),
                 },
             ),
         ),
@@ -257,19 +255,19 @@ fn worksheet_resource_delta(
             super::project_state::checked_resource_revision(path.as_str(), before.revision)?,
             yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
                 yss_project_history::ResourceLifecyclePatch {
-                    before: Some(worksheet_lifecycle_state(path, before.revision)),
+                    before: Some(chart_lifecycle_state(path, before.revision)),
                     after: None,
                 },
             ),
         ),
         (None, None) => {
             return Err(prepare_error(
-                "worksheet resource delta has neither a before nor an after document",
+                "chart resource delta has neither a before nor an after document",
             ));
         }
     };
     Ok(yss_project_history::ResourceDeltaEvent {
-        resource: worksheet_key(path),
+        resource: chart_key(path),
         from_revision,
         to_revision,
         caused_by: Some(operation_id),
@@ -407,8 +405,8 @@ fn variable_key(id: &yss_variable_contract::VariableId) -> ResourceKey {
     ResourceKey::Variable(VariableResourceKey(format!("variables/{id}").into()))
 }
 
-fn worksheet_key(path: &WorksheetResourcePath) -> ResourceKey {
-    ResourceKey::Worksheet(WorksheetResourceKey(path.as_str().into()))
+fn chart_key(path: &ChartResourcePath) -> ResourceKey {
+    ResourceKey::Chart(ChartResourceKey(path.as_str().into()))
 }
 
 fn context(
@@ -442,7 +440,7 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
         Some("yssbi-vars") => serde_json::from_slice::<crate::GlobalVariablesDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
-        Some(WORKSHEET_EXTENSION) => serde_json::from_slice::<WorksheetDocument>(contents)
+        Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
         _ if path == Path::new(PROJECT_METADATA_FILE) => {
@@ -503,13 +501,13 @@ impl ProjectState {
         let data = self.project_data.read().unwrap();
         let graph_revisions = self.graph_revisions.read().unwrap();
         let variable_revisions = self.variable_revisions.read().unwrap();
-        let worksheet_revisions = self.worksheet_revisions.read().unwrap();
+        let chart_revisions = self.chart_revisions.read().unwrap();
         super::project_state::validate_context_revisions(
             context,
             &data,
             &graph_revisions,
             &variable_revisions,
-            &worksheet_revisions,
+            &chart_revisions,
         )
     }
 

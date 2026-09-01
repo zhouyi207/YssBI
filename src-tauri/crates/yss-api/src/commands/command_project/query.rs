@@ -172,7 +172,7 @@ fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
     }
 }
 
-/// Resolve the on-disk path for a project resource (graph / database / worksheet).
+/// Resolve the on-disk path for a project resource (graph / database / chart).
 #[tauri::command]
 pub fn get_project_resource_path(
     application: State<ApplicationState>,

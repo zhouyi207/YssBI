@@ -10,12 +10,12 @@ import type { GraphResourceType } from "../../sidebarContextMenu";
 import { SidebarSectionEmptyState } from "../sections/SidebarSectionEmptyState";
 import { SidebarGraphRow } from "./SidebarGraphRow";
 import { SidebarVariableRow } from "./SidebarVariableRow";
-import { SidebarWorksheetRow } from "./SidebarWorksheetRow";
+import { SidebarChartRow } from "./SidebarChartRow";
 
 export interface SidebarProjectTreeActions {
   onAddEvent: () => void;
   onAddFunction: () => void;
-  onAddWorksheet: () => void;
+  onAddChart: () => void;
   onAddVariable: (isGlobal: boolean) => void;
   onCategoryContextMenu: (event: React.MouseEvent, categoryId: ProjectTreeCategoryId) => void;
   onGraphContextMenu: (
@@ -23,8 +23,8 @@ export interface SidebarProjectTreeActions {
     target: { type: "graph"; id: string; name: string; graphType: GraphResourceType },
   ) => void;
   onVariableContextMenu: (event: React.MouseEvent, id: string, name: string) => void;
-  onWorksheetContextMenu: (event: React.MouseEvent, path: string, name: string) => void;
-  onOpenWorksheet: (path: string, name: string) => void;
+  onChartContextMenu: (event: React.MouseEvent, path: string, name: string) => void;
+  onOpenChart: (path: string, name: string) => void;
 }
 
 function categoryAddConfig(
@@ -37,10 +37,10 @@ function categoryAddConfig(
       return { onAdd: actions.onAddEvent, ariaLabel: t("canvas.newEventGraph") };
     case PROJECT_TREE_CATEGORY_IDS.functions:
       return { onAdd: actions.onAddFunction, ariaLabel: t("canvas.newFunction") };
-    case PROJECT_TREE_CATEGORY_IDS.worksheets:
+    case PROJECT_TREE_CATEGORY_IDS.charts:
       return {
-        onAdd: actions.onAddWorksheet,
-        ariaLabel: t("contextMenu.sidebar.newWorksheet"),
+        onAdd: actions.onAddChart,
+        ariaLabel: t("contextMenu.sidebar.newChart"),
       };
     case PROJECT_TREE_CATEGORY_IDS.variables:
       return null;
@@ -147,19 +147,15 @@ export function SidebarProjectTreeRow({
           onContextMenu={(event) => actions.onVariableContextMenu(event, row.id, row.name)}
         />
       );
-    case "worksheet":
+    case "chart":
       return (
-        <SidebarWorksheetRow
-          worksheetPath={row.worksheetPath}
+        <SidebarChartRow
+          chartPath={row.chartPath}
           name={row.name}
           indentDepth={row.level}
-          isSelected={
-            detailTarget?.kind === "worksheet" && detailTarget.worksheetPath === row.worksheetPath
-          }
-          onOpen={actions.onOpenWorksheet}
-          onContextMenu={(event) =>
-            actions.onWorksheetContextMenu(event, row.worksheetPath, row.name)
-          }
+          isSelected={detailTarget?.kind === "chart" && detailTarget.chartPath === row.chartPath}
+          onOpen={actions.onOpenChart}
+          onContextMenu={(event) => actions.onChartContextMenu(event, row.chartPath, row.name)}
         />
       );
     default: {

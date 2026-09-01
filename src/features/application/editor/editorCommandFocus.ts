@@ -11,7 +11,7 @@ export interface EditorCommandTarget {
   readonly panelInstanceId: string;
   readonly groupId: string;
   readonly resourceRef: string;
-  readonly resourceKind: "event" | "function" | "worksheet";
+  readonly resourceKind: "event" | "function" | "chart";
 }
 
 const projectIdentityByTarget = new WeakMap<EditorCommandTarget, ProjectIdentitySnapshot>();

@@ -1,7 +1,7 @@
 import i18n from "i18next";
 
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
-import { saveWorksheetDocument } from "@/features/application/worksheet/saveWorksheetDocument";
+import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
 import {
   captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
@@ -18,7 +18,7 @@ import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 interface DirtyEditorDocument {
   resourceRef: string;
   title: string;
-  resourceKind: "event" | "function" | "worksheet";
+  resourceKind: "event" | "function" | "chart";
 }
 
 function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
@@ -52,13 +52,13 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
   for (const document of dirty) {
     let context: GraphSaveCommandContext | undefined;
     try {
-      if (document.resourceKind === "worksheet") {
-        const saved = await saveWorksheetDocument(document.resourceRef);
+      if (document.resourceKind === "chart") {
+        const saved = await saveChartDocument(document.resourceRef);
         if (!saved) {
           showBlockingMessage(
             i18n.t("notifications.editor.documentSaveFailed", {
               title: document.title,
-              error: "worksheet_save_not_committed",
+              error: "chart_save_not_committed",
             }),
           );
           return false;
@@ -91,7 +91,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
       );
       showBlockingIpcError(
         error,
-        document.resourceKind === "worksheet" ? "save_worksheet" : "save_project_graph",
+        document.resourceKind === "chart" ? "save_chart" : "save_project_graph",
         (code) =>
           i18n.t("notifications.editor.documentSaveFailed", {
             title: document.title,

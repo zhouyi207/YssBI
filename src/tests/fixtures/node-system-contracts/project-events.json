@@ -30,17 +30,17 @@
                   "kind": "resource_lifecycle",
                   "patch": {
                     "after": {
-                      "kind": "worksheet",
+                      "kind": "chart",
                       "name": "Sales Overview",
-                      "path": "worksheets/Sales Overview.yssbi-worksheet",
+                      "path": "charts/Sales Overview.yssbi-chart",
                       "revision": 0
                     },
                     "before": null
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Sales Overview.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Sales Overview.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 0
               }
@@ -73,7 +73,7 @@
                 "causedBy": "00000000-0000-0000-0000-000000000902",
                 "fromRevision": 0,
                 "payload": {
-                  "kind": "worksheet",
+                  "kind": "chart",
                   "patch": {
                     "after": {
                       "chartType": "line",
@@ -94,8 +94,8 @@
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Sales Overview.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Sales Overview.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 1
               }
@@ -130,13 +130,13 @@
                 "payload": {
                   "kind": "resource_move",
                   "patch": {
-                    "from": "worksheets/Sales Overview.yssbi-worksheet",
-                    "to": "worksheets/Regional Sales.yssbi-worksheet"
+                    "from": "charts/Sales Overview.yssbi-chart",
+                    "to": "charts/Regional Sales.yssbi-chart"
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Regional Sales.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Regional Sales.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 2
               }
@@ -147,10 +147,10 @@
             },
             "moves": [
               {
-                "from": "worksheets/Sales Overview.yssbi-worksheet",
-                "kind": "worksheet",
+                "from": "charts/Sales Overview.yssbi-chart",
+                "kind": "chart",
                 "name": "Regional Sales",
-                "to": "worksheets/Regional Sales.yssbi-worksheet"
+                "to": "charts/Regional Sales.yssbi-chart"
               }
             ],
             "operationId": "00000000-0000-0000-0000-000000000903",
@@ -180,16 +180,16 @@
                   "patch": {
                     "after": null,
                     "before": {
-                      "kind": "worksheet",
+                      "kind": "chart",
                       "name": "Regional Sales",
-                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "path": "charts/Regional Sales.yssbi-chart",
                       "revision": 2
                     }
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Regional Sales.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Regional Sales.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 3
               }
@@ -225,17 +225,17 @@
                   "kind": "resource_lifecycle",
                   "patch": {
                     "after": {
-                      "kind": "worksheet",
+                      "kind": "chart",
                       "name": "Regional Sales",
-                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "path": "charts/Regional Sales.yssbi-chart",
                       "revision": 4
                     },
                     "before": null
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Regional Sales.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Regional Sales.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 4
               }
@@ -272,16 +272,16 @@
                   "patch": {
                     "after": null,
                     "before": {
-                      "kind": "worksheet",
+                      "kind": "chart",
                       "name": "Regional Sales",
-                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "path": "charts/Regional Sales.yssbi-chart",
                       "revision": 4
                     }
                   }
                 },
                 "resource": {
-                  "key": "worksheets/Regional Sales.yssbi-worksheet",
-                  "kind": "worksheet"
+                  "key": "charts/Regional Sales.yssbi-chart",
+                  "kind": "chart"
                 },
                 "toRevision": 5
               }
@@ -318,17 +318,17 @@
               "kind": "resource_lifecycle",
               "patch": {
                 "after": {
-                  "kind": "worksheet",
+                  "kind": "chart",
                   "name": "Sales Overview",
-                  "path": "worksheets/Sales Overview.yssbi-worksheet",
+                  "path": "charts/Sales Overview.yssbi-chart",
                   "revision": 0
                 },
                 "before": null
               }
             },
             "resource": {
-              "key": "worksheets/Sales Overview.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Sales Overview.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 0
           }
@@ -356,7 +356,7 @@
             "causedBy": "00000000-0000-0000-0000-000000000902",
             "fromRevision": 0,
             "payload": {
-              "kind": "worksheet",
+              "kind": "chart",
               "patch": {
                 "after": {
                   "chartType": "line",
@@ -377,8 +377,8 @@
               }
             },
             "resource": {
-              "key": "worksheets/Sales Overview.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Sales Overview.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 1
           }
@@ -408,13 +408,13 @@
             "payload": {
               "kind": "resource_move",
               "patch": {
-                "from": "worksheets/Sales Overview.yssbi-worksheet",
-                "to": "worksheets/Regional Sales.yssbi-worksheet"
+                "from": "charts/Sales Overview.yssbi-chart",
+                "to": "charts/Regional Sales.yssbi-chart"
               }
             },
             "resource": {
-              "key": "worksheets/Regional Sales.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Regional Sales.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 2
           }
@@ -425,10 +425,10 @@
         },
         "moves": [
           {
-            "from": "worksheets/Sales Overview.yssbi-worksheet",
-            "kind": "worksheet",
+            "from": "charts/Sales Overview.yssbi-chart",
+            "kind": "chart",
             "name": "Regional Sales",
-            "to": "worksheets/Regional Sales.yssbi-worksheet"
+            "to": "charts/Regional Sales.yssbi-chart"
           }
         ],
         "operationId": "00000000-0000-0000-0000-000000000903",
@@ -453,16 +453,16 @@
               "patch": {
                 "after": null,
                 "before": {
-                  "kind": "worksheet",
+                  "kind": "chart",
                   "name": "Regional Sales",
-                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "path": "charts/Regional Sales.yssbi-chart",
                   "revision": 2
                 }
               }
             },
             "resource": {
-              "key": "worksheets/Regional Sales.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Regional Sales.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 3
           }
@@ -493,17 +493,17 @@
               "kind": "resource_lifecycle",
               "patch": {
                 "after": {
-                  "kind": "worksheet",
+                  "kind": "chart",
                   "name": "Regional Sales",
-                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "path": "charts/Regional Sales.yssbi-chart",
                   "revision": 4
                 },
                 "before": null
               }
             },
             "resource": {
-              "key": "worksheets/Regional Sales.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Regional Sales.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 4
           }
@@ -535,16 +535,16 @@
               "patch": {
                 "after": null,
                 "before": {
-                  "kind": "worksheet",
+                  "kind": "chart",
                   "name": "Regional Sales",
-                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "path": "charts/Regional Sales.yssbi-chart",
                   "revision": 4
                 }
               }
             },
             "resource": {
-              "key": "worksheets/Regional Sales.yssbi-worksheet",
-              "kind": "worksheet"
+              "key": "charts/Regional Sales.yssbi-chart",
+              "kind": "chart"
             },
             "toRevision": 5
           }

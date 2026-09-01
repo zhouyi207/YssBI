@@ -96,7 +96,7 @@ describe("sidebarStore section expand", () => {
       JSON.stringify({
         graphsEvent: false,
         variablesGlobal: true,
-        chartsWorksheets: false,
+        chartsCharts: false,
         dataData: false,
       }),
     );

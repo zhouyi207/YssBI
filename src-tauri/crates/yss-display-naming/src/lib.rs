@@ -1,7 +1,7 @@
 //! Allocation for case-sensitive database and variable display names.
 //!
 //! Display names intentionally have a looser compatibility contract than
-//! filesystem-backed graph and worksheet resource names. Existing `base N` and
+//! filesystem-backed graph and chart resource names. Existing `base N` and
 //! `base_N` spellings reserve the same numeric suffix, while newly allocated
 //! names use the canonical `base N` spelling starting at one.
 

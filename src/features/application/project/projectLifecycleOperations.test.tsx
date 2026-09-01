@@ -151,7 +151,7 @@ function mockProjectBHydration(): void {
     projectName: "Project B",
     graphs: [],
     variables: [],
-    worksheets: [],
+    charts: [],
     databases: [],
     exportTime: "",
   });
@@ -249,7 +249,7 @@ describe("project lifecycle initiating operations", () => {
       projectName: "Project B",
       graphs: [],
       variables: [],
-      worksheets: [],
+      charts: [],
       databases: [],
       exportTime: "",
     });
@@ -388,7 +388,7 @@ describe("project lifecycle initiating operations", () => {
       projectName: "Project B",
       graphs: [],
       variables: [],
-      worksheets: [],
+      charts: [],
       databases: [],
       exportTime: "",
     });
@@ -663,7 +663,7 @@ describe("project lifecycle initiating operations", () => {
         },
       ],
       variables: [],
-      worksheets: [],
+      charts: [],
       databases: [],
       exportTime: "",
     });

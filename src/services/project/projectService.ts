@@ -11,11 +11,11 @@ import type {
   ProjectGraphIndexRow,
   ProjectIndexRow,
   ProjectVariableIndexRow,
-  ProjectWorksheetIndexRow,
+  ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
 import type { FunctionSignatureDto, HistoryStatusDto } from "@/shared/types/domain/editorMutation";
 import type { DatabaseEngineDTO } from "@/shared/types/domain/database";
-import type { WorksheetChartType } from "@/shared/types/domain/worksheet";
+import type { ChartType } from "@/shared/types/domain/chart";
 import {
   isFunctionEditorProjectionDto,
   isGraphResourcePath,
@@ -132,26 +132,26 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
   throw new Error("Invalid project graph index row");
 }
 
-function isWorksheetChartType(value: unknown): value is WorksheetChartType {
+function isChartType(value: unknown): value is ChartType {
   return value === "histogram" || value === "scatter" || value === "line";
 }
 
-function parseProjectWorksheetIndexRow(value: unknown): ProjectWorksheetIndexRow {
+function parseProjectChartIndexRow(value: unknown): ProjectChartIndexRow {
   if (
     !isRecord(value) ||
     Array.isArray(value) ||
-    !hasExactKeys(value, ["worksheetPath", "name", "databaseId", "chartType", "revision"]) ||
-    typeof value.worksheetPath !== "string" ||
-    value.worksheetPath.length === 0 ||
+    !hasExactKeys(value, ["chartPath", "name", "databaseId", "chartType", "revision"]) ||
+    typeof value.chartPath !== "string" ||
+    value.chartPath.length === 0 ||
     typeof value.name !== "string" ||
     value.name.trim().length === 0 ||
     typeof value.databaseId !== "string" ||
-    !isWorksheetChartType(value.chartType) ||
+    !isChartType(value.chartType) ||
     !isSafeRevision(value.revision)
   ) {
-    throw new Error("Invalid project worksheet index row");
+    throw new Error("Invalid project chart index row");
   }
-  return value as unknown as ProjectWorksheetIndexRow;
+  return value as unknown as ProjectChartIndexRow;
 }
 
 function parseProjectIndexRow(value: unknown): ProjectIndexRow {
@@ -165,7 +165,7 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       "projectName",
       "exportTime",
       "graphs",
-      "worksheets",
+      "charts",
       "variables",
       "databases",
     ]) ||
@@ -179,7 +179,7 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     typeof value.projectName !== "string" ||
     typeof value.exportTime !== "string" ||
     !Array.isArray(value.graphs) ||
-    !Array.isArray(value.worksheets) ||
+    !Array.isArray(value.charts) ||
     !Array.isArray(value.variables) ||
     !Array.isArray(value.databases) ||
     !value.databases.every(isProjectDatabaseIndexRow)
@@ -194,7 +194,7 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       projectName: value.projectName,
       exportTime: value.exportTime,
       graphs: value.graphs.map(parseProjectGraphIndexRow),
-      worksheets: value.worksheets.map(parseProjectWorksheetIndexRow),
+      charts: value.charts.map(parseProjectChartIndexRow),
       variables: value.variables as ProjectVariableIndexRow[],
       databases: value.databases,
     };
@@ -310,7 +310,7 @@ export interface ProjectActivationResult {
 // ==================== 项目状态管理 API ====================
 
 export type RevealProjectResourceRequest = {
-  kind: "graph" | "database" | "worksheet";
+  kind: "graph" | "database" | "chart";
   resourceId: string;
 };
 

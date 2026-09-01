@@ -40,7 +40,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: null,
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toEqual({ kind: "empty" });
@@ -51,7 +51,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "variable", id: "var-1" },
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toMatchObject({ kind: "variable", id: "var-1", variable: { name: "X" } });
@@ -60,7 +60,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "data", id: "df-1" },
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toMatchObject({ kind: "data", id: "df-1", dataframe: { name: "Sales" } });
@@ -71,7 +71,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "node", id: "shared-node", graphPath: "functions/second" },
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toEqual({
@@ -85,7 +85,7 @@ describe("resolveDetailPanelModel", () => {
     const model = resolveDetailPanelModel({
       target: { kind: "function", path: "fn-1" },
       selectedLog: null,
-      worksheetDocument: null,
+      chartDocument: null,
       ...catalog,
       functions: {
         "fn-1": {
@@ -113,7 +113,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "event", path: "missing" },
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toEqual({ kind: "empty" });
@@ -122,7 +122,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "log" },
         selectedLog: null,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toEqual({ kind: "empty" });
@@ -131,7 +131,7 @@ describe("resolveDetailPanelModel", () => {
       resolveDetailPanelModel({
         target: { kind: "log" },
         selectedLog: logEntry,
-        worksheetDocument: null,
+        chartDocument: null,
         ...catalog,
       }),
     ).toEqual({ kind: "log", log: logEntry });

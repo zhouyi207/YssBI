@@ -83,7 +83,7 @@ export function validateResourceMutationWireResult(
         typeof move.to === "string" &&
         move.to.length > 0 &&
         move.from !== move.to &&
-        (move.kind === "worksheet" ||
+        (move.kind === "chart" ||
           ((move.kind === "event" || move.kind === "function") &&
             isGraphResourcePath(move.from) &&
             isGraphResourcePath(move.to))) &&

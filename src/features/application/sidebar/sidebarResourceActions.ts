@@ -8,7 +8,7 @@ import { captureProjectCommandContext } from "@/features/application/projectComm
 import { renameResource } from "@/features/application/resource/resourceActions";
 
 export type RevealProjectResourceRequest = {
-  readonly kind: "graph" | "database" | "worksheet";
+  readonly kind: "graph" | "database" | "chart";
   readonly resourceId: string;
 };
 
@@ -33,9 +33,6 @@ export async function revealProjectResourceInExplorer(
   }
 }
 
-export async function renameWorksheetResource(
-  worksheetPath: string,
-  nextName: string,
-): Promise<void> {
-  await renameResource({ id: worksheetPath, kind: "worksheet" }, nextName);
+export async function renameChartResource(chartPath: string, nextName: string): Promise<void> {
+  await renameResource({ id: chartPath, kind: "chart" }, nextName);
 }

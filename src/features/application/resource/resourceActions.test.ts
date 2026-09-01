@@ -5,7 +5,7 @@ import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectL
 import { useResourceStore } from "@/features/core/resource";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
-import { WorksheetService } from "@/services/worksheet/worksheetService";
+import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { deleteResource, renameResource } from "./resourceActions";
@@ -86,30 +86,30 @@ function deleteResult(projectInstanceId: string) {
   };
 }
 
-function worksheetRenameResult(projectInstanceId: string, publicationRevision = 1) {
+function chartRenameResult(projectInstanceId: string, publicationRevision = 1) {
   return {
     operationId: "00000000-0000-0000-0000-000000000124",
     projectInstanceId,
     publicationRevision,
     moves: [
       {
-        from: "worksheets/Report.yssbi-worksheet",
-        to: "worksheets/Renamed Report.yssbi-worksheet",
-        kind: "worksheet" as const,
+        from: "charts/Report.yssbi-chart",
+        to: "charts/Renamed Report.yssbi-chart",
+        kind: "chart" as const,
         name: "Renamed Report",
       },
     ],
     deltas: [
       {
-        resource: { kind: "worksheet" as const, key: "worksheets/Renamed Report.yssbi-worksheet" },
+        resource: { kind: "chart" as const, key: "charts/Renamed Report.yssbi-chart" },
         fromRevision: 4,
         toRevision: 5,
         causedBy: "00000000-0000-0000-0000-000000000124",
         payload: {
           kind: "resource_move" as const,
           patch: {
-            from: "worksheets/Report.yssbi-worksheet",
-            to: "worksheets/Renamed Report.yssbi-worksheet",
+            from: "charts/Report.yssbi-chart",
+            to: "charts/Renamed Report.yssbi-chart",
           },
         },
       },
@@ -181,10 +181,10 @@ describe("renameResource project ownership", () => {
           hasConflictDocument: false,
         },
         {
-          id: "worksheets/Report.yssbi-worksheet",
-          kind: "worksheet",
+          id: "charts/Report.yssbi-chart",
+          kind: "chart",
           name: "Report",
-          uri: "yssbi://worksheet/worksheets/Report.yssbi-worksheet",
+          uri: "yssbi://chart/charts/Report.yssbi-chart",
           revision: 4,
           exists: true,
           loaded: true,
@@ -280,29 +280,23 @@ describe("renameResource project ownership", () => {
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
   });
 
-  it("renames a worksheet from captured revision and token without load or save fallback", async () => {
-    const committed = worksheetRenameResult("project-instance-current");
-    vi.spyOn(WorksheetService, "renameWorksheet").mockImplementation(async () => {
+  it("renames a chart from captured revision and token without load or save fallback", async () => {
+    const committed = chartRenameResult("project-instance-current");
+    vi.spyOn(ChartService, "renameChart").mockImplementation(async () => {
       useResourceStore
         .getState()
-        .patchResource(
-          { id: "worksheets/Report.yssbi-worksheet", kind: "worksheet" },
-          { revision: 99 },
-        );
+        .patchResource({ id: "charts/Report.yssbi-chart", kind: "chart" }, { revision: 99 });
       return committed;
     });
-    const load = vi.spyOn(WorksheetService, "loadWorksheet");
-    const save = vi.spyOn(WorksheetService, "saveWorksheet");
+    const load = vi.spyOn(ChartService, "loadChart");
+    const save = vi.spyOn(ChartService, "saveChart");
 
-    await renameResource(
-      { id: "worksheets/Report.yssbi-worksheet", kind: "worksheet" },
-      "Renamed Report",
-    );
+    await renameResource({ id: "charts/Report.yssbi-chart", kind: "chart" }, "Renamed Report");
 
-    expect(WorksheetService.renameWorksheet).toHaveBeenCalledWith(
+    expect(ChartService.renameChart).toHaveBeenCalledWith(
       "project-instance-current",
       expect.any(String),
-      "worksheets/Report.yssbi-worksheet",
+      "charts/Report.yssbi-chart",
       4,
       "Renamed Report",
       expect.any(Number),
@@ -312,22 +306,19 @@ describe("renameResource project ownership", () => {
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
   });
 
-  it("rejects stale worksheet project and lifecycle ownership before publication", async () => {
-    vi.spyOn(WorksheetService, "renameWorksheet").mockResolvedValueOnce(
-      worksheetRenameResult("project-instance-stale"),
+  it("rejects stale chart project and lifecycle ownership before publication", async () => {
+    vi.spyOn(ChartService, "renameChart").mockResolvedValueOnce(
+      chartRenameResult("project-instance-stale"),
     );
 
     await expect(
-      renameResource(
-        { id: "worksheets/Report.yssbi-worksheet", kind: "worksheet" },
-        "Renamed Report",
-      ),
+      renameResource({ id: "charts/Report.yssbi-chart", kind: "chart" }, "Renamed Report"),
     ).rejects.toThrow("stale project lifecycle");
     expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
 
-    let resolveFirst!: (result: ReturnType<typeof worksheetRenameResult>) => void;
-    let resolveSecond!: (result: ReturnType<typeof worksheetRenameResult>) => void;
-    vi.mocked(WorksheetService.renameWorksheet)
+    let resolveFirst!: (result: ReturnType<typeof chartRenameResult>) => void;
+    let resolveSecond!: (result: ReturnType<typeof chartRenameResult>) => void;
+    vi.mocked(ChartService.renameChart)
       .mockReset()
       .mockReturnValueOnce(
         new Promise((resolve) => {
@@ -341,18 +332,18 @@ describe("renameResource project ownership", () => {
       );
 
     const first = renameResource(
-      { id: "worksheets/Report.yssbi-worksheet", kind: "worksheet" },
+      { id: "charts/Report.yssbi-chart", kind: "chart" },
       "Renamed Report",
     );
-    await vi.waitFor(() => expect(WorksheetService.renameWorksheet).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ChartService.renameChart).toHaveBeenCalledTimes(1));
     const second = renameResource(
-      { id: "worksheets/Report.yssbi-worksheet", kind: "worksheet" },
+      { id: "charts/Report.yssbi-chart", kind: "chart" },
       "Renamed Report",
     );
-    await vi.waitFor(() => expect(WorksheetService.renameWorksheet).toHaveBeenCalledTimes(2));
-    resolveFirst(worksheetRenameResult("project-instance-current", 1));
+    await vi.waitFor(() => expect(ChartService.renameChart).toHaveBeenCalledTimes(2));
+    resolveFirst(chartRenameResult("project-instance-current", 1));
     await expect(first).rejects.toMatchObject({ code: "stale_resource_lifecycle" });
-    resolveSecond(worksheetRenameResult("project-instance-current", 2));
+    resolveSecond(chartRenameResult("project-instance-current", 2));
     await expect(second).resolves.toBeUndefined();
   });
 

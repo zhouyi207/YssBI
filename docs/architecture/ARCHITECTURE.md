@@ -162,14 +162,14 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-registry/`           | 独立 Stateful Project 层：registration、favorite、cleanup、scan、路径规范化/校验及 typed workflow error 的唯一 owner；SQLite 实现留在 Backend Adapter，不持有 ProjectState、Tauri 或 SQLx                                                                                                                    |
 | `src-tauri/crates/yss-project-registry-sqlite/`    | 独立 Backend Adapter：`ProjectRegistryStore` 的 SQLx/SQLite schema、CRUD 与 strict row mapping 唯一 owner；不依赖 registry workflow、ProjectState 或 Tauri                                                                                                                                                   |
 | `src-tauri/crates/yss-resource-lifecycle/`         | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport                                                                      |
-| `src-tauri/crates/yss-resource-naming/`            | 独立 Pure Leaf：graph/worksheet 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner                                                                                                                                                                                                        |
+| `src-tauri/crates/yss-resource-naming/`            | 独立 Pure Leaf：graph/chart 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner                                                                                                                                                                                                        |
 | `src-tauri/crates/yss-sql-source/`                 | 独立 Database Core：SQLite/PostgreSQL/MySQL read-only table discovery、连接配置、identifier quoting、strict SQLx value decoding 与 typed Polars materialization 的唯一 owner；不持有 Project/Application/Tauri 状态或导入 publication                                                                        |
 | `src-tauri/crates/yss-tabular-contract/`           | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；变量值归一化由 `yss-variable-value` 负责                                                                                                                                                                     |
 | `src-tauri/crates/yss-tabular-io/`                 | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O、Excel workbook sheet inspection/CSV bridge 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io`、`database/excel_reader` owner，且不依赖 root database、Application 或 Tauri                                |
 | `src-tauri/crates/yss-tabular-polars/`             | 独立 Backend Adapter：canonical tabular scalar/column/snapshot 的 Polars materialization、双向 JSON value projection，以及 `yss-database-edit` operation 的 DataFrame apply/reverse/cast 唯一 owner；完整保留 `u64` 与 1970 年前时间戳，且不依赖 root database、Application 或 Tauri                         |
 | `src-tauri/crates/yss-variable-contract/`          | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project                                                                                                                                                       |
 | `src-tauri/crates/yss-variable-value/`             | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization                                                                                                                                             |
-| `src-tauri/crates/yss-worksheet-document/`         | 独立 Pure Leaf：worksheet 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project                                                                                                                                                        |
+| `src-tauri/crates/yss-chart-document/`         | 独立 Pure Leaf：chart 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project                                                                                                                                                        |
 | `src-tauri/crates/yss-bayes-artifact-contract/`    | 独立 Pure Leaf：Bayes artifact reader port 与 read/validation/export typed failure category 的唯一 owner；只依赖 canonical result projection，不依赖 Polars、Tauri、Application 或具体 I/O                                                                                                                   |
 | `src-tauri/crates/yss-bayes-artifact-polars/`      | 独立 Backend Adapter：Arrow IPC artifact materialization、CSV export、sample paging 与 trace/density/autocorrelation/posterior-predictive projection 的唯一 owner；malformed/partial rows fail closed，不依赖 Tauri 或 Application                                                                           |
 | `src-tauri/crates/yss-bayes-model/`                | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri                                                                                                                    |
@@ -220,7 +220,7 @@ components/ui and shared/ui
 
 ### 3.1 Plot / Visualization
 
-Rust scientific modules 与 result payloads 拥有统计计算、canonical ordering、confidence fields 和其他科学决策。React 不成为第二套 scientific authority：Result 与 Worksheet source adapters 将 authoritative DTOs 转换为 source-independent discriminated `ChartModel` union；renderers 不感知 Rust、IPC、stores、report workflows 或 Bayes workflows。
+Rust scientific modules 与 result payloads 拥有统计计算、canonical ordering、confidence fields 和其他科学决策。React 不成为第二套 scientific authority：Result 与 Chart source adapters 将 authoritative DTOs 转换为 source-independent discriminated `ChartModel` union；renderers 不感知 Rust、IPC、stores、report workflows 或 Bayes workflows。
 
 - `src/shared/charts/ChartRenderer.tsx` 是唯一的 generic `ChartModel` dispatcher。其 registry 将 model kinds 映射到 final leaf renderers；已有窄 presentation contract 的 specialized report composition 可以直接导入 leaf renderer。
 - `src/shared/charts/core/` 拥有共享 sizing、theme、geometry、stable SVG layers 与 tooltip behavior。`cartesian/` 拥有 generic Cartesian marks/axes；`statistical/` 拥有 domain-specific statistical visual grammars。两个 renderer categories 不互相依赖，category/core modules 也不导入 root public barrel。
@@ -286,7 +286,7 @@ command_bayes
 
 ### 5.1 ProjectData 与 ProjectStore
 
-`ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、worksheet、database declaration 和 computation settings 的 authoritative state。
+`ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、chart、database declaration 和 computation settings 的 authoritative state。
 
 `ProjectStore` 只保留 Project session identity；随 project session 重建的运行时对象由
 `ApplicationSessionSlot` 持有：
@@ -399,7 +399,7 @@ yss-julia-runtime
 yss-julia-worker + yss-bayes-worker
   → yss-bayes-worker-julia → composition root
 yss-project-layout
-  → yss-graph-document + yss-worksheet-document + Project persistence/indexing + Platform watcher classification
+  → yss-graph-document + yss-chart-document + Project persistence/indexing + Platform watcher classification
 yss-path-display
   → Project registry + Application project query
 yss-project-layout + yss-project-identity
@@ -410,7 +410,7 @@ yss-project-identity
   → yss-project-registry-contract → yss-project-registry/Application/Transport/Backend Adapter
 yss-project-identity + yss-project-registry-contract
   → yss-project-registry-sqlite → Composition Root
-yss-project-identity + yss-graph-document + yss-worksheet-document + yss-database-contract
+yss-project-identity + yss-graph-document + yss-chart-document + yss-database-contract
   → yss-project-history → yss-project
 yss-data-contract + yss-project-history + yss-project-identity
   → yss-function-editor-projection → Project index/Application events/Transport
@@ -418,13 +418,13 @@ yss-project-layout + yss-project-progress
   → yss-project-discovery → yss-project-registry → Application/Commands
 yss-computation-settings
   → yss-project-manifest → Project I/O/lifecycle
-yss-computation-settings + yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-worksheet-document
+yss-computation-settings + yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-chart-document
   → yss-project-model → yss-project
 yss-project-identity
   → yss-project-operation → yss-project
-yss-project-identity + yss-project-layout + yss-resource-lifecycle + yss-resource-naming + yss-graph-document + yss-worksheet-document
+yss-project-identity + yss-project-layout + yss-resource-lifecycle + yss-resource-naming + yss-graph-document + yss-chart-document
   → yss-project-filesystem → yss-project
-yss-project-identity + yss-graph-document + yss-worksheet-document
+yss-project-identity + yss-graph-document + yss-chart-document
   → yss-resource-lifecycle → yss-project
 yss-data-contract + yss-tabular-contract + yss-variable-contract
   → yss-variable-value → yss-project
@@ -446,13 +446,13 @@ yss-project-progress
 yss-computation-settings + yss-project-identity
   → yss-project → Application SCI/Execution mappings → Commands/Event wire
 yss-resource-naming + yss-project-identity
-  → yss-worksheet-document → yss-project → Application/Commands
+  → yss-chart-document → yss-project → Application/Commands
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
 - `yss-computation-settings`：统一拥有持久化 numeric tolerance、missing-value policy、校验错误和 settings mutation envelopes。Project manifest 读取显式执行 fail-closed validation，嵌套 settings wire 拒绝未知字段；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
 - `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
-- `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Worksheet 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
+- `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Chart 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
 - `yss-project-change`：统一拥有不可绕过的 project-relative path 不变量、文件 change kind、显式 `RescanRequired` 与 `ProjectIndexInvalidation`。Watcher 故障不再伪造为 `metadata.yssbi` 文件变更，无关路径以 `None` 表示无操作而不是错误；notify adapter 忽略普通 read/open access 事件以避免自激重读循环，同时保留 `Close(Write)`、rename 语义和跨边界事件中的安全根内路径。`ProjectState` 重读、watcher lifecycle 与 Tauri event delivery 分别留在各自 owner，根 `project` 不提供 contract facade。
 - `yss-project-watcher`：统一拥有 watcher epoch、旧 session delivery admission 封锁、typed factory/session/drain protocol、超时后可重试的 drain ownership 与替换状态机。Application 只把 canonical `ProjectChange` 交给当前 Project authority，Notify adapter 只实现 filesystem observation；从核心删除未被使用的 duplicate quiet-period 常量及生产不可构造的 `DeliveryFailed` 分支，避免两个 debounce 事实源和伪终态。
 - `yss-project-watcher-notify`：统一拥有 `notify` backend、相关 event 到 canonical `ProjectChange` 的安全映射、单一 250ms debounce 事实、bounded coalescing worker 与可超时重试的 join handoff。根 crate 删除空 `platform` facade 和直接 `notify` 依赖，只在 composition root 将该 adapter 注入 `yss-project-watcher`；普通 read/open access 继续被忽略，callback uncertainty 显式升级为 rescan。
@@ -468,7 +468,7 @@ yss-resource-naming + yss-project-identity
 - `yss-resource-lifecycle`：统一拥有 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、ownership predecessor chain、提交/放弃状态与 RAII guard。核心 API 只接收 canonical `ProjectInstanceId`，不再耦合完整 `ProjectSession`；原先被 `cfg(all(test, any()))` 永久关闭的 17 个状态机测试已恢复，零调用且可能 panic 的资源路径 getter 与根层测试探针已删除。跨状态 `ProjectSession` 校验和激活 publication 锁顺序继续留在 `yss-project`，typed filesystem 分类映射由 `yss-project-filesystem` 唯一拥有。
 - `yss-variable-value`：统一拥有变量类型变更后的 inert 默认值、`var:{id}` handle 与 tabular literal/snapshot 归一化。数组和对象默认值为空，避免伪造用户数据或违反元素类型；canonical handle 缺失 snapshot 时 fail closed，DataSeries 只替换 handle 并保留 element/dummy/time-series metadata。Project 激活不再吞掉归一化错误，状态、事务和持久化仍留在 Project。
 - `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
-- `yss-worksheet-document`：统一拥有 worksheet schema version、严格 document/encodings wire 与资源路径；`worksheets/*.yssbi-worksheet` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 worksheet contract facade。
+- `yss-chart-document`：统一拥有 chart schema version、严格 document/encodings wire 与资源路径；`charts/*.yssbi-chart` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 chart contract facade。
 - `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。

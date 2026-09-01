@@ -9,4 +9,4 @@ publish = false
 thiserror.workspace = true
 yss-graph-document = { path = "../yss-graph-document" }
 yss-project-identity = { path = "../yss-project-identity" }
-yss-worksheet-document = { path = "../yss-worksheet-document" }
+yss-chart-document = { path = "../yss-chart-document" }

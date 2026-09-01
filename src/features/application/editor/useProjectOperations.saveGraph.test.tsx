@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   captureSettledGraphSaveCommandContext: vi.fn(),
   isGraphSaveCommandRevisionCurrent: vi.fn(() => true),
   saveProjectGraph: vi.fn(async () => undefined),
-  saveWorksheet: vi.fn(async () => true),
+  saveChart: vi.fn(async () => true),
   markResourceDirty: vi.fn(),
   warnCallFunctionIssuesBeforeSave: vi.fn(),
   showBlockingMessage: vi.fn(),
@@ -40,13 +40,13 @@ vi.mock("@/features/application/project/projectSession", () => ({
   resolveActiveProjectPath: mocks.resolveActiveProjectPath,
 }));
 
-vi.mock("@/features/application/worksheet/saveWorksheetDocument", () => ({
-  saveWorksheetDocument: mocks.saveWorksheet,
+vi.mock("@/features/application/chart/saveChartDocument", () => ({
+  saveChartDocument: mocks.saveChart,
 }));
 
-vi.mock("@/features/core/worksheet/worksheetStore", () => ({
-  useWorksheetStore: {
-    getState: () => ({ saveDocument: mocks.saveWorksheet }),
+vi.mock("@/features/core/chart/chartDocumentStore", () => ({
+  useChartDocumentStore: {
+    getState: () => ({ saveDocument: mocks.saveChart }),
   },
 }));
 
@@ -126,7 +126,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     mocks.captureSettledGraphSaveCommandContext.mockResolvedValue(graphSaveContext());
     mocks.isGraphSaveCommandRevisionCurrent.mockReturnValue(true);
     mocks.saveProjectGraph.mockResolvedValue(undefined);
-    mocks.saveWorksheet.mockResolvedValue(true);
+    mocks.saveChart.mockResolvedValue(true);
 
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -196,23 +196,23 @@ describe("useProjectOperations saveGraph target authority", () => {
     expect(mocks.markResourceDirty).not.toHaveBeenCalled();
   });
 
-  it("saves a worksheet by its captured target and ignores stale settlement feedback", async () => {
-    const worksheetTarget: EditorCommandTarget = Object.freeze({
-      panelInstanceId: "panel-worksheet",
+  it("saves a chart by its captured target and ignores stale settlement feedback", async () => {
+    const chartTarget: EditorCommandTarget = Object.freeze({
+      panelInstanceId: "panel-chart",
       groupId: "group-main",
-      resourceRef: "worksheets/Summary.yssbi-worksheet",
-      resourceKind: "worksheet",
+      resourceRef: "charts/Summary.yssbi-chart",
+      resourceKind: "chart",
     });
-    mocks.saveWorksheet.mockImplementationOnce(async () => {
+    mocks.saveChart.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
       return false;
     });
 
     await act(async () => {
-      await operations.saveGraph(worksheetTarget);
+      await operations.saveGraph(chartTarget);
     });
 
-    expect(mocks.saveWorksheet).toHaveBeenCalledWith(worksheetTarget.resourceRef);
+    expect(mocks.saveChart).toHaveBeenCalledWith(chartTarget.resourceRef);
     expect(mocks.captureSettledGraphSaveCommandContext).not.toHaveBeenCalled();
     expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
     expect(mocks.showBlockingMessage).not.toHaveBeenCalled();
