@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { FunctionComponent } from "react";
 
 import { BottomBar } from "./Layout/BottomBar";
 import { Menubar } from "./Layout/Menubar";
@@ -12,9 +13,9 @@ import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSync } from "@/features/application/initialization";
 import {
-  EditorSessionProvider,
   useEditorKeyboard,
   useWorkbenchWindowCloseGuard,
+  type WorkbenchCommandCapability,
 } from "@/features/application/editor";
 
 import { useWorkbenchWindowGeometryPersistence } from "@/features/application/window";
@@ -23,22 +24,33 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
   readonly dndCoordinator: RootDockviewDndCoordinator;
+  readonly commands: WorkbenchCommandCapability;
+  readonly watermarkComponent: FunctionComponent;
 }
 
-function WorkbenchWindowReady({ panelRegistry, dndCoordinator }: WorkbenchWindowProps) {
+function WorkbenchWindowReady({
+  panelRegistry,
+  dndCoordinator,
+  commands,
+  watermarkComponent,
+}: WorkbenchWindowProps) {
   useProjectSync();
   useProjectionLocaleSync();
 
-  useEditorKeyboard();
+  useEditorKeyboard(commands);
 
   return (
     <div
       className="flex h-screen w-full flex-col bg-[var(--workbench-bg)] text-foreground"
       data-yssbi-workbench
     >
-      <Menubar />
+      <Menubar commands={commands} />
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
-        <RootDockviewHost panelRegistry={panelRegistry} dndCoordinator={dndCoordinator} />
+        <RootDockviewHost
+          panelRegistry={panelRegistry}
+          dndCoordinator={dndCoordinator}
+          watermarkComponent={watermarkComponent}
+        />
       </div>
       <BottomBar />
       <WorkbenchOverlayHost />
@@ -46,7 +58,7 @@ function WorkbenchWindowReady({ panelRegistry, dndCoordinator }: WorkbenchWindow
   );
 }
 
-export function WorkbenchWindow({ panelRegistry, dndCoordinator }: WorkbenchWindowProps) {
+export function WorkbenchWindow(props: WorkbenchWindowProps) {
   const { t } = useTranslation();
   const { status, error } = useAppInitialization();
 
@@ -66,9 +78,5 @@ export function WorkbenchWindow({ panelRegistry, dndCoordinator }: WorkbenchWind
     );
   }
 
-  return (
-    <EditorSessionProvider>
-      <WorkbenchWindowReady panelRegistry={panelRegistry} dndCoordinator={dndCoordinator} />
-    </EditorSessionProvider>
-  );
+  return <WorkbenchWindowReady {...props} />;
 }

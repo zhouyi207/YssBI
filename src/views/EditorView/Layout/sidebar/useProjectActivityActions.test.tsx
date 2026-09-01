@@ -14,37 +14,20 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/application/editor", () => ({
-  useEditorSessionCommandsContext: () => ({
+  useEditorPanelCommands: () => ({ openGraph: vi.fn() }),
+  useOpenChart: () => vi.fn(),
+  useChartManagement: () => ({}),
+}));
+
+vi.mock("@/features/application/dataManagement", () => ({
+  useGraphManagement: () => ({}),
+  useVariableManagement: () => ({
     addVariable: mocks.addVariable,
   }),
-  useEditorSessionResources: () => ({
-    events: {},
-    functions: {},
-  }),
 }));
 
-vi.mock("@/features/core/graphSession/ui", () => ({
-  useGraphSessionUi: (
-    selector: (state: { focusedSession: { groupId: string; graphPath: string } }) => unknown,
-  ) =>
-    selector({
-      focusedSession: {
-        groupId: "group-1",
-        graphPath: "charts/Report.yssbi-chart",
-      },
-    }),
-}));
-
-vi.mock("@/features/core/dockview", () => ({
-  workbenchDockviewRead: {
-    getActiveEditorPanelInGroup: () => ({
-      metadata: {
-        role: "editor",
-        resourceRef: "charts/Report.yssbi-chart",
-        resourceKind: "chart",
-      },
-    }),
-  },
+vi.mock("@/features/application/sidebar", () => ({
+  useActiveProjectGraph: () => null,
 }));
 
 vi.mock("@/features/core/variable/read", () => ({

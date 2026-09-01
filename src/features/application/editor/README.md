@@ -6,33 +6,31 @@ Editor UI orchestration lives under `features/application/editor/`. Core editor 
 
 ```
 features/application/editor/
-├── EditorSessionContext.tsx   # Stable command provider per Workbench window
-├── editorSessionCommands.ts   # Explicit intersection of stable command slices
-├── editorSessionTypes.ts      # Named caller-shaped contracts
-├── useEditorSessionCommands.ts
-├── useEditorSessionSlices.ts  # Direct resource subscriptions and detail actions
+├── editorCanvasTypes.ts       # Panel-scoped Canvas contracts
+├── workbenchCommandCapability.ts # Explicit Workbench command contract
 ├── useEditorCanvas.ts         # Panel-scoped Canvas commands/workspace/resources/interaction
 ├── useEditorOperations.ts     # Clipboard, history, node ops
 ├── useEditorPanelCommands.ts  # Narrow panel open/split facade
+├── useDetailsCommands.ts      # Details-only mutation capability
 └── index.ts
 
 features/core/editor/
-├── hooks/                     # Group workspace and narrow collection hooks
-├── context/GroupContext.ts    # Dockview group scope for layout-backed editors
+├── hooks/                     # Narrow projection and UI hooks
 └── index.ts
 ```
 
 ## Usage
 
-### Workbench window shell
+### Workbench composition
 
 ```tsx
-import { EditorSessionProvider } from "@/features/application/editor";
+const commands = useWorkbenchCommandCoordinator();
 
-<EditorSessionProvider>
-  <WorkbenchWindowReady />
-</EditorSessionProvider>;
+<WorkbenchWindow commands={commands} />;
 ```
+
+Only `app/integrations/workbenchCommandCoordinator.ts` combines menu, keyboard,
+project, graph, and chart commands. Views receive the typed capability through props.
 
 ### Canvas
 
@@ -49,27 +47,25 @@ Use `mode: 'preview'` for an inactive Dockview panel. Preview does not mount
 the panel's context-menu actions, global pointer loop, or drop handling.
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` /
-`execution` model from Canvas and must not call editor session hooks.
+`execution` model from Canvas and must not assemble application commands.
 
 ### Other consumers
 
-Use the narrow interface matching the caller:
+Use the narrow capability matching the caller:
 
 ```tsx
-const resources = useEditorSessionResources();
-const detailActions = useEditorSessionDetailActions();
-const commands = useEditorSessionCommandsContext();
+const { updateVariable } = useDetailsCommands();
+const activeGraph = useActiveProjectGraph();
 ```
 
 ## Interface rules
 
-| Hook                                | Interface                                                                                            | Mount/caller                             |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `EditorSessionProvider`             | Stable command context                                                                               | `WorkbenchWindow` root                   |
-| `useEditorSessionCommandsContext()` | Explicit command-slice intersection                                                                  | Application consumers that need commands |
-| `useEditorSessionResources()`       | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists                |
-| `useEditorSessionDetailActions()`   | Variable/DataFrame update commands                                                                   | Detail panels                            |
-| `useEditorCanvas({ mode, scope })`  | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction`                           | **Only** `Canvas.tsx`                    |
+| Capability / Hook                  | Interface                                                                  | Mount/caller                |
+| ---------------------------------- | -------------------------------------------------------------------------- | --------------------------- |
+| `WorkbenchCommandCapability`       | Menu, keyboard, and welcome actions composed by the app                    | `WorkbenchWindow` props     |
+| `useDetailsCommands()`             | Variable mutation required by Details                                      | `DetailsPane`               |
+| `useActiveProjectGraph()`          | Active event/function resource required by Project Explorer                | Project Activity controller |
+| `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx`       |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through
 a subtree, or mirror Dockview topology in a store. Add or reuse a named slice

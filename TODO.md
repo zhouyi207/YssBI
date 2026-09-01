@@ -894,3 +894,5 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       前端 service/state/UI、`charts/*.yssbi-chart` 与 i18n，并删除旧双路径。
 - [ ] 将 Project、Node Catalog、Data 与 Commands Activity panel 拆为独立 controller/public contribution，
       删除宽 `WorkbenchActivityPanelsProvider`，并由 app integration 唯一协调 sidebar-to-editor DnD。
+- [ ] 删除全局 `EditorSessionCommands`/Provider 与宽资源切片，让 Graph、Project、Data、Details 使用
+      caller-shaped capability，并由 app integration 唯一组装 Menubar、快捷键与欢迎页的跨模块命令。

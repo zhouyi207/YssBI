@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useEditorSessionCommandsContext } from "@/features/application/editor";
+import { useDatabaseManagement } from "@/features/application/dataManagement";
 import { renameResource } from "@/features/application/resource/resourceActions";
 import { revealProjectResourceInExplorer } from "@/features/application/sidebar/sidebarResourceActions";
 import { openDatabaseEditorWindow } from "@/features/application/window";
@@ -18,7 +18,7 @@ type OpenInputDialog = (
 export function useDataActivityActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
   const databases = useDatabaseRead((snapshot) => snapshot.databases);
-  const { deleteDataFrame, triggerImportData } = useEditorSessionCommandsContext();
+  const { deleteDataFrame, triggerImportData } = useDatabaseManagement();
 
   const renameDatabaseItem = useCallback(
     (id: string, name: string) => {

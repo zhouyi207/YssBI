@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useEditorSessionResources } from "@/features/application/editor";
+import { useDatabaseRead } from "@/features/core/database/read";
 import { ActionMenu } from "@/shared/ui/actionMenu";
 import type { RootDockviewPanelComponent } from "../../RootDockviewHost";
 import { SidebarRenameDialog } from "../../sidebar/SidebarRenameDialog";
@@ -16,7 +16,7 @@ import { ActivityPanelShell } from "../ActivityPanelShell";
 
 function DataActivityPanelController() {
   const { t } = useTranslation();
-  const { dataframes } = useEditorSessionResources();
+  const dataframes = useDatabaseRead((snapshot) => snapshot.databases);
   const {
     contextMenu,
     closeActionMenu,

@@ -418,6 +418,54 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps Workbench commands caller-shaped instead of globally aggregated", () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = productionTypeScriptSources(context);
+      const retiredCommandFiles = [
+        "src/features/application/editor/EditorSessionContext.tsx",
+        "src/features/application/editor/editorSessionCommands.ts",
+        "src/features/application/editor/editorSessionTypes.ts",
+        "src/features/application/editor/useEditorSessionCommands.ts",
+        "src/features/application/editor/useEditorSessionSlices.ts",
+        "src/features/application/editor/useEditorSessionUi.ts",
+      ];
+      expect(
+        sources.map(({ path }) => path).filter((path) => retiredCommandFiles.includes(path)),
+      ).toEqual([]);
+
+      const retiredIdentifiers = [
+        "EditorSessionCommands",
+        "EditorSessionProvider",
+        "useEditorSessionCommandsContext",
+        "useEditorSessionResources",
+        "useEditorSessionDetailActions",
+      ];
+      expect(
+        sources.flatMap(({ path, source }) =>
+          retiredIdentifiers
+            .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
+            .map((identifier) => `${path}:${identifier}`),
+        ),
+      ).toEqual([]);
+
+      const coordinatorConsumers = sources.filter(
+        ({ path, source }) =>
+          path !== "src/app/integrations/workbenchCommandCoordinator.ts" &&
+          /\buseWorkbenchCommandCoordinator\s*\(/u.test(source),
+      );
+      expect(coordinatorConsumers.map(({ path }) => path)).toEqual([
+        "src/app/WorkbenchComposition.tsx",
+      ]);
+
+      const coordinator = sources.find(
+        ({ path }) => path === "src/app/integrations/workbenchCommandCoordinator.ts",
+      )?.source;
+      expect(coordinator).toMatch(/\buseEditorOperations\s*\(/u);
+      expect(coordinator).toMatch(/\buseGraphManagement\s*\(/u);
+      expect(coordinator).toMatch(/\buseChartManagement\s*\(/u);
+    });
+  });
+
   it("classifies every frontend production source exactly once", () => {
     const emptyMembership = Object.fromEntries(
       [

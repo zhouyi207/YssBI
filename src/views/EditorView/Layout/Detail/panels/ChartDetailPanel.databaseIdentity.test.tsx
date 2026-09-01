@@ -13,8 +13,9 @@ import { ChartDetailPanel } from "./ChartDetailPanel";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/features/application/editor", () => ({
-  useEditorSessionResources: () => ({ dataframes: {} }),
+vi.mock("@/features/core/database/read", () => ({
+  useDatabaseRead: (selector: (snapshot: { databases: Record<string, never> }) => unknown) =>
+    selector({ databases: {} }),
 }));
 vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

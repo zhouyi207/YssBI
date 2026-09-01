@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+
 import { AssistantPanel } from "@/views/AssistantView/AssistantPanel";
 import { EditorResourceDockPanel } from "@/views/EditorView/Layout/EditorResourceDockPanel";
 import { DetailsPane } from "@/views/EditorView/Layout/Detail/DetailsPane";
@@ -9,10 +11,12 @@ import { nodeCatalogActivityPanelContribution } from "@/views/EditorView/Layout/
 import { projectActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/project/public";
 import { createRootPanelRegistry } from "@/views/EditorView/Layout/RootDockviewHost";
 import { WorkbenchWindow } from "@/views/EditorView/WorkbenchWindow";
+import { WatermarkView } from "@/views/EditorView/Canvas/overlays/WatermarkView";
 import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
 import { LogWorkspaceDockview } from "@/views/LogView/LogWorkspaceDockview";
 import { OutputPanel } from "@/views/LogView/OutputPanel";
 import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
+import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
 
 function MainLogsDockPanel() {
   return <LogWorkspaceDockview layout={{ kind: "main" }} />;
@@ -35,5 +39,15 @@ const rootPanelRegistry = createRootPanelRegistry({
 
 export function WorkbenchComposition() {
   const dndCoordinator = useActivityEditorDndCoordinator();
-  return <WorkbenchWindow panelRegistry={rootPanelRegistry} dndCoordinator={dndCoordinator} />;
+  const commands = useWorkbenchCommandCoordinator();
+  const watermarkComponent = useCallback(() => <WatermarkView commands={commands} />, [commands]);
+
+  return (
+    <WorkbenchWindow
+      panelRegistry={rootPanelRegistry}
+      dndCoordinator={dndCoordinator}
+      commands={commands}
+      watermarkComponent={watermarkComponent}
+    />
+  );
 }

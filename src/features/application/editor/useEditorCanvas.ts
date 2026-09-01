@@ -1,11 +1,13 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 import { useCanvasInteraction } from "@/features/core/canvas";
+import { useNodeManagement } from "@/features/application/dataManagement";
 import { useVariableStore } from "@/features/core/dataStore";
 import {
   EMPTY_EDITOR_PANE_SELECTION,
@@ -13,11 +15,11 @@ import {
   useEditorPaneStateStore,
 } from "@/features/core/dockview";
 import { setInspectionContext } from "./rightSidebarActions";
-import type { EditorContextMenuState } from "@/features/core/editor";
+import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
+import { editorViewportScope, getViewport, subscribeToViewport } from "@/features/core/viewport";
 import type { Pin } from "@/shared/types/domain";
 import { captureActiveEditorCommandTarget, type EditorCommandTarget } from "./editorCommandFocus";
 import { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
-import { useEditorSessionCommandsContext } from "./EditorSessionContext";
 import type {
   EditorCanvasCommandsSlice,
   EditorCanvasInteractionSlice,
@@ -26,8 +28,10 @@ import type {
   EditorCanvasScope,
   EditorCanvasSession,
   EditorCanvasWorkspaceSlice,
-} from "./editorSessionTypes";
+} from "./editorCanvasTypes";
 import { useCanvasMutationHandlers } from "./useCanvasMutationHandlers";
+import { useEditorOperations } from "./useEditorOperations";
+import { useProjectOperations } from "./useProjectOperations";
 
 export interface UseEditorCanvasOptions {
   mode: EditorCanvasMode;
@@ -36,7 +40,10 @@ export interface UseEditorCanvasOptions {
 
 /** Canvas-only editor projection scoped to one Dockview panel and resource. */
 export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): EditorCanvasSession {
-  const sessionCommands = useEditorSessionCommandsContext();
+  const editorCommands = useEditorOperations();
+  const projectCommands = useProjectOperations();
+  const nodeCommands = useNodeManagement();
+  const { setContextMenu: setEditorContextMenu } = useEditorUIActions();
   const variables = useVariableStore((state) => state.variables);
   const paneSelection = useEditorPaneStateStore(
     (state) => state.selections[scope.panelInstanceId] ?? EMPTY_EDITOR_PANE_SELECTION,
@@ -45,8 +52,17 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   const interactive = mode === "interactive";
   const groupIdRef = useRef(scope.groupId);
   const graphPathRef = useRef<string | null>(scope.graphPath);
+  const viewportRef = useRef(getViewport(editorViewportScope(scope.groupId, scope.graphPath)));
   groupIdRef.current = scope.groupId;
   graphPathRef.current = scope.graphPath;
+
+  useEffect(() => {
+    const viewportScope = editorViewportScope(scope.groupId, scope.graphPath);
+    viewportRef.current = getViewport(viewportScope);
+    return subscribeToViewport(viewportScope, (viewport) => {
+      viewportRef.current = viewport;
+    });
+  }, [scope.graphPath, scope.groupId]);
 
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -73,7 +89,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
 
   const setContextMenu = useCallback(
     (menu: EditorContextMenuState | null) => {
-      sessionCommands.setContextMenu(
+      setEditorContextMenu(
         menu
           ? {
               ...menu,
@@ -84,7 +100,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
           : null,
       );
     },
-    [scope.graphPath, scope.groupId, scope.panelInstanceId, sessionCommands.setContextMenu],
+    [scope.graphPath, scope.groupId, scope.panelInstanceId, setEditorContextMenu],
   );
 
   const resolveCommandTarget = useCallback(
@@ -94,17 +110,17 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
 
   const createNode = useCallback(
     (
-      descriptor: Parameters<typeof sessionCommands.createNode>[0],
-      position: Parameters<typeof sessionCommands.createNode>[1],
-    ) => sessionCommands.createNode(descriptor, position, resolveCommandTarget()),
-    [resolveCommandTarget, sessionCommands.createNode],
+      descriptor: Parameters<typeof nodeCommands.createNode>[0],
+      position: Parameters<typeof nodeCommands.createNode>[1],
+    ) => nodeCommands.createNode(descriptor, position, resolveCommandTarget()),
+    [nodeCommands.createNode, resolveCommandTarget],
   );
 
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: groupIdRef as RefObject<string>,
     activeTabIdRef: graphPathRef,
     panelInstanceId: scope.panelInstanceId,
-    viewportRef: sessionCommands.viewportRef,
+    viewportRef,
     setSelectedNodeIds,
     setContextMenu,
     handlers: mutationHandlers,
@@ -144,51 +160,50 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   const commands = useMemo(
     (): EditorCanvasCommandsSlice => ({
       copyNodes: (nodeIds, target) =>
-        sessionCommands.copyNodes(nodeIds, resolveCommandTarget(target)),
-      cutNodes: (nodeIds, target) =>
-        sessionCommands.cutNodes(nodeIds, resolveCommandTarget(target)),
+        editorCommands.copyNodes(nodeIds, resolveCommandTarget(target)),
+      cutNodes: (nodeIds, target) => editorCommands.cutNodes(nodeIds, resolveCommandTarget(target)),
       duplicateNodes: (nodeIds, offset, target) =>
-        sessionCommands.duplicateNodes(nodeIds, offset, resolveCommandTarget(target)),
+        editorCommands.duplicateNodes(nodeIds, offset, resolveCommandTarget(target)),
       deleteNodesById: (nodeIds, target) =>
-        sessionCommands.deleteNodesById(nodeIds, resolveCommandTarget(target)),
+        editorCommands.deleteNodesById(nodeIds, resolveCommandTarget(target)),
       breakAllNodeLinks: (nodeId, target) =>
-        sessionCommands.breakAllNodeLinks(nodeId, resolveCommandTarget(target)),
+        editorCommands.breakAllNodeLinks(nodeId, resolveCommandTarget(target)),
       breakConnectionsById: (connectionIds, graphPath, targetGroupId, target) =>
-        sessionCommands.breakConnectionsById(
+        editorCommands.breakConnectionsById(
           connectionIds,
           graphPath,
           targetGroupId,
           resolveCommandTarget(target),
         ),
       selectLinkedNodes: (nodeId, target) =>
-        sessionCommands.selectLinkedNodes(nodeId, resolveCommandTarget(target)),
+        editorCommands.selectLinkedNodes(nodeId, resolveCommandTarget(target)),
       disconnectPinById: (pinId, target) =>
-        sessionCommands.disconnectPinById(pinId, resolveCommandTarget(target)),
+        editorCommands.disconnectPinById(pinId, resolveCommandTarget(target)),
       resetPinValue: (nodeId, pinId, target) =>
-        sessionCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
+        editorCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
       setSelectedNodeIds,
       setSelectedConnectionIds,
-      executeGraph: sessionCommands.executeGraph,
-      cancelGraphExecution: sessionCommands.cancelGraphExecution,
-      clearGraphArtifacts: sessionCommands.clearGraphArtifacts,
+      executeGraph: projectCommands.executeGraph,
+      cancelGraphExecution: projectCommands.cancelGraphExecution,
+      clearGraphArtifacts: projectCommands.clearGraphArtifacts,
       createNode,
     }),
     [
       resolveCommandTarget,
-      sessionCommands.copyNodes,
-      sessionCommands.cutNodes,
-      sessionCommands.duplicateNodes,
-      sessionCommands.deleteNodesById,
-      sessionCommands.breakAllNodeLinks,
-      sessionCommands.breakConnectionsById,
-      sessionCommands.selectLinkedNodes,
-      sessionCommands.disconnectPinById,
-      sessionCommands.resetPinValue,
+      editorCommands.copyNodes,
+      editorCommands.cutNodes,
+      editorCommands.duplicateNodes,
+      editorCommands.deleteNodesById,
+      editorCommands.breakAllNodeLinks,
+      editorCommands.breakConnectionsById,
+      editorCommands.selectLinkedNodes,
+      editorCommands.disconnectPinById,
+      editorCommands.resetPinValue,
       setSelectedNodeIds,
       setSelectedConnectionIds,
-      sessionCommands.executeGraph,
-      sessionCommands.cancelGraphExecution,
-      sessionCommands.clearGraphArtifacts,
+      projectCommands.executeGraph,
+      projectCommands.cancelGraphExecution,
+      projectCommands.clearGraphArtifacts,
       createNode,
     ],
   );

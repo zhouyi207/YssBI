@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
     saveGraphAs: vi.fn(),
     importGraph: vi.fn(),
     addEvent: vi.fn(),
+    addFunction: vi.fn(),
+    addChart: vi.fn(),
     splitEditorRight: vi.fn(),
     selectAllNodes: vi.fn(async () => true),
     focusSelectedNodes: vi.fn(() => true),
@@ -136,10 +138,6 @@ vi.mock("@/features/core/canvas/canvasInteractionCleanup", () => ({
 vi.mock("@/features/core/editor", () => ({
   useEditorStore: { getState: () => ({ setContextMenu: vi.fn() }) },
 }));
-vi.mock("./EditorSessionContext", () => ({
-  useEditorSessionCommandsContext: () => mocks.commands,
-}));
-
 const callbacks = mocks.commands;
 const editorPanel = (): TestPanel => ({
   panelInstanceId: "editor-a",
@@ -164,7 +162,7 @@ const logsPanel = (): TestPanel => ({
 let root: Root;
 
 function Harness() {
-  useEditorKeyboard();
+  useEditorKeyboard(callbacks);
   return null;
 }
 

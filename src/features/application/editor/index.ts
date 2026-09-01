@@ -1,14 +1,11 @@
-export { EditorSessionProvider, useEditorSessionCommandsContext } from "./EditorSessionContext";
-export type {
-  EditorCanvasMode,
-  EditorCanvasScope,
-  EditorCanvasSession,
-  EditorSessionResourcesSlice,
-  EditorSessionDetailActionsSlice,
-} from "./editorSessionTypes";
-export { useEditorSessionResources, useEditorSessionDetailActions } from "./useEditorSessionSlices";
+export type { EditorCanvasMode, EditorCanvasScope, EditorCanvasSession } from "./editorCanvasTypes";
 export { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 export { useEditorOperations } from "./useEditorOperations";
+export { useGraphCanvasCommands } from "./useGraphCanvasCommands";
+export { useChartManagement, useOpenChart } from "./useChartManagement";
+export { useDetailsCommands } from "./useDetailsCommands";
+export { useDetailResourceProjection } from "./useDetailResourceProjection";
+export type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";
 export { useEditorKeyboard } from "./useEditorKeyboard";
 export { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";

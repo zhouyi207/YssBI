@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { buildDataSidebarModel } from "@/features/core/sidebar/flatRows";
 import { sidebarUi, useSidebarUi } from "@/features/core/sidebar/ui";
 import { SidebarTabPanel } from "../sections/SidebarTabPanel";
@@ -12,7 +11,7 @@ export function SidebarDataTab({
   onSectionContextMenu,
   onDatabaseContextMenu,
 }: {
-  dataframes: Record<string, DatabaseRecord>;
+  dataframes: Readonly<Record<string, { readonly name: string; readonly resourcePath?: string }>>;
   onImport: () => void;
   onSectionContextMenu: (e: React.MouseEvent) => void;
   onDatabaseContextMenu: (e: React.MouseEvent, id: string, name: string) => void;

@@ -1,13 +1,18 @@
 import { useTranslation } from "react-i18next";
 import { VscFolderOpened, VscNewFile, VscSymbolMethod } from "react-icons/vsc";
-import { useEditorSessionCommandsContext } from "@/features/application/editor";
+import type { WorkbenchCommandCapability } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BrandMark } from "@/shared/ui/BrandMark";
 
-export const WatermarkView = () => {
+type WatermarkCommands = Pick<
+  WorkbenchCommandCapability,
+  "addEvent" | "addFunction" | "importGraph"
+>;
+
+export const WatermarkView = ({ commands }: { readonly commands: WatermarkCommands }) => {
   const { t } = useTranslation();
-  const { addEvent, addFunction, importGraph } = useEditorSessionCommandsContext();
+  const { addEvent, addFunction, importGraph } = commands;
 
   return (
     <div className="relative flex h-full w-full select-none items-center justify-center overflow-hidden bg-[var(--workbench-bg)] px-6 py-10">

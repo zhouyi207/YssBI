@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useEditorSessionDetailActions } from "@/features/application/editor";
+import { useDetailsCommands } from "@/features/application/editor";
 import { updateFunctionSignature } from "@/features/application/graphDocument/graphDocumentActions";
 import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { DetailEmptyState } from "./DetailEmptyState";
@@ -14,7 +14,7 @@ import { ChartDetailPanel } from "./panels/ChartDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
-  const { updateVariable } = useEditorSessionDetailActions();
+  const { updateVariable } = useDetailsCommands();
   const { model, chartPath, chartName, chartDocument } = useDetailPanelModel();
 
   useEffect(() => {

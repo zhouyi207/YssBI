@@ -3,7 +3,7 @@ import type { SidebarPanelModel } from "./sidebarPanelModel";
 import type { SidebarItemRow } from "./types";
 
 export function buildDataSidebarModel(params: {
-  dataframes: Record<string, { name: string; resourcePath?: string }>;
+  dataframes: Readonly<Record<string, { readonly name: string; readonly resourcePath?: string }>>;
   expandedSections: Record<string, boolean>;
   labels: { data: string; noData: string };
 }): SidebarPanelModel {

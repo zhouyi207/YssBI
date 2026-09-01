@@ -9,4 +9,5 @@ export {
   type ProjectResourceBrowserRow,
 } from "./projectResourceBrowser";
 export { useProjectResourceBrowser } from "./useProjectResourceBrowser";
+export { useActiveProjectGraph } from "./useActiveProjectGraph";
 export type { RevealProjectResourceRequest } from "./sidebarResourceActions";

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   useEditorHistoryAvailability,
-  useEditorSessionCommandsContext,
+  type WorkbenchCommandCapability,
 } from "@/features/application/editor";
 import { EDITOR_MUTATION_CAPABILITIES } from "@/features/application/editor/editorMutationAvailability";
 import { useMenubar } from "@/features/application/menubar";
@@ -249,7 +249,7 @@ export function EditorMenuBar({ menus }: { menus: readonly MenuButtonProps[] }) 
   );
 }
 
-export function Menubar() {
+export function Menubar({ commands }: { readonly commands: WorkbenchCommandCapability }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -266,7 +266,7 @@ export function Menubar() {
     addEvent,
     addFunction,
     addChart,
-  } = useEditorSessionCommandsContext();
+  } = commands;
   const { canUndo, canRedo, activeTabId } = useEditorHistoryAvailability();
   const {
     openSettings,

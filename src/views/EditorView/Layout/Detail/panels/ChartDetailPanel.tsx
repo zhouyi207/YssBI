@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { useEditorSessionResources } from "@/features/application/editor";
+import { useDatabaseRead } from "@/features/core/database/read";
 import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
 import { chartUi } from "@/features/core/chart/ui";
 import { Select } from "@/shared/ui";
@@ -34,7 +34,7 @@ interface ChartDetailPanelProps {
 
 export function ChartDetailPanel({ chartPath, name, document }: ChartDetailPanelProps) {
   const { t } = useTranslation();
-  const { dataframes } = useEditorSessionResources();
+  const dataframes = useDatabaseRead((snapshot) => snapshot.databases);
   const databases = dataframes ?? {};
 
   const databaseOptions = useMemo(

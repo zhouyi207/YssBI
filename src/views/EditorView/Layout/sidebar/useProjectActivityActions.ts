@@ -1,20 +1,20 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import { updateVariableAction } from "@/features/application/dataManagement/variableActions";
+import { useGraphManagement, useVariableManagement } from "@/features/application/dataManagement";
 import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
 import {
-  useEditorSessionCommandsContext,
-  useEditorSessionResources,
+  useChartManagement,
+  useEditorPanelCommands,
+  useOpenChart,
 } from "@/features/application/editor";
 import { renameResource } from "@/features/application/resource/resourceActions";
-import { resolveActiveProjectGraph } from "@/features/application/sidebar";
+import { useActiveProjectGraph } from "@/features/application/sidebar";
 import {
   renameChartResource,
   revealProjectResourceInExplorer,
 } from "@/features/application/sidebar/sidebarResourceActions";
-import { workbenchDockviewRead } from "@/features/core/dockview";
-import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import { ui } from "@/features/core/ui/ui";
 import { useVariableRead } from "@/features/core/variable/read";
 import type { GraphResourceType } from "../sidebarContextMenu/sidebarContextMenuTypes";
@@ -28,31 +28,21 @@ type OpenInputDialog = (
 
 export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
-  const { events, functions } = useEditorSessionResources();
-  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
   const variables = useVariableRead((snapshot) => snapshot.variables);
-  const activeEditor = focusedSession
-    ? (workbenchDockviewRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata ?? null)
-    : null;
-  const activeProjectGraph = useMemo(
-    () => resolveActiveProjectGraph({ events, functions, activeEditor }),
-    [activeEditor, events, functions],
-  );
+  const activeProjectGraph = useActiveProjectGraph();
+  const { openGraph } = useEditorPanelCommands();
   const {
     renameGraph,
     duplicateGraph,
     deleteEvent,
     deleteFunction,
-    deleteVariable,
-    addVariable,
     addEvent,
     addFunction,
     createGraph,
-    openGraph,
-    openChart,
-    duplicateChart,
-    addChart,
-  } = useEditorSessionCommandsContext();
+  } = useGraphManagement(openGraph);
+  const { deleteVariable, addVariable } = useVariableManagement();
+  const openChart = useOpenChart();
+  const { duplicateChart, addChart } = useChartManagement(openChart);
 
   const renameGraphItem = useCallback(
     (id: string, name: string, type: GraphResourceType) => {

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { EditorSessionCanvasActions } from "./editorSessionTypes";
+import type { GraphCanvasViewportCommands } from "./editorCanvasTypes";
 import { revealInspect } from "./rightSidebarActions";
 import { isEditorCommandTargetCurrent, type EditorCommandTarget } from "./editorCommandFocus";
 import { collectCanvasNodeWorldBounds } from "@/features/core/canvas";
@@ -71,7 +71,7 @@ function fitCanvasNodes(context: ActiveGraphCanvas, nodeIds?: readonly string[])
   return true;
 }
 
-export function useGraphCanvasCommands(): EditorSessionCanvasActions {
+export function useGraphCanvasCommands(): GraphCanvasViewportCommands {
   return useMemo(
     () => ({
       async selectAllNodes(target: EditorCommandTarget): Promise<boolean> {

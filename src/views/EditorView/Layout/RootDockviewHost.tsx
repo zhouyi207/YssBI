@@ -25,14 +25,9 @@ import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
-import { WatermarkView } from "../Canvas/overlays/WatermarkView";
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
 import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
 import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
-
-function WorkbenchDockviewWatermark() {
-  return <WatermarkView />;
-}
 
 export type RootDockviewPanelComponent = FunctionComponent<
   IDockviewPanelProps<WorkbenchPanelParams>
@@ -64,8 +59,9 @@ export const RootDockviewHost = forwardRef<
   {
     readonly panelRegistry: RootPanelRegistry;
     readonly dndCoordinator: RootDockviewDndCoordinator;
+    readonly watermarkComponent: FunctionComponent;
   }
->(({ panelRegistry, dndCoordinator }, ref) => {
+>(({ panelRegistry, dndCoordinator, watermarkComponent }, ref) => {
   const themeMode = useSettingsRead((state) => state.theme.mode);
   const bindWorkbenchLayout = useWorkbenchLayout();
   const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
@@ -113,7 +109,7 @@ export const RootDockviewHost = forwardRef<
             components={panelRegistry}
             defaultTabComponent={WorkbenchDockviewTab}
             rightHeaderActionsComponent={WorkbenchActivityActions}
-            watermarkComponent={WorkbenchDockviewWatermark}
+            watermarkComponent={watermarkComponent}
             disableFloatingGroups
             theme={resolveYssbiDockviewTheme(themeMode)}
             onReady={onDockviewReady}

@@ -15,7 +15,7 @@ import {
 import { cancelCanvasInteraction } from "@/features/core/canvas/canvasInteractionCleanup";
 import { useEditorStore } from "@/features/core/editor";
 import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
-import { useEditorSessionCommandsContext } from "./EditorSessionContext";
+import type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
@@ -65,8 +65,7 @@ function cyclePhysicalPanel(backward: boolean): boolean {
 }
 
 /** Mounts the workbench window's single ordered global keyboard shortcut listener set. */
-export function useEditorKeyboard(): void {
-  const commands = useEditorSessionCommandsContext();
+export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {

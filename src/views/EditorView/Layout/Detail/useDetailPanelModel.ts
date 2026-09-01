@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useEditorSessionResources } from "@/features/application/editor";
+import { useDetailResourceProjection } from "@/features/application/editor";
 import { useEditorUi } from "@/features/core/editor/ui";
 import { useLogStore } from "@/features/application/log";
 import { useChartRead } from "@/features/core/chart/read";
@@ -13,7 +13,7 @@ export function useDetailPanelModel(): {
   chartName: string | null;
   chartDocument: ChartDocument | null;
 } {
-  const { variables, events, functions, dataframes } = useEditorSessionResources();
+  const { variables, events, functions, dataframes } = useDetailResourceProjection();
   const target = useEditorUi((snapshot) => snapshot.detailFocus);
   const selectedLog = useLogStore((s) => s.selectedLog);
 
