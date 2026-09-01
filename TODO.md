@@ -917,3 +917,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Assistant、Logs、Project Explorer、Data Explorer、Database Editor、Results 与 Bayes 的
       独立窗口/panel UI 迁入各自 `modules/*/internal/ui`，由根 `public.ts` 向 app 动态路由、UI host
       和 root panel registry 暴露窄入口；同步 nested Logs Dockview 与 chart/plot 架构门禁的最终路径。
+- [x] 将 Details/Inspect 与 Result panel UI 迁入 `modules/details`、`modules/results`，由 root registry
+      仅导入模块 public contribution；将跨模块复用的 Markdown prose 样式收敛为无业务状态的
+      `shared/ui` presentation primitive，移除旧 Layout 相对路径依赖。

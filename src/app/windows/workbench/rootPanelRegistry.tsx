@@ -1,8 +1,7 @@
 import { AssistantPanel } from "@/modules/assistant/public";
 import { EditorResourceDockPanel } from "@/views/EditorView/Layout/EditorResourceDockPanel";
-import { DetailsPane } from "@/views/EditorView/Layout/Detail/DetailsPane";
-import { InspectPane } from "@/views/EditorView/Layout/Detail/InspectPane";
-import { ResultPanel } from "@/views/EditorView/Layout/result/ResultPanel";
+import { DetailsPane, InspectPane } from "@/modules/details/public";
+import { ResultPanel } from "@/modules/results/public";
 import { commandsActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/commands/public";
 import { dataActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/data/public";
 import { nodeCatalogActivityPanelContribution } from "@/views/EditorView/Layout/activityPanels/nodes/public";

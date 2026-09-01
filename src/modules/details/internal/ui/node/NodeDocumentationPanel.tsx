@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownRenderer } from "@/shared/ui/MarkdownRenderer";
-import { detailProseClass } from "../shared/detailStyles";
+import { markdownProseClass } from "@/shared/ui/markdownProseClass";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 
 interface NodeDocumentationPanelProps {
@@ -15,7 +15,7 @@ export const NodeDocumentationPanel = memo(function NodeDocumentationPanel({
 
   return (
     <DetailCollapsibleSection title={t("detail.nodeDoc.documentation")} defaultOpen>
-      <div className={detailProseClass}>
+      <div className={markdownProseClass}>
         <MarkdownRenderer markdown={markdown} />
       </div>
     </DetailCollapsibleSection>

@@ -25,7 +25,7 @@ import type {
 } from "@/shared/types/domain/editorMutation";
 import type { EditorGraphProjectionDto } from "@/shared/types/dto/editorProjection";
 import { isLocalizedCatalogDto } from "@/shared/types/dto/localizedCatalog";
-import { NodeParameterEditor } from "@/views/EditorView/Layout/Detail/node/parameterEditors/NodeParameterEditor";
+import { NodeParameterEditor } from "@/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor";
 import { createNodeFromDescriptor } from "./createNodeFromDescriptor";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -233,7 +233,7 @@ describe("ParameterizedStatic production route", () => {
     ).toMatchObject({ kind: "projectColumns", value: fixture.submit.selectedColumns });
 
     const viewSource = readFileSync(
-      resolve("src/views/EditorView/Layout/Detail/node/parameterEditors/NodeParameterEditor.tsx"),
+      resolve("src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx"),
       "utf8",
     );
     expect(viewSource).not.toMatch(/\binvoke\s*\(/);

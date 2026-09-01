@@ -12,7 +12,7 @@ import {
 } from "@/features/application/presentation";
 import { UnifiedResultView, ResultViewPresentationProvider } from "@/features/application/results";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
-import { ReportView } from "@/modules/results/public";
+import { ReportView } from "../info/ReportView";
 import { PlotResultView } from "@/features/application/presentation/PlotResultView";
 
 function ResultStatus({ message }: { message: string }) {

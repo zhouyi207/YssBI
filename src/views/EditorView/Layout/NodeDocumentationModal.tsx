@@ -23,8 +23,8 @@ import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useL
 import { catalogItemKey } from "@/features/domain/nodeCatalog/catalogItem";
 import type { LocalizedCatalogItem } from "@/features/domain/nodeCatalog/catalogItem";
 import { MarkdownRenderer } from "@/shared/ui/MarkdownRenderer";
+import { markdownProseClass } from "@/shared/ui/markdownProseClass";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { detailProseClass } from "./Detail/shared/detailStyles";
 
 interface NodeDocumentationModalProps {
   open: boolean;
@@ -136,7 +136,7 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
           {t("detail.nodeDoc.documentation")}
         </h3>
         {item.documentation ? (
-          <div className={detailProseClass}>
+          <div className={markdownProseClass}>
             <MarkdownRenderer markdown={item.documentation} />
           </div>
         ) : (

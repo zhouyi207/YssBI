@@ -1,0 +1,2 @@
+export const markdownProseClass =
+  "prose dark:prose-invert max-w-none text-sm leading-relaxed text-foreground [&_h1]:text-base [&_h1]:font-bold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-xs [&_p]:my-2 [&_table]:text-xs [&_td]:border [&_td]:border-border/30 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border/30 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-4 [&_.katex]:text-foreground";

@@ -41,7 +41,7 @@ vi.mock("@/features/application/results", async () => {
   };
 });
 
-vi.mock("@/modules/results/public", () => ({
+vi.mock("../info/ReportView", () => ({
   ReportView: (props: { descriptor: ResultDescriptor; report: string; data: unknown }) => {
     mocks.reportView(props);
     return <div data-testid="report-preview">report preview</div>;
