@@ -7,6 +7,14 @@ export type {
 export type { RootDockviewDndCoordinator } from "./internal/dockview/RootDockviewHost";
 export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
 export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
+export { useWorkbenchUiStore } from "./internal/state/workbenchUiStore";
+export {
+  getWorkbenchUiSnapshot,
+  subscribeWorkbenchUi,
+  useWorkbenchUi,
+  workbenchUi,
+} from "./internal/state/ui";
+export type { WorkbenchUiCapability } from "./internal/state/ui";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";

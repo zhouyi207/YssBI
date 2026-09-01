@@ -12,7 +12,7 @@ import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application
 import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
 import type { WorkbenchViewId } from "@/features/core/dockview/workbenchPanelModel";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import { useWorkbenchUiStore } from "@/features/core/workbench/workbenchUiStore";
+import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import type { MenubarViewState } from "./menubarViewItems";
 
 function openViewIds(): ReadonlySet<WorkbenchViewId> {

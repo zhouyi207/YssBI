@@ -1,5 +1,5 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useWorkbenchUi, workbenchUi } from "@/features/core/workbench/ui";
+import { useWorkbenchUi, workbenchUi } from "../../state/ui";
 
 import type { WorkbenchOverlayRegistry } from "./overlayContribution";
 

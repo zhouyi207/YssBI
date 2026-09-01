@@ -286,7 +286,7 @@ const VIEW_CORE_CAPABILITIES = [
     "viewportGridStyle",
     "viewportTransformStyle",
   ]),
-  viewCoreCapability("src/features/core/workbench/ui.ts", ["workbenchUi"], {
+  viewCoreCapability("src/modules/workbench/internal/state/ui.ts", ["workbenchUi"], {
     workbenchUi: [
       "getSnapshot",
       "subscribe",
@@ -295,7 +295,7 @@ const VIEW_CORE_CAPABILITIES = [
       "openSettings",
     ],
   }),
-  viewCoreCapability("src/features/core/workbench/ui.ts", ["useWorkbenchUi"]),
+  viewCoreCapability("src/modules/workbench/internal/state/ui.ts", ["useWorkbenchUi"]),
   viewCoreCapability("src/features/core/chart/read.ts", ["useChartRead"]),
   viewCoreCapability("src/features/core/chart/ui.ts", ["chartUi"], {
     chartUi: ["updateDraft", "discardDraft"],

@@ -5,7 +5,7 @@ import {
 } from "@/features/core/editor/editorGroupSelection";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
-import { useWorkbenchUiStore } from "@/features/core/workbench";
+import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { useHistoryStore } from "@/features/core/history";
 import {

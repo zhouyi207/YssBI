@@ -15,7 +15,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/features/core/workbench/ui", () => ({
+vi.mock("../../state/ui", () => ({
   workbenchUi: {
     openSettings: mocks.openSettings,
   },

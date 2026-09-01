@@ -459,7 +459,7 @@ describe("frontend architecture model", () => {
       expect(retiredFiles.filter((path) => paths.has(path))).toEqual([]);
 
       const finalFiles = [
-        "src/features/core/workbench/workbenchUiStore.ts",
+        "src/modules/workbench/internal/state/workbenchUiStore.ts",
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx",
         "src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx",
         "src/modules/workbench/internal/ui/status/StatusBar.tsx",

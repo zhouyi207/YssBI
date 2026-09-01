@@ -929,3 +929,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 删除 `graph-editor` 对 `node-catalog` UI 的直接导入，由 app-owned `editorRendererRegistry`
       注入 typed catalog row renderer；新增 production gate 禁止非 Workbench 跨业务模块导入并检测模块级循环，
       同时以 lazy Workbench window entry 保持公共 UI primitives 的导入无应用初始化副作用。
+- [x] 将 Workbench settings/node-documentation modal 的非布局 UI state 从
+      `features/core/workbench` 迁入 `modules/workbench/internal/state`，删除旧 barrel，并通过 Workbench
+      public API 向 Menubar/keyboard workflow 暴露唯一 store owner；Dockview 继续独占全部物理布局状态。

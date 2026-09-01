@@ -125,7 +125,8 @@ vi.mock("@/features/core/viewport", () => ({
   getViewport: () => ({ x: 0, y: 0, scale: 1 }),
   editorViewportScope: (groupId: string, graphPath: string) => ({ groupId, graphPath }),
 }));
-vi.mock("@/features/core/workbench", () => ({
+vi.mock("@/modules/workbench/public", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/workbench/public")>()),
   useWorkbenchUiStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
 }));
 vi.mock("@/features/core/graphInteraction/graphInteractionStore", () => ({
