@@ -5,8 +5,13 @@ import {
   useRef,
   type FunctionComponent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
-import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
+import {
+  DockviewReact,
+  type DockviewReadyEvent,
+  type IDockviewHeaderActionsProps,
+} from "dockview-react";
 import {
   DndContext,
   DragOverlay,
@@ -21,13 +26,13 @@ import { synchronizeActiveEditorPanel } from "@/features/application/editor/acti
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
 import { workbenchDockviewRead } from "@/features/core/dockview";
-import type { RootPanelRegistry } from "@/modules/workbench/public";
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
-import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
+import { WorkbenchActivityActions } from "../ui/activity/WorkbenchActivityActions";
 import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
 import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
+import type { RootPanelRegistry } from "./panelContribution";
 
 export interface RootDockviewDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;
@@ -50,8 +55,9 @@ export const RootDockviewHost = forwardRef<
     readonly panelRegistry: RootPanelRegistry;
     readonly dndCoordinator: RootDockviewDndCoordinator;
     readonly watermarkComponent: FunctionComponent;
+    readonly activityActions?: ReactNode;
   }
->(({ panelRegistry, dndCoordinator, watermarkComponent }, ref) => {
+>(({ panelRegistry, dndCoordinator, watermarkComponent, activityActions }, ref) => {
   const themeMode = useSettingsRead((state) => state.theme.mode);
   const bindWorkbenchLayout = useWorkbenchLayout();
   const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
@@ -81,6 +87,13 @@ export const RootDockviewHost = forwardRef<
     [bindWorkbenchLayout],
   );
 
+  const rightHeaderActionsComponent = useCallback(
+    (props: IDockviewHeaderActionsProps) => (
+      <WorkbenchActivityActions {...props} additionalActions={activityActions} />
+    ),
+    [activityActions],
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -98,7 +111,7 @@ export const RootDockviewHost = forwardRef<
             className="yssbi-root-dockview-instance h-full w-full"
             components={panelRegistry}
             defaultTabComponent={RootPanelTabRenderer}
-            rightHeaderActionsComponent={WorkbenchActivityActions}
+            rightHeaderActionsComponent={rightHeaderActionsComponent}
             watermarkComponent={watermarkComponent}
             disableFloatingGroups
             theme={resolveYssbiDockviewTheme(themeMode)}

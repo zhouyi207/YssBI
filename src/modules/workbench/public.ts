@@ -1,8 +1,12 @@
 export type { EditorPanelScope, EditorRendererRegistry } from "./internal/dockview/editorRenderer";
+export { EditorResourceDockPanel } from "./internal/dockview/EditorResourceDockPanel";
 export type {
   RootDockviewPanelComponent,
   RootPanelRegistry,
 } from "./internal/dockview/panelContribution";
+export type { RootDockviewDndCoordinator } from "./internal/dockview/RootDockviewHost";
+export { WorkbenchWindow } from "./internal/ui/WorkbenchWindow";
+export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";

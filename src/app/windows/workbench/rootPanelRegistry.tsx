@@ -1,12 +1,15 @@
 import { AssistantPanel } from "@/modules/assistant/public";
 import { commandsActivityPanelContribution } from "@/modules/commands/public";
 import { dataActivityPanelContribution } from "@/modules/data-explorer/public";
-import { EditorResourceDockPanel } from "@/views/EditorView/Layout/EditorResourceDockPanel";
 import { DetailsPane, InspectPane } from "@/modules/details/public";
 import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/public";
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
 import { ResultPanel } from "@/modules/results/public";
-import type { RootDockviewPanelComponent, RootPanelRegistry } from "@/modules/workbench/public";
+import {
+  EditorResourceDockPanel,
+  type RootDockviewPanelComponent,
+  type RootPanelRegistry,
+} from "@/modules/workbench/public";
 import { DiagnosticsPanel, LogDomainDockviewHost, OutputPanel } from "@/modules/logs/public";
 import { editorRendererRegistry } from "./editorRendererRegistry";
 

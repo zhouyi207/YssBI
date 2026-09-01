@@ -923,3 +923,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Project、Data、Node Catalog、Commands Activity panel 的 controller、rows、actions 与菜单
       分别迁入所属模块，根 `public.ts` 各自只暴露 panel contribution；Workbench public API 提供通用
       Dockview panel contract、Activity shell 与 sidebar primitives，删除旧跨业务 sidebar 聚合目录。
+- [x] 清空旧 `src/views` 生产目录：将 Workbench window、root Dockview adapter、菜单、状态栏与拖放 UI
+      迁入 `modules/workbench/internal`，将 Settings、Node Documentation 与 Plugin UI 迁入各自模块；
+      Workbench 仅接收 typed overlay registry 和 activity action slot，由 `WorkbenchComposition` 唯一组合业务 UI。

@@ -1,6 +1,6 @@
 import { getSidebarDragOverlayLabel } from "@/features/core/dnd";
 import { useSidebarDragUi } from "@/features/core/sidebarDrag/ui";
-import { editorDragChipClass } from "@/views/EditorView/Layout/editorDropPreviewStyles";
+import { editorDragChipClass } from "./editorDropPreviewStyles";
 
 /** Floating chip while dragging from sidebar (node template or graph resource). */
 export function SidebarDragOverlay() {

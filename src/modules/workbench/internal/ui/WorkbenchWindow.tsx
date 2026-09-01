@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
-import type { FunctionComponent } from "react";
+import type { FunctionComponent, ReactNode } from "react";
 
-import { StatusBar } from "./Layout/StatusBar";
-import { Menubar } from "./Layout/Menubar";
-import { RootDockviewHost, type RootDockviewDndCoordinator } from "./Layout/RootDockviewHost";
-import type { RootPanelRegistry } from "@/modules/workbench/public";
-import { WorkbenchOverlayHost } from "./Layout/WorkbenchOverlayHost";
+import { StatusBar } from "./status/StatusBar";
+import { Menubar } from "./menu/Menubar";
+import { RootDockviewHost, type RootDockviewDndCoordinator } from "../dockview/RootDockviewHost";
+import type { RootPanelRegistry } from "../dockview/panelContribution";
+import { WorkbenchOverlayHost } from "./overlay/WorkbenchOverlayHost";
+import type { WorkbenchOverlayRegistry } from "./overlay/overlayContribution";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSync } from "@/features/application/initialization";
@@ -23,6 +24,8 @@ interface WorkbenchWindowProps {
   readonly dndCoordinator: RootDockviewDndCoordinator;
   readonly commands: WorkbenchCommandCapability;
   readonly watermarkComponent: FunctionComponent;
+  readonly activityActions?: ReactNode;
+  readonly overlays: WorkbenchOverlayRegistry;
 }
 
 function WorkbenchWindowReady({
@@ -30,6 +33,8 @@ function WorkbenchWindowReady({
   dndCoordinator,
   commands,
   watermarkComponent,
+  activityActions,
+  overlays,
 }: WorkbenchWindowProps) {
   useProjectSync();
   useProjectionLocaleSync();
@@ -47,10 +52,11 @@ function WorkbenchWindowReady({
           panelRegistry={panelRegistry}
           dndCoordinator={dndCoordinator}
           watermarkComponent={watermarkComponent}
+          activityActions={activityActions}
         />
       </div>
       <StatusBar />
-      <WorkbenchOverlayHost />
+      <WorkbenchOverlayHost overlays={overlays} />
     </div>
   );
 }

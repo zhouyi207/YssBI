@@ -158,7 +158,7 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/views/EditorView/Layout/RootDockviewHost.tsx",
+    "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
     `
     import { DockviewReact } from 'dockview-react';
     export const RootDockviewHost = () => <DockviewReact />;

@@ -21,10 +21,6 @@ vi.mock("@/features/core/workbench/ui", () => ({
   },
 }));
 
-vi.mock("./PluginActivityActions", () => ({
-  PluginActivityActions: () => null,
-}));
-
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -56,7 +52,10 @@ describe("WorkbenchActivityActions", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <WorkbenchActivityActions {...props("workbench-edge-left")} />
+          <WorkbenchActivityActions
+            {...props("workbench-edge-left")}
+            additionalActions={<span data-testid="additional-action" />}
+          />
         </TooltipProvider>,
       ),
     );
@@ -77,5 +76,6 @@ describe("WorkbenchActivityActions", () => {
       ),
     );
     expect(host.querySelector("[data-workbench-activity-settings]")).toBeNull();
+    expect(host.querySelector("[data-testid='additional-action']")).toBeNull();
   });
 });

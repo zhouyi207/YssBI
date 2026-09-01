@@ -1,18 +1,25 @@
 import { useTranslation } from "react-i18next";
 import { VscSettingsGear } from "react-icons/vsc";
+import type { ReactNode } from "react";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WORKBENCH_ACTIVITY_GROUP_ID } from "@/features/core/dockview/workbenchDockviewDefaults";
 import { workbenchUi } from "@/features/core/workbench/ui";
-import { PluginActivityActions } from "./PluginActivityActions";
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
   event.stopPropagation();
 }
 
-export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
+type WorkbenchActivityActionsProps = IDockviewHeaderActionsProps & {
+  readonly additionalActions?: ReactNode;
+};
+
+export function WorkbenchActivityActions({
+  additionalActions,
+  ...props
+}: WorkbenchActivityActionsProps) {
   const { t } = useTranslation();
   const openSettings = workbenchUi.openSettings;
 
@@ -29,12 +36,14 @@ export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
       onPointerDown={stopHeaderControlPropagation}
       onMouseDown={stopHeaderControlPropagation}
     >
-      <PluginActivityActions />
-      <span
-        data-workbench-activity-settings-divider
-        aria-hidden="true"
-        className="my-1 h-px w-6 bg-[var(--strong-border)]"
-      />
+      {additionalActions}
+      {additionalActions ? (
+        <span
+          data-workbench-activity-settings-divider
+          aria-hidden="true"
+          className="my-1 h-px w-6 bg-[var(--strong-border)]"
+        />
+      ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

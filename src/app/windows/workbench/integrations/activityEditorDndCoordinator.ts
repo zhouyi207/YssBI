@@ -7,7 +7,7 @@ import {
   updateActivityEditorDragPointer,
 } from "@/features/application/editor/editorDragDropActions";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import type { RootDockviewDndCoordinator } from "@/views/EditorView/Layout/RootDockviewHost";
+import type { RootDockviewDndCoordinator } from "@/modules/workbench/public";
 
 export function useActivityEditorDndCoordinator(): RootDockviewDndCoordinator {
   const pointerMoveCleanupRef = useRef<(() => void) | null>(null);

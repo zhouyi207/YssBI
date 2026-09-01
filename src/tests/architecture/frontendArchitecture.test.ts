@@ -313,7 +313,7 @@ describe("frontend architecture model", () => {
           /\buseWorkbenchLayout\s*\(/u.test(source),
       );
       expect(layoutConsumers.map(({ path }) => path)).toEqual([
-        "src/views/EditorView/Layout/RootDockviewHost.tsx",
+        "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
       ]);
 
       const obsoleteShellFiles = new Set([
@@ -430,8 +430,8 @@ describe("frontend architecture model", () => {
       const finalFiles = [
         "src/features/core/workbench/workbenchUiStore.ts",
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx",
-        "src/views/EditorView/Layout/RootPanelTabRenderer.tsx",
-        "src/views/EditorView/Layout/StatusBar.tsx",
+        "src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx",
+        "src/modules/workbench/internal/ui/status/StatusBar.tsx",
         "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
       ];
       expect(finalFiles.filter((path) => !paths.has(path))).toEqual([]);
@@ -526,7 +526,7 @@ describe("frontend architecture model", () => {
       ]);
 
       const rootDockviewHost = sources.find(
-        ({ path }) => path === "src/views/EditorView/Layout/RootDockviewHost.tsx",
+        ({ path }) => path === "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
       )?.source;
       expect(rootDockviewHost).not.toMatch(
         /\b(?:beginActivityEditorDrag|executeEditorDragEnd|sidebarDragUi)\b|["']pointermove["']/u,
@@ -1744,7 +1744,7 @@ describe("frontend architecture model", () => {
       const productionPaths = productionTypeScriptSources(context).map(({ path }) => path);
       for (const root of [
         "src/app/",
-        "src/views/",
+        "src/modules/",
         "src/features/",
         "src/services/",
         "src/components/",
@@ -1756,6 +1756,7 @@ describe("frontend architecture model", () => {
           root,
         ).toBe(true);
       }
+      expect(productionPaths.some((path) => path.startsWith("src/views/"))).toBe(false);
     });
   });
 
