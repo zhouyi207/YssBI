@@ -950,3 +950,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Result Dockview metadata 解包迁入 app-owned `ResultDockPanel` adapter，Results 模块只接收
       显式 `resultId` props；新增 production gate，禁止除唯一 Logs nested Dockview adapter 外的业务模块
       直接导入 `dockview-react`。
+- [x] 删除遗留 `features/core/layout`：dirty editor panel 查询迁入 editor application，graph retention
+      直接读取 Workbench panel port，并删除零调用的 editor part options、graph query facade 与 variable
+      dirty wrapper；新增 production gate 禁止泛化 layout feature 路径回流。

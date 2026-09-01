@@ -9,7 +9,6 @@ import {
   isGraphResourceDirty,
   resourceKey,
 } from "@/features/core/resource";
-import { collectDirtyEditorPanels } from "@/features/core/layout/editorPanelDirty";
 
 describe("document state queries", () => {
   beforeEach(() => {
@@ -42,20 +41,5 @@ describe("document state queries", () => {
     expect(
       useDocumentStateStore.getState().documents[resourceKey({ id: meta.id, kind: "event" })],
     ).toBeUndefined();
-  });
-});
-
-describe("collectDirtyEditorPanels", () => {
-  beforeEach(() => {
-    useDocumentStateStore.getState().clear();
-    useResourceStore.getState().clear();
-  });
-
-  it("reads dirty from DocumentState instead of panel metadata", () => {
-    const path = "events/A.yssbi-event";
-    useResourceStore.getState().upsertResource(buildGraphResourceMeta("event", path, "A"));
-    markResourceDirty({ id: path, kind: "event" }, true);
-
-    expect(collectDirtyEditorPanels()).toEqual([]);
   });
 });

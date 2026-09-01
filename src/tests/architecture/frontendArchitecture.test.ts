@@ -306,6 +306,15 @@ describe("frontend architecture model", () => {
         "src/features/application/editor/dockviewTabProjection.ts",
       ]);
       expect(sources.map(({ path }) => path).filter((path) => obsoleteFiles.has(path))).toEqual([]);
+      expect(
+        sources
+          .map(({ path }) => path)
+          .filter(
+            (path) =>
+              path.startsWith("src/features/application/layout/") ||
+              path.startsWith("src/features/core/layout/"),
+          ),
+      ).toEqual([]);
 
       const layoutConsumers = sources.filter(
         ({ path, source }) =>

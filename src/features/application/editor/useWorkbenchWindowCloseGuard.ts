@@ -3,9 +3,9 @@ import { i18n } from "@/app/i18n";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import { workbenchLayoutController } from "@/modules/workbench/public";
 import { showWorkbenchLayoutError } from "@/modules/workbench/public";
-import { collectDirtyEditorPanels } from "@/features/core/layout/editorPanelDirty";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/features/application/observability/appLogger";
+import { collectDirtyEditorPanels } from "./editorPanelDirty";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 
 /** Flushes layout and protects dirty documents before the workbench window closes. */

@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
-vi.mock("@/features/core/layout/editorPanelDirty", () => ({
+vi.mock("./editorPanelDirty", () => ({
   collectDirtyEditorPanels: () => mocks.dirty,
 }));
 vi.mock("@/features/core/ui/UIStore", () => ({
