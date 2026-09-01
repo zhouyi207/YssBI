@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { lookupGraphResourceKind, useResourceStore } from "@/features/core/resource";
-import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEditorGroup";
+import { useActiveEditorGroup } from "@/features/application/editor/editorGroupContext";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
 import { revealWorkbenchView } from "@/modules/workbench/public";

@@ -953,3 +953,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 删除遗留 `features/core/layout`：dirty editor panel 查询迁入 editor application，graph retention
       直接读取 Workbench panel port，并删除零调用的 editor part options、graph query facade 与 variable
       dirty wrapper；新增 production gate 禁止泛化 layout feature 路径回流。
+- [x] 将 active editor group projection 收敛到唯一 application hook，删除 Core 中重复的 placement/groups
+      facade，以及零调用的 editor actions、canvas actions 和 UI state hooks；保留 pane-local selection 的
+      Workbench authority，不再通过多层 hook 镜像物理 group 状态。

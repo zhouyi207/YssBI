@@ -18,7 +18,7 @@ const activeEditor = vi.hoisted(() => ({
 }));
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 
-vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
+vi.mock("./editorGroupContext", () => ({
   useActiveEditorGroup: () => ({ activeResourceRef: activeEditor.activeResourceRef }),
 }));
 vi.mock("@/services/nodeSystem/historyService", () => ({

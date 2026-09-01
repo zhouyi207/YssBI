@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEditorGroup";
+import { useActiveEditorGroup } from "@/features/application/editor/editorGroupContext";
 import { executeCommand } from "@/features/core/history";
 import { canDeleteNode } from "@/features/core/dataStore/graphNodeSelectors";
 import { logger } from "@/features/application/observability/appLogger";

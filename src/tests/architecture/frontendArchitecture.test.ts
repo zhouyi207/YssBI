@@ -664,16 +664,22 @@ describe("frontend architecture model", () => {
   it("keeps Workbench commands caller-shaped instead of globally aggregated", () => {
     withProductionTypeScriptProject((context) => {
       const sources = productionTypeScriptSources(context);
-      const retiredCommandFiles = [
+      const retiredEditorFacadeFiles = [
         "src/features/application/editor/EditorSessionContext.tsx",
         "src/features/application/editor/editorSessionCommands.ts",
         "src/features/application/editor/editorSessionTypes.ts",
         "src/features/application/editor/useEditorSessionCommands.ts",
         "src/features/application/editor/useEditorSessionSlices.ts",
         "src/features/application/editor/useEditorSessionUi.ts",
+        "src/features/core/editor/hooks/useActiveEditorGroup.ts",
+        "src/features/core/editor/hooks/useEditorActions.ts",
+        "src/features/core/editor/hooks/useEditorCanvasActions.ts",
+        "src/features/core/editor/hooks/useEditorGroupPlacement.ts",
+        "src/features/core/editor/hooks/useEditorGroups.ts",
+        "src/features/core/editor/hooks/useEditorUIState.ts",
       ];
       expect(
-        sources.map(({ path }) => path).filter((path) => retiredCommandFiles.includes(path)),
+        sources.map(({ path }) => path).filter((path) => retiredEditorFacadeFiles.includes(path)),
       ).toEqual([]);
 
       const retiredIdentifiers = [

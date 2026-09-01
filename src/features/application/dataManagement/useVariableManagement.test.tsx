@@ -19,7 +19,7 @@ vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () =>
   revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 
-vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
+vi.mock("@/features/application/editor/editorGroupContext", () => ({
   useActiveEditorGroup: () => ({
     activeResourceRef: "functions/Detail.yssbi-function",
     panels: [
