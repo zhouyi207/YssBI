@@ -10,9 +10,20 @@ export type { WorkbenchPanelCommitToken } from "./internal/dockview/workbenchTyp
 export { canRemoveWorkbenchPanel } from "./internal/dockview/workbenchActivityGroup";
 export type {
   RootDockviewPanelComponent,
+  RootPanelActivationTarget,
   RootPanelRegistry,
+  RootPanelTabComponent,
 } from "./internal/dockview/panelContribution";
-export type { RootDockviewDndCoordinator } from "./internal/dockview/RootDockviewHost";
+export type {
+  RootDockviewDndCoordinator,
+  RootPanelActivationCoordinator,
+} from "./internal/dockview/RootDockviewHost";
+export {
+  RootPanelTabRenderer,
+  type RootPanelTabActions,
+  type RootPanelTabRendererProps,
+  type WorkbenchTabTarget,
+} from "./internal/dockview/RootPanelTabRenderer";
 export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
 export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
 export { useWorkbenchUiStore } from "./internal/state/workbenchUiStore";
@@ -37,6 +48,7 @@ export {
 } from "./internal/application/workbenchLayoutController";
 export { showWorkbenchLayoutError } from "./internal/application/workbenchLayoutErrorFeedback";
 export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
+export { SidebarDragOverlay } from "./internal/ui/dnd/SidebarDragOverlay";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";
 export { SidebarSectionEmptyState } from "./internal/ui/sidebar/SidebarSectionEmptyState";

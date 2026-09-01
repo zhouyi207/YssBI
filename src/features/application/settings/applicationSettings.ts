@@ -4,6 +4,10 @@ import { settingsUi } from "@/features/core/settings/ui";
 
 const loadSettings = () => useSettingsStore.getState().load();
 
+export function useApplicationThemeMode() {
+  return useSettingsRead((state) => state.theme.mode);
+}
+
 /** Settings read/actions needed by the application composition effects. */
 export function useApplicationSettings() {
   const snapshot = useSettingsRead((state) => state);

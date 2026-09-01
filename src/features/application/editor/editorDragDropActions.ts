@@ -10,7 +10,7 @@ import {
   type CanvasDropTarget,
 } from "./dropFunctionIntoEventEditor";
 import { canvasDropHandlerStore, useSidebarDragStore } from "@/features/core/sidebarDrag";
-import { sidebarDragUi } from "@/features/core/sidebarDrag/ui";
+import { sidebarDragUi, useSidebarDragUi } from "@/features/core/sidebarDrag/ui";
 import { workbenchDockviewControl } from "@/modules/workbench/public";
 import type { SidebarDragPayload } from "@/features/core/dnd";
 import {
@@ -18,6 +18,7 @@ import {
   isSidebarSpawnDropAllowed,
 } from "./sidebarSpawnDropPolicy";
 import {
+  getSidebarDragOverlayLabel,
   isGraphResourceDragPayload,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
@@ -29,6 +30,11 @@ import {
 import { keyboardUi } from "@/features/core/keyboard/ui";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
+
+export function useActivityEditorDragOverlayLabel(): string | null {
+  const activeDrag = useSidebarDragUi((state) => state.activeDrag);
+  return activeDrag ? getSidebarDragOverlayLabel(activeDrag) : null;
+}
 
 export function beginActivityEditorDrag(event: DragStartEvent): boolean {
   const activeData = parseCanvasDragPayload(event.active.data.current);

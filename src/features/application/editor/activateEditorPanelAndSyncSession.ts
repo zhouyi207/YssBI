@@ -11,6 +11,11 @@ let editorGroupSessionChain: Promise<void> = Promise.resolve();
 let latestPanelActivationRequest = 0;
 const pendingGroupSuspensions = new Set<string>();
 
+type ActiveEditorPanelTarget = Pick<
+  WorkbenchEditorPanelInfo,
+  "panelInstanceId" | "groupId" | "metadata"
+>;
+
 function scheduleSuspendPreviousGroup(prevGroupId: string): void {
   if (pendingGroupSuspensions.has(prevGroupId)) return;
   pendingGroupSuspensions.add(prevGroupId);
@@ -47,7 +52,7 @@ export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
 
 async function synchronizePanelSession(
   request: number,
-  panel: WorkbenchEditorPanelInfo,
+  panel: ActiveEditorPanelTarget,
 ): Promise<boolean> {
   const { groupId, metadata } = panel;
   if (metadata.resourceKind === "event" || metadata.resourceKind === "function") {
@@ -75,7 +80,7 @@ async function synchronizePanelSession(
 
 /** Synchronize a user-originated Dockview activation without writing back to Dockview. */
 export async function synchronizeActiveEditorPanel(
-  panel: WorkbenchEditorPanelInfo,
+  panel: ActiveEditorPanelTarget,
 ): Promise<boolean> {
   const request = ++latestPanelActivationRequest;
   focusEditorGroupSync(panel.groupId);

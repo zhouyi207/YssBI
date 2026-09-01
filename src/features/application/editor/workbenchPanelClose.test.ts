@@ -228,6 +228,7 @@ vi.mock("i18next", () => ({
 vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
     listPanels: () => mocks.panels,
+    listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
   },
 }));
 
@@ -323,7 +324,11 @@ vi.mock("./resolveResourceDisplayName", () => ({
   resolveResourceDisplayName: mocks.resolveResourceDisplayName,
 }));
 
-import { requestCloseWorkbenchPanel, requestCloseWorkbenchPanels } from "./workbenchPanelClose";
+import {
+  requestCloseWorkbenchGroup,
+  requestCloseWorkbenchPanel,
+  requestCloseWorkbenchPanels,
+} from "./workbenchPanelClose";
 
 function editorPanel(
   panelInstanceId: string,
@@ -402,6 +407,18 @@ beforeEach(() => {
 });
 
 describe("workbench panel close coordinator", () => {
+  it("resolves a physical group before entering the batch close workflow", async () => {
+    seedPanels([
+      viewPanel("logs-a", "logs", "group-a"),
+      viewPanel("output-a", "output", "group-a"),
+      viewPanel("diagnostics-b", "diagnostics", "group-b"),
+    ]);
+
+    await expect(requestCloseWorkbenchGroup("group-a")).resolves.toBe(true);
+
+    expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["diagnostics-b"]);
+  });
+
   it("removes nothing when a dirty editor cancels a mixed Close Group", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([editorPanel("editor-a", graphPath), viewPanel("logs-a"), resultPanel("result-a")]);

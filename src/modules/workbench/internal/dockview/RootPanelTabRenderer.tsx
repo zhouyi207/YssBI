@@ -20,35 +20,29 @@ import {
 import type { IconType } from "react-icons";
 import type { IDockviewPanelHeaderProps } from "dockview-react";
 
-import {
-  requestCloseWorkbenchPanel,
-  requestCloseWorkbenchPanels,
-} from "@/features/application/editor/workbenchPanelClose";
-import { buildEditorPanelTabMenu } from "@/features/application/editor/editorPanelTabMenu";
-import { requestCloseEditorPanel } from "@/features/application/editor/editorPanelCloseCommands";
-import {
-  isWorkbenchActivityViewId,
-  isWorkbenchPersistentViewMetadata,
-  workbenchDockviewRead,
-} from "./index";
-import type {
-  WorkbenchPanelInfo,
-  WorkbenchPanelMetadata,
-  WorkbenchPanelParams,
-  WorkbenchViewId,
-} from "./index";
-import { resourceKey } from "@/features/core/resource";
-import { useResourceRead } from "@/features/core/resource/read";
+import { isWorkbenchActivityViewId, isWorkbenchPersistentViewMetadata } from "./index";
+import type { WorkbenchPanelMetadata, WorkbenchPanelParams, WorkbenchViewId } from "./index";
 import {
   ActionMenu,
   usePositionedActionMenu,
   type ActionMenuSection,
 } from "@/shared/ui/actionMenu";
 
-interface WorkbenchTabContextTarget {
+export interface WorkbenchTabTarget {
   readonly panelInstanceId: string;
   readonly groupId: string;
   readonly metadata: WorkbenchPanelMetadata;
+}
+
+export interface RootPanelTabActions {
+  readonly requestClose: (target: WorkbenchTabTarget) => void;
+  readonly requestCloseGroup: (target: WorkbenchTabTarget) => void;
+  readonly buildEditorContextMenu: (target: WorkbenchTabTarget) => ActionMenuSection[];
+}
+
+export interface RootPanelTabRendererProps extends IDockviewPanelHeaderProps<WorkbenchPanelParams> {
+  readonly dirty: boolean;
+  readonly actions: RootPanelTabActions;
 }
 
 const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
@@ -143,9 +137,10 @@ function titleForMetadata(
 }
 
 function genericContextMenuSections(
-  target: WorkbenchTabContextTarget,
+  target: WorkbenchTabTarget,
   closeLabel: string,
   closeGroupLabel: string,
+  actions: RootPanelTabActions,
 ): ActionMenuSection[] {
   return [
     {
@@ -154,26 +149,21 @@ function genericContextMenuSections(
           id: "close",
           label: closeLabel,
           icon: <VscClose size={12} />,
-          onClick: () => void requestCloseWorkbenchPanel(target.panelInstanceId),
+          onClick: () => actions.requestClose(target),
         },
         {
           id: "close-group",
           label: closeGroupLabel,
           icon: <VscCloseAll size={12} />,
           danger: true,
-          onClick: () => {
-            const panelInstanceIds = workbenchDockviewRead
-              .listGroupPanels(target.groupId)
-              .map((panel: WorkbenchPanelInfo) => panel.panelInstanceId);
-            void requestCloseWorkbenchPanels(panelInstanceIds);
-          },
+          onClick: () => actions.requestCloseGroup(target),
         },
       ],
     },
   ];
 }
 
-export function RootPanelTabRenderer(props: IDockviewPanelHeaderProps<WorkbenchPanelParams>) {
+export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabRendererProps) {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);
@@ -182,21 +172,17 @@ export function RootPanelTabRenderer(props: IDockviewPanelHeaderProps<WorkbenchP
   const isActivityTab = metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId);
   const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
-  const editorDocumentKey =
-    metadata.role === "editor"
-      ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
-      : null;
-  const dirty = useResourceRead((snapshot) =>
-    editorDocumentKey ? snapshot.documents[editorDocumentKey]?.dirty === true : false,
-  );
   const { contextMenu, setContextMenu, closeActionMenu } =
-    usePositionedActionMenu<WorkbenchTabContextTarget>();
+    usePositionedActionMenu<WorkbenchTabTarget>();
   const tabContentRef = useRef<HTMLDivElement>(null);
 
   const requestClose = useCallback(() => {
-    if (metadata.role === "editor") void requestCloseEditorPanel(props.api.id);
-    else void requestCloseWorkbenchPanel(props.api.id);
-  }, [metadata.role, props.api]);
+    actions.requestClose({
+      panelInstanceId: props.api.id,
+      groupId: props.api.group.id,
+      metadata,
+    });
+  }, [actions, metadata, props.api]);
 
   useEffect(() => {
     const tabContent = tabContentRef.current;
@@ -297,17 +283,12 @@ export function RootPanelTabRenderer(props: IDockviewPanelHeaderProps<WorkbenchP
 
   const contextMenuSections = contextMenu
     ? contextMenu.target.metadata.role === "editor"
-      ? buildEditorPanelTabMenu(
-          {
-            panelInstanceId: contextMenu.target.panelInstanceId,
-            groupId: contextMenu.target.groupId,
-          },
-          t,
-        )
+      ? actions.buildEditorContextMenu(contextMenu.target)
       : genericContextMenuSections(
           contextMenu.target,
           t("tabBar.contextMenu.close"),
           t("tabBar.closeGroup"),
+          actions,
         )
     : [];
 

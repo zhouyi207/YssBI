@@ -16,11 +16,9 @@ const WORKBENCH_DOCKVIEW_CSS = readFileSync(
 
 const mocks = vi.hoisted(() => ({
   dirty: false,
-  groupPanels: [] as Array<{ panelInstanceId: string }>,
   requestCloseWorkbenchPanel: vi.fn(() => Promise.resolve(false)),
-  requestCloseWorkbenchPanels: vi.fn(() => Promise.resolve(false)),
+  requestCloseWorkbenchGroup: vi.fn(() => Promise.resolve(false)),
   requestCloseEditorPanel: vi.fn(() => Promise.resolve(false)),
-  listGroupPanels: vi.fn(),
   buildEditorPanelTabMenu: vi.fn(() => [
     {
       items: [{ id: "document-action", label: "document-action" }],
@@ -30,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/features/application/editor/workbenchPanelClose", () => ({
   requestCloseWorkbenchPanel: mocks.requestCloseWorkbenchPanel,
-  requestCloseWorkbenchPanels: mocks.requestCloseWorkbenchPanels,
+  requestCloseWorkbenchGroup: mocks.requestCloseWorkbenchGroup,
 }));
 
 vi.mock("@/features/application/editor/editorPanelCloseCommands", () => ({
@@ -46,31 +44,17 @@ vi.mock("./index", () => ({
     ["project", "nodes", "data", "commands"].includes(viewId),
   isWorkbenchPersistentViewMetadata: (metadata: { role: string; viewId?: string }) =>
     metadata.role === "view" && metadata.viewId === "details",
-  workbenchDockviewRead: {
-    listGroupPanels: mocks.listGroupPanels,
-  },
 }));
 
-vi.mock("@/features/core/resource", () => ({
-  resourceKey: ({ id, kind }: { id: string; kind: string }) => `${kind}:${id}`,
-}));
-
-vi.mock("@/features/core/resource/read", () => ({
-  useResourceRead: (
-    selector: (state: { documents: Record<string, { dirty: boolean }> }) => unknown,
-  ) =>
-    selector({
-      documents: {
-        "event:events/Main.yssbi-event": { dirty: mocks.dirty },
-      },
-    }),
+vi.mock("@/features/application/editor/useEditorPanelDirty", () => ({
+  useEditorPanelDirty: () => mocks.dirty,
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
+import { rootPanelTabRenderer } from "@/app/windows/workbench/rootPanelTabRenderer";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -131,8 +115,6 @@ describe("RootPanelTabRenderer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.dirty = false;
-    mocks.groupPanels = [];
-    mocks.listGroupPanels.mockImplementation(() => mocks.groupPanels);
     api = null;
     host = document.createElement("div");
     host.dataset.yssbiRootDockview = "";
@@ -167,7 +149,7 @@ describe("RootPanelTabRenderer", () => {
               Diagnostics: TestPanel,
               Result: TestPanel,
             }}
-            defaultTabComponent={RootPanelTabRenderer}
+            defaultTabComponent={rootPanelTabRenderer}
             onReady={({ api: readyApi }) => {
               api = readyApi;
               initialize(readyApi);
@@ -543,8 +525,6 @@ describe("RootPanelTabRenderer", () => {
         position: { referencePanel: logs.id, direction: "within" },
       });
     });
-    mocks.groupPanels = [{ panelInstanceId: "logs-a" }, { panelInstanceId: "result-a" }];
-
     const result = api?.getPanel("result-a");
     const event = new MouseEvent("contextmenu", {
       bubbles: true,
@@ -560,10 +540,8 @@ describe("RootPanelTabRenderer", () => {
     expect(closeGroupItem).toBeDefined();
     act(() => closeGroupItem?.click());
 
-    expect(mocks.listGroupPanels).toHaveBeenCalledOnce();
-    expect(mocks.listGroupPanels).toHaveBeenCalledWith(result?.group.id);
-    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledOnce();
-    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith(["logs-a", "result-a"]);
+    expect(mocks.requestCloseWorkbenchGroup).toHaveBeenCalledOnce();
+    expect(mocks.requestCloseWorkbenchGroup).toHaveBeenCalledWith(result?.group.id);
     expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
   });
 });

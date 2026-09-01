@@ -935,3 +935,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 root/nested Dockview runtime、read/control/binding、layout persistence 与 layout lifecycle
       从 `features` 迁入 `modules/workbench/internal/{dockview,application}`；raw transaction 仅留在模块内部，
       editor publication、panel removal 与 project replacement 通过窄 public commands 协调并释放 panel state。
+- [x] 将 root Dockview 的主题读取、editor activation、tab dirty/close/context-menu 与 sidebar drag overlay
+      业务协调迁入 `app/windows/workbench`；Workbench adapter 仅接收 typed capability，继续独占 Dockview
+      event、tab chrome 与 edge topology 行为。

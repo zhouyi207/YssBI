@@ -342,6 +342,13 @@ export async function requestCloseWorkbenchPanel(panelInstanceId: string): Promi
   return requestCloseWorkbenchPanels([panelInstanceId]);
 }
 
+export function requestCloseWorkbenchGroup(groupId: string): Promise<boolean> {
+  const panelInstanceIds = workbenchDockviewRead
+    .listGroupPanels(groupId)
+    .map((panel) => panel.panelInstanceId);
+  return requestCloseWorkbenchPanels(panelInstanceIds);
+}
+
 async function requestCloseWorkbenchPanelsNow(
   panelInstanceIds: readonly string[],
 ): Promise<boolean> {

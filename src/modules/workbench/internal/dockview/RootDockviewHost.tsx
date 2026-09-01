@@ -10,6 +10,7 @@ import {
 import {
   DockviewReact,
   type DockviewReadyEvent,
+  type DockviewTheme,
   type IDockviewHeaderActionsProps,
 } from "dockview-react";
 import {
@@ -22,21 +23,35 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
-import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
 import { useWorkbenchLayout } from "../application/useWorkbenchLayout";
 import { workbenchLayoutController } from "../application/workbenchLayoutController";
-import { workbenchDockviewRead } from "./index";
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
-import { useSettingsRead } from "@/features/core/settings/read";
-import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
 import { WorkbenchActivityActions } from "../ui/activity/WorkbenchActivityActions";
-import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
-import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
-import type { RootPanelRegistry } from "./panelContribution";
+import { workbenchDockviewRead } from "./workbenchRead";
+import type {
+  RootPanelActivationTarget,
+  RootPanelRegistry,
+  RootPanelTabComponent,
+} from "./panelContribution";
 
 export interface RootDockviewDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;
   readonly onDragEnd: (event: DragEndEvent) => void;
+}
+
+export type RootPanelActivationCoordinator = (
+  panel: RootPanelActivationTarget,
+) => void | Promise<void>;
+
+export interface RootDockviewHostProps {
+  readonly panelRegistry: RootPanelRegistry;
+  readonly tabComponent: RootPanelTabComponent;
+  readonly dndCoordinator: RootDockviewDndCoordinator;
+  readonly onActiveEditorPanelChange: RootPanelActivationCoordinator;
+  readonly dockviewTheme: DockviewTheme;
+  readonly watermarkComponent: FunctionComponent;
+  readonly dragOverlay?: ReactNode;
+  readonly activityActions?: ReactNode;
 }
 
 function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): void {
@@ -49,81 +64,86 @@ function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): vo
   event.stopPropagation();
 }
 
-export const RootDockviewHost = forwardRef<
-  HTMLDivElement,
-  {
-    readonly panelRegistry: RootPanelRegistry;
-    readonly dndCoordinator: RootDockviewDndCoordinator;
-    readonly watermarkComponent: FunctionComponent;
-    readonly activityActions?: ReactNode;
-  }
->(({ panelRegistry, dndCoordinator, watermarkComponent, activityActions }, ref) => {
-  const themeMode = useSettingsRead((state) => state.theme.mode);
-  const bindWorkbenchLayout = useWorkbenchLayout();
-  const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  useEffect(
-    () => () => {
-      activationDisposableRef.current?.dispose();
-      activationDisposableRef.current = null;
+export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps>(
+  (
+    {
+      panelRegistry,
+      tabComponent,
+      dndCoordinator,
+      onActiveEditorPanelChange,
+      dockviewTheme,
+      watermarkComponent,
+      dragOverlay,
+      activityActions,
     },
-    [],
-  );
+    ref,
+  ) => {
+    const bindWorkbenchLayout = useWorkbenchLayout();
+    const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const onDockviewReady = useCallback(
-    (event: DockviewReadyEvent) => {
-      bindWorkbenchLayout(event);
-      activationDisposableRef.current?.dispose();
-      activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
-        if (!workbenchDockviewRead.isHydrated || !workbenchLayoutController.projectResourcesReady)
-          return;
+    useEffect(
+      () => () => {
+        activationDisposableRef.current?.dispose();
+        activationDisposableRef.current = null;
+      },
+      [],
+    );
 
-        const activePanel = workbenchDockviewRead.getActivePanel();
-        if (activePanel?.metadata.role !== "editor") return;
-        void synchronizeActiveEditorPanel({ ...activePanel, metadata: activePanel.metadata });
-      });
-    },
-    [bindWorkbenchLayout],
-  );
+    const onDockviewReady = useCallback(
+      (event: DockviewReadyEvent) => {
+        bindWorkbenchLayout(event);
+        activationDisposableRef.current?.dispose();
+        activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
+          if (!workbenchDockviewRead.isHydrated || !workbenchLayoutController.projectResourcesReady)
+            return;
 
-  const rightHeaderActionsComponent = useCallback(
-    (props: IDockviewHeaderActionsProps) => (
-      <WorkbenchActivityActions {...props} additionalActions={activityActions} />
-    ),
-    [activityActions],
-  );
+          const activePanel = workbenchDockviewRead.getActivePanel();
+          if (activePanel?.metadata.role !== "editor") return;
+          void onActiveEditorPanelChange({ ...activePanel, metadata: activePanel.metadata });
+        });
+      },
+      [bindWorkbenchLayout, onActiveEditorPanelChange],
+    );
 
-  return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={dndCoordinator.onDragStart}
-      onDragEnd={dndCoordinator.onDragEnd}
-    >
-      <div ref={ref} className="relative flex min-w-0 flex-1 overflow-hidden">
-        <div
-          data-yssbi-root-dockview
-          data-testid="root-dockview"
-          className="h-full min-h-0 w-full min-w-0"
-          onKeyDownCapture={preventDockviewNativeTabClose}
-        >
-          <DockviewReact
-            className="yssbi-root-dockview-instance h-full w-full"
-            components={panelRegistry}
-            defaultTabComponent={RootPanelTabRenderer}
-            rightHeaderActionsComponent={rightHeaderActionsComponent}
-            watermarkComponent={watermarkComponent}
-            disableFloatingGroups
-            theme={resolveYssbiDockviewTheme(themeMode)}
-            onReady={onDockviewReady}
-          />
+    const rightHeaderActionsComponent = useCallback(
+      (props: IDockviewHeaderActionsProps) => (
+        <WorkbenchActivityActions {...props} additionalActions={activityActions} />
+      ),
+      [activityActions],
+    );
+
+    return (
+      <DndContext
+        sensors={sensors}
+        onDragStart={dndCoordinator.onDragStart}
+        onDragEnd={dndCoordinator.onDragEnd}
+      >
+        <div ref={ref} className="relative flex min-w-0 flex-1 overflow-hidden">
+          <div
+            data-yssbi-root-dockview
+            data-testid="root-dockview"
+            className="h-full min-h-0 w-full min-w-0"
+            onKeyDownCapture={preventDockviewNativeTabClose}
+          >
+            <DockviewReact
+              className="yssbi-root-dockview-instance h-full w-full"
+              components={panelRegistry}
+              defaultTabComponent={tabComponent}
+              rightHeaderActionsComponent={rightHeaderActionsComponent}
+              watermarkComponent={watermarkComponent}
+              disableFloatingGroups
+              theme={dockviewTheme}
+              onReady={onDockviewReady}
+            />
+          </div>
         </div>
-      </div>
-      <DragOverlay dropAnimation={null} modifiers={[snapTopLeftToCursor]}>
-        <RootDockviewDragOverlay />
-      </DragOverlay>
-    </DndContext>
-  );
-});
+        <DragOverlay dropAnimation={null} modifiers={[snapTopLeftToCursor]}>
+          {dragOverlay}
+        </DragOverlay>
+      </DndContext>
+    );
+  },
+);
 
 RootDockviewHost.displayName = "RootDockviewHost";

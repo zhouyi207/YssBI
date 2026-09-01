@@ -350,6 +350,34 @@ describe("frontend architecture model", () => {
     });
   });
 
+  it("keeps business coordination outside the root Dockview adapters", () => {
+    withProductionTypeScriptProject((context) => {
+      const sourceByPath = new Map(
+        productionTypeScriptSources(context).map(({ path, source }) => [path, source]),
+      );
+      const rootHost =
+        sourceByPath.get("src/modules/workbench/internal/dockview/RootDockviewHost.tsx") ?? "";
+      const tabRenderer =
+        sourceByPath.get("src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx") ?? "";
+      const dragOverlay =
+        sourceByPath.get("src/modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx") ?? "";
+
+      expect(rootHost).not.toMatch(/\b(?:synchronizeActiveEditorPanel|useSettingsRead)\b/u);
+      expect(tabRenderer).not.toMatch(/from\s+["']@\/features\//u);
+      expect(dragOverlay).not.toMatch(/from\s+["']@\/features\//u);
+
+      expect(
+        sourceByPath.get("src/app/windows/workbench/integrations/panelActivationCoordinator.ts"),
+      ).toMatch(/\bsynchronizeActiveEditorPanel\b/u);
+      expect(sourceByPath.get("src/app/windows/workbench/rootPanelTabRenderer.tsx")).toMatch(
+        /\brequestCloseEditorPanel\b/u,
+      );
+      expect(
+        sourceByPath.get("src/app/windows/workbench/integrations/activityEditorDndOverlay.tsx"),
+      ).toMatch(/\buseActivityEditorDragOverlayLabel\b/u);
+    });
+  });
+
   it("keeps the chart resource cutover single-path", () => {
     withProductionTypeScriptProject((context) => {
       const retiredResourceTerm = ["work", "sheet"].join("");

@@ -3,8 +3,8 @@ import type { FunctionComponent, ReactNode } from "react";
 
 import { StatusBar } from "./status/StatusBar";
 import { Menubar } from "./menu/Menubar";
-import { RootDockviewHost, type RootDockviewDndCoordinator } from "../dockview/RootDockviewHost";
-import type { RootPanelRegistry } from "../dockview/panelContribution";
+import { RootDockviewHost, type RootDockviewHostProps } from "../dockview/RootDockviewHost";
+import type { RootPanelRegistry, RootPanelTabComponent } from "../dockview/panelContribution";
 import { WorkbenchOverlayHost } from "./overlay/WorkbenchOverlayHost";
 import type { WorkbenchOverlayRegistry } from "./overlay/overlayContribution";
 import { useAppInitialization } from "@/features/application/initialization";
@@ -21,18 +21,26 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 
 export interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
-  readonly dndCoordinator: RootDockviewDndCoordinator;
+  readonly tabComponent: RootPanelTabComponent;
+  readonly dndCoordinator: RootDockviewHostProps["dndCoordinator"];
+  readonly onActiveEditorPanelChange: RootDockviewHostProps["onActiveEditorPanelChange"];
+  readonly dockviewTheme: RootDockviewHostProps["dockviewTheme"];
   readonly commands: WorkbenchCommandCapability;
   readonly watermarkComponent: FunctionComponent;
+  readonly dragOverlay?: ReactNode;
   readonly activityActions?: ReactNode;
   readonly overlays: WorkbenchOverlayRegistry;
 }
 
 function WorkbenchWindowReady({
   panelRegistry,
+  tabComponent,
   dndCoordinator,
+  onActiveEditorPanelChange,
+  dockviewTheme,
   commands,
   watermarkComponent,
+  dragOverlay,
   activityActions,
   overlays,
 }: WorkbenchWindowProps) {
@@ -50,8 +58,12 @@ function WorkbenchWindowReady({
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
         <RootDockviewHost
           panelRegistry={panelRegistry}
+          tabComponent={tabComponent}
           dndCoordinator={dndCoordinator}
+          onActiveEditorPanelChange={onActiveEditorPanelChange}
+          dockviewTheme={dockviewTheme}
           watermarkComponent={watermarkComponent}
+          dragOverlay={dragOverlay}
           activityActions={activityActions}
         />
       </div>
