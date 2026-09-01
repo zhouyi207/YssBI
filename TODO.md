@@ -920,3 +920,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 将 Details/Inspect 与 Result panel UI 迁入 `modules/details`、`modules/results`，由 root registry
       仅导入模块 public contribution；将跨模块复用的 Markdown prose 样式收敛为无业务状态的
       `shared/ui` presentation primitive，移除旧 Layout 相对路径依赖。
+- [x] 将 Project、Data、Node Catalog、Commands Activity panel 的 controller、rows、actions 与菜单
+      分别迁入所属模块，根 `public.ts` 各自只暴露 panel contribution；Workbench public API 提供通用
+      Dockview panel contract、Activity shell 与 sidebar primitives，删除旧跨业务 sidebar 聚合目录。

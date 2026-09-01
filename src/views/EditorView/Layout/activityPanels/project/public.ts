@@ -1,1 +1,0 @@
-export { projectActivityPanelContribution } from "./ProjectActivityPanelController";

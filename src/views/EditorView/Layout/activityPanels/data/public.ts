@@ -1,1 +1,0 @@
-export { dataActivityPanelContribution } from "./DataActivityPanelController";

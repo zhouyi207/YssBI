@@ -10,10 +10,8 @@ import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useL
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { useDismissableOverlay } from "@/shared/ui/positionedOverlay";
-import {
-  LocalizedCatalogTreeRow,
-  SidebarTreeSearchInput,
-} from "@/views/EditorView/Layout/sidebarUi";
+import { LocalizedCatalogTreeRow } from "@/modules/node-catalog/public";
+import { SidebarTreeSearchInput } from "@/modules/workbench/public";
 
 export function NodePalette({
   x,

@@ -3,11 +3,8 @@ import type { FunctionComponent } from "react";
 
 import { StatusBar } from "./Layout/StatusBar";
 import { Menubar } from "./Layout/Menubar";
-import {
-  RootDockviewHost,
-  type RootDockviewDndCoordinator,
-  type RootPanelRegistry,
-} from "./Layout/RootDockviewHost";
+import { RootDockviewHost, type RootDockviewDndCoordinator } from "./Layout/RootDockviewHost";
+import type { RootPanelRegistry } from "@/modules/workbench/public";
 import { WorkbenchOverlayHost } from "./Layout/WorkbenchOverlayHost";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";

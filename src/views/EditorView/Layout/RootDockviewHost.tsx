@@ -6,7 +6,7 @@ import {
   type FunctionComponent,
   type KeyboardEvent,
 } from "react";
-import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview-react";
+import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
   DndContext,
   DragOverlay,
@@ -21,19 +21,13 @@ import { synchronizeActiveEditorPanel } from "@/features/application/editor/acti
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
 import { workbenchDockviewRead } from "@/features/core/dockview";
-import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core/dockview";
+import type { RootPanelRegistry } from "@/modules/workbench/public";
 import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
 import { RootPanelTabRenderer } from "./RootPanelTabRenderer";
 import { RootDockviewDragOverlay } from "./RootDockviewDragOverlay";
-
-export type RootDockviewPanelComponent = FunctionComponent<
-  IDockviewPanelProps<WorkbenchPanelParams>
->;
-
-export type RootPanelRegistry = Record<WorkbenchComponentId, RootDockviewPanelComponent>;
 
 export interface RootDockviewDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;

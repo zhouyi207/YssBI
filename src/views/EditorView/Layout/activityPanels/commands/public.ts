@@ -1,1 +1,0 @@
-export { commandsActivityPanelContribution } from "./CommandsActivityPanelController";
