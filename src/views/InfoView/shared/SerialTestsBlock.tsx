@@ -1,16 +1,24 @@
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { computeSerialTests } from '@/features/application/stats/statsActions';
-import { formatInlineUserError } from '@/features/application/userErrorSummary';
-import type { SerialTestsResponse } from '@/features/application/stats/statsActions';
-import { SectionHeader } from './RegressionShared';
-import { InfoAccentButton } from './InfoViewControls';
-import { formatNum } from './utils';
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { computeSerialTests } from "@/features/application/stats/statsActions";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
+import type { SerialTestsResponse } from "@/features/application/stats/statsActions";
+import { SectionHeader } from "./RegressionShared";
+import { InfoAccentButton } from "./InfoViewControls";
+import { formatNum } from "./utils";
 
-export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals?: number[]; exog?: number[][]; residualLabel?: string }) {
+export function SerialTestsBlock({
+  residuals,
+  exog,
+  residualLabel,
+}: {
+  residuals?: number[];
+  exog?: number[][];
+  residualLabel?: string;
+}) {
   const { t } = useTranslation();
   const [lag, setLag] = useState(20);
   const [bgDropMissing, setBgDropMissing] = useState(false);
@@ -45,16 +53,27 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
   return (
     <div className="mt-6">
       <SectionHeader
-        title={residualLabel ? `Serial Correlation (检验对象: ${residualLabel})` : 'Serial Correlation (BG / Q / DW)'}
+        title={
+          residualLabel
+            ? `Serial Correlation (检验对象: ${residualLabel})`
+            : "Serial Correlation (BG / Q / DW)"
+        }
         icon={
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
+            />
           </svg>
         }
       />
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags (BG/Q)</Label>
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">
+            Lags (BG/Q)
+          </Label>
           <Input
             type="number"
             min={1}
@@ -69,7 +88,10 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
               checked={bgDropMissing}
               onCheckedChange={(checked) => setBgDropMissing(checked === true)}
             />
-            <Label htmlFor="serial-bg-drop-missing" className="cursor-pointer text-[11px] text-muted-foreground">
+            <Label
+              htmlFor="serial-bg-drop-missing"
+              className="cursor-pointer text-[11px] text-muted-foreground"
+            >
               BG: 去掉缺失值 (n-p)
             </Label>
           </div>
@@ -85,15 +107,15 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
             {result.bg && (
               <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
-                <div className="text-[11px] text-muted-foreground font-mono mb-2">Breusch-Godfrey LM</div>
+                <div className="text-[11px] text-muted-foreground font-mono mb-2">
+                  Breusch-Godfrey LM
+                </div>
                 <div className="text-foreground font-mono text-sm font-medium">
                   χ²({result.bg.lags}) = {formatNum(result.bg.stat)}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   p = {formatNum(result.bg.p_value)}
-                  {result.bg.p_value < 0.05 ? (
-                    <span className="text-amber-400 ml-1">*</span>
-                  ) : null}
+                  {result.bg.p_value < 0.05 ? <span className="text-amber-400 ml-1">*</span> : null}
                 </div>
               </div>
             )}
@@ -105,15 +127,15 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   p = {formatNum(result.q.p_value)}
-                  {result.q.p_value < 0.05 ? (
-                    <span className="text-amber-400 ml-1">*</span>
-                  ) : null}
+                  {result.q.p_value < 0.05 ? <span className="text-amber-400 ml-1">*</span> : null}
                 </div>
               </div>
             )}
             <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
               <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
-              <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw.d)}</div>
+              <div className="text-foreground font-mono text-sm font-medium">
+                DW = {formatNum(result.dw.d)}
+              </div>
             </div>
           </div>
         )}

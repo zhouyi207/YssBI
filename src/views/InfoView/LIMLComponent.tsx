@@ -1,5 +1,5 @@
-import type { FC } from 'react';
-import { useRegressionReport } from '@/features/application/stats/useRegressionReport';
+import type { FC } from "react";
+import { useRegressionReport } from "@/features/application/stats/useRegressionReport";
 import {
   ReportLayout,
   RSquaredBadge,
@@ -7,8 +7,8 @@ import {
   RegressionModelCoreSections,
   OlsStyleDiagnosticsSection,
   IvReportSections,
-} from './shared';
-import type { OLSResultData } from '@/shared/types/report';
+} from "./shared";
+import type { OLSResultData } from "@/shared/types/report";
 
 export const LIMLComponent: FC<{ data: OLSResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical, leverageKdeData } = useRegressionReport(data);
@@ -35,7 +35,7 @@ export const LIMLComponent: FC<{ data: OLSResultData }> = ({ data }) => {
     >
       <IvReportSections
         variant="liml"
-        endogName={data.endog_name || 'y'}
+        endogName={data.endog_name || "y"}
         coefficients={coefficients}
         diag={diag}
       />

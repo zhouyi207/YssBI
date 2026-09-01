@@ -1,16 +1,16 @@
-import { listen } from '@tauri-apps/api/event';
-import { toErrorReference, type ErrorReference } from '@/services/ipc';
+import { listen } from "@tauri-apps/api/event";
+import { toErrorReference, type ErrorReference } from "@/services/ipc";
 import {
   parseProjectEvent,
   type ProjectEvent,
   type ProjectEventParseCode,
-} from './projectEventParser';
+} from "./projectEventParser";
 
 type UnlistenFn = () => void;
 
 export type ProjectEventStreamItem =
-  | { readonly kind: 'event'; readonly event: ProjectEvent }
-  | { readonly kind: 'failure'; readonly issue: ErrorReference };
+  | { readonly kind: "event"; readonly event: ProjectEvent }
+  | { readonly kind: "failure"; readonly issue: ErrorReference };
 
 export type ProjectEventStreamStartOutcome =
   | { readonly ok: true; readonly value: undefined }
@@ -24,18 +24,18 @@ export interface ProjectEventStream {
   subscribe(listener: ProjectEventListener): () => void;
 }
 
-const PROJECT_EVENT_NAME = 'project-event';
-const SUBSCRIPTION_FAILURE_CODE = 'project_event_subscription_failed';
-const CLOSED_CODE = 'project_event_stream_closed';
+const PROJECT_EVENT_NAME = "project-event";
+const SUBSCRIPTION_FAILURE_CODE = "project_event_subscription_failed";
+const CLOSED_CODE = "project_event_stream_closed";
 
 function parseFailureCode(code: ProjectEventParseCode): string {
   switch (code) {
-    case 'invalidEnvelope':
-      return 'project_event_invalid_envelope';
-    case 'unknownType':
-      return 'project_event_unknown_type';
-    case 'invalidPayload':
-      return 'project_event_invalid_payload';
+    case "invalidEnvelope":
+      return "project_event_invalid_envelope";
+    case "unknownType":
+      return "project_event_unknown_type";
+    case "invalidPayload":
+      return "project_event_invalid_payload";
   }
 }
 
@@ -70,9 +70,9 @@ export function createProjectEventStream(): ProjectEventStream {
     if (closed) return;
     const parsed = parseProjectEvent(payload);
     const item: ProjectEventStreamItem = parsed.ok
-      ? { kind: 'event', event: parsed.event }
+      ? { kind: "event", event: parsed.event }
       : {
-          kind: 'failure',
+          kind: "failure",
           issue: { code: parseFailureCode(parsed.code), incidentId: null },
         };
     notifyListeners(listeners, item);

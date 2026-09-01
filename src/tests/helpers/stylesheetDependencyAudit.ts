@@ -1,20 +1,18 @@
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { isAbsolute, posix, relative, resolve, win32 } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, posix, relative, resolve, win32 } from "node:path";
 import {
   parseExternalDependencySpecifier,
   type ResolvedModuleDependency,
   type StylesheetDependencyOrigin,
-} from './moduleDependencyAudit';
+} from "./moduleDependencyAudit";
 
-export type StylesheetDependencyKind =
-  | 'stylesheet-import'
-  | 'stylesheet-url';
+export type StylesheetDependencyKind = "stylesheet-import" | "stylesheet-url";
 
 export interface ResolvedStylesheetDependency {
   repositoryRelativeSourceFile: string;
   fullyQualifiedOwner: string;
   kind: StylesheetDependencyKind;
-  mode: 'build-style';
+  mode: "build-style";
   origin: StylesheetDependencyOrigin;
   canonicalOriginTarget: string;
   writtenSpecifier: string;
@@ -23,11 +21,28 @@ export interface ResolvedStylesheetDependency {
 }
 
 export type StylesheetResolutionError =
-  | { readonly kind: 'stylesheet-parse-failure'; readonly sourceFile: string; readonly line: number; readonly column: number }
-  | { readonly kind: 'stylesheet-cycle'; readonly cycle: readonly string[] }
-  | { readonly kind: 'stylesheet-path-escapes-repository'; readonly sourceFile: string; readonly writtenSpecifier: string }
-  | { readonly kind: 'stylesheet-target-missing'; readonly sourceFile: string; readonly canonicalTarget: string }
-  | { readonly kind: 'unsupported-stylesheet-target'; readonly sourceFile: string; readonly writtenSpecifier: string };
+  | {
+      readonly kind: "stylesheet-parse-failure";
+      readonly sourceFile: string;
+      readonly line: number;
+      readonly column: number;
+    }
+  | { readonly kind: "stylesheet-cycle"; readonly cycle: readonly string[] }
+  | {
+      readonly kind: "stylesheet-path-escapes-repository";
+      readonly sourceFile: string;
+      readonly writtenSpecifier: string;
+    }
+  | {
+      readonly kind: "stylesheet-target-missing";
+      readonly sourceFile: string;
+      readonly canonicalTarget: string;
+    }
+  | {
+      readonly kind: "unsupported-stylesheet-target";
+      readonly sourceFile: string;
+      readonly writtenSpecifier: string;
+    };
 
 export interface ResolvedStylesheetGraph {
   readonly repositoryStylesheets: readonly string[];
@@ -40,23 +55,29 @@ export interface RepositoryTextReader {
 }
 
 export function createRepositoryTextReader(repositoryRoot: string): RepositoryTextReader {
-  const sourceRoot = realpathSync(resolve(repositoryRoot, 'src'));
+  const sourceRoot = realpathSync(resolve(repositoryRoot, "src"));
   return {
     readRepositoryText(repositoryRelativePath: string): string | null {
-      if (!repositoryRelativePath.startsWith('src/')
-        || repositoryRelativePath.includes('\\')
-        || repositoryRelativePath.split('/').includes('..')
-        || posix.normalize(repositoryRelativePath) !== repositoryRelativePath
-        || isAbsolute(repositoryRelativePath)
-        || win32.isAbsolute(repositoryRelativePath)) return null;
+      if (
+        !repositoryRelativePath.startsWith("src/") ||
+        repositoryRelativePath.includes("\\") ||
+        repositoryRelativePath.split("/").includes("..") ||
+        posix.normalize(repositoryRelativePath) !== repositoryRelativePath ||
+        isAbsolute(repositoryRelativePath) ||
+        win32.isAbsolute(repositoryRelativePath)
+      )
+        return null;
       try {
-        const target = realpathSync(resolve(repositoryRoot, ...repositoryRelativePath.split('/')));
+        const target = realpathSync(resolve(repositoryRoot, ...repositoryRelativePath.split("/")));
         const sourceRelativeTarget = relative(sourceRoot, target);
-        if (!sourceRelativeTarget
-          || sourceRelativeTarget.startsWith('..')
-          || isAbsolute(sourceRelativeTarget)
-          || !statSync(target).isFile()) return null;
-        return readFileSync(target, 'utf8');
+        if (
+          !sourceRelativeTarget ||
+          sourceRelativeTarget.startsWith("..") ||
+          isAbsolute(sourceRelativeTarget) ||
+          !statSync(target).isFile()
+        )
+          return null;
+        return readFileSync(target, "utf8");
       } catch {
         return null;
       }
@@ -85,27 +106,31 @@ interface LiteralResult extends CursorResult {
 }
 
 function isWhitespace(value: string | undefined): boolean {
-  return value === ' ' || value === '\t' || value === '\r' || value === '\n' || value === '\f';
+  return value === " " || value === "\t" || value === "\r" || value === "\n" || value === "\f";
 }
 
 function isIdentifierCharacter(value: string | undefined): boolean {
   if (!value) return false;
   const code = value.charCodeAt(0);
-  return (code >= 48 && code <= 57)
-    || (code >= 65 && code <= 90)
-    || (code >= 97 && code <= 122)
-    || value === '-'
-    || value === '_';
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    value === "-" ||
+    value === "_"
+  );
 }
 
 function startsWord(source: string, offset: number, word: string): boolean {
   if (source.slice(offset, offset + word.length).toLowerCase() !== word) return false;
-  return !isIdentifierCharacter(source[offset - 1])
-    && !isIdentifierCharacter(source[offset + word.length]);
+  return (
+    !isIdentifierCharacter(source[offset - 1]) &&
+    !isIdentifierCharacter(source[offset + word.length])
+  );
 }
 
 function skipComment(source: string, offset: number): CursorResult {
-  const end = source.indexOf('*/', offset + 2);
+  const end = source.indexOf("*/", offset + 2);
   return end < 0
     ? { next: source.length, errorOffset: offset }
     : { next: end + 2, errorOffset: null };
@@ -118,7 +143,7 @@ function skipTrivia(source: string, offset: number): CursorResult {
       cursor += 1;
       continue;
     }
-    if (source[cursor] === '/' && source[cursor + 1] === '*') {
+    if (source[cursor] === "/" && source[cursor + 1] === "*") {
       const comment = skipComment(source, cursor);
       if (comment.errorOffset !== null) return comment;
       cursor = comment.next;
@@ -134,17 +159,17 @@ function readQuotedLiteral(source: string, offset: number): LiteralResult {
   if (quote !== '"' && quote !== "'") {
     return { value: null, next: offset, errorOffset: offset };
   }
-  let value = '';
+  let value = "";
   let cursor = offset + 1;
   while (cursor < source.length) {
     const character = source[cursor];
     if (character === quote) {
       return { value, next: cursor + 1, errorOffset: null };
     }
-    if (character === '\n' || character === '\r') {
+    if (character === "\n" || character === "\r") {
       return { value: null, next: cursor, errorOffset: cursor };
     }
-    if (character === '\\') {
+    if (character === "\\") {
       if (cursor + 1 >= source.length) {
         return { value: null, next: source.length, errorOffset: cursor };
       }
@@ -160,7 +185,7 @@ function readQuotedLiteral(source: string, offset: number): LiteralResult {
 
 function readUrlLiteral(source: string, offset: number): LiteralResult {
   const openParenthesis = offset + 3;
-  if (source[openParenthesis] !== '(') {
+  if (source[openParenthesis] !== "(") {
     return { value: null, next: offset + 3, errorOffset: offset };
   }
   const trivia = skipTrivia(source, openParenthesis + 1);
@@ -176,8 +201,8 @@ function readUrlLiteral(source: string, offset: number): LiteralResult {
     cursor = quoted.next;
   } else {
     const start = cursor;
-    while (cursor < source.length && source[cursor] !== ')') {
-      if (source[cursor] === '(' || source[cursor] === '"' || source[cursor] === "'") {
+    while (cursor < source.length && source[cursor] !== ")") {
+      if (source[cursor] === "(" || source[cursor] === '"' || source[cursor] === "'") {
         return { value: null, next: cursor, errorOffset: cursor };
       }
       cursor += 1;
@@ -188,7 +213,7 @@ function readUrlLiteral(source: string, offset: number): LiteralResult {
     }
   }
   const closingTrivia = skipTrivia(source, cursor);
-  if (closingTrivia.errorOffset !== null || source[closingTrivia.next] !== ')') {
+  if (closingTrivia.errorOffset !== null || source[closingTrivia.next] !== ")") {
     return {
       value: null,
       next: closingTrivia.next,
@@ -203,7 +228,7 @@ function lexStylesheet(source: string): StylesheetLexResult {
   const errorOffsets: number[] = [];
   let cursor = 0;
   while (cursor < source.length) {
-    if (source[cursor] === '/' && source[cursor + 1] === '*') {
+    if (source[cursor] === "/" && source[cursor + 1] === "*") {
       const comment = skipComment(source, cursor);
       if (comment.errorOffset !== null) {
         errorOffsets.push(comment.errorOffset);
@@ -221,34 +246,39 @@ function lexStylesheet(source: string): StylesheetLexResult {
       cursor = quoted.next;
       continue;
     }
-    if (source[cursor] === '@' && startsWord(source, cursor + 1, 'import')) {
+    if (source[cursor] === "@" && startsWord(source, cursor + 1, "import")) {
       const valueStart = skipTrivia(source, cursor + 7);
       if (valueStart.errorOffset !== null) {
         errorOffsets.push(valueStart.errorOffset);
         break;
       }
-      const literal = source[valueStart.next] === '"' || source[valueStart.next] === "'"
-        ? readQuotedLiteral(source, valueStart.next)
-        : startsWord(source, valueStart.next, 'url')
-          ? readUrlLiteral(source, valueStart.next)
-          : { value: null, next: valueStart.next, errorOffset: valueStart.next };
+      const literal =
+        source[valueStart.next] === '"' || source[valueStart.next] === "'"
+          ? readQuotedLiteral(source, valueStart.next)
+          : startsWord(source, valueStart.next, "url")
+            ? readUrlLiteral(source, valueStart.next)
+            : { value: null, next: valueStart.next, errorOffset: valueStart.next };
       if (literal.errorOffset !== null || literal.value === null) {
         errorOffsets.push(literal.errorOffset ?? valueStart.next);
         cursor = Math.max(literal.next, valueStart.next + 1);
         continue;
       }
-      references.push({ kind: 'stylesheet-import', specifier: literal.value, offset: valueStart.next });
+      references.push({
+        kind: "stylesheet-import",
+        specifier: literal.value,
+        offset: valueStart.next,
+      });
       cursor = literal.next;
       continue;
     }
-    if (startsWord(source, cursor, 'url') && source[cursor + 3] === '(') {
+    if (startsWord(source, cursor, "url") && source[cursor + 3] === "(") {
       const literal = readUrlLiteral(source, cursor);
       if (literal.errorOffset !== null || literal.value === null) {
         errorOffsets.push(literal.errorOffset ?? cursor);
         cursor = Math.max(literal.next, cursor + 1);
         continue;
       }
-      references.push({ kind: 'stylesheet-url', specifier: literal.value, offset: cursor });
+      references.push({ kind: "stylesheet-url", specifier: literal.value, offset: cursor });
       cursor = literal.next;
       continue;
     }
@@ -261,7 +291,7 @@ function lineAndColumn(source: string, offset: number): { line: number; column: 
   let line = 1;
   let column = 1;
   for (let cursor = 0; cursor < offset; cursor += 1) {
-    if (source[cursor] === '\n') {
+    if (source[cursor] === "\n") {
       line += 1;
       column = 1;
     } else {
@@ -273,16 +303,16 @@ function lineAndColumn(source: string, offset: number): { line: number; column: 
 
 function hasForbiddenEncodedSeparator(specifier: string): boolean {
   const lower = specifier.toLowerCase();
-  return lower.includes('%2f') || lower.includes('%5c');
+  return lower.includes("%2f") || lower.includes("%5c");
 }
 
-function externalTarget(origin: Extract<StylesheetDependencyOrigin, { kind: 'external' }>): string {
+function externalTarget(origin: Extract<StylesheetDependencyOrigin, { kind: "external" }>): string {
   const subpath = origin.dependency.canonicalSubpath;
-  return `external:${origin.dependency.packageName}${subpath === null ? '' : `::${subpath}`}`;
+  return `external:${origin.dependency.packageName}${subpath === null ? "" : `::${subpath}`}`;
 }
 
 function packageExists(repositoryRoot: string, packageName: string): boolean {
-  return existsSync(resolve(repositoryRoot, 'node_modules', ...packageName.split('/')));
+  return existsSync(resolve(repositoryRoot, "node_modules", ...packageName.split("/")));
 }
 
 type StylesheetOriginResult =
@@ -295,51 +325,73 @@ function resolveStylesheetOrigin(
   specifier: string,
   sourceReader: RepositoryTextReader,
 ): StylesheetOriginResult {
-  if (!specifier
-    || specifier.includes('\\')
-    || specifier.includes('?')
-    || specifier.includes('#')
-    || hasForbiddenEncodedSeparator(specifier)
-    || specifier.startsWith('//')
-    || specifier.includes('://')
-    || specifier.toLowerCase().startsWith('data:')) {
-    return { error: { kind: 'unsupported-stylesheet-target', sourceFile, writtenSpecifier: specifier } };
+  if (
+    !specifier ||
+    specifier.includes("\\") ||
+    specifier.includes("?") ||
+    specifier.includes("#") ||
+    hasForbiddenEncodedSeparator(specifier) ||
+    specifier.startsWith("//") ||
+    specifier.includes("://") ||
+    specifier.toLowerCase().startsWith("data:")
+  ) {
+    return {
+      error: { kind: "unsupported-stylesheet-target", sourceFile, writtenSpecifier: specifier },
+    };
   }
-  const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
-  if (specifier.startsWith('/') || (isRelative && specifier.split('/').includes('..'))) {
+  const isRelative = specifier.startsWith("./") || specifier.startsWith("../");
+  if (specifier.startsWith("/") || (isRelative && specifier.split("/").includes(".."))) {
     const escapedTarget = posix.normalize(posix.join(posix.dirname(sourceFile), specifier));
-    if (!escapedTarget.startsWith('src/')) {
-      return { error: { kind: 'stylesheet-path-escapes-repository', sourceFile, writtenSpecifier: specifier } };
+    if (!escapedTarget.startsWith("src/")) {
+      return {
+        error: {
+          kind: "stylesheet-path-escapes-repository",
+          sourceFile,
+          writtenSpecifier: specifier,
+        },
+      };
     }
-    return { error: { kind: 'unsupported-stylesheet-target', sourceFile, writtenSpecifier: specifier } };
+    return {
+      error: { kind: "unsupported-stylesheet-target", sourceFile, writtenSpecifier: specifier },
+    };
   }
-  if (specifier.startsWith('./')) {
+  if (specifier.startsWith("./")) {
     const canonicalTarget = posix.normalize(posix.join(posix.dirname(sourceFile), specifier));
-    if (!canonicalTarget.startsWith('src/')) {
-      return { error: { kind: 'stylesheet-path-escapes-repository', sourceFile, writtenSpecifier: specifier } };
+    if (!canonicalTarget.startsWith("src/")) {
+      return {
+        error: {
+          kind: "stylesheet-path-escapes-repository",
+          sourceFile,
+          writtenSpecifier: specifier,
+        },
+      };
     }
-    if (!canonicalTarget.endsWith('.css')) {
-      return { error: { kind: 'unsupported-stylesheet-target', sourceFile, writtenSpecifier: specifier } };
+    if (!canonicalTarget.endsWith(".css")) {
+      return {
+        error: { kind: "unsupported-stylesheet-target", sourceFile, writtenSpecifier: specifier },
+      };
     }
     if (sourceReader.readRepositoryText(canonicalTarget) === null) {
-      return { error: { kind: 'stylesheet-target-missing', sourceFile, canonicalTarget } };
+      return { error: { kind: "stylesheet-target-missing", sourceFile, canonicalTarget } };
     }
     return {
       origin: {
-        kind: 'repository-asset',
-        asset: { repositoryRelativeAssetPath: canonicalTarget, resourceKind: 'stylesheet' },
+        kind: "repository-asset",
+        asset: { repositoryRelativeAssetPath: canonicalTarget, resourceKind: "stylesheet" },
       },
       canonicalTarget: `repository-asset:${canonicalTarget}`,
     };
   }
-  const dependency = parseExternalDependencySpecifier(specifier, 'stylesheet');
+  const dependency = parseExternalDependencySpecifier(specifier, "stylesheet");
   if (!dependency) {
-    return { error: { kind: 'unsupported-stylesheet-target', sourceFile, writtenSpecifier: specifier } };
+    return {
+      error: { kind: "unsupported-stylesheet-target", sourceFile, writtenSpecifier: specifier },
+    };
   }
-  const origin = { kind: 'external', dependency } as const;
+  const origin = { kind: "external", dependency } as const;
   const canonicalTarget = externalTarget(origin);
   if (!packageExists(repositoryRoot, dependency.packageName)) {
-    return { error: { kind: 'stylesheet-target-missing', sourceFile, canonicalTarget } };
+    return { error: { kind: "stylesheet-target-missing", sourceFile, canonicalTarget } };
   }
   return { origin, canonicalTarget };
 }
@@ -354,15 +406,15 @@ export function resolvedStylesheetDependencies(
   const errors: StylesheetResolutionError[] = [];
   const visited = new Set<string>();
   const traversalStack: string[] = [];
-  const roots = moduleDependencies.flatMap(({ origin }) => (
-    origin.kind === 'repository-asset' ? [origin.asset.repositoryRelativeAssetPath] : []
-  ));
+  const roots = moduleDependencies.flatMap(({ origin }) =>
+    origin.kind === "repository-asset" ? [origin.asset.repositoryRelativeAssetPath] : [],
+  );
 
   const visit = (sourceFile: string): void => {
     const cycleStart = traversalStack.indexOf(sourceFile);
     if (cycleStart >= 0) {
       errors.push({
-        kind: 'stylesheet-cycle',
+        kind: "stylesheet-cycle",
         cycle: [...traversalStack.slice(cycleStart), sourceFile],
       });
       return;
@@ -370,7 +422,7 @@ export function resolvedStylesheetDependencies(
     if (visited.has(sourceFile)) return;
     const source = sourceReader.readRepositoryText(sourceFile);
     if (source === null) {
-      errors.push({ kind: 'stylesheet-target-missing', sourceFile, canonicalTarget: sourceFile });
+      errors.push({ kind: "stylesheet-target-missing", sourceFile, canonicalTarget: sourceFile });
       return;
     }
     visited.add(sourceFile);
@@ -378,7 +430,11 @@ export function resolvedStylesheetDependencies(
     traversalStack.push(sourceFile);
     const lexed = lexStylesheet(source);
     for (const offset of lexed.errorOffsets) {
-      errors.push({ kind: 'stylesheet-parse-failure', sourceFile, ...lineAndColumn(source, offset) });
+      errors.push({
+        kind: "stylesheet-parse-failure",
+        sourceFile,
+        ...lineAndColumn(source, offset),
+      });
     }
     for (const reference of lexed.references) {
       const resolvedOrigin = resolveStylesheetOrigin(
@@ -387,7 +443,7 @@ export function resolvedStylesheetDependencies(
         reference.specifier,
         sourceReader,
       );
-      if ('error' in resolvedOrigin) {
+      if ("error" in resolvedOrigin) {
         errors.push(resolvedOrigin.error);
         continue;
       }
@@ -395,13 +451,13 @@ export function resolvedStylesheetDependencies(
         repositoryRelativeSourceFile: sourceFile,
         fullyQualifiedOwner: `stylesheet:${sourceFile}`,
         kind: reference.kind,
-        mode: 'build-style',
+        mode: "build-style",
         origin: resolvedOrigin.origin,
         canonicalOriginTarget: resolvedOrigin.canonicalTarget,
         writtenSpecifier: reference.specifier,
         ...lineAndColumn(source, reference.offset),
       });
-      if (resolvedOrigin.origin.kind === 'repository-asset') {
+      if (resolvedOrigin.origin.kind === "repository-asset") {
         visit(resolvedOrigin.origin.asset.repositoryRelativeAssetPath);
       }
     }

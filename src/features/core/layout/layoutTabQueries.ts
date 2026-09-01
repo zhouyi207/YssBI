@@ -1,41 +1,41 @@
-import { getPaneSelection, useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
-import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
+import {
+  getPaneSelection,
+  useEditorPaneStateStore,
+} from "@/features/core/dockview/editorPaneStateStore";
+import { layoutTabFromEditorMetadata } from "@/features/core/dockview/workbenchPanelModel";
 import {
   workbenchDockviewRead,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchRead';
-import type { LayoutTab } from '@/shared/types';
+} from "@/features/core/dockview/workbenchRead";
+import type { LayoutTab } from "@/shared/types";
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
-export interface LayoutGroupContext { activeEditorGroupId: string | null }
+export interface LayoutGroupContext {
+  activeEditorGroupId: string | null;
+}
 
 function panelTab(panel: WorkbenchPanelInfo | undefined): LayoutTab | null {
-  return panel?.metadata.role === 'editor'
-    ? layoutTabFromEditorMetadata(panel.metadata)
-    : null;
+  return panel?.metadata.role === "editor" ? layoutTabFromEditorMetadata(panel.metadata) : null;
 }
 
 function activeEditorPanelInGroup(groupId: string): WorkbenchPanelInfo | undefined {
   const activePanelInstanceId = workbenchDockviewRead
     .listGroups()
-    .find((group) => group.groupId === groupId)
-    ?.activePanelInstanceId;
+    .find((group) => group.groupId === groupId)?.activePanelInstanceId;
   if (!activePanelInstanceId) return undefined;
   return workbenchDockviewRead
     .listGroupPanels(groupId)
-    .find((panel) => panel.panelInstanceId === activePanelInstanceId
-      && panel.metadata.role === 'editor');
+    .find(
+      (panel) =>
+        panel.panelInstanceId === activePanelInstanceId && panel.metadata.role === "editor",
+    );
 }
 
 export function resolveEditorTargetGroupId(explicitGroupId?: string | null): string {
-  const groupIds = new Set(
-    workbenchDockviewRead.listGroups().map((group) => group.groupId),
-  );
+  const groupIds = new Set(workbenchDockviewRead.listGroups().map((group) => group.groupId));
   if (explicitGroupId && groupIds.has(explicitGroupId)) return explicitGroupId;
   const activeEditorGroupId = workbenchDockviewRead.getActiveEditorPanel()?.groupId;
-  return activeEditorGroupId && groupIds.has(activeEditorGroupId)
-    ? activeEditorGroupId
-    : '';
+  return activeEditorGroupId && groupIds.has(activeEditorGroupId) ? activeEditorGroupId : "";
 }
 
 export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
@@ -46,17 +46,24 @@ export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTa
   return panel && tab ? { nodeId: panel.groupId, tab } : null;
 }
 
-export function getActiveLayoutTab(groupId: string): { activeTabId: string; tab: LayoutTab } | null {
+export function getActiveLayoutTab(
+  groupId: string,
+): { activeTabId: string; tab: LayoutTab } | null {
   const panel = activeEditorPanelInGroup(groupId);
   const tab = panelTab(panel);
   return panel && tab ? { activeTabId: tab.id, tab } : null;
 }
 
-export function resolveEditorGroupId(groupId?: string | null, context?: LayoutGroupContext): string | null {
-  return groupId
-    ?? context?.activeEditorGroupId
-    ?? workbenchDockviewRead.getActiveEditorPanel()?.groupId
-    ?? null;
+export function resolveEditorGroupId(
+  groupId?: string | null,
+  context?: LayoutGroupContext,
+): string | null {
+  return (
+    groupId ??
+    context?.activeEditorGroupId ??
+    workbenchDockviewRead.getActiveEditorPanel()?.groupId ??
+    null
+  );
 }
 
 export interface GraphSelection {
@@ -64,7 +71,10 @@ export interface GraphSelection {
   connectionIds: Set<string>;
 }
 
-export function createGraphSelection(nodeIds: readonly string[], connectionIds: readonly string[]): GraphSelection {
+export function createGraphSelection(
+  nodeIds: readonly string[],
+  connectionIds: readonly string[],
+): GraphSelection {
   return { nodeIds: new Set(nodeIds), connectionIds: new Set(connectionIds) };
 }
 
@@ -90,7 +100,7 @@ export function updateEditorGroupSelectedNodeIds(
   const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
   if (!groupId || !panelId) return null;
   const current = getPaneSelection(panelId).selectedNodeIds;
-  const nodeIds = typeof updater === 'function' ? updater(current) : updater;
+  const nodeIds = typeof updater === "function" ? updater(current) : updater;
   useEditorPaneStateStore.getState().setSelectedNodeIds(panelId, nodeIds);
   return { groupId, nodeIds: [...new Set(nodeIds)] };
 }
@@ -108,7 +118,7 @@ export function updateEditorGroupSelectedConnectionIds(
   const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
   if (!groupId || !panelId) return null;
   const current = getPaneSelection(panelId).selectedConnectionIds;
-  const connectionIds = typeof updater === 'function' ? updater(current) : updater;
+  const connectionIds = typeof updater === "function" ? updater(current) : updater;
   useEditorPaneStateStore.getState().setSelectedConnectionIds(panelId, connectionIds);
   return { groupId, connectionIds: [...new Set(connectionIds)] };
 }

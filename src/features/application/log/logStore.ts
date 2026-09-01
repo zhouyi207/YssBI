@@ -1,10 +1,10 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import {
   DIAGNOSTIC_LEVELS,
   type DiagnosticLevel,
   type DiagnosticRecordDto,
-} from '@/shared/types/domain/diagnostics';
-import type { LogDomainId } from '@/features/domain/log/logDomains';
+} from "@/shared/types/domain/diagnostics";
+import type { LogDomainId } from "@/features/domain/log/logDomains";
 
 export interface DiagnosticLogFilter {
   levels: Set<DiagnosticLevel>;
@@ -25,7 +25,7 @@ export interface LogStore {
 
 const initialFilter: DiagnosticLogFilter = {
   levels: new Set(DIAGNOSTIC_LEVELS),
-  searchText: '',
+  searchText: "",
 };
 
 export const useLogStore = create<LogStore>((set) => ({
@@ -34,18 +34,21 @@ export const useLogStore = create<LogStore>((set) => ({
   autoScroll: true,
 
   setSelectedLog: (log) => set({ selectedLog: log }),
-  setFilter: (filter) => set((state) => ({
-    filter: { ...state.filter, ...filter },
-  })),
-  toggleLevel: (level) => set((state) => {
-    const levels = new Set(state.filter.levels);
-    if (levels.has(level)) levels.delete(level);
-    else levels.add(level);
-    return { filter: { ...state.filter, levels } };
-  }),
-  setSearchText: (searchText) => set((state) => ({
-    filter: { ...state.filter, searchText },
-  })),
+  setFilter: (filter) =>
+    set((state) => ({
+      filter: { ...state.filter, ...filter },
+    })),
+  toggleLevel: (level) =>
+    set((state) => {
+      const levels = new Set(state.filter.levels);
+      if (levels.has(level)) levels.delete(level);
+      else levels.add(level);
+      return { filter: { ...state.filter, levels } };
+    }),
+  setSearchText: (searchText) =>
+    set((state) => ({
+      filter: { ...state.filter, searchText },
+    })),
   setAutoScroll: (autoScroll) => set({ autoScroll }),
 }));
 
@@ -57,7 +60,7 @@ export function applyLogFilter(
   const search = filter.searchText.trim().toLowerCase();
   return logs.filter((log) => {
     if (!filter.levels.has(log.level)) return false;
-    if (domain !== 'all' && log.domain !== domain) return false;
+    if (domain !== "all" && log.domain !== domain) return false;
     if (!search) return true;
     return [
       log.message,

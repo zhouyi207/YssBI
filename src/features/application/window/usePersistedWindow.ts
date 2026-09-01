@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { currentAppWindow } from '@/services/platform/appWindow';
+import { currentAppWindow } from "@/services/platform/appWindow";
 import { WindowStateService } from "@/services/window/windowStateService";
 import type { WindowKind } from "@/shared/types/settings";
-import { logger } from '@/features/application/observability/appLogger';
+import { logger } from "@/features/application/observability/appLogger";
 import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCapture";
 
 /**
@@ -17,39 +17,38 @@ import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCaptur
  * 拦截相互独立、可叠加。
  */
 export function usePersistedWindow(kind: WindowKind): void {
-    useEffect(() => {
-        const win = currentAppWindow();
-        let unlistenClose: (() => void) | null = null;
+  useEffect(() => {
+    const win = currentAppWindow();
+    let unlistenClose: (() => void) | null = null;
 
-        const setup = async () => {
-            if (win.label !== "main") return;
-            try {
-                const subscription = await win.onCloseRequested(async (): Promise<'allow'> => {
-                    const next = await captureWindowGeometryPreservingMaximized(
-                        win,
-                        () => WindowStateService.get(kind),
-                    );
-                    if (!next) return 'allow';
-                    try {
-                        await WindowStateService.save(kind, next);
-                    } catch {
-                        logger.app.error('window state persistence failed', "Window");
-                    }
-                    return 'allow';
-                });
-                if (!subscription.ok) {
-                    logger.app.warn('window close listener unavailable', 'Window');
-                    return;
-                }
-                unlistenClose = subscription.value;
-            } catch {
-                logger.app.warn('window close listener unavailable', "Window");
-            }
-        };
+    const setup = async () => {
+      if (win.label !== "main") return;
+      try {
+        const subscription = await win.onCloseRequested(async (): Promise<"allow"> => {
+          const next = await captureWindowGeometryPreservingMaximized(win, () =>
+            WindowStateService.get(kind),
+          );
+          if (!next) return "allow";
+          try {
+            await WindowStateService.save(kind, next);
+          } catch {
+            logger.app.error("window state persistence failed", "Window");
+          }
+          return "allow";
+        });
+        if (!subscription.ok) {
+          logger.app.warn("window close listener unavailable", "Window");
+          return;
+        }
+        unlistenClose = subscription.value;
+      } catch {
+        logger.app.warn("window close listener unavailable", "Window");
+      }
+    };
 
-        void setup();
-        return () => {
-            unlistenClose?.();
-        };
-    }, [kind]);
+    void setup();
+    return () => {
+      unlistenClose?.();
+    };
+  }, [kind]);
 }

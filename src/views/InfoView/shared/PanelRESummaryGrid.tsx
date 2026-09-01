@@ -1,6 +1,6 @@
-import { formatNum, InfoRow } from './RegressionShared';
-import type { PanelFEInfo } from '@/shared/types/report';
-import type { ModelBasicInfo } from '@/shared/types/report';
+import { formatNum, InfoRow } from "./RegressionShared";
+import type { PanelFEInfo } from "@/shared/types/report";
+import type { ModelBasicInfo } from "@/shared/types/report";
 
 /** Stata xtreg, re style summary grid — Random-effects GLS or ML regression */
 export function PanelRESummaryGrid({
@@ -13,13 +13,13 @@ export function PanelRESummaryGrid({
   const isMle = info.lr_chi2 != null;
   const waldChi2 = info.lr_chi2 ?? info.wald_chi2 ?? info.f_statistic;
   const probWald = info.prob_lr_chi2 ?? info.prob_wald_chi2 ?? info.prob_f_statistic;
-  const isCluster = info.covariance_type?.toLowerCase().includes('cluster');
+  const isCluster = info.covariance_type?.toLowerCase().includes("cluster");
 
   return (
     <div className="space-y-2 mb-2">
       {/* Header: Random-effects GLS or ML regression */}
       <div className="text-xs text-muted-foreground mb-2">
-        {isMle ? 'Random-effects ML regression' : 'Random-effects GLS regression'}
+        {isMle ? "Random-effects ML regression" : "Random-effects GLS regression"}
       </div>
 
       {/* Number of obs, Number of groups */}
@@ -54,7 +54,7 @@ export function PanelRESummaryGrid({
           {formatNum(waldChi2)}
         </InfoRow>
         <InfoRow label="Prob &gt; chi2">
-          <span className={probWald < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+          <span className={probWald < 0.05 ? "text-emerald-400" : "text-muted-foreground"}>
             {formatNum(probWald)}
           </span>
         </InfoRow>
@@ -115,7 +115,9 @@ export function PanelRESummaryGrid({
         <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
           <InfoRow label="LR test of sigma_u=0: chibar2(01)">{formatNum(panelFe.chibar2)}</InfoRow>
           <InfoRow label="Prob &gt;= chibar2">
-            <span className={panelFe.prob_chibar2 < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+            <span
+              className={panelFe.prob_chibar2 < 0.05 ? "text-emerald-400" : "text-muted-foreground"}
+            >
               {formatNum(panelFe.prob_chibar2)}
             </span>
           </InfoRow>

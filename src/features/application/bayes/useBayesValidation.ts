@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { BayesModelDraftDTO, ValidationReportDTO } from '@/shared/types/bayes';
-import { validateBayesModel } from '@/services/bayes';
-import { normalizeBayesApplicationError, type BayesApplicationError } from './bayesError';
+import { useCallback, useMemo, useState } from "react";
+import type { BayesModelDraftDTO, ValidationReportDTO } from "@/shared/types/bayes";
+import { validateBayesModel } from "@/services/bayes";
+import { normalizeBayesApplicationError, type BayesApplicationError } from "./bayesError";
 
 export function useBayesValidation(draft: BayesModelDraftDTO, draftHash: string) {
   const [report, setReport] = useState<ValidationReportDTO | null>(null);
@@ -22,7 +22,7 @@ export function useBayesValidation(draft: BayesModelDraftDTO, draftHash: string)
     } catch (caught) {
       setReport(null);
       setValidatedHash(null);
-      setError(normalizeBayesApplicationError(caught, 'bayes_validation_request_failed'));
+      setError(normalizeBayesApplicationError(caught, "bayes_validation_request_failed"));
       return null;
     } finally {
       setLoading(false);

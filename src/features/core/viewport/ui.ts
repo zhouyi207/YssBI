@@ -1,18 +1,16 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import {
   commitViewport,
   getViewport,
   resetLiveViewports,
   setViewportLive,
   subscribeToViewport,
-} from './viewportSession';
-import {
-  useViewportStore,
-} from './useViewportStore';
-import type { EditorViewport } from './editorViewport';
-import type { ViewportScope } from './viewportScope';
+} from "./viewportSession";
+import { useViewportStore } from "./useViewportStore";
+import type { EditorViewport } from "./editorViewport";
+import type { ViewportScope } from "./viewportScope";
 
 export interface ViewportUiSnapshot {
   readonly viewports: DeepReadonly<Record<string, EditorViewport>>;
@@ -45,8 +43,10 @@ function cloneViewport(viewport: EditorViewport): DeepReadonly<EditorViewport> {
 
 function buildSnapshot(): DeepReadonly<ViewportUiSnapshot> {
   const viewports = Object.fromEntries(
-    Object.entries(useViewportStore.getState().viewports)
-      .map(([key, viewport]) => [key, cloneViewport(viewport)]),
+    Object.entries(useViewportStore.getState().viewports).map(([key, viewport]) => [
+      key,
+      cloneViewport(viewport),
+    ]),
   );
   return Object.freeze({ viewports });
 }
@@ -70,9 +70,7 @@ export function subscribeViewportUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useViewportUi<T>(
-  selector: (snapshot: DeepReadonly<ViewportUiSnapshot>) => T,
-): T {
+export function useViewportUi<T>(selector: (snapshot: DeepReadonly<ViewportUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeViewportUi,
     getViewportUiSnapshot,
@@ -84,8 +82,7 @@ export function useViewportUi<T>(
 export const viewportUi: ViewportUiCapability = {
   getSnapshot: getViewportUiSnapshot,
   subscribe: subscribeViewportUi,
-  setViewport: (scope, updater) =>
-    useViewportStore.getState().setViewport(scope, updater),
+  setViewport: (scope, updater) => useViewportStore.getState().setViewport(scope, updater),
   getViewport: (scope) => cloneViewport(getViewport(scope)),
   setViewportLive: (scope, updater) => setViewportLive(scope, updater),
   commitViewport,

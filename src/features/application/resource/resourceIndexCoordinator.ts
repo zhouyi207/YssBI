@@ -1,9 +1,9 @@
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 const INVALIDATION_DEBOUNCE_MS = 50;
 

@@ -1,13 +1,13 @@
-import { isEditorGraphProjectionDto } from '@/shared/types/domain/editorProjectionGuards';
-import { isSchemaAwareParameterEditorDto } from '@/shared/types/domain/parameterEditorValidators';
+import { isEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionGuards";
+import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import type {
   EditorGraphProjectionDto,
   PortAddressDto,
-} from '@/shared/types/domain/editorProjection';
+} from "@/shared/types/domain/editorProjection";
 
 export function parseEditorGraphProjectionDto(value: unknown): EditorGraphProjectionDto {
   if (!isEditorGraphProjectionDto(value)) {
-    throw new Error('Invalid editor graph projection response');
+    throw new Error("Invalid editor graph projection response");
   }
   return validateEditorGraphProjection(value);
 }
@@ -27,7 +27,7 @@ export function validateEditorGraphProjection(
   }
 
   const nodeIds = new Set<string>();
-  const portDirections = new Map<string, 'input' | 'output'>();
+  const portDirections = new Map<string, "input" | "output">();
   for (const node of projection.nodes) {
     validateNode(projection, nodeIds, portDirections, node);
   }
@@ -46,7 +46,7 @@ export function validateEditorGraphProjection(
         `projection connection '${connection.connectionId}' references a missing port`,
       );
     }
-    if (outputDirection !== 'output' || inputDirection !== 'input') {
+    if (outputDirection !== "output" || inputDirection !== "input") {
       throw new Error(
         `projection connection '${connection.connectionId}' endpoint direction is invalid`,
       );
@@ -59,8 +59,8 @@ export function validateEditorGraphProjection(
 function validateNode(
   projection: EditorGraphProjectionDto,
   nodeIds: Set<string>,
-  portDirections: Map<string, 'input' | 'output'>,
-  node: EditorGraphProjectionDto['nodes'][number],
+  portDirections: Map<string, "input" | "output">,
+  node: EditorGraphProjectionDto["nodes"][number],
 ): void {
   if (nodeIds.has(node.nodeId)) {
     throw new Error(`projection contains duplicate node '${node.nodeId}'`);
@@ -79,8 +79,10 @@ function validateNode(
   }
 
   for (const parameter of node.parameterEditors) {
-    if (parameter.configuration !== null
-      && !isSchemaAwareParameterEditorDto(parameter.configuration)) {
+    if (
+      parameter.configuration !== null &&
+      !isSchemaAwareParameterEditorDto(parameter.configuration)
+    ) {
       throw new Error(`projection parameter editor '${parameter.key}' is invalid`);
     }
   }
@@ -101,7 +103,7 @@ function validateNode(
 }
 
 function portAddressKey(address: PortAddressDto): string {
-  return address.kind === 'declared'
-    ? JSON.stringify(['declared', address.nodeId, address.portKey])
-    : JSON.stringify(['instance', address.nodeId, address.templateKey, address.instanceId]);
+  return address.kind === "declared"
+    ? JSON.stringify(["declared", address.nodeId, address.portKey])
+    : JSON.stringify(["instance", address.nodeId, address.templateKey, address.instanceId]);
 }

@@ -8,16 +8,16 @@
  * 位置坐标
  */
 export interface Position {
-    x: number;
-    y: number;
+  x: number;
+  y: number;
 }
 
 /**
  * 尺寸
  */
 export interface Size {
-    width: number;
-    height: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -29,8 +29,8 @@ export interface Rect extends Position, Size {}
  * 加载状态
  */
 export enum LoadStatus {
-    Idle = "idle",
-    Loading = "loading",
-    Ready = "ready",
-    Error = "error",
+  Idle = "idle",
+  Loading = "loading",
+  Ready = "ready",
+  Error = "error",
 }

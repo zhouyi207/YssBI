@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { InfoSegmentedToggle } from './shared/InfoViewControls';
-import { FormulaMappingTable } from './shared/FormulaMappingTable';
-import { formatNum } from './shared/utils';
-import type { Coefficient } from '@/shared/types/report';
+import React, { useMemo, useState } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { InfoSegmentedToggle } from "./shared/InfoViewControls";
+import { FormulaMappingTable } from "./shared/FormulaMappingTable";
+import { formatNum } from "./shared/utils";
+import type { Coefficient } from "@/shared/types/report";
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);
 }
 
-type EquationMode = 'expanded' | 'symbolic';
+type EquationMode = "expanded" | "symbolic";
 
 interface VariableMapping {
   symbol: string;
@@ -26,12 +26,12 @@ function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): str
 
   for (const c of coefficients) {
     const coefStr = formatNum(c.coef);
-    if (c.variable === 'const') {
+    if (c.variable === "const") {
       terms.push(coefStr);
       continue;
     }
     const absCoef = formatNum(Math.abs(c.coef));
-    const sign = c.coef >= 0 ? '+' : '-';
+    const sign = c.coef >= 0 ? "+" : "-";
     let varLabel: string;
     if (c.category != null) {
       varLabel = `\\mathbb{1}(\\text{${escapeLatex(c.variable)}} = \\text{${escapeLatex(c.category)}})`;
@@ -46,11 +46,15 @@ function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): str
     }
   }
 
-  return `${lhs} = ${terms.join(' ')} + \\varepsilon`;
+  return `${lhs} = ${terms.join(" ")} + \\varepsilon`;
 }
 
-function buildExpandedLatexWithAR1(endogName: string, coefficients: Coefficient[], rho: number): string {
-  const mainEq = buildExpandedLatex(endogName, coefficients).replace('+ \\varepsilon', '+ u_t');
+function buildExpandedLatexWithAR1(
+  endogName: string,
+  coefficients: Coefficient[],
+  rho: number,
+): string {
+  const mainEq = buildExpandedLatex(endogName, coefficients).replace("+ \\varepsilon", "+ u_t");
   const rhoStr = formatNum(rho);
   return `${mainEq},\\quad u_t = ${rhoStr} \\cdot u_{t-1} + e_t`;
 }
@@ -61,12 +65,12 @@ function buildSymbolicData(endogName: string, coefficients: Coefficient[], ar1Rh
   const terms: string[] = [];
   let xi = 1;
 
-  mappings.push({ symbol: 'y', variable: endogName, coef: NaN });
+  mappings.push({ symbol: "y", variable: endogName, coef: NaN });
 
   for (const c of coefficients) {
-    if (c.variable === 'const') {
-      mappings.push({ symbol: '\\beta_0', variable: 'const', coef: c.coef });
-      terms.push('\\beta_0');
+    if (c.variable === "const") {
+      mappings.push({ symbol: "\\beta_0", variable: "const", coef: c.coef });
+      terms.push("\\beta_0");
       continue;
     }
     const sym = `x_{${xi}}`;
@@ -77,16 +81,16 @@ function buildSymbolicData(endogName: string, coefficients: Coefficient[], ar1Rh
   }
 
   if (hasAR1) {
-    mappings.push({ symbol: '\\rho', variable: 'rho', coef: ar1Rho ?? NaN });
+    mappings.push({ symbol: "\\rho", variable: "rho", coef: ar1Rho ?? NaN });
   }
   const latex = hasAR1
     ? buildSymbolicLatexWithAR1(terms)
-    : `y = ${terms.join(' + ')} + \\varepsilon`;
+    : `y = ${terms.join(" + ")} + \\varepsilon`;
   return { latex, mappings, terms };
 }
 
 function buildSymbolicLatexWithAR1(terms: string[]): string {
-  return `y = ${terms.join(' + ')} + u_t,\\quad u_t = \\rho \\, u_{t-1} + e_t`;
+  return `y = ${terms.join(" + ")} + u_t,\\quad u_t = \\rho \\, u_{t-1} + e_t`;
 }
 
 function renderKatex(latex: string, displayMode = true): string | null {
@@ -109,14 +113,14 @@ interface FormulaBlockProps {
 }
 
 const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar1Rho }) => {
-  const [mode, setMode] = useState<EquationMode>('symbolic');
+  const [mode, setMode] = useState<EquationMode>("symbolic");
 
   const expandedHtml = useMemo(
     () =>
       ar1Rho != null
         ? renderKatex(buildExpandedLatexWithAR1(endogName, coefficients, ar1Rho))
         : renderKatex(buildExpandedLatex(endogName, coefficients)),
-    [endogName, coefficients, ar1Rho]
+    [endogName, coefficients, ar1Rho],
   );
 
   const { symbolicHtml, mappings } = useMemo(() => {
@@ -134,8 +138,8 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
           value={mode}
           onValueChange={setMode}
           options={[
-            { value: 'symbolic', label: 'Symbolic' },
-            { value: 'expanded', label: 'Expanded' },
+            { value: "symbolic", label: "Symbolic" },
+            { value: "expanded", label: "Expanded" },
           ]}
         />
       </div>
@@ -144,14 +148,18 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
       <ScrollArea orientation="horizontal">
         <div
           className="px-6 py-4 w-max min-w-full [&_.katex]:text-foreground"
-          dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
+          dangerouslySetInnerHTML={{
+            __html: (mode === "expanded" ? expandedHtml : symbolicHtml) || "",
+          }}
         />
       </ScrollArea>
 
       {/* Mapping table (symbolic mode only) */}
-      {mode === 'symbolic' && (
+      {mode === "symbolic" && (
         <div className="border-t border-border px-4 pb-4 pt-3">
-          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+            Variable Mapping
+          </div>
           <FormulaMappingTable
             mappings={mappings}
             hasCat={hasCat}
@@ -159,7 +167,10 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
             renderSymbol={(symbol) => {
               const symHtml = renderInlineKatex(symbol);
               return symHtml ? (
-                <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+                <span
+                  className="[&_.katex]:text-[var(--accent-color)]"
+                  dangerouslySetInnerHTML={{ __html: symHtml }}
+                />
               ) : (
                 <span className="font-mono text-[var(--accent-color)]">{symbol}</span>
               );

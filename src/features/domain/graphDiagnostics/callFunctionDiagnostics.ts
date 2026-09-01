@@ -1,9 +1,9 @@
-import { lookupGraphResourceByKind } from '@/features/domain/resource/resourceQueries';
-import type { ProjectResourceMeta, ResourceKey } from '@/features/domain/resource/resourceTypes';
-import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
-import type { NodeData } from '@/shared/types/store/graph';
+import { lookupGraphResourceByKind } from "@/features/domain/resource/resourceQueries";
+import type { ProjectResourceMeta, ResourceKey } from "@/features/domain/resource/resourceTypes";
+import { isCallFunctionNodeType } from "@/features/domain/nodeCatalog";
+import type { NodeData } from "@/shared/types/store/graph";
 
-export type CallFunctionIssueKind = 'empty_target' | 'missing_target';
+export type CallFunctionIssueKind = "empty_target" | "missing_target";
 
 export interface CallFunctionIssue {
   graphPath: string;
@@ -22,7 +22,7 @@ export function isFunctionResourceAvailable(
 ): boolean {
   const path = functionPath.trim();
   if (!path) return false;
-  return lookupGraphResourceByKind(resources, path, 'function')?.exists === true;
+  return lookupGraphResourceByKind(resources, path, "function")?.exists === true;
 }
 
 export function getFunctionResourceName(
@@ -31,24 +31,24 @@ export function getFunctionResourceName(
 ): string | undefined {
   const path = functionPath.trim();
   if (!path) return undefined;
-  const meta = lookupGraphResourceByKind(resources, path, 'function');
+  const meta = lookupGraphResourceByKind(resources, path, "function");
   return meta?.exists ? meta.name : undefined;
 }
 
 export function getCallFunctionIssueForNode(
   graphPath: string,
-  node: Pick<NodeData, 'id' | 'nodeType' | 'subGraphPath'>,
+  node: Pick<NodeData, "id" | "nodeType" | "subGraphPath">,
   resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
 ): CallFunctionIssue | null {
   if (!isCallFunctionNodeType(node.nodeType)) return null;
 
   const subGraphPath = node.subGraphPath?.trim();
   if (!subGraphPath) {
-    return { graphPath, nodeId: node.id, kind: 'empty_target' };
+    return { graphPath, nodeId: node.id, kind: "empty_target" };
   }
 
   if (!isFunctionResourceAvailable(resources, subGraphPath)) {
-    return { graphPath, nodeId: node.id, kind: 'missing_target', subGraphPath };
+    return { graphPath, nodeId: node.id, kind: "missing_target", subGraphPath };
   }
 
   return null;

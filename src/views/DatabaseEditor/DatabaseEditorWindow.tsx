@@ -1,21 +1,27 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useProjectSync } from '@/features/application/initialization';
-import { initializeProjectForCurrentWindow } from '@/features/application/project';
-import { hydrateDatabaseEditorMetadata } from '@/features/application/dataManagement/databaseRecords';
-import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
-import { useDatabaseRead } from '@/features/core/database/read';
-import { useDataLoader, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText, useDatabaseExport } from '@/features/application/databaseEditor';
-import { TitleBar, Toolbar, type DataframeOption } from './Layout';
-import { DataTable } from './Table';
-import { reportViewIssue } from '@/features/application/observability/reportViewIssue';
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useProjectSync } from "@/features/application/initialization";
+import { initializeProjectForCurrentWindow } from "@/features/application/project";
+import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
+import { useCurrentWindowActions, usePersistedWindow } from "@/features/application/window";
+import { useDatabaseRead } from "@/features/core/database/read";
+import {
+  useDataLoader,
+  useSelection,
+  useDatabaseEditorKeyboard,
+  getGridSelectionPrimaryCellText,
+  useDatabaseExport,
+} from "@/features/application/databaseEditor";
+import { TitleBar, Toolbar, type DataframeOption } from "./Layout";
+import { DataTable } from "./Table";
+import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
 
 function getDatabaseIdFromUrl(): string | null {
-  const searchValue = new URLSearchParams(window.location.search).get('database');
+  const searchValue = new URLSearchParams(window.location.search).get("database");
   if (searchValue) return searchValue;
 
-  const hashQueryIndex = window.location.hash.indexOf('?');
+  const hashQueryIndex = window.location.hash.indexOf("?");
   if (hashQueryIndex < 0) return null;
-  return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1)).get('database');
+  return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1)).get("database");
 }
 
 export const DatabaseEditorWindow: React.FC = () => {
@@ -24,13 +30,14 @@ export const DatabaseEditorWindow: React.FC = () => {
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const hasInitializedDfRef = useRef(false);
 
-  usePersistedWindow('databaseEditor');
+  usePersistedWindow("databaseEditor");
 
   useProjectSync();
 
   // Derived state
   const selectedDf = selectedDfId ? dataframes[selectedDfId] : null;
-  const columns = ((selectedDf as { columns?: Array<{ name: string; type: string }> })?.columns ?? []);
+  const columns =
+    (selectedDf as { columns?: Array<{ name: string; type: string }> })?.columns ?? [];
   const totalRowCount = (selectedDf as { rowCount?: number })?.rowCount ?? 0;
 
   // Data loading
@@ -95,11 +102,10 @@ export const DatabaseEditorWindow: React.FC = () => {
     if (!df) return;
     if (df.name && (df.columns?.length ?? 0) > 0) return;
     let cancelled = false;
-    void hydrateDatabaseEditorMetadata(
-      selectedDfId,
-      () => cancelled,
-    );
-    return () => { cancelled = true; };
+    void hydrateDatabaseEditorMetadata(selectedDfId, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDfId, dataframes]);
 
   // 子窗口独立 WebView：先从后端同步项目，再展示窗口
@@ -111,27 +117,47 @@ export const DatabaseEditorWindow: React.FC = () => {
         if (cancelled) return;
         await windowActions.show();
       } catch (e) {
-        reportViewIssue('app', e, 'DatabaseEditorWindow');
+        reportViewIssue("app", e, "DatabaseEditorWindow");
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [windowActions]);
 
-  const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
-    const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string }; duckDb?: { table?: string } } };
-    let label = d.name;
-    if (!label && d.engine?.csv?.path) { const p = d.engine.csv.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }
-    if (!label && d.engine?.parquet?.path) { const p = d.engine.parquet.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }
-    return { label: String(label ?? id), value: id };
-  }), [dataframes]);
+  const dfOptions: DataframeOption[] = useMemo(
+    () =>
+      Object.entries(dataframes).map(([id, df]) => {
+        const d = df as {
+          name?: string;
+          engine?: {
+            csv?: { path?: string };
+            parquet?: { path?: string };
+            duckDb?: { table?: string };
+          };
+        };
+        let label = d.name;
+        if (!label && d.engine?.csv?.path) {
+          const p = d.engine.csv.path;
+          label = p.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || p;
+        }
+        if (!label && d.engine?.parquet?.path) {
+          const p = d.engine.parquet.path;
+          label = p.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || p;
+        }
+        return { label: String(label ?? id), value: id };
+      }),
+    [dataframes],
+  );
 
   const selectedCellPreview = useMemo(
-    () => getGridSelectionPrimaryCellText(
-      sel.selection,
-      columns.length,
-      dataLoader.loadedRows.length,
-      dataLoader.loadedRows,
-    ),
+    () =>
+      getGridSelectionPrimaryCellText(
+        sel.selection,
+        columns.length,
+        dataLoader.loadedRows.length,
+        dataLoader.loadedRows,
+      ),
     [sel.selection, columns.length, dataLoader.loadedRows],
   );
 
@@ -170,7 +196,6 @@ export const DatabaseEditorWindow: React.FC = () => {
         onRefresh={dataLoader.refreshData}
         onExport={exportDatabase}
       />
-
     </div>
   );
 };

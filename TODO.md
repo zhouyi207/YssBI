@@ -1,5 +1,7 @@
 # 在正式打包分发前，可以等渲染完毕再显示窗口
+
 # 在目前的开发环境中，不要这样做，可以取消 debug
+
 # 项目未发布 不做任何迁移处理
 
 每次更新版本都需要
@@ -34,33 +36,31 @@ src/app/appConfig/appLinks.ts
 
 codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
 
-
 已完成汇总文档：
 
-  docs/superpowers/plans/2026-08-27-architecture-decoupling-progress-and-next-steps.md
+docs/superpowers/plans/2026-08-27-architecture-decoupling-progress-and-next-steps.md
 
-  文档包含：
+文档包含：
 
-  - 已完成、已集成、进行中、待实现的完整状态矩阵。
-  - Strict Frontend/Rust、Backend Tasks 1–5a、Project–Graph Task 1 的实现与提交记录。
-  - 当前 architecture-final、各 worktree 和验证状态。
-  - 当前进行中的 Backend Task 5b Tabular/Polars 拆分。
-  - Backend、Project–Graph、Execution、Presentation、Frontend Application 的后续依赖顺序。
-  - 最终原子切换、债务清零和验证门槛。
-  - 明确禁止兼容层、双路线、动态 debt baseline。
+- 已完成、已集成、进行中、待实现的完整状态矩阵。
+- Strict Frontend/Rust、Backend Tasks 1–5a、Project–Graph Task 1 的实现与提交记录。
+- 当前 architecture-final、各 worktree 和验证状态。
+- 当前进行中的 Backend Task 5b Tabular/Polars 拆分。
+- Backend、Project–Graph、Execution、Presentation、Frontend Application 的后续依赖顺序。
+- 最终原子切换、债务清零和验证门槛。
+- 明确禁止兼容层、双路线、动态 debt baseline。
 
-  同时已向 TODO.md 的 2026.08.27 标题追加两条摘要，未改写既有内容。
+同时已向 TODO.md 的 2026.08.27 标题追加两条摘要，未改写既有内容。
 
-  最新集成分支 d042b4f9 已重新确认：
+最新集成分支 d042b4f9 已重新确认：
 
-  - pnpm rust:fmt:check：通过
-  - pnpm rust:check：通过
-  - git diff --check：通过
+- pnpm rust:fmt:check：通过
+- pnpm rust:check：通过
+- git diff --check：通过
 
-  docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中的用户代码改动未被触碰
+docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中的用户代码改动未被触碰
 
 # DOLIST
-
 
 ## 2026.08.28
 
@@ -113,7 +113,6 @@ codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
 - [ ] 确认现有 OLS/WLS golden 覆盖数值面较广但缺少外部工具版本、命令、数据哈希、生成脚本和原始参考输出，当前更接近内部行为快照。
 - [ ] 将测试治理从硬性数量比例改为价值准入，优先建设可复现的 Stata/R/statsmodels 参考 fixture，并按每个独立高风险统计 seam 保留一个代表案例。
 - [ ] 完成 P0 测试清理：删除两个 Rust 源码文本 oracle，移除 901 行 node identity AST analyzer，将 observability omnibus scan 收敛为两条仓库级政策并把 DTO/status 断言迁移到 owner wire tests。
-
 
 ## 2026.08.27
 
@@ -193,7 +192,6 @@ codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
 - [ ] 规划 `shared/charts/core`、`cartesian`、`statistical` 三层目录及 theme、margin、ResizeObserver、tooltip、domain 和稳定 D3 layer 的公共契约。
 - [ ] 规划 Scatter、Line、Histogram、ECDF、KDE、MultiLine、Correlation、Correlogram、DID、VAR stability 与 PredictiveInterval 的渐进迁移和旧路径原子删除。
 - [ ] 明确本轮不引入 ECharts、Vega-Lite、Canvas 或万能 Chart grammar，并将 Binary margins、Bayes 诊断 authority、Worksheet backend preview DTO 与 datetime 规范化保留为独立后续计划。
-
 
 ## 2026.08.26
 
@@ -344,12 +342,10 @@ codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
 - [ ] graph 分为两种，一种是纯计算 graph，一种是目前这种；纯计算 graph 使用 notebook 这种形式，修改节点会污染依赖该节点的下游节点，递归污染；运行到此节点可以做到将上游阶段全部干净，
 - [ ] 我认为下面的版本信息完全没有必要
 
-
             GlobalVariableMutation::Delete {
-                id,
-                expected_revision,
-            },
-
+                        id,
+                        expected_revision,
+                    },
 
 ## v1.0 待办
 
@@ -366,6 +362,7 @@ codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
 in "node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-editor-container/data-grid-container.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
 node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-grid-overlay-editor/private/markdown-overlay-editor-style.js (2:13): A comment
 ```
+
 ### 口语化表达
 
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
@@ -416,7 +413,6 @@ zed 的 .rules 文件需要学习，同时还有根目录中的内容，有必�
 3. 主工作区前端测试为 1830 通过、1 失败；失败测试
    `src/features/core/dockview/workbenchDockviewDefaults.test.ts:115` 的期望值缺少现有的 `assistant: "right"`。
 4. 默认 Vitest 仍会扫描嵌套的 `.worktrees/`；本次完整主工作区验证通过 CLI 临时排除了该目录。
-
 
 绘图组件库需要重构
 
@@ -497,7 +493,6 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 [12:43:12.757][BE][DEBUG] [APP] Settings saved successfully via backend
 [12:43:12.758][BE][DEBUG] [APP] Settings saved successfully via backend
 
-
 需要你确认的执行语义
 
 我建议选择：
@@ -526,367 +521,367 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 ## 2026.08.29
 
 - [ ] 完成 architecture decoupling 的最终 Rust production composition：ApplicationSessionSlot
-  注入 scientific/resource/Bayes/artifact adapters，Graph neutral package 进入 Execution，
-  旧 Project/node-system compiler、projection、command route 与重复测试 owner 已删除。
+      注入 scientific/resource/Bayes/artifact adapters，Graph neutral package 进入 Execution，
+      旧 Project/node-system compiler、projection、command route 与重复测试 owner 已删除。
 - [ ] 完成 Backend Task 5b、Database session/query ownership、Project–Graph Tasks 2–10、
-  Execution Tasks 8–9 与 Presentation/Command Tasks 4–8 的生产 caller cutover；Rust debt
-  manifest 已清空并由 exact architecture policy 维护。
+      Execution Tasks 8–9 与 Presentation/Command Tasks 4–8 的生产 caller cutover；Rust debt
+      manifest 已清空并由 exact architecture policy 维护。
 - [ ] 完成 Frontend Application atomic cutover：ProjectSync、Database/Variable/Worksheet/
-  Result/Bayes/Window actions、Dockview read/control/root binding 与 UI/settings capability
-  已收归 Application/Core 合约，Frontend architecture debt 已清空。
+      Result/Bayes/Window actions、Dockview read/control/root binding 与 UI/settings capability
+      已收归 Application/Core 合约，Frontend architecture debt 已清空。
 - [ ] 维护 architecture、backend-adapter、Project–Graph、Execution、Presentation/Command、
-  Frontend Application 与 Workbench 文档，使实现地图不再描述 staged/旧 production route。
+      Frontend Application 与 Workbench 文档，使实现地图不再描述 staged/旧 production route。
 - [ ] Rust 测试链接成本高；增量阶段只执行 fmt/check，待全部 cutover 完成后统一执行一次
-  Rust architecture/runtime/SCI 验证批次，并记录最终命令输出。
+      Rust architecture/runtime/SCI 验证批次，并记录最终命令输出。
 - [ ] 最终批次记录：`pnpm verify:full` 已在 architecture-final 通过；Frontend 311 files / 1755
-  tests、yssbi library 509 tests、database integration 19 tests、yss-sci 全部 suites 与
-  `git diff --check` 均通过。该条仅作为 append-only 完成记录，后续 Rust 验证继续按昂贵批次
-  约定执行。
+      tests、yssbi library 509 tests、database integration 19 tests、yss-sci 全部 suites 与
+      `git diff --check` 均通过。该条仅作为 append-only 完成记录，后续 Rust 验证继续按昂贵批次
+      约定执行。
 - [ ] Project→Application boundary cleanup 完成记录：Project production reachability audit
-  保持无 Application/Commands 依赖，Database project storage 与 schema wire conversion 使用
-  最终 owner；相关计划 checklist 与维护文档已同步。
+      保持无 Application/Commands 依赖，Database project storage 与 schema wire conversion 使用
+      最终 owner；相关计划 checklist 与维护文档已同步。
 
 ## 2026.08.30
 
 - [ ] 修复 Application Zustand 绑定器的 selector 快照稳定性，避免对象 projection 在 React 19
-  `useSyncExternalStore` 中触发无限更新。
+      `useSyncExternalStore` 中触发无限更新。
 - [ ] 将独立 `yss-sci` crate 迁移至 `src-tauri/crates/yss-sci/`，并同步 Cargo workspace、
-  架构审计 fixture 与维护文档中的路径。
+      架构审计 fixture 与维护文档中的路径。
 - [ ] 清理已完成的迁移边界文档与空债务豁免机制，让前后端架构发现项直接触发失败。
 - [ ] 收敛本地工作流与 Workbench 验证文档，移除失效命令、已删除 benchmark 和易漂移的测试文件库存。
 - [ ] 将 Rust `tracing` 采集、过滤、脱敏及 console/rolling JSONL 输出迁入独立
-  `src-tauri/crates/yss-tracing/`；Diagnostics 仅保留 sanitized Rust projection、frontend
-  ingestion、recent ring、sequence 与 live delivery，并由架构审计守卫两层边界。
+      `src-tauri/crates/yss-tracing/`；Diagnostics 仅保留 sanitized Rust projection、frontend
+      ingestion、recent ring、sequence 与 live delivery，并由架构审计守卫两层边界。
 - [ ] 将 persisted data contract 迁入独立 `src-tauri/crates/yss-data-contract/` Pure Leaf，
-  由该 crate 唯一拥有 `DataType`、`DataValue` 与 wire compatibility tests，并移除主 crate
-  中的兼容 re-export。
+      由该 crate 唯一拥有 `DataType`、`DataValue` 与 wire compatibility tests，并移除主 crate
+      中的兼容 re-export。
 - [ ] 将 persisted database contract 迁入独立 `src-tauri/crates/yss-database-contract/`
-  Pure Leaf，由该 crate 唯一拥有 declaration、engine/session identity、observation 与
-  fingerprint，并统一拥有 CSV/Parquet export format 与严格 parser；消费方直接依赖该 crate，
-  不保留主 crate 兼容 re-export。
+      Pure Leaf，由该 crate 唯一拥有 declaration、engine/session identity、observation 与
+      fingerprint，并统一拥有 CSV/Parquet export format 与严格 parser；消费方直接依赖该 crate，
+      不保留主 crate 兼容 re-export。
 - [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-tabular-contract/` Pure Leaf，
-  集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
-  adapter/application owner 持有，主 crate 不保留兼容 module。
+      集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
+      adapter/application owner 持有，主 crate 不保留兼容 module。
 - [ ] 将 Polars materialization 与 JSON-to-`AnyValue` 严格转换迁入独立
-  `src-tauri/crates/yss-tabular-polars/` Backend Adapter；删除根 `backend_adapters::tabular`
-  owner、测试 module 与兼容 facade；统一 database/Bayes 的 scalar/column conversion，保留完整
-  `u64`，修复 1970 年前时间戳投影，并移除从未构造的 `UnsupportedColumnType` 分支和零调用的
-  `database/row_mapping` 重复实现。
+      `src-tauri/crates/yss-tabular-polars/` Backend Adapter；删除根 `backend_adapters::tabular`
+      owner、测试 module 与兼容 facade；统一 database/Bayes 的 scalar/column conversion，保留完整
+      `u64`，修复 1970 年前时间戳投影，并移除从未构造的 `UnsupportedColumnType` 分支和零调用的
+      `database/row_mapping` 重复实现。
 - [ ] 将 Polars-backed typed IPC/CSV/Parquet filesystem I/O 迁入独立
-  `src-tauri/crates/yss-tabular-io/` Database Core；删除根 `database/tabular_io` owner/facade，
-  四个 database/Bayes 消费方直接依赖 crate，并允许不带目录的相对输出路径写入当前目录。
+      `src-tauri/crates/yss-tabular-io/` Database Core；删除根 `database/tabular_io` owner/facade，
+      四个 database/Bayes 消费方直接依赖 crate，并允许不带目录的相对输出路径写入当前目录。
 - [ ] 将 dataset profile DTO 与内存 Polars 统计迁入独立
-  `src-tauri/crates/yss-dataset-profile/` Database Core；DuckDB physical profiling 保持
-  engine-specific 并直接构造同一 DTO；删除 `column_stats`、`column_distribution`、
-  `dataset_overview` 三个根 owner/facade，统一非字符串投影与同频排序，过滤非有限直方图值，
-  并用饱和运算保护总单元格计算。
+      `src-tauri/crates/yss-dataset-profile/` Database Core；DuckDB physical profiling 保持
+      engine-specific 并直接构造同一 DTO；删除 `column_stats`、`column_distribution`、
+      `dataset_overview` 三个根 owner/facade，统一非字符串投影与同频排序，过滤非有限直方图值，
+      并用饱和运算保护总单元格计算。
 - [ ] 建立 `src-tauri/crates/yss-duckdb/` Database Core engine crate，先迁入 DuckDB
-  identifier/literal quoting、editable type allowlist 与 dataset-profile physical SQL；删除根
-  `duckdb_sql`/`duckdb_analytics` owner 与 re-export，并由根 runtime 通过借用型列 metadata
-  视图直接调用；typed CSV/Parquet `COPY` export 也归入同一 crate，Loaded DataFrame 直接调用
-  `yss-tabular-io`，删除混合职责的根 `database/export` owner；后续 reader/editing 继续向同一
-  crate 收敛，避免形成 DuckDB 微型 crate 群。
+      identifier/literal quoting、editable type allowlist 与 dataset-profile physical SQL；删除根
+      `duckdb_sql`/`duckdb_analytics` owner 与 re-export，并由根 runtime 通过借用型列 metadata
+      视图直接调用；typed CSV/Parquet `COPY` export 也归入同一 crate，Loaded DataFrame 直接调用
+      `yss-tabular-io`，删除混合职责的根 `database/export` owner；后续 reader/editing 继续向同一
+      crate 收敛，避免形成 DuckDB 微型 crate 群。
 - [ ] 将 persisted variable model 迁入独立 `src-tauri/crates/yss-variable-contract/`
-  Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
-  application/project 仅持有 mutation、normalization 与 authority。
+      Pure Leaf，由该 crate 唯一拥有 `VariableId`、`VariableScope` 与 `VariableInstance`；
+      application/project 仅持有 mutation、normalization 与 authority。
 - [ ] 将受限数学表达式 IR、plain/LaTeX parser、关系拆分与输入预算迁入独立
-  `src-tauri/crates/yss-math/` Pure Leaf；根 crate 消费方直接依赖该 crate，不保留
-  `math` 兼容 module，并收敛 `mathlex` 为单一声明与单一使用层。
+      `src-tauri/crates/yss-math/` Pure Leaf；根 crate 消费方直接依赖该 crate，不保留
+      `math` 兼容 module，并收敛 `mathlex` 为单一声明与单一使用层。
 - [ ] 将窗口 kind/default、后端权威几何缓存、主窗口恢复与原子 JSON 持久化迁入
-  `src-tauri/crates/yss-window-state/` Platform Adapter；移除根 `window_state` owner，
-  并以 typed error 保留持久化主错误与临时文件清理失败。
+      `src-tauri/crates/yss-window-state/` Platform Adapter；移除根 `window_state` owner，
+      并以 typed error 保留持久化主错误与临时文件清理失败。
 - [ ] 将 sanitized Rust log projection、frontend ingestion、recent ring、sequence 与
-  bounded live delivery 迁入独立 `src-tauri/crates/yss-diagnostics/`；生产构建仅单向
-  依赖 `yss-tracing`，通过正式的 platform-neutral batch sink 测试而不暴露 dispatcher
-  测试后门，并且不保留根兼容层。
+      bounded live delivery 迁入独立 `src-tauri/crates/yss-diagnostics/`；生产构建仅单向
+      依赖 `yss-tracing`，通过正式的 platform-neutral batch sink 测试而不暴露 dispatcher
+      测试后门，并且不保留根兼容层。
 - [ ] 将稳定 graph node/port/type/schema/value protocol、wire validation 与 dataframe
-  nominal literals 迁入独立 `src-tauri/crates/yss-graph-protocol/` Pure Leaf；消费方直接
-  依赖 crate，catalog assembly 测试归还 Graph owner，根 crate 不保留兼容 module。
+      nominal literals 迁入独立 `src-tauri/crates/yss-graph-protocol/` Pure Leaf；消费方直接
+      依赖 crate，catalog assembly 测试归还 Graph owner，根 crate 不保留兼容 module。
 - [ ] 将 persisted graph document、entity identity 与 graph resource path 迁入独立
-  `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 resource path 直接
-  消费独立 resource-name contract，避免镜像错误类型和重复规则事实源。
+      `src-tauri/crates/yss-graph-document/` Pure Leaf；删除根兼容 module，并让 resource path 直接
+      消费独立 resource-name contract，避免镜像错误类型和重复规则事实源。
 - [ ] 将跨 graph/worksheet 的严格文件资源名校验、Unicode portable key 与冲突分配迁入
-  `src-tauri/crates/yss-resource-naming/` Pure Leaf；`yss-graph-document` 与 Project 直接消费该
-  crate，不保留 graph/root 兼容 re-export。宽松数据库/变量显示名的 `1`/`_1` 兼容语义保持
-  独立，避免以表面去重改变持久化命名行为。
+      `src-tauri/crates/yss-resource-naming/` Pure Leaf；`yss-graph-document` 与 Project 直接消费该
+      crate，不保留 graph/root 兼容 re-export。宽松数据库/变量显示名的 `1`/`_1` 兼容语义保持
+      独立，避免以表面去重改变持久化命名行为。
 - [ ] 将数据库/变量宽松显示名的大小写敏感冲突分配迁入
-  `src-tauri/crates/yss-display-naming/` Pure Leaf；删除根 `project/unique_name` owner 与兼容路径，
-  以无正则单遍解析保持 `base N`/`base_N` 共享编号及从 `1` 开始的既有语义，移除调用方临时集合，
-  并删除零调用的前端 `getUniqueName` 重复事实源。
+      `src-tauri/crates/yss-display-naming/` Pure Leaf；删除根 `project/unique_name` owner 与兼容路径，
+      以无正则单遍解析保持 `base N`/`base_N` 共享编号及从 `1` 开始的既有语义，移除调用方临时集合，
+      并删除零调用的前端 `getUniqueName` 重复事实源。
 - [ ] 删除无生产调用的根 `graph/value` 层，不为 dead code 创建 `yss-graph-value`；移除两套
-  漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
+      漂移的 `DataType` accept/convert/value-type 规则，并由架构测试禁止兼容目录回流。
 - [ ] 将 canonical JSON 域分隔哈希迁入独立 `src-tauri/crates/yss-canonical-hash/` Pure Leaf；
-  registry、analysis 与 runtime 直接依赖该 crate，并删除 registry 中重复的手写 SHA-256 实现。
+      registry、analysis 与 runtime 直接依赖该 crate，并删除 registry 中重复的手写 SHA-256 实现。
 - [ ] 将 provider/type/category/node registry、校验与 fingerprint 迁入独立
-  `src-tauri/crates/yss-graph-registry/`；删除根兼容 module，并清除 nominal prepared-value/no-op
-  lowerer、永久禁用 legacy lowerer、无调用 snapshot helper 与重复 capability API。
+      `src-tauri/crates/yss-graph-registry/`；删除根兼容 module，并清除 nominal prepared-value/no-op
+      lowerer、永久禁用 legacy lowerer、无调用 snapshot helper 与重复 capability API。
 - [ ] 将 analysis snapshot、semantic graph、diagnostic、basis 与 provenance 迁入独立
-  `src-tauri/crates/yss-graph-analysis-contract/`；删除根兼容 module，并清除零调用的 test-only
-  resource resolver、projection/alias helper、永久禁用 compatibility projection 路径与重复
-  unknown/blocking API。
+      `src-tauri/crates/yss-graph-analysis-contract/`；删除根兼容 module，并清除零调用的 test-only
+      resource resolver、projection/alias helper、永久禁用 compatibility projection 路径与重复
+      unknown/blocking API。
 - [ ] 将 compiler diagnostic code、双语模板与定义校验迁入独立
-  `src-tauri/crates/yss-graph-compiler-diagnostics/`；删除根兼容 module，并清除仅由自身测试调用的
-  diagnostic 构造、排序、role/scope helper 与 tracing/UUID 依赖。
+      `src-tauri/crates/yss-graph-compiler-diagnostics/`；删除根兼容 module，并清除仅由自身测试调用的
+      diagnostic 构造、排序、role/scope helper 与 tracing/UUID 依赖。
 - [ ] 将 built-in protocol、localized catalog 与内置节点文档迁入独立
-  `src-tauri/crates/yss-graph-catalog/`；删除根兼容 module、未挂载且重复 resolver ID 的
-  `project_interface.rs`、漂移的永久禁用 plot tests、零调用 fault/mutator API 与无效导入；根库测试入口通过
-  `test-support` feature 显式隔离。
+      `src-tauri/crates/yss-graph-catalog/`；删除根兼容 module、未挂载且重复 resolver ID 的
+      `project_interface.rs`、漂移的永久禁用 plot tests、零调用 fault/mutator API 与无效导入；根库测试入口通过
+      `test-support` feature 显式隔离。
 - [ ] 在提取 `yss-execution` 前删除仅由 `cfg(test)` 挂载的旧 `node_system` runtime 与
-  `execution::plan::legacy`，同步清除 ProjectStore 中生产不存在的 database/catalog/run/result
-  镜像、永久禁用旧 command/application route 及其测试，确保新 execution 成为唯一运行时事实源。
+      `execution::plan::legacy`，同步清除 ProjectStore 中生产不存在的 database/catalog/run/result
+      镜像、永久禁用旧 command/application route 及其测试，确保新 execution 成为唯一运行时事实源。
 - [ ] 将唯一生产 execution runtime、plan、ports、result store 与 lifecycle state 迁入
-  `src-tauri/crates/yss-execution/`；根 crate 直接消费该 crate 而不保留兼容 module，测试构造器通过
-  `test-support` feature 隔离，并删除从未读取或构造的 candidate/resource effect 镜像链。
+      `src-tauri/crates/yss-execution/`；根 crate 直接消费该 crate 而不保留兼容 module，测试构造器通过
+      `test-support` feature 隔离，并删除从未读取或构造的 candidate/resource effect 镜像链。
 - [ ] 将 Graph 编译资源标识、函数/变量 contract、数据库 schema 与 immutable resource catalog
-  snapshot 迁入 `src-tauri/crates/yss-graph-resource-contract/` Pure Leaf；根 crate 不保留兼容
-  module，并以显式文档和架构门禁防止其与 built-in `yss-graph-catalog` 漂移成重复事实源。
+      snapshot 迁入 `src-tauri/crates/yss-graph-resource-contract/` Pure Leaf；根 crate 不保留兼容
+      module，并以显式文档和架构门禁防止其与 built-in `yss-graph-catalog` 漂移成重复事实源。
 - [ ] 将 Graph document analysis、editor projection facts 与 result category 判定迁入
-  `src-tauri/crates/yss-graph-analysis/`；根 crate 不保留兼容 module，并删除从 Project settings/
-  resource catalog 构造后仅被丢弃的 no-op analysis 输入链。
+      `src-tauri/crates/yss-graph-analysis/`；根 crate 不保留兼容 module，并删除从 Project settings/
+      resource catalog 构造后仅被丢弃的 no-op analysis 输入链。
 - [ ] 将 neutral Graph lowering、immutable compiled package 与 compile error 迁入
-  `src-tauri/crates/yss-graph-compiler/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
-  compilation report、空 diagnostics、重复 basis 与零生产者 error 分支。
+      `src-tauri/crates/yss-graph-compiler/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
+      compilation report、空 diagnostics、重复 basis 与零生产者 error 分支。
 - [ ] 将 Graph document invariant、atomic patch、candidate staging 与 edit error 迁入
-  `src-tauri/crates/yss-graph-document-edit/`；根 crate 不保留兼容 re-export，并删除零调用的
-  `address_is_complete` helper，保持 `document → document-edit → editor → runtime` 单向依赖。
+      `src-tauri/crates/yss-graph-document-edit/`；根 crate 不保留兼容 re-export，并删除零调用的
+      `address_is_complete` helper，保持 `document → document-edit → editor → runtime` 单向依赖。
 - [ ] 将 persisted `DataType` 到 Graph `TypeExpr` 的 canonical typed conversion 迁入
-  `src-tauri/crates/yss-graph-type-mapping/` Pure Leaf；editor/runtime 直接消费该 crate，并由架构
-  门禁禁止两套逐 variant 映射表回流。
+      `src-tauri/crates/yss-graph-type-mapping/` Pure Leaf；editor/runtime 直接消费该 crate，并由架构
+      门禁禁止两套逐 variant 映射表回流。
 - [ ] 将 editor mutation、连接兼容性与 portable subgraph codec/instantiate 迁入
-  `src-tauri/crates/yss-graph-editor/`；删除根 `graph/document`、`graph/compatibility`、
-  `graph/mutation` 与空 `graph/node` owner，收敛端口解析和类型校验为单一事实源，并清除永久禁用的
-  projected/materialization/revision-store 兼容路径；资源参数绑定只读取 registry protocol，兼容目录
-  过滤不再在 runtime 复制端口推断；Application 仅保留 catalog snapshot 编排与 session-revalidated
-  graph commit seam。
+      `src-tauri/crates/yss-graph-editor/`；删除根 `graph/document`、`graph/compatibility`、
+      `graph/mutation` 与空 `graph/node` owner，收敛端口解析和类型校验为单一事实源，并清除永久禁用的
+      projected/materialization/revision-store 兼容路径；资源参数绑定只读取 registry protocol，兼容目录
+      过滤不再在 runtime 复制端口推断；Application 仅保留 catalog snapshot 编排与 session-revalidated
+      graph commit seam。
 - [ ] 将 session-scoped registry/catalog 组合、analysis、open candidate materialization 与 catalog query
-  迁入 `src-tauri/crates/yss-graph-runtime/`；删除最后的根 `graph` facade、零调用 basis/catalog API、
-  未读取且会形成第二事实源的 cached resource catalog，以及生产中恒为空操作的 bind hook；测试故障注入
-  只通过 `test-support` feature 暴露，Application 继续唯一拥有 session capture/revalidation/commit。
+      迁入 `src-tauri/crates/yss-graph-runtime/`；删除最后的根 `graph` facade、零调用 basis/catalog API、
+      未读取且会形成第二事实源的 cached resource catalog，以及生产中恒为空操作的 bind hook；测试故障注入
+      只通过 `test-support` feature 暴露，Application 继续唯一拥有 session capture/revalidation/commit。
 - [ ] 将 project instance/session/operation/history identity 与 project/resource revision
-  迁入 `src-tauri/crates/yss-project-identity/` Pure Leaf；删除根 `project` identity owner 与兼容
-  re-export，所有消费方直接依赖新 crate；保留 Project/Graph revision 的显式命名转换，并以
-  `test-support` feature 隔离测试专用 revision advancement。
+      迁入 `src-tauri/crates/yss-project-identity/` Pure Leaf；删除根 `project` identity owner 与兼容
+      re-export，所有消费方直接依赖新 crate；保留 Project/Graph revision 的显式命名转换，并以
+      `test-support` feature 隔离测试专用 revision advancement。
 - [ ] 将 project discovery/cleanup 的平台无关进度事件与输出 port 迁入
-  `src-tauri/crates/yss-project-progress/` Pure Leaf；Project registry 与 command adapter 直接依赖
-  唯一 owner，Tauri 有界队列、Channel 和 wire DTO 留在 Commands，并删除两个零调用的重复事件
-  DTO，避免根 facade、幽灵 API 与多事实源回流。
+      `src-tauri/crates/yss-project-progress/` Pure Leaf；Project registry 与 command adapter 直接依赖
+      唯一 owner，Tauri 有界队列、Channel 和 wire DTO 留在 Commands，并删除两个零调用的重复事件
+      DTO，避免根 facade、幽灵 API 与多事实源回流。
 - [ ] 将 persisted computation settings、validation 与 project mutation envelopes 迁入
-  `src-tauri/crates/yss-computation-settings/` Pure Leaf；Project/Application/Commands/Event 直接消费
-  唯一 owner，manifest 读取严格拒绝非法或未知 settings 字段，并删除 Application 中完全同构的
-  mapping error 镜像与无效转换函数。
+      `src-tauri/crates/yss-computation-settings/` Pure Leaf；Project/Application/Commands/Event 直接消费
+      唯一 owner，manifest 读取严格拒绝非法或未知 settings 字段，并删除 Application 中完全同构的
+      mapping error 镜像与无效转换函数。
 - [ ] 将 worksheet persisted document、schema version、resource path 与布局常量迁入
-  `src-tauri/crates/yss-worksheet-document/` Pure Leaf；Project 仅保留 redirect-safe 扫描、事务 I/O、
-  history 与 authority，全部消费者直接依赖唯一 owner；嵌套 encodings 严格拒绝未知字段，并删除根
-  resource-path owner、test-only 目录 helper 与生产扩展名字符串副本。
+      `src-tauri/crates/yss-worksheet-document/` Pure Leaf；Project 仅保留 redirect-safe 扫描、事务 I/O、
+      history 与 authority，全部消费者直接依赖唯一 owner；嵌套 encodings 严格拒绝未知字段，并删除根
+      resource-path owner、test-only 目录 helper 与生产扩展名字符串副本。
 - [ ] 将 project discovery/cleanup 的取消 capability 与 active-task registry 收归
-  `src-tauri/crates/yss-project-progress/` Pure Leaf，删除根 `project_picker_task` owner、字符串 sentinel
-  与裸 `AtomicBool` 泄漏；使用 typed discovery error 保证递归扫描中途取消仍映射为 `Cancelled`，
-  而不是错误漂移为 `ScanFailed`；新任务替换 active task 时先取消旧任务，避免孤儿扫描。
+      `src-tauri/crates/yss-project-progress/` Pure Leaf，删除根 `project_picker_task` owner、字符串 sentinel
+      与裸 `AtomicBool` 泄漏；使用 typed discovery error 保证递归扫描中途取消仍映射为 `Cancelled`，
+      而不是错误漂移为 `ScanFailed`；新任务替换 active task 时先取消旧任务，避免孤儿扫描。
 - [ ] 将 project registry 的 canonical record、root identity state 与 persistence port 迁入
-  `src-tauri/crates/yss-project-registry-contract/` Pure Leaf，删除根 crate 中字段完全相同的
-  `ProjectRegistryRecord` 存储镜像及转换函数；将 registration/root identity 收归
-  `yss-project-identity`，避免把持久化 registration ID 错当成 runtime `ProjectInstanceId`，并让
-  Project、Application、Commands、Transport 与 SQLite adapter 直接依赖唯一 contract owner；
-  重新启用 8 个 application lifecycle 测试，并修复 registry 写入失败时恢复动作从
-  `registerDestination` 漂移成 `removeRegistryRecord` 的语义错误。
+      `src-tauri/crates/yss-project-registry-contract/` Pure Leaf，删除根 crate 中字段完全相同的
+      `ProjectRegistryRecord` 存储镜像及转换函数；将 registration/root identity 收归
+      `yss-project-identity`，避免把持久化 registration ID 错当成 runtime `ProjectInstanceId`，并让
+      Project、Application、Commands、Transport 与 SQLite adapter 直接依赖唯一 contract owner；
+      重新启用 8 个 application lifecycle 测试，并修复 registry 写入失败时恢复动作从
+      `registerDestination` 漂移成 `removeRegistryRecord` 的语义错误。
 - [ ] 将 project registration、favorite、cleanup、scan 与路径校验工作流迁入
-  `src-tauri/crates/yss-project-registry/` Stateful Project 层；删除根 `project_registry` owner 与兼容
-  facade，行为层仅依赖 registry contract、discovery、progress、filesystem identity 等下层 crate，
-  SQLite 继续作为 Backend Adapter；删除零调用的 validity wrapper，并以测试侧失败 store 替代生产类型中的
-  remove-failure 开关，避免测试后门成为公开 API。
+      `src-tauri/crates/yss-project-registry/` Stateful Project 层；删除根 `project_registry` owner 与兼容
+      facade，行为层仅依赖 registry contract、discovery、progress、filesystem identity 等下层 crate，
+      SQLite 继续作为 Backend Adapter；删除零调用的 validity wrapper，并以测试侧失败 store 替代生产类型中的
+      remove-failure 开关，避免测试后门成为公开 API。
 - [ ] 将 `ProjectRegistryStore` 的 SQLx/SQLite 实现迁入
-  `src-tauri/crates/yss-project-registry-sqlite/` Backend Adapter 层；删除根 `backend_adapters` owner 与
-  兼容 module，Composition Root 直接注入 concrete store；集中 workspace 的 SQLx/Tokio 版本声明，
-  并让非法 `is_favorite`/root identity discriminant fail closed，而不是把任意非零整数静默解释为 true。
+      `src-tauri/crates/yss-project-registry-sqlite/` Backend Adapter 层；删除根 `backend_adapters` owner 与
+      兼容 module，Composition Root 直接注入 concrete store；集中 workspace 的 SQLx/Tokio 版本声明，
+      并让非法 `is_favorite`/root identity discriminant fail closed，而不是把任意非零整数静默解释为 true。
 - [ ] 将 project 根文件名、内容目录、资源扩展名与 index-input 相对路径分类收归
-  `src-tauri/crates/yss-project-layout/` 无依赖 Pure Leaf；Graph/Worksheet/Project/Watcher 直接消费
-  唯一 owner，删除 `project_io`、registry、graph/worksheet document 与 watcher 中的布局镜像，
-  并拒绝空路径、绝对路径及含 parent/root/prefix component 的不安全分类输入；I/O、schema、
-  watcher delivery 与 workflow 继续留在各自层。
+      `src-tauri/crates/yss-project-layout/` 无依赖 Pure Leaf；Graph/Worksheet/Project/Watcher 直接消费
+      唯一 owner，删除 `project_io`、registry、graph/worksheet document 与 watcher 中的布局镜像，
+      并拒绝空路径、绝对路径及含 parent/root/prefix component 的不安全分类输入；I/O、schema、
+      watcher delivery 与 workflow 继续留在各自层。
 - [ ] 将 project mutation envelope、resource/document patch、undo/redo transaction 与内存文档状态机迁入
-  `src-tauri/crates/yss-project-history/` Project 层；所有消费者直接依赖唯一 owner，删除根
-  `project/history.rs` 与兼容 re-export，并移除仅测试可构造、生产永远无法应用的旧 Graph patch 分支；
-  filesystem hydration、durable transaction、publication 与 transport mapping 继续留在原有层。
+      `src-tauri/crates/yss-project-history/` Project 层；所有消费者直接依赖唯一 owner，删除根
+      `project/history.rs` 与兼容 re-export，并移除仅测试可构造、生产永远无法应用的旧 Graph patch 分支；
+      filesystem hydration、durable transaction、publication 与 transport mapping 继续留在原有层。
 - [ ] 将可取消的 project metadata 递归扫描、跳过目录规则与项目名规范化迁入
-  `src-tauri/crates/yss-project-discovery/` Project 层；删除根 `project_scan` owner 与兼容 re-export，
-  注册结果继续由 registry workflow 拥有；扫描拒绝进入 Unix symlink 与 Windows reparse point，
-  避免越过用户选择的 discovery root 或因目录重定向形成递归循环。
+      `src-tauri/crates/yss-project-discovery/` Project 层；删除根 `project_scan` owner 与兼容 re-export，
+      注册结果继续由 registry workflow 拥有；扫描拒绝进入 Unix symlink 与 Windows reparse point，
+      避免越过用户选择的 discovery root 或因目录重定向形成递归循环。
 - [ ] 将 `metadata.yssbi` 的当前 schema version、严格 `ProjectManifest` wire 与 computation settings
-  fail-closed validation 迁入 `src-tauri/crates/yss-project-manifest/` Pure Leaf；Project I/O 只通过
-  唯一受校验构造器生成 manifest，不再拥有重复 schema/validation 定义，validated fields 不公开
-  mutation seam；文件系统、运行时 `ProjectData`、时钟与 lifecycle 继续留在 Project 层。
+      fail-closed validation 迁入 `src-tauri/crates/yss-project-manifest/` Pure Leaf；Project I/O 只通过
+      唯一受校验构造器生成 manifest，不再拥有重复 schema/validation 定义，validated fields 不公开
+      mutation seam；文件系统、运行时 `ProjectData`、时钟与 lifecycle 继续留在 Project 层。
 - [ ] 将变量默认值、稳定 `var:{id}` handle 与 tabular literal/snapshot 归一化迁入
-  `src-tauri/crates/yss-variable-value/` Pure Leaf；删除 Project 中两个旧 owner 与兼容入口，复合类型
-  默认值不得伪造示例数据，canonical handle 必须对应 snapshot，DataSeries 归一化必须保留附加 metadata；
-  Project 继续拥有状态/事务/激活，并在非法持久化变量上 fail closed 而不是静默吞错。
+      `src-tauri/crates/yss-variable-value/` Pure Leaf；删除 Project 中两个旧 owner 与兼容入口，复合类型
+      默认值不得伪造示例数据，canonical handle 必须对应 snapshot，DataSeries 归一化必须保留附加 metadata；
+      Project 继续拥有状态/事务/激活，并在非法持久化变量上 fail closed 而不是静默吞错。
 - [ ] 将用户可见路径的 Windows extended-length prefix 移除语义迁入无依赖
-  `src-tauri/crates/yss-path-display/` Pure Leaf；Project registry 与 Application query 直接消费唯一
-  owner，删除根 `project/path_format.rs` 与兼容 capability，并让 `\\?\` / `\\?\UNC\` 处理在所有
-  宿主平台保持一致；路径存在性、canonicalization、校验与 I/O 继续由调用方拥有。
+      `src-tauri/crates/yss-path-display/` Pure Leaf；Project registry 与 Application query 直接消费唯一
+      owner，删除根 `project/path_format.rs` 与兼容 capability，并让 `\\?\` / `\\?\UNC\` 处理在所有
+      宿主平台保持一致；路径存在性、canonicalization、校验与 I/O 继续由调用方拥有。
 - [ ] 将内存 `ProjectData`、`ProjectMetadata` 与 Graph resource aggregate 迁入
-  `src-tauri/crates/yss-project-model/` Project 层；删除根 `project_data.rs`、`project_metadata.rs`
-  与兼容 re-export，移除零调用的整包 JSON/`info`/隐式 metadata 刷新 API，统一复用
-  `yss-graph-document::GraphResourceKind`；Project lifecycle 显式拥有 export-time 时钟，磁盘 wire
-  继续由 manifest、Graph/Worksheet contract 与 Project I/O 分别拥有。
+      `src-tauri/crates/yss-project-model/` Project 层；删除根 `project_data.rs`、`project_metadata.rs`
+      与兼容 re-export，移除零调用的整包 JSON/`info`/隐式 metadata 刷新 API，统一复用
+      `yss-graph-document::GraphResourceKind`；Project lifecycle 显式拥有 export-time 时钟，磁盘 wire
+      继续由 manifest、Graph/Worksheet contract 与 Project I/O 分别拥有。
 - [ ] 将函数文档到强类型 editor pin/projection 的转换迁入
-  `src-tauri/crates/yss-function-editor-projection/` Project 层；以 `ResourceRevision` 替代内部裸
-  `u64`，让 Project index 与 mutation event 复用同一个严格 camelCase wire，并删除根
-  `function_editor_projection.rs`、三处 parameter/signature 展开逻辑及 Transport 同构 DTO 镜像。
+      `src-tauri/crates/yss-function-editor-projection/` Project 层；以 `ResourceRevision` 替代内部裸
+      `u64`，让 Project index 与 mutation event 复用同一个严格 camelCase wire，并删除根
+      `function_editor_projection.rs`、三处 parameter/signature 展开逻辑及 Transport 同构 DTO 镜像。
 - [ ] 将安全 project-relative path、文件 change kind、显式重扫请求与 index invalidation 结果迁入
-  `src-tauri/crates/yss-project-change/` Pure Leaf；删除根 `project_change.rs` contract owner，避免将
-  watcher 故障伪造为 metadata 文件变更，并将无关路径从 error control flow 改为 no-op；notify adapter
-  忽略普通 read/open access 但保留 `Close(Write)`，同时保留 rename 语义及跨边界事件中的安全根内路径；
-  ProjectState 重读协调继续留在 Project 层。
+      `src-tauri/crates/yss-project-change/` Pure Leaf；删除根 `project_change.rs` contract owner，避免将
+      watcher 故障伪造为 metadata 文件变更，并将无关路径从 error control flow 改为 no-op；notify adapter
+      忽略普通 read/open access 但保留 `Close(Write)`，同时保留 rename 语义及跨边界事件中的安全根内路径；
+      ProjectState 重读协调继续留在 Project 层。
 
 ## 2026.08.31
 
 - [ ] 将运行期 project aggregate 的原子候选 patch 迁入 `yss-project-model::ProjectDataPatch`；删除根
-  `project/resource_patch.rs` 与 facade，并与 `yss-project-history::ResourceDocumentPatch` 的持久化历史
-  payload 明确分名，避免两个不同语义继续共享 `ResourceDocumentPatch` 名称；ProjectState 保留锁、事务、
-  I/O、history 转换与 publication authority。
+      `project/resource_patch.rs` 与 facade，并与 `yss-project-history::ResourceDocumentPatch` 的持久化历史
+      payload 明确分名，避免两个不同语义继续共享 `ResourceDocumentPatch` 名称；ProjectState 保留锁、事务、
+      I/O、history 转换与 publication authority。
 - [ ] 将 project/session 绑定的 operation admission、防重放集合与 RAII reservation 状态机迁入
-  `src-tauri/crates/yss-project-operation/` Stateful Project 层；删除根 `resource_mutations/operation_ledger.rs`
-  与兼容 re-export，并以 canonical `ProjectSessionId` 替代 ledger 自建 UUID epoch，消除第二会话事实源；
-  ProjectState 继续拥有 publication 线性化、跨状态锁顺序与现有 filesystem error 分类映射。
+      `src-tauri/crates/yss-project-operation/` Stateful Project 层；删除根 `resource_mutations/operation_ledger.rs`
+      与兼容 re-export，并以 canonical `ProjectSessionId` 替代 ledger 自建 UUID epoch，消除第二会话事实源；
+      ProjectState 继续拥有 publication 线性化、跨状态锁顺序与现有 filesystem error 分类映射。
 - [ ] 将 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、
-  predecessor chain 与 RAII guard 状态机迁入 `src-tauri/crates/yss-resource-lifecycle/` Stateful Project 层；
-  删除根 `project/resource_lifecycle.rs` owner 与兼容 facade，核心 API 仅依赖 canonical `ProjectInstanceId`；
-  恢复原先被永久关闭的 17 个状态机测试，并删除零调用的 panic getter/测试探针；跨状态 session 校验、
-  activation publication 锁顺序与 filesystem error 分类映射继续留在根 Project 层。
+      predecessor chain 与 RAII guard 状态机迁入 `src-tauri/crates/yss-resource-lifecycle/` Stateful Project 层；
+      删除根 `project/resource_lifecycle.rs` owner 与兼容 facade，核心 API 仅依赖 canonical `ProjectInstanceId`；
+      恢复原先被永久关闭的 17 个状态机测试，并删除零调用的 panic getter/测试探针；跨状态 session 校验、
+      activation publication 锁顺序与 filesystem error 分类映射继续留在根 Project 层。
 - [ ] 将 native project-root identity、入口路径 binding/revalidation、root lease/lifecycle admission、原子
-  transaction/rollback 与 recovery marker 迁入 `src-tauri/crates/yss-project-filesystem/` Stateful Project 层；
-  删除根 `project/filesystem/` owner、`ProjectFilesystemError` 镜像和兼容 facade，并把 transaction context
-  收窄为 root、operation id 与 recovery marker，避免 filesystem 反向依赖完整 `ProjectSession`；ProjectState
-  publication、resource revision 校验与 document serialization 继续留在根 Project 层；错误码和 recovery
-  分类仅通过 Application-owned failure view 进入 Commands，通用 Transport error 不依赖 Project/Application。
+      transaction/rollback 与 recovery marker 迁入 `src-tauri/crates/yss-project-filesystem/` Stateful Project 层；
+      删除根 `project/filesystem/` owner、`ProjectFilesystemError` 镜像和兼容 facade，并把 transaction context
+      收窄为 root、operation id 与 recovery marker，避免 filesystem 反向依赖完整 `ProjectSession`；ProjectState
+      publication、resource revision 校验与 document serialization 继续留在根 Project 层；错误码和 recovery
+      分类仅通过 Application-owned failure view 进入 Commands，通用 Transport error 不依赖 Project/Application。
 - [ ] 将 Excel workbook sheet inspection 与 Sheet→CSV bridge 迁入现有 `yss-tabular-io` Database Core；
-  删除根 `database/excel_reader` owner/facade，将 `calamine` 依赖下沉到唯一 owner，并让 Application 与
-  DuckDB reader 直接调用 typed `ExcelIoError` API，为 `duckdb_reader` 整体迁入 `yss-duckdb` 解除反向依赖。
+      删除根 `database/excel_reader` owner/facade，将 `calamine` 依赖下沉到唯一 owner，并让 Application 与
+      DuckDB reader 直接调用 typed `ExcelIoError` API，为 `duckdb_reader` 整体迁入 `yss-duckdb` 解除反向依赖。
 - [ ] 将根 `database/duckdb_reader.rs` 的 table lifecycle、ingest、Arrow bridge、catalog/display metadata 与
-  paged/column query 整体迁入 `yss-duckdb::table`；删除根 owner/re-export，所有 Application、Project、Database
-  和 integration test 消费方直接依赖 engine crate，并将不再属于根 package 的 `polars-arrow` 依赖一并下沉；
-  同时统一 DuckDB 父目录创建，并修复删除/覆盖表时遗留命名 ENUM type、无 metadata table 时先删表后报错的问题。
+      paged/column query 整体迁入 `yss-duckdb::table`；删除根 owner/re-export，所有 Application、Project、Database
+      和 integration test 消费方直接依赖 engine crate，并将不再属于根 package 的 `polars-arrow` 依赖一并下沉；
+      同时统一 DuckDB 父目录创建，并修复删除/覆盖表时遗留命名 ENUM type、无 metadata table 时先删表后报错的问题。
 - [ ] 将共享 `EditOperation`、`EditHistory` 与 `EditState` 迁入无 Polars/DuckDB 依赖的
-  `src-tauri/crates/yss-database-edit/` Database Core；删除根 `database/edit_operation.rs` owner/facade，并将
-  DataFrame apply/reverse/cast 迁入现有 `yss-tabular-polars::edit` adapter，使 DuckDB 与 Loaded state 复用同一
-  operation model，同时下沉 root package 不再直接使用的 `polars-dtype` 依赖，并删除零调用的
-  `EditOperation` serde wire compatibility，只保留实际跨 IPC 的 `EditState` camelCase projection。
+      `src-tauri/crates/yss-database-edit/` Database Core；删除根 `database/edit_operation.rs` owner/facade，并将
+      DataFrame apply/reverse/cast 迁入现有 `yss-tabular-polars::edit` adapter，使 DuckDB 与 Loaded state 复用同一
+      operation model，同时下沉 root package 不再直接使用的 `polars-dtype` 依赖，并删除零调用的
+      `EditOperation` serde wire compatibility，只保留实际跨 IPC 的 `EditState` camelCase projection。
 - [ ] 将根 `database/duckdb_editing.rs` 与 `duckdb_column_snapshot.rs` 整体迁入现有 `yss-duckdb` engine
-  crate；让根 `DatabaseInstance` 仅调用 typed operation API，不再自行打开 DuckDB edit connection，并使
-  cell/add-row/delete-rows/apply/reverse 全部在 engine transaction 中完成；同时修复未排序 `indices` 与
-  `rowIds` 配对漂移、多行删除中途失败产生半提交、add-row reverse 已命中 null row 时仍提前求值 index
-  fallback，以及 update 未命中 rowid 却静默成功的问题。
+      crate；让根 `DatabaseInstance` 仅调用 typed operation API，不再自行打开 DuckDB edit connection，并使
+      cell/add-row/delete-rows/apply/reverse 全部在 engine transaction 中完成；同时修复未排序 `indices` 与
+      `rowIds` 配对漂移、多行删除中途失败产生半提交、add-row reverse 已命中 null row 时仍提前求值 index
+      fallback，以及 update 未命中 rowid 却静默成功的问题。
 - [ ] 修复 DuckDB cell edit 将大于 `i64::MAX` 的 JSON unsigned integer 经 `f64` 中转而丢失精度的问题；
-  SQL numeric literal 直接使用 `serde_json::Number` 的规范十进制表示，并用 `u64::MAX -> UBIGINT` 回归测试
-  锁定无损语义。
+      SQL numeric literal 直接使用 `serde_json::Number` 的规范十进制表示，并用 `u64::MAX -> UBIGINT` 回归测试
+      锁定无损语义。
 - [ ] 将根 `database/sql_reader.rs` 与 `sqlite_reader.rs` 合并迁入职责命名的 `yss-sql-source` Database Core；
-  统一 SQLite/PostgreSQL/MySQL table discovery、identifier quoting、连接配置、SQLx decode 与 Polars
-  materialization，删除根 facade 以及 root production 的 Tokio/SQLx 依赖，并由 Application 直接调用 typed API。
+      统一 SQLite/PostgreSQL/MySQL table discovery、identifier quoting、连接配置、SQLx decode 与 Polars
+      materialization，删除根 facade 以及 root production 的 Tokio/SQLx 依赖，并由 Application 直接调用 typed API。
 - [ ] 修复 external SQL import 将 PostgreSQL `INT2/INT4`、MySQL 各宽度 signed/unsigned integer 等合法值静默
-  降级为 null、BLOB 被替换成 `<N bytes>` 字符串、空表丢失列 schema、list-table decode error 被 `filter_map`
-  吞掉、SQLite 路径手拼 URL，以及 `ssl`/`charset`/`auto_create` persisted config 未生效的问题；unsupported
-  source type 改为 fail closed，并验证同步 API 在既有 Tokio runtime 内不会 nested-`block_on` panic。
+      降级为 null、BLOB 被替换成 `<N bytes>` 字符串、空表丢失列 schema、list-table decode error 被 `filter_map`
+      吞掉、SQLite 路径手拼 URL，以及 `ssl`/`charset`/`auto_create` persisted config 未生效的问题；unsupported
+      source type 改为 fail closed，并验证同步 API 在既有 Tokio runtime 内不会 nested-`block_on` panic。
 - [ ] 将根 `database/schema_snapshot.rs` 的 runtime schema facts、revision projection 与 Polars/DuckDB
-  physical metadata normalization 迁入职责命名的 `src-tauri/crates/yss-database-schema/` Database Core；删除
-  根 owner/facade，并让 Application、Database runtime 与 Transport conversion 直接消费唯一 schema owner，
-  session/runtime authority 继续留在根 Database 层。
+      physical metadata normalization 迁入职责命名的 `src-tauri/crates/yss-database-schema/` Database Core；删除
+      根 owner/facade，并让 Application、Database runtime 与 Transport conversion 直接消费唯一 schema owner，
+      session/runtime authority 继续留在根 Database 层。
 - [ ] 修复 DuckDB `TIMESTAMP` metadata 经 `duckdb_type_to_raw_string` 产生精确 `DateTime` 后，在 schema
-  normalization 中因仅识别 `DateTime(...)` 而静默降级为 `DataType::Any` 的漂移；同时锁定 Polars temporal
-  dtype、nullable、revision 与非法列名 fail-closed 语义。
+      normalization 中因仅识别 `DateTime(...)` 而静默降级为 `DataType::Any` 的漂移；同时锁定 Polars temporal
+      dtype、nullable、revision 与非法列名 fail-closed 语义。
 - [ ] 将剩余 session-scoped database instance/state、declaration observation/revision authority、
-  admission/drain/recovery、physical routing 与 typed query/edit handoff 整体迁入职责命名的
-  `src-tauri/crates/yss-database-runtime/` Database Core；删除根 `src/database/` owner/facade，所有
-  Application、Commands、Transport 与 integration test 消费方直接依赖新 crate，且不创建混合领域的
-  catch-all `yss-backend`。
+      admission/drain/recovery、physical routing 与 typed query/edit handoff 整体迁入职责命名的
+      `src-tauri/crates/yss-database-runtime/` Database Core；删除根 `src/database/` owner/facade，所有
+      Application、Commands、Transport 与 integration test 消费方直接依赖新 crate，且不创建混合领域的
+      catch-all `yss-backend`。
 - [ ] 清理 database runtime 抽取后的边界漂移：公开最小的不透明 session/transaction API，保留 registry
-  record 与 physical state 私有；删除可绕过真实 runtime 伪造 catalog snapshot 的 test-only minting seam、
-  永远不可产生的内部 driver compensation 分支及重复 restore wrapper，并以架构测试锁定 runtime 不反向依赖
-  Project、Application、Commands、Transport 或 Tauri。
+      record 与 physical state 私有；删除可绕过真实 runtime 伪造 catalog snapshot 的 test-only minting seam、
+      永远不可产生的内部 driver compensation 分支及重复 restore wrapper，并以架构测试锁定 runtime 不反向依赖
+      Project、Application、Commands、Transport 或 Tauri。
 - [ ] 将平台中立的 project watcher epoch、delivery admission、factory/session/drain protocol、超时 ownership
-  与 replacement 状态机迁入 `src-tauri/crates/yss-project-watcher/` Application service；根 Application 只保留
-  Project authority reconciliation，Notify 适配器直接消费 crate contract，并删除未使用的重复 quiet-period 常量
-  与生产不可构造的 `DeliveryFailed` 终态。
+      与 replacement 状态机迁入 `src-tauri/crates/yss-project-watcher/` Application service；根 Application 只保留
+      Project authority reconciliation，Notify 适配器直接消费 crate contract，并删除未使用的重复 quiet-period 常量
+      与生产不可构造的 `DeliveryFailed` 终态。
 - [ ] 将根 `platform/project_file_watcher` 的 native observation、notify event 映射、bounded debounce、worker lifetime
-  与 drain completion 整体迁入 `src-tauri/crates/yss-project-watcher-notify/` Platform Adapter；删除空根
-  `platform` facade 与 root package 的直接 `notify` 依赖，让 composition root 只负责 adapter 注入。
+      与 drain completion 整体迁入 `src-tauri/crates/yss-project-watcher-notify/` Platform Adapter；删除空根
+      `platform` facade 与 root package 的直接 `notify` 依赖，让 composition root 只负责 adapter 注入。
 - [ ] 将系统 Julia executable discovery、版本校验、Windows Juliaup 安装与 background command policy 迁入
-  `src-tauri/crates/yss-julia-runtime/` Backend Adapter；Commands/worker 直接消费 typed runtime API，删除根 facade，
-  并以 `JuliaRuntimeError` 替代公开 `String` error，同时保留无 stderr/stdout 命令失败的 process status 诊断。
+      `src-tauri/crates/yss-julia-runtime/` Backend Adapter；Commands/worker 直接消费 typed runtime API，删除根 facade，
+      并以 `JuliaRuntimeError` 替代公开 `String` error，同时保留无 stderr/stdout 命令失败的 process status 诊断。
 - [ ] 将根 Julia reusable process、embedded assets、JSON-RPC、progress/cancel/restart、typed worker error 与
-  app-owned task-directory lifecycle 迁入 `src-tauri/crates/yss-julia-worker/` Backend Adapter；SCI/Bayes artifact
-  trait 适配留在 adapter 一侧，删除根 worker facade、公开 `String` compatibility API 与状态机不可达分支，并让
-  Commands、composition root 及 Bayes adapter 直接消费唯一 worker owner。
+      app-owned task-directory lifecycle 迁入 `src-tauri/crates/yss-julia-worker/` Backend Adapter；SCI/Bayes artifact
+      trait 适配留在 adapter 一侧，删除根 worker facade、公开 `String` compatibility API 与状态机不可达分支，并让
+      Commands、composition root 及 Bayes adapter 直接消费唯一 worker owner。
 - [ ] 将 backend-neutral statistical input/settings、执行控制、取消 capability 与稳定 SCI error code 迁入
-  `src-tauri/crates/yss-sci-contract/` Pure Leaf；删除根 `sci/api/computation.rs`、`sci/api/control.rs`、
-  `sci/error.rs` facade 和零生产调用的 Application `DataValue` 映射，让 workflows、SCI runtime、Execution
-  adapter 与 Julia Bayes adapter 直接消费唯一 owner，并以 `StatisticalInput::try_new` 拒绝空白名称和非有限数值。
+      `src-tauri/crates/yss-sci-contract/` Pure Leaf；删除根 `sci/api/computation.rs`、`sci/api/control.rs`、
+      `sci/error.rs` facade 和零生产调用的 Application `DataValue` 映射，让 workflows、SCI runtime、Execution
+      adapter 与 Julia Bayes adapter 直接消费唯一 owner，并以 `StatisticalInput::try_new` 拒绝空白名称和非有限数值。
 - [ ] 将 Bayes draft、expression parser、structured validation 与 validated immutable spec 构造迁入
-  `src-tauri/crates/yss-bayes-model/` Pure Leaf；删除根 `sci/api/bayes` model facade，让 Commands、Application、
-  worker validation、integration tests 与 Julia adapters 直接消费唯一 owner；同时以内部 parts object 收敛
-  多参数构造，统一 conversion/worker 的 spec validator，并消除 `ValidationReport.ok`/errors 双事实源、
-  非有限 prior 漏检及 draft-to-spec 的生产 `expect` 分支。
+      `src-tauri/crates/yss-bayes-model/` Pure Leaf；删除根 `sci/api/bayes` model facade，让 Commands、Application、
+      worker validation、integration tests 与 Julia adapters 直接消费唯一 owner；同时以内部 parts object 收敛
+      多参数构造，统一 conversion/worker 的 spec validator，并消除 `ValidationReport.ok`/errors 双事实源、
+      非有限 prior 漏检及 draft-to-spec 的生产 `expect` 分支。
 - [ ] 将 Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 迁入
-  `src-tauri/crates/yss-bayes-result/` Pure Leaf；删除根 `sci/api/bayes` result/contract facade、旧 exchange contract
-  与仅测试挂载的重复 Julia Bayes backend，让 Commands、Application、worker 和 Julia adapter 直接消费唯一 owner；
-  artifact lease 由 Application 的 materialization 清单唯一管理，不再嵌入可序列化 result，同时拒绝把 PNG/任意 binary
-  伪装成 Arrow IPC。
+      `src-tauri/crates/yss-bayes-result/` Pure Leaf；删除根 `sci/api/bayes` result/contract facade、旧 exchange contract
+      与仅测试挂载的重复 Julia Bayes backend，让 Commands、Application、worker 和 Julia adapter 直接消费唯一 owner；
+      artifact lease 由 Application 的 materialization 清单唯一管理，不再嵌入可序列化 result，同时拒绝把 PNG/任意 binary
+      伪装成 Arrow IPC。
 - [ ] 将 backend-neutral Bayes validated task、opaque generation/artifact handle、terminal/error contract 与 worker port
-  迁入 `src-tauri/crates/yss-bayes-worker/` Pure Leaf；删除根 `sci/api/bayes/worker` owner/facade，让 Application 与
-  Julia adapter 直接消费唯一 crate，并以不可构造的 `BayesWorkerAuthority` 和 `BayesWorkerClient` 临时借用收敛
-  handle/result 铸造权限，避免因跨 crate 迁移而把旧 `pub(crate)` 构造器直接公开；Julia process 与 task-directory
-  lifecycle 继续仅由 `yss-julia-worker` 拥有。
+      迁入 `src-tauri/crates/yss-bayes-worker/` Pure Leaf；删除根 `sci/api/bayes/worker` owner/facade，让 Application 与
+      Julia adapter 直接消费唯一 crate，并以不可构造的 `BayesWorkerAuthority` 和 `BayesWorkerClient` 临时借用收敛
+      handle/result 铸造权限，避免因跨 crate 迁移而把旧 `pub(crate)` 构造器直接公开；Julia process 与 task-directory
+      lifecycle 继续仅由 `yss-julia-worker` 拥有。
 - [ ] 删除根 `sci/api/bayes` 中仅测试启用的 `BayesBackend` 与 Polars input-validation 第二路径；让
-  `BayesInferenceService` 强制持有非可选 `BayesWorkerClient` 和 app-data root，生产与测试共同通过
-  `BayesWorkerPort` 执行；删除双 queue/runner、空 SCI facade、不可达 cancel backend 分支与零调用 artifact reader，
-  并由架构测试禁止恢复 test-only backend、可选 worker 或 Transport validation 镜像。
+      `BayesInferenceService` 强制持有非可选 `BayesWorkerClient` 和 app-data root，生产与测试共同通过
+      `BayesWorkerPort` 执行；删除双 queue/runner、空 SCI facade、不可达 cancel backend 分支与零调用 artifact reader，
+      并由架构测试禁止恢复 test-only backend、可选 worker 或 Transport validation 镜像。
 - [ ] 将根 `julia/bayes_worker_adapter` 的 Julia model kernel 生成、typed exchange files、worker task 状态、
-  cancel/result/artifact port 实现整体迁入 `src-tauri/crates/yss-bayes-worker-julia/` Backend Adapter；删除空根
-  `julia` facade，让 composition root 直接构造具体 adapter，并禁止新 crate 反向依赖 Tauri、Application、
-  Commands、Project 或 Database。
+      cancel/result/artifact port 实现整体迁入 `src-tauri/crates/yss-bayes-worker-julia/` Backend Adapter；删除空根
+      `julia` facade，让 composition root 直接构造具体 adapter，并禁止新 crate 反向依赖 Tauri、Application、
+      Commands、Project 或 Database。
 - [ ] 将剩余根 `src/sci` 同步 runtime API、regression/panel models 与 Rust adapters 整体迁入职责命名的
-  `src-tauri/crates/yss-sci-runtime/` SCI Core；删除根 facade，让 Application、Execution adapter 与 Commands
-  直接消费唯一 owner，并把 time-series golden tests/fixtures 随 owner 下沉；root package 不再直接依赖
-  `yss-sci`、`rand` 或 `statrs`，runtime 不反向依赖 Tauri、Project、Database、Execution 或 Julia。
+      `src-tauri/crates/yss-sci-runtime/` SCI Core；删除根 facade，让 Application、Execution adapter 与 Commands
+      直接消费唯一 owner，并把 time-series golden tests/fixtures 随 owner 下沉；root package 不再直接依赖
+      `yss-sci`、`rand` 或 `statrs`，runtime 不反向依赖 Tauri、Project、Database、Execution 或 Julia。
 - [ ] 清理 SCI runtime 迁移后的失效分支与重复事实：Panel DID 使用 typed `DidFakeGroupError`、一次外层结构校验
-  与唯一实体 ID 集合，避免稀疏 ID 生成 phantom entities；regression report 改为一次 typed serialization 并将
-  失败映射为 `SciError`，不再依赖对象形状 `expect` 或多阶段可变 JSON；以 crate ownership/semantic guards
-  禁止根 SCI、重复验证和旧 consumer route 回流。
+      与唯一实体 ID 集合，避免稀疏 ID 生成 phantom entities；regression report 改为一次 typed serialization 并将
+      失败映射为 `SciError`，不再依赖对象形状 `expect` 或多阶段可变 JSON；以 crate ownership/semantic guards
+      禁止根 SCI、重复验证和旧 consumer route 回流。
 - [ ] 将根 `src/project/` 的 `ProjectState`、session/instance authority、resource revision、history hydration、
-  持久化事务编排与 publication 整体迁入 `src-tauri/crates/yss-project/` Stateful Project 层；删除根 owner/facade、
-  重复 resource mutation 路径、永久关闭的边缘测试与零调用 hooks，让 Application/Commands/Composition Root 直接
-  依赖唯一 crate；同时修复 Graph move undo/redo 误入恒定失败 legacy rename stub，并以可构造磁盘计划回归锁定。
+      持久化事务编排与 publication 整体迁入 `src-tauri/crates/yss-project/` Stateful Project 层；删除根 owner/facade、
+      重复 resource mutation 路径、永久关闭的边缘测试与零调用 hooks，让 Application/Commands/Composition Root 直接
+      依赖唯一 crate；同时修复 Graph move undo/redo 误入恒定失败 legacy rename stub，并以可构造磁盘计划回归锁定。
 - [ ] 将根 `src/application/` 的跨 Project、Execution、Database、Graph、SCI 与 Bayes 用例编排整体迁入
-  `src-tauri/crates/yss-application/`；删除根 owner/facade，让 Commands 与 composition root 直接消费唯一
-  Application crate，并以最小公开 typed API、`test-support` feature 和架构门禁禁止 Tauri、Commands、Schema
-  或根包反向依赖。
+      `src-tauri/crates/yss-application/`；删除根 owner/facade，让 Commands 与 composition root 直接消费唯一
+      Application crate，并以最小公开 typed API、`test-support` feature 和架构门禁禁止 Tauri、Commands、Schema
+      或根包反向依赖。
 - [ ] 清理 Application 抽取后的重复与失效事实：数据库导出失败统一进入 typed cleanup、保留 session transition
-  主错误并记录 cleanup 次错误；删除零调用 database mutation/session hooks、重复 session/database receipt 字段、
-  不可构造 result-state/data-series wire 分支与永久关闭测试遗留的发射器，同时移除根包不再直接消费的依赖。
+      主错误并记录 cleanup 次错误；删除零调用 database mutation/session hooks、重复 session/database receipt 字段、
+      不可构造 result-state/data-series wire 分支与永久关闭测试遗留的发射器，同时移除根包不再直接消费的依赖。
 - [ ] 收窄 `yss-application` 跨 crate API：以 `HypothesisApplicationError` 替代 hypothesis/`at()` 的公开
-  `String` error，隐藏仅内部使用的解析与 candidate-install 类型，并新增 ownership 门禁禁止根 Application facade、
-  Tauri/Transport 反向依赖及错误层分类回流。
+      `String` error，隐藏仅内部使用的解析与 candidate-install 类型，并新增 ownership 门禁禁止根 Application facade、
+      Tauri/Transport 反向依赖及错误层分类回流。
 - [ ] 将 Bayes artifact reader port/error 从 Application 抽取到
-  `src-tauri/crates/yss-bayes-artifact-contract/` Pure Leaf；Application 与 concrete reader 直接消费唯一 contract，
-  禁止 contract 反向依赖 Polars、Tauri、Application 或具体 filesystem I/O。
+      `src-tauri/crates/yss-bayes-artifact-contract/` Pure Leaf；Application 与 concrete reader 直接消费唯一 contract，
+      禁止 contract 反向依赖 Polars、Tauri、Application 或具体 filesystem I/O。
 - [ ] 将根 Bayes/Polars artifact reader 迁入 `src-tauri/crates/yss-bayes-artifact-polars/` Backend Adapter，
-  删除 Application 内复制的 DataFrame 解析与测试镜像并下沉测试；malformed/null/non-finite rows、空 predictive
-  artifact 和零 plot budget 必须 fail closed，禁止静默丢行、除零及 Tauri/Application 回边。
+      删除 Application 内复制的 DataFrame 解析与测试镜像并下沉测试；malformed/null/non-finite rows、空 predictive
+      artifact 和零 plot budget 必须 fail closed，禁止静默丢行、除零及 Tauri/Application 回边。
 - [ ] 将根 Execution→SCI adapter 迁入 `src-tauri/crates/yss-execution-sci-adapter/`，仅保留生产实际消费的
-  ACF/PACF typed port 并让零 lag fail closed；删除零生产调用的 regression/KDE 与 relational port families、
-  永远 unavailable 的 relational stub、透传 session ID 的 resource factory callback 及整个根 `backend_adapters` facade。
+      ACF/PACF typed port 并让零 lag fail closed；删除零生产调用的 regression/KDE 与 relational port families、
+      永远 unavailable 的 relational stub、透传 session ID 的 resource factory callback 及整个根 `backend_adapters` facade。
 - [ ] 将根 `commands`、`schema`、`error` 与 `event` 整体迁入 `src-tauri/crates/yss-api/`，由私有 transport
-  modules 唯一拥有 command handlers、wire mapping、稳定错误与 event/channel delivery，只公开 canonical
-  `invoke_handler` 给 composition root；删除永久关闭的兼容 helpers/tests、不可构造 DTO 分支与未使用依赖，
-  并禁止根 transport facade、重复 command registry 或 composition-only adapter 依赖回流。
+      modules 唯一拥有 command handlers、wire mapping、稳定错误与 event/channel delivery，只公开 canonical
+      `invoke_handler` 给 composition root；删除永久关闭的兼容 helpers/tests、不可构造 DTO 分支与未使用依赖，
+      并禁止根 transport facade、重复 command registry 或 composition-only adapter 依赖回流。
 - [ ] 清理 `yss-api` project progress transport 的线程启动失败路径：以 typed spawn error 替代生产 `expect`，
-  在 command 边界集中映射稳定错误码与 incident ID，并确保 worker 创建失败时不会登记残留的活动取消任务；
-  同时移除当前 wire 文档中的过时 legacy 表述。
+      在 command 边界集中映射稳定错误码与 incident ID，并确保 worker 创建失败时不会登记残留的活动取消任务；
+      同时移除当前 wire 文档中的过时 legacy 表述。
 - [ ] 清理根 composition entry 的 Tauri runtime 终止失败路径：移除模板式生产 `expect`，直接记录 typed
-  `tauri::Error` 与稳定 diagnostic event 后返回，并以架构门禁禁止启动 panic 回流。
+      `tauri::Error` 与稳定 diagnostic event 后返回，并以架构门禁禁止启动 panic 回流。
 
 ## 2026.09.01
 
 - [ ] 修复 editor 仅在 group 内激活却未成为 root physical target、以及 preview canvas 注销 drop route
-  的问题；保持 editor command focus gate 并恢复节点拖动与创建。
+      的问题；保持 editor command focus gate 并恢复节点拖动与创建。
 - [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复
-  资源绑定节点的实例显示名。
+      资源绑定节点的实例显示名。

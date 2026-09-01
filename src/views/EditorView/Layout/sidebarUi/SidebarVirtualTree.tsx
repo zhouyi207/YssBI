@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { useCallback, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface SidebarVirtualTreeProps<Row> {
   rows: readonly Row[];
@@ -44,70 +44,72 @@ export function SidebarVirtualTree<Row>({
   const virtualRows = virtualizer.getVirtualItems();
   const renderedTabStopIndex = virtualRows.some(({ index }) => index === tabStopIndex)
     ? tabStopIndex
-    : virtualRows[0]?.index ?? -1;
+    : (virtualRows[0]?.index ?? -1);
 
-  const measureAndFocusRow = useCallback((element: HTMLDivElement | null) => {
-    virtualizer.measureElement(element);
-    if (!element) return;
+  const measureAndFocusRow = useCallback(
+    (element: HTMLDivElement | null) => {
+      virtualizer.measureElement(element);
+      if (!element) return;
 
-    const index = Number(element.dataset.sidebarTreeRowIndex);
-    if (pendingFocusIndexRef.current !== index) return;
-    pendingFocusIndexRef.current = null;
-    element.focus({ preventScroll: true });
-  }, [virtualizer]);
+      const index = Number(element.dataset.sidebarTreeRowIndex);
+      if (pendingFocusIndexRef.current !== index) return;
+      pendingFocusIndexRef.current = null;
+      element.focus({ preventScroll: true });
+    },
+    [virtualizer],
+  );
 
-  const focusRow = useCallback((index: number) => {
-    if (rows.length === 0) return;
-    const nextIndex = Math.max(0, Math.min(index, rows.length - 1));
-    pendingFocusIndexRef.current = nextIndex;
-    setTabStopIndex(nextIndex);
-    virtualizer.scrollToIndex(nextIndex, { align: 'auto' });
+  const focusRow = useCallback(
+    (index: number) => {
+      if (rows.length === 0) return;
+      const nextIndex = Math.max(0, Math.min(index, rows.length - 1));
+      pendingFocusIndexRef.current = nextIndex;
+      setTabStopIndex(nextIndex);
+      virtualizer.scrollToIndex(nextIndex, { align: "auto" });
 
-    const rowElement = treeRef.current?.querySelector<HTMLElement>(
-      `[data-sidebar-tree-row-index="${nextIndex}"]`,
-    );
-    if (!rowElement) return;
-    pendingFocusIndexRef.current = null;
-    rowElement.focus({ preventScroll: true });
-  }, [rows.length, virtualizer]);
+      const rowElement = treeRef.current?.querySelector<HTMLElement>(
+        `[data-sidebar-tree-row-index="${nextIndex}"]`,
+      );
+      if (!rowElement) return;
+      pendingFocusIndexRef.current = null;
+      rowElement.focus({ preventScroll: true });
+    },
+    [rows.length, virtualizer],
+  );
 
-  const handleRowKeyDown = useCallback((
-    event: KeyboardEvent<HTMLDivElement>,
-    rowIndex: number,
-  ) => {
-    if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey) {
-      return;
-    }
-
-    let nextIndex: number;
-    switch (event.key) {
-      case 'ArrowDown':
-        nextIndex = rowIndex + 1;
-        break;
-      case 'ArrowUp':
-        nextIndex = rowIndex - 1;
-        break;
-      case 'Home':
-        nextIndex = 0;
-        break;
-      case 'End':
-        nextIndex = rows.length - 1;
-        break;
-      default:
+  const handleRowKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>, rowIndex: number) => {
+      if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey) {
         return;
-    }
+      }
 
-    event.preventDefault();
-    event.stopPropagation();
-    focusRow(nextIndex);
-  }, [focusRow, rows.length]);
+      let nextIndex: number;
+      switch (event.key) {
+        case "ArrowDown":
+          nextIndex = rowIndex + 1;
+          break;
+        case "ArrowUp":
+          nextIndex = rowIndex - 1;
+          break;
+        case "Home":
+          nextIndex = 0;
+          break;
+        case "End":
+          nextIndex = rows.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      focusRow(nextIndex);
+    },
+    [focusRow, rows.length],
+  );
 
   return (
-    <ScrollArea
-      viewportRef={viewportRef}
-      orientation="vertical"
-      className="min-h-0 min-w-0 flex-1"
-    >
+    <ScrollArea viewportRef={viewportRef} orientation="vertical" className="min-h-0 min-w-0 flex-1">
       {rows.length === 0 ? (
         <Empty className="gap-1 rounded-none px-2 py-4">
           <EmptyHeader>

@@ -1,11 +1,11 @@
-import { useCallback } from 'react';
-import { DatabaseService } from '@/services/database/databaseService';
-import { selectDatabaseExportPath } from '@/services/platform/pathDialog';
+import { useCallback } from "react";
+import { DatabaseService } from "@/services/database/databaseService";
+import { selectDatabaseExportPath } from "@/services/platform/pathDialog";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { logger } from '@/features/application/observability/appLogger';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { logger } from "@/features/application/observability/appLogger";
 
 export function useDatabaseExport(selectedDatabaseId: string | null): () => Promise<void> {
   return useCallback(async () => {
@@ -14,7 +14,7 @@ export function useDatabaseExport(selectedDatabaseId: string | null): () => Prom
     const selected = await selectDatabaseExportPath();
     if (!selected.ok || selected.value === null || !isCurrentProjectIdentity(identity)) return;
     try {
-      const format = selected.value.endsWith('.parquet') ? 'parquet' : 'csv';
+      const format = selected.value.endsWith(".parquet") ? "parquet" : "csv";
       await DatabaseService.exportDatabase(
         identity.projectInstanceId,
         selectedDatabaseId,
@@ -23,7 +23,7 @@ export function useDatabaseExport(selectedDatabaseId: string | null): () => Prom
       );
     } catch {
       if (isCurrentProjectIdentity(identity)) {
-        logger.data.error('database export failed', 'DatabaseEditorWindow');
+        logger.data.error("database export failed", "DatabaseEditorWindow");
       }
     }
   }, [selectedDatabaseId]);

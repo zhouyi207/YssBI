@@ -1,23 +1,20 @@
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import {
   ProjectLifecycleProtocolError,
   type ProjectLifecycleReceiptDependencies,
-} from '@/features/application/projectLifecycleReceipt';
+} from "@/features/application/projectLifecycleReceipt";
 import {
   commitPreparedAuthoritativeProjectLoad,
   prepareAuthoritativeProjectLoad,
   useProjectIOStore,
-} from '@/features/application/project/projectIOStore';
-import { ProjectService } from '@/services/project/projectService';
+} from "@/features/application/project/projectIOStore";
+import { ProjectService } from "@/services/project/projectService";
 import {
   captureProjectIdentity,
   isProjectLifecycleStateCurrent,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import {
-  revokeAllPinPreviewLeases,
-  useExecutionStore,
-} from '@/features/core/execution';
-import { clearCanvasInteractionProject } from '@/features/core/canvas/canvasInteractionCleanup';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { revokeAllPinPreviewLeases, useExecutionStore } from "@/features/core/execution";
+import { clearCanvasInteractionProject } from "@/features/core/canvas/canvasInteractionCleanup";
 
 export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleReceiptDependencies {
   return {
@@ -49,14 +46,18 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
           variables: {},
           graphs: {},
           databases: {},
-          metadata: { exportTime: '' },
+          metadata: { exportTime: "" },
         },
         null,
         owner,
       );
-      if (isProjectLifecycleStateCurrent(owner)
-        && useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId) {
-        throw new ProjectLifecycleProtocolError('Project clear retained an unexpected store identity');
+      if (
+        isProjectLifecycleStateCurrent(owner) &&
+        useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId
+      ) {
+        throw new ProjectLifecycleProtocolError(
+          "Project clear retained an unexpected store identity",
+        );
       }
     },
     markProjectStale: () => projectPublicationCoordinator.markProjectProjectionStale(),

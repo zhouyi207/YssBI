@@ -5,16 +5,10 @@ export {
   readSecondaryWindowState,
 } from "./secondaryWindowGeometryStore";
 export { useWindowMaximized } from "./useWindowMaximized";
-export { useCurrentWindowActions } from './useCurrentWindowActions';
-export type {
-  CurrentWindowActions,
-  WindowActionOutcome,
-} from './useCurrentWindowActions';
+export { useCurrentWindowActions } from "./useCurrentWindowActions";
+export type { CurrentWindowActions, WindowActionOutcome } from "./useCurrentWindowActions";
 export { createPersistedWindow } from "./createPersistedWindow";
-export type {
-  PersistedWindowOptions,
-  WindowGeometryPolicy,
-} from "./createPersistedWindow";
+export type { PersistedWindowOptions, WindowGeometryPolicy } from "./createPersistedWindow";
 export {
   resolveWindowDecorations,
   usesCustomTitleBar,

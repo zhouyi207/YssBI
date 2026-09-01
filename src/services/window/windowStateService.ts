@@ -9,18 +9,18 @@ import type { WindowKind, WindowState } from "@/shared/types/settings";
  * 子窗口在创建时直接以 saved 状态启动，避免「先默认尺寸再被前端缩放」的闪烁。
  */
 export const WindowStateService = {
-    /** 获取所有 kind 的当前几何状态（未保存过的 kind 会返回内置默认值）。 */
-    async getAll(): Promise<Record<WindowKind, WindowState>> {
-        return await invokeCommand<Record<WindowKind, WindowState>>("get_window_states");
-    },
+  /** 获取所有 kind 的当前几何状态（未保存过的 kind 会返回内置默认值）。 */
+  async getAll(): Promise<Record<WindowKind, WindowState>> {
+    return await invokeCommand<Record<WindowKind, WindowState>>("get_window_states");
+  },
 
-    /** 读取单个 kind 的几何状态。 */
-    async get(kind: WindowKind): Promise<WindowState> {
-        return await invokeCommand<WindowState>("get_window_state", { kind });
-    },
+  /** 读取单个 kind 的几何状态。 */
+  async get(kind: WindowKind): Promise<WindowState> {
+    return await invokeCommand<WindowState>("get_window_state", { kind });
+  },
 
-    /** 写入单个 kind 的几何状态并立即落盘。 */
-    async save(kind: WindowKind, value: WindowState): Promise<void> {
-        await invokeCommand("save_window_state", { kind, value });
-    },
+  /** 写入单个 kind 的几何状态并立即落盘。 */
+  async save(kind: WindowKind, value: WindowState): Promise<void> {
+    await invokeCommand("save_window_state", { kind, value });
+  },
 };

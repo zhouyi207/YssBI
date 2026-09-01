@@ -1,14 +1,14 @@
-import { useEffect, useSyncExternalStore, useState } from 'react';
+import { useEffect, useSyncExternalStore, useState } from "react";
 
-import type { ErrorReference } from '@/features/application/errorReference';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { ResultValue } from './types';
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { ResultValue } from "./types";
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,
   ResultQueryOutcome,
-} from './resultQueryCoordinator';
-import { resultQueryCoordinator, resultQueryRead } from './runtime';
+} from "./resultQueryCoordinator";
+import { resultQueryCoordinator, resultQueryRead } from "./runtime";
 
 export interface ResultValueHookDependencies {
   readonly coordinator: ResultQueryCoordinator;
@@ -32,15 +32,14 @@ export function useResultValue(
   const [loading, setLoading] = useState(false);
   const value = useSyncExternalStore(
     dependencies.read.subscribe,
-    () => resultId === null ? null : dependencies.read.getValue(resultId),
-    () => resultId === null ? null : dependencies.read.getValue(resultId),
+    () => (resultId === null ? null : dependencies.read.getValue(resultId)),
+    () => (resultId === null ? null : dependencies.read.getValue(resultId)),
   );
-  const error = resultId === null
-    ? null
-    : dependencies.read.getFailure({ kind: 'value', resultId });
+  const error =
+    resultId === null ? null : dependencies.read.getFailure({ kind: "value", resultId });
 
   const reload = async (): Promise<ResultQueryOutcome> => {
-    if (resultId === null) return { status: 'notReady' };
+    if (resultId === null) return { status: "notReady" };
     return dependencies.coordinator.loadValue({ resultId });
   };
 
@@ -54,11 +53,14 @@ export function useResultValue(
     }
 
     setLoading(true);
-    void dependencies.coordinator.loadValue({ resultId }).then(() => {
-      if (mounted) setLoading(false);
-    }).catch(() => {
-      if (mounted) setLoading(false);
-    });
+    void dependencies.coordinator
+      .loadValue({ resultId })
+      .then(() => {
+        if (mounted) setLoading(false);
+      })
+      .catch(() => {
+        if (mounted) setLoading(false);
+      });
 
     return () => {
       mounted = false;

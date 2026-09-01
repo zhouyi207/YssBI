@@ -1,5 +1,5 @@
-import type { CommandHandler, GraphMutationCommandResult } from '../types';
-import { executeGraphIntent } from './executeGraphIntent';
+import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import { executeGraphIntent } from "./executeGraphIntent";
 
 export interface InsertRerouteArgs {
   connectionId: string;
@@ -9,7 +9,7 @@ export interface InsertRerouteArgs {
 export const insertRerouteCommand: CommandHandler<InsertRerouteArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     return executeGraphIntent(graphPath, {
-      type: 'insertReroute',
+      type: "insertReroute",
       payload: args,
     });
   },

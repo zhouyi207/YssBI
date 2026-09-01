@@ -1,59 +1,57 @@
 // @vitest-environment happy-dom
 
-import { act, createElement } from 'react';
-import { createRoot } from 'react-dom/client';
-import { afterAll, describe, expect, it, vi } from 'vitest';
-import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { portAddressKey } from '@/features/domain/editorProjection';
-import { NodeDetailPanel, selectNodeDetailNode } from './NodeDetailPanel';
-import { NodeInspectPanel } from './NodeInspectPanel';
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { portAddressKey } from "@/features/domain/editorProjection";
+import { NodeDetailPanel, selectNodeDetailNode } from "./NodeDetailPanel";
+import { NodeInspectPanel } from "./NodeInspectPanel";
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
-  return vi.spyOn(console, 'warn').mockImplementation((message, ...args) => {
-    const quirksWarning = "Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.";
+  return vi.spyOn(console, "warn").mockImplementation((message, ...args) => {
+    const quirksWarning =
+      "Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.";
     if (message !== quirksWarning) warn(message, ...args);
   });
 });
 
-vi.mock('react-i18next', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('react-i18next')>()),
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en-US' },
+    i18n: { language: "en-US" },
   }),
 }));
 
-vi.mock('../node/parameterEditors/NodeParameterEditor', () => ({
-  NodeParameterEditor: () => createElement(
-    'span',
-    { 'data-testid': 'parameter-editor' },
-    'parameter editor',
-  ),
+vi.mock("../node/parameterEditors/NodeParameterEditor", () => ({
+  NodeParameterEditor: () =>
+    createElement("span", { "data-testid": "parameter-editor" }, "parameter editor"),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 function bucket(graphPath: string, title: string): GraphEntityBucket {
   return {
     basis: {
       graphPath,
       graphRevision: 1,
-      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
+      registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
       resourceVersions: {},
     },
     sourceRevision: 1,
     requestGeneration: 1,
     diagnostics: [],
-    outcome: { type: 'success' },
+    outcome: { type: "success" },
     hasBlockingDiagnostics: false,
     nodes: {
       shared: {
-        id: 'shared',
+        id: "shared",
         graphPath,
-        nodeType: 'projected.call-function',
+        nodeType: "projected.call-function",
         category: [],
         title,
         inputs: [],
@@ -76,120 +74,124 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
           supportsInlineLiterals: false,
         },
         diagnostics: [],
-        subGraphPath: 'unexpected/must-not-be-read',
+        subGraphPath: "unexpected/must-not-be-read",
       },
     },
     pins: {},
     connections: {},
-    graphNodes: ['shared'],
+    graphNodes: ["shared"],
     nodePins: { shared: [] },
     pinConnections: {},
   };
 }
 
-describe('NodeDetailPanel projection selection', () => {
+describe("NodeDetailPanel projection selection", () => {
   afterAll(() => katexWarningSpy.mockRestore());
 
-  it('selects an overlapping node id only from the requested graph path', () => {
+  it("selects an overlapping node id only from the requested graph path", () => {
     const state = {
       graphEntities: {
-        first: bucket('first', 'First'),
-        second: bucket('second', 'Second'),
+        first: bucket("first", "First"),
+        second: bucket("second", "Second"),
       },
     };
 
-    expect(selectNodeDetailNode(state, 'second', 'shared')?.title).toBe('Second');
+    expect(selectNodeDetailNode(state, "second", "shared")?.title).toBe("Second");
   });
 
-  it('renders editable parameters only in NodeInspectPanel', () => {
-    const graphPath = 'events/Main.yssbi-event';
-    const graphBucket = bucket(graphPath, 'Node');
-    graphBucket.nodes.shared.parameterEditors = [{
-      key: 'value',
-      display: { title: 'Value', description: null },
-      editor: 'number',
-      presentation: 'inlineAndDetail',
-      valueType: { kind: 'Int64' },
-      multiline: false,
-      value: 42,
-      configuration: null,
-      inheritedValue: null,
-      valueSource: null,
-      options: null,
-    }];
+  it("renders editable parameters only in NodeInspectPanel", () => {
+    const graphPath = "events/Main.yssbi-event";
+    const graphBucket = bucket(graphPath, "Node");
+    graphBucket.nodes.shared.parameterEditors = [
+      {
+        key: "value",
+        display: { title: "Value", description: null },
+        editor: "number",
+        presentation: "inlineAndDetail",
+        valueType: { kind: "Int64" },
+        multiline: false,
+        value: 42,
+        configuration: null,
+        inheritedValue: null,
+        valueSource: null,
+        options: null,
+      },
+    ];
     useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
-    const container = document.createElement('div');
+    const container = document.createElement("div");
     const root = createRoot(container);
 
-    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: 'shared' })));
+    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
     expect(container.querySelector('[data-testid="parameter-editor"]')).toBeNull();
 
-    act(() => root.render(createElement(NodeInspectPanel, { graphPath, nodeId: 'shared' })));
+    act(() => root.render(createElement(NodeInspectPanel, { graphPath, nodeId: "shared" })));
     expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
 
     act(() => root.unmount());
   });
 
-  it('uses translation keys for capability and diagnostic section titles', () => {
-    const graphPath = 'events/Main.yssbi-event';
-    const graphBucket = bucket(graphPath, 'Node');
+  it("uses translation keys for capability and diagnostic section titles", () => {
+    const graphPath = "events/Main.yssbi-event";
+    const graphBucket = bucket(graphPath, "Node");
     graphBucket.nodes.shared.diagnostics = [
       {
-        code: 'node.warning',
-        message: 'Needs review',
-        severity: 'warning',
+        code: "node.warning",
+        message: "Needs review",
+        severity: "warning",
         blocking: false,
-        location: { kind: 'node', nodeId: 'shared' },
+        location: { kind: "node", nodeId: "shared" },
         related: [],
       },
     ];
     useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
-    const container = document.createElement('div');
+    const container = document.createElement("div");
     const root = createRoot(container);
 
-    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: 'shared' })));
+    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
 
-    expect(container.textContent).toContain('detail.sections.capabilities');
-    expect(container.textContent).toContain('detail.sections.diagnostics');
-    expect(container.textContent).not.toContain('Capabilities');
-    expect(container.textContent).not.toContain('Diagnostics');
+    expect(container.textContent).toContain("detail.sections.capabilities");
+    expect(container.textContent).toContain("detail.sections.diagnostics");
+    expect(container.textContent).not.toContain("Capabilities");
+    expect(container.textContent).not.toContain("Diagnostics");
 
     act(() => root.unmount());
   });
 
-  it('renders diagnostic port locations as node and pin titles', () => {
-    const graphPath = 'events/Main.yssbi-event';
-    const graphBucket = bucket(graphPath, 'Node');
-    const address = { kind: 'declared' as const, nodeId: 'shared', portKey: 'value' };
+  it("renders diagnostic port locations as node and pin titles", () => {
+    const graphPath = "events/Main.yssbi-event";
+    const graphBucket = bucket(graphPath, "Node");
+    const address = { kind: "declared" as const, nodeId: "shared", portKey: "value" };
     const pinId = portAddressKey(address);
-    graphBucket.nodes.shared.diagnostics = [{
-      code: 'node.error',
-      message: 'Value is invalid',
-      severity: 'error',
-      blocking: true,
-      location: { kind: 'port', address },
-      related: [],
-    }];
+    graphBucket.nodes.shared.diagnostics = [
+      {
+        code: "node.error",
+        message: "Value is invalid",
+        severity: "error",
+        blocking: true,
+        location: { kind: "port", address },
+        related: [],
+      },
+    ];
     graphBucket.pins[pinId] = {
       id: pinId,
-      nodeId: 'shared',
-      name: 'raw-value',
-      type: 'object',
-      direction: 'input',
-      display: { label: 'Value', instanceLabel: null },
+      nodeId: "shared",
+      name: "raw-value",
+      type: "object",
+      direction: "input",
+      display: { label: "Value", instanceLabel: null },
       address,
     };
     graphBucket.nodePins.shared = [pinId];
     graphBucket.pinConnections[pinId] = [];
     useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
-    const container = document.createElement('div');
+    const container = document.createElement("div");
     const root = createRoot(container);
 
-    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: 'shared' })));
+    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
 
-    expect(container.textContent).toContain('Node · Value');
+    expect(container.textContent).toContain("Node · Value");
     expect(container.textContent).not.toContain(pinId);
-    expect(container.textContent).not.toContain('raw-value');
+    expect(container.textContent).not.toContain("raw-value");
 
     act(() => root.unmount());
   });

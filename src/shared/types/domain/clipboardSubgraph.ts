@@ -1,23 +1,23 @@
-import type { NodePositionDto } from '@/shared/types/domain/editorProjection';
-import type { TypeExprDto } from '@/shared/types/domain/editorMutation';
+import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
+import type { TypeExprDto } from "@/shared/types/domain/editorMutation";
 
 export type ClipboardNodeCreationDto =
-  | { kind: 'static'; nodeTypeId: string }
+  | { kind: "static"; nodeTypeId: string }
   | {
-      kind: 'resourceBound';
+      kind: "resourceBound";
       nodeTypeId: string;
       resourcePath: string;
       createArgs: ClipboardResourceBoundCreateArgsDto;
     };
 
 export type ClipboardResourceBoundCreateArgsDto =
-  | { kind: 'function' }
-  | { kind: 'variable' }
-  | { kind: 'database' };
+  | { kind: "function" }
+  | { kind: "variable" }
+  | { kind: "database" };
 
 export type ClipboardPortRefDto =
-  | { kind: 'declared'; key: string }
-  | { kind: 'instance'; template: string; localInstanceId: string };
+  | { kind: "declared"; key: string }
+  | { kind: "instance"; template: string; localInstanceId: string };
 
 export interface ClipboardPortAddressDto {
   nodeId: string;
@@ -33,8 +33,8 @@ export interface ClipboardNodeDto {
 }
 
 export type ClipboardDynamicMemberOriginDto =
-  | { kind: 'functionParameter'; function: string; parameter: string }
-  | { kind: 'schemaField'; source: string; field: string };
+  | { kind: "functionParameter"; function: string; parameter: string }
+  | { kind: "schemaField"; source: string; field: string };
 
 export interface ClipboardLastKnownPortMetadataDto {
   label: string;
@@ -42,9 +42,9 @@ export interface ClipboardLastKnownPortMetadataDto {
 }
 
 export type ClipboardDynamicPortBindingDto =
-  | { kind: 'userCreated'; order: string }
+  | { kind: "userCreated"; order: string }
   | {
-      kind: 'resolved' | 'orphan';
+      kind: "resolved" | "orphan";
       origin: ClipboardDynamicMemberOriginDto;
       order: string;
       lastKnown: ClipboardLastKnownPortMetadataDto;

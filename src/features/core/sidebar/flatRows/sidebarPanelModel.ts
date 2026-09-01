@@ -1,5 +1,5 @@
-import type { SidebarSectionKey } from '../sidebarSectionState';
-import type { SidebarItemRow } from './types';
+import type { SidebarSectionKey } from "../sidebarSectionState";
+import type { SidebarItemRow } from "./types";
 
 export interface SidebarSectionModel {
   key: SidebarSectionKey;

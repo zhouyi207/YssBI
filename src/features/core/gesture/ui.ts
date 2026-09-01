@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useGestureStore } from './useGestureStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useGestureStore } from "./useGestureStore";
 
 export interface GestureUiSnapshot {
   readonly suppressNextContextMenu: boolean;
@@ -39,9 +39,7 @@ export function subscribeGestureUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useGestureUi<T>(
-  selector: (snapshot: DeepReadonly<GestureUiSnapshot>) => T,
-): T {
+export function useGestureUi<T>(selector: (snapshot: DeepReadonly<GestureUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeGestureUi,
     getGestureUiSnapshot,
@@ -54,6 +52,5 @@ export const gestureUi: GestureUiCapability = {
   getSnapshot: getGestureUiSnapshot,
   subscribe: subscribeGestureUi,
   clearGesture: (hadMovement) => useGestureStore.getState().clearGesture(hadMovement),
-  consumeSuppressContextMenu: () =>
-    useGestureStore.getState().consumeSuppressContextMenu(),
+  consumeSuppressContextMenu: () => useGestureStore.getState().consumeSuppressContextMenu(),
 };

@@ -1,22 +1,22 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import type {
   ExecutionState,
   GraphExecutionState,
   RecordedEvent,
   PinHistoryProjection,
-} from '@/shared/types/ui';
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import type { RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
-import { flushLiveExecutionEventsNow } from './executionLiveFeed';
+} from "@/shared/types/ui";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
+import { flushLiveExecutionEventsNow } from "./executionLiveFeed";
 import {
   clearExecutionVisual,
   getExecutionVisual,
   resetExecutionVisual,
   snapshotToGraphPatch,
-} from './executionVisualSession';
-import { clearedRunProjectionsPatch } from './graphRunArtifacts';
-import { pinHistoryCacheKey, pinPreviewCacheKey } from './pinResultIndex';
-import { appendRunOutput, emptyRunOutputProjection } from './runOutputProjection';
+} from "./executionVisualSession";
+import { clearedRunProjectionsPatch } from "./graphRunArtifacts";
+import { pinHistoryCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
+import { appendRunOutput, emptyRunOutputProjection } from "./runOutputProjection";
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -33,7 +33,7 @@ const emptyGraphState = (): GraphExecutionState => ({
 
 function clearedVisualPatch(): Pick<
   GraphExecutionState,
-  'status' | 'runId' | 'nodeStates' | 'completedConnections' | 'flowingConnections'
+  "status" | "runId" | "nodeStates" | "completedConnections" | "flowingConnections"
 > {
   return {
     status: "idle",
@@ -47,7 +47,7 @@ function clearedVisualPatch(): Pick<
 function stopPlaybackIfGraph(
   state: ExecutionState,
   graphPath: string,
-): Pick<ExecutionState, 'isPlaying' | 'playbackGraphPath'> {
+): Pick<ExecutionState, "isPlaying" | "playbackGraphPath"> {
   const stop = state.playbackGraphPath === graphPath;
   return {
     isPlaying: stop ? false : state.isPlaying,
@@ -102,11 +102,7 @@ interface ExecutionStore extends ExecutionState {
   recordPinHistory: (projection: PinHistoryProjection) => void;
   recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
   clearRunOutput: (graphPath: string) => void;
-  beginPinPreview: (
-    graphPath: string,
-    port: PortAddressDto,
-    generation: number,
-  ) => PinPreviewLease;
+  beginPinPreview: (graphPath: string, port: PortAddressDto, generation: number) => PinPreviewLease;
   completePinPreview: (
     graphPath: string,
     port: PortAddressDto,
@@ -119,11 +115,7 @@ interface ExecutionStore extends ExecutionState {
     generation: number,
     error: string,
   ) => boolean;
-  removePinPreview: (
-    graphPath: string,
-    port: PortAddressDto,
-    generation: number,
-  ) => boolean;
+  removePinPreview: (graphPath: string, port: PortAddressDto, generation: number) => boolean;
   setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphPath?: string) => void;
   markGraphDirty: (graphPath: string) => void;
@@ -132,7 +124,6 @@ interface ExecutionStore extends ExecutionState {
   releaseGraphExecutionState: (graphPath: string) => void;
   /** Clear node/connection visuals only; keep pin results and recording (replay start). */
   resetGraphVisuals: (graphPath: string) => void;
-
 }
 
 function updateGraph(
@@ -172,29 +163,38 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   startExecution: (graphPath) => {
     resetExecutionVisual(graphPath);
-    set((state) => updateGraph(state, graphPath, {
-      ...clearedVisualPatch(),
-      ...clearedRunProjectionsPatch(),
-      runOutput: emptyRunOutputProjection(),
-      status: "running",
-    }));
+    set((state) =>
+      updateGraph(state, graphPath, {
+        ...clearedVisualPatch(),
+        ...clearedRunProjectionsPatch(),
+        runOutput: emptyRunOutputProjection(),
+        status: "running",
+      }),
+    );
   },
 
-  setActiveRunId: (graphPath, runId) => set((state) => {
-    const graph = state.graphs[graphPath];
-    if (graph?.status !== 'running') return state;
-    return updateGraph(state, graphPath, { runId });
-  }),
+  setActiveRunId: (graphPath, runId) =>
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (graph?.status !== "running") return state;
+      return updateGraph(state, graphPath, { runId });
+    }),
 
-  completeExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
-    status: "completed",
-    runId: null,
-  })),
+  completeExecution: (graphPath) =>
+    set((state) =>
+      updateGraph(state, graphPath, {
+        status: "completed",
+        runId: null,
+      }),
+    ),
 
-  failExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
-    status: "error",
-    runId: null,
-  })),
+  failExecution: (graphPath) =>
+    set((state) =>
+      updateGraph(state, graphPath, {
+        status: "error",
+        runId: null,
+      }),
+    ),
 
   interruptExecution: (graphPath) => {
     clearExecutionVisual();
@@ -224,30 +224,29 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     commitVisualSnapshot(graphPath, set);
   },
 
+  recordPinHistory: (projection) =>
+    set((state) => {
+      const graph = state.graphs[projection.graphPath] ?? emptyGraphState();
+      const pinHistories = new Map(graph.pinHistories);
+      pinHistories.set(pinHistoryCacheKey(projection.graphPath, projection.output), projection);
+      return updateGraph(state, projection.graphPath, { pinHistories });
+    }),
 
-  recordPinHistory: (projection) => set((state) => {
-    const graph = state.graphs[projection.graphPath] ?? emptyGraphState();
-    const pinHistories = new Map(graph.pinHistories);
-    pinHistories.set(
-      pinHistoryCacheKey(projection.graphPath, projection.output),
-      projection,
-    );
-    return updateGraph(state, projection.graphPath, { pinHistories });
-  }),
+  recordRunOutput: (graphPath, event) =>
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (!graph || graph.status !== "running") return state;
+      if (graph.runId !== null && graph.runId !== event.runId) return state;
+      const runOutput = appendRunOutput(graph.runOutput, event);
+      if (runOutput === graph.runOutput) return state;
+      return updateGraph(state, graphPath, { runOutput });
+    }),
 
-  recordRunOutput: (graphPath, event) => set((state) => {
-    const graph = state.graphs[graphPath];
-    if (!graph || graph.status !== 'running') return state;
-    if (graph.runId !== null && graph.runId !== event.runId) return state;
-    const runOutput = appendRunOutput(graph.runOutput, event);
-    if (runOutput === graph.runOutput) return state;
-    return updateGraph(state, graphPath, { runOutput });
-  }),
-
-  clearRunOutput: (graphPath) => set((state) => {
-    if (!state.graphs[graphPath]) return state;
-    return updateGraph(state, graphPath, { runOutput: emptyRunOutputProjection() });
-  }),
+  clearRunOutput: (graphPath) =>
+    set((state) => {
+      if (!state.graphs[graphPath]) return state;
+      return updateGraph(state, graphPath, { runOutput: emptyRunOutputProjection() });
+    }),
 
   beginPinPreview: (graphPath, port, generation) => {
     const key = pinPreviewCacheKey(graphPath, port);
@@ -258,10 +257,12 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     const lease: PinPreviewLease = {
       generation,
       isCurrent: () => !record.revoked && activePreviewLeases.get(key) === record,
-      complete: (resultId) => lease.isCurrent()
-        && useExecutionStore.getState().completePinPreview(graphPath, port, generation, resultId),
-      fail: (error) => lease.isCurrent()
-        && useExecutionStore.getState().failPinPreview(graphPath, port, generation, error),
+      complete: (resultId) =>
+        lease.isCurrent() &&
+        useExecutionStore.getState().completePinPreview(graphPath, port, generation, resultId),
+      fail: (error) =>
+        lease.isCurrent() &&
+        useExecutionStore.getState().failPinPreview(graphPath, port, generation, error),
       revoke: () => {
         record.revoked = true;
         if (activePreviewLeases.get(key) === record) activePreviewLeases.delete(key);
@@ -277,7 +278,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         graphPath,
         port,
         generation,
-        status: 'pending',
+        status: "pending",
         resultId: null,
         error: null,
       });
@@ -297,7 +298,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       const pinPreviews = new Map(graph.pinPreviews);
       pinPreviews.set(key, {
         ...preview,
-        status: 'ready',
+        status: "ready",
         resultId,
         error: null,
       });
@@ -318,7 +319,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       const pinPreviews = new Map(graph.pinPreviews);
       pinPreviews.set(key, {
         ...preview,
-        status: 'error',
+        status: "error",
         resultId: null,
         error,
       });
@@ -344,29 +345,31 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return removed;
   },
 
-  setRecording: (graphPath, recording) => set((state) => updateGraph(state, graphPath, { recording })),
+  setRecording: (graphPath, recording) =>
+    set((state) => updateGraph(state, graphPath, { recording })),
 
-  setPlaying: (playing, graphPath) => set({
-    isPlaying: playing,
-    playbackGraphPath: playing ? (graphPath ?? get().playbackGraphPath) : null,
-  }),
+  setPlaying: (playing, graphPath) =>
+    set({
+      isPlaying: playing,
+      playbackGraphPath: playing ? (graphPath ?? get().playbackGraphPath) : null,
+    }),
 
-  markGraphDirty: (graphPath) => set((state) => {
-    const g = state.graphs[graphPath];
-    if (!g) return state;
-    if (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath)) {
-      return state;
-    }
-    clearExecutionVisual();
-    return {
-      ...updateGraph(state, graphPath, {
-        ...clearedVisualPatch(),
-        graphDirty: true,
-      }),
-      ...stopPlaybackIfGraph(state, graphPath),
-    };
-  }),
-
+  markGraphDirty: (graphPath) =>
+    set((state) => {
+      const g = state.graphs[graphPath];
+      if (!g) return state;
+      if (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath)) {
+        return state;
+      }
+      clearExecutionVisual();
+      return {
+        ...updateGraph(state, graphPath, {
+          ...clearedVisualPatch(),
+          graphDirty: true,
+        }),
+        ...stopPlaybackIfGraph(state, graphPath),
+      };
+    }),
 
   releaseGraphExecutionState: (graphPath) => {
     revokeGraphPreviewLeases(graphPath);
@@ -382,12 +385,12 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     });
   },
 
-  resetGraphVisuals: (graphPath) => set((state) => {
-    clearExecutionVisual();
-    return {
-      ...updateGraph(state, graphPath, clearedVisualPatch()),
-      ...stopPlaybackIfGraph(state, graphPath),
-    };
-  }),
-
+  resetGraphVisuals: (graphPath) =>
+    set((state) => {
+      clearExecutionVisual();
+      return {
+        ...updateGraph(state, graphPath, clearedVisualPatch()),
+        ...stopPlaybackIfGraph(state, graphPath),
+      };
+    }),
 }));

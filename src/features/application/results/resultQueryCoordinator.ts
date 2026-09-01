@@ -1,19 +1,8 @@
-import {
-  toErrorReference,
-  type ErrorReference,
-} from '@/features/application/errorReference';
-import {
-  freezeProjectionSnapshot,
-  type DeepReadonly,
-} from '@/shared/types/deepReadonly';
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import type {
-  PinResultEntry,
-  ResultDescriptor,
-  ResultPage,
-  ResultValue,
-} from './types';
-import { portAddressKey } from '@/features/domain/editorProjection';
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import type { PinResultEntry, ResultDescriptor, ResultPage, ResultValue } from "./types";
+import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface ResultIdentityRequest {
   readonly resultId: string;
@@ -30,15 +19,15 @@ export interface ResultPinHistoryRequest {
 }
 
 export type ResultQueryScope =
-  | ({ readonly kind: 'descriptor' | 'value' } & ResultIdentityRequest)
-  | ({ readonly kind: 'page' } & ResultPageRequest)
-  | ({ readonly kind: 'pinHistory' } & ResultPinHistoryRequest);
+  | ({ readonly kind: "descriptor" | "value" } & ResultIdentityRequest)
+  | ({ readonly kind: "page" } & ResultPageRequest)
+  | ({ readonly kind: "pinHistory" } & ResultPinHistoryRequest);
 
 export type ResultQueryOutcome =
-  | { readonly status: 'published' }
-  | { readonly status: 'stale' }
-  | { readonly status: 'notReady' }
-  | { readonly status: 'failed' };
+  | { readonly status: "published" }
+  | { readonly status: "stale" }
+  | { readonly status: "notReady" }
+  | { readonly status: "failed" };
 
 export interface ResultQueryCoordinator {
   loadDescriptor(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
@@ -52,11 +41,7 @@ export interface ResultQueryCoordinator {
 export interface ResultQueryServicePort {
   readonly getDescriptor: (resultId: string) => Promise<ResultDescriptor | null>;
   readonly getValue: (resultId: string) => Promise<ResultValue | null>;
-  readonly getPage: (
-    resultId: string,
-    offset: number,
-    limit: number,
-  ) => Promise<ResultPage | null>;
+  readonly getPage: (resultId: string, offset: number, limit: number) => Promise<ResultPage | null>;
   readonly getPinHistory: (
     graphPath: string,
     output: PortAddressDto,
@@ -94,29 +79,20 @@ export interface ResultQueryPublication {
 /** Read side of the Application-owned result projection used by staged hooks. */
 export interface ResultQueryReadCapability {
   readonly subscribe: (listener: () => void) => () => void;
-  readonly getDescriptor: (
-    resultId: string,
-  ) => DeepReadonly<ResultDescriptor | null>;
+  readonly getDescriptor: (resultId: string) => DeepReadonly<ResultDescriptor | null>;
   readonly getValue: (resultId: string) => DeepReadonly<ResultValue | null>;
-  readonly getPage: (
-    request: ResultPageRequest,
-  ) => DeepReadonly<ResultPage | null>;
+  readonly getPage: (request: ResultPageRequest) => DeepReadonly<ResultPage | null>;
   readonly getPinHistory: (
     request: ResultPinHistoryRequest,
   ) => DeepReadonly<readonly PinResultEntry[]> | null;
-  readonly getFailure: (
-    scope: ResultQueryScope,
-  ) => DeepReadonly<ErrorReference> | null;
+  readonly getFailure: (scope: ResultQueryScope) => DeepReadonly<ErrorReference> | null;
 }
 
 export interface ResultQueryDependencies {
   readonly readCurrentProjectInstanceId: () => string | null;
   readonly service: ResultQueryServicePort;
   readonly publication: ResultQueryPublication;
-  readonly toErrorReference?: (
-    error: unknown,
-    fallbackCode: string,
-  ) => ErrorReference;
+  readonly toErrorReference?: (error: unknown, fallbackCode: string) => ErrorReference;
 }
 
 interface RequestOwner {
@@ -136,18 +112,18 @@ function queryPart(value: string): string {
 
 function queryKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
-    case 'descriptor':
-    case 'value':
+    case "descriptor":
+    case "value":
       return `${scope.kind}:${queryPart(scope.resultId)}`;
-    case 'page':
+    case "page":
       return `${scope.kind}:${queryPart(scope.resultId)}:${scope.offset}:${scope.limit}`;
-    case 'pinHistory':
+    case "pinHistory":
       return `${scope.kind}:${queryPart(scope.graphPath)}:${portAddressKey(scope.output)}`;
   }
 }
 
 function resultIdFor(scope: ResultQueryScope): string | null {
-  return scope.kind === 'pinHistory' ? null : scope.resultId;
+  return scope.kind === "pinHistory" ? null : scope.resultId;
 }
 
 function validIdentity(value: string | null): value is string {
@@ -159,24 +135,29 @@ function validIdentityRequest(request: ResultIdentityRequest): boolean {
 }
 
 function validPageRequest(request: ResultPageRequest): boolean {
-  return validIdentityRequest(request)
-    && Number.isSafeInteger(request.offset)
-    && request.offset >= 0
-    && Number.isSafeInteger(request.limit)
-    && request.limit > 0;
+  return (
+    validIdentityRequest(request) &&
+    Number.isSafeInteger(request.offset) &&
+    request.offset >= 0 &&
+    Number.isSafeInteger(request.limit) &&
+    request.limit > 0
+  );
 }
 
 function validPinHistoryRequest(request: ResultPinHistoryRequest): boolean {
-  return request.graphPath.length > 0 && typeof request.output === 'object'
-    && request.output !== null;
+  return (
+    request.graphPath.length > 0 && typeof request.output === "object" && request.output !== null
+  );
 }
 
 function isErrorReference(value: unknown): value is ErrorReference {
-  return typeof value === 'object'
-    && value !== null
-    && typeof (value as { code?: unknown }).code === 'string'
-    && ((value as { incidentId?: unknown }).incidentId === null
-      || typeof (value as { incidentId?: unknown }).incidentId === 'string');
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { code?: unknown }).code === "string" &&
+    ((value as { incidentId?: unknown }).incidentId === null ||
+      typeof (value as { incidentId?: unknown }).incidentId === "string")
+  );
 }
 
 function fallbackIssue(code: string): ErrorReference {
@@ -212,15 +193,16 @@ export function createResultQueryCoordinator(
   };
 
   const isCurrent = (owner: RequestOwner): boolean => {
-    if (owner.projectEpoch !== projectEpoch
-      || queryGenerations.get(owner.queryKey) !== owner.queryGeneration) {
+    if (
+      owner.projectEpoch !== projectEpoch ||
+      queryGenerations.get(owner.queryKey) !== owner.queryGeneration
+    ) {
       return false;
     }
     const currentProject = captureProject();
     if (currentProject !== owner.projectInstanceId) return false;
     const resultId = resultIdFor(owner.scope);
-    return resultId === null
-      || (resultEpochs.get(resultId) ?? 0) === owner.resultEpoch;
+    return resultId === null || (resultEpochs.get(resultId) ?? 0) === owner.resultEpoch;
   };
 
   const issueFor = (error: unknown, fallbackCode: string): ErrorReference => {
@@ -242,14 +224,14 @@ export function createResultQueryCoordinator(
     fallbackCode: string,
   ): Promise<ResultQueryOutcome> => {
     const projectInstanceId = captureProject();
-    if (!projectInstanceId) return { status: 'notReady' };
+    if (!projectInstanceId) return { status: "notReady" };
 
     const key = queryKey(scope);
     const resultId = resultIdFor(scope);
     const owner: RequestOwner = {
       projectInstanceId,
       projectEpoch,
-      resultEpoch: resultId === null ? null : resultEpochs.get(resultId) ?? 0,
+      resultEpoch: resultId === null ? null : (resultEpochs.get(resultId) ?? 0),
       queryKey: key,
       queryGeneration: nextQueryGeneration(key),
       scope,
@@ -257,15 +239,15 @@ export function createResultQueryCoordinator(
 
     try {
       const value = await read();
-      if (!isCurrent(owner)) return { status: 'stale' };
-      if (value === null) return { status: 'notReady' };
+      if (!isCurrent(owner)) return { status: "stale" };
+      if (value === null) return { status: "notReady" };
 
       const snapshot = freezeProjectionSnapshot(value);
-      if (!isCurrent(owner)) return { status: 'stale' };
+      if (!isCurrent(owner)) return { status: "stale" };
       publish(owner.projectInstanceId, snapshot);
-      return { status: 'published' };
+      return { status: "published" };
     } catch (error) {
-      if (!isCurrent(owner)) return { status: 'stale' };
+      if (!isCurrent(owner)) return { status: "stale" };
       try {
         dependencies.publication.publishFailure(
           owner.projectInstanceId,
@@ -275,44 +257,38 @@ export function createResultQueryCoordinator(
       } catch {
         // A failure publication cannot reopen the rejected query.
       }
-      return { status: 'failed' };
+      return { status: "failed" };
     }
   };
 
   const loadDescriptor = (request: ResultIdentityRequest): Promise<ResultQueryOutcome> => {
-    if (!validIdentityRequest(request)) return Promise.resolve({ status: 'notReady' });
-    const scope: ResultQueryScope = { kind: 'descriptor', resultId: request.resultId };
+    if (!validIdentityRequest(request)) return Promise.resolve({ status: "notReady" });
+    const scope: ResultQueryScope = { kind: "descriptor", resultId: request.resultId };
     return load(
       scope,
       () => dependencies.service.getDescriptor(request.resultId),
-      (projectInstanceId, value) => dependencies.publication.publishDescriptor(
-        projectInstanceId,
-        request.resultId,
-        value,
-      ),
-      'result_descriptor_read_failed',
+      (projectInstanceId, value) =>
+        dependencies.publication.publishDescriptor(projectInstanceId, request.resultId, value),
+      "result_descriptor_read_failed",
     );
   };
 
   const loadValue = (request: ResultIdentityRequest): Promise<ResultQueryOutcome> => {
-    if (!validIdentityRequest(request)) return Promise.resolve({ status: 'notReady' });
-    const scope: ResultQueryScope = { kind: 'value', resultId: request.resultId };
+    if (!validIdentityRequest(request)) return Promise.resolve({ status: "notReady" });
+    const scope: ResultQueryScope = { kind: "value", resultId: request.resultId };
     return load(
       scope,
       () => dependencies.service.getValue(request.resultId),
-      (projectInstanceId, value) => dependencies.publication.publishValue(
-        projectInstanceId,
-        request.resultId,
-        value,
-      ),
-      'result_value_read_failed',
+      (projectInstanceId, value) =>
+        dependencies.publication.publishValue(projectInstanceId, request.resultId, value),
+      "result_value_read_failed",
     );
   };
 
   const loadPage = (request: ResultPageRequest): Promise<ResultQueryOutcome> => {
-    if (!validPageRequest(request)) return Promise.resolve({ status: 'notReady' });
+    if (!validPageRequest(request)) return Promise.resolve({ status: "notReady" });
     const scope: ResultQueryScope = {
-      kind: 'page',
+      kind: "page",
       resultId: request.resultId,
       offset: request.offset,
       limit: request.limit,
@@ -320,33 +296,25 @@ export function createResultQueryCoordinator(
     return load(
       scope,
       () => dependencies.service.getPage(request.resultId, request.offset, request.limit),
-      (projectInstanceId, value) => dependencies.publication.publishPage(
-        projectInstanceId,
-        request,
-        value,
-      ),
-      'result_page_read_failed',
+      (projectInstanceId, value) =>
+        dependencies.publication.publishPage(projectInstanceId, request, value),
+      "result_page_read_failed",
     );
   };
 
-  const loadPinHistory = (
-    request: ResultPinHistoryRequest,
-  ): Promise<ResultQueryOutcome> => {
-    if (!validPinHistoryRequest(request)) return Promise.resolve({ status: 'notReady' });
+  const loadPinHistory = (request: ResultPinHistoryRequest): Promise<ResultQueryOutcome> => {
+    if (!validPinHistoryRequest(request)) return Promise.resolve({ status: "notReady" });
     const scope: ResultQueryScope = {
-      kind: 'pinHistory',
+      kind: "pinHistory",
       graphPath: request.graphPath,
       output: request.output,
     };
     return load(
       scope,
       async () => dependencies.service.getPinHistory(request.graphPath, request.output),
-      (projectInstanceId, value) => dependencies.publication.publishPinHistory(
-        projectInstanceId,
-        request,
-        value,
-      ),
-      'result_pin_history_read_failed',
+      (projectInstanceId, value) =>
+        dependencies.publication.publishPinHistory(projectInstanceId, request, value),
+      "result_pin_history_read_failed",
     );
   };
 

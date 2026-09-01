@@ -1,4 +1,4 @@
-import type { EditorViewport, WorldBounds } from '@/features/core/viewport';
+import type { EditorViewport, WorldBounds } from "@/features/core/viewport";
 
 export interface CollectCanvasNodeWorldBoundsInput {
   canvasElement: HTMLElement;
@@ -17,7 +17,7 @@ export function collectCanvasNodeWorldBounds({
   const canvasRect = canvasElement.getBoundingClientRect();
   let bounds: WorldBounds | null = null;
 
-  for (const element of canvasElement.querySelectorAll<HTMLElement>('[data-node-id]')) {
+  for (const element of canvasElement.querySelectorAll<HTMLElement>("[data-node-id]")) {
     const nodeId = element.dataset.nodeId;
     if (!nodeId || (requestedIds && !requestedIds.has(nodeId))) continue;
 

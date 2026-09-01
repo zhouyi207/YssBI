@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TFunction } from 'i18next';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { TFunction } from "i18next";
 
-import { usePluginStore } from '@/features/core/plugins/pluginStore';
+import { usePluginStore } from "@/features/core/plugins/pluginStore";
 
 const runtime = vi.hoisted(() => ({
   install: vi.fn(),
@@ -15,25 +15,25 @@ const ui = vi.hoisted(() => ({
   finishProgress: vi.fn(),
 }));
 
-vi.mock('@/services/julia/juliaRuntimeService', () => ({
+vi.mock("@/services/julia/juliaRuntimeService", () => ({
   JuliaRuntimeService: {
     install: runtime.install,
   },
 }));
 
-vi.mock('@/features/core/ui/UIStore', () => ({
+vi.mock("@/features/core/ui/UIStore", () => ({
   uiStore: ui,
 }));
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { installJuliaPlugin } from './installJuliaPlugin';
+import { installJuliaPlugin } from "./installJuliaPlugin";
 
 const translate = ((key: string) => key) as unknown as TFunction;
 
-describe('installJuliaPlugin', () => {
+describe("installJuliaPlugin", () => {
   beforeEach(() => {
     localStorage.clear();
     usePluginStore.setState({ installedPluginIds: [] });
@@ -41,24 +41,24 @@ describe('installJuliaPlugin', () => {
     ui.confirm.mockResolvedValue(true);
   });
 
-  it('installs the Julia slot only after the managed runtime is ready', async () => {
+  it("installs the Julia slot only after the managed runtime is ready", async () => {
     runtime.install.mockResolvedValue({
-      state: 'ready',
-      version: '1.12.0',
+      state: "ready",
+      version: "1.12.0",
       installDir: null,
     });
 
     await expect(installJuliaPlugin(translate)).resolves.toBe(true);
 
-    expect(usePluginStore.getState().installedPluginIds).toEqual(['julia']);
+    expect(usePluginStore.getState().installedPluginIds).toEqual(["julia"]);
     expect(ui.startProgress).toHaveBeenCalledOnce();
     expect(ui.finishProgress).toHaveBeenCalledOnce();
     expect(ui.alert).not.toHaveBeenCalled();
   });
 
-  it('keeps the Julia slot absent when runtime installation is invalid', async () => {
+  it("keeps the Julia slot absent when runtime installation is invalid", async () => {
     runtime.install.mockResolvedValue({
-      state: 'invalid',
+      state: "invalid",
       version: null,
       installDir: null,
     });

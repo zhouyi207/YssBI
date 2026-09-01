@@ -1,5 +1,5 @@
-export { buildSidebarDragData } from './buildSidebarDragData';
-export { refreshMissingSidebarResourcePath } from './refreshSidebarResourceCreation';
+export { buildSidebarDragData } from "./buildSidebarDragData";
+export { refreshMissingSidebarResourcePath } from "./refreshSidebarResourceCreation";
 export {
   buildProjectResourceBrowser,
   resolveActiveProjectGraph,
@@ -7,6 +7,6 @@ export {
   type ProjectResourceBrowserInput,
   type ProjectResourceBrowserProjection,
   type ProjectResourceBrowserRow,
-} from './projectResourceBrowser';
-export { useProjectResourceBrowser } from './useProjectResourceBrowser';
-export type { RevealProjectResourceRequest } from './sidebarResourceActions';
+} from "./projectResourceBrowser";
+export { useProjectResourceBrowser } from "./useProjectResourceBrowser";
+export type { RevealProjectResourceRequest } from "./sidebarResourceActions";

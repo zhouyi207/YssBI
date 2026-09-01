@@ -1,8 +1,8 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphMetaStore, type GraphMeta } from '@/features/core/dataStore/graphMetaStore';
-import { getGraphSnapshot, type GraphProjectionSnapshot } from './read';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphMetaStore, type GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import { getGraphSnapshot, type GraphProjectionSnapshot } from "./read";
 
 export interface OptimisticOperationKey {
   readonly projectInstanceId: string;
@@ -22,14 +22,11 @@ export interface GraphCommittedDelta {
 export interface GraphProjectionPublication {
   replaceSnapshot(snapshot: DeepReadonly<GraphProjectionSnapshot>): void;
   applyCommittedDelta(delta: DeepReadonly<GraphCommittedDelta>): void;
-  beginOptimisticOverlay(
-    key: OptimisticOperationKey,
-    overlay: DeepReadonly<GraphOverlay>,
-  ): void;
+  beginOptimisticOverlay(key: OptimisticOperationKey, overlay: DeepReadonly<GraphOverlay>): void;
   getOptimisticOverlay(key: OptimisticOperationKey): DeepReadonly<GraphOverlay> | undefined;
-  settleOptimisticOverlay(key: OptimisticOperationKey): 'settled' | 'missing';
-  rejectOptimisticOverlay(key: OptimisticOperationKey): 'rejected' | 'missing';
-  invalidateOptimisticOverlay(key: OptimisticOperationKey): 'invalidated' | 'missing';
+  settleOptimisticOverlay(key: OptimisticOperationKey): "settled" | "missing";
+  rejectOptimisticOverlay(key: OptimisticOperationKey): "rejected" | "missing";
+  invalidateOptimisticOverlay(key: OptimisticOperationKey): "invalidated" | "missing";
   clearForProject(projectInstanceId: string | null): void;
 }
 
@@ -44,7 +41,7 @@ export function optimisticOperationKey(key: OptimisticOperationKey): string {
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map(cloneValue) as T;
-  if (value === null || typeof value !== 'object') return value;
+  if (value === null || typeof value !== "object") return value;
   if (value instanceof Date) return new Date(value.getTime()) as T;
   if (value instanceof Map) {
     return new Map(
@@ -53,8 +50,10 @@ function cloneValue<T>(value: T): T {
   }
   if (value instanceof Set) return new Set([...value].map(cloneValue)) as T;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneValue(nested)]),
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      cloneValue(nested),
+    ]),
   ) as T;
 }
 
@@ -62,25 +61,26 @@ function freezeOverlayValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return Object.freeze(value.map(freezeOverlayValue));
   }
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, freezeOverlayValue(nested)]),
-  ));
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        freezeOverlayValue(nested),
+      ]),
+    ),
+  );
 }
 
-function freezeOverlay(
-  overlay: DeepReadonly<GraphOverlay>,
-): DeepReadonly<GraphOverlay> {
+function freezeOverlay(overlay: DeepReadonly<GraphOverlay>): DeepReadonly<GraphOverlay> {
   return freezeOverlayValue(overlay) as DeepReadonly<GraphOverlay>;
 }
 
 export function createGraphProjectionPublication(): GraphProjectionPublication {
   const overlays = new Map<string, DeepReadonly<GraphOverlay>>();
 
-  const removeOverlay = (
-    key: OptimisticOperationKey,
-  ): boolean => overlays.delete(optimisticOperationKey(key));
+  const removeOverlay = (key: OptimisticOperationKey): boolean =>
+    overlays.delete(optimisticOperationKey(key));
 
   return {
     replaceSnapshot: (snapshot) => {
@@ -98,9 +98,10 @@ export function createGraphProjectionPublication(): GraphProjectionPublication {
         ...current.graphEntities,
         [delta.graphPath]: delta.graphEntities,
       };
-      const graphMeta = delta.graphMeta === undefined
-        ? current.graphMeta
-        : { ...current.graphMeta, [delta.graphPath]: delta.graphMeta };
+      const graphMeta =
+        delta.graphMeta === undefined
+          ? current.graphMeta
+          : { ...current.graphMeta, [delta.graphPath]: delta.graphMeta };
       useGraphDataStore.setState({
         graphEntities: cloneValue(graphEntities) as Record<string, GraphEntityBucket>,
       });
@@ -115,14 +116,11 @@ export function createGraphProjectionPublication(): GraphProjectionPublication {
 
     getOptimisticOverlay: (key) => overlays.get(optimisticOperationKey(key)),
 
-    settleOptimisticOverlay: (key) =>
-      removeOverlay(key) ? 'settled' : 'missing',
+    settleOptimisticOverlay: (key) => (removeOverlay(key) ? "settled" : "missing"),
 
-    rejectOptimisticOverlay: (key) =>
-      removeOverlay(key) ? 'rejected' : 'missing',
+    rejectOptimisticOverlay: (key) => (removeOverlay(key) ? "rejected" : "missing"),
 
-    invalidateOptimisticOverlay: (key) =>
-      removeOverlay(key) ? 'invalidated' : 'missing',
+    invalidateOptimisticOverlay: (key) => (removeOverlay(key) ? "invalidated" : "missing"),
 
     clearForProject: (projectInstanceId) => {
       if (projectInstanceId === null) {

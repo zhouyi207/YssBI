@@ -1,18 +1,18 @@
-import type { ReactNode } from 'react';
-import { Suspense } from 'react';
-import { useResultViewPresentation } from '@/features/application/results';
-import { SectionHeader } from './RegressionShared';
-import { REPORT_SECTION_ICONS, type ReportSectionIcon } from './reportIcons';
+import type { ReactNode } from "react";
+import { Suspense } from "react";
+import { useResultViewPresentation } from "@/features/application/results";
+import { SectionHeader } from "./RegressionShared";
+import { REPORT_SECTION_ICONS, type ReportSectionIcon } from "./reportIcons";
 
 const LAZY_FALLBACKS = {
-  formula: 'rounded-lg border border-border bg-card h-24 animate-pulse',
-  chart: 'rounded-lg border border-border bg-card h-[280px] animate-pulse',
+  formula: "rounded-lg border border-border bg-card h-24 animate-pulse",
+  chart: "rounded-lg border border-border bg-card h-[280px] animate-pulse",
 } as const;
 
 const LAYOUT_SIZE_CLASS = {
-  default: 'max-w-[900px]',
-  wide: 'max-w-[980px]',
-  extraWide: 'max-w-[1100px]',
+  default: "max-w-[900px]",
+  wide: "max-w-[980px]",
+  extraWide: "max-w-[1100px]",
 } as const;
 
 export type ReportLazyVariant = keyof typeof LAZY_FALLBACKS;
@@ -23,7 +23,7 @@ export function ReportLayout({
   badges,
   subtitle,
   children,
-  size = 'default',
+  size = "default",
 }: {
   title: string;
   badges?: ReactNode;
@@ -32,7 +32,7 @@ export function ReportLayout({
   size?: ReportLayoutSize;
 }) {
   const presentation = useResultViewPresentation();
-  const showHeading = presentation === 'standalone';
+  const showHeading = presentation === "standalone";
 
   return (
     <div className={`mx-auto p-6 ${LAYOUT_SIZE_CLASS[size]}`}>

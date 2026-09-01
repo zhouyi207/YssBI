@@ -1,7 +1,11 @@
-import { create } from 'zustand';
-import { DatabaseId } from '@/shared/types/domain/ids';
-import type { ColumnStats } from '@/shared/types/domain/dataframe';
-export type { ColumnStats, NumericColumnStats, StringColumnStats } from '@/shared/types/domain/dataframe';
+import { create } from "zustand";
+import { DatabaseId } from "@/shared/types/domain/ids";
+import type { ColumnStats } from "@/shared/types/domain/dataframe";
+export type {
+  ColumnStats,
+  NumericColumnStats,
+  StringColumnStats,
+} from "@/shared/types/domain/dataframe";
 
 /** 按列名索引的统计信息 */
 export type ColumnStatsMap = Record<string, ColumnStats>;

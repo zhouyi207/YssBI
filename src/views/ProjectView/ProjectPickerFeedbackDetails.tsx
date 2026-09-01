@@ -1,14 +1,10 @@
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from "react-i18next";
 import type {
   ProjectPickerErrorPresentation,
   ProjectPickerRecoveryPresentation,
-} from '@/features/application/project';
+} from "@/features/application/project";
 
-export function ProjectPickerErrorDetails({
-  error,
-}: {
-  error: ProjectPickerErrorPresentation;
-}) {
+export function ProjectPickerErrorDetails({ error }: { error: ProjectPickerErrorPresentation }) {
   const { t } = useTranslation();
   const message = t(error.messageKey, {
     defaultValue: t(error.fallbackMessageKey),
@@ -46,9 +42,5 @@ export function ProjectPickerRecoveryDetails({
 
 export function ProjectPickerStaleDetails() {
   const { t } = useTranslation();
-  return (
-    <span>
-      {t('projectPicker.issues.stale', { defaultValue: t('common.error') })}
-    </span>
-  );
+  return <span>{t("projectPicker.issues.stale", { defaultValue: t("common.error") })}</span>;
 }

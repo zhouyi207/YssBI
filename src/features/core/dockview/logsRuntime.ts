@@ -1,16 +1,13 @@
-import type { DockviewApi, SerializedDockview } from 'dockview-react';
+import type { DockviewApi, SerializedDockview } from "dockview-react";
 
-import { DEFAULT_LOGS_DOCKVIEW_LAYOUT } from './logsDockviewLayout';
+import { DEFAULT_LOGS_DOCKVIEW_LAYOUT } from "./logsDockviewLayout";
 
 export interface LogsDockviewRuntime {
   bind(api: DockviewApi): void;
   unbind(api?: DockviewApi): void;
   subscribe(listener: () => void): () => void;
   beginRestore(): number;
-  stageRestore(
-    epoch: number,
-    layout: SerializedDockview,
-  ): 'staged' | 'applied' | 'stale';
+  stageRestore(epoch: number, layout: SerializedDockview): "staged" | "applied" | "stale";
   captureBoundSnapshot(): void;
   getLatestSnapshot(): SerializedDockview;
   resetToDefault(): void;
@@ -24,7 +21,7 @@ type BoundDockview = {
 type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function comparableKeys(value: UnknownRecord): string[] {
@@ -36,18 +33,23 @@ function comparableKeys(value: UnknownRecord): string[] {
 function snapshotsEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left)
-      && Array.isArray(right)
-      && left.length === right.length
-      && left.every((value, index) => snapshotsEqual(value, right[index]));
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => snapshotsEqual(value, right[index]))
+    );
   }
   if (!isRecord(left) || !isRecord(right)) return false;
 
   const leftKeys = comparableKeys(left);
   const rightKeys = comparableKeys(right);
-  return leftKeys.length === rightKeys.length
-    && leftKeys.every((key, index) =>
-      key === rightKeys[index] && snapshotsEqual(left[key], right[key]));
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) => key === rightKeys[index] && snapshotsEqual(left[key], right[key]),
+    )
+  );
 }
 
 function cloneLayout(layout: SerializedDockview): SerializedDockview {
@@ -149,14 +151,14 @@ export function createLogsDockviewRuntime(
     },
 
     stageRestore(epoch, layout) {
-      if (epoch !== restoreEpoch) return 'stale';
+      if (epoch !== restoreEpoch) return "stale";
 
       pendingSnapshot = cloneLayout(layout);
       publishSnapshot(pendingSnapshot);
-      if (!bound) return 'staged';
+      if (!bound) return "staged";
 
       applyPending(bound.api);
-      return 'applied';
+      return "applied";
     },
 
     captureBoundSnapshot() {

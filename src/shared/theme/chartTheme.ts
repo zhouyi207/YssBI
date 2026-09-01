@@ -1,4 +1,4 @@
-import type { ResolvedThemeTokens } from './themeTokens';
+import type { ResolvedThemeTokens } from "./themeTokens";
 
 /** D3 / SVG 图表在 dark / light 下的配色（Summary、Plot 窗口共用） */
 export interface ChartThemeColors {

@@ -9,16 +9,16 @@ import { ProjectSettings } from "./ProjectSettings";
  * 不再混入 AppSettings；详见 `src/services/window/windowStateService.ts`。
  */
 export interface AppSettings {
-    theme: ThemeSettings;
-    editor: EditorSettings;
-    appearance: AppearanceSettings;
-    project: ProjectSettings;
+  theme: ThemeSettings;
+  editor: EditorSettings;
+  appearance: AppearanceSettings;
+  project: ProjectSettings;
 }
 
 // 深度部分类型，允许嵌套属性也是可选的
 export interface PartialAppSettings {
-    theme?: Partial<ThemeSettings>;
-    editor?: Partial<EditorSettings>;
-    appearance?: Partial<AppearanceSettings>;
-    project?: Partial<ProjectSettings>;
+  theme?: Partial<ThemeSettings>;
+  editor?: Partial<EditorSettings>;
+  appearance?: Partial<AppearanceSettings>;
+  project?: Partial<ProjectSettings>;
 }

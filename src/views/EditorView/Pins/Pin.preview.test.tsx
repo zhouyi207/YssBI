@@ -1,67 +1,63 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { markResourceLoaded, useDocumentStateStore } from '@/features/core/resource';
-import { useExecutionStore } from '@/features/core/execution';
-import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
-import { ProjectService } from '@/services/project/projectService';
-import { ResultService } from '@/services/result/resultService';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import {
-  resetResultQueryProject,
-} from '@/features/application/results';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import {
-  Pin,
-  pinConnectionFeedbackAttributes,
-} from './Pin';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { markResourceLoaded, useDocumentStateStore } from "@/features/core/resource";
+import { useExecutionStore } from "@/features/core/execution";
+import { PinPreviewGenerationService } from "@/services/nodeSystem/pinPreviewGenerationService";
+import { ProjectService } from "@/services/project/projectService";
+import { ResultService } from "@/services/result/resultService";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import { resetResultQueryProject } from "@/features/application/results";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { Pin, pinConnectionFeedbackAttributes } from "./Pin";
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
-  return vi.spyOn(console, 'warn').mockImplementation((message, ...args) => {
-    const quirksWarning = "Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.";
+  return vi.spyOn(console, "warn").mockImplementation((message, ...args) => {
+    const quirksWarning =
+      "Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.";
     if (message !== quirksWarning) warn(message, ...args);
   });
 });
 
-vi.mock('@/features/application/window', () => ({
+vi.mock("@/features/application/window", () => ({
   openPresentationWindow: vi.fn(),
   presentationWindowPayload: vi.fn(() => ({})),
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({})),
 }));
 
-vi.mock('react-i18next', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('react-i18next')>()),
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
-const graphPath = 'events/Main.yssbi-event';
+const graphPath = "events/Main.yssbi-event";
 
-describe('Pin connection feedback', () => {
-  it('maps structured feedback to safe metadata', () => {
-    expect(pinConnectionFeedbackAttributes({ kind: 'append' })).toEqual({
-      'data-connection-feedback': 'append',
+describe("Pin connection feedback", () => {
+  it("maps structured feedback to safe metadata", () => {
+    expect(pinConnectionFeedbackAttributes({ kind: "append" })).toEqual({
+      "data-connection-feedback": "append",
     });
-    expect(pinConnectionFeedbackAttributes({ kind: 'invalid', reason: 'capacity' })).toEqual({
-      'data-connection-feedback': 'invalid',
-      'data-connection-invalid-reason': 'capacity',
+    expect(pinConnectionFeedbackAttributes({ kind: "invalid", reason: "capacity" })).toEqual({
+      "data-connection-feedback": "invalid",
+      "data-connection-invalid-reason": "capacity",
     });
   });
 });
 
-describe('Pin preview production path', () => {
+describe("Pin preview production path", () => {
   afterAll(() => katexWarningSpy.mockRestore());
   let container: HTMLDivElement;
   let root: Root;
@@ -69,9 +65,9 @@ describe('Pin preview production path', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     resetResultQueryProject();
-    useProjectIOStore.setState({ projectInstanceId: 'project-session-1' });
+    useProjectIOStore.setState({ projectInstanceId: "project-session-1" });
     clearProjectLifecycle();
-    startProjectLifecycle('project-session-1');
+    startProjectLifecycle("project-session-1");
     useGraphDataStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
@@ -80,10 +76,10 @@ describe('Pin preview production path', () => {
       playbackGraphPath: null,
       isPlaying: false,
     });
-    vi.spyOn(PinPreviewGenerationService, 'allocate').mockResolvedValue(1);
-    vi.spyOn(ResultService, 'getPinHistory').mockResolvedValue([]);
-    vi.spyOn(ResultService, 'getDescriptor').mockResolvedValue(null);
-    container = document.createElement('div');
+    vi.spyOn(PinPreviewGenerationService, "allocate").mockResolvedValue(1);
+    vi.spyOn(ResultService, "getPinHistory").mockResolvedValue([]);
+    vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(null);
+    container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
   });
@@ -91,45 +87,48 @@ describe('Pin preview production path', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    document.querySelector('[data-yssbi-overlay-root]')?.remove();
+    document.querySelector("[data-yssbi-overlay-root]")?.remove();
     resetResultQueryProject();
     useProjectIOStore.setState({ projectInstanceId: null });
     vi.restoreAllMocks();
   });
 
-  it('routes output View through authoritative structured Pin history', async () => {
+  it("routes output View through authoritative structured Pin history", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    expect(useGraphDataStore.getState().replaceProjection(
-      graphPath,
-      fixture.projection,
-      1,
-    ).applied).toBe(true);
-    markResourceLoaded({ id: graphPath, kind: 'event' });
-    useGraphSessionStore.getState().setFocusedSession('editor-a', graphPath);
+    expect(
+      useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1).applied,
+    ).toBe(true);
+    markResourceLoaded({ id: graphPath, kind: "event" });
+    useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
     const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
-    if (!pin) throw new Error('expected projected output pin');
-    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
+    if (!pin) throw new Error("expected projected output pin");
+    const execute = vi.spyOn(ProjectService, "executeGraphDocument");
 
-    act(() => root.render(
-      <TooltipProvider>
-        <Pin {...pin} graphPath={graphPath} />
-      </TooltipProvider>,
-    ));
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <Pin {...pin} graphPath={graphPath} />
+        </TooltipProvider>,
+      ),
+    );
     const pinElement = container.querySelector(`[data-pin-id="${fixture.outputKey}"]`);
-    if (!pinElement) throw new Error('expected rendered pin');
+    if (!pinElement) throw new Error("expected rendered pin");
     act(() => {
-      pinElement.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        clientX: 10,
-        clientY: 20,
-      }));
+      pinElement.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 10,
+          clientY: 20,
+        }),
+      );
     });
 
-    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((item) => item.textContent?.includes('contextMenu.pin.view'));
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes("contextMenu.pin.view"),
+    );
     expect(viewItem).toBeDefined();
-    expect(viewItem?.hasAttribute('data-disabled')).toBe(false);
+    expect(viewItem?.hasAttribute("data-disabled")).toBe(false);
 
     await act(async () => {
       viewItem?.click();
@@ -140,53 +139,59 @@ describe('Pin preview production path', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('opens an exact historical occurrence from the compact Pin context menu', async () => {
+  it("opens an exact historical occurrence from the compact Pin context menu", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    expect(useGraphDataStore.getState().replaceProjection(
-      graphPath,
-      fixture.projection,
-      1,
-    ).applied).toBe(true);
+    expect(
+      useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1).applied,
+    ).toBe(true);
     const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
-    if (!pin) throw new Error('expected projected output pin');
+    if (!pin) throw new Error("expected projected output pin");
     vi.mocked(ResultService.getPinHistory).mockResolvedValue([
       {
-        resultId: '17',
-        runId: '7',
-        activationId: '70',
-        graphRevision: '1',
-        createdAtMs: '1000',
-        usage: { kind: 'produced' },
-        state: { kind: 'ready' },
+        resultId: "17",
+        runId: "7",
+        activationId: "70",
+        graphRevision: "1",
+        createdAtMs: "1000",
+        usage: { kind: "produced" },
+        state: { kind: "ready" },
       },
       {
-        resultId: '18',
-        runId: '8',
-        activationId: '80',
-        graphRevision: '1',
-        createdAtMs: '2000',
-        usage: { kind: 'produced' },
-        state: { kind: 'cancelled' },
+        resultId: "18",
+        runId: "8",
+        activationId: "80",
+        graphRevision: "1",
+        createdAtMs: "2000",
+        usage: { kind: "produced" },
+        state: { kind: "cancelled" },
       },
     ]);
 
-    act(() => root.render(
-      <TooltipProvider><Pin {...pin} graphPath={graphPath} /></TooltipProvider>,
-    ));
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <Pin {...pin} graphPath={graphPath} />
+        </TooltipProvider>,
+      ),
+    );
     const pinElement = container.querySelector(`[data-pin-id="${fixture.outputKey}"]`);
-    if (!pinElement) throw new Error('expected rendered pin');
-    const openContext = () => act(() => {
-      pinElement.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        clientX: 10,
-        clientY: 20,
-      }));
-    });
+    if (!pinElement) throw new Error("expected rendered pin");
+    const openContext = () =>
+      act(() => {
+        pinElement.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            clientX: 10,
+            clientY: 20,
+          }),
+        );
+      });
 
     openContext();
-    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((item) => item.textContent?.includes('contextMenu.pin.view'));
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes("contextMenu.pin.view"),
+    );
     await act(async () => {
       viewItem?.click();
       await Promise.resolve();
@@ -194,8 +199,9 @@ describe('Pin preview production path', () => {
     });
 
     openContext();
-    const historical = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((item) => item.textContent?.includes('17 · ready'));
+    const historical = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent?.includes("17 · ready"),
+    );
     expect(historical).toBeDefined();
     await act(async () => {
       historical?.click();
@@ -203,44 +209,48 @@ describe('Pin preview production path', () => {
       await Promise.resolve();
     });
 
-    expect(ResultService.getDescriptor).toHaveBeenCalledWith('17');
-    expect(useExecutionStore.getState().getGraph(graphPath).pinHistories.values().next().value)
-      .toMatchObject({ selectedResultId: '17' });
+    expect(ResultService.getDescriptor).toHaveBeenCalledWith("17");
+    expect(
+      useExecutionStore.getState().getGraph(graphPath).pinHistories.values().next().value,
+    ).toMatchObject({ selectedResultId: "17" });
   });
 
-  it('enables authoritative history View for a Function output', async () => {
-    const functionPath = 'functions/Helper.yssbi-function';
+  it("enables authoritative history View for a Function output", async () => {
+    const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
-    expect(useGraphDataStore.getState().replaceProjection(
-      functionPath,
-      fixture.projection,
-      1,
-    ).applied).toBe(true);
-    markResourceLoaded({ id: functionPath, kind: 'function' });
-    useGraphSessionStore.getState().setFocusedSession('editor-a', functionPath);
+    expect(
+      useGraphDataStore.getState().replaceProjection(functionPath, fixture.projection, 1).applied,
+    ).toBe(true);
+    markResourceLoaded({ id: functionPath, kind: "function" });
+    useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
     const pin = useGraphDataStore.getState().getGraphPin(functionPath, fixture.outputKey);
-    if (!pin) throw new Error('expected projected function output pin');
-    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
+    if (!pin) throw new Error("expected projected function output pin");
+    const execute = vi.spyOn(ProjectService, "executeGraphDocument");
 
-    act(() => root.render(
-      <TooltipProvider>
-        <Pin {...pin} graphPath={functionPath} />
-      </TooltipProvider>,
-    ));
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <Pin {...pin} graphPath={functionPath} />
+        </TooltipProvider>,
+      ),
+    );
     const pinElement = container.querySelector(`[data-pin-id="${fixture.outputKey}"]`);
-    if (!pinElement) throw new Error('expected rendered pin');
+    if (!pinElement) throw new Error("expected rendered pin");
     act(() => {
-      pinElement.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        clientX: 10,
-        clientY: 20,
-      }));
+      pinElement.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 10,
+          clientY: 20,
+        }),
+      );
     });
 
-    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((item) => item.textContent?.includes('contextMenu.pin.view'));
-    expect(viewItem?.hasAttribute('data-disabled')).toBe(false);
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes("contextMenu.pin.view"),
+    );
+    expect(viewItem?.hasAttribute("data-disabled")).toBe(false);
     await act(async () => {
       viewItem?.click();
       await Promise.resolve();

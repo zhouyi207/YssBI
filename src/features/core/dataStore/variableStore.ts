@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import type { VariableId, Variable } from '@/shared/types';
-import { logger } from '@/features/core/observability/logger';
+import { create } from "zustand";
+import type { VariableId, Variable } from "@/shared/types";
+import { logger } from "@/features/core/observability/logger";
 
 interface VariableStore {
   variables: Record<VariableId, Variable>;
@@ -30,7 +30,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
   addVariable: (id, v) =>
     set((state) => {
       if (state.variables[id]) {
-        logger.data.warn(`addVariable: Variable "${id}" already exists`, 'VariableStore');
+        logger.data.warn(`addVariable: Variable "${id}" already exists`, "VariableStore");
         return state;
       }
       return {
@@ -43,7 +43,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
     set((state) => {
       const prev = state.variables[id];
       if (!prev) {
-        logger.data.warn(`updateVariable: Variable "${id}" not found`, 'VariableStore');
+        logger.data.warn(`updateVariable: Variable "${id}" not found`, "VariableStore");
         return state;
       }
       return {
@@ -54,7 +54,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
   deleteVariable: (id) =>
     set((state) => {
       if (!state.variables[id]) {
-        logger.data.warn(`deleteVariable: Variable "${id}" not found`, 'VariableStore');
+        logger.data.warn(`deleteVariable: Variable "${id}" not found`, "VariableStore");
         return state;
       }
       const nextVars = { ...state.variables };
@@ -71,8 +71,8 @@ export const useVariableStore = create<VariableStore>((set) => ({
       for (const [id, variable] of Object.entries(state.variables)) {
         const scope = variable.scope;
         if (
-          (scope.type === 'event' && scope.eventPath === graphPath) ||
-          (scope.type === 'function' && scope.functionPath === graphPath)
+          (scope.type === "event" && scope.eventPath === graphPath) ||
+          (scope.type === "function" && scope.functionPath === graphPath)
         ) {
           delete nextVars[id];
           delete nextRevisions[id];
@@ -84,13 +84,15 @@ export const useVariableStore = create<VariableStore>((set) => ({
   // ==========================
   // Project / 全量设置
   // ==========================
-  setVariables: (vars) => set({
-    variables: vars,
-    revisions: Object.fromEntries(Object.keys(vars).map((id) => [id, 0])),
-  }),
+  setVariables: (vars) =>
+    set({
+      variables: vars,
+      revisions: Object.fromEntries(Object.keys(vars).map((id) => [id, 0])),
+    }),
   setVariableSnapshot: (variables, revisions) => set({ variables, revisions }),
-  setVariableRevision: (id, revision) => set((state) => ({
-    revisions: { ...state.revisions, [id]: revision },
-  })),
+  setVariableRevision: (id, revision) =>
+    set((state) => ({
+      revisions: { ...state.revisions, [id]: revision },
+    })),
   clear: () => set({ variables: {}, revisions: {} }),
 }));

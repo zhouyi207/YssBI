@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
-import { ReportSection } from '../shared/ReportLayout';
-import { formatNum } from '../shared/RegressionShared';
-import { VarModelCell, VarModelRow, VarModelTable } from '../shared/VarModelTable';
-import type { VARWleDisplay } from '@/shared/types/report';
+import { useMemo } from "react";
+import { ReportSection } from "../shared/ReportLayout";
+import { formatNum } from "../shared/RegressionShared";
+import { VarModelCell, VarModelRow, VarModelTable } from "../shared/VarModelTable";
+import type { VARWleDisplay } from "@/shared/types/report";
 
 export function VarWaldLagExclusionSection({ rows }: { rows: VARWleDisplay[] }) {
   const byEquation = useMemo(() => {
@@ -26,7 +26,7 @@ export function VarWaldLagExclusionSection({ rows }: { rows: VARWleDisplay[] }) 
             <div className="border-b border-border px-4 py-2.5 text-sm font-medium text-foreground">
               Equation: {eqName}
             </div>
-            <VarModelTable columns={['lag', 'chi2', 'df', 'Prob > chi2']}>
+            <VarModelTable columns={["lag", "chi2", "df", "Prob > chi2"]}>
               {eqRows.map((row, i) => (
                 <VarModelRow key={i}>
                   <VarModelCell>{row.lag}</VarModelCell>

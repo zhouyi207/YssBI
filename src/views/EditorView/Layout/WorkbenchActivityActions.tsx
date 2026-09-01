@@ -1,12 +1,12 @@
-import { useTranslation } from 'react-i18next';
-import { VscSettingsGear } from 'react-icons/vsc';
-import type { IDockviewHeaderActionsProps } from 'dockview-react';
+import { useTranslation } from "react-i18next";
+import { VscSettingsGear } from "react-icons/vsc";
+import type { IDockviewHeaderActionsProps } from "dockview-react";
 
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { WORKBENCH_ACTIVITY_GROUP_ID } from '@/features/core/dockview/workbenchDockviewDefaults';
-import { workbenchUi } from '@/features/core/workbench/ui';
-import { PluginActivityActions } from './PluginActivityActions';
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { WORKBENCH_ACTIVITY_GROUP_ID } from "@/features/core/dockview/workbenchDockviewDefaults";
+import { workbenchUi } from "@/features/core/workbench/ui";
+import { PluginActivityActions } from "./PluginActivityActions";
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
   event.stopPropagation();
@@ -16,11 +16,11 @@ export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
   const { t } = useTranslation();
   const openSettings = workbenchUi.openSettings;
 
-  if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== 'left') {
+  if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== "left") {
     return null;
   }
 
-  const title = t('menubar.settings');
+  const title = t("menubar.settings");
 
   return (
     <div

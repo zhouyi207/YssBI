@@ -1,7 +1,7 @@
-import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
-import type { ResourceBoundCreateArgsDto } from '@/shared/types/domain/nodeCreationDescriptor';
-import type { NodeSpawnTemplate } from '@/features/core/dnd';
-import type { CreateNodeFn } from './createNodeFn';
+import type { LocalizedCatalogItem } from "@/features/domain/nodeCatalog/catalogItem";
+import type { ResourceBoundCreateArgsDto } from "@/shared/types/domain/nodeCreationDescriptor";
+import type { NodeSpawnTemplate } from "@/features/core/dnd";
+import type { CreateNodeFn } from "./createNodeFn";
 
 export interface SpawnFromTemplateContext {
   createNode: CreateNodeFn;
@@ -10,15 +10,17 @@ export interface SpawnFromTemplateContext {
 export function findResourceNodeSpawnTemplate(
   items: readonly LocalizedCatalogItem[],
   resourcePath: string,
-  createArgsKind: ResourceBoundCreateArgsDto['kind'],
+  createArgsKind: ResourceBoundCreateArgsDto["kind"],
   nodeTypeId?: string,
 ): NodeSpawnTemplate | null {
-  const item = items.find((candidate) =>
-    candidate.resourcePath === resourcePath
-    && candidate.creation.kind === 'resourceBound'
-    && candidate.creation.resourcePath === resourcePath
-    && candidate.creation.createArgs.kind === createArgsKind
-    && (nodeTypeId === undefined || candidate.creation.nodeTypeId === nodeTypeId));
+  const item = items.find(
+    (candidate) =>
+      candidate.resourcePath === resourcePath &&
+      candidate.creation.kind === "resourceBound" &&
+      candidate.creation.resourcePath === resourcePath &&
+      candidate.creation.createArgs.kind === createArgsKind &&
+      (nodeTypeId === undefined || candidate.creation.nodeTypeId === nodeTypeId),
+  );
   return item ? { title: item.title, descriptor: item.creation } : null;
 }
 

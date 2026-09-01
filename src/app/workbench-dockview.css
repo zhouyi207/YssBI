@@ -1,24 +1,11 @@
 [data-yssbi-root-dockview] .yssbi-dockview-theme,
-[data-yssbi-logs-dockview]
-  :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
-  --yssbi-dockview-divider: color-mix(
-    in srgb,
-    var(--strong-border) 68%,
-    transparent
-  );
-  --yssbi-dockview-idle-sash: color-mix(
-    in srgb,
-    var(--muted-foreground) 24%,
-    transparent
-  );
+[data-yssbi-logs-dockview] :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
+  --yssbi-dockview-divider: color-mix(in srgb, var(--strong-border) 68%, transparent);
+  --yssbi-dockview-idle-sash: color-mix(in srgb, var(--muted-foreground) 24%, transparent);
   --dv-paneview-active-outline-color: var(--accent-color);
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-tabs-and-actions-container-height: var(--workbench-tab-height);
-  --dv-drag-over-background-color: color-mix(
-    in srgb,
-    var(--accent-color) 14%,
-    transparent
-  );
+  --dv-drag-over-background-color: color-mix(in srgb, var(--accent-color) 14%, transparent);
   --dv-drag-over-border: 1px solid var(--accent-color);
   --dv-drag-over-border-color: var(--accent-color);
   --dv-edge-dock-indicator-color: var(--accent-color);
@@ -62,13 +49,11 @@
   color: var(--foreground);
 }
 
-[data-yssbi-logs-dockview]
-  :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
+[data-yssbi-logs-dockview] :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
   --dv-tabs-and-actions-container-height: var(--logs-tab-height);
 }
 
-:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
-  .dv-tabs-and-actions-container {
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview]) .dv-tabs-and-actions-container {
   border-bottom: 1px solid var(--yssbi-dockview-divider);
 }
 
@@ -156,25 +141,17 @@
 }
 
 /* Logs are a fixed tab set: keep the strip quiet, legible, and reorderable. */
-[data-yssbi-logs-dockview]
-  .dv-tabs-and-actions-container {
-  background: color-mix(
-    in srgb,
-    var(--panel-header-bg) 92%,
-    var(--workbench-bg)
-  );
+[data-yssbi-logs-dockview] .dv-tabs-and-actions-container {
+  background: color-mix(in srgb, var(--panel-header-bg) 92%, var(--workbench-bg));
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tabs-container.dv-horizontal {
+[data-yssbi-logs-dockview] .dv-tabs-container.dv-horizontal {
   align-items: stretch;
   gap: 2px;
   padding: 3px 4px;
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tabs-container.dv-horizontal
-  > .dv-tab {
+[data-yssbi-logs-dockview] .dv-tabs-container.dv-horizontal > .dv-tab {
   min-width: 76px;
   height: calc(var(--logs-tab-height) - 6px);
   margin: 0;
@@ -184,29 +161,26 @@
   background: transparent;
   color: var(--muted-foreground);
   cursor: grab;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tabs-container.dv-horizontal
-  > .dv-tab:hover {
+[data-yssbi-logs-dockview] .dv-tabs-container.dv-horizontal > .dv-tab:hover {
   border-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
   background: color-mix(in srgb, var(--interactive-hover) 72%, transparent);
   color: var(--foreground);
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tabs-container.dv-horizontal
-  > .dv-tab.dv-active-tab {
+[data-yssbi-logs-dockview] .dv-tabs-container.dv-horizontal > .dv-tab.dv-active-tab {
   border-color: color-mix(in srgb, var(--accent-color) 34%, var(--yssbi-dockview-divider));
   background: color-mix(in srgb, var(--accent-color) 12%, var(--workbench-bg));
   color: var(--foreground);
   cursor: default;
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tab
-  .dv-default-tab {
+[data-yssbi-logs-dockview] .dv-tab .dv-default-tab {
   display: flex;
   width: 100%;
   height: 100%;
@@ -214,53 +188,42 @@
   gap: 6px;
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tab
-  .dv-default-tab-content {
+[data-yssbi-logs-dockview] .dv-tab .dv-default-tab-content {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-[data-yssbi-logs-dockview]
-  .dv-tab
-  .dv-default-tab-action {
+[data-yssbi-logs-dockview] .dv-tab .dv-default-tab-action {
   display: none;
 }
 
-[data-yssbi-logs-dockview]
-  [data-yssbi-logs-header-actions] {
+[data-yssbi-logs-dockview] [data-yssbi-logs-header-actions] {
   margin: 3px 4px 3px 2px;
   border-left: 1px solid var(--yssbi-dockview-divider);
   padding-left: 5px;
   background: transparent;
 }
 
-[data-yssbi-logs-dockview]
-  [data-yssbi-logs-header-actions]
-  button {
+[data-yssbi-logs-dockview] [data-yssbi-logs-header-actions] button {
   color: var(--muted-foreground);
-  transition: color 120ms ease, background-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
-[data-yssbi-logs-dockview]
-  [data-yssbi-logs-header-actions]
-  button:hover {
+[data-yssbi-logs-dockview] [data-yssbi-logs-header-actions] button:hover {
   color: var(--foreground);
 }
 
-:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
-  .dv-tab:focus-visible,
-:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
-  .dv-tab:has(:focus-visible) {
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview]) .dv-tab:focus-visible,
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview]) .dv-tab:has(:focus-visible) {
   outline: 2px solid var(--accent-color);
   outline-offset: -2px;
 }
 
-:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
-  .dv-tab:focus-visible::after,
-:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
-  .dv-tab:has(:focus-visible)::after {
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview]) .dv-tab:focus-visible::after,
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview]) .dv-tab:has(:focus-visible)::after {
   outline: none !important;
 }
 
@@ -274,26 +237,16 @@
   transition: opacity 100ms ease;
 }
 
-[data-yssbi-root-dockview]
-    .dv-tab:hover
-    [data-workbench-tab-close],
-  [data-yssbi-root-dockview]
-    .dv-tab.dv-active-tab
-    [data-workbench-tab-close],
-  [data-yssbi-root-dockview]
-    .dv-tab:focus-visible
-    [data-workbench-tab-close],
-  [data-yssbi-root-dockview]
-    .dv-tab:focus-within
-    [data-workbench-tab-close] {
+[data-yssbi-root-dockview] .dv-tab:hover [data-workbench-tab-close],
+[data-yssbi-root-dockview] .dv-tab.dv-active-tab [data-workbench-tab-close],
+[data-yssbi-root-dockview] .dv-tab:focus-visible [data-workbench-tab-close],
+[data-yssbi-root-dockview] .dv-tab:focus-within [data-workbench-tab-close] {
   pointer-events: auto;
   opacity: 1;
 }
 
 @media (hover: none) {
-  [data-yssbi-root-dockview]
-    .dv-tab:not([data-yssbi-logs-dockview] *)
-    [data-workbench-tab-close] {
+  [data-yssbi-root-dockview] .dv-tab:not([data-yssbi-logs-dockview] *) [data-workbench-tab-close] {
     pointer-events: auto;
     opacity: 1;
   }
@@ -510,7 +463,9 @@
   justify-content: center;
   border-radius: 6px;
   line-height: 1;
-  transition: color 120ms ease, background-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 [data-yssbi-root-dockview]
@@ -588,7 +543,9 @@
 }
 
 [data-yssbi-root-dockview]
-  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom.dv-edge-collapsed:not([data-yssbi-logs-dockview] *)
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom.dv-edge-collapsed:not(
+    [data-yssbi-logs-dockview] *
+  )
   > .dv-tabs-and-actions-container
   .dv-tabs-container
   > .dv-tab.dv-active-tab:has([data-workbench-tab-edge-collapsed="true"]) {
@@ -600,7 +557,9 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
   > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-vertical
-  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]) {
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has(
+    [data-workbench-tab-edge-collapsed="true"]
+  ) {
   background: transparent;
   color: var(--muted-foreground);
 }
@@ -609,7 +568,9 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
   > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-vertical
-  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"])::after {
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has(
+    [data-workbench-tab-edge-collapsed="true"]
+  )::after {
   content: none;
 }
 
@@ -617,7 +578,9 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
   > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-vertical
-  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"])
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has(
+    [data-workbench-tab-edge-collapsed="true"]
+  )
   [data-workbench-activity-icon] {
   background: transparent;
   color: var(--muted-foreground);
@@ -627,7 +590,9 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
   > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-vertical
-  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]):hover {
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has(
+    [data-workbench-tab-edge-collapsed="true"]
+  ):hover {
   color: var(--foreground);
 }
 
@@ -635,7 +600,9 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
   > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-vertical
-  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]):hover
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has(
+    [data-workbench-tab-edge-collapsed="true"]
+  ):hover
   [data-workbench-activity-icon] {
   background: var(--interactive-hover);
   color: var(--foreground);

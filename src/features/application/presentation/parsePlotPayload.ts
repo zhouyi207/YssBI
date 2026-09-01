@@ -6,4 +6,4 @@ export {
   type ParsedPlotPayload,
   type PlotPointDTO,
   type XySeriesPlotDTO,
-} from '@/shared/types/domain/plotPayload';
+} from "@/shared/types/domain/plotPayload";

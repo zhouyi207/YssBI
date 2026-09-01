@@ -1,34 +1,33 @@
 // @vitest-environment happy-dom
 
-import { act, useLayoutEffect } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, useLayoutEffect } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConnectionLine,
   connectionFeedbackAttributes,
   connectionFeedbackColor,
-} from './ConnectionLine';
+} from "./ConnectionLine";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let resizeCallback: (() => void) | null = null;
 
-
-vi.mock('@/features/core/viewport', () => ({
+vi.mock("@/features/core/viewport", () => ({
   getViewport: () => ({ x: 0, y: 0, scale: 1 }),
   subscribeToViewport: () => vi.fn(),
 }));
 
-vi.mock('@/features/core/theme/useTheme', () => ({
-  useTheme: () => ({ theme: 'light' }),
+vi.mock("@/features/core/theme/useTheme", () => ({
+  useTheme: () => ({ theme: "light" }),
 }));
 
-vi.mock('@/features/core/canvas/connectPreview', () => ({
+vi.mock("@/features/core/canvas/connectPreview", () => ({
   getConnectPreview: () => ({ active: false, startPin: null, worldX: 0, worldY: 0 }),
   subscribeConnectPreview: () => vi.fn(),
 }));
 
-vi.mock('./Edge', () => ({ drawEdge: vi.fn() }));
+vi.mock("./Edge", () => ({ drawEdge: vi.fn() }));
 
 const context = {
   clearRect: vi.fn(),
@@ -65,26 +64,32 @@ function renderConnectionLine(root: Root) {
   });
 }
 
-describe('ConnectionLine feedback', () => {
-  it('maps append, replacement, and invalid feedback to visible safe metadata', () => {
-    expect(connectionFeedbackAttributes({ kind: 'append' })).toEqual({
-      'data-connection-feedback': 'append',
+describe("ConnectionLine feedback", () => {
+  it("maps append, replacement, and invalid feedback to visible safe metadata", () => {
+    expect(connectionFeedbackAttributes({ kind: "append" })).toEqual({
+      "data-connection-feedback": "append",
     });
-    expect(connectionFeedbackAttributes({ kind: 'replace', displacedConnectionIds: ['visual-id'] })).toEqual({
-      'data-connection-feedback': 'replace',
+    expect(
+      connectionFeedbackAttributes({ kind: "replace", displacedConnectionIds: ["visual-id"] }),
+    ).toEqual({
+      "data-connection-feedback": "replace",
     });
-    expect(connectionFeedbackAttributes({ kind: 'invalid', reason: 'type-mismatch' })).toEqual({
-      'data-connection-feedback': 'invalid',
-      'data-connection-invalid-reason': 'type-mismatch',
+    expect(connectionFeedbackAttributes({ kind: "invalid", reason: "type-mismatch" })).toEqual({
+      "data-connection-feedback": "invalid",
+      "data-connection-invalid-reason": "type-mismatch",
     });
-    const palette = { success: '#22c55e', warning: '#f59e0b', danger: '#ef4444' };
-    expect(connectionFeedbackColor({ kind: 'append' }, '#000', palette)).toBe(palette.success);
-    expect(connectionFeedbackColor({ kind: 'replace', displacedConnectionIds: [] }, '#000', palette)).toBe(palette.warning);
-    expect(connectionFeedbackColor({ kind: 'invalid', reason: 'capacity' }, '#000', palette)).toBe(palette.danger);
+    const palette = { success: "#22c55e", warning: "#f59e0b", danger: "#ef4444" };
+    expect(connectionFeedbackColor({ kind: "append" }, "#000", palette)).toBe(palette.success);
+    expect(
+      connectionFeedbackColor({ kind: "replace", displacedConnectionIds: [] }, "#000", palette),
+    ).toBe(palette.warning);
+    expect(connectionFeedbackColor({ kind: "invalid", reason: "capacity" }, "#000", palette)).toBe(
+      palette.danger,
+    );
   });
 });
 
-describe('ConnectionLine canvas sizing', () => {
+describe("ConnectionLine canvas sizing", () => {
   let host: HTMLDivElement;
   let root: Root;
   let rect: DOMRect;
@@ -92,20 +97,23 @@ describe('ConnectionLine canvas sizing', () => {
   beforeEach(() => {
     resizeCallback = null;
     rect = { ...defaultRect } as DOMRect;
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect);
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => rect);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       context as unknown as CanvasRenderingContext2D,
     );
-    vi.stubGlobal('devicePixelRatio', 2);
-    vi.stubGlobal('ResizeObserver', class {
-      constructor(callback: ResizeObserverCallback) {
-        resizeCallback = () => callback([], this as unknown as ResizeObserver);
-      }
-      observe() {}
-      disconnect() {}
-      unobserve() {}
-    });
-    host = document.createElement('div');
+    vi.stubGlobal("devicePixelRatio", 2);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = () => callback([], this as unknown as ResizeObserver);
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -117,12 +125,12 @@ describe('ConnectionLine canvas sizing', () => {
     vi.restoreAllMocks();
   });
 
-  it('synchronizes a valid size before parent layout effects run', () => {
+  it("synchronizes a valid size before parent layout effects run", () => {
     let sizeSeenByParent: { width: number; height: number } | null = null;
 
     function Harness() {
       useLayoutEffect(() => {
-        const canvas = host.querySelector('canvas');
+        const canvas = host.querySelector("canvas");
         sizeSeenByParent = canvas ? { width: canvas.width, height: canvas.height } : null;
       }, []);
 
@@ -142,9 +150,9 @@ describe('ConnectionLine canvas sizing', () => {
     expect(sizeSeenByParent).toEqual({ width: 640, height: 360 });
   });
 
-  it('ignores transient zero-sized resize observations', () => {
+  it("ignores transient zero-sized resize observations", () => {
     renderConnectionLine(root);
-    const canvas = host.querySelector('canvas')!;
+    const canvas = host.querySelector("canvas")!;
 
     rect = { ...defaultRect, right: 0, bottom: 0, width: 0, height: 0 } as DOMRect;
     act(() => resizeCallback?.());
@@ -153,13 +161,17 @@ describe('ConnectionLine canvas sizing', () => {
     expect(canvas.height).toBe(360);
   });
 
-  it('does not reset the backing store when the observed size is unchanged', () => {
+  it("does not reset the backing store when the observed size is unchanged", () => {
     renderConnectionLine(root);
-    const canvas = host.querySelector('canvas')!;
+    const canvas = host.querySelector("canvas")!;
     let width = canvas.width;
     let height = canvas.height;
-    const widthSetter = vi.fn((value: number) => { width = value; });
-    const heightSetter = vi.fn((value: number) => { height = value; });
+    const widthSetter = vi.fn((value: number) => {
+      width = value;
+    });
+    const heightSetter = vi.fn((value: number) => {
+      height = value;
+    });
 
     Object.defineProperties(canvas, {
       width: { configurable: true, get: () => width, set: widthSetter },

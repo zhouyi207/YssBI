@@ -1,8 +1,5 @@
-import type {
-  EditorGraphProjectionDto,
-  PortAddressDto,
-} from '@/shared/types/dto/editorProjection';
-import { portAddressKey } from '@/features/domain/editorProjection';
+import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
+import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface EditorProjectionFixtureOptions {
   graphPath: string;
@@ -23,20 +20,20 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
   const {
     graphPath,
     sourceRevision = 1,
-    nodeId = 'local-node',
-    nodeTypeId = 'tests.projected-node',
-    title = 'Projected node',
-    connectionId = 'local-connection',
+    nodeId = "local-node",
+    nodeTypeId = "tests.projected-node",
+    title = "Projected node",
+    connectionId = "local-connection",
   } = options;
   const outputAddress: PortAddressDto = {
-    kind: 'declared',
+    kind: "declared",
     nodeId,
-    portKey: 'local-out',
+    portKey: "local-out",
   };
   const inputAddress: PortAddressDto = {
-    kind: 'declared',
+    kind: "declared",
     nodeId,
-    portKey: 'local-in',
+    portKey: "local-in",
   };
   const outputKey = portAddressKey(outputAddress);
   const inputKey = portAddressKey(inputAddress);
@@ -50,7 +47,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
       basis: {
         graphPath,
         graphRevision: sourceRevision,
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
+        registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
         resourceVersions: {},
       },
       graphPath,
@@ -71,11 +68,11 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
           ports: [
             {
               address: outputAddress,
-              templateKey: 'local-out',
-              display: { label: 'Output', instanceLabel: null },
-              direction: 'output',
-              kind: 'data',
-              instanceKind: 'declared',
+              templateKey: "local-out",
+              display: { label: "Output", instanceLabel: null },
+              direction: "output",
+              kind: "data",
+              instanceKind: "declared",
               orphan: false,
               canRemove: false,
               connections: {
@@ -87,17 +84,17 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 canMove: true,
               },
               input: null,
-              resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
+              resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
               resolvedSchema: null,
-              status: 'resolved',
+              status: "resolved",
             },
             {
               address: inputAddress,
-              templateKey: 'local-in',
-              display: { label: 'Input', instanceLabel: null },
-              direction: 'input',
-              kind: 'data',
-              instanceKind: 'declared',
+              templateKey: "local-in",
+              display: { label: "Input", instanceLabel: null },
+              direction: "input",
+              kind: "data",
+              instanceKind: "declared",
               orphan: false,
               canRemove: false,
               connections: {
@@ -111,11 +108,11 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               input: {
                 literalOverride: null,
                 protocolDefault: null,
-                effective: 'connections',
+                effective: "connections",
               },
-              resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
+              resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
               resolvedSchema: null,
-              status: 'resolved',
+              status: "resolved",
             },
           ],
           parameterEditors: [],
@@ -140,7 +137,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
         },
       ],
       diagnostics: [],
-      outcome: { type: 'success' },
+      outcome: { type: "success" },
       hasBlockingDiagnostics: false,
     },
   };

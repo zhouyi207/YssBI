@@ -1,5 +1,5 @@
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import type { PlatformFailure, PlatformOutcome } from './platformTypes';
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { PlatformFailure, PlatformOutcome } from "./platformTypes";
 
 export interface CreateWebviewWindowRequest {
   readonly label: string;
@@ -15,15 +15,15 @@ export interface CreateWebviewWindowRequest {
 }
 
 function invalidLabel(): PlatformFailure {
-  return { operation: 'createWebviewWindow', code: 'invalidArgument', argument: 'windowLabel' };
+  return { operation: "createWebviewWindow", code: "invalidArgument", argument: "windowLabel" };
 }
 
 function invalidUrl(): PlatformFailure {
-  return { operation: 'createWebviewWindow', code: 'invalidArgument', argument: 'url' };
+  return { operation: "createWebviewWindow", code: "invalidArgument", argument: "url" };
 }
 
 function operationFailure(): PlatformFailure {
-  return { operation: 'createWebviewWindow', code: 'operationFailed' };
+  return { operation: "createWebviewWindow", code: "operationFailed" };
 }
 
 export async function createWebviewWindow(
@@ -38,7 +38,7 @@ export async function createWebviewWindow(
       width: request.width,
       height: request.height,
     };
-    if (typeof request.x === 'number' && typeof request.y === 'number') {
+    if (typeof request.x === "number" && typeof request.y === "number") {
       config.x = request.x;
       config.y = request.y;
     }

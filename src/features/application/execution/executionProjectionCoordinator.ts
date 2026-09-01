@@ -1,9 +1,6 @@
-import type { ExecutionUi } from '@/features/core/execution/ui';
-import type {
-  RunEvent,
-  RunOutputChannelEvent,
-} from '@/shared/types/domain/runEvent';
-import type { PinHistoryProjection, RecordedEvent } from '@/shared/types/ui/execution';
+import type { ExecutionUi } from "@/features/core/execution/ui";
+import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
+import type { PinHistoryProjection, RecordedEvent } from "@/shared/types/ui/execution";
 
 export interface ExecutionProjectionPublication {
   readonly startRun: (graphPath: string, runId: string) => void;
@@ -22,13 +19,15 @@ export interface ExecutionProjectionCoordinatorDependencies {
 }
 
 function isRunEvent(event: ExecutionChannelEvent): event is RunEvent {
-  return 'run' in event && 'kind' in event;
+  return "run" in event && "kind" in event;
 }
 
 function isTerminalRunEvent(event: RunEvent): boolean {
-  return event.kind.type === 'runCompleted'
-    || event.kind.type === 'runErrored'
-    || event.kind.type === 'runCancelled';
+  return (
+    event.kind.type === "runCompleted" ||
+    event.kind.type === "runErrored" ||
+    event.kind.type === "runCancelled"
+  );
 }
 
 /**
@@ -56,7 +55,7 @@ export class ExecutionProjectionCoordinator {
   }
 
   publishRunEvent(event: RunEvent): void {
-    if (event.kind.type === 'runStarted') {
+    if (event.kind.type === "runStarted") {
       this.publication.startRun(event.run.graphPath, event.run.runId);
       return;
     }

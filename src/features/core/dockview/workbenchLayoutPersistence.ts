@@ -1,14 +1,14 @@
-import type { SerializedDockview } from 'dockview-react';
+import type { SerializedDockview } from "dockview-react";
 
-import { isValidLogsDockviewLayout } from './logsDockviewLayout';
+import { isValidLogsDockviewLayout } from "./logsDockviewLayout";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchActivityMetadata,
   isWorkbenchPanelMetadata,
   WORKBENCH_ACTIVITY_VIEW_IDS,
   type WorkbenchPanelMetadata,
-} from './workbenchPanelModel';
-import { WORKBENCH_ACTIVITY_GROUP_ID } from './workbenchDockviewDefaults';
+} from "./workbenchPanelModel";
+import { WORKBENCH_ACTIVITY_GROUP_ID } from "./workbenchDockviewDefaults";
 
 export interface PersistedWorkbenchLayout {
   readonly root: SerializedDockview;
@@ -16,18 +16,18 @@ export interface PersistedWorkbenchLayout {
 }
 
 export type ParsedLayoutPart<T> =
-  | { readonly status: 'valid'; readonly value: T }
-  | { readonly status: 'invalid' };
+  | { readonly status: "valid"; readonly value: T }
+  | { readonly status: "invalid" };
 
 export interface ParsedPersistedWorkbenchLayout {
   readonly root: ParsedLayoutPart<SerializedDockview>;
   readonly logs: ParsedLayoutPart<SerializedDockview>;
 }
-const EDGE_POSITIONS = ['top', 'bottom', 'left', 'right'] as const;
+const EDGE_POSITIONS = ["top", "bottom", "left", "right"] as const;
 
 type UnknownRecord = Record<string, unknown>;
-type GridNode = SerializedDockview['grid']['root'];
-type GridWithMaximizedNode = SerializedDockview['grid'] & {
+type GridNode = SerializedDockview["grid"]["root"];
+type GridWithMaximizedNode = SerializedDockview["grid"] & {
   maximizedNode?: unknown;
 };
 
@@ -49,7 +49,7 @@ interface PrunedGridNode {
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasOnlyKeys(value: UnknownRecord, allowed: readonly string[]): boolean {
@@ -58,20 +58,22 @@ function hasOnlyKeys(value: UnknownRecord, allowed: readonly string[]): boolean 
 }
 
 function hasExactKeys(value: UnknownRecord, expected: readonly string[]): boolean {
-  return Object.keys(value).length === expected.length
-    && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+  return (
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
+  return typeof value === "string" && value.length > 0;
 }
 
 function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isOptionalBoolean(value: unknown): boolean {
-  return value === undefined || typeof value === 'boolean';
+  return value === undefined || typeof value === "boolean";
 }
 
 function isOptionalFiniteNumber(value: unknown): boolean {
@@ -80,45 +82,47 @@ function isOptionalFiniteNumber(value: unknown): boolean {
 
 function readMetadata(panel: unknown): WorkbenchPanelMetadata | undefined {
   if (!isRecord(panel) || !isRecord(panel.params)) return undefined;
-  return isWorkbenchPanelMetadata(panel.params.metadata)
-    ? panel.params.metadata
-    : undefined;
+  return isWorkbenchPanelMetadata(panel.params.metadata) ? panel.params.metadata : undefined;
 }
 
 function isTransientWorkbenchMetadata(metadata: WorkbenchPanelMetadata): boolean {
-  return metadata.role === 'result'
-    || (metadata.role === 'view'
-      && metadata.viewId === 'inspect');
+  return metadata.role === "result" || (metadata.role === "view" && metadata.viewId === "inspect");
 }
 
 function isProjectScopedWorkbenchMetadata(metadata: WorkbenchPanelMetadata): boolean {
-  return metadata.role === 'editor' || isTransientWorkbenchMetadata(metadata);
+  return metadata.role === "editor" || isTransientWorkbenchMetadata(metadata);
 }
 
 function validatePanelShape(panelId: string, panel: unknown): panel is UnknownRecord {
-  if (!isRecord(panel) || !hasOnlyKeys(panel, [
-    'id',
-    'contentComponent',
-    'tabComponent',
-    'title',
-    'renderer',
-    'params',
-    'minimumWidth',
-    'minimumHeight',
-    'maximumWidth',
-    'maximumHeight',
-    'pinned',
-  ])) return false;
+  if (
+    !isRecord(panel) ||
+    !hasOnlyKeys(panel, [
+      "id",
+      "contentComponent",
+      "tabComponent",
+      "title",
+      "renderer",
+      "params",
+      "minimumWidth",
+      "minimumHeight",
+      "maximumWidth",
+      "maximumHeight",
+      "pinned",
+    ])
+  )
+    return false;
   if (panel.id !== panelId || !isNonEmptyString(panel.contentComponent)) return false;
-  if (panel.tabComponent !== undefined && typeof panel.tabComponent !== 'string') return false;
-  if (panel.title !== undefined && typeof panel.title !== 'string') return false;
-  if (panel.renderer !== undefined && typeof panel.renderer !== 'string') return false;
-  return isRecord(panel.params)
-    && isOptionalFiniteNumber(panel.minimumWidth)
-    && isOptionalFiniteNumber(panel.minimumHeight)
-    && isOptionalFiniteNumber(panel.maximumWidth)
-    && isOptionalFiniteNumber(panel.maximumHeight)
-    && isOptionalBoolean(panel.pinned);
+  if (panel.tabComponent !== undefined && typeof panel.tabComponent !== "string") return false;
+  if (panel.title !== undefined && typeof panel.title !== "string") return false;
+  if (panel.renderer !== undefined && typeof panel.renderer !== "string") return false;
+  return (
+    isRecord(panel.params) &&
+    isOptionalFiniteNumber(panel.minimumWidth) &&
+    isOptionalFiniteNumber(panel.minimumHeight) &&
+    isOptionalFiniteNumber(panel.maximumWidth) &&
+    isOptionalFiniteNumber(panel.maximumHeight) &&
+    isOptionalBoolean(panel.pinned)
+  );
 }
 
 function validateRootPanels(candidate: unknown): ValidatedRootPanels | undefined {
@@ -130,10 +134,13 @@ function validateRootPanels(candidate: unknown): ValidatedRootPanels | undefined
   for (const [panelId, panel] of Object.entries(candidate)) {
     if (!isNonEmptyString(panelId) || !validatePanelShape(panelId, panel)) return undefined;
     const metadata = readMetadata(panel);
-    if (!metadata
-      || isTransientWorkbenchMetadata(metadata)
-      || panel.contentComponent !== componentForWorkbenchMetadata(metadata)) return undefined;
-    if (metadata.role === 'view') {
+    if (
+      !metadata ||
+      isTransientWorkbenchMetadata(metadata) ||
+      panel.contentComponent !== componentForWorkbenchMetadata(metadata)
+    )
+      return undefined;
+    if (metadata.role === "view") {
       if (singletonViews.has(metadata.viewId)) return undefined;
       singletonViews.add(metadata.viewId);
       if (isWorkbenchActivityMetadata(metadata)) activityPanelIds.add(panelId);
@@ -150,27 +157,27 @@ function validateTabGroups(value: unknown, groupViews: ReadonlySet<string>): boo
   const groupIds = new Set<string>();
   const groupedPanels = new Set<string>();
   for (const candidate of value) {
-    if (!isRecord(candidate) || !hasOnlyKeys(candidate, [
-      'id',
-      'label',
-      'color',
-      'collapsed',
-      'panelIds',
-      'componentParams',
-    ])) return false;
-    if (!isNonEmptyString(candidate.id)
-      || groupIds.has(candidate.id)
-      || typeof candidate.collapsed !== 'boolean'
-      || !Array.isArray(candidate.panelIds)) return false;
-    if (candidate.label !== undefined && typeof candidate.label !== 'string') return false;
-    if (candidate.color !== undefined && typeof candidate.color !== 'string') return false;
-    if (candidate.componentParams !== undefined && !isRecord(candidate.componentParams)) return false;
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, ["id", "label", "color", "collapsed", "panelIds", "componentParams"])
+    )
+      return false;
+    if (
+      !isNonEmptyString(candidate.id) ||
+      groupIds.has(candidate.id) ||
+      typeof candidate.collapsed !== "boolean" ||
+      !Array.isArray(candidate.panelIds)
+    )
+      return false;
+    if (candidate.label !== undefined && typeof candidate.label !== "string") return false;
+    if (candidate.color !== undefined && typeof candidate.color !== "string") return false;
+    if (candidate.componentParams !== undefined && !isRecord(candidate.componentParams))
+      return false;
 
     groupIds.add(candidate.id);
     for (const panelId of candidate.panelIds) {
-      if (!isNonEmptyString(panelId)
-        || !groupViews.has(panelId)
-        || groupedPanels.has(panelId)) return false;
+      if (!isNonEmptyString(panelId) || !groupViews.has(panelId) || groupedPanels.has(panelId))
+        return false;
       groupedPanels.add(panelId);
     }
   }
@@ -178,45 +185,64 @@ function validateTabGroups(value: unknown, groupViews: ReadonlySet<string>): boo
 }
 
 function validateGroup(candidate: unknown, state: TopologyValidationState): boolean {
-  if (!isRecord(candidate) || !hasOnlyKeys(candidate, [
-    'id',
-    'views',
-    'activeView',
-    'locked',
-    'hideHeader',
-    'headerPosition',
-    'skipSetActive',
-    'constraints',
-    'initialWidth',
-    'initialHeight',
-    'tabGroups',
-  ])) return false;
-  if (!isNonEmptyString(candidate.id)
-    || state.groupIds.has(candidate.id)
-    || !Array.isArray(candidate.views)) return false;
-  if (candidate.locked !== undefined
-    && typeof candidate.locked !== 'boolean'
-    && candidate.locked !== 'no-drop-target') return false;
-  if (!isOptionalBoolean(candidate.hideHeader)
-    || !isOptionalBoolean(candidate.skipSetActive)
-    || !isOptionalFiniteNumber(candidate.initialWidth)
-    || !isOptionalFiniteNumber(candidate.initialHeight)) return false;
-  if (candidate.headerPosition !== undefined
-    && !['top', 'bottom', 'left', 'right'].includes(String(candidate.headerPosition))) return false;
+  if (
+    !isRecord(candidate) ||
+    !hasOnlyKeys(candidate, [
+      "id",
+      "views",
+      "activeView",
+      "locked",
+      "hideHeader",
+      "headerPosition",
+      "skipSetActive",
+      "constraints",
+      "initialWidth",
+      "initialHeight",
+      "tabGroups",
+    ])
+  )
+    return false;
+  if (
+    !isNonEmptyString(candidate.id) ||
+    state.groupIds.has(candidate.id) ||
+    !Array.isArray(candidate.views)
+  )
+    return false;
+  if (
+    candidate.locked !== undefined &&
+    typeof candidate.locked !== "boolean" &&
+    candidate.locked !== "no-drop-target"
+  )
+    return false;
+  if (
+    !isOptionalBoolean(candidate.hideHeader) ||
+    !isOptionalBoolean(candidate.skipSetActive) ||
+    !isOptionalFiniteNumber(candidate.initialWidth) ||
+    !isOptionalFiniteNumber(candidate.initialHeight)
+  )
+    return false;
+  if (
+    candidate.headerPosition !== undefined &&
+    !["top", "bottom", "left", "right"].includes(String(candidate.headerPosition))
+  )
+    return false;
   if (candidate.constraints !== undefined && !isRecord(candidate.constraints)) return false;
 
   const views = new Set<string>();
   for (const panelId of candidate.views) {
-    if (!isNonEmptyString(panelId)
-      || views.has(panelId)
-      || !state.panelIds.has(panelId)
-      || state.referencedPanelIds.has(panelId)) return false;
+    if (
+      !isNonEmptyString(panelId) ||
+      views.has(panelId) ||
+      !state.panelIds.has(panelId) ||
+      state.referencedPanelIds.has(panelId)
+    )
+      return false;
     views.add(panelId);
     state.referencedPanelIds.add(panelId);
   }
   if (views.size > 0) {
     if (!isNonEmptyString(candidate.activeView) || !views.has(candidate.activeView)) return false;
-  } else if (candidate.activeView !== undefined && candidate.activeView !== '') {
+  } else if (candidate.activeView !== undefined && candidate.activeView !== "") {
     return false;
   }
   if (!validateTabGroups(candidate.tabGroups, views)) return false;
@@ -225,54 +251,62 @@ function validateGroup(candidate: unknown, state: TopologyValidationState): bool
   return true;
 }
 
-function validateGridNode(
-  candidate: unknown,
-  state: TopologyValidationState,
-): boolean {
-  if (!isRecord(candidate)
-    || !hasOnlyKeys(candidate, ['type', 'data', 'size', 'visible'])
-    || (candidate.type !== 'leaf' && candidate.type !== 'branch')
-    || !isOptionalFiniteNumber(candidate.size)
-    || !isOptionalBoolean(candidate.visible)) return false;
+function validateGridNode(candidate: unknown, state: TopologyValidationState): boolean {
+  if (
+    !isRecord(candidate) ||
+    !hasOnlyKeys(candidate, ["type", "data", "size", "visible"]) ||
+    (candidate.type !== "leaf" && candidate.type !== "branch") ||
+    !isOptionalFiniteNumber(candidate.size) ||
+    !isOptionalBoolean(candidate.visible)
+  )
+    return false;
 
-  if (candidate.type === 'leaf') return validateGroup(candidate.data, state);
+  if (candidate.type === "leaf") return validateGroup(candidate.data, state);
   if (!Array.isArray(candidate.data)) return false;
   return candidate.data.every((child) => validateGridNode(child, state));
 }
 
 function validateMaximizedNode(candidate: unknown, root: unknown): boolean {
   if (candidate === undefined) return true;
-  if (!isRecord(candidate)
-    || !hasExactKeys(candidate, ['location'])
-    || !Array.isArray(candidate.location)
-    || candidate.location.length === 0) return false;
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, ["location"]) ||
+    !Array.isArray(candidate.location) ||
+    candidate.location.length === 0
+  )
+    return false;
 
   let node = root;
   for (const index of candidate.location) {
-    if (typeof index !== 'number'
-      || !Number.isFinite(index)
-      || !Number.isInteger(index)
-      || index < 0
-      || !isRecord(node)
-      || node.type !== 'branch'
-      || !Array.isArray(node.data)
-      || index >= node.data.length) return false;
+    if (
+      typeof index !== "number" ||
+      !Number.isFinite(index) ||
+      !Number.isInteger(index) ||
+      index < 0 ||
+      !isRecord(node) ||
+      node.type !== "branch" ||
+      !Array.isArray(node.data) ||
+      index >= node.data.length
+    )
+      return false;
     node = node.data[index];
   }
-  return isRecord(node) && node.type === 'leaf';
+  return isRecord(node) && node.type === "leaf";
 }
 
 function validateGrid(candidate: unknown, state: TopologyValidationState): boolean {
-  return isRecord(candidate)
-    && hasOnlyKeys(candidate, ['root', 'height', 'width', 'orientation', 'maximizedNode'])
-    && isFiniteNumber(candidate.height)
-    && isFiniteNumber(candidate.width)
-    && (candidate.orientation === 'HORIZONTAL' || candidate.orientation === 'VERTICAL')
-    && isRecord(candidate.root)
-    && candidate.root.type === 'branch'
-    && Array.isArray(candidate.root.data)
-    && validateGridNode(candidate.root, state)
-    && validateMaximizedNode(candidate.maximizedNode, candidate.root);
+  return (
+    isRecord(candidate) &&
+    hasOnlyKeys(candidate, ["root", "height", "width", "orientation", "maximizedNode"]) &&
+    isFiniteNumber(candidate.height) &&
+    isFiniteNumber(candidate.width) &&
+    (candidate.orientation === "HORIZONTAL" || candidate.orientation === "VERTICAL") &&
+    isRecord(candidate.root) &&
+    candidate.root.type === "branch" &&
+    Array.isArray(candidate.root.data) &&
+    validateGridNode(candidate.root, state) &&
+    validateMaximizedNode(candidate.maximizedNode, candidate.root)
+  );
 }
 
 function validateEdgeGroups(candidate: unknown, state: TopologyValidationState): boolean {
@@ -282,92 +316,121 @@ function validateEdgeGroups(candidate: unknown, state: TopologyValidationState):
   for (const position of EDGE_POSITIONS) {
     const edge = candidate[position];
     if (edge === undefined) continue;
-    if (!isRecord(edge) || !hasOnlyKeys(edge, [
-      'size',
-      'visible',
-      'collapsed',
-      'group',
-      'autoHide',
-      'autoReveal',
-      'minimumSize',
-      'maximumSize',
-      'collapsedSize',
-    ])) return false;
-    if (!isFiniteNumber(edge.size)
-      || typeof edge.visible !== 'boolean'
-      || !isOptionalBoolean(edge.collapsed)
-      || !isOptionalBoolean(edge.autoHide)
-      || !isOptionalBoolean(edge.autoReveal)
-      || !isOptionalFiniteNumber(edge.minimumSize)
-      || !isOptionalFiniteNumber(edge.maximumSize)
-      || !isOptionalFiniteNumber(edge.collapsedSize)
-      || !isRecord(edge.group)
-      || !Array.isArray(edge.group.views)
-      || edge.group.views.length === 0
-      || !validateGroup(edge.group, state)) return false;
+    if (
+      !isRecord(edge) ||
+      !hasOnlyKeys(edge, [
+        "size",
+        "visible",
+        "collapsed",
+        "group",
+        "autoHide",
+        "autoReveal",
+        "minimumSize",
+        "maximumSize",
+        "collapsedSize",
+      ])
+    )
+      return false;
+    if (
+      !isFiniteNumber(edge.size) ||
+      typeof edge.visible !== "boolean" ||
+      !isOptionalBoolean(edge.collapsed) ||
+      !isOptionalBoolean(edge.autoHide) ||
+      !isOptionalBoolean(edge.autoReveal) ||
+      !isOptionalFiniteNumber(edge.minimumSize) ||
+      !isOptionalFiniteNumber(edge.maximumSize) ||
+      !isOptionalFiniteNumber(edge.collapsedSize) ||
+      !isRecord(edge.group) ||
+      !Array.isArray(edge.group.views) ||
+      edge.group.views.length === 0 ||
+      !validateGroup(edge.group, state)
+    )
+      return false;
   }
   return true;
 }
 
-function validateActivityTopology(
-  layout: UnknownRecord,
-  state: TopologyValidationState,
-): boolean {
+function validateActivityTopology(layout: UnknownRecord, state: TopologyValidationState): boolean {
   if (state.activityPanelIds.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length) return false;
-  const left = isRecord(layout.edgeGroups)
-    && isRecord(layout.edgeGroups.left)
-    && isRecord(layout.edgeGroups.left.group)
-    ? layout.edgeGroups.left.group
-    : undefined;
-  if (!left
-    || left.id !== WORKBENCH_ACTIVITY_GROUP_ID
-    || left.headerPosition !== 'left'
-    || left.locked !== undefined
-    || left.tabGroups !== undefined
-    || !Array.isArray(left.views)) return false;
+  const left =
+    isRecord(layout.edgeGroups) &&
+    isRecord(layout.edgeGroups.left) &&
+    isRecord(layout.edgeGroups.left.group)
+      ? layout.edgeGroups.left.group
+      : undefined;
+  if (
+    !left ||
+    left.id !== WORKBENCH_ACTIVITY_GROUP_ID ||
+    left.headerPosition !== "left" ||
+    left.locked !== undefined ||
+    left.tabGroups !== undefined ||
+    !Array.isArray(left.views)
+  )
+    return false;
 
   const leftViews = new Set(left.views);
-  if (leftViews.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length
-    || leftViews.size !== state.activityPanelIds.size
-    || [...leftViews].some((panelId) => !state.activityPanelIds.has(panelId))
-    || typeof left.activeView !== 'string'
-    || !leftViews.has(left.activeView)) return false;
+  if (
+    leftViews.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length ||
+    leftViews.size !== state.activityPanelIds.size ||
+    [...leftViews].some((panelId) => !state.activityPanelIds.has(panelId)) ||
+    typeof left.activeView !== "string" ||
+    !leftViews.has(left.activeView)
+  )
+    return false;
 
   let activityInGrid = false;
   if (!isRecord(layout.grid) || !isRecord(layout.grid.root)) return false;
   visitGridGroups(layout.grid.root, (group) => {
-    if (Array.isArray(group.views)
-      && group.views.some((panelId) => typeof panelId === 'string'
-        && state.activityPanelIds.has(panelId))) activityInGrid = true;
+    if (
+      Array.isArray(group.views) &&
+      group.views.some(
+        (panelId) => typeof panelId === "string" && state.activityPanelIds.has(panelId),
+      )
+    )
+      activityInGrid = true;
   });
   if (activityInGrid) return false;
 
   const edgeGroups = isRecord(layout.edgeGroups) ? layout.edgeGroups : {};
   for (const position of EDGE_POSITIONS) {
-    if (position === 'left') continue;
+    if (position === "left") continue;
     const edge = edgeGroups[position];
     const group = isRecord(edge) && isRecord(edge.group) ? edge.group : undefined;
-    if (group
-      && Array.isArray(group.views)
-      && group.views.some((panelId) => typeof panelId === 'string'
-        && state.activityPanelIds.has(panelId))) return false;
+    if (
+      group &&
+      Array.isArray(group.views) &&
+      group.views.some(
+        (panelId) => typeof panelId === "string" && state.activityPanelIds.has(panelId),
+      )
+    )
+      return false;
   }
   return true;
 }
 
 function isValidRootLayout(candidate: unknown): candidate is SerializedDockview {
-  if (!isRecord(candidate) || !hasOnlyKeys(candidate, [
-    'grid',
-    'panels',
-    'activeGroup',
-    'floatingGroups',
-    'popoutGroups',
-    'edgeGroups',
-  ])) return false;
-  if (candidate.floatingGroups !== undefined
-    && (!Array.isArray(candidate.floatingGroups) || candidate.floatingGroups.length > 0)) return false;
-  if (candidate.popoutGroups !== undefined
-    && (!Array.isArray(candidate.popoutGroups) || candidate.popoutGroups.length > 0)) return false;
+  if (
+    !isRecord(candidate) ||
+    !hasOnlyKeys(candidate, [
+      "grid",
+      "panels",
+      "activeGroup",
+      "floatingGroups",
+      "popoutGroups",
+      "edgeGroups",
+    ])
+  )
+    return false;
+  if (
+    candidate.floatingGroups !== undefined &&
+    (!Array.isArray(candidate.floatingGroups) || candidate.floatingGroups.length > 0)
+  )
+    return false;
+  if (
+    candidate.popoutGroups !== undefined &&
+    (!Array.isArray(candidate.popoutGroups) || candidate.popoutGroups.length > 0)
+  )
+    return false;
 
   const validatedPanels = validateRootPanels(candidate.panels);
   if (!validatedPanels) return false;
@@ -380,19 +443,24 @@ function isValidRootLayout(candidate: unknown): candidate is SerializedDockview 
   if (!validateGrid(candidate.grid, state) || !validateEdgeGroups(candidate.edgeGroups, state)) {
     return false;
   }
-  if (state.referencedPanelIds.size !== validatedPanels.panelIds.size
-    || !validateActivityTopology(candidate, state)) return false;
-  return candidate.activeGroup === undefined
-    || (isNonEmptyString(candidate.activeGroup) && state.groupIds.has(candidate.activeGroup));
+  if (
+    state.referencedPanelIds.size !== validatedPanels.panelIds.size ||
+    !validateActivityTopology(candidate, state)
+  )
+    return false;
+  return (
+    candidate.activeGroup === undefined ||
+    (isNonEmptyString(candidate.activeGroup) && state.groupIds.has(candidate.activeGroup))
+  );
 }
 
 function visitGridGroups(node: unknown, visit: (group: UnknownRecord) => void): void {
   if (!isRecord(node)) return;
-  if (node.type === 'leaf') {
+  if (node.type === "leaf") {
     if (isRecord(node.data)) visit(node.data);
     return;
   }
-  if (node.type !== 'branch' || !Array.isArray(node.data)) return;
+  if (node.type !== "branch" || !Array.isArray(node.data)) return;
   node.data.forEach((child) => visitGridGroups(child, visit));
 }
 
@@ -408,20 +476,17 @@ function removePanelRecords(layout: SerializedDockview, removed: ReadonlySet<str
   removed.forEach((panelId) => delete layout.panels[panelId]);
 }
 
-function removePanelReferencesFromGroup(
-  group: UnknownRecord,
-  removed: ReadonlySet<string>,
-): void {
+function removePanelReferencesFromGroup(group: UnknownRecord, removed: ReadonlySet<string>): void {
   if (Array.isArray(group.views)) {
     group.views = group.views.filter(
-      (panelId): panelId is string => typeof panelId === 'string' && !removed.has(panelId),
+      (panelId): panelId is string => typeof panelId === "string" && !removed.has(panelId),
     );
   }
   if (!Array.isArray(group.tabGroups)) return;
   group.tabGroups = group.tabGroups.flatMap((candidate) => {
     if (!isRecord(candidate) || !Array.isArray(candidate.panelIds)) return [candidate];
     const panelIds = candidate.panelIds.filter(
-      (panelId): panelId is string => typeof panelId === 'string' && !removed.has(panelId),
+      (panelId): panelId is string => typeof panelId === "string" && !removed.has(panelId),
     );
     candidate.panelIds = panelIds;
     return panelIds.length > 0 ? [candidate] : [];
@@ -448,18 +513,21 @@ function removePanelReferencesFromEdges(
 function repairActiveViews(layout: SerializedDockview): void {
   visitAllGroups(layout, (group) => {
     const views = Array.isArray(group.views)
-      ? group.views.filter((panelId): panelId is string => typeof panelId === 'string')
+      ? group.views.filter((panelId): panelId is string => typeof panelId === "string")
       : [];
-    if (typeof group.activeView === 'string'
-      && group.activeView.length > 0
-      && views.includes(group.activeView)) return;
+    if (
+      typeof group.activeView === "string" &&
+      group.activeView.length > 0 &&
+      views.includes(group.activeView)
+    )
+      return;
     if (views.length > 0) group.activeView = views[0];
     else delete group.activeView;
   });
 }
 
 function pruneEmptyGridNode(node: GridNode): PrunedGridNode {
-  if (node.type === 'leaf') {
+  if (node.type === "leaf") {
     const group = node.data as unknown;
     const keep = isRecord(group) && Array.isArray(group.views) && group.views.length > 0;
     return { node: keep ? node : undefined, topologyChanged: !keep };
@@ -481,10 +549,10 @@ function pruneEmptyGridNode(node: GridNode): PrunedGridNode {
 
 function removeEmptyGridLeaves(layout: SerializedDockview): boolean {
   const root = layout.grid.root;
-  if (root.type !== 'branch' || !Array.isArray(root.data)) {
+  if (root.type !== "branch" || !Array.isArray(root.data)) {
     const pruned = pruneEmptyGridNode(root);
     layout.grid.root = {
-      type: 'branch',
+      type: "branch",
       data: pruned.node ? [pruned.node] : [],
     };
     return true;
@@ -516,12 +584,11 @@ function removeEmptyEdgeGroups(layout: SerializedDockview): void {
 function repairActiveGroup(layout: SerializedDockview): void {
   const survivingGroupIds: string[] = [];
   visitAllGroups(layout, (group) => {
-    if (isNonEmptyString(group.id)
-      && Array.isArray(group.views)
-      && group.views.length > 0) survivingGroupIds.push(group.id);
+    if (isNonEmptyString(group.id) && Array.isArray(group.views) && group.views.length > 0)
+      survivingGroupIds.push(group.id);
   });
-  if (typeof layout.activeGroup === 'string'
-    && survivingGroupIds.includes(layout.activeGroup)) return;
+  if (typeof layout.activeGroup === "string" && survivingGroupIds.includes(layout.activeGroup))
+    return;
   if (survivingGroupIds.length > 0) layout.activeGroup = survivingGroupIds[0];
   else delete layout.activeGroup;
 }
@@ -555,7 +622,7 @@ function cloneRootLayoutWithoutPanels(
 }
 
 export function workbenchLayoutStorageKey(label: string): string {
-  return `yssbi-workbench-layout:${label || 'main'}`;
+  return `yssbi-workbench-layout:${label || "main"}`;
 }
 
 export function createPersistedWorkbenchLayout(
@@ -571,31 +638,29 @@ export function createPersistedWorkbenchLayout(
 export function parsePersistedWorkbenchLayout(
   candidate: unknown,
 ): ParsedPersistedWorkbenchLayout | null {
-  if (!isRecord(candidate)
-    || !hasExactKeys(candidate, ['root', 'nested'])
-    || !isRecord(candidate.nested)
-    || !hasExactKeys(candidate.nested, ['logs'])) {
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, ["root", "nested"]) ||
+    !isRecord(candidate.nested) ||
+    !hasExactKeys(candidate.nested, ["logs"])
+  ) {
     return null;
   }
 
   return {
     root: isValidRootLayout(candidate.root)
-      ? { status: 'valid', value: candidate.root }
-      : { status: 'invalid' },
+      ? { status: "valid", value: candidate.root }
+      : { status: "invalid" },
     logs: isValidLogsDockviewLayout(candidate.nested.logs)
-      ? { status: 'valid', value: candidate.nested.logs }
-      : { status: 'invalid' },
+      ? { status: "valid", value: candidate.nested.logs }
+      : { status: "invalid" },
   };
 }
 
-export function prepareRootLayoutForPersistence(
-  layout: SerializedDockview,
-): SerializedDockview {
+export function prepareRootLayoutForPersistence(layout: SerializedDockview): SerializedDockview {
   return cloneRootLayoutWithoutPanels(layout, isTransientWorkbenchMetadata);
 }
 
-export function scrubProjectScopedRootLayout(
-  layout: SerializedDockview,
-): SerializedDockview {
+export function scrubProjectScopedRootLayout(layout: SerializedDockview): SerializedDockview {
   return cloneRootLayoutWithoutPanels(layout, isProjectScopedWorkbenchMetadata);
 }

@@ -1,13 +1,13 @@
-import type { VariableListEntry } from '@/features/core/variable/variableScopeSelectors';
+import type { VariableListEntry } from "@/features/core/variable/variableScopeSelectors";
 import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
-} from '@/features/core/sidebar/projectTreeState';
-import type { LayoutTab } from '@/shared/types';
+} from "@/features/core/sidebar/projectTreeState";
+import type { LayoutTab } from "@/shared/types";
 
 export interface ActiveProjectGraph {
   path: string;
-  kind: 'event' | 'function';
+  kind: "event" | "function";
   name: string;
 }
 
@@ -36,7 +36,7 @@ export interface ProjectResourceBrowserInput {
 }
 
 export type ProjectResourceBrowserCategoryRow = {
-  kind: 'category';
+  kind: "category";
   rowKey: string;
   categoryId: ProjectTreeCategoryId;
   level: number;
@@ -45,7 +45,7 @@ export type ProjectResourceBrowserCategoryRow = {
 };
 
 export type ProjectResourceBrowserEmptyRow = {
-  kind: 'empty';
+  kind: "empty";
   rowKey: string;
   categoryId: ProjectTreeCategoryId;
   level: number;
@@ -53,16 +53,16 @@ export type ProjectResourceBrowserEmptyRow = {
 };
 
 export type ProjectResourceGraphRow = {
-  kind: 'graph';
+  kind: "graph";
   rowKey: string;
   level: number;
   id: string;
   name: string;
-  graphType: 'event' | 'function';
+  graphType: "event" | "function";
 };
 
 export type ProjectResourceVariableRow = {
-  kind: 'variable';
+  kind: "variable";
   rowKey: string;
   level: number;
   id: string;
@@ -73,7 +73,7 @@ export type ProjectResourceVariableRow = {
 };
 
 export type ProjectResourceWorksheetRow = {
-  kind: 'worksheet';
+  kind: "worksheet";
   rowKey: string;
   level: number;
   worksheetPath: string;
@@ -101,11 +101,10 @@ export function resolveActiveProjectGraph(input: {
   activeTab: LayoutTab | null;
 }): ActiveProjectGraph | null {
   const { activeTab } = input;
-  if (!activeTab || (activeTab.type !== 'event' && activeTab.type !== 'function')) return null;
+  if (!activeTab || (activeTab.type !== "event" && activeTab.type !== "function")) return null;
 
-  const graph = activeTab.type === 'event'
-    ? input.events[activeTab.id]
-    : input.functions[activeTab.id];
+  const graph =
+    activeTab.type === "event" ? input.events[activeTab.id] : input.functions[activeTab.id];
   return graph ? { path: activeTab.id, kind: activeTab.type, name: graph.name } : null;
 }
 
@@ -127,9 +126,7 @@ export function buildProjectResourceBrowser(
     .filter((category): category is Category => category !== null);
   const categoryIds = new Set<ProjectTreeCategoryId>();
   for (const category of categories) collectCategoryIds(category, categoryIds);
-  const expandedCategoryIds = searching
-    ? new Set(categoryIds)
-    : input.expandedCategoryIds;
+  const expandedCategoryIds = searching ? new Set(categoryIds) : input.expandedCategoryIds;
   const rows: ProjectResourceBrowserRow[] = [];
 
   for (const category of categories) {
@@ -140,8 +137,9 @@ export function buildProjectResourceBrowser(
     rows,
     categoryIds,
     expandedCategoryIds,
-    allCategoriesExpanded: categoryIds.size > 0
-      && [...categoryIds].every((categoryId) => expandedCategoryIds.has(categoryId)),
+    allCategoriesExpanded:
+      categoryIds.size > 0 &&
+      [...categoryIds].every((categoryId) => expandedCategoryIds.has(categoryId)),
     canToggleAllCategories: !searching && categoryIds.size > 0,
   };
 }
@@ -152,20 +150,20 @@ function buildCategories(input: ProjectResourceBrowserInput): Category[] {
       id: PROJECT_TREE_CATEGORY_IDS.events,
       label: input.labels.events,
       emptyMessage: input.labels.noEvents,
-      leaves: graphRows(input.events, 'event'),
+      leaves: graphRows(input.events, "event"),
     },
     {
       id: PROJECT_TREE_CATEGORY_IDS.functions,
       label: input.labels.functions,
       emptyMessage: input.labels.noFunctions,
-      leaves: graphRows(input.functions, 'function'),
+      leaves: graphRows(input.functions, "function"),
     },
     {
       id: PROJECT_TREE_CATEGORY_IDS.worksheets,
       label: input.labels.worksheets,
       emptyMessage: input.labels.noWorksheets,
       leaves: input.worksheets.map((worksheet): ProjectResourceWorksheetRow => ({
-        kind: 'worksheet',
+        kind: "worksheet",
         rowKey: `worksheet:${worksheet.worksheetPath}`,
         level: 0,
         worksheetPath: worksheet.worksheetPath,
@@ -212,10 +210,7 @@ function filterCategory(
   return { ...category, leaves, children };
 }
 
-function collectCategoryIds(
-  category: Category,
-  categoryIds: Set<ProjectTreeCategoryId>,
-): void {
+function collectCategoryIds(category: Category, categoryIds: Set<ProjectTreeCategoryId>): void {
   categoryIds.add(category.id);
   for (const child of category.children ?? []) collectCategoryIds(child, categoryIds);
 }
@@ -228,7 +223,7 @@ function appendCategoryRows(
 ): void {
   const expanded = expandedCategoryIds.has(category.id);
   rows.push({
-    kind: 'category',
+    kind: "category",
     rowKey: `category:${category.id}`,
     categoryId: category.id,
     level,
@@ -244,7 +239,7 @@ function appendCategoryRows(
     rows.push(...category.leaves.map((leaf) => ({ ...leaf, level: level + 1 })));
   } else if (!category.children?.length && category.emptyMessage) {
     rows.push({
-      kind: 'empty',
+      kind: "empty",
       rowKey: `empty:${category.id}`,
       categoryId: category.id,
       level: level + 1,
@@ -255,10 +250,10 @@ function appendCategoryRows(
 
 function graphRows(
   graphs: Readonly<Record<string, { name: string }>>,
-  graphType: 'event' | 'function',
+  graphType: "event" | "function",
 ): ProjectResourceGraphRow[] {
   return Object.entries(graphs).map(([path, graph]) => ({
-    kind: 'graph',
+    kind: "graph",
     rowKey: `graph:${graphType}:${path}`,
     level: 0,
     id: path,
@@ -272,8 +267,8 @@ function variableRows(
   isGlobal: boolean,
 ): ProjectResourceVariableRow[] {
   return Object.entries(variables).map(([id, variable]) => ({
-    kind: 'variable',
-    rowKey: `variable:${isGlobal ? 'global' : 'local'}:${variable.resourcePath ?? id}`,
+    kind: "variable",
+    rowKey: `variable:${isGlobal ? "global" : "local"}:${variable.resourcePath ?? id}`,
     level: 0,
     id,
     resourcePath: variable.resourcePath,

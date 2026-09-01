@@ -10,36 +10,36 @@ import {
   isString,
   optionalFiniteNumber,
   optionalString,
-} from './guards';
-import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from './iv';
-import { parseCoefficientList, parseFiniteNumberArray, parseModelBasicInfo } from './parseCommon';
-import type { PlotPointDTO } from '@/shared/types/domain/plotPayload';
-import type { BinaryModelStatistics, DiagnosticInfo, RegressionResultData } from './regression';
+} from "./guards";
+import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from "./iv";
+import { parseCoefficientList, parseFiniteNumberArray, parseModelBasicInfo } from "./parseCommon";
+import type { PlotPointDTO } from "@/shared/types/domain/plotPayload";
+import type { BinaryModelStatistics, DiagnosticInfo, RegressionResultData } from "./regression";
 
 const DIAGNOSTIC_OPTIONAL_KEYS = [
-  'vif',
-  'bp_tests',
-  'ov_tests',
-  'im_test',
-  'normality_tests',
-  'fitted_values',
-  'residuals',
-  'leverage',
-  'residual_scatter',
-  'exog',
-  'timing',
-  'prais_info',
-  'iv2sls_first_stage_summary',
-  'iv2sls_overid',
-  'iv2sls_overid_dims',
-  'iv2sls_hausman',
-  'iv2sls_endogenous',
-  'ivliml_kappa',
-  'ivliml_overid',
-  'classification_table',
-  'exog_means',
-  'panel_fe_info',
-  'omit_info',
+  "vif",
+  "bp_tests",
+  "ov_tests",
+  "im_test",
+  "normality_tests",
+  "fitted_values",
+  "residuals",
+  "leverage",
+  "residual_scatter",
+  "exog",
+  "timing",
+  "prais_info",
+  "iv2sls_first_stage_summary",
+  "iv2sls_overid",
+  "iv2sls_overid_dims",
+  "iv2sls_hausman",
+  "iv2sls_endogenous",
+  "ivliml_kappa",
+  "ivliml_overid",
+  "classification_table",
+  "exog_means",
+  "panel_fe_info",
+  "omit_info",
 ] as const satisfies readonly (keyof DiagnosticInfo)[];
 
 function parseFiniteNumberMatrix(raw: unknown): number[][] | null {
@@ -62,17 +62,22 @@ function parseOptionalFiniteNumberMatrix(raw: unknown): number[][] | undefined |
 }
 
 function isSquareMatrix(matrix: number[][], size: number): boolean {
-  return matrix.length === size && matrix.every(row => row.length === size);
+  return matrix.length === size && matrix.every((row) => row.length === size);
 }
 
 function equalMatrices(left: number[][], right: number[][]): boolean {
-  return left.length === right.length && left.every((row, rowIndex) =>
-    row.length === right[rowIndex]?.length && row.every((value, columnIndex) => value === right[rowIndex]?.[columnIndex]),
+  return (
+    left.length === right.length &&
+    left.every(
+      (row, rowIndex) =>
+        row.length === right[rowIndex]?.length &&
+        row.every((value, columnIndex) => value === right[rowIndex]?.[columnIndex]),
+    )
   );
 }
 
 function parseBinaryModelStatistics(raw: unknown): BinaryModelStatistics | null {
-  if (!isRecord(raw) || raw.kind !== 'binary' || (raw.link !== 'logit' && raw.link !== 'probit')) {
+  if (!isRecord(raw) || raw.kind !== "binary" || (raw.link !== "logit" && raw.link !== "probit")) {
     return null;
   }
   const covariance = parseFiniteNumberMatrix(raw.covariance);
@@ -90,34 +95,34 @@ function parseBinaryModelStatistics(raw: unknown): BinaryModelStatistics | null 
   ];
   if (
     !covariance ||
-    coefficientArrays.some(values => values === null) ||
+    coefficientArrays.some((values) => values === null) ||
     !standardErrors ||
     !isSquareMatrix(covariance, standardErrors.length) ||
-    coefficientArrays.some(values => values?.length !== standardErrors.length)
+    coefficientArrays.some((values) => values?.length !== standardErrors.length)
   ) {
     return null;
   }
   const numericKeys = [
-    'logLikelihood',
-    'nullLogLikelihood',
-    'pseudoR2',
-    'adjustedPseudoR2',
-    'lrChi2',
-    'lrPValue',
-    'aic',
-    'bic',
-    'conditionNumber',
+    "logLikelihood",
+    "nullLogLikelihood",
+    "pseudoR2",
+    "adjustedPseudoR2",
+    "lrChi2",
+    "lrPValue",
+    "aic",
+    "bic",
+    "conditionNumber",
   ] as const;
   if (
-    numericKeys.some(key => !isFiniteNumber(raw[key])) ||
+    numericKeys.some((key) => !isFiniteNumber(raw[key])) ||
     !isNonNegativeInteger(raw.iterations) ||
-    typeof raw.converged !== 'boolean'
+    typeof raw.converged !== "boolean"
   ) {
     return null;
   }
 
   return {
-    kind: 'binary',
+    kind: "binary",
     link: raw.link,
     covariance,
     standardErrors,
@@ -139,7 +144,9 @@ function parseBinaryModelStatistics(raw: unknown): BinaryModelStatistics | null 
   };
 }
 
-function parseOptionalBinaryModelStatistics(raw: unknown): BinaryModelStatistics | undefined | null {
+function parseOptionalBinaryModelStatistics(
+  raw: unknown,
+): BinaryModelStatistics | undefined | null {
   return raw === undefined ? undefined : parseBinaryModelStatistics(raw);
 }
 
@@ -202,18 +209,20 @@ export function parseRegressionResultData(raw: unknown): RegressionResultData | 
   }
   if (betas && betas.length !== coefficients.length) return null;
   if (cov_beta && !isSquareMatrix(cov_beta, betas?.length ?? cov_beta.length)) return null;
-  if (model_statistics && model_statistics.standardErrors.length !== coefficients.length) return null;
-  if (model_statistics && cov_beta && !equalMatrices(model_statistics.covariance, cov_beta)) return null;
+  if (model_statistics && model_statistics.standardErrors.length !== coefficients.length)
+    return null;
+  if (model_statistics && cov_beta && !equalMatrices(model_statistics.covariance, cov_beta))
+    return null;
 
   return {
     title: raw.title,
-    endog_name: optionalString(raw, 'endog_name'),
+    endog_name: optionalString(raw, "endog_name"),
     model_basic_info,
     coefficients,
     diagnostic_info,
     betas,
     cov_beta,
     model_statistics,
-    executionTimeMs: optionalFiniteNumber(raw, 'executionTimeMs'),
+    executionTimeMs: optionalFiniteNumber(raw, "executionTimeMs"),
   };
 }

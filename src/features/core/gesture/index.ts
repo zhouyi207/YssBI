@@ -1,1 +1,1 @@
-﻿export * from './useGestureStore';
+﻿export * from "./useGestureStore";

@@ -11,76 +11,76 @@ rust-version.workspace = true
 [workspace]
 resolver = "3"
 members = [
-    ".",
-    "crates/yss-api",
-    "crates/yss-application",
-    "crates/yss-bayes-artifact-contract",
-    "crates/yss-bayes-artifact-polars",
-    "crates/yss-bayes-model",
-    "crates/yss-bayes-result",
-    "crates/yss-bayes-worker",
-    "crates/yss-bayes-worker-julia",
-    "crates/yss-canonical-hash",
-    "crates/yss-computation-settings",
-    "crates/yss-data-contract",
-    "crates/yss-database-contract",
-    "crates/yss-database-edit",
-    "crates/yss-database-runtime",
-    "crates/yss-database-schema",
-    "crates/yss-dataset-profile",
-    "crates/yss-diagnostics",
-    "crates/yss-display-naming",
-    "crates/yss-duckdb",
-    "crates/yss-execution",
-    "crates/yss-execution-sci-adapter",
-    "crates/yss-function-editor-projection",
-    "crates/yss-graph-analysis",
-    "crates/yss-graph-analysis-contract",
-    "crates/yss-graph-catalog",
-    "crates/yss-graph-compiler",
-    "crates/yss-graph-compiler-diagnostics",
-    "crates/yss-graph-document",
-    "crates/yss-graph-document-edit",
-    "crates/yss-graph-editor",
-    "crates/yss-graph-protocol",
-    "crates/yss-graph-resource-contract",
-    "crates/yss-graph-registry",
-    "crates/yss-graph-runtime",
-    "crates/yss-graph-type-mapping",
-    "crates/yss-julia-runtime",
-    "crates/yss-julia-worker",
-    "crates/yss-math",
-    "crates/yss-path-display",
-    "crates/yss-project",
-    "crates/yss-project-change",
-    "crates/yss-project-discovery",
-    "crates/yss-project-filesystem",
-    "crates/yss-project-history",
-    "crates/yss-project-identity",
-    "crates/yss-project-layout",
-    "crates/yss-project-manifest",
-    "crates/yss-project-model",
-    "crates/yss-project-operation",
-    "crates/yss-project-progress",
-    "crates/yss-project-registry",
-    "crates/yss-project-registry-contract",
-    "crates/yss-project-registry-sqlite",
-    "crates/yss-project-watcher",
-    "crates/yss-project-watcher-notify",
-    "crates/yss-resource-lifecycle",
-    "crates/yss-resource-naming",
-    "crates/yss-sci",
-    "crates/yss-sci-contract",
-    "crates/yss-sci-runtime",
-    "crates/yss-sql-source",
-    "crates/yss-tabular-contract",
-    "crates/yss-tabular-io",
-    "crates/yss-tabular-polars",
-    "crates/yss-tracing",
-    "crates/yss-variable-contract",
-    "crates/yss-variable-value",
-    "crates/yss-window-state",
-    "crates/yss-worksheet-document",
+  ".",
+  "crates/yss-api",
+  "crates/yss-application",
+  "crates/yss-bayes-artifact-contract",
+  "crates/yss-bayes-artifact-polars",
+  "crates/yss-bayes-model",
+  "crates/yss-bayes-result",
+  "crates/yss-bayes-worker",
+  "crates/yss-bayes-worker-julia",
+  "crates/yss-canonical-hash",
+  "crates/yss-computation-settings",
+  "crates/yss-data-contract",
+  "crates/yss-database-contract",
+  "crates/yss-database-edit",
+  "crates/yss-database-runtime",
+  "crates/yss-database-schema",
+  "crates/yss-dataset-profile",
+  "crates/yss-diagnostics",
+  "crates/yss-display-naming",
+  "crates/yss-duckdb",
+  "crates/yss-execution",
+  "crates/yss-execution-sci-adapter",
+  "crates/yss-function-editor-projection",
+  "crates/yss-graph-analysis",
+  "crates/yss-graph-analysis-contract",
+  "crates/yss-graph-catalog",
+  "crates/yss-graph-compiler",
+  "crates/yss-graph-compiler-diagnostics",
+  "crates/yss-graph-document",
+  "crates/yss-graph-document-edit",
+  "crates/yss-graph-editor",
+  "crates/yss-graph-protocol",
+  "crates/yss-graph-resource-contract",
+  "crates/yss-graph-registry",
+  "crates/yss-graph-runtime",
+  "crates/yss-graph-type-mapping",
+  "crates/yss-julia-runtime",
+  "crates/yss-julia-worker",
+  "crates/yss-math",
+  "crates/yss-path-display",
+  "crates/yss-project",
+  "crates/yss-project-change",
+  "crates/yss-project-discovery",
+  "crates/yss-project-filesystem",
+  "crates/yss-project-history",
+  "crates/yss-project-identity",
+  "crates/yss-project-layout",
+  "crates/yss-project-manifest",
+  "crates/yss-project-model",
+  "crates/yss-project-operation",
+  "crates/yss-project-progress",
+  "crates/yss-project-registry",
+  "crates/yss-project-registry-contract",
+  "crates/yss-project-registry-sqlite",
+  "crates/yss-project-watcher",
+  "crates/yss-project-watcher-notify",
+  "crates/yss-resource-lifecycle",
+  "crates/yss-resource-naming",
+  "crates/yss-sci",
+  "crates/yss-sci-contract",
+  "crates/yss-sci-runtime",
+  "crates/yss-sql-source",
+  "crates/yss-tabular-contract",
+  "crates/yss-tabular-io",
+  "crates/yss-tabular-polars",
+  "crates/yss-tracing",
+  "crates/yss-variable-contract",
+  "crates/yss-variable-value",
+  "crates/yss-window-state",
+  "crates/yss-worksheet-document",
 ]
 
 [workspace.package]
@@ -88,13 +88,32 @@ rust-version = "1.94"
 
 [workspace.dependencies]
 chrono = "0.4.41"
-duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
+duckdb = { version = "1.10504.0", default-features = false, features = [
+  "bundled",
+  "appender-arrow",
+] }
 faer = "0.24.0"
 mathlex = "=0.4.2"
 ndarray = "0.17.2"
 notify = "8.2.0"
 num-traits = "0.2.19"
-polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "ipc", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
+polars = { version = "0.53.0", default-features = false, features = [
+  "lazy",
+  "csv",
+  "ipc",
+  "parquet",
+  "strings",
+  "dtype-categorical",
+  "dtype-date",
+  "dtype-datetime",
+  "dtype-duration",
+  "dtype-time",
+  "dtype-decimal",
+  "dtype-i8",
+  "dtype-i16",
+  "dtype-u8",
+  "dtype-u16",
+] }
 polars-arrow = { version = "0.53.0", default-features = false }
 polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 rand = "0.10"
@@ -107,12 +126,22 @@ thiserror = "2.0.18"
 regex = "1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
+sqlx = { version = "0.9", default-features = false, features = [
+  "runtime-tokio",
+  "macros",
+  "sqlite",
+  "postgres",
+  "mysql",
+] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 unicode-normalization = "0.1.24"
 unicode-casefold = "0.2.0"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Storage_FileSystem",
+] }
 
 
 [lib]

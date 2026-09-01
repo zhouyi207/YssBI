@@ -1,8 +1,8 @@
-import { useTranslation } from 'react-i18next';
-import type { ValidationIssueDTO } from '@/shared/types/bayes';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { bayesValidationIssueMessage } from '../../bayesIssuePresentation';
+import { useTranslation } from "react-i18next";
+import type { ValidationIssueDTO } from "@/shared/types/bayes";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { bayesValidationIssueMessage } from "../../bayesIssuePresentation";
 
 export function PanelTitle({
   title,
@@ -18,8 +18,15 @@ export function PanelTitle({
     <div className="space-y-1">
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-      {issues.map(issue => (
-        <p key={`${issue.code}-${issue.path}`} className={issue.severity === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+      {issues.map((issue) => (
+        <p
+          key={`${issue.code}-${issue.path}`}
+          className={
+            issue.severity === "error"
+              ? "text-xs text-destructive"
+              : "text-xs text-muted-foreground"
+          }
+        >
           <span className="font-mono">[{issue.code}]</span> {bayesValidationIssueMessage(issue, t)}
         </p>
       ))}
@@ -58,11 +65,23 @@ export function EditableNumberField({
   );
 }
 
-export function ReadOnlyField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+export function ReadOnlyField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <div className={`rounded-md border border-border bg-muted/30 px-3 py-2 text-sm ${mono ? 'font-mono' : ''}`}>{value}</div>
+      <div
+        className={`rounded-md border border-border bg-muted/30 px-3 py-2 text-sm ${mono ? "font-mono" : ""}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -74,5 +93,5 @@ export function replaceAt(values: string[], index: number, value: string): strin
 }
 
 export function formatNumber(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(3) : '—';
+  return Number.isFinite(value) ? value.toFixed(3) : "—";
 }

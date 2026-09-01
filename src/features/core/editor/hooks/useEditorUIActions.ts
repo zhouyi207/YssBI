@@ -1,4 +1,4 @@
-import { useEditorStore } from '../stores';
+import { useEditorStore } from "../stores";
 
 export function useEditorUIActions() {
   const setContextMenu = useEditorStore((state) => state.setContextMenu);

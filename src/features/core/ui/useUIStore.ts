@@ -8,6 +8,6 @@ export function useUIStore<T>(selector: (state: UIState) => T): T {
   return useSyncExternalStore(
     uiStore.subscribe.bind(uiStore),
     () => selector(uiStore.getState()),
-    () => selector(uiStore.getState())
+    () => selector(uiStore.getState()),
   );
 }

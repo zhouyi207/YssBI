@@ -10,7 +10,7 @@ export {
   type RepositoryAssetDependencyOrigin,
   type ResolvedModuleDependency,
   type StylesheetDependencyOrigin,
-} from '@/tests/helpers/moduleDependencyAudit';
+} from "@/tests/helpers/moduleDependencyAudit";
 export {
   createRepositoryTextReader,
   resolvedStylesheetDependencies,
@@ -19,54 +19,51 @@ export {
   type ResolvedStylesheetGraph,
   type StylesheetDependencyKind,
   type StylesheetResolutionError,
-} from '@/tests/helpers/stylesheetDependencyAudit';
-export { productionTypeScriptSources } from '@/tests/helpers/productionSourceAudit';
-export {
-  rawTauriInvokeOccurrences,
-  type SourceOccurrence,
-} from '@/tests/helpers/tauriInvokeAudit';
-import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
+} from "@/tests/helpers/stylesheetDependencyAudit";
+export { productionTypeScriptSources } from "@/tests/helpers/productionSourceAudit";
+export { rawTauriInvokeOccurrences, type SourceOccurrence } from "@/tests/helpers/tauriInvokeAudit";
+import type { ArchitectureSource } from "@/tests/helpers/moduleDependencyAudit";
 import type {
   FrontendDependencyMode,
   ModuleDependencyKind,
   ModuleDependencyResourceKind,
   ResolvedModuleDependency,
   ModuleDependencyResolutionError,
-} from '@/tests/helpers/moduleDependencyAudit';
+} from "@/tests/helpers/moduleDependencyAudit";
 import type {
   ResolvedStylesheetDependency,
   ResolvedStylesheetGraph,
   StylesheetDependencyKind,
   StylesheetResolutionError,
-} from '@/tests/helpers/stylesheetDependencyAudit';
+} from "@/tests/helpers/stylesheetDependencyAudit";
 
 export type FrontendLayer =
-  | 'app-composition'
-  | 'views'
-  | 'application'
-  | 'core'
-  | 'domain'
-  | 'services'
-  | 'components-ui'
-  | 'wire-schema'
-  | 'diagnostics'
-  | 'pure-shared';
+  | "app-composition"
+  | "views"
+  | "application"
+  | "core"
+  | "domain"
+  | "services"
+  | "components-ui"
+  | "wire-schema"
+  | "diagnostics"
+  | "pure-shared";
 
 export type FrontendDependencyKind =
   | ModuleDependencyKind
   | StylesheetDependencyKind
-  | 'call'
-  | 'property-access'
-  | 'constructor'
-  | 'export-surface';
+  | "call"
+  | "property-access"
+  | "constructor"
+  | "export-surface";
 
 export type FrontendClassificationError =
   | {
-      readonly kind: 'unclassified-production-source';
+      readonly kind: "unclassified-production-source";
       readonly sourceFile: string;
     }
   | {
-      readonly kind: 'multiply-classified-production-source';
+      readonly kind: "multiply-classified-production-source";
       readonly sourceFile: string;
       readonly layers: readonly FrontendLayer[];
     };
@@ -76,12 +73,10 @@ export interface FrontendClassificationReport {
   readonly errors: readonly FrontendClassificationError[];
 }
 
-export type FrontendLiteralPolicyMembership = Readonly<
-  Record<FrontendLayer, readonly string[]>
->;
+export type FrontendLiteralPolicyMembership = Readonly<Record<FrontendLayer, readonly string[]>>;
 
 export interface FrontendResolvedCapability {
-  readonly sourceLayer: 'app-composition' | 'views' | 'application';
+  readonly sourceLayer: "app-composition" | "views" | "application";
   readonly canonicalModule: string;
   readonly exportedSymbols: readonly string[];
   readonly exactConsumers: readonly string[] | null;
@@ -123,9 +118,9 @@ export interface ExternalDependencyPolicy {
 
 export interface RepositoryAssetDependencyAllowance {
   readonly sourceLayer: FrontendLayer;
-  readonly mode: 'runtime' | 'build-style';
-  readonly dependencyKind: 'side-effect-import' | StylesheetDependencyKind;
-  readonly resourceKind: 'stylesheet';
+  readonly mode: "runtime" | "build-style";
+  readonly dependencyKind: "side-effect-import" | StylesheetDependencyKind;
+  readonly resourceKind: "stylesheet";
   readonly consumerSourceFile: string;
   readonly repositoryRelativeAssetPath: string;
 }
@@ -141,27 +136,27 @@ export interface ReadonlyPackageManifest {
 
 export type FrontendExternalDependencyError =
   | {
-      readonly kind: 'unknown-external-package';
+      readonly kind: "unknown-external-package";
       readonly packageName: string;
       readonly sourceFile: string;
     }
   | {
-      readonly kind: 'development-dependency-in-production';
+      readonly kind: "development-dependency-in-production";
       readonly packageName: string;
       readonly sourceFile: string;
     }
   | {
-      readonly kind: 'production-declaration-set-mismatch';
+      readonly kind: "production-declaration-set-mismatch";
       readonly missing: readonly string[];
       readonly extra: readonly string[];
     }
   | {
-      readonly kind: 'build-declaration-set-mismatch';
+      readonly kind: "build-declaration-set-mismatch";
       readonly missing: readonly string[];
       readonly wrongScope: readonly string[];
     }
   | {
-      readonly kind: 'invalid-external-policy-row';
+      readonly kind: "invalid-external-policy-row";
       readonly packageName: string;
       readonly reason: string;
     };
@@ -169,12 +164,12 @@ export type FrontendExternalDependencyError =
 export type FrontendAssetDependencyError =
   | StylesheetResolutionError
   | {
-      readonly kind: 'stylesheet-layer-conflict';
+      readonly kind: "stylesheet-layer-conflict";
       readonly sourceFile: string;
       readonly inheritedLayers: readonly FrontendLayer[];
     }
   | {
-      readonly kind: 'invalid-asset-policy-row';
+      readonly kind: "invalid-asset-policy-row";
       readonly consumerSourceFile: string;
       readonly repositoryRelativeAssetPath: string;
       readonly reason: string;
@@ -188,7 +183,7 @@ export interface FrontendExternalDependencyEvaluation {
   readonly canonicalSubpath: string | null;
   readonly resourceKind: ModuleDependencyResourceKind;
   readonly consumerSourceFile: string | null;
-  readonly declarationScope: 'production' | 'development';
+  readonly declarationScope: "production" | "development";
   readonly allowed: boolean;
 }
 
@@ -220,8 +215,6 @@ export interface FrontendArchitectureReport {
   readonly findings: readonly FrontendFinding[];
 }
 
-export type ResolvedFrontendDependency =
-  | ResolvedModuleDependency
-  | ResolvedStylesheetDependency;
+export type ResolvedFrontendDependency = ResolvedModuleDependency | ResolvedStylesheetDependency;
 
 export type { ArchitectureSource };

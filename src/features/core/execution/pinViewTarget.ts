@@ -1,21 +1,20 @@
-import type { TFunction } from 'i18next';
-import { portAddressKey } from '@/features/domain/editorProjection';
-import { outputPinRef, type InspectableResultRef } from '@/features/domain/result/inspectableResultRef';
+import type { TFunction } from "i18next";
+import { portAddressKey } from "@/features/domain/editorProjection";
+import {
+  outputPinRef,
+  type InspectableResultRef,
+} from "@/features/domain/result/inspectableResultRef";
 import type {
   EditorConnectionProjectionDto,
   PortAddressDto,
-} from '@/shared/types/domain/editorProjection';
+} from "@/shared/types/domain/editorProjection";
 
-export type PinViewDisabledReason =
-  | 'exec_pin'
-  | 'not_applicable'
-  | 'no_run'
-  | 'no_upstream';
+export type PinViewDisabledReason = "exec_pin" | "not_applicable" | "no_run" | "no_upstream";
 
 export interface ResolvePinViewTargetParams {
   graphPath: string;
   address?: PortAddressDto;
-  direction: 'input' | 'output';
+  direction: "input" | "output";
   isExec: boolean;
   connections?: readonly EditorConnectionProjectionDto[];
 }
@@ -45,29 +44,27 @@ export function inspectableRefsFromPinView(
 ): InspectableResultRef[] {
   const { graphPath, address, direction, isExec, connections } = params;
   if (isExec || !address) return [];
-  const outputs = direction === 'output'
-    ? [address]
-    : resolveUpstreamOutputs(address, connections);
+  const outputs = direction === "output" ? [address] : resolveUpstreamOutputs(address, connections);
   return outputs.map((output) => outputPinRef(graphPath, output));
 }
 
 export function evaluatePinViewState(params: ResolvePinViewTargetParams): PinViewUiState {
   if (params.isExec) {
-    return { showMenu: false, enabled: false, disabledReason: 'exec_pin', refs: [] };
+    return { showMenu: false, enabled: false, disabledReason: "exec_pin", refs: [] };
   }
 
   const refs = inspectableRefsFromPinView(params);
-  if (params.direction === 'input' && refs.length === 0) {
+  if (params.direction === "input" && refs.length === 0) {
     return {
       showMenu: false,
       enabled: false,
-      disabledReason: 'not_applicable',
+      disabledReason: "not_applicable",
       refs,
     };
   }
 
   if (refs.length === 0) {
-    return { showMenu: true, enabled: false, disabledReason: 'no_run', refs };
+    return { showMenu: true, enabled: false, disabledReason: "no_run", refs };
   }
 
   return { showMenu: true, enabled: true, disabledReason: null, refs };
@@ -77,10 +74,10 @@ export function pinViewDisabledTitle(
   reason: PinViewDisabledReason | null,
   t: TFunction,
 ): string | undefined {
-  if (!reason || reason === 'exec_pin' || reason === 'not_applicable') return undefined;
+  if (!reason || reason === "exec_pin" || reason === "not_applicable") return undefined;
   const key = {
-    no_run: 'contextMenu.pin.viewDisabledNoRun',
-    no_upstream: 'contextMenu.pin.viewDisabledNoUpstream',
+    no_run: "contextMenu.pin.viewDisabledNoRun",
+    no_upstream: "contextMenu.pin.viewDisabledNoUpstream",
   }[reason];
   return t(key);
 }

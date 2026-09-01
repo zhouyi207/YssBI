@@ -1,6 +1,6 @@
-import { VscAdd } from 'react-icons/vsc';
-import { Button } from '@/components/ui/button';
-import { SidebarChevron } from '../../sidebarUi/SidebarChevron';
+import { VscAdd } from "react-icons/vsc";
+import { Button } from "@/components/ui/button";
+import { SidebarChevron } from "../../sidebarUi/SidebarChevron";
 import {
   sidebarGroupRowClass,
   sidebarItemIndent,
@@ -8,7 +8,7 @@ import {
   SIDEBAR_ROW_ICON_SIZE,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
   SIDEBAR_ROW_TRAILING_SLOT_CLASS,
-} from '../../sidebarUi/sidebarStyles';
+} from "../../sidebarUi/sidebarStyles";
 
 export function SidebarGroupRow({
   level,
@@ -37,7 +37,7 @@ export function SidebarGroupRow({
         onToggle();
       }}
       onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
         onToggle();
       }}
@@ -54,7 +54,7 @@ export function SidebarGroupRow({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={addAriaLabel ?? (typeof label === 'string' ? label : undefined)}
+          aria-label={addAriaLabel ?? (typeof label === "string" ? label : undefined)}
           onClick={(e) => {
             e.stopPropagation();
             onAdd();

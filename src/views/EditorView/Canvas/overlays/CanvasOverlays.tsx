@@ -1,22 +1,22 @@
-import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
-import { ActionMenu } from '@/shared/ui/actionMenu';
-import { NodePalette } from '../../Layout/NodePalette';
-import { PinResultSearch } from './PinResultSearchPalette';
-import { CanvasExecutionToolbar } from './CanvasExecutionToolbar';
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
+import { ActionMenu } from "@/shared/ui/actionMenu";
+import { NodePalette } from "../../Layout/NodePalette";
+import { PinResultSearch } from "./PinResultSearchPalette";
+import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
 export type CanvasOverlayGraphModel =
-  | { kind: 'event'; graphPath: string }
-  | { kind: 'function'; graphPath: string }
-  | { kind: 'unavailable' };
+  | { kind: "event"; graphPath: string }
+  | { kind: "function"; graphPath: string }
+  | { kind: "unavailable" };
 
 export type CanvasPaletteOverlayModel =
-  | { kind: 'hidden' }
+  | { kind: "hidden" }
   | {
-      kind: 'visible';
+      kind: "visible";
       x: number;
       y: number;
       graphPath: string | null;
@@ -27,22 +27,21 @@ export type CanvasPaletteOverlayModel =
     };
 
 export type CanvasVariableOverlayModel =
-  | { kind: 'hidden' }
+  | { kind: "hidden" }
   | {
-      kind: 'visible';
+      kind: "visible";
       x: number;
       y: number;
       variableName: string;
       onGet: () => void;
       onSet: () => void;
       onClose: () => void;
-  };
-
+    };
 
 export type CanvasExecutionOverlayModel =
-  | { kind: 'hidden' }
+  | { kind: "hidden" }
   | {
-      kind: 'event';
+      kind: "event";
       graphPath: string;
       onExecute: () => void;
       onCancelExecution: () => void;
@@ -62,13 +61,13 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
 
   return (
     <>
-      {graph.kind === 'event' ? (
+      {graph.kind === "event" ? (
         <div className="absolute left-3 top-3 z-40">
           <PinResultSearch graphPath={graph.graphPath} />
         </div>
       ) : null}
 
-      {execution.kind === 'event' ? (
+      {execution.kind === "event" ? (
         <CanvasExecutionToolbar
           graphPath={execution.graphPath}
           onExecute={execution.onExecute}
@@ -77,7 +76,7 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
         />
       ) : null}
 
-      {palette.kind === 'visible'
+      {palette.kind === "visible"
         ? createPortal(
             <NodePalette
               x={palette.x}
@@ -92,16 +91,15 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
           )
         : null}
 
-
-      {variable.kind === 'visible' ? (
+      {variable.kind === "visible" ? (
         <ActionMenu
           position={{ x: variable.x, y: variable.y }}
           sections={[
             {
               items: [
                 {
-                  id: 'get-variable',
-                  label: t('canvas.getVariable', { name: variable.variableName }),
+                  id: "get-variable",
+                  label: t("canvas.getVariable", { name: variable.variableName }),
                   onClick: variable.onGet,
                 },
               ],
@@ -109,8 +107,8 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
             {
               items: [
                 {
-                  id: 'set-variable',
-                  label: t('canvas.setVariable', { name: variable.variableName }),
+                  id: "set-variable",
+                  label: t("canvas.setVariable", { name: variable.variableName }),
                   onClick: variable.onSet,
                 },
               ],

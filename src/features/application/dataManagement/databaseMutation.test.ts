@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { executeDatabaseMutation } from './databaseMutation';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { executeDatabaseMutation } from "./databaseMutation";
 
-const projectInstanceId = '00000000-0000-0000-0000-000000000601';
-const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000602';
+const projectInstanceId = "00000000-0000-0000-0000-000000000601";
+const replacementProjectInstanceId = "00000000-0000-0000-0000-000000000602";
 
 function aggregate(operationId: string) {
   return {
-    data: 'done',
+    data: "done",
     mutation: {
       operationId,
       projectInstanceId,
@@ -16,13 +16,13 @@ function aggregate(operationId: string) {
       moves: [],
       deltas: [],
       projectionReplacements: [],
-      projectionStatus: { status: 'complete' as const, expectedGraphPaths: [] },
+      projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
       history: { canUndo: false, canRedo: false },
     },
   };
 }
 
-describe('executeDatabaseMutation', () => {
+describe("executeDatabaseMutation", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     projectPublicationCoordinator.cancelProject();
@@ -30,10 +30,10 @@ describe('executeDatabaseMutation', () => {
     useDatabaseStore.setState({ databases: {}, revisions: { sales: 4 } });
   });
 
-  it('passes one revisioned lifecycle snapshot to the command and settles its receipt', async () => {
+  it("passes one revisioned lifecycle snapshot to the command and settles its receipt", async () => {
     const command = vi.fn(async (authority) => aggregate(authority.operationId));
 
-    await expect(executeDatabaseMutation('sales', command)).resolves.toBe('done');
+    await expect(executeDatabaseMutation("sales", command)).resolves.toBe("done");
     expect(command).toHaveBeenCalledWith({
       projectInstanceId,
       operationId: expect.any(String),
@@ -41,21 +41,21 @@ describe('executeDatabaseMutation', () => {
     });
   });
 
-  it('rejects lifecycle replacement inside the authority reader before command or publication effects', async () => {
+  it("rejects lifecycle replacement inside the authority reader before command or publication effects", async () => {
     const authority = useDatabaseStore.getState();
     const before = {
       databases: structuredClone(authority.databases),
       revisions: structuredClone(authority.revisions),
     };
-    vi.spyOn(useDatabaseStore, 'getState').mockImplementationOnce(() => {
+    vi.spyOn(useDatabaseStore, "getState").mockImplementationOnce(() => {
       projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
       return authority;
     });
     const command = vi.fn();
-    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 
-    await expect(executeDatabaseMutation('sales', command)).rejects.toMatchObject({
-      code: 'stale_project_lifecycle',
+    await expect(executeDatabaseMutation("sales", command)).rejects.toMatchObject({
+      code: "stale_project_lifecycle",
     });
 
     expect(command).not.toHaveBeenCalled();
@@ -63,12 +63,12 @@ describe('executeDatabaseMutation', () => {
     expect(useDatabaseStore.getState()).toMatchObject(before);
   });
 
-  it('rejects missing revision authority before command or publication effects', async () => {
+  it("rejects missing revision authority before command or publication effects", async () => {
     useDatabaseStore.setState({ databases: {}, revisions: {} });
     const command = vi.fn();
-    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 
-    await expect(executeDatabaseMutation('sales', command)).rejects.toThrow(
+    await expect(executeDatabaseMutation("sales", command)).rejects.toThrow(
       "Database 'sales' has no authoritative revision",
     );
 

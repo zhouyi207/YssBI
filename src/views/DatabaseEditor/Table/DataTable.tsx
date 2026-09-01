@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CellStyleModule,
   ClientSideRowModelModule,
@@ -9,46 +9,47 @@ import {
   type CellStyle,
   type ColDef,
   type GetRowIdParams,
-} from 'ag-grid-community';
-import { AgGridReact } from 'ag-grid-react';
-import { VscDatabase } from 'react-icons/vsc';
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
-import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import { useSettingsRead } from '@/features/core/settings/read';
-import { resolveThemeTokens } from '@/shared/theme/themeTokens';
-import type { ColumnInfo, DatabaseRow } from '@/shared/types/domain/database';
+} from "ag-grid-community";
+import { AgGridReact } from "ag-grid-react";
+import { VscDatabase } from "react-icons/vsc";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { buildAgGridTheme } from "@/components/data-grid/agGridTheme";
+import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
+import { useSettingsRead } from "@/features/core/settings/read";
+import { resolveThemeTokens } from "@/shared/theme/themeTokens";
+import type { ColumnInfo, DatabaseRow } from "@/shared/types/domain/database";
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
   DATABASE_EDITOR_ROW_HEIGHT,
   DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-} from '@/shared/config-default';
+} from "@/shared/config-default";
 import {
   DatabaseCellRenderer,
   DatabaseColumnHeader,
   DatabaseRowMarker,
-} from './DatabaseGridRenderers';
+} from "./DatabaseGridRenderers";
 import {
   dataColumnId,
   isGridCellActive,
   isGridCellSelected,
   isGridColumnSelected,
   type DatabaseGridRow,
-} from './databaseGridModel';
-import { databaseGridSelectionToClipboardText } from './databaseGridClipboard';
-import { useDatabaseGridSelectionAdapter } from './useDatabaseGridSelectionAdapter';
+} from "./databaseGridModel";
+import { databaseGridSelectionToClipboardText } from "./databaseGridClipboard";
+import { useDatabaseGridSelectionAdapter } from "./useDatabaseGridSelectionAdapter";
 
-const ROW_MARKER_COLUMN_ID = '__row_marker__';
+const ROW_MARKER_COLUMN_ID = "__row_marker__";
 
-const GRID_MODULES = [CellStyleModule, ClientSideRowModelModule, RenderApiModule, RowApiModule, RowSelectionModule];
+const GRID_MODULES = [
+  CellStyleModule,
+  ClientSideRowModelModule,
+  RenderApiModule,
+  RowApiModule,
+  RowSelectionModule,
+];
 
 const ROW_SELECTION = {
-  mode: 'multiRow',
+  mode: "multiRow",
   checkboxes: false,
   headerCheckbox: false,
   enableClickSelection: false,
@@ -79,11 +80,13 @@ function getRowId({ data }: GetRowIdParams<DatabaseGridRow>): string {
 }
 
 function isTextEntryTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement
-    && (target.isContentEditable
-      || target instanceof HTMLInputElement
-      || target instanceof HTMLTextAreaElement
-      || target instanceof HTMLSelectElement);
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement)
+  );
 }
 
 export const DataTable: React.FC<DataTableProps> = ({
@@ -100,11 +103,15 @@ export const DataTable: React.FC<DataTableProps> = ({
   const themeTokens = useMemo(() => resolveThemeTokens(appTheme), [appTheme]);
   const gridRef = useRef<AgGridReact<DatabaseGridRow>>(null);
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
-  const gridRows = useMemo<DatabaseGridRow[]>(() => loadedRows.map((values, rowIndex) => ({
-    values,
-    rowId: loadedRowIds[rowIndex] ?? `page:${pageStartIndex + rowIndex}`,
-    sourceRowIndex: rowIndex,
-  })), [loadedRows, loadedRowIds, pageStartIndex]);
+  const gridRows = useMemo<DatabaseGridRow[]>(
+    () =>
+      loadedRows.map((values, rowIndex) => ({
+        values,
+        rowId: loadedRowIds[rowIndex] ?? `page:${pageStartIndex + rowIndex}`,
+        sourceRowIndex: rowIndex,
+      })),
+    [loadedRows, loadedRowIds, pageStartIndex],
+  );
 
   const {
     selectionRef,
@@ -125,30 +132,33 @@ export const DataTable: React.FC<DataTableProps> = ({
     onSelectionChange,
   });
 
-  const defaultColumnDef = useMemo<ColDef<DatabaseGridRow>>(() => ({
-    ...BASE_COLUMN_DEF,
-    suppressKeyboardEvent: ({ editing, event }) => {
-      if (editing) return false;
-      captureCellKeyboard(event);
-      const commandKey = event.ctrlKey || event.metaKey;
-      return commandKey && event.key.toLowerCase() === 'a';
-    },
-  }), [captureCellKeyboard]);
+  const defaultColumnDef = useMemo<ColDef<DatabaseGridRow>>(
+    () => ({
+      ...BASE_COLUMN_DEF,
+      suppressKeyboardEvent: ({ editing, event }) => {
+        if (editing) return false;
+        captureCellKeyboard(event);
+        const commandKey = event.ctrlKey || event.metaKey;
+        return commandKey && event.key.toLowerCase() === "a";
+      },
+    }),
+    [captureCellKeyboard],
+  );
 
-  const cellSelectionStyle = useCallback((
-    rowIndex: number,
-    columnIndex: number,
-  ): CellStyle => {
-    const current = selectionRef.current;
-    const selected = isGridCellSelected(current, rowIndex, columnIndex);
-    const active = isGridCellActive(current, rowIndex, columnIndex);
-    return {
-      backgroundColor: selected
-        ? `color-mix(in srgb, ${themeTokens.selection} 16%, transparent)`
-        : 'transparent',
-      boxShadow: active ? `inset 0 0 0 1px ${themeTokens.accent}` : 'none',
-    };
-  }, [themeTokens.accent, themeTokens.selection]);
+  const cellSelectionStyle = useCallback(
+    (rowIndex: number, columnIndex: number): CellStyle => {
+      const current = selectionRef.current;
+      const selected = isGridCellSelected(current, rowIndex, columnIndex);
+      const active = isGridCellActive(current, rowIndex, columnIndex);
+      return {
+        backgroundColor: selected
+          ? `color-mix(in srgb, ${themeTokens.selection} 16%, transparent)`
+          : "transparent",
+        boxShadow: active ? `inset 0 0 0 1px ${themeTokens.accent}` : "none",
+      };
+    },
+    [themeTokens.accent, themeTokens.selection],
+  );
 
   const gridColumns = useMemo<ColDef<DatabaseGridRow>[]>(() => {
     const realColumns = columns.map<ColDef<DatabaseGridRow>>((column, columnIndex) => ({
@@ -167,9 +177,10 @@ export const DataTable: React.FC<DataTableProps> = ({
       maxWidth: 520,
       valueGetter: ({ data }) => data?.values[columnIndex],
       cellRenderer: DatabaseCellRenderer,
-      cellStyle: ({ data }) => data
-        ? cellSelectionStyle(data.sourceRowIndex, columnIndex)
-        : { backgroundColor: 'transparent', boxShadow: 'none' },
+      cellStyle: ({ data }) =>
+        data
+          ? cellSelectionStyle(data.sourceRowIndex, columnIndex)
+          : { backgroundColor: "transparent", boxShadow: "none" },
     }));
 
     const placeholderColumns = Array.from(
@@ -177,7 +188,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       (_, index): ColDef<DatabaseGridRow> => ({
         colId: `__placeholder_${index}`,
         editable: false,
-        headerName: '',
+        headerName: "",
         initialWidth: 96,
         suppressNavigable: true,
       }),
@@ -190,41 +201,36 @@ export const DataTable: React.FC<DataTableProps> = ({
         cellRendererParams: { onSelectRow: handleRowSelect },
         cellStyle: { padding: 0 },
         editable: false,
-        headerName: '',
+        headerName: "",
         lockPinned: true,
-        lockPosition: 'left',
+        lockPosition: "left",
         maxWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
         minWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-        pinned: 'left',
+        pinned: "left",
         resizable: false,
         suppressNavigable: true,
-        valueGetter: ({ data }) => data
-          ? pageStartIndex + data.sourceRowIndex + 1
-          : undefined,
+        valueGetter: ({ data }) => (data ? pageStartIndex + data.sourceRowIndex + 1 : undefined),
         width: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
       },
       ...realColumns,
       ...placeholderColumns,
     ];
-  }, [
-    columns,
-    pageStartIndex,
-    cellSelectionStyle,
-    handleColumnSelect,
-    handleRowSelect,
-  ]);
+  }, [columns, pageStartIndex, cellSelectionStyle, handleColumnSelect, handleRowSelect]);
 
-  const handleCopy = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
-    if (isTextEntryTarget(event.target)) return;
-    const text = databaseGridSelectionToClipboardText(
-      selectionRef.current,
-      loadedRows,
-      columns.length,
-    );
-    if (text === null) return;
-    event.preventDefault();
-    event.clipboardData.setData('text/plain', text);
-  }, [columns.length, loadedRows]);
+  const handleCopy = useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      if (isTextEntryTarget(event.target)) return;
+      const text = databaseGridSelectionToClipboardText(
+        selectionRef.current,
+        loadedRows,
+        columns.length,
+      );
+      if (text === null) return;
+      event.preventDefault();
+      event.clipboardData.setData("text/plain", text);
+    },
+    [columns.length, loadedRows],
+  );
 
   const hasData = columns.length > 0 || loadedRows.length > 0;
   if (!hasData) {
@@ -232,7 +238,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card text-muted-foreground">
           <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="text-xs">{t('databaseEditor.loadingProjectData')}</span>
+          <span className="text-xs">{t("databaseEditor.loadingProjectData")}</span>
         </div>
       );
     }
@@ -242,7 +248,7 @@ export const DataTable: React.FC<DataTableProps> = ({
           <EmptyMedia variant="icon" className="size-12 text-muted-foreground">
             <VscDatabase className="size-6" />
           </EmptyMedia>
-          <EmptyTitle>{t('databaseEditor.noDataFrameSelected')}</EmptyTitle>
+          <EmptyTitle>{t("databaseEditor.noDataFrameSelected")}</EmptyTitle>
         </EmptyHeader>
       </Empty>
     );
@@ -276,7 +282,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       />
       {loading ? (
         <div className="pointer-events-none absolute bottom-3 right-4 rounded-md border border-border bg-popover/95 px-2.5 py-1.5 text-[11px] font-medium text-popover-foreground shadow-lg backdrop-blur">
-          {t('databaseEditor.loadingProjectData')}
+          {t("databaseEditor.loadingProjectData")}
         </div>
       ) : null}
     </div>

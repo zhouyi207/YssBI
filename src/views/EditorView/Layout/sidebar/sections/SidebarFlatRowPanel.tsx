@@ -1,10 +1,10 @@
-import { useMemo, useRef } from 'react';
-import { useEditorUi } from '@/features/core/editor/ui';
-import type { SidebarPanelModel } from '@/features/core/sidebar/flatRows';
-import type { SidebarSectionActionConfig, SidebarSectionKey } from '@/features/core/sidebar';
-import { SidebarFlatRowContext, type SidebarFlatRowContextValue } from './sidebarFlatRowContext';
-import { SidebarFlatRowList } from './SidebarFlatRowList';
-import { flattenSidebarPanelModel } from './sidebarRenderRows';
+import { useMemo, useRef } from "react";
+import { useEditorUi } from "@/features/core/editor/ui";
+import type { SidebarPanelModel } from "@/features/core/sidebar/flatRows";
+import type { SidebarSectionActionConfig, SidebarSectionKey } from "@/features/core/sidebar";
+import { SidebarFlatRowContext, type SidebarFlatRowContextValue } from "./sidebarFlatRowContext";
+import { SidebarFlatRowList } from "./SidebarFlatRowList";
+import { flattenSidebarPanelModel } from "./sidebarRenderRows";
 
 export type SidebarFlatRowPanelProps = {
   model: SidebarPanelModel;
@@ -22,7 +22,7 @@ export function SidebarFlatRowPanel({
   const detailTarget = useEditorUi((snapshot) => snapshot.detailFocus);
   const rows = useMemo(() => flattenSidebarPanelModel(model), [model]);
 
-  const handlersRef = useRef<Omit<SidebarFlatRowContextValue, 'detailTarget' | 'sectionActions'>>({
+  const handlersRef = useRef<Omit<SidebarFlatRowContextValue, "detailTarget" | "sectionActions">>({
     onToggleSection,
     onDatabaseContextMenu,
   });
@@ -36,7 +36,8 @@ export function SidebarFlatRowPanel({
       sectionActions,
       detailTarget,
       onToggleSection: (key) => handlersRef.current.onToggleSection(key),
-      onDatabaseContextMenu: (e, id, name) => handlersRef.current.onDatabaseContextMenu?.(e, id, name),
+      onDatabaseContextMenu: (e, id, name) =>
+        handlersRef.current.onDatabaseContextMenu?.(e, id, name),
     }),
     [detailTarget, sectionActions],
   );

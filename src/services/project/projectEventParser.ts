@@ -3,24 +3,22 @@ import type {
   HistoryStatusDto,
   ResourceKeyDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from "@/shared/types/dto/editorMutation";
 import {
   parseGraphDeltaDto,
   parseHistoryStatusDto,
-} from '@/shared/types/dto/editorMutationWireParser';
+} from "@/shared/types/dto/editorMutationWireParser";
 import type {
   ComputationSettingsMutationReceiptDto,
   ProjectComputationSettingsDto,
-} from '@/shared/types/dto/projectComputationSettings';
-import {
-  parseComputationSettingsMutationReceipt,
-} from '@/shared/types/dto/projectComputationSettings';
+} from "@/shared/types/dto/projectComputationSettings";
+import { parseComputationSettingsMutationReceipt } from "@/shared/types/dto/projectComputationSettings";
 import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
   ProjectSaveResultDto,
-} from '@/shared/types/dto/project';
-import { parseResourceMutationResultDto } from '@/shared/types/dto/resourceMutationResultWireParser';
+} from "@/shared/types/dto/project";
+import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -46,7 +44,7 @@ export interface ComputationSettingsChangedPayload {
 
 export interface ProjectIndexInvalidatedPayload {
   readonly projectInstanceId: string;
-  readonly source: 'watcher';
+  readonly source: "watcher";
   readonly version: number;
 }
 
@@ -60,28 +58,28 @@ export interface ResourceMutationCommittedPayload {
 }
 
 export type ProjectEvent =
-  | { readonly type: 'ProjectLoaded'; readonly payload: ProjectLoadedPayload }
-  | { readonly type: 'ProjectCleared'; readonly payload: undefined }
+  | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
+  | { readonly type: "ProjectCleared"; readonly payload: undefined }
   | {
-      readonly type: 'ProjectLifecycleCommitted';
+      readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
     }
-  | { readonly type: 'ProjectSaved'; readonly payload: ProjectSavedPayload }
+  | { readonly type: "ProjectSaved"; readonly payload: ProjectSavedPayload }
   | {
-      readonly type: 'ComputationSettingsChanged';
+      readonly type: "ComputationSettingsChanged";
       readonly payload: ComputationSettingsChangedPayload;
     }
   | {
-      readonly type: 'ProjectIndexInvalidated';
+      readonly type: "ProjectIndexInvalidated";
       readonly payload: ProjectIndexInvalidatedPayload;
     }
-  | { readonly type: 'GraphDelta'; readonly payload: GraphDeltaEventPayload }
+  | { readonly type: "GraphDelta"; readonly payload: GraphDeltaEventPayload }
   | {
-      readonly type: 'ResourceMutationCommitted';
+      readonly type: "ResourceMutationCommitted";
       readonly payload: ResourceMutationCommittedPayload;
     };
 
-export type ProjectEventParseCode = 'invalidEnvelope' | 'unknownType' | 'invalidPayload';
+export type ProjectEventParseCode = "invalidEnvelope" | "unknownType" | "invalidPayload";
 
 export type ProjectEventParseOutcome =
   | { readonly ok: true; readonly event: ProjectEvent }
@@ -101,16 +99,18 @@ const PROJECT_EVENT_TYPES = {
 type ProjectEventType = keyof typeof PROJECT_EVENT_TYPES;
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasExactKeys(value: UnknownRecord, keys: readonly string[]): boolean {
-  return Object.keys(value).length === keys.length
-    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+  return (
+    Object.keys(value).length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
+  return typeof value === "string" && value.length > 0;
 }
 
 function isNullableNonEmptyString(value: unknown): value is string | null {
@@ -135,30 +135,32 @@ function parseHistory(value: unknown): HistoryStatusDto | null {
 }
 
 function parseResourceKey(value: unknown): ResourceKeyDto | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['kind', 'key'])
-    || !isNonEmptyString(value.key)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["kind", "key"]) || !isNonEmptyString(value.key)) {
     return null;
   }
-  if (value.kind !== 'graph'
-    && value.kind !== 'function'
-    && value.kind !== 'variable'
-    && value.kind !== 'database'
-    && value.kind !== 'worksheet') {
+  if (
+    value.kind !== "graph" &&
+    value.kind !== "function" &&
+    value.kind !== "variable" &&
+    value.kind !== "database" &&
+    value.kind !== "worksheet"
+  ) {
     return null;
   }
   return { kind: value.kind, key: value.key };
 }
 
 function parseProjectLoadedPayload(value: unknown): ProjectLoadedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['result']) || !isRecord(value.result)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
     return null;
   }
   const result = value.result;
-  if (!hasExactKeys(result, ['path', 'projectInstanceId', 'activationRevision'])
-    || !isNonEmptyString(result.path)
-    || !isNonEmptyString(result.projectInstanceId)
-    || !isRevision(result.activationRevision)) {
+  if (
+    !hasExactKeys(result, ["path", "projectInstanceId", "activationRevision"]) ||
+    !isNonEmptyString(result.path) ||
+    !isNonEmptyString(result.projectInstanceId) ||
+    !isRevision(result.activationRevision)
+  ) {
     return null;
   }
   return {
@@ -171,17 +173,25 @@ function parseProjectLoadedPayload(value: unknown): ProjectLoadedPayload | null 
 }
 
 function parseProjectRecord(value: unknown): ProjectRecordRow | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, [
-      'id', 'name', 'path', 'createdAt', 'lastOpenedAt', 'isFavorite', 'rootIdentity',
-    ])
-    || !isNonEmptyString(value.id)
-    || !isNonEmptyString(value.name)
-    || !isNonEmptyString(value.path)
-    || !isNonEmptyString(value.createdAt)
-    || !isNullableNonEmptyString(value.lastOpenedAt)
-    || typeof value.isFavorite !== 'boolean'
-    || !isNonEmptyString(value.rootIdentity)) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id",
+      "name",
+      "path",
+      "createdAt",
+      "lastOpenedAt",
+      "isFavorite",
+      "rootIdentity",
+    ]) ||
+    !isNonEmptyString(value.id) ||
+    !isNonEmptyString(value.name) ||
+    !isNonEmptyString(value.path) ||
+    !isNonEmptyString(value.createdAt) ||
+    !isNullableNonEmptyString(value.lastOpenedAt) ||
+    typeof value.isFavorite !== "boolean" ||
+    !isNonEmptyString(value.rootIdentity)
+  ) {
     return null;
   }
   return {
@@ -195,13 +205,15 @@ function parseProjectRecord(value: unknown): ProjectRecordRow | null {
   };
 }
 
-function parseLifecycleRecovery(value: unknown): LifecycleMutationResultDto['recovery'] | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['required', 'action', 'path', 'identity'])
-    || typeof value.required !== 'boolean'
-    || !isNonEmptyString(value.action)
-    || !isNullableNonEmptyString(value.path)
-    || !isNullableNonEmptyString(value.identity)) {
+function parseLifecycleRecovery(value: unknown): LifecycleMutationResultDto["recovery"] | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["required", "action", "path", "identity"]) ||
+    typeof value.required !== "boolean" ||
+    !isNonEmptyString(value.action) ||
+    !isNullableNonEmptyString(value.path) ||
+    !isNullableNonEmptyString(value.identity)
+  ) {
     return null;
   }
   return {
@@ -213,35 +225,45 @@ function parseLifecycleRecovery(value: unknown): LifecycleMutationResultDto['rec
 }
 
 function parseLifecyclePayload(value: unknown): ProjectLifecycleCommittedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['result']) || !isRecord(value.result)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
     return null;
   }
   const result = value.result;
-  if (!hasExactKeys(result, [
-    'operationId', 'kind', 'oldProjectInstanceId', 'newProjectInstanceId', 'phase', 'outcome',
-    'record', 'path', 'recovery', 'invalidation',
-  ])
-    || !isNonEmptyString(result.operationId)
-    || (result.kind !== 'saveAs'
-      && result.kind !== 'create'
-      && result.kind !== 'delete'
-      && result.kind !== 'registryCleanup'
-      && result.kind !== 'load'
-      && result.kind !== 'clear')
-    || !isNullableNonEmptyString(result.oldProjectInstanceId)
-    || !isNullableNonEmptyString(result.newProjectInstanceId)
-    || (result.phase !== 'destinationCommitted'
-      && result.phase !== 'registryCommitted'
-      && result.phase !== 'authorityCommitted')
-    || (result.outcome !== 'committed'
-      && result.outcome !== 'registryFailed'
-      && result.outcome !== 'activationFailed'
-      && result.outcome !== 'registryPending')
-    || !isNullableNonEmptyString(result.path)
-    || !isRecord(result.invalidation)
-    || !hasExactKeys(result.invalidation, ['project', 'registry'])
-    || typeof result.invalidation.project !== 'boolean'
-    || typeof result.invalidation.registry !== 'boolean') {
+  if (
+    !hasExactKeys(result, [
+      "operationId",
+      "kind",
+      "oldProjectInstanceId",
+      "newProjectInstanceId",
+      "phase",
+      "outcome",
+      "record",
+      "path",
+      "recovery",
+      "invalidation",
+    ]) ||
+    !isNonEmptyString(result.operationId) ||
+    (result.kind !== "saveAs" &&
+      result.kind !== "create" &&
+      result.kind !== "delete" &&
+      result.kind !== "registryCleanup" &&
+      result.kind !== "load" &&
+      result.kind !== "clear") ||
+    !isNullableNonEmptyString(result.oldProjectInstanceId) ||
+    !isNullableNonEmptyString(result.newProjectInstanceId) ||
+    (result.phase !== "destinationCommitted" &&
+      result.phase !== "registryCommitted" &&
+      result.phase !== "authorityCommitted") ||
+    (result.outcome !== "committed" &&
+      result.outcome !== "registryFailed" &&
+      result.outcome !== "activationFailed" &&
+      result.outcome !== "registryPending") ||
+    !isNullableNonEmptyString(result.path) ||
+    !isRecord(result.invalidation) ||
+    !hasExactKeys(result.invalidation, ["project", "registry"]) ||
+    typeof result.invalidation.project !== "boolean" ||
+    typeof result.invalidation.registry !== "boolean"
+  ) {
     return null;
   }
 
@@ -270,19 +292,25 @@ function parseLifecyclePayload(value: unknown): ProjectLifecycleCommittedPayload
 }
 
 function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['result']) || !isRecord(value.result)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
     return null;
   }
   const result = value.result;
-  if (!hasExactKeys(result, [
-    'projectInstanceId', 'operationId', 'publicationRevision', 'affectedResources',
-    'indexInvalidated', 'history',
-  ])
-    || !isNonEmptyString(result.projectInstanceId)
-    || !isNonEmptyString(result.operationId)
-    || !isRevision(result.publicationRevision)
-    || !Array.isArray(result.affectedResources)
-    || typeof result.indexInvalidated !== 'boolean') {
+  if (
+    !hasExactKeys(result, [
+      "projectInstanceId",
+      "operationId",
+      "publicationRevision",
+      "affectedResources",
+      "indexInvalidated",
+      "history",
+    ]) ||
+    !isNonEmptyString(result.projectInstanceId) ||
+    !isNonEmptyString(result.operationId) ||
+    !isRevision(result.publicationRevision) ||
+    !Array.isArray(result.affectedResources) ||
+    typeof result.indexInvalidated !== "boolean"
+  ) {
     return null;
   }
 
@@ -304,7 +332,7 @@ function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
 }
 
 function parseSettingsPayload(value: unknown): ComputationSettingsChangedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['result'])) return null;
+  if (!isRecord(value) || !hasExactKeys(value, ["result"])) return null;
   try {
     const parsed = parseComputationSettingsMutationReceipt(value.result);
     const settings: ProjectComputationSettingsDto = {
@@ -331,11 +359,13 @@ function parseSettingsPayload(value: unknown): ComputationSettingsChangedPayload
 }
 
 function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPayload | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['projectInstanceId', 'source', 'version'])
-    || !isNonEmptyString(value.projectInstanceId)
-    || value.source !== 'watcher'
-    || !isWatcherVersion(value.version)) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["projectInstanceId", "source", "version"]) ||
+    !isNonEmptyString(value.projectInstanceId) ||
+    value.source !== "watcher" ||
+    !isWatcherVersion(value.version)
+  ) {
     return null;
   }
   return {
@@ -346,9 +376,11 @@ function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPa
 }
 
 function parseGraphDeltaPayload(value: unknown): GraphDeltaEventPayload | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['projectInstanceId', 'delta'])
-    || !isNonEmptyString(value.projectInstanceId)) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["projectInstanceId", "delta"]) ||
+    !isNonEmptyString(value.projectInstanceId)
+  ) {
     return null;
   }
   try {
@@ -362,7 +394,7 @@ function parseGraphDeltaPayload(value: unknown): GraphDeltaEventPayload | null {
 }
 
 function parseResourceMutationPayload(value: unknown): ResourceMutationCommittedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['result'])) return null;
+  if (!isRecord(value) || !hasExactKeys(value, ["result"])) return null;
   try {
     return { result: parseResourceMutationResultDto(value.result) };
   } catch {
@@ -371,82 +403,84 @@ function parseResourceMutationPayload(value: unknown): ResourceMutationCommitted
 }
 
 function isProjectEventType(value: unknown): value is ProjectEventType {
-  return typeof value === 'string'
-    && Object.prototype.hasOwnProperty.call(PROJECT_EVENT_TYPES, value);
+  return (
+    typeof value === "string" && Object.prototype.hasOwnProperty.call(PROJECT_EVENT_TYPES, value)
+  );
 }
 
 function invalidEnvelope(): ProjectEventParseOutcome {
-  return { ok: false, code: 'invalidEnvelope' };
+  return { ok: false, code: "invalidEnvelope" };
 }
 
 function invalidPayload(): ProjectEventParseOutcome {
-  return { ok: false, code: 'invalidPayload' };
+  return { ok: false, code: "invalidPayload" };
 }
 
 function unknownType(): ProjectEventParseOutcome {
-  return { ok: false, code: 'unknownType' };
+  return { ok: false, code: "unknownType" };
 }
 
 export function parseProjectEvent(value: unknown): ProjectEventParseOutcome {
-  if (!isRecord(value) || !hasExactKeys(value, ['type', 'payload'])) return invalidEnvelope();
-  if (value.type !== 'Project' && value.type !== 'Resource') return unknownType();
-  if (!isRecord(value.payload)
-    || !Object.prototype.hasOwnProperty.call(value.payload, 'type')) {
+  if (!isRecord(value) || !hasExactKeys(value, ["type", "payload"])) return invalidEnvelope();
+  if (value.type !== "Project" && value.type !== "Resource") return unknownType();
+  if (!isRecord(value.payload) || !Object.prototype.hasOwnProperty.call(value.payload, "type")) {
     return invalidEnvelope();
   }
 
   const nested = value.payload;
   if (!isProjectEventType(nested.type)) return unknownType();
-  if (nested.type === 'ProjectCleared') {
-    if (value.type !== 'Project' || !hasExactKeys(nested, ['type'])) return invalidEnvelope();
-    return { ok: true, event: { type: 'ProjectCleared', payload: undefined } };
+  if (nested.type === "ProjectCleared") {
+    if (value.type !== "Project" || !hasExactKeys(nested, ["type"])) return invalidEnvelope();
+    return { ok: true, event: { type: "ProjectCleared", payload: undefined } };
   }
-  if (!hasExactKeys(nested, ['type', 'payload'])) return invalidEnvelope();
+  if (!hasExactKeys(nested, ["type", "payload"])) return invalidEnvelope();
 
-  const isResourceEvent = nested.type === 'ProjectIndexInvalidated';
-  if ((isResourceEvent && value.type !== 'Resource')
-    || (!isResourceEvent && value.type !== 'Project')) {
+  const isResourceEvent = nested.type === "ProjectIndexInvalidated";
+  if (
+    (isResourceEvent && value.type !== "Resource") ||
+    (!isResourceEvent && value.type !== "Project")
+  ) {
     return invalidEnvelope();
   }
 
   switch (nested.type) {
-    case 'ProjectLoaded': {
+    case "ProjectLoaded": {
       const payload = parseProjectLoadedPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'ProjectLifecycleCommitted': {
+    case "ProjectLifecycleCommitted": {
       const payload = parseLifecyclePayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'ProjectSaved': {
+    case "ProjectSaved": {
       const payload = parseProjectSavedPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'ComputationSettingsChanged': {
+    case "ComputationSettingsChanged": {
       const payload = parseSettingsPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'ProjectIndexInvalidated': {
+    case "ProjectIndexInvalidated": {
       const payload = parseIndexInvalidatedPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'GraphDelta': {
+    case "GraphDelta": {
       const payload = parseGraphDeltaPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case 'ResourceMutationCommitted': {
+    case "ResourceMutationCommitted": {
       const payload = parseResourceMutationPayload(nested.payload);
       return payload === null
         ? invalidPayload()

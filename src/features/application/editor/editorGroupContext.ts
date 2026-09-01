@@ -1,9 +1,9 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext } from "react";
 
 import {
   useActiveEditorGroup as useCoreActiveEditorGroup,
   useEditorGroupWorkspace as useCoreEditorGroupWorkspace,
-} from '@/features/core/editor';
+} from "@/features/core/editor";
 
 /** Application-owned group selection context for editor view composition. */
 export const GroupContext = createContext<string | null>(null);

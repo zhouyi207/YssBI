@@ -12,35 +12,35 @@
  * `Graph.path` / `LayoutTab.id` / `ResourceRef.id` use the persisted relative path.
  */
 
-export type GraphResourceKind = 'event' | 'function';
+export type GraphResourceKind = "event" | "function";
 
 /** Logical URI for persisted graph resources. */
 export type GraphResourceUri = `yssbi://graph/${GraphResourceKind}/${string}`;
 
-const GRAPH_URI_PREFIX = 'yssbi://graph/';
+const GRAPH_URI_PREFIX = "yssbi://graph/";
 
 export function normalizeGraphResourcePath(path: string): string {
   return path
-    .replace(/\\/g, '/')
-    .replace(/^\/+|\/+$/g, '')
-    .split('/')
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
     .filter((part) => part.length > 0)
-    .join('/');
+    .join("/");
 }
 
 export function encodeGraphResourceKey(path: string): string {
-  return normalizeGraphResourcePath(path).replace(/\//g, '::');
+  return normalizeGraphResourcePath(path).replace(/\//g, "::");
 }
 
 export function decodeGraphResourceKey(encoded: string): string {
-  return normalizeGraphResourcePath(encoded.replace(/::/g, '/'));
+  return normalizeGraphResourcePath(encoded.replace(/::/g, "/"));
 }
 
 /** Infer graph kind from a persisted path. */
 export function inferGraphResourceKind(path: string): GraphResourceKind | undefined {
   const normalized = normalizeGraphResourcePath(path);
-  if (normalized.startsWith('events/')) return 'event';
-  if (normalized.startsWith('functions/')) return 'function';
+  if (normalized.startsWith("events/")) return "event";
+  if (normalized.startsWith("functions/")) return "function";
   return undefined;
 }
 
@@ -59,10 +59,10 @@ export function parseGraphResourceUri(
 ): { kind: GraphResourceKind; path: string } | null {
   if (!uri.startsWith(GRAPH_URI_PREFIX)) return null;
   const rest = uri.slice(GRAPH_URI_PREFIX.length);
-  const slash = rest.indexOf('/');
+  const slash = rest.indexOf("/");
   if (slash <= 0) return null;
   const kind = rest.slice(0, slash);
-  if (kind !== 'event' && kind !== 'function') return null;
+  if (kind !== "event" && kind !== "function") return null;
   const encoded = rest.slice(slash + 1);
   if (!encoded) return null;
   return { kind, path: decodeGraphResourceKey(encoded) };

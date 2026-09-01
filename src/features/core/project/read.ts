@@ -1,4 +1,4 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
 export interface ProjectReadSnapshot {
   readonly projectInstanceId: string | null;

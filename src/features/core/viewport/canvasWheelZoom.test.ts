@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { applyWheelZoomToViewport } from './canvasWheelZoom';
+import { describe, expect, it } from "vitest";
+import { applyWheelZoomToViewport } from "./canvasWheelZoom";
 
-describe('canvasWheelZoom', () => {
+describe("canvasWheelZoom", () => {
   const base = { x: 100, y: 50, scale: 1 };
   const rect = { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
 
-  it('zooms toward cursor with plain wheel', () => {
+  it("zooms toward cursor with plain wheel", () => {
     const e = {
       ctrlKey: false,
       metaKey: false,
@@ -20,7 +20,7 @@ describe('canvasWheelZoom', () => {
     expect(next.y).not.toBe(base.y);
   });
 
-  it('does not require or reject modifier keys', () => {
+  it("does not require or reject modifier keys", () => {
     const plainWheel = {
       ctrlKey: false,
       metaKey: false,

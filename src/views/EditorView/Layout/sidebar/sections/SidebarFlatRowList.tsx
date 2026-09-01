@@ -1,9 +1,9 @@
-import { useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { SIDEBAR_FLAT_ROW_HEIGHT } from '@/features/core/sidebar/flatRows';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { SidebarFlatRowItem } from './SidebarFlatRowItem';
-import type { SidebarRenderRow } from './sidebarRenderRows';
+import { useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { SIDEBAR_FLAT_ROW_HEIGHT } from "@/features/core/sidebar/flatRows";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SidebarFlatRowItem } from "./SidebarFlatRowItem";
+import type { SidebarRenderRow } from "./sidebarRenderRows";
 
 export function SidebarFlatRowList({ rows }: { rows: SidebarRenderRow[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);

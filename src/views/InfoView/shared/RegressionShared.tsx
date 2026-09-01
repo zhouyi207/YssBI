@@ -1,10 +1,10 @@
-import React from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { formatNum, formatNullableNum, coerceFiniteNumber } from './utils';
-import type { BreuschPaganTests } from '@/shared/types/report';
+import React from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { formatNum, formatNullableNum, coerceFiniteNumber } from "./utils";
+import type { BreuschPaganTests } from "@/shared/types/report";
 
-export { formatNum, formatNullableNum, formatPercent, coerceFiniteNumber } from './utils';
+export { formatNum, formatNullableNum, formatPercent, coerceFiniteNumber } from "./utils";
 
 export function SignificanceStars({ pValue }: { pValue: number }) {
   if (pValue < 0.001) return <span className="text-yellow-400 font-bold ml-1">***</span>;
@@ -17,11 +17,14 @@ export function SignificanceStars({ pValue }: { pValue: number }) {
 export function RSquaredBadge({ value }: { value: unknown }) {
   const n = coerceFiniteNumber(value);
   const variant =
-    n == null ? 'destructive' : n >= 0.7 ? 'success' : n >= 0.4 ? 'warning' : 'destructive';
+    n == null ? "destructive" : n >= 0.7 ? "success" : n >= 0.4 ? "warning" : "destructive";
 
   return (
-    <Badge variant={variant} className="rounded-full px-2.5 py-0.5 text-xs font-semibold normal-case tracking-normal">
-      R² = {formatNullableNum(value, 3, 'N/A')}
+    <Badge
+      variant={variant}
+      className="rounded-full px-2.5 py-0.5 text-xs font-semibold normal-case tracking-normal"
+    >
+      R² = {formatNullableNum(value, 3, "N/A")}
     </Badge>
   );
 }
@@ -29,7 +32,7 @@ export function RSquaredBadge({ value }: { value: unknown }) {
 export function StatValue({
   value,
   decimals = 4,
-  fallback = '—',
+  fallback = "—",
 }: {
   value: unknown;
   decimals?: number;
@@ -38,11 +41,21 @@ export function StatValue({
   return <>{formatNullableNum(value, decimals, fallback)}</>;
 }
 
-export function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+export function StatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+}) {
   return (
     <Card className="rounded-lg py-0 shadow-none">
       <CardContent className="px-4 py-3">
-        <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
         <div className="font-mono text-sm font-medium text-foreground">{value}</div>
         {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
       </CardContent>
@@ -70,10 +83,10 @@ export function InfoRow({ label, children }: { label: string; children: React.Re
 }
 
 const BP_VARIANTS: { key: keyof BreuschPaganTests; label: string }[] = [
-  { key: 'stata', label: 'estat hettest' },
-  { key: 'koenker', label: 'estat hettest, iid' },
-  { key: 'stata_rhs', label: 'estat hettest, rhs' },
-  { key: 'koenker_rhs', label: 'estat hettest, rhs iid' },
+  { key: "stata", label: "estat hettest" },
+  { key: "koenker", label: "estat hettest, iid" },
+  { key: "stata_rhs", label: "estat hettest, rhs" },
+  { key: "koenker_rhs", label: "estat hettest, rhs iid" },
 ];
 
 export { BP_VARIANTS };
@@ -91,7 +104,10 @@ export function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
       {cards.map((c) => {
         const reject = c.p_value < 0.05;
         return (
-          <Card key={c.label} className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border">
+          <Card
+            key={c.label}
+            className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border"
+          >
             <CardContent className="px-4 py-3">
               <div className="mb-2 font-mono text-[11px] text-muted-foreground">{c.label}</div>
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
@@ -102,7 +118,12 @@ export function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
                   df = <span className="font-mono text-foreground">{c.df}</span>
                 </span>
                 <span className="text-muted-foreground">
-                  p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
+                  p ={" "}
+                  <span
+                    className={`font-mono ${reject ? "text-emerald-400" : "text-muted-foreground"}`}
+                  >
+                    {formatNum(c.p_value)}
+                  </span>
                 </span>
               </div>
               <div className="mt-1.5 text-[10px]">
@@ -128,9 +149,9 @@ export interface FTestCard {
   p_value: number;
 }
 
-const OV_VARIANTS: { key: 'default' | 'rhs'; label: string }[] = [
-  { key: 'default', label: 'estat ovtest' },
-  { key: 'rhs', label: 'estat ovtest, rhs' },
+const OV_VARIANTS: { key: "default" | "rhs"; label: string }[] = [
+  { key: "default", label: "estat ovtest" },
+  { key: "rhs", label: "estat ovtest, rhs" },
 ];
 
 export { OV_VARIANTS };
@@ -141,20 +162,31 @@ export function FTestCards({ cards }: { cards: FTestCard[] }) {
       {cards.map((c) => {
         const reject = c.p_value < 0.05;
         return (
-          <Card key={c.label} className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border">
+          <Card
+            key={c.label}
+            className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border"
+          >
             <CardContent className="px-4 py-3">
               <div className="mb-2 font-mono text-[11px] text-muted-foreground">{c.label}</div>
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
                 <span className="text-muted-foreground">
-                  F({c.df1},{c.df2}) = <span className="font-mono text-foreground">{formatNum(c.f_stat)}</span>
+                  F({c.df1},{c.df2}) ={" "}
+                  <span className="font-mono text-foreground">{formatNum(c.f_stat)}</span>
                 </span>
                 <span className="text-muted-foreground">
-                  p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
+                  p ={" "}
+                  <span
+                    className={`font-mono ${reject ? "text-emerald-400" : "text-muted-foreground"}`}
+                  >
+                    {formatNum(c.p_value)}
+                  </span>
                 </span>
               </div>
               <div className="mt-1.5 text-[10px]">
                 {reject ? (
-                  <span className="text-amber-400">拒绝 H0（模型可能有遗漏变量或函数形式误设）</span>
+                  <span className="text-amber-400">
+                    拒绝 H0（模型可能有遗漏变量或函数形式误设）
+                  </span>
                 ) : (
                   <span className="text-muted-foreground">不拒绝 H0</span>
                 )}

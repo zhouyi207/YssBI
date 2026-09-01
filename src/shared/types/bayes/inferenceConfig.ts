@@ -1,5 +1,5 @@
 export interface InferenceConfigDTO {
-  algorithm: 'nuts';
+  algorithm: "nuts";
   chains: number;
   samples: number;
   warmup: number;

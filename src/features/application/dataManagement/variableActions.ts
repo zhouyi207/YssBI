@@ -1,36 +1,41 @@
-
-import type { Variable, VariableScope } from '@/shared/types/domain';
-import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
-import { dataTypeFromKey, getDefaultValue, isVariableDataTypeAllowed } from '@/shared/types/domain/dataType';
-import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
-import { useResourceStore } from '@/features/core/resource';
-import { ProjectLifecycleError } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
-import { VariableService } from '@/services/variable/variableService';
-import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
-import { logger } from '@/features/application/observability/appLogger';
+import type { Variable, VariableScope } from "@/shared/types/domain";
+import { DEFAULT_VARIABLE_NAME } from "@/shared/constants/defaultResourceNames";
+import {
+  dataTypeFromKey,
+  getDefaultValue,
+  isVariableDataTypeAllowed,
+} from "@/shared/types/domain/dataType";
+import { dataValueFromRaw } from "@/shared/types/domain/dataValue";
+import { useVariableStore } from "@/features/core/dataStore/variableStore";
+import { useResourceStore } from "@/features/core/resource";
+import { ProjectLifecycleError } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { variableCatalogToResourceMetas } from "@/features/core/variable/variableCatalog";
+import { VariableService } from "@/services/variable/variableService";
+import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
+import { logger } from "@/features/application/observability/appLogger";
 import {
   captureRevisionedProjectCommandSnapshot,
   type ProjectCommandContext,
-} from '@/features/application/projectCommandContext';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+} from "@/features/application/projectCommandContext";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 
 function isStaleProjectLifecycleError(error: unknown): boolean {
-  return error instanceof ProjectLifecycleError
-    || isApplicationIpcErrorCode(error, 'stale_project_lifecycle');
+  return (
+    error instanceof ProjectLifecycleError ||
+    isApplicationIpcErrorCode(error, "stale_project_lifecycle")
+  );
 }
 
 function buildScope(
   isGlobal: boolean,
   activeGraphPath: string | null,
-  graphType: 'event' | 'function' | undefined,
+  graphType: "event" | "function" | undefined,
 ): VariableScope {
-  if (isGlobal || !activeGraphPath) return { type: 'global' };
-  const scopeType = graphType ?? 'event';
-  return scopeType === 'function'
-    ? { type: 'function', functionPath: activeGraphPath }
-    : { type: 'event', eventPath: activeGraphPath };
+  if (isGlobal || !activeGraphPath) return { type: "global" };
+  const scopeType = graphType ?? "event";
+  return scopeType === "function"
+    ? { type: "function", functionPath: activeGraphPath }
+    : { type: "event", eventPath: activeGraphPath };
 }
 
 export function rebuildVariableResourceProjection(): void {
@@ -42,10 +47,10 @@ export function rebuildVariableResourceProjection(): void {
     store.upsertResource(meta);
   }
   for (const key of Object.keys(store.resources)) {
-    if (!key.startsWith('variable:')) continue;
-    const id = key.slice('variable:'.length);
+    if (!key.startsWith("variable:")) continue;
+    const id = key.slice("variable:".length);
     if (!nextIds.has(id)) {
-      store.removeResource({ id, kind: 'variable' });
+      store.removeResource({ id, kind: "variable" });
     }
   }
 }
@@ -55,19 +60,19 @@ export async function createVariableAction(params: {
   type?: string;
   isGlobal?: boolean;
   activeGraphPath: string | null;
-  graphType?: 'event' | 'function';
+  graphType?: "event" | "function";
 }): Promise<string | null> {
   let context: ProjectCommandContext | undefined;
   try {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
-    const dataType = dataTypeFromKey(params.type ?? 'Int64');
+    const dataType = dataTypeFromKey(params.type ?? "Int64");
     if (!isVariableDataTypeAllowed(dataType)) return null;
     const snapshot = captureRevisionedProjectCommandSnapshot(
-      (): Omit<Variable, 'id' | 'revision'> => ({
+      (): Omit<Variable, "id" | "revision"> => ({
         name: baseName,
         dataType,
         dataValue: dataValueFromRaw(getDefaultValue(dataType), dataType),
-        description: '',
+        description: "",
         scope: buildScope(Boolean(params.isGlobal), params.activeGraphPath, params.graphType),
         tags: [],
       }),
@@ -92,7 +97,7 @@ export async function createVariableAction(params: {
     return committed.variableId;
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
-    logger.data.error('Failed to create variable: ' + String(e), 'VariableActions');
+    logger.data.error("Failed to create variable: " + String(e), "VariableActions");
     return null;
   }
 }
@@ -134,7 +139,7 @@ export async function updateVariableAction(
     return useVariableStore.getState().variables[id] ?? null;
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
-    logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableActions');
+    logger.data.error("Failed to update variable in backend: " + String(e), "VariableActions");
     return null;
   }
 }
@@ -164,12 +169,12 @@ export async function deleteVariableAction(id: string): Promise<boolean> {
       await projectPublicationCoordinator.submit({ result: committed.result });
     } else {
       useVariableStore.getState().deleteVariable(id);
-      useResourceStore.getState().removeResource({ id, kind: 'variable' });
+      useResourceStore.getState().removeResource({ id, kind: "variable" });
     }
     return context.isCurrent();
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return false;
-    logger.data.error('Failed to delete variable in backend: ' + String(e), 'VariableActions');
+    logger.data.error("Failed to delete variable in backend: " + String(e), "VariableActions");
     return false;
   }
 }

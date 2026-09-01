@@ -1,22 +1,20 @@
-import type { Presentation } from './types';
+import type { Presentation } from "./types";
 
 export function presentationRoute(presentation: Presentation): string {
   switch (presentation.kind) {
-    case 'inspector':
-      return '/inspect';
-    case 'plot':
-      return '/plot';
-    case 'report':
-      return '/info';
+    case "inspector":
+      return "/inspect";
+    case "plot":
+      return "/plot";
+    case "report":
+      return "/info";
   }
 }
 
 export function plotTypeFromPresentation(presentation: Presentation): string | undefined {
-  return presentation.kind === 'plot' ? presentation.chart : undefined;
+  return presentation.kind === "plot" ? presentation.chart : undefined;
 }
 
-export function presentationRouteForDescriptor(descriptor: {
-  presentation: Presentation;
-}): string {
+export function presentationRouteForDescriptor(descriptor: { presentation: Presentation }): string {
   return presentationRoute(descriptor.presentation);
 }

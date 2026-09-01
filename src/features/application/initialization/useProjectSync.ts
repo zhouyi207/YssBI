@@ -1,27 +1,33 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
-import { loadActivatedProject, useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { createNodeCatalogPublication } from '@/features/core/nodeCatalog/publication';
-import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
+  loadActivatedProject,
+  useProjectIOStore,
+} from "@/features/application/project/projectIOStore";
+import { createNodeCatalogPublication } from "@/features/core/nodeCatalog/publication";
+import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   createProjectEventIngress,
   type ProjectEventIngress,
-} from '@/features/application/project/projectEventIngress';
+} from "@/features/application/project/projectEventIngress";
 import {
   createProjectEventReconciler,
   type ProjectEventReconciler,
   type ProjectEventReconcilerDependencies,
-} from '@/features/application/project/projectEventReconciler';
+} from "@/features/application/project/projectEventReconciler";
 import {
   createProjectEventStream,
   type ProjectEventStream,
-} from '@/services/project/projectEventStream';
-import { resetGraphProjectionCoordinator, invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
-import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { reconcileProjectComputationSettingsEvent } from '@/features/application/projectSettings/useProjectComputationSettings';
-import { resetResultQueryProject } from '@/features/application/results';
+} from "@/services/project/projectEventStream";
+import {
+  resetGraphProjectionCoordinator,
+  invalidateGraphProjection,
+} from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
+import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { reconcileProjectComputationSettingsEvent } from "@/features/application/projectSettings/useProjectComputationSettings";
+import { resetResultQueryProject } from "@/features/application/results";
 
 interface ProjectSyncRuntime {
   readonly stream: ProjectEventStream;
@@ -33,17 +39,20 @@ interface ProjectSyncRuntime {
 
 let runtime: ProjectSyncRuntime | null = null;
 
-function hydrationDependencies(): ProjectEventReconcilerDependencies['hydration'] {
+function hydrationDependencies(): ProjectEventReconcilerDependencies["hydration"] {
   return {
-    loadCurrentProject: async () => (await useProjectIOStore.getState().loadProject())
-      ? { status: 'published' as const }
-      : { status: 'failed' as const },
-    refreshResourceIndex: async () => (await useProjectIOStore.getState().refreshResourceIndex())
-      ? { status: 'published' as const }
-      : { status: 'failed' as const },
-    loadGraph: async (graphPath) => (await useProjectIOStore.getState().loadGraph(graphPath))
-      ? { status: 'published' as const }
-      : { status: 'failed' as const },
+    loadCurrentProject: async () =>
+      (await useProjectIOStore.getState().loadProject())
+        ? { status: "published" as const }
+        : { status: "failed" as const },
+    refreshResourceIndex: async () =>
+      (await useProjectIOStore.getState().refreshResourceIndex())
+        ? { status: "published" as const }
+        : { status: "failed" as const },
+    loadGraph: async (graphPath) =>
+      (await useProjectIOStore.getState().loadGraph(graphPath))
+        ? { status: "published" as const }
+        : { status: "failed" as const },
     replaceProject: resetGraphProjectionCoordinator,
   };
 }
@@ -64,7 +73,7 @@ function createReconciler(): ProjectEventReconciler {
     publishLifecycleCommitted: async (result) => {
       await applyProjectLifecycleReceipt(
         result,
-        'event',
+        "event",
         createProjectLifecycleReceiptDependencies(),
       );
       if (result.invalidation.project) resetResultQueryProject();
@@ -78,10 +87,7 @@ function createReconciler(): ProjectEventReconciler {
     },
     publishResourceMutationCommitted: async (result) => {
       await projectPublicationCoordinator.submit({ result: result as never });
-      publication.observeResourcePublication(
-        result.projectInstanceId,
-        result.publicationRevision,
-      );
+      publication.observeResourcePublication(result.projectInstanceId, result.publicationRevision);
     },
     requestAuthoritativeSnapshot: async () => {
       await useProjectIOStore.getState().loadProject();
@@ -96,7 +102,7 @@ function createRuntime(): ProjectSyncRuntime {
       await useProjectIOStore.getState().loadProject();
     },
     publishIssue: (issue) => {
-      if (issue.reason === 'recoveryRequested') return;
+      if (issue.reason === "recoveryRequested") return;
       useProjectIOStore.setState({
         error: { code: issue.code, incidentId: issue.incidentId },
       });
@@ -120,7 +126,7 @@ async function acquireRuntime(): Promise<ProjectSyncRuntime> {
   current.references += 1;
   if (!current.start) {
     current.start = current.stream.start().then((outcome) => {
-      if (!outcome.ok) current.ingress.enqueue({ kind: 'failure', issue: outcome.issue });
+      if (!outcome.ok) current.ingress.enqueue({ kind: "failure", issue: outcome.issue });
     });
   }
   await current.start;

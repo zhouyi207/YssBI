@@ -1,21 +1,22 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   catalogResponseKey,
-
   useNodeCatalogStore,
   type LocalizedCatalogResponse,
-} from './nodeCatalogStore';
+} from "./nodeCatalogStore";
 
 function catalog(
-  overrides: Partial<Pick<
-    LocalizedCatalogResponse,
-    'projectInstanceId' | 'locale' | 'registryFingerprint' | 'resourcePublicationRevision'
-  >> = {},
+  overrides: Partial<
+    Pick<
+      LocalizedCatalogResponse,
+      "projectInstanceId" | "locale" | "registryFingerprint" | "resourcePublicationRevision"
+    >
+  > = {},
 ): LocalizedCatalogResponse {
   return {
-    projectInstanceId: 'project-1',
-    locale: 'zh-CN',
-    registryFingerprint: 'registry-1',
+    projectInstanceId: "project-1",
+    locale: "zh-CN",
+    registryFingerprint: "registry-1",
     resourcePublicationRevision: 7,
     categories: [],
     items: [],
@@ -23,15 +24,15 @@ function catalog(
   };
 }
 
-describe('useNodeCatalogStore', () => {
+describe("useNodeCatalogStore", () => {
   beforeEach(() => useNodeCatalogStore.getState().clear());
 
   it.each([
-    ['project instance ID', { projectInstanceId: 'project-2' }],
-    ['locale', { locale: 'en-US' }],
-    ['Registry fingerprint', { registryFingerprint: 'registry-2' }],
-    ['resource publication revision', { resourcePublicationRevision: 8 }],
-  ] as const)('retains distinct cached responses by %s', (_dimension, overrides) => {
+    ["project instance ID", { projectInstanceId: "project-2" }],
+    ["locale", { locale: "en-US" }],
+    ["Registry fingerprint", { registryFingerprint: "registry-2" }],
+    ["resource publication revision", { resourcePublicationRevision: 8 }],
+  ] as const)("retains distinct cached responses by %s", (_dimension, overrides) => {
     const baseline = catalog();
     const changed = catalog(overrides);
     const store = useNodeCatalogStore.getState();
@@ -48,25 +49,36 @@ describe('useNodeCatalogStore', () => {
     expect(Object.keys(responses)).toHaveLength(2);
   });
 
-  it('replaces equal-metadata cached response provenance with the latest DTO object', () => {
+  it("replaces equal-metadata cached response provenance with the latest DTO object", () => {
     const first = catalog();
     const second = catalog();
     first.items = [];
-    second.items = [{
-      nodeTypeId: 'second', title: 'Second', documentation: null,
-      categoryId: 'tests', iconId: 'tests', styleId: 'default', aliases: [],
-      technicalTerms: [], backendSearchText: [], resourceNames: [], ports: [], parameters: [],
-      creation: { kind: 'static', nodeTypeId: 'second' },
-    }];
+    second.items = [
+      {
+        nodeTypeId: "second",
+        title: "Second",
+        documentation: null,
+        categoryId: "tests",
+        iconId: "tests",
+        styleId: "default",
+        aliases: [],
+        technicalTerms: [],
+        backendSearchText: [],
+        resourceNames: [],
+        ports: [],
+        parameters: [],
+        creation: { kind: "static", nodeTypeId: "second" },
+      },
+    ];
     const store = useNodeCatalogStore.getState();
 
-    expect(store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, first)).toBe(true);
-    expect(store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, second)).toBe(true);
+    expect(store.storeResponse(store.beginRequest("project-1", "zh-CN")!, first)).toBe(true);
+    expect(store.storeResponse(store.beginRequest("project-1", "zh-CN")!, second)).toBe(true);
 
     expect(useNodeCatalogStore.getState().responses[catalogResponseKey(second)]).toBe(second);
   });
 
-  it('deduplicates an exact project and locale while its owner is loading', () => {
+  it("deduplicates an exact project and locale while its owner is loading", () => {
     const response = catalog();
     const store = useNodeCatalogStore.getState();
     const owner = store.beginRequest(response.projectInstanceId, response.locale);
@@ -76,7 +88,7 @@ describe('useNodeCatalogStore', () => {
     expect(useNodeCatalogStore.getState().responses).toEqual({});
     expect(useNodeCatalogStore.getState().requests).toEqual({
       '["project-1","zh-CN"]': {
-        status: 'loading',
+        status: "loading",
         responseKey: null,
         error: null,
         requestGeneration: owner!.requestGeneration,
@@ -85,24 +97,29 @@ describe('useNodeCatalogStore', () => {
     });
   });
 
-  it('keeps newer success when an older owner errors later', () => {
-    const response = catalog({ registryFingerprint: 'registry-new', resourcePublicationRevision: 8 });
+  it("keeps newer success when an older owner errors later", () => {
+    const response = catalog({
+      registryFingerprint: "registry-new",
+      resourcePublicationRevision: 8,
+    });
     const store = useNodeCatalogStore.getState();
     const older = store.beginRequest(response.projectInstanceId, response.locale)!;
     store.clear();
     const newer = store.beginRequest(response.projectInstanceId, response.locale)!;
 
     expect(store.storeResponse(newer, response)).toBe(true);
-    expect(store.storeError(older, {
-      code: 'catalog_request_failed',
-      incidentId: null,
-    })).toBe(false);
+    expect(
+      store.storeError(older, {
+        code: "catalog_request_failed",
+        incidentId: null,
+      }),
+    ).toBe(false);
     expect(useNodeCatalogStore.getState().responses).toEqual({
       [catalogResponseKey(response)]: response,
     });
     expect(useNodeCatalogStore.getState().requests).toEqual({
       '["project-1","zh-CN"]': {
-        status: 'ready',
+        status: "ready",
         responseKey: catalogResponseKey(response),
         error: null,
         requestGeneration: newer.requestGeneration,
@@ -111,13 +128,19 @@ describe('useNodeCatalogStore', () => {
     });
   });
 
-  it('rejects an out-of-order metadata response from an older owner', () => {
-    const olderResponse = catalog({ registryFingerprint: 'registry-old', resourcePublicationRevision: 7 });
-    const newerResponse = catalog({ registryFingerprint: 'registry-new', resourcePublicationRevision: 8 });
+  it("rejects an out-of-order metadata response from an older owner", () => {
+    const olderResponse = catalog({
+      registryFingerprint: "registry-old",
+      resourcePublicationRevision: 7,
+    });
+    const newerResponse = catalog({
+      registryFingerprint: "registry-new",
+      resourcePublicationRevision: 8,
+    });
     const store = useNodeCatalogStore.getState();
-    const older = store.beginRequest('project-1', 'zh-CN')!;
+    const older = store.beginRequest("project-1", "zh-CN")!;
     store.clear();
-    const newer = store.beginRequest('project-1', 'zh-CN')!;
+    const newer = store.beginRequest("project-1", "zh-CN")!;
 
     expect(store.storeResponse(newer, newerResponse)).toBe(true);
     expect(store.storeResponse(older, olderResponse)).toBe(false);
@@ -126,7 +149,7 @@ describe('useNodeCatalogStore', () => {
     });
     expect(useNodeCatalogStore.getState().requests).toEqual({
       '["project-1","zh-CN"]': {
-        status: 'ready',
+        status: "ready",
         responseKey: catalogResponseKey(newerResponse),
         error: null,
         requestGeneration: newer.requestGeneration,
@@ -135,81 +158,83 @@ describe('useNodeCatalogStore', () => {
     });
   });
 
-  it('stores a stable contract code when response identity does not match its request', () => {
+  it("stores a stable contract code when response identity does not match its request", () => {
     const store = useNodeCatalogStore.getState();
-    const owner = store.beginRequest('project-1', 'zh-CN')!;
+    const owner = store.beginRequest("project-1", "zh-CN")!;
 
-    expect(store.storeResponse(owner, catalog({ projectInstanceId: 'project-2' }))).toBe(false);
+    expect(store.storeResponse(owner, catalog({ projectInstanceId: "project-2" }))).toBe(false);
     expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
-      status: 'error',
+      status: "error",
       error: {
-        code: 'catalog_response_contract_error',
+        code: "catalog_response_contract_error",
         incidentId: null,
       },
     });
   });
 
-  it('invalidates only the matching project when its publication watermark advances', () => {
+  it("invalidates only the matching project when its publication watermark advances", () => {
     const projectOne = catalog();
-    const projectTwo = catalog({ projectInstanceId: 'project-2' });
+    const projectTwo = catalog({ projectInstanceId: "project-2" });
     const store = useNodeCatalogStore.getState();
     const ownerOne = store.beginRequest(projectOne.projectInstanceId, projectOne.locale)!;
     const ownerTwo = store.beginRequest(projectTwo.projectInstanceId, projectTwo.locale)!;
     store.storeResponse(ownerOne, projectOne);
     store.storeResponse(ownerTwo, projectTwo);
 
-    expect(store.observeResourcePublication('project-1', 8)).toBe(true);
+    expect(store.observeResourcePublication("project-1", 8)).toBe(true);
 
     const state = useNodeCatalogStore.getState();
     expect(state.requests['["project-1","zh-CN"]']).toMatchObject({
-      status: 'idle',
+      status: "idle",
       responseKey: catalogResponseKey(projectOne),
       minimumResourcePublicationRevision: 8,
     });
     expect(state.requests['["project-2","zh-CN"]']).toMatchObject({
-      status: 'ready',
+      status: "ready",
       responseKey: catalogResponseKey(projectTwo),
       minimumResourcePublicationRevision: 0,
     });
-    expect(store.observeResourcePublication('project-1', 8)).toBe(false);
+    expect(store.observeResourcePublication("project-1", 8)).toBe(false);
   });
 
-  it('rejects a response below the requested publication watermark without losing cached data', () => {
+  it("rejects a response below the requested publication watermark without losing cached data", () => {
     const previous = catalog({ resourcePublicationRevision: 7 });
     const store = useNodeCatalogStore.getState();
-    store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, previous);
-    store.observeResourcePublication('project-1', 9);
-    const refresh = store.beginRequest('project-1', 'zh-CN')!;
+    store.storeResponse(store.beginRequest("project-1", "zh-CN")!, previous);
+    store.observeResourcePublication("project-1", 9);
+    const refresh = store.beginRequest("project-1", "zh-CN")!;
 
     expect(store.storeResponse(refresh, catalog({ resourcePublicationRevision: 8 }))).toBe(false);
     expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
-      status: 'error',
+      status: "error",
       responseKey: catalogResponseKey(previous),
       error: {
-        code: 'catalog_response_stale',
+        code: "catalog_response_stale",
         incidentId: null,
       },
       minimumResourcePublicationRevision: 9,
     });
   });
 
-  it('preserves the last ready response when a refresh fails', () => {
+  it("preserves the last ready response when a refresh fails", () => {
     const previous = catalog();
     const store = useNodeCatalogStore.getState();
-    store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, previous);
-    store.observeResourcePublication('project-1', 8);
-    const refresh = store.beginRequest('project-1', 'zh-CN')!;
+    store.storeResponse(store.beginRequest("project-1", "zh-CN")!, previous);
+    store.observeResourcePublication("project-1", 8);
+    const refresh = store.beginRequest("project-1", "zh-CN")!;
 
-    expect(store.storeError(refresh, {
-      code: 'catalog_refresh_failed',
-      incidentId: 'incident-catalog-refresh',
-    })).toBe(true);
+    expect(
+      store.storeError(refresh, {
+        code: "catalog_refresh_failed",
+        incidentId: "incident-catalog-refresh",
+      }),
+    ).toBe(true);
     expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
-      status: 'error',
+      status: "error",
       responseKey: catalogResponseKey(previous),
       error: {
-        code: 'catalog_refresh_failed',
-        incidentId: 'incident-catalog-refresh',
+        code: "catalog_refresh_failed",
+        incidentId: "incident-catalog-refresh",
       },
       minimumResourcePublicationRevision: 8,
     });

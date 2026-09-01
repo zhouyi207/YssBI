@@ -1,15 +1,10 @@
-import type {
-  DialogOptions,
-  ConfirmTriResult,
-} from '@/shared/types/ui';
-import { uiStore } from './UIStore';
+import type { DialogOptions, ConfirmTriResult } from "@/shared/types/ui";
+import { uiStore } from "./UIStore";
 
 export interface UiCapability {
-  readonly confirm: (
-    options: Omit<DialogOptions, 'onConfirm' | 'onCancel'>,
-  ) => Promise<boolean>;
+  readonly confirm: (options: Omit<DialogOptions, "onConfirm" | "onCancel">) => Promise<boolean>;
   readonly confirm3: (
-    options: Omit<DialogOptions, 'onConfirm' | 'onCancel' | 'onDiscard'> & {
+    options: Omit<DialogOptions, "onConfirm" | "onCancel" | "onDiscard"> & {
       discardText: string;
     },
   ) => Promise<ConfirmTriResult>;

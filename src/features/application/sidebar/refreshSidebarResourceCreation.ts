@@ -1,11 +1,11 @@
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { useVariableStore } from "@/features/core/dataStore/variableStore";
 
-type SidebarResourceKind = 'variable' | 'database';
+type SidebarResourceKind = "variable" | "database";
 
 function currentResourcePath(kind: SidebarResourceKind, id: string): string | undefined {
-  return kind === 'variable'
+  return kind === "variable"
     ? useVariableStore.getState().variables[id]?.resourcePath
     : useDatabaseStore.getState().databases[id]?.resourcePath;
 }

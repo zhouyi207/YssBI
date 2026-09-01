@@ -1,5 +1,5 @@
-import { ReportSection } from '../shared/ReportLayout';
-import { formatNum } from '../shared/RegressionShared';
+import { ReportSection } from "../shared/ReportLayout";
+import { formatNum } from "../shared/RegressionShared";
 
 export function VarModelSummarySection({
   completeSampleRows,
@@ -29,8 +29,10 @@ export function VarModelSummarySection({
           <div className="col-span-2 flex justify-between border-b border-border bg-card px-4 py-2.5">
             <span className="shrink-0 text-xs text-muted-foreground">Observations</span>
             <span className="text-right font-mono text-xs text-foreground">
-              T = {completeSampleRows}, p = {varMaxLag}, n = {numObservation}{' '}
-              <span className="font-sans text-muted-foreground">（无缺失外生时 n = T − p；首期外生缺失不减少 n）</span>
+              T = {completeSampleRows}, p = {varMaxLag}, n = {numObservation}{" "}
+              <span className="font-sans text-muted-foreground">
+                （无缺失外生时 n = T − p；首期外生缺失不减少 n）
+              </span>
             </span>
           </div>
         ) : null}

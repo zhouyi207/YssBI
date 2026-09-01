@@ -1,26 +1,26 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   measure: vi.fn(),
   snapToBottom: vi.fn(),
 }));
 
-vi.mock('@tanstack/react-virtual', () => ({
+vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: () => ({ measure: mocks.measure }),
 }));
 
-vi.mock('./logPanelViewport', () => ({
+vi.mock("./logPanelViewport", () => ({
   snapLogViewportToBottom: mocks.snapToBottom,
 }));
 
-import { useLogPanelVirtualList } from './useLogPanelVirtualList';
+import { useLogPanelVirtualList } from "./useLogPanelVirtualList";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const EMPTY_LOGS = [] as const;
 
@@ -44,14 +44,14 @@ function VirtualListProbe() {
   const { viewportRef } = useLogPanelVirtualList({
     filteredLogs: EMPTY_LOGS,
     autoScroll: true,
-    presentation: 'standalone',
+    presentation: "standalone",
     refreshScrollToken: 0,
   });
 
   return <div ref={viewportRef} data-testid="viewport" />;
 }
 
-describe('useLogPanelVirtualList', () => {
+describe("useLogPanelVirtualList", () => {
   let host: HTMLDivElement;
   let root: Root;
   let mounted: boolean;
@@ -60,8 +60,8 @@ describe('useLogPanelVirtualList', () => {
     currentObserver = null;
     mocks.measure.mockReset();
     mocks.snapToBottom.mockReset();
-    vi.stubGlobal('ResizeObserver', ControllableResizeObserver);
-    host = document.createElement('div');
+    vi.stubGlobal("ResizeObserver", ControllableResizeObserver);
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     mounted = false;
@@ -74,7 +74,7 @@ describe('useLogPanelVirtualList', () => {
     vi.clearAllMocks();
   });
 
-  it('remeasures and follows the pinned tail when a standalone viewport resizes', () => {
+  it("remeasures and follows the pinned tail when a standalone viewport resizes", () => {
     mounted = true;
     act(() => root.render(<VirtualListProbe />));
 

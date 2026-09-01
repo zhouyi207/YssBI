@@ -1,28 +1,19 @@
-import { useEffect, useRef } from 'react';
-import { axisBottom, axisLeft, scaleLinear, select } from 'd3';
-import { cn } from '@/lib/utils';
-import {
-  paddedNumericDomain,
-  resolveChartBox,
-} from '@/shared/charts/core/domain';
+import { useEffect, useRef } from "react";
+import { axisBottom, axisLeft, scaleLinear, select } from "d3";
+import { cn } from "@/lib/utils";
+import { paddedNumericDomain, resolveChartBox } from "@/shared/charts/core/domain";
 import {
   joinCartesianLayers,
   styleChartAxis,
   updateCartesianLabels,
   updateHorizontalGrid,
-} from '@/shared/charts/core/layers';
-import { DEFAULT_CARTESIAN_MARGIN } from '@/shared/charts/core/margins';
-import { useChartTheme } from '@/shared/charts/core/theme';
-import type {
-  ChartMargin,
-  ChartSurfaceVariant,
-} from '@/shared/charts/core/types';
-import { useChartContainerSize } from '@/shared/charts/core/useChartContainerSize';
-import type {
-  AxisModel,
-  XYPoint,
-} from '@/shared/types/visualization/chartModel';
-import { plotAxisTickFormatter } from './axisFormat';
+} from "@/shared/charts/core/layers";
+import { DEFAULT_CARTESIAN_MARGIN } from "@/shared/charts/core/margins";
+import { useChartTheme } from "@/shared/charts/core/theme";
+import type { ChartMargin, ChartSurfaceVariant } from "@/shared/charts/core/types";
+import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
+import type { AxisModel, XYPoint } from "@/shared/types/visualization/chartModel";
+import { plotAxisTickFormatter } from "./axisFormat";
 
 export interface ScatterChartProps {
   data: XYPoint[];
@@ -42,9 +33,7 @@ export interface ScatterChartProps {
 
 function symmetricDomain(data: XYPoint[]): [number, number] {
   const maximum = data.reduce(
-    (current, point) => Number.isFinite(point.y)
-      ? Math.max(current, Math.abs(point.y))
-      : current,
+    (current, point) => (Number.isFinite(point.y) ? Math.max(current, Math.abs(point.y)) : current),
     0,
   );
   const paddedMaximum = maximum * 1.15 || 1;
@@ -63,7 +52,7 @@ export function ScatterChart({
   zeroLine = false,
   highlightIndices,
   highlightColor,
-  surface = 'card',
+  surface = "card",
   className,
 }: ScatterChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -87,46 +76,50 @@ export function ScatterChart({
     const box = resolveChartBox(width, height, margin);
 
     svg
-      .attr('width', width)
-      .attr('height', height)
-      .attr('role', 'img')
-      .attr('aria-label', `${yLabel ?? 'y'} by ${xLabel ?? 'x'}`);
+      .attr("width", width)
+      .attr("height", height)
+      .attr("role", "img")
+      .attr("aria-label", `${yLabel ?? "y"} by ${xLabel ?? "x"}`);
 
     if (data.length === 0 || !box) {
-      svg
-        .attr('data-chart-x-domain', null)
-        .attr('data-chart-y-domain', null);
-      layers.root.attr('display', 'none');
+      svg.attr("data-chart-x-domain", null).attr("data-chart-y-domain", null);
+      layers.root.attr("display", "none");
       layers.marks
         .selectAll<SVGLineElement, number>('line[data-chart-reference="zero"]')
         .data([])
-        .join('line');
+        .join("line");
       layers.marks
         .selectAll<SVGCircleElement, XYPoint>('circle[data-chart-mark="scatter-point"]')
         .data([])
-        .join('circle');
+        .join("circle");
       return;
     }
 
-    layers.root
-      .attr('display', null)
-      .attr('transform', `translate(${margin.left},${margin.top})`);
+    layers.root.attr("display", null).attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const xDomain = paddedNumericDomain(data.map(point => point.x), 0.06, 1);
+    const xDomain = paddedNumericDomain(
+      data.map((point) => point.x),
+      0.06,
+      1,
+    );
     const yDomain = symmetricY
       ? symmetricDomain(data)
-      : paddedNumericDomain(data.map(point => point.y), 0.06, 1);
+      : paddedNumericDomain(
+          data.map((point) => point.y),
+          0.06,
+          1,
+        );
     const xScale = scaleLinear().domain(xDomain).range([0, box.plotWidth]);
     const yScale = scaleLinear().domain(yDomain).range([box.plotHeight, 0]);
 
     svg
-      .attr('data-chart-x-domain', JSON.stringify(xDomain))
-      .attr('data-chart-y-domain', JSON.stringify(yDomain));
+      .attr("data-chart-x-domain", JSON.stringify(xDomain))
+      .attr("data-chart-y-domain", JSON.stringify(yDomain));
 
     updateHorizontalGrid(
       layers.grid,
       yScale.ticks(5),
-      value => yScale(value),
+      (value) => yScale(value),
       box.plotWidth,
       chartTheme.grid,
     );
@@ -134,9 +127,7 @@ export function ScatterChart({
     const xAxisGenerator = axisBottom(xScale).ticks(6).tickSize(-4);
     const xTickFormat = plotAxisTickFormatter(xValueType);
     if (xTickFormat) xAxisGenerator.tickFormat(xTickFormat);
-    layers.xAxis
-      .attr('transform', `translate(0,${box.plotHeight})`)
-      .call(xAxisGenerator);
+    layers.xAxis.attr("transform", `translate(0,${box.plotHeight})`).call(xAxisGenerator);
     styleChartAxis(layers.xAxis, chartTheme);
 
     const yAxisGenerator = axisLeft(yScale).ticks(5).tickSize(-4);
@@ -144,39 +135,34 @@ export function ScatterChart({
     if (yTickFormat) yAxisGenerator.tickFormat(yTickFormat);
     layers.yAxis.call(yAxisGenerator);
     styleChartAxis(layers.yAxis, chartTheme);
-    updateCartesianLabels(
-      layers.labels,
-      box,
-      { x: xLabel, y: yLabel },
-      chartTheme.label,
-    );
+    updateCartesianLabels(layers.labels, box, { x: xLabel, y: yLabel }, chartTheme.label);
 
     layers.marks
       .selectAll<SVGLineElement, number>('line[data-chart-reference="zero"]')
       .data(zeroLine ? [0] : [])
-      .join('line')
-      .attr('data-chart-reference', 'zero')
-      .attr('x1', 0)
-      .attr('x2', box.plotWidth)
-      .attr('y1', value => yScale(value))
-      .attr('y2', value => yScale(value))
-      .attr('stroke', chartTheme.zeroLine)
-      .attr('stroke-width', 1);
+      .join("line")
+      .attr("data-chart-reference", "zero")
+      .attr("x1", 0)
+      .attr("x2", box.plotWidth)
+      .attr("y1", (value) => yScale(value))
+      .attr("y2", (value) => yScale(value))
+      .attr("stroke", chartTheme.zeroLine)
+      .attr("stroke-width", 1);
 
     layers.marks
       .selectAll<SVGCircleElement, XYPoint>('circle[data-chart-mark="scatter-point"]')
       .data(data)
-      .join('circle')
-      .attr('data-chart-mark', 'scatter-point')
-      .attr('data-highlighted', (_, index) => highlightIndices?.has(index) ? 'true' : 'false')
-      .attr('cx', point => xScale(point.x))
-      .attr('cy', point => yScale(point.y))
-      .attr('r', radius)
-      .attr('fill', (_, index) => highlightIndices?.has(index) ? plotHighlightColor : plotColor)
-      .attr('fill-opacity', 0.7)
-      .attr('stroke', (_, index) => highlightIndices?.has(index) ? plotHighlightColor : plotColor)
-      .attr('stroke-opacity', 0.3)
-      .attr('stroke-width', 1);
+      .join("circle")
+      .attr("data-chart-mark", "scatter-point")
+      .attr("data-highlighted", (_, index) => (highlightIndices?.has(index) ? "true" : "false"))
+      .attr("cx", (point) => xScale(point.x))
+      .attr("cy", (point) => yScale(point.y))
+      .attr("r", radius)
+      .attr("fill", (_, index) => (highlightIndices?.has(index) ? plotHighlightColor : plotColor))
+      .attr("fill-opacity", 0.7)
+      .attr("stroke", (_, index) => (highlightIndices?.has(index) ? plotHighlightColor : plotColor))
+      .attr("stroke-opacity", 0.3)
+      .attr("stroke-width", 1);
   }, [
     chartTheme,
     data,
@@ -199,9 +185,9 @@ export function ScatterChart({
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full min-h-0 overflow-hidden',
-        heightProp === undefined && 'h-full',
-        surface === 'card' && 'rounded-lg border border-border bg-card',
+        "relative w-full min-h-0 overflow-hidden",
+        heightProp === undefined && "h-full",
+        surface === "card" && "rounded-lg border border-border bg-card",
         className,
       )}
       style={heightProp === undefined ? undefined : { height: heightProp }}

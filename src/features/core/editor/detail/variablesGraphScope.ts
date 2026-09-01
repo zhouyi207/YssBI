@@ -1,11 +1,11 @@
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import { useEditorStore } from '../stores/useEditorStore';
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { useEditorStore } from "../stores/useEditorStore";
 
-function readActiveGraphTab(): { id: string; type: 'event' | 'function' } | null {
+function readActiveGraphTab(): { id: string; type: "event" | "function" } | null {
   const panel = workbenchDockviewRead.getActiveEditorPanel();
   if (
-    panel?.metadata.role === 'editor'
-    && (panel.metadata.resourceKind === 'event' || panel.metadata.resourceKind === 'function')
+    panel?.metadata.role === "editor" &&
+    (panel.metadata.resourceKind === "event" || panel.metadata.resourceKind === "function")
   ) {
     return {
       id: panel.metadata.resourceRef,

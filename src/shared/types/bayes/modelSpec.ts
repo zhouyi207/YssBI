@@ -1,9 +1,9 @@
-import type { ExpressionDTO, RawExpressionDTO } from './expression';
-import type { InferenceConfigDTO } from './inferenceConfig';
-import type { LikelihoodSpecDTO } from './likelihood';
-import type { ParameterSpecDTO } from './prior';
+import type { ExpressionDTO, RawExpressionDTO } from "./expression";
+import type { InferenceConfigDTO } from "./inferenceConfig";
+import type { LikelihoodSpecDTO } from "./likelihood";
+import type { ParameterSpecDTO } from "./prior";
 
-export type BayesColumnDTypeDTO = 'number' | 'integer' | 'boolean' | 'string' | 'date' | 'unknown';
+export type BayesColumnDTypeDTO = "number" | "integer" | "boolean" | "string" | "date" | "unknown";
 
 export interface BayesColumnMetaDTO {
   name: string;
@@ -12,12 +12,12 @@ export interface BayesColumnMetaDTO {
 }
 
 export interface BayesDatasetSelectionDTO {
-  sourceType: 'table' | 'query' | 'result_source';
+  sourceType: "table" | "query" | "result_source";
   sourceId: string;
   columns: BayesColumnMetaDTO[];
 }
 
-export type BayesSymbolRoleDTO = 'dependent' | 'independent' | 'parameter';
+export type BayesSymbolRoleDTO = "dependent" | "independent" | "parameter";
 
 export interface SymbolDraftDTO {
   name: string;
@@ -53,8 +53,6 @@ export interface BayesModelDraftDTO {
   parameters: ParameterSpecDTO[];
   sampler: InferenceConfigDTO;
 }
-
-
 
 export interface ParseExpressionRequestDTO {
   formula: string;

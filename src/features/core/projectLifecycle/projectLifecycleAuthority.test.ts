@@ -1,26 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const projectA = '00000000-0000-0000-0000-000000000601';
-const projectB = '00000000-0000-0000-0000-000000000602';
+const projectA = "00000000-0000-0000-0000-000000000601";
+const projectB = "00000000-0000-0000-0000-000000000602";
 
-type ProjectLifecycleAuthority = typeof import('@/features/core/projectLifecycle/projectLifecycleAuthority');
+type ProjectLifecycleAuthority =
+  typeof import("@/features/core/projectLifecycle/projectLifecycleAuthority");
 
 let authority: ProjectLifecycleAuthority;
 
-describe('projectLifecycleAuthority', () => {
+describe("projectLifecycleAuthority", () => {
   beforeEach(async () => {
     vi.resetModules();
-    authority = await import('@/features/core/projectLifecycle/projectLifecycleAuthority');
+    authority = await import("@/features/core/projectLifecycle/projectLifecycleAuthority");
   });
 
-  it('rejects capture when no project lifecycle is active', () => {
-    expect(() => authority.captureProjectIdentity()).toThrow(expect.objectContaining({
-      code: 'stale_project_lifecycle',
-      message: 'project lifecycle changed before publication settlement',
-    }));
+  it("rejects capture when no project lifecycle is active", () => {
+    expect(() => authority.captureProjectIdentity()).toThrow(
+      expect.objectContaining({
+        code: "stale_project_lifecycle",
+        message: "project lifecycle changed before publication settlement",
+      }),
+    );
   });
 
-  it('captures the first active project lifecycle', () => {
+  it("captures the first active project lifecycle", () => {
     authority.startProjectLifecycle(projectA);
 
     const snapshot = authority.captureProjectIdentity();
@@ -31,7 +34,7 @@ describe('projectLifecycleAuthority', () => {
     expect(() => authority.assertCurrentProjectIdentity(snapshot)).not.toThrow();
   });
 
-  it('invalidates a captured lifecycle when another project replaces it', () => {
+  it("invalidates a captured lifecycle when another project replaces it", () => {
     authority.startProjectLifecycle(projectA);
     const stale = authority.captureProjectIdentity();
 
@@ -44,7 +47,7 @@ describe('projectLifecycleAuthority', () => {
     expect(authority.isCurrentProjectIdentity(current)).toBe(true);
   });
 
-  it('invalidates a captured lifecycle when the active project is cleared', () => {
+  it("invalidates a captured lifecycle when the active project is cleared", () => {
     authority.startProjectLifecycle(projectA);
     const stale = authority.captureProjectIdentity();
 
@@ -52,11 +55,11 @@ describe('projectLifecycleAuthority', () => {
 
     expect(authority.isCurrentProjectIdentity(stale)).toBe(false);
     expect(() => authority.captureProjectIdentity()).toThrow(
-      expect.objectContaining({ code: 'stale_project_lifecycle' }),
+      expect.objectContaining({ code: "stale_project_lifecycle" }),
     );
   });
 
-  it('returns an immutable lifecycle snapshot', () => {
+  it("returns an immutable lifecycle snapshot", () => {
     authority.startProjectLifecycle(projectA);
 
     const snapshot = authority.captureProjectIdentity();
@@ -68,18 +71,20 @@ describe('projectLifecycleAuthority', () => {
     expect(authority.captureProjectIdentity()).toEqual(snapshot);
   });
 
-  it('throws the compatible stale lifecycle error for an invalidated snapshot', () => {
+  it("throws the compatible stale lifecycle error for an invalidated snapshot", () => {
     authority.startProjectLifecycle(projectA);
     const stale = authority.captureProjectIdentity();
     authority.startProjectLifecycle(projectB);
 
-    expect(() => authority.assertCurrentProjectIdentity(stale)).toThrow(expect.objectContaining({
-      code: 'stale_project_lifecycle',
-      message: 'project lifecycle changed before publication settlement',
-    }));
+    expect(() => authority.assertCurrentProjectIdentity(stale)).toThrow(
+      expect.objectContaining({
+        code: "stale_project_lifecycle",
+        message: "project lifecycle changed before publication settlement",
+      }),
+    );
   });
 
-  it('treats repeated activation of the same project as a new lifecycle', () => {
+  it("treats repeated activation of the same project as a new lifecycle", () => {
     authority.startProjectLifecycle(projectA);
     const stale = authority.captureProjectIdentity();
 
@@ -92,7 +97,7 @@ describe('projectLifecycleAuthority', () => {
     expect(authority.isCurrentProjectIdentity(current)).toBe(true);
   });
 
-  it('captures and compares lifecycle state while no project is active', () => {
+  it("captures and compares lifecycle state while no project is active", () => {
     const inactive = authority.captureProjectLifecycleState();
 
     expect(inactive.projectInstanceId).toBeNull();
@@ -104,27 +109,27 @@ describe('projectLifecycleAuthority', () => {
     expect(authority.isProjectLifecycleStateCurrent(inactive)).toBe(false);
   });
 
-  it('retains the latest activation revision after clearing the active lifecycle', () => {
-    expect(authority.acceptProjectLifecycleActivation(projectA, 2000)).toBe('activated');
+  it("retains the latest activation revision after clearing the active lifecycle", () => {
+    expect(authority.acceptProjectLifecycleActivation(projectA, 2000)).toBe("activated");
 
     authority.clearProjectLifecycle();
 
-    expect(authority.acceptProjectLifecycleActivation(projectB, 1999)).toBe('stale');
+    expect(authority.acceptProjectLifecycleActivation(projectB, 1999)).toBe("stale");
     expect(() => authority.captureProjectIdentity()).toThrow(
-      expect.objectContaining({ code: 'stale_project_lifecycle' }),
+      expect.objectContaining({ code: "stale_project_lifecycle" }),
     );
   });
 
-  it('deduplicates activation receipts and rejects older replacements', () => {
-    expect(authority.acceptProjectLifecycleActivation(projectA, 1001)).toBe('activated');
+  it("deduplicates activation receipts and rejects older replacements", () => {
+    expect(authority.acceptProjectLifecycleActivation(projectA, 1001)).toBe("activated");
     const first = authority.captureProjectIdentity();
 
-    expect(authority.acceptProjectLifecycleActivation(projectA, 1001)).toBe('duplicate');
+    expect(authority.acceptProjectLifecycleActivation(projectA, 1001)).toBe("duplicate");
     expect(authority.captureProjectIdentity()).toEqual(first);
-    expect(authority.acceptProjectLifecycleActivation(projectB, 1000)).toBe('stale');
+    expect(authority.acceptProjectLifecycleActivation(projectB, 1000)).toBe("stale");
     expect(authority.captureProjectIdentity()).toEqual(first);
 
-    expect(authority.acceptProjectLifecycleActivation(projectB, 1002)).toBe('activated');
+    expect(authority.acceptProjectLifecycleActivation(projectB, 1002)).toBe("activated");
     expect(authority.captureProjectIdentity().projectInstanceId).toBe(projectB);
     expect(authority.isCurrentProjectIdentity(first)).toBe(false);
   });

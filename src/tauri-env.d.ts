@@ -3,7 +3,7 @@
  * 由 tsconfig `include: ["src"]` 自动加载；勿在业务组件内 cast。
  */
 
-import 'react';
+import "react";
 
 declare global {
   interface Window {
@@ -15,13 +15,13 @@ declare global {
   }
 }
 
-declare module 'react' {
+declare module "react" {
   interface CSSProperties {
     /**
      * WKWebView / Tauri 自定义标题栏拖拽区。
      * @see https://v2.tauri.app/learn/window-customization/
      */
-    WebkitAppRegion?: 'drag' | 'no-drag';
+    WebkitAppRegion?: "drag" | "no-drag";
   }
 }
 

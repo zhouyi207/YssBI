@@ -5,11 +5,11 @@ export {
   readBayesInferenceResult,
   submitBayesInference,
   validateBayesModel,
-} from '@/services/bayes';
+} from "@/services/bayes";
 
 export type {
   BayesInferenceTaskDTO,
   BayesModelDraftDTO,
   InferenceResultDTO,
   ValidationReportDTO,
-} from '@/shared/types/bayes';
+} from "@/shared/types/bayes";

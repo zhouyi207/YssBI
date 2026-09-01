@@ -17,17 +17,8 @@
   ],
   "items": [
     {
-      "aliases": [
-        "plus",
-        "sum",
-        "+"
-      ],
-      "backendSearchText": [
-        "Add",
-        "plus",
-        "sum",
-        "+"
-      ],
+      "aliases": ["plus", "sum", "+"],
+      "backendSearchText": ["Add", "plus", "sum", "+"],
       "categoryId": "numeric",
       "creation": {
         "kind": "static",
@@ -59,24 +50,12 @@
       ],
       "resourceNames": [],
       "styleId": "builtin.default",
-      "technicalTerms": [
-        "plus",
-        "sum",
-        "+"
-      ],
+      "technicalTerms": ["plus", "sum", "+"],
       "title": "Add"
     },
     {
-      "aliases": [
-        "call",
-        "invoke",
-        "function"
-      ],
-      "backendSearchText": [
-        "call",
-        "invoke",
-        "function"
-      ],
+      "aliases": ["call", "invoke", "function"],
+      "backendSearchText": ["call", "invoke", "function"],
       "categoryId": "project",
       "creation": {
         "createArgs": {
@@ -123,19 +102,11 @@
           "label": "Then"
         }
       ],
-      "resourceNames": [
-        "Straße_Data Café 数据"
-      ],
+      "resourceNames": ["Straße_Data Café 数据"],
       "resourcePath": "functions/catalog-search-wire",
       "resourceRevision": 23,
       "styleId": "builtin.default",
-      "technicalTerms": [
-        "Maße_Valué",
-        "call",
-        "function",
-        "invoke",
-        "技术_Term"
-      ],
+      "technicalTerms": ["Maße_Valué", "call", "function", "invoke", "技术_Term"],
       "title": "Straße_Data Café 数据"
     }
   ],

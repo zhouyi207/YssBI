@@ -1,14 +1,14 @@
-import type { WindowState } from '@/shared/types/settings';
-import { logger } from '@/features/application/observability/appLogger';
+import type { WindowState } from "@/shared/types/settings";
+import { logger } from "@/features/application/observability/appLogger";
 
-const SECONDARY_WINDOW_PREFIX = 'yssbi-secondary-window-';
+const SECONDARY_WINDOW_PREFIX = "yssbi-secondary-window-";
 
 function storageKey(label: string): string {
   return `${SECONDARY_WINDOW_PREFIX}${label}`;
 }
 
 function loadSecondaryWindowState(label: string): WindowState | null {
-  if (typeof localStorage === 'undefined') return null;
+  if (typeof localStorage === "undefined") return null;
   try {
     const raw = localStorage.getItem(storageKey(label));
     if (!raw) return null;
@@ -19,19 +19,19 @@ function loadSecondaryWindowState(label: string): WindowState | null {
 }
 
 export function saveSecondaryWindowState(label: string, state: WindowState): void {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(storageKey(label), JSON.stringify(state));
   } catch (error) {
     logger.app.warn(
       `Failed to save secondary window state: ${error instanceof Error ? error.message : String(error)}`,
-      'Window',
+      "Window",
     );
   }
 }
 
 export function readSecondaryWindowFallbackPosition(label: string): { x: number; y: number } {
-  const hash = label.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const hash = label.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   return { x: 80 + (hash % 120), y: 80 + (hash % 80) };
 }
 

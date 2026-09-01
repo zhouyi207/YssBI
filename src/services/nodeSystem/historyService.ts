@@ -1,14 +1,14 @@
-import { invokeCommand } from '@/services/ipc';
+import { invokeCommand } from "@/services/ipc";
 import type {
   HistoryMutationDto,
   HistoryStatusDto,
   MutationRequestDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from "@/shared/types/dto/editorMutation";
 
 export class HistoryService {
   static getStatus(projectInstanceId: string): Promise<HistoryStatusDto> {
-    return invokeCommand<HistoryStatusDto>('get_project_history_status', { projectInstanceId });
+    return invokeCommand<HistoryStatusDto>("get_project_history_status", { projectInstanceId });
   }
 
   static undo(
@@ -16,7 +16,7 @@ export class HistoryService {
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invokeCommand<ResourceMutationResultDto>('undo_graph_document', {
+    return invokeCommand<ResourceMutationResultDto>("undo_graph_document", {
       projectInstanceId,
       locale,
       request,
@@ -28,7 +28,7 @@ export class HistoryService {
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invokeCommand<ResourceMutationResultDto>('redo_graph_document', {
+    return invokeCommand<ResourceMutationResultDto>("redo_graph_document", {
       projectInstanceId,
       locale,
       request,

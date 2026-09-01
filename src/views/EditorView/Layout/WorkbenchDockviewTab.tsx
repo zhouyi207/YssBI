@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-} from 'react';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import {
   VscClose,
   VscCloseAll,
@@ -22,24 +16,34 @@ import {
   VscSymbolEvent,
   VscSymbolMethod,
   VscTerminal,
-} from 'react-icons/vsc';
-import type { IconType } from 'react-icons';
-import type { IDockviewPanelHeaderProps } from 'dockview-react';
+} from "react-icons/vsc";
+import type { IconType } from "react-icons";
+import type { IDockviewPanelHeaderProps } from "dockview-react";
 
 import {
   requestCloseWorkbenchPanel,
   requestCloseWorkbenchPanels,
-} from '@/features/application/editor/workbenchPanelClose';
-import { buildTabContextMenuSections } from '@/features/application/editor/tabContextMenu';
-import { isWorkbenchActivityViewId, isWorkbenchPersistentViewMetadata, layoutTabFromEditorMetadata, workbenchDockviewRead } from '@/features/core/dockview';
-import type { WorkbenchPanelInfo, WorkbenchPanelMetadata, WorkbenchPanelParams, WorkbenchViewId } from '@/features/core/dockview';
-import { resourceKey } from '@/features/core/resource';
-import { useResourceRead } from '@/features/core/resource/read';
+} from "@/features/application/editor/workbenchPanelClose";
+import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
+import {
+  isWorkbenchActivityViewId,
+  isWorkbenchPersistentViewMetadata,
+  layoutTabFromEditorMetadata,
+  workbenchDockviewRead,
+} from "@/features/core/dockview";
+import type {
+  WorkbenchPanelInfo,
+  WorkbenchPanelMetadata,
+  WorkbenchPanelParams,
+  WorkbenchViewId,
+} from "@/features/core/dockview";
+import { resourceKey } from "@/features/core/resource";
+import { useResourceRead } from "@/features/core/resource/read";
 import {
   ActionMenu,
   usePositionedActionMenu,
   type ActionMenuSection,
-} from '@/shared/ui/actionMenu';
+} from "@/shared/ui/actionMenu";
 
 interface WorkbenchTabContextTarget {
   readonly panelInstanceId: string;
@@ -61,32 +65,32 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
 };
 
 const VIEW_TITLE_KEYS = {
-  project: 'activityBar.project',
-  nodes: 'activityBar.nodes',
-  data: 'activityBar.data',
-  commands: 'activityBar.commands',
-  details: 'panel.details',
-  assistant: 'panel.assistant',
-  inspect: 'panel.inspect',
-  logs: 'panel.logs',
-  output: 'panel.output',
-  diagnostics: 'panel.diagnostics',
+  project: "activityBar.project",
+  nodes: "activityBar.nodes",
+  data: "activityBar.data",
+  commands: "activityBar.commands",
+  details: "panel.details",
+  assistant: "panel.assistant",
+  inspect: "panel.inspect",
+  logs: "panel.logs",
+  output: "panel.output",
+  diagnostics: "panel.diagnostics",
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function iconForMetadata(metadata: WorkbenchPanelMetadata): {
-  readonly Icon: ComponentType<{ size?: number; 'aria-hidden'?: boolean }>;
+  readonly Icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
   readonly key: string;
 } {
-  if (metadata.role === 'editor') {
-    if (metadata.resourceKind === 'event') return { Icon: VscSymbolEvent, key: 'event' };
-    if (metadata.resourceKind === 'function') return { Icon: VscSymbolMethod, key: 'function' };
-    return { Icon: VscGraphLine, key: 'worksheet' };
+  if (metadata.role === "editor") {
+    if (metadata.resourceKind === "event") return { Icon: VscSymbolEvent, key: "event" };
+    if (metadata.resourceKind === "function") return { Icon: VscSymbolMethod, key: "function" };
+    return { Icon: VscGraphLine, key: "worksheet" };
   }
-  if (metadata.role === 'result') return { Icon: VscPreview, key: 'result' };
+  if (metadata.role === "result") return { Icon: VscPreview, key: "result" };
   return { Icon: VIEW_ICONS[metadata.viewId], key: metadata.viewId };
 }
 
-function usePanelTitle(api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api']) {
+function usePanelTitle(api: IDockviewPanelHeaderProps<WorkbenchPanelParams>["api"]) {
   const [title, setTitle] = useState(api.title);
 
   useEffect(() => {
@@ -100,13 +104,11 @@ function usePanelTitle(api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api
 }
 
 function useWorkbenchEdgeCollapsed(
-  api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api'],
+  api: IDockviewPanelHeaderProps<WorkbenchPanelParams>["api"],
 ): boolean {
   const [groupApi, setGroupApi] = useState(() => api.group.api);
-  const isEdge = groupApi.location.type === 'edge';
-  const [collapsed, setCollapsed] = useState(
-    () => isEdge && groupApi.isCollapsed(),
-  );
+  const isEdge = groupApi.location.type === "edge";
+  const [collapsed, setCollapsed] = useState(() => isEdge && groupApi.isCollapsed());
 
   useEffect(() => {
     const updateGroup = () => setGroupApi(api.group.api);
@@ -133,10 +135,10 @@ function titleForMetadata(
   panelTitle: string | undefined,
   translate: (key: string) => string,
 ): string {
-  if (metadata.role === 'result') {
+  if (metadata.role === "result") {
     return metadata.title || panelTitle || metadata.resultId;
   }
-  if (metadata.role === 'editor') return panelTitle || metadata.resourceRef;
+  if (metadata.role === "editor") return panelTitle || metadata.resourceRef;
   return translate(VIEW_TITLE_KEYS[metadata.viewId]);
 }
 
@@ -145,52 +147,50 @@ function genericContextMenuSections(
   closeLabel: string,
   closeGroupLabel: string,
 ): ActionMenuSection[] {
-  return [{
-    items: [
-      {
-        id: 'close',
-        label: closeLabel,
-        icon: <VscClose size={12} />,
-        onClick: () => void requestCloseWorkbenchPanel(target.panelInstanceId),
-      },
-      {
-        id: 'close-group',
-        label: closeGroupLabel,
-        icon: <VscCloseAll size={12} />,
-        danger: true,
-        onClick: () => {
-          const panelInstanceIds = workbenchDockviewRead
-            .listGroupPanels(target.groupId)
-            .map((panel: WorkbenchPanelInfo) => panel.panelInstanceId);
-          void requestCloseWorkbenchPanels(panelInstanceIds);
+  return [
+    {
+      items: [
+        {
+          id: "close",
+          label: closeLabel,
+          icon: <VscClose size={12} />,
+          onClick: () => void requestCloseWorkbenchPanel(target.panelInstanceId),
         },
-      },
-    ],
-  }];
+        {
+          id: "close-group",
+          label: closeGroupLabel,
+          icon: <VscCloseAll size={12} />,
+          danger: true,
+          onClick: () => {
+            const panelInstanceIds = workbenchDockviewRead
+              .listGroupPanels(target.groupId)
+              .map((panel: WorkbenchPanelInfo) => panel.panelInstanceId);
+            void requestCloseWorkbenchPanels(panelInstanceIds);
+          },
+        },
+      ],
+    },
+  ];
 }
 
-export function WorkbenchDockviewTab(
-  props: IDockviewPanelHeaderProps<WorkbenchPanelParams>,
-) {
+export function WorkbenchDockviewTab(props: IDockviewPanelHeaderProps<WorkbenchPanelParams>) {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);
   const isEdgeCollapsed = useWorkbenchEdgeCollapsed(props.api);
   const title = titleForMetadata(metadata, panelTitle, t);
-  const isActivityTab = metadata.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
+  const isActivityTab = metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId);
   const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
-  const editorDocumentKey = metadata.role === 'editor'
-    ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
-    : null;
-  const dirty = useResourceRead((snapshot) => (
-    editorDocumentKey ? snapshot.documents[editorDocumentKey]?.dirty === true : false
-  ));
-  const {
-    contextMenu,
-    setContextMenu,
-    closeActionMenu,
-  } = usePositionedActionMenu<WorkbenchTabContextTarget>();
+  const editorDocumentKey =
+    metadata.role === "editor"
+      ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
+      : null;
+  const dirty = useResourceRead((snapshot) =>
+    editorDocumentKey ? snapshot.documents[editorDocumentKey]?.dirty === true : false,
+  );
+  const { contextMenu, setContextMenu, closeActionMenu } =
+    usePositionedActionMenu<WorkbenchTabContextTarget>();
   const tabContentRef = useRef<HTMLDivElement>(null);
 
   const requestClose = useCallback(() => {
@@ -209,8 +209,8 @@ export function WorkbenchDockviewTab(
         props.api.setActive();
         props.api.group.api.expand();
       };
-      tabContent.addEventListener('click', handleActivityClick);
-      return () => tabContent.removeEventListener('click', handleActivityClick);
+      tabContent.addEventListener("click", handleActivityClick);
+      return () => tabContent.removeEventListener("click", handleActivityClick);
     }
 
     if (isPersistentSidebarTab) return;
@@ -260,17 +260,17 @@ export function WorkbenchDockviewTab(
       });
     };
 
-    tabHost.addEventListener('pointerdown', handlePointerDown);
-    tabHost.addEventListener('pointerup', handlePointerUp);
-    tabHost.addEventListener('pointerleave', handlePointerLeave);
-    tabHost.addEventListener('auxclick', handleAuxClick);
-    tabHost.addEventListener('contextmenu', handleContextMenu);
+    tabHost.addEventListener("pointerdown", handlePointerDown);
+    tabHost.addEventListener("pointerup", handlePointerUp);
+    tabHost.addEventListener("pointerleave", handlePointerLeave);
+    tabHost.addEventListener("auxclick", handleAuxClick);
+    tabHost.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      tabHost.removeEventListener('pointerdown', handlePointerDown);
-      tabHost.removeEventListener('pointerup', handlePointerUp);
-      tabHost.removeEventListener('pointerleave', handlePointerLeave);
-      tabHost.removeEventListener('auxclick', handleAuxClick);
-      tabHost.removeEventListener('contextmenu', handleContextMenu);
+      tabHost.removeEventListener("pointerdown", handlePointerDown);
+      tabHost.removeEventListener("pointerup", handlePointerUp);
+      tabHost.removeEventListener("pointerleave", handlePointerLeave);
+      tabHost.removeEventListener("auxclick", handleAuxClick);
+      tabHost.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [isActivityTab, isPersistentSidebarTab, metadata, props.api, requestClose, setContextMenu]);
 
@@ -280,8 +280,8 @@ export function WorkbenchDockviewTab(
         ref={tabContentRef}
         className="dv-default-tab"
         data-workbench-activity-tab
-        data-workbench-activity-separator={metadata.viewId === 'commands' ? 'true' : undefined}
-        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? 'true' : undefined}
+        data-workbench-activity-separator={metadata.viewId === "commands" ? "true" : undefined}
+        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? "true" : undefined}
         data-panel-instance-id={props.api.id}
         aria-label={title}
         title={title}
@@ -295,7 +295,7 @@ export function WorkbenchDockviewTab(
   }
 
   const contextMenuSections = contextMenu
-    ? contextMenu.target.metadata.role === 'editor'
+    ? contextMenu.target.metadata.role === "editor"
       ? buildTabContextMenuSections(
           {
             panelInstanceId: contextMenu.target.panelInstanceId,
@@ -306,8 +306,8 @@ export function WorkbenchDockviewTab(
         )
       : genericContextMenuSections(
           contextMenu.target,
-          t('tabBar.contextMenu.close'),
-          t('tabBar.closeGroup'),
+          t("tabBar.contextMenu.close"),
+          t("tabBar.closeGroup"),
         )
     : [];
 
@@ -318,7 +318,7 @@ export function WorkbenchDockviewTab(
         className="dv-default-tab"
         data-panel-instance-id={props.api.id}
         data-workbench-tab
-        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? 'true' : undefined}
+        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? "true" : undefined}
         title={title}
       >
         <span className="dv-default-tab-content flex min-w-0 items-center gap-1.5">
@@ -328,7 +328,9 @@ export function WorkbenchDockviewTab(
           >
             <Icon size={14} aria-hidden />
           </span>
-          <span className="min-w-0 truncate" data-workbench-tab-title>{title}</span>
+          <span className="min-w-0 truncate" data-workbench-tab-title>
+            {title}
+          </span>
           {dirty ? (
             <span
               aria-hidden
@@ -341,7 +343,7 @@ export function WorkbenchDockviewTab(
           <button
             type="button"
             className="dv-default-tab-action"
-            aria-label={t('tabBar.contextMenu.close')}
+            aria-label={t("tabBar.contextMenu.close")}
             data-workbench-tab-close
             onPointerDown={(event) => {
               event.preventDefault();

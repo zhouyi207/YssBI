@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo } from "react";
 import {
   ReportLayout,
   ReportSection,
@@ -8,26 +8,27 @@ import {
   VarModelTable,
   VarModelRow,
   VarModelCell,
-} from './shared';
-import { VarEigenvalueStabilityPanel } from './shared/VarEigenvalueStabilityPanel';
-import type { Coefficient, VECSummaryResultData } from '@/shared/types/report';
+} from "./shared";
+import { VarEigenvalueStabilityPanel } from "./shared/VarEigenvalueStabilityPanel";
+import type { Coefficient, VECSummaryResultData } from "@/shared/types/report";
 
-function vecCoeffsToOLSFormat(coefficients: VECSummaryResultData['coefficients']): Coefficient[] {
+function vecCoeffsToOLSFormat(coefficients: VECSummaryResultData["coefficients"]): Coefficient[] {
   const eqOrder = [...new Set(coefficients.map((x) => x.eq_name))];
-  return coefficients.map((c, idx) => ({
-    variable: c.variable,
-    category: c.eq_name,
-    coef: c.coef,
-    std_err: c.std_err,
-    t_value: c.z_value,
-    p_value: c.p_value,
-    'confidence_interval_0.025': c.ci_lower,
-    'confidence_interval_0.975': c.ci_upper,
-    is_significant: c.p_value < 0.05,
-    _sortKey: c.variable === 'const' ? 0 : 1,
-    _eqOrder: eqOrder.indexOf(c.eq_name),
-    _idx: idx,
-  }))
+  return coefficients
+    .map((c, idx) => ({
+      variable: c.variable,
+      category: c.eq_name,
+      coef: c.coef,
+      std_err: c.std_err,
+      t_value: c.z_value,
+      p_value: c.p_value,
+      "confidence_interval_0.025": c.ci_lower,
+      "confidence_interval_0.975": c.ci_upper,
+      is_significant: c.p_value < 0.05,
+      _sortKey: c.variable === "const" ? 0 : 1,
+      _eqOrder: eqOrder.indexOf(c.eq_name),
+      _idx: idx,
+    }))
     .sort((a, b) => {
       if (a._eqOrder !== b._eqOrder) return a._eqOrder - b._eqOrder;
       if (a._sortKey !== b._sortKey) return a._sortKey - b._sortKey;
@@ -45,7 +46,7 @@ function vecBetaToCoeffs(
   beta_z_value: (number | null)[][],
   beta_p_value: (number | null)[][],
   beta_ci_lower: (number | null)[][],
-  beta_ci_upper: (number | null)[][]
+  beta_ci_upper: (number | null)[][],
 ): Coefficient[] {
   const result: BetaCoeffWithSort[] = [];
   for (let ceIdx = 0; ceIdx < beta.length; ceIdx++) {
@@ -63,10 +64,10 @@ function vecBetaToCoeffs(
         std_err: hasStats ? se! : undefined,
         t_value: hasStats ? z! : undefined,
         p_value: hasStats ? p! : undefined,
-        'confidence_interval_0.025': hasStats ? ciLo! : undefined,
-        'confidence_interval_0.975': hasStats ? ciHi! : undefined,
-        is_significant: hasStats ? (p! < 0.05) : false,
-        _sortKey: betaVarNames[varIdx] === 'const' ? 0 : 1,
+        "confidence_interval_0.025": hasStats ? ciLo! : undefined,
+        "confidence_interval_0.975": hasStats ? ciHi! : undefined,
+        is_significant: hasStats ? p! < 0.05 : false,
+        _sortKey: betaVarNames[varIdx] === "const" ? 0 : 1,
         _eqOrder: ceIdx,
         _idx: result.length,
       });
@@ -109,14 +110,14 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
 
   const vecstableSorted = useMemo(
     () => (vecstable.length > 0 ? [...vecstable].sort((a, b) => b.modulus - a.modulus) : []),
-    [vecstable]
+    [vecstable],
   );
 
   const coeffsForTable = vecCoeffsToOLSFormat(coefficients);
   const betaVarNames = beta_var_names?.length
     ? beta_var_names
     : (beta[0]?.length ?? 0) > var_names.length
-      ? [...var_names, 'const']
+      ? [...var_names, "const"]
       : var_names;
 
   const betaCoeffs = useMemo(
@@ -129,10 +130,10 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
             beta_z_value,
             beta_p_value,
             beta_ci_lower,
-            beta_ci_upper
+            beta_ci_upper,
           )
         : [],
-    [beta, betaVarNames, beta_std_err, beta_z_value, beta_p_value, beta_ci_lower, beta_ci_upper]
+    [beta, betaVarNames, beta_std_err, beta_z_value, beta_p_value, beta_ci_lower, beta_ci_upper],
   );
 
   return (
@@ -140,7 +141,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
       title={data.title}
       badges={
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span>Variables: {var_names.join(', ')}</span>
+          <span>Variables: {var_names.join(", ")}</span>
           <span>n = {num_observation}</span>
           <span>rank = {rank}</span>
           <span>lags = {lags}</span>
@@ -152,7 +153,9 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
         <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
           <div className="flex justify-between bg-card px-4 py-2.5">
             <span className="text-xs text-muted-foreground">Log likelihood</span>
-            <span className="font-mono text-xs font-medium text-foreground">{formatNum(log_likelihood)}</span>
+            <span className="font-mono text-xs font-medium text-foreground">
+              {formatNum(log_likelihood)}
+            </span>
           </div>
           <div className="flex justify-between bg-card px-4 py-2.5">
             <span className="text-xs text-muted-foreground">AIC</span>
@@ -168,13 +171,18 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
           </div>
           <div className="col-span-2 flex justify-between bg-card px-4 py-2.5">
             <span className="text-xs text-muted-foreground">Det(Sigma_ml)</span>
-            <span className="font-mono text-xs font-medium text-foreground">{formatNum(det_sigma_ml)}</span>
+            <span className="font-mono text-xs font-medium text-foreground">
+              {formatNum(det_sigma_ml)}
+            </span>
           </div>
         </div>
       </ReportSection>
       {equations.length > 0 && (
         <ReportSection title="Equation Summary" icon="anova">
-          <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'RMSE', 'R-sq', 'chi2', 'P>chi2']}>
+          <VarModelTable
+            className="mb-6"
+            columns={["Equation", "Parms", "RMSE", "R-sq", "chi2", "P>chi2"]}
+          >
             {equations.map((eq, i) => (
               <VarModelRow key={i}>
                 <VarModelCell>{eq.eq_name}</VarModelCell>
@@ -201,7 +209,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
       {/* Cointegrating equations (Stata style) */}
       {cointegrating_equations.length > 0 && (
         <ReportSection title="Cointegrating equations" icon="classification">
-          <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'chi2', 'P>chi2']}>
+          <VarModelTable className="mb-6" columns={["Equation", "Parms", "chi2", "P>chi2"]}>
             {cointegrating_equations.map((ce, i) => (
               <VarModelRow key={i}>
                 <VarModelCell>{ce.eq_name}</VarModelCell>
@@ -211,13 +219,17 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </VarModelRow>
             ))}
           </VarModelTable>
-          <div className="mb-4 mt-2 text-xs text-muted-foreground">Identification: beta is exactly identified</div>
+          <div className="mb-4 mt-2 text-xs text-muted-foreground">
+            Identification: beta is exactly identified
+          </div>
         </ReportSection>
       )}
 
       {betaCoeffs.length > 0 && (
         <>
-          <div className="mb-2 text-xs text-muted-foreground">Johansen normalization restriction imposed</div>
+          <div className="mb-2 text-xs text-muted-foreground">
+            Johansen normalization restriction imposed
+          </div>
           <ReportSection title="beta" icon="firstStage">
             <CoefficientTable
               coefficients={betaCoeffs}
@@ -241,7 +253,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
         <ReportSection title="Lagrange-multiplier test (veclmar)" icon="margins">
           <VarModelTable
             className="mb-6"
-            columns={['lag', 'chi2', 'df', 'Prob > chi2']}
+            columns={["lag", "chi2", "df", "Prob > chi2"]}
             footer={
               <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
                 H0: no autocorrelation at lag order
@@ -262,7 +274,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
 
       {equations.length === 0 && coefficients.length === 0 && beta.length === 0 && (
         <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/10 px-4 py-3 text-sm text-amber-700/80 dark:text-amber-200/80">
-          VEC 协整估计尚未实现，当前为占位结果。待实现 Johansen  procedure 后显示完整输出。
+          VEC 协整估计尚未实现，当前为占位结果。待实现 Johansen procedure 后显示完整输出。
         </div>
       )}
     </ReportLayout>

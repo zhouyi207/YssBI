@@ -1,4 +1,4 @@
-export type PluginIcon = 'julia';
+export type PluginIcon = "julia";
 
 export interface PluginManifest {
   readonly id: string;
@@ -8,14 +8,14 @@ export interface PluginManifest {
   readonly order: number;
 }
 
-export const JULIA_PLUGIN_ID = 'julia';
+export const JULIA_PLUGIN_ID = "julia";
 
 export const BUILT_IN_PLUGIN_MANIFESTS: readonly PluginManifest[] = [
   {
     id: JULIA_PLUGIN_ID,
-    titleKey: 'plugins.julia.title',
-    descriptionKey: 'plugins.julia.description',
-    icon: 'julia',
+    titleKey: "plugins.julia.title",
+    descriptionKey: "plugins.julia.description",
+    icon: "julia",
     order: 10,
   },
 ];
@@ -29,7 +29,7 @@ export function getInstalledPluginManifests(
 ): PluginManifest[] {
   const installed = new Set(installedPluginIds);
 
-  return BUILT_IN_PLUGIN_MANIFESTS
-    .filter((manifest) => installed.has(manifest.id))
-    .sort((left, right) => left.order - right.order);
+  return BUILT_IN_PLUGIN_MANIFESTS.filter((manifest) => installed.has(manifest.id)).sort(
+    (left, right) => left.order - right.order,
+  );
 }

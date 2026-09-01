@@ -1,19 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
-import { parseProjectEvent } from './projectEventParser';
+import { describe, expect, it } from "vitest";
+import projectEvents from "@/tests/fixtures/node-system-contracts/project-events.json";
+import { parseProjectEvent } from "./projectEventParser";
 
-const projectInstanceId = '00000000-0000-0000-0000-000000000601';
-const operationId = '00000000-0000-0000-0000-000000000701';
+const projectInstanceId = "00000000-0000-0000-0000-000000000601";
+const operationId = "00000000-0000-0000-0000-000000000701";
 
 const lifecycleResult = {
   operationId,
-  kind: 'saveAs',
+  kind: "saveAs",
   oldProjectInstanceId: null,
   newProjectInstanceId: projectInstanceId,
-  phase: 'authorityCommitted',
-  outcome: 'committed',
+  phase: "authorityCommitted",
+  outcome: "committed",
   record: null,
-  path: 'D:/projects/copy/metadata.yssbi',
+  path: "D:/projects/copy/metadata.yssbi",
   recovery: null,
   invalidation: { project: true, registry: true },
 };
@@ -22,7 +22,7 @@ const projectSavedResult = {
   projectInstanceId,
   operationId,
   publicationRevision: 2,
-  affectedResources: [{ kind: 'worksheet', key: 'worksheets/Sales.yssbi-worksheet' }],
+  affectedResources: [{ kind: "worksheet", key: "worksheets/Sales.yssbi-worksheet" }],
   indexInvalidated: true,
   history: { canUndo: true, canRedo: false },
 };
@@ -34,108 +34,121 @@ const settingsResult = {
   publicationRevision: 4,
   settings: {
     numeric: { tolerance: { absolute: 1e-12, relative: 1e-9 } },
-    missingValues: { statistics: 'listwise' },
+    missingValues: { statistics: "listwise" },
   },
 };
 
 const supportedEvents = [
   {
-    type: 'Project',
+    type: "Project",
     payload: {
-      type: 'ProjectLoaded',
+      type: "ProjectLoaded",
       payload: {
         result: {
-          path: 'D:/projects/demo',
+          path: "D:/projects/demo",
           projectInstanceId,
           activationRevision: 7,
         },
       },
     },
   },
-  { type: 'Project', payload: { type: 'ProjectCleared' } },
+  { type: "Project", payload: { type: "ProjectCleared" } },
   {
-    type: 'Project',
-    payload: { type: 'ProjectLifecycleCommitted', payload: { result: lifecycleResult } },
+    type: "Project",
+    payload: { type: "ProjectLifecycleCommitted", payload: { result: lifecycleResult } },
   },
   {
-    type: 'Project',
-    payload: { type: 'ProjectSaved', payload: { result: projectSavedResult } },
+    type: "Project",
+    payload: { type: "ProjectSaved", payload: { result: projectSavedResult } },
   },
   {
-    type: 'Project',
-    payload: { type: 'ComputationSettingsChanged', payload: { result: settingsResult } },
+    type: "Project",
+    payload: { type: "ComputationSettingsChanged", payload: { result: settingsResult } },
   },
   projectEvents.events[0],
   projectEvents.events[1],
   {
-    type: 'Resource',
+    type: "Resource",
     payload: {
-      type: 'ProjectIndexInvalidated',
-      payload: { projectInstanceId, source: 'watcher', version: 9 },
+      type: "ProjectIndexInvalidated",
+      payload: { projectInstanceId, source: "watcher", version: 9 },
     },
   },
 ] as const;
 
-describe('project event parser', () => {
-  it('unwraps every supported Project and Resource envelope into service-owned events', () => {
+describe("project event parser", () => {
+  it("unwraps every supported Project and Resource envelope into service-owned events", () => {
     const parsed = supportedEvents.map((value) => parseProjectEvent(value));
 
     expect(parsed.every((outcome) => outcome.ok)).toBe(true);
     expect(parsed.map((outcome) => outcome.ok && outcome.event.type)).toEqual([
-      'ProjectLoaded',
-      'ProjectCleared',
-      'ProjectLifecycleCommitted',
-      'ProjectSaved',
-      'ComputationSettingsChanged',
-      'GraphDelta',
-      'ResourceMutationCommitted',
-      'ProjectIndexInvalidated',
+      "ProjectLoaded",
+      "ProjectCleared",
+      "ProjectLifecycleCommitted",
+      "ProjectSaved",
+      "ComputationSettingsChanged",
+      "GraphDelta",
+      "ResourceMutationCommitted",
+      "ProjectIndexInvalidated",
     ]);
     expect(parsed[1]).toEqual({
       ok: true,
-      event: { type: 'ProjectCleared', payload: undefined },
+      event: { type: "ProjectCleared", payload: undefined },
     });
     expect(parsed[5]).toEqual({
       ok: true,
       event: {
-        type: 'GraphDelta',
+        type: "GraphDelta",
         payload: {
-          projectInstanceId: '00000000-0000-0000-0000-000000000601',
+          projectInstanceId: "00000000-0000-0000-0000-000000000601",
           delta: projectEvents.events[0].payload.payload.delta,
         },
       },
     });
   });
 
-  it('returns only stable parse codes for malformed, unknown, extra, and prose-bearing input', () => {
+  it("returns only stable parse codes for malformed, unknown, extra, and prose-bearing input", () => {
     const valid = projectEvents.events[0];
-    const cases: Array<[unknown, 'invalidEnvelope' | 'unknownType' | 'invalidPayload']> = [
-      [{ ...valid, extra: true }, 'invalidEnvelope'],
-      [{ ...valid, type: 'Unsupported' }, 'unknownType'],
-      [{ ...valid, payload: { ...valid.payload, extra: true } }, 'invalidEnvelope'],
-      [{ ...valid, payload: { ...valid.payload, type: 'Unsupported' } }, 'unknownType'],
-      [{
-        ...valid,
-        payload: {
-          ...valid.payload,
-          payload: { ...valid.payload.payload, extra: true },
+    const cases: Array<[unknown, "invalidEnvelope" | "unknownType" | "invalidPayload"]> = [
+      [{ ...valid, extra: true }, "invalidEnvelope"],
+      [{ ...valid, type: "Unsupported" }, "unknownType"],
+      [{ ...valid, payload: { ...valid.payload, extra: true } }, "invalidEnvelope"],
+      [{ ...valid, payload: { ...valid.payload, type: "Unsupported" } }, "unknownType"],
+      [
+        {
+          ...valid,
+          payload: {
+            ...valid.payload,
+            payload: { ...valid.payload.payload, extra: true },
+          },
         },
-      }, 'invalidPayload'],
-      [{
-        type: 'Resource',
-        payload: {
-          type: 'ProjectIndexInvalidated',
-          payload: { projectInstanceId, source: 'watcher', version: 1, message: 'backend prose' },
+        "invalidPayload",
+      ],
+      [
+        {
+          type: "Resource",
+          payload: {
+            type: "ProjectIndexInvalidated",
+            payload: { projectInstanceId, source: "watcher", version: 1, message: "backend prose" },
+          },
         },
-      }, 'invalidPayload'],
-      [{ type: 'Project', payload: { type: 'ProjectCleared', payload: null } }, 'invalidEnvelope'],
-      [{ code: 'backend_failed', details: { message: 'private backend prose' }, incidentId: 'opaque-1' }, 'invalidEnvelope'],
+        "invalidPayload",
+      ],
+      [{ type: "Project", payload: { type: "ProjectCleared", payload: null } }, "invalidEnvelope"],
+      [
+        {
+          code: "backend_failed",
+          details: { message: "private backend prose" },
+          incidentId: "opaque-1",
+        },
+        "invalidEnvelope",
+      ],
     ];
 
     for (const [value, code] of cases) {
       const outcome = parseProjectEvent(value);
       expect(outcome).toEqual({ ok: false, code });
-      expect(JSON.stringify(outcome)).not.toContain('backend prose');
+      expect(JSON.stringify(outcome)).not.toContain("backend prose");
     }
   });
 });

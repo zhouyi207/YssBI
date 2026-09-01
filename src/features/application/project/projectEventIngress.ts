@@ -1,31 +1,31 @@
-import type { ErrorReference } from '@/features/application/errorReference';
+import type { ErrorReference } from "@/features/application/errorReference";
 import type {
   ProjectEvent,
   ProjectEventReconciler,
   ProjectReconciliationOutcome,
-} from './projectEventReconciler';
+} from "./projectEventReconciler";
 
 type Awaitable<T> = T | PromiseLike<T>;
 
 export type ProjectEventStreamItem =
-  | { readonly kind: 'event'; readonly event: ProjectEvent }
-  | { readonly kind: 'failure'; readonly issue: ErrorReference };
+  | { readonly kind: "event"; readonly event: ProjectEvent }
+  | { readonly kind: "failure"; readonly issue: ErrorReference };
 
-export type ProjectEventEnqueueOutcome = 'accepted' | 'closed' | 'overflowRecovery';
-export type ProjectEventDrainOutcome = { readonly status: 'drained' };
+export type ProjectEventEnqueueOutcome = "accepted" | "closed" | "overflowRecovery";
+export type ProjectEventDrainOutcome = { readonly status: "drained" };
 
 export type ProjectEventIngressRecoveryReason =
-  | 'queueOverflow'
-  | 'streamFailure'
-  | 'reconcilerRejected'
-  | 'recoveryRequested';
+  | "queueOverflow"
+  | "streamFailure"
+  | "reconcilerRejected"
+  | "recoveryRequested";
 
 export interface ProjectEventIngressIssue {
   readonly code:
-    | 'project_event_queue_overflow'
-    | 'project_event_stream_failure'
-    | 'project_event_reconciliation_rejected'
-    | 'project_event_recovery_requested';
+    | "project_event_queue_overflow"
+    | "project_event_stream_failure"
+    | "project_event_reconciliation_rejected"
+    | "project_event_recovery_requested";
   readonly incidentId: string | null;
   readonly reason: ProjectEventIngressRecoveryReason;
 }
@@ -48,13 +48,14 @@ function issueFor(
   reason: ProjectEventIngressRecoveryReason,
   incidentId: string | null,
 ): ProjectEventIngressIssue {
-  const code = reason === 'queueOverflow'
-    ? 'project_event_queue_overflow'
-    : reason === 'streamFailure'
-      ? 'project_event_stream_failure'
-      : reason === 'reconcilerRejected'
-        ? 'project_event_reconciliation_rejected'
-        : 'project_event_recovery_requested';
+  const code =
+    reason === "queueOverflow"
+      ? "project_event_queue_overflow"
+      : reason === "streamFailure"
+        ? "project_event_stream_failure"
+        : reason === "reconcilerRejected"
+          ? "project_event_reconciliation_rejected"
+          : "project_event_recovery_requested";
   return { code, incidentId, reason };
 }
 
@@ -66,7 +67,7 @@ export function createProjectEventIngress(
 ): ProjectEventIngress {
   const capacity = dependencies.capacity ?? DEFAULT_PROJECT_EVENT_QUEUE_CAPACITY;
   const queue: ProjectEventStreamItem[] = [];
-  let state: 'open' | 'recovering' | 'closed' = 'open';
+  let state: "open" | "recovering" | "closed" = "open";
   let active: Promise<void> | null = null;
   let recovery: Promise<void> | null = null;
   let closedDrain: Promise<ProjectEventDrainOutcome> | null = null;
@@ -88,7 +89,7 @@ export function createProjectEventIngress(
   ): Promise<void> => {
     queue.length = 0;
     if (recovery) return recovery;
-    if (state !== 'closed') state = 'recovering';
+    if (state !== "closed") state = "recovering";
     publishIssue(issueFor(reason, incidentId));
 
     let recoveryPromise!: Promise<void>;
@@ -102,66 +103,66 @@ export function createProjectEventIngress(
       })
       .finally(() => {
         if (recovery === recoveryPromise) recovery = null;
-        if (state === 'recovering') state = 'open';
-        if (state === 'open' && queue.length > 0) startWorker();
+        if (state === "recovering") state = "open";
+        if (state === "open" && queue.length > 0) startWorker();
       });
     recovery = recoveryPromise;
     return recoveryPromise;
   };
 
   const processQueue = async (): Promise<void> => {
-    while (state === 'open' && queue.length > 0) {
+    while (state === "open" && queue.length > 0) {
       const item = queue.shift()!;
       try {
-        if (item.kind === 'failure') {
-          await beginRecovery('streamFailure', item.issue.incidentId, null);
+        if (item.kind === "failure") {
+          await beginRecovery("streamFailure", item.issue.incidentId, null);
           return;
         }
         const outcome: ProjectReconciliationOutcome = await reconciler.acceptEvent(item.event);
-        if (outcome.status === 'recoveryRequested') {
-          await beginRecovery('recoveryRequested', null, null);
+        if (outcome.status === "recoveryRequested") {
+          await beginRecovery("recoveryRequested", null, null);
           return;
         }
       } catch {
-        await beginRecovery('reconcilerRejected', null, null);
+        await beginRecovery("reconcilerRejected", null, null);
         return;
       }
     }
   };
 
   function startWorker(): void {
-    if (active || state !== 'open') return;
+    if (active || state !== "open") return;
     const worker = processQueue();
     let finished!: Promise<void>;
     finished = worker.finally(() => {
       if (active === finished) active = null;
-      if (state === 'open' && queue.length > 0) startWorker();
+      if (state === "open" && queue.length > 0) startWorker();
     });
     active = finished;
   }
 
   const enqueue = (item: ProjectEventStreamItem): ProjectEventEnqueueOutcome => {
-    if (state === 'closed') return 'closed';
-    if (state === 'recovering') return 'overflowRecovery';
-    if (item.kind === 'failure') {
-      void beginRecovery('streamFailure', item.issue.incidentId, active);
-      return 'overflowRecovery';
+    if (state === "closed") return "closed";
+    if (state === "recovering") return "overflowRecovery";
+    if (item.kind === "failure") {
+      void beginRecovery("streamFailure", item.issue.incidentId, active);
+      return "overflowRecovery";
     }
     if (queue.length >= capacity) {
-      void beginRecovery('queueOverflow', null, active);
-      return 'overflowRecovery';
+      void beginRecovery("queueOverflow", null, active);
+      return "overflowRecovery";
     }
     queue.push(item);
     startWorker();
-    return 'accepted';
+    return "accepted";
   };
 
   const closeAndDrain = (): Promise<ProjectEventDrainOutcome> => {
     if (closedDrain) return closedDrain;
-    state = 'closed';
+    state = "closed";
     queue.length = 0;
     closedDrain = Promise.all([waitFor(active), waitFor(recovery)]).then(() => ({
-      status: 'drained' as const,
+      status: "drained" as const,
     }));
     return closedDrain;
   };

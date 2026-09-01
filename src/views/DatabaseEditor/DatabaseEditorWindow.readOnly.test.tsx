@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { act, createElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRoot, type Root } from 'react-dom/client';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { act, createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createRoot, type Root } from "react-dom/client";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const mocks = vi.hoisted(() => ({
   initProjectSync: vi.fn(),
@@ -20,25 +20,25 @@ const mocks = vi.hoisted(() => ({
   useDataLoader: vi.fn(),
   useSelection: vi.fn(),
   useDatabaseEditorKeyboard: vi.fn(),
-  getGridSelectionPrimaryCellText: vi.fn(() => ''),
+  getGridSelectionPrimaryCellText: vi.fn(() => ""),
   useDatabaseExport: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@/features/application/initialization', () => ({
+vi.mock("@/features/application/initialization", () => ({
   useProjectSync: mocks.useProjectSync,
 }));
 
-vi.mock('@/features/application/window', () => ({
+vi.mock("@/features/application/window", () => ({
   useCurrentWindowActions: mocks.useCurrentWindowActions,
   usePersistedWindow: mocks.usePersistedWindow,
   useWindowMaximized: mocks.useWindowMaximized,
 }));
 
-vi.mock('@/features/application/window/useWindowDecorations', () => ({
+vi.mock("@/features/application/window/useWindowDecorations", () => ({
   useCustomTitleBar: mocks.useCustomTitleBar,
 }));
 
-vi.mock('@/features/application/databaseEditor', () => ({
+vi.mock("@/features/application/databaseEditor", () => ({
   getGridSelectionPrimaryCellText: mocks.getGridSelectionPrimaryCellText,
   useDatabaseEditorKeyboard: mocks.useDatabaseEditorKeyboard,
   useDatabaseExport: mocks.useDatabaseExport,
@@ -46,30 +46,30 @@ vi.mock('@/features/application/databaseEditor', () => ({
   useSelection: mocks.useSelection,
 }));
 
-vi.mock('./Table', () => ({
-  DataTable: () => createElement('div', { 'data-testid': 'read-only-table' }),
+vi.mock("./Table", () => ({
+  DataTable: () => createElement("div", { "data-testid": "read-only-table" }),
 }));
 
-vi.mock('@/features/core/dataStore', async () => {
-  const actual = await vi.importActual<typeof import('@/features/core/dataStore')>(
-    '@/features/core/dataStore',
+vi.mock("@/features/core/dataStore", async () => {
+  const actual = await vi.importActual<typeof import("@/features/core/dataStore")>(
+    "@/features/core/dataStore",
   );
   return { ...actual, initProjectSync: mocks.initProjectSync };
 });
 
-import { DatabaseEditorWindow } from './DatabaseEditorWindow';
+import { DatabaseEditorWindow } from "./DatabaseEditorWindow";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const database = {
-  id: 'sales',
-  name: 'Sales',
-  columns: [{ name: 'amount', type: 'Int64' }],
+  id: "sales",
+  name: "Sales",
+  columns: [{ name: "amount", type: "Int64" }],
   rowCount: 1,
   columnCount: 1,
 };
 
-describe('DatabaseEditorWindow read-only composition', () => {
+describe("DatabaseEditorWindow read-only composition", () => {
   let root: Root;
   let host: HTMLDivElement;
 
@@ -99,10 +99,12 @@ describe('DatabaseEditorWindow read-only composition', () => {
       setSelection: vi.fn(),
     });
     useDatabaseStore.setState({ databases: { sales: database }, revisions: { sales: 1 } });
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
-    act(() => root.render(createElement(TooltipProvider, null, createElement(DatabaseEditorWindow))));
+    act(() =>
+      root.render(createElement(TooltipProvider, null, createElement(DatabaseEditorWindow))),
+    );
   });
 
   afterEach(() => {
@@ -110,18 +112,20 @@ describe('DatabaseEditorWindow read-only composition', () => {
     host.remove();
   });
 
-  it('keeps inspection, paging, and export controls without mutation controls', () => {
+  it("keeps inspection, paging, and export controls without mutation controls", () => {
     expect(host.querySelector('[data-testid="read-only-table"]')).not.toBeNull();
-    const buttonLabels = Array.from(host.querySelectorAll('button'))
-      .map((button) => `${button.textContent} ${button.getAttribute('aria-label') ?? ''}`)
-      .join(' ')
+    const buttonLabels = Array.from(host.querySelectorAll("button"))
+      .map((button) => `${button.textContent} ${button.getAttribute("aria-label") ?? ""}`)
+      .join(" ")
       .toLowerCase();
 
     expect(buttonLabels).not.toMatch(/save|undo|redo|insert|delete|保存|撤销|重做|插入|删除/);
     expect(mocks.useDatabaseExport).toHaveBeenCalled();
-    expect(mocks.useDatabaseEditorKeyboard).toHaveBeenCalledWith(expect.objectContaining({
-      clearSelection: expect.any(Function),
-      selectAll: expect.any(Function),
-    }));
+    expect(mocks.useDatabaseEditorKeyboard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clearSelection: expect.any(Function),
+        selectAll: expect.any(Function),
+      }),
+    );
   });
 });

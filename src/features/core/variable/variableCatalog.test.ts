@@ -1,72 +1,74 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 import {
   applyVariableCatalogFromIndex,
   variableCatalogToResourceMetas,
   variableFromIndexRow,
-} from '@/features/core/variable/variableCatalog';
+} from "@/features/core/variable/variableCatalog";
 
-describe('variableCatalog', () => {
-  it('hydrates VariableStore entries from ProjectIndex.variables rows', () => {
+describe("variableCatalog", () => {
+  it("hydrates VariableStore entries from ProjectIndex.variables rows", () => {
     const catalog = applyVariableCatalogFromIndex([
       {
-        id: 'global-1',
-        resourcePath: 'variables/global-1',
+        id: "global-1",
+        resourcePath: "variables/global-1",
         revision: 3,
-        name: 'Counter',
-        dataType: { kind: 'Int64' },
-        dataValue: { kind: 'Int64', value: 0 },
-        description: '',
-        scope: { type: 'global' },
+        name: "Counter",
+        dataType: { kind: "Int64" },
+        dataValue: { kind: "Int64", value: 0 },
+        description: "",
+        scope: { type: "global" },
         tags: [],
       },
       {
-        id: 'local-1',
-        resourcePath: 'variables/local-1',
+        id: "local-1",
+        resourcePath: "variables/local-1",
         revision: 0,
-        name: 'Temp',
-        dataType: { kind: 'Float64' },
-        dataValue: { kind: 'Float64', value: 1.5 },
-        description: '',
-        scope: { type: 'event', eventPath: 'graph-a' },
+        name: "Temp",
+        dataType: { kind: "Float64" },
+        dataValue: { kind: "Float64", value: 1.5 },
+        description: "",
+        scope: { type: "event", eventPath: "graph-a" },
         tags: [],
-        ownerGraphPath: 'graph-a',
+        ownerGraphPath: "graph-a",
       },
     ]);
 
-    expect(Object.keys(catalog)).toEqual(['global-1', 'local-1']);
-    expect(catalog['global-1'].resourcePath).toBe('variables/global-1');
-    expect(variableFromIndexRow({
-      id: 'global-1',
-      resourcePath: 'variables/global-1',
-      revision: 3,
-      name: 'Counter',
-      dataType: { kind: 'Int64' },
-      dataValue: { kind: 'Int64', value: 0 },
-      description: '',
-      scope: { type: 'global' },
-      tags: [],
-    }).name).toBe('Counter');
+    expect(Object.keys(catalog)).toEqual(["global-1", "local-1"]);
+    expect(catalog["global-1"].resourcePath).toBe("variables/global-1");
+    expect(
+      variableFromIndexRow({
+        id: "global-1",
+        resourcePath: "variables/global-1",
+        revision: 3,
+        name: "Counter",
+        dataType: { kind: "Int64" },
+        dataValue: { kind: "Int64", value: 0 },
+        description: "",
+        scope: { type: "global" },
+        tags: [],
+      }).name,
+    ).toBe("Counter");
   });
 
-  it('projects variable catalog entries to resource metas', () => {
+  it("projects variable catalog entries to resource metas", () => {
     const metas = variableCatalogToResourceMetas({
-      'v1': {
-        id: 'v1',
-        name: 'Alpha',
-        dataType: { kind: 'Boolean' },
-        dataValue: { kind: 'Boolean', value: false },
-        description: '',
-        scope: { type: 'function', functionPath: 'fn-1' },
+      v1: {
+        id: "v1",
+        name: "Alpha",
+        dataType: { kind: "Boolean" },
+        dataValue: { kind: "Boolean", value: false },
+        description: "",
+        scope: { type: "function", functionPath: "fn-1" },
         tags: [],
       },
     });
 
     expect(metas).toHaveLength(1);
     expect(metas[0]).toMatchObject({
-      id: 'v1',
-      kind: 'variable',
-      name: 'Alpha',
-      scope: { type: 'function' , graphPath: 'fn-1' },
+      id: "v1",
+      kind: "variable",
+      name: "Alpha",
+      scope: { type: "function", graphPath: "fn-1" },
     });
   });
 });

@@ -2,16 +2,16 @@
  * Pin DTO → store 规范化：视觉/展示字段由前端从 `dataType` 本地推导。
  */
 
-import type { DataType } from '../domain/dataType';
-import type { PinInstanceDTO } from './graph';
-import { dataTypeFromBackend, type DataTypeBackendFormat } from './dataType';
-import type { PinData } from '../store/graph';
+import type { DataType } from "../domain/dataType";
+import type { PinInstanceDTO } from "./graph";
+import { dataTypeFromBackend, type DataTypeBackendFormat } from "./dataType";
+import type { PinData } from "../store/graph";
 
 function resolveDomainDataType(
   dataType: DataType | DataTypeBackendFormat | undefined,
 ): DataType | undefined {
   if (!dataType) return undefined;
-  if (typeof dataType === 'object' && 'kind' in dataType) {
+  if (typeof dataType === "object" && "kind" in dataType) {
     return dataType as DataType;
   }
   return dataTypeFromBackend(dataType as DataTypeBackendFormat);
@@ -30,15 +30,15 @@ export function normalizePinDto(pin: PinInstanceDTO | PinData): PinData {
     ui: pin.ui,
   };
 
-  if (pin.type === 'exec') {
-    return { ...base, type: 'exec' };
+  if (pin.type === "exec") {
+    return { ...base, type: "exec" };
   }
 
   const dataType = resolveDomainDataType(pin.dataType);
 
   return {
     ...base,
-    type: 'object',
+    type: "object",
     dataType,
   };
 }
@@ -47,6 +47,6 @@ export function normalizePinDto(pin: PinInstanceDTO | PinData): PinData {
 export function pinInferredPatch(dataType: DataType): Partial<PinData> {
   return {
     dataType,
-    type: 'object',
+    type: "object",
   };
 }

@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
-import { act, type ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DidPlaceboFakeGroupBlock, PanelDidResultData } from '@/shared/types/report';
-import { DIDComponent } from './DIDComponent';
+import { act, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DidPlaceboFakeGroupBlock, PanelDidResultData } from "@/shared/types/report";
+import { DIDComponent } from "./DIDComponent";
 
 const mocks = vi.hoisted(() => ({
   hookState: null as unknown as {
@@ -19,33 +19,34 @@ const mocks = vi.hoisted(() => ({
     canRun: boolean;
   },
   t: vi.fn((key: string, values?: Record<string, unknown>) => {
-    if (key === 'did.fakeGroup.methodology') {
+    if (key === "did.fakeGroup.methodology") {
       return `methodology:${values?.nPerm}/${values?.nPermValid}/${values?.nTreatedEntities}/${values?.nEntities}`;
     }
-    if (key === 'did.fakeGroup.unavailable.insufficient_valid_permutations') {
+    if (key === "did.fakeGroup.unavailable.insufficient_valid_permutations") {
       return `unavailable:${values?.nPermValid}/${values?.minValidPermutations}`;
     }
-    if (key === 'did.fakeGroup.errors.internal_error') return 'Localized internal failure';
-    if (key === 'common.incidentId') return 'Incident ID';
+    if (key === "did.fakeGroup.errors.internal_error") return "Localized internal failure";
+    if (key === "common.incidentId") return "Incident ID";
     return key;
   }),
 }));
 
-vi.mock('@/features/application/stats/statsActions', () => ({
+vi.mock("@/features/application/stats/statsActions", () => ({
   useDidFakeGroupRi: () => mocks.hookState,
 }));
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: mocks.t }),
 }));
 
-vi.mock('@/shared/charts/statistical', () => ({
+vi.mock("@/shared/charts/statistical", () => ({
   DidEventStudyChart: () => null,
 }));
 
-vi.mock('./shared', async () => {
-  const React = await import('react');
-  const Container = ({ children }: { children?: ReactNode }) => React.createElement('div', null, children);
+vi.mock("./shared", async () => {
+  const React = await import("react");
+  const Container = ({ children }: { children?: ReactNode }) =>
+    React.createElement("div", null, children);
   return {
     ReportLayout: Container,
     ReportSection: Container,
@@ -59,15 +60,15 @@ vi.mock('./shared', async () => {
   };
 });
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const data = {
-  kind: 'panel_did',
-  title: 'DID',
-  endog_name: 'Y',
-  treat_name: 'Treat',
-  post_name: 'Post',
+  kind: "panel_did",
+  title: "DID",
+  endog_name: "Y",
+  treat_name: "Treat",
+  post_name: "Post",
   fe_twoway: {
     coefficients: [],
     model_basic_info: {},
@@ -77,15 +78,15 @@ const data = {
     endog: [1],
     exog_row_major: [1],
     ncols: 1,
-    all_labels: [{ variable: 'Treat×Post' }],
+    all_labels: [{ variable: "Treat×Post" }],
     entity_id: [0],
     time_id: [0],
     post: [1],
     treat: [1],
-    did_label: 'Treat×Post',
+    did_label: "Treat×Post",
     observed_coef: 1,
     constant: false,
-    cov_type: 'nonrobust',
+    cov_type: "nonrobust",
   },
 } as unknown as PanelDidResultData;
 
@@ -117,14 +118,14 @@ function hookState(overrides: Partial<typeof mocks.hookState> = {}): typeof mock
   };
 }
 
-describe('DIDComponent fake-group result', () => {
+describe("DIDComponent fake-group result", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     mocks.t.mockClear();
     mocks.hookState = hookState();
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
   });
@@ -138,13 +139,13 @@ describe('DIDComponent fake-group result', () => {
     act(() => root.render(<DIDComponent data={data} />));
   }
 
-  it('builds successful methodology text from structured numeric fields', () => {
+  it("builds successful methodology text from structured numeric fields", () => {
     mocks.hookState = hookState({ display: success });
 
     render();
 
-    expect(container.textContent).toContain('methodology:20/18/3/8');
-    expect(mocks.t).toHaveBeenCalledWith('did.fakeGroup.methodology', {
+    expect(container.textContent).toContain("methodology:20/18/3/8");
+    expect(mocks.t).toHaveBeenCalledWith("did.fakeGroup.methodology", {
       nPerm: 20,
       nPermValid: 18,
       nTreatedEntities: 3,
@@ -152,11 +153,11 @@ describe('DIDComponent fake-group result', () => {
     });
   });
 
-  it('localizes expected statistical unavailability by its stable code', () => {
+  it("localizes expected statistical unavailability by its stable code", () => {
     mocks.hookState = hookState({
       display: {
         available: false,
-        unavailableCode: 'insufficient_valid_permutations',
+        unavailableCode: "insufficient_valid_permutations",
         n_perm: 9,
         n_perm_valid: 7,
         min_valid_permutations: 10,
@@ -167,9 +168,9 @@ describe('DIDComponent fake-group result', () => {
 
     render();
 
-    expect(container.textContent).toContain('unavailable:7/10');
+    expect(container.textContent).toContain("unavailable:7/10");
     expect(mocks.t).toHaveBeenCalledWith(
-      'did.fakeGroup.unavailable.insufficient_valid_permutations',
+      "did.fakeGroup.unavailable.insufficient_valid_permutations",
       {
         nPerm: 9,
         nPermValid: 7,
@@ -180,14 +181,14 @@ describe('DIDComponent fake-group result', () => {
     );
   });
 
-  it('localizes command errors by code and displays an incident ID when present', () => {
+  it("localizes command errors by code and displays an incident ID when present", () => {
     mocks.hookState = hookState({
-      error: { code: 'internal_error', incidentId: 'incident-did-42' },
+      error: { code: "internal_error", incidentId: "incident-did-42" },
     });
 
     render();
 
-    expect(container.textContent).toContain('[internal_error] Localized internal failure');
-    expect(container.textContent).toContain('Incident ID: incident-did-42');
+    expect(container.textContent).toContain("[internal_error] Localized internal failure");
+    expect(container.textContent).toContain("Incident ID: incident-did-42");
   });
 });

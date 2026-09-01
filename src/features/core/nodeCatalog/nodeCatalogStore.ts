@@ -1,9 +1,9 @@
-import { create } from 'zustand';
-import type { ErrorReference } from '@/shared/types/domain/diagnostics';
+import { create } from "zustand";
+import type { ErrorReference } from "@/shared/types/domain/diagnostics";
 import type {
   LocalizedCatalogCategory,
   LocalizedCatalogItem,
-} from '@/features/domain/nodeCatalog/catalogItem';
+} from "@/features/domain/nodeCatalog/catalogItem";
 
 export interface LocalizedCatalogResponse {
   projectInstanceId: string;
@@ -14,10 +14,10 @@ export interface LocalizedCatalogResponse {
   items: LocalizedCatalogItem[];
 }
 
-export type CatalogLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type CatalogLoadStatus = "idle" | "loading" | "ready" | "error";
 
-export const CATALOG_RESPONSE_CONTRACT_ERROR_CODE = 'catalog_response_contract_error';
-export const CATALOG_RESPONSE_STALE_ERROR_CODE = 'catalog_response_stale';
+export const CATALOG_RESPONSE_CONTRACT_ERROR_CODE = "catalog_response_contract_error";
+export const CATALOG_RESPONSE_STALE_ERROR_CODE = "catalog_response_stale";
 
 export interface CatalogRequestIdentity {
   projectInstanceId: string;
@@ -47,7 +47,7 @@ export interface NodeCatalogState {
 }
 
 const IDLE_REQUEST: CatalogRequestState = {
-  status: 'idle',
+  status: "idle",
   responseKey: null,
   error: null,
   requestGeneration: null,
@@ -83,13 +83,12 @@ export function selectCatalogResponse(
   locale: string,
 ): LocalizedCatalogResponse | null {
   const request = selectCatalogRequest(state, projectInstanceId, locale);
-  return request.responseKey ? state.responses[request.responseKey] ?? null : null;
+  return request.responseKey ? (state.responses[request.responseKey] ?? null) : null;
 }
 
 function ownsRequest(state: NodeCatalogState, identity: CatalogRequestIdentity): boolean {
   const request = state.requests[catalogRequestKey(identity.projectInstanceId, identity.locale)];
-  return request?.status === 'loading'
-    && request.requestGeneration === identity.requestGeneration;
+  return request?.status === "loading" && request.requestGeneration === identity.requestGeneration;
 }
 
 export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
@@ -101,7 +100,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     let identity: CatalogRequestIdentity | null = null;
     set((state) => {
       const current = selectCatalogRequest(state, projectInstanceId, locale);
-      if (current.status === 'loading') return state;
+      if (current.status === "loading") return state;
       identity = {
         projectInstanceId,
         locale,
@@ -112,7 +111,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
         requests: {
           ...state.requests,
           [catalogRequestKey(projectInstanceId, locale)]: {
-            status: 'loading',
+            status: "loading",
             responseKey: current.responseKey,
             error: null,
             requestGeneration: identity.requestGeneration,
@@ -124,21 +123,22 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     return identity;
   },
 
-
   storeResponse: (identity, response) => {
     let stored = false;
     set((state) => {
       if (!ownsRequest(state, identity)) return state;
       const requestKey = catalogRequestKey(identity.projectInstanceId, identity.locale);
       const request = state.requests[requestKey];
-      if (response.projectInstanceId !== identity.projectInstanceId
-        || response.locale !== identity.locale) {
+      if (
+        response.projectInstanceId !== identity.projectInstanceId ||
+        response.locale !== identity.locale
+      ) {
         return {
           requests: {
             ...state.requests,
             [requestKey]: {
               ...request,
-              status: 'error',
+              status: "error",
               error: {
                 code: CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
                 incidentId: null,
@@ -153,7 +153,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
             ...state.requests,
             [requestKey]: {
               ...request,
-              status: 'error',
+              status: "error",
               error: {
                 code: CATALOG_RESPONSE_STALE_ERROR_CODE,
                 incidentId: null,
@@ -177,7 +177,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
         requests: {
           ...state.requests,
           [catalogRequestKey(identity.projectInstanceId, identity.locale)]: {
-            status: 'ready',
+            status: "ready",
             responseKey,
             error: null,
             requestGeneration: identity.requestGeneration,
@@ -200,7 +200,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
         requests: {
           ...state.requests,
           [requestKey]: {
-            status: 'error',
+            status: "error",
             responseKey: current.responseKey,
             error,
             requestGeneration: identity.requestGeneration,
@@ -224,7 +224,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
         if (requestProject !== projectInstanceId) continue;
         requests[key] = {
           ...request,
-          status: 'idle',
+          status: "idle",
           error: null,
           requestGeneration: null,
           minimumResourcePublicationRevision: revision,
@@ -238,17 +238,18 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     return advanced;
   },
 
-  requestRefresh: (projectInstanceId, locale) => set((state) => {
-    const key = catalogRequestKey(projectInstanceId, locale);
-    const current = selectCatalogRequest(state, projectInstanceId, locale);
-    if (current.status === 'loading' || current.status === 'idle') return state;
-    return {
-      requests: {
-        ...state.requests,
-        [key]: { ...current, status: 'idle', error: null, requestGeneration: null },
-      },
-    };
-  }),
+  requestRefresh: (projectInstanceId, locale) =>
+    set((state) => {
+      const key = catalogRequestKey(projectInstanceId, locale);
+      const current = selectCatalogRequest(state, projectInstanceId, locale);
+      if (current.status === "loading" || current.status === "idle") return state;
+      return {
+        requests: {
+          ...state.requests,
+          [key]: { ...current, status: "idle", error: null, requestGeneration: null },
+        },
+      };
+    }),
 
   clear: () => set({ responses: {}, requests: {}, projectWatermarks: {} }),
 }));

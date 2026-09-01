@@ -1,16 +1,16 @@
 import type { Graph } from "./graph";
 import type { Variable } from "./variable";
 import type { DatabaseDecl } from "./database";
-import type { DatabaseEngineDTO } from './database';
-import type { FunctionEditorProjectionDto } from './editorProjection';
-import type { FunctionSignatureDto, HistoryStatusDto, ResourceKeyDto } from './editorMutation';
-import type { DataType } from './dataType';
-import type { DataValue } from './dataValue';
-import type { WorksheetChartType } from './worksheet';
+import type { DatabaseEngineDTO } from "./database";
+import type { FunctionEditorProjectionDto } from "./editorProjection";
+import type { FunctionSignatureDto, HistoryStatusDto, ResourceKeyDto } from "./editorMutation";
+import type { DataType } from "./dataType";
+import type { DataValue } from "./dataValue";
+import type { WorksheetChartType } from "./worksheet";
 
 /**
  * Domain Types - Project
- * 
+ *
  * Project 代表整个项目的数据结构
  */
 
@@ -18,7 +18,7 @@ import type { WorksheetChartType } from './worksheet';
  * 项目元数据
  */
 export interface ProjectMetadata {
-    exportTime: string;   // 导出时间
+  exportTime: string; // 导出时间
 }
 
 /**
@@ -26,38 +26,38 @@ export interface ProjectMetadata {
  * 包含项目的所有内容
  */
 export interface ProjectData {
-    variables: Record<string, Variable>;  // 变量集合（ID -> Variable）
-    graphs: Record<string, Graph>;        // 图集合（path -> Graph，键与 Graph.path 一致）
-    databases: Record<string, DatabaseDecl>;  // 数据库集合（ID -> DatabaseDecl）
-    metadata: ProjectMetadata;            // 元数据
+  variables: Record<string, Variable>; // 变量集合（ID -> Variable）
+  graphs: Record<string, Graph>; // 图集合（path -> Graph，键与 Graph.path 一致）
+  databases: Record<string, DatabaseDecl>; // 数据库集合（ID -> DatabaseDecl）
+  metadata: ProjectMetadata; // 元数据
 }
 
 export interface ProjectRecordRow {
-    id: string;
-    name: string;
-    path: string;
-    createdAt: string;
-    lastOpenedAt: string | null;
-    isFavorite: boolean;
-    rootIdentity: string;
+  id: string;
+  name: string;
+  path: string;
+  createdAt: string;
+  lastOpenedAt: string | null;
+  isFavorite: boolean;
+  rootIdentity: string;
 }
 
 export type LifecycleMutationKind =
-  | 'saveAs'
-  | 'create'
-  | 'delete'
-  | 'registryCleanup'
-  | 'load'
-  | 'clear';
+  | "saveAs"
+  | "create"
+  | "delete"
+  | "registryCleanup"
+  | "load"
+  | "clear";
 export type LifecycleMutationPhase =
-  | 'destinationCommitted'
-  | 'registryCommitted'
-  | 'authorityCommitted';
+  | "destinationCommitted"
+  | "registryCommitted"
+  | "authorityCommitted";
 export type LifecycleMutationOutcome =
-  | 'committed'
-  | 'registryFailed'
-  | 'activationFailed'
-  | 'registryPending';
+  | "committed"
+  | "registryFailed"
+  | "activationFailed"
+  | "registryPending";
 
 export interface LifecycleRecoveryDto {
   required: boolean;
@@ -96,11 +96,11 @@ interface ProjectGraphIndexRowBase {
 }
 
 export interface ProjectEventGraphIndexRow extends ProjectGraphIndexRowBase {
-  type: 'event';
+  type: "event";
 }
 
 export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
-  type: 'function';
+  type: "function";
   functionRevision: number;
   functionSignature: FunctionSignatureDto;
   functionEditorProjection: FunctionEditorProjectionDto;
@@ -124,11 +124,11 @@ export interface ProjectVariableIndexRow {
   dataType: DataType;
   dataValue: DataValue;
   description: string;
-  scope: Variable['scope'];
+  scope: Variable["scope"];
   tags: string[];
   ownerGraphPath?: string | null;
   ownerGraphName?: string | null;
-  ownerGraphKind?: 'event' | 'function' | null;
+  ownerGraphKind?: "event" | "function" | null;
 }
 
 export interface ProjectDatabaseIndexRow {

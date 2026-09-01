@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react';
-import { ChartRenderer } from '@/shared/charts/ChartRenderer';
-import type { ParsedPlotPayload } from '@/shared/types/dto/plotPayload';
-import { LinePlotControls } from './LinePlotControls';
-import { toResultChartModel } from './toResultChartModel';
+import type { ReactNode } from "react";
+import { ChartRenderer } from "@/shared/charts/ChartRenderer";
+import type { ParsedPlotPayload } from "@/shared/types/dto/plotPayload";
+import { LinePlotControls } from "./LinePlotControls";
+import { toResultChartModel } from "./toResultChartModel";
 
 export interface PlotResultViewProps {
   payload: ParsedPlotPayload | null;
@@ -40,7 +40,7 @@ export function PlotResultView({ payload, invalidContent }: PlotResultViewProps)
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
-      {model.kind === 'line' ? (
+      {model.kind === "line" ? (
         <div className="min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-border bg-card">
           <LinePlotControls model={model} />
         </div>

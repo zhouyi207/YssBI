@@ -1,6 +1,6 @@
 export interface ValidationIssueDTO {
   code: string;
-  severity: 'error' | 'warning';
+  severity: "error" | "warning";
   path: string;
 }
 

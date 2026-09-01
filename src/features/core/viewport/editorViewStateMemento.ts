@@ -1,8 +1,8 @@
-import type { EditorViewport } from './editorViewport';
-import { logger } from '@/features/core/observability/logger';
-import { normalizeEditorViewport } from './useViewportStore';
+import type { EditorViewport } from "./editorViewport";
+import { logger } from "@/features/core/observability/logger";
+import { normalizeEditorViewport } from "./useViewportStore";
 
-const STORAGE_PREFIX = 'yssbi-editor-view-state';
+const STORAGE_PREFIX = "yssbi-editor-view-state";
 
 export type EditorViewStateMemento = Record<string, EditorViewport>;
 
@@ -11,18 +11,18 @@ export function editorViewStateStorageKey(projectPath: string): string {
 }
 
 export function loadEditorViewStateMemento(projectPath: string): EditorViewStateMemento {
-  if (typeof localStorage === 'undefined') return {};
+  if (typeof localStorage === "undefined") return {};
 
   try {
     const raw = localStorage.getItem(editorViewStateStorageKey(projectPath));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as EditorViewStateMemento;
-    if (!parsed || typeof parsed !== 'object') return {};
+    if (!parsed || typeof parsed !== "object") return {};
     return parsed;
   } catch (error) {
     logger.app.warn(
       `Failed to load editor view state: ${error instanceof Error ? error.message : String(error)}`,
-      'EditorViewState',
+      "EditorViewState",
     );
     return {};
   }
@@ -32,14 +32,14 @@ export function saveEditorViewStateMemento(
   projectPath: string,
   memento: EditorViewStateMemento,
 ): void {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === "undefined") return;
 
   try {
     localStorage.setItem(editorViewStateStorageKey(projectPath), JSON.stringify(memento));
   } catch (error) {
     logger.app.warn(
       `Failed to save editor view state: ${error instanceof Error ? error.message : String(error)}`,
-      'EditorViewState',
+      "EditorViewState",
     );
   }
 }
@@ -71,11 +71,7 @@ export function patchEditorViewStateViewport(
   saveEditorViewStateMemento(projectPath, { ...memento, [graphPath]: normalized });
 }
 
-export function remapEditorViewStateGraphPath(
-  projectPath: string,
-  from: string,
-  to: string,
-): void {
+export function remapEditorViewStateGraphPath(projectPath: string, from: string, to: string): void {
   if (from === to) return;
   const memento = loadEditorViewStateMemento(projectPath);
   const viewport = memento[from];

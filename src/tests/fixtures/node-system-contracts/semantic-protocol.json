@@ -278,11 +278,7 @@
             {
               "max": null,
               "min": 0,
-              "templates": [
-                "then_source",
-                "else_source",
-                "result"
-              ]
+              "templates": ["then_source", "else_source", "result"]
             }
           ],
           "ports": [
@@ -536,12 +532,7 @@
             {
               "max": null,
               "min": 1,
-              "templates": [
-                "initial_source",
-                "body_input",
-                "next_source",
-                "result"
-              ]
+              "templates": ["initial_source", "body_input", "next_source", "result"]
             }
           ],
           "ports": [
@@ -2109,9 +2100,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
@@ -2174,9 +2163,7 @@
               "title": "Column",
               "value_type": {
                 "Applied": {
-                  "arguments": [
-                    "Unknown"
-                  ],
+                  "arguments": ["Unknown"],
                   "constructor": "core.data_series"
                 }
               }
@@ -2354,9 +2341,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.predicate.description",
               "editor": "Auto",
@@ -2579,10 +2564,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "entity",
-            "time"
-          ]
+          "type_parameters": ["entity", "time"]
         },
         "managedRole": null,
         "parameters": {
@@ -2797,9 +2779,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.columns.description",
               "editor": "Auto",
@@ -2887,9 +2867,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.from.description",
               "editor": {
@@ -2905,9 +2883,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.to.description",
               "editor": {
@@ -2995,9 +2971,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
@@ -4126,9 +4100,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
@@ -4421,9 +4393,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
@@ -4577,17 +4547,13 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.column.description",
               "editor": "Select",
@@ -4863,9 +4829,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.dataframe.description",
               "editor": {
@@ -4967,17 +4931,13 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "time"
-          ]
+          "type_parameters": ["time"]
         },
         "managedRole": null,
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.frequency.description",
               "editor": "Select",
@@ -5179,9 +5139,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "element"
-          ]
+          "type_parameters": ["element"]
         },
         "managedRole": null,
         "parameters": {
@@ -5601,9 +5559,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "value"
-          ]
+          "type_parameters": ["value"]
         },
         "managedRole": null,
         "parameters": {
@@ -8290,9 +8246,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "value"
-          ]
+          "type_parameters": ["value"]
         },
         "managedRole": null,
         "parameters": {
@@ -8765,9 +8719,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "value"
-          ]
+          "type_parameters": ["value"]
         },
         "managedRole": null,
         "parameters": {
@@ -11810,9 +11762,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.target.description",
               "editor": {
@@ -11889,9 +11839,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.function.description",
               "editor": {
@@ -11971,9 +11919,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.function.description",
               "editor": {
@@ -12028,17 +11974,13 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "value"
-          ]
+          "type_parameters": ["value"]
         },
         "managedRole": null,
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.variable.description",
               "editor": {
@@ -12124,17 +12066,13 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "value"
-          ]
+          "type_parameters": ["value"]
         },
         "managedRole": null,
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": null,
               "description_key": "parameters.variable.description",
               "editor": {
@@ -12276,9 +12214,7 @@
             }
           ],
           "type_constraints": [],
-          "type_parameters": [
-            "t"
-          ]
+          "type_parameters": ["t"]
         },
         "managedRole": null,
         "parameters": {
@@ -12650,9 +12586,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "constant"
@@ -12770,9 +12704,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "identity"
@@ -13351,9 +13283,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "non_robust"
@@ -15634,9 +15564,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": ""
@@ -15816,9 +15744,7 @@
         "parameters": {
           "parameters": [
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "bartlett"
@@ -16242,9 +16168,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "fixed_effects"
@@ -16263,9 +16187,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "entity"
@@ -17103,9 +17025,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "prais_winsten"
@@ -18548,9 +18468,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "constant"
@@ -18788,9 +18706,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "constant"
@@ -19084,9 +19000,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "constant"
@@ -19284,9 +19198,7 @@
               }
             },
             {
-              "constraints": [
-                "Required"
-              ],
+              "constraints": ["Required"],
               "default_value": {
                 "value": {
                   "String": "constant"

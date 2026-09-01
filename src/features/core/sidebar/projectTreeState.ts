@@ -1,15 +1,14 @@
 export const PROJECT_TREE_CATEGORY_IDS = {
-  events: 'project.events',
-  functions: 'project.functions',
-  worksheets: 'project.worksheets',
-  variables: 'project.variables',
-  localVariables: 'project.localVariables',
-  globalVariables: 'project.globalVariables',
+  events: "project.events",
+  functions: "project.functions",
+  worksheets: "project.worksheets",
+  variables: "project.variables",
+  localVariables: "project.localVariables",
+  globalVariables: "project.globalVariables",
 } as const;
 
-export type ProjectTreeCategoryId = (
-  typeof PROJECT_TREE_CATEGORY_IDS[keyof typeof PROJECT_TREE_CATEGORY_IDS]
-);
+export type ProjectTreeCategoryId =
+  (typeof PROJECT_TREE_CATEGORY_IDS)[keyof typeof PROJECT_TREE_CATEGORY_IDS];
 
 export const PROJECT_TREE_EXPANSION_DEFAULTS = {
   [PROJECT_TREE_CATEGORY_IDS.events]: true,

@@ -1,60 +1,60 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { pinTypeLabel } from '@/shared/types/domain/pinSemantics';
+import { beforeEach, describe, expect, it } from "vitest";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import { pinTypeLabel } from "@/shared/types/domain/pinSemantics";
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
   useGraphDataStore,
-} from './graphDataStore';
+} from "./graphDataStore";
 
-describe('graphDataStore projected entity truth', () => {
+describe("graphDataStore projected entity truth", () => {
   beforeEach(() => {
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
-  it('materializes exact structured data types for pin semantics', () => {
-    const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
+  it("materializes exact structured data types for pin semantics", () => {
+    const fixture = makeEditorProjectionFixture({ graphPath: "graph-1" });
     fixture.projection.nodes[0].ports[1].resolvedType = {
-      display: 'Frontend must not parse this text',
+      display: "Frontend must not parse this text",
       resolved: true,
-      dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } },
+      dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
     };
 
-    useGraphDataStore.getState().replaceProjection('graph-1', fixture.projection, 1);
+    useGraphDataStore.getState().replaceProjection("graph-1", fixture.projection, 1);
 
-    const bucket = useGraphDataStore.getState().graphEntities['graph-1'];
+    const bucket = useGraphDataStore.getState().graphEntities["graph-1"];
     const output = bucket.pins[fixture.outputKey];
     const input = bucket.pins[fixture.inputKey];
-    expect(output).toMatchObject({ type: 'object', dataType: { kind: 'Float64' } });
-    expect(input.dataType).toEqual({ kind: 'DataSeries', inner: { kind: 'Float64' } });
-    expect(pinTypeLabel(input)).toBe('DataSeries<Float64>');
+    expect(output).toMatchObject({ type: "object", dataType: { kind: "Float64" } });
+    expect(input.dataType).toEqual({ kind: "DataSeries", inner: { kind: "Float64" } });
+    expect(pinTypeLabel(input)).toBe("DataSeries<Float64>");
   });
 
-  it('preserves unresolved projected types without materializing Any', () => {
-    const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
+  it("preserves unresolved projected types without materializing Any", () => {
+    const fixture = makeEditorProjectionFixture({ graphPath: "graph-1" });
     fixture.projection.nodes[0].ports[1].resolvedType = {
-      display: 'Unknown',
+      display: "Unknown",
       resolved: false,
       dataType: null,
     };
 
-    useGraphDataStore.getState().replaceProjection('graph-1', fixture.projection, 1);
+    useGraphDataStore.getState().replaceProjection("graph-1", fixture.projection, 1);
 
-    const input = useGraphDataStore.getState().graphEntities['graph-1'].pins[fixture.inputKey];
-    expect(input.resolvedType).toEqual({ display: 'Unknown', resolved: false, dataType: null });
+    const input = useGraphDataStore.getState().graphEntities["graph-1"].pins[fixture.inputKey];
+    expect(input.resolvedType).toEqual({ display: "Unknown", resolved: false, dataType: null });
     expect(input.dataType).toBeUndefined();
   });
 
-  it('stores projected connection topology and required metadata', () => {
-    const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
+  it("stores projected connection topology and required metadata", () => {
+    const fixture = makeEditorProjectionFixture({ graphPath: "graph-1" });
 
-    useGraphDataStore.getState().replaceProjection('graph-1', fixture.projection, 7);
+    useGraphDataStore.getState().replaceProjection("graph-1", fixture.projection, 7);
 
-    const bucket = useGraphDataStore.getState().graphEntities['graph-1'];
-    expect(bucket.pinConnections[fixture.outputKey]).toEqual(['local-connection']);
-    expect(bucket.pinConnections[fixture.inputKey]).toEqual(['local-connection']);
-    expect(bucket.connections['local-connection']).toMatchObject({
-      id: 'local-connection',
+    const bucket = useGraphDataStore.getState().graphEntities["graph-1"];
+    expect(bucket.pinConnections[fixture.outputKey]).toEqual(["local-connection"]);
+    expect(bucket.pinConnections[fixture.inputKey]).toEqual(["local-connection"]);
+    expect(bucket.connections["local-connection"]).toMatchObject({
+      id: "local-connection",
       from: fixture.outputKey,
       to: fixture.inputKey,
     });
@@ -67,82 +67,88 @@ describe('graphDataStore projected entity truth', () => {
     });
   });
 
-  it('atomically accepts an authoritative dependency replacement at the same graph revision', () => {
+  it("atomically accepts an authoritative dependency replacement at the same graph revision", () => {
     const current = makeEditorProjectionFixture({
-      graphPath: 'functions/Compute.yssbi-function',
+      graphPath: "functions/Compute.yssbi-function",
       sourceRevision: 7,
-      title: 'Before signature',
+      title: "Before signature",
     });
     const committed = makeEditorProjectionFixture({
-      graphPath: 'functions/Compute.yssbi-function',
+      graphPath: "functions/Compute.yssbi-function",
       sourceRevision: 7,
-      title: 'After signature',
+      title: "After signature",
     });
-    useGraphDataStore.getState().replaceProjection(
-      'functions/Compute.yssbi-function',
-      current.projection,
-      1,
-    );
+    useGraphDataStore
+      .getState()
+      .replaceProjection("functions/Compute.yssbi-function", current.projection, 1);
 
-    const outcome = useGraphDataStore.getState().replaceProjectionsAtomically([{
-      graphPath: 'functions/Compute.yssbi-function',
-      projection: committed.projection,
-    }]);
+    const outcome = useGraphDataStore.getState().replaceProjectionsAtomically([
+      {
+        graphPath: "functions/Compute.yssbi-function",
+        projection: committed.projection,
+      },
+    ]);
 
     expect(outcome).toEqual({
       applied: true,
-      graphPaths: ['functions/Compute.yssbi-function'],
+      graphPaths: ["functions/Compute.yssbi-function"],
     });
-    expect(useGraphDataStore.getState().graphEntities['functions/Compute.yssbi-function'])
-      .toMatchObject({
-        sourceRevision: 7,
-        nodes: { 'local-node': { title: 'After signature' } },
-      });
+    expect(
+      useGraphDataStore.getState().graphEntities["functions/Compute.yssbi-function"],
+    ).toMatchObject({
+      sourceRevision: 7,
+      nodes: { "local-node": { title: "After signature" } },
+    });
   });
 
-  it('prepares malformed projection replacements with zero store effects', () => {
-    const current = makeEditorProjectionFixture({ graphPath: 'graph-1', title: 'Current' });
-    useGraphDataStore.getState().replaceProjection('graph-1', current.projection, 1);
+  it("prepares malformed projection replacements with zero store effects", () => {
+    const current = makeEditorProjectionFixture({ graphPath: "graph-1", title: "Current" });
+    useGraphDataStore.getState().replaceProjection("graph-1", current.projection, 1);
     const before = useGraphDataStore.getState().graphEntities;
     const malformed = structuredClone(current.projection);
-    malformed.nodes[0].graphPath = 'graph-other';
+    malformed.nodes[0].graphPath = "graph-other";
 
-    const prepared = prepareGraphProjectionReplacements([{
-      graphPath: 'graph-1',
-      projection: malformed,
-    }]);
+    const prepared = prepareGraphProjectionReplacements([
+      {
+        graphPath: "graph-1",
+        projection: malformed,
+      },
+    ]);
 
-    expect(prepared).toMatchObject({ prepared: false, graphPath: 'graph-1' });
+    expect(prepared).toMatchObject({ prepared: false, graphPath: "graph-1" });
     expect(useGraphDataStore.getState().graphEntities).toBe(before);
   });
 
-  it('commits a prepared replacement through one non-failing Zustand write', () => {
-    const current = makeEditorProjectionFixture({ graphPath: 'graph-1', title: 'Current' });
-    const replacement = makeEditorProjectionFixture({ graphPath: 'graph-1', title: 'Prepared' });
-    useGraphDataStore.getState().replaceProjection('graph-1', current.projection, 1);
-    const prepared = prepareGraphProjectionReplacements([{
-      graphPath: 'graph-1',
-      projection: replacement.projection,
-    }]);
-    if (!prepared.prepared) throw new Error('expected projection preparation to succeed');
-    expect(useGraphDataStore.getState().graphEntities['graph-1'].nodes['local-node'].title)
-      .toBe('Current');
+  it("commits a prepared replacement through one non-failing Zustand write", () => {
+    const current = makeEditorProjectionFixture({ graphPath: "graph-1", title: "Current" });
+    const replacement = makeEditorProjectionFixture({ graphPath: "graph-1", title: "Prepared" });
+    useGraphDataStore.getState().replaceProjection("graph-1", current.projection, 1);
+    const prepared = prepareGraphProjectionReplacements([
+      {
+        graphPath: "graph-1",
+        projection: replacement.projection,
+      },
+    ]);
+    if (!prepared.prepared) throw new Error("expected projection preparation to succeed");
+    expect(useGraphDataStore.getState().graphEntities["graph-1"].nodes["local-node"].title).toBe(
+      "Current",
+    );
 
     expect(() => commitPreparedGraphProjectionReplacements(prepared.plan)).not.toThrow();
 
-    expect(useGraphDataStore.getState().graphEntities['graph-1'].nodes['local-node'].title)
-      .toBe('Prepared');
+    expect(useGraphDataStore.getState().graphEntities["graph-1"].nodes["local-node"].title).toBe(
+      "Prepared",
+    );
   });
 
-  it('isolates overlapping local ids across projected graph buckets', () => {
-    const first = makeEditorProjectionFixture({ graphPath: 'graph-1', title: 'First' });
-    const second = makeEditorProjectionFixture({ graphPath: 'graph-2', title: 'Second' });
+  it("isolates overlapping local ids across projected graph buckets", () => {
+    const first = makeEditorProjectionFixture({ graphPath: "graph-1", title: "First" });
+    const second = makeEditorProjectionFixture({ graphPath: "graph-2", title: "Second" });
     const store = useGraphDataStore.getState();
-    store.replaceProjection('graph-1', first.projection, 1);
-    store.replaceProjection('graph-2', second.projection, 1);
+    store.replaceProjection("graph-1", first.projection, 1);
+    store.replaceProjection("graph-2", second.projection, 1);
 
-    expect(store.getGraphNode('graph-1', 'local-node')?.title).toBe('First');
-    expect(store.getGraphNode('graph-2', 'local-node')?.title).toBe('Second');
+    expect(store.getGraphNode("graph-1", "local-node")?.title).toBe("First");
+    expect(store.getGraphNode("graph-2", "local-node")?.title).toBe("Second");
   });
-
 });

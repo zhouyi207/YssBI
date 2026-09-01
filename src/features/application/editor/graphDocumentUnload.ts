@@ -1,22 +1,22 @@
-import { useGraphDataStore, useVariableStore } from '@/features/core/dataStore';
-import { invalidateGraphLoadOwnership } from '@/features/application/project/projectIOStore';
-import { useExecutionStore } from '@/features/core/execution';
-import { clearCanvasInteractionGraph } from '@/features/core/canvas/canvasInteractionCleanup';
-import { markResourceLoaded } from '@/features/core/resource';
-import { releaseGraphViewport } from '@/features/core/viewport';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/features/application/observability/appLogger';
-import { shouldRetainGraphDocument } from './graphDocumentRetention';
+import { useGraphDataStore, useVariableStore } from "@/features/core/dataStore";
+import { invalidateGraphLoadOwnership } from "@/features/application/project/projectIOStore";
+import { useExecutionStore } from "@/features/core/execution";
+import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
+import { markResourceLoaded } from "@/features/core/resource";
+import { releaseGraphViewport } from "@/features/core/viewport";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { GraphService } from "@/services/graph/graphService";
+import { logger } from "@/features/application/observability/appLogger";
+import { shouldRetainGraphDocument } from "./graphDocumentRetention";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   beginGraphUnloadLifecycle,
   isGraphLifecycleCurrent,
-} from '@/features/application/editorProjection/graphProjectionCoordinator';
+} from "@/features/application/editorProjection/graphProjectionCoordinator";
 
 /** Unload frontend/backend graph cache when retention guards no longer apply. */
 export async function unloadGraphDocument(graphPath: string): Promise<void> {
@@ -43,11 +43,7 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
   }
 
   try {
-    await GraphService.unloadProjectGraph(
-      graphPath,
-      lifecycleToken,
-      identity.projectInstanceId,
-    );
+    await GraphService.unloadProjectGraph(graphPath, lifecycleToken, identity.projectInstanceId);
     if (!isCurrentProjectIdentity(identity)) return;
     if (kind && isGraphLifecycleCurrent(graphPath, lifecycleToken)) {
       markResourceLoaded({ id: graphPath, kind }, false);
@@ -56,7 +52,7 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
     if (!isCurrentProjectIdentity(identity)) return;
     logger.graph.warn(
       `Failed to unload graph '${graphPath}': ${error instanceof Error ? error.message : String(error)}`,
-      'unloadGraphDocument',
+      "unloadGraphDocument",
     );
   }
 }

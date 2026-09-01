@@ -1,11 +1,27 @@
-import React from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-import { FormulaMappingTable } from './shared/FormulaMappingTable';
+import React from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import { FormulaMappingTable } from "./shared/FormulaMappingTable";
 
-export type PanelMethod = 'mixed_ols' | 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
-export type PanelModelType = 'mixed' | 'fe' | 're';
-export type PanelEffectType = 'none' | 'entity' | 'time' | 'twoway';
+export type PanelMethod =
+  | "mixed_ols"
+  | "fe"
+  | "fe_time"
+  | "fe_twoway"
+  | "lsdv"
+  | "lsdv_time"
+  | "lsdv_twoway"
+  | "fd"
+  | "re_fgls"
+  | "re_mle"
+  | "re_be"
+  | "re_fgls_time"
+  | "re_mle_time"
+  | "re_be_time"
+  | "re_fgls_twoway"
+  | "re_mle_twoway";
+export type PanelModelType = "mixed" | "fe" | "re";
+export type PanelEffectType = "none" | "entity" | "time" | "twoway";
 
 function renderKatex(latex: string, displayMode = true): string | null {
   try {
@@ -66,78 +82,85 @@ const METHOD_FORMULAS: Record<PanelMethod, string> = {
 };
 
 const MAPPINGS_BASE = [
-  { symbol: 'y_{it}', variable: 'dependent variable' },
-  { symbol: '\\beta', variable: 'coefficient vector' },
-  { symbol: 'X_{it}', variable: 'independent variables' },
-  { symbol: 'i', variable: 'entity' },
-  { symbol: 't', variable: 'time' },
-  { symbol: 'u_{it}', variable: 'idiosyncratic error' },
+  { symbol: "y_{it}", variable: "dependent variable" },
+  { symbol: "\\beta", variable: "coefficient vector" },
+  { symbol: "X_{it}", variable: "independent variables" },
+  { symbol: "i", variable: "entity" },
+  { symbol: "t", variable: "time" },
+  { symbol: "u_{it}", variable: "idiosyncratic error" },
 ];
 
 const MAPPINGS_FE = [
   ...MAPPINGS_BASE,
-  { symbol: '\\alpha_i', variable: 'individual fixed effect' },
+  { symbol: "\\alpha_i", variable: "individual fixed effect" },
 ];
 
 const MAPPINGS_FE_TIME = [
   ...MAPPINGS_BASE,
-  { symbol: '\\lambda_t', variable: 'time fixed effect' },
+  { symbol: "\\lambda_t", variable: "time fixed effect" },
 ];
 
 const MAPPINGS_FE_TWOWAY = [
   ...MAPPINGS_BASE,
-  { symbol: '\\alpha_i', variable: 'individual fixed effect' },
-  { symbol: '\\lambda_t', variable: 'time fixed effect' },
+  { symbol: "\\alpha_i", variable: "individual fixed effect" },
+  { symbol: "\\lambda_t", variable: "time fixed effect" },
 ];
 
 const MAPPINGS_LSDV = [
   ...MAPPINGS_BASE,
-  { symbol: '\\alpha', variable: 'intercept' },
-  { symbol: '\\gamma_i', variable: 'coefficient for entity i dummy' },
-  { symbol: 'D_i', variable: 'dummy variable (1 if entity i, 0 else)' },
+  { symbol: "\\alpha", variable: "intercept" },
+  { symbol: "\\gamma_i", variable: "coefficient for entity i dummy" },
+  { symbol: "D_i", variable: "dummy variable (1 if entity i, 0 else)" },
 ];
 
 const MAPPINGS_RE = [
   ...MAPPINGS_BASE,
-  { symbol: '\\varepsilon_{it}', variable: 'composite error' },
-  { symbol: '\\alpha_i', variable: 'individual random effect' },
-  { symbol: '\\theta_i', variable: 'quasi-demeaning weight' },
-  { symbol: '\\sigma_u^2,\\sigma_e^2', variable: 'variance components' },
-  { symbol: '\\ell', variable: 'log-likelihood' },
-  { symbol: 'SSR_w,SSR_b', variable: 'within/between sum of squared residuals' },
-  { symbol: '\\bar{T}', variable: 'harmonic mean of T_i' },
+  { symbol: "\\varepsilon_{it}", variable: "composite error" },
+  { symbol: "\\alpha_i", variable: "individual random effect" },
+  { symbol: "\\theta_i", variable: "quasi-demeaning weight" },
+  { symbol: "\\sigma_u^2,\\sigma_e^2", variable: "variance components" },
+  { symbol: "\\ell", variable: "log-likelihood" },
+  { symbol: "SSR_w,SSR_b", variable: "within/between sum of squared residuals" },
+  { symbol: "\\bar{T}", variable: "harmonic mean of T_i" },
 ];
 
-const MAPPINGS_OTHER = [
-  ...MAPPINGS_BASE,
-  { symbol: 'u_i', variable: 'individual effect' },
-];
+const MAPPINGS_OTHER = [...MAPPINGS_BASE, { symbol: "u_i", variable: "individual effect" }];
 
 const MAPPINGS_LSDV_TIME = [
   ...MAPPINGS_BASE,
-  { symbol: '\\alpha', variable: 'intercept' },
-  { symbol: '\\gamma_t', variable: 'coefficient for time t dummy' },
-  { symbol: 'D_t', variable: 'dummy variable (1 if time t, 0 else)' },
+  { symbol: "\\alpha", variable: "intercept" },
+  { symbol: "\\gamma_t", variable: "coefficient for time t dummy" },
+  { symbol: "D_t", variable: "dummy variable (1 if time t, 0 else)" },
 ];
 
 const MAPPINGS_LSDV_TWOWAY = [
   ...MAPPINGS_BASE,
-  { symbol: '\\alpha', variable: 'intercept' },
-  { symbol: '\\gamma_i', variable: 'coefficient for entity i dummy' },
-  { symbol: 'D_i', variable: 'entity dummy (1 if entity i, 0 else)' },
-  { symbol: '\\lambda_t', variable: 'coefficient for time t dummy' },
-  { symbol: 'D_t', variable: 'time dummy (1 if time t, 0 else)' },
+  { symbol: "\\alpha", variable: "intercept" },
+  { symbol: "\\gamma_i", variable: "coefficient for entity i dummy" },
+  { symbol: "D_i", variable: "entity dummy (1 if entity i, 0 else)" },
+  { symbol: "\\lambda_t", variable: "coefficient for time t dummy" },
+  { symbol: "D_t", variable: "time dummy (1 if time t, 0 else)" },
 ];
 
 function getMappings(method: PanelMethod) {
-  if (method === 'mixed_ols') return MAPPINGS_BASE;
-  if (method === 'fe') return MAPPINGS_FE;
-  if (method === 'fe_time') return MAPPINGS_FE_TIME;
-  if (method === 'fe_twoway') return MAPPINGS_FE_TWOWAY;
-  if (method === 're_fgls' || method === 're_mle' || method === 're_be' || method === 're_fgls_time' || method === 're_mle_time' || method === 're_be_time' || method === 're_fgls_twoway' || method === 're_mle_twoway') return MAPPINGS_RE;
-  if (method === 'lsdv') return MAPPINGS_LSDV;
-  if (method === 'lsdv_time') return MAPPINGS_LSDV_TIME;
-  if (method === 'lsdv_twoway') return MAPPINGS_LSDV_TWOWAY;
+  if (method === "mixed_ols") return MAPPINGS_BASE;
+  if (method === "fe") return MAPPINGS_FE;
+  if (method === "fe_time") return MAPPINGS_FE_TIME;
+  if (method === "fe_twoway") return MAPPINGS_FE_TWOWAY;
+  if (
+    method === "re_fgls" ||
+    method === "re_mle" ||
+    method === "re_be" ||
+    method === "re_fgls_time" ||
+    method === "re_mle_time" ||
+    method === "re_be_time" ||
+    method === "re_fgls_twoway" ||
+    method === "re_mle_twoway"
+  )
+    return MAPPINGS_RE;
+  if (method === "lsdv") return MAPPINGS_LSDV;
+  if (method === "lsdv_time") return MAPPINGS_LSDV_TIME;
+  if (method === "lsdv_twoway") return MAPPINGS_LSDV_TWOWAY;
   return MAPPINGS_OTHER;
 }
 
@@ -151,13 +174,13 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
   const coreLatex = CORE_FORMULAS[modelType][effectType];
   const methodLatex = METHOD_FORMULAS[method] ?? METHOD_FORMULAS.fe;
 
-  const coreMultiline = coreLatex.includes('\\\\');
-  const methodMultiline = methodLatex.includes('\\\\');
+  const coreMultiline = coreLatex.includes("\\\\");
+  const methodMultiline = methodLatex.includes("\\\\");
   const coreHtml = renderKatex(
-    coreMultiline ? `\\begin{gathered} ${coreLatex} \\end{gathered}` : coreLatex
+    coreMultiline ? `\\begin{gathered} ${coreLatex} \\end{gathered}` : coreLatex,
   );
   const methodHtml = renderKatex(
-    methodMultiline ? `\\begin{gathered} ${methodLatex} \\end{gathered}` : methodLatex
+    methodMultiline ? `\\begin{gathered} ${methodLatex} \\end{gathered}` : methodLatex,
   );
   const mappings = getMappings(method);
 
@@ -191,16 +214,21 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
         </div>
       </div>
       <div className="border-t border-border px-4 pb-4 pt-3">
-        <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+        <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+          Variable Mapping
+        </div>
         <FormulaMappingTable
           mappings={mappings}
           hasCat={false}
           showCoef={false}
-          formatNum={() => ''}
+          formatNum={() => ""}
           renderSymbol={(symbol) => {
             const symHtml = renderInlineKatex(symbol);
             return symHtml ? (
-              <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+              <span
+                className="[&_.katex]:text-[var(--accent-color)]"
+                dangerouslySetInnerHTML={{ __html: symHtml }}
+              />
             ) : (
               <span className="font-mono text-[var(--accent-color)]">{symbol}</span>
             );

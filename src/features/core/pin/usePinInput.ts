@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { executeCommand } from "@/features/core/history";
-import { logger } from '@/features/core/observability/logger';
-import type { DataType } from '@/shared/types/domain/dataType';
-import { scalarPinInputKey } from '@/shared/types/domain/pinSemantics';
+import { logger } from "@/features/core/observability/logger";
+import type { DataType } from "@/shared/types/domain/dataType";
+import { scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 
 /**
  * Get default value for a scalar pin dataType.
@@ -57,20 +57,20 @@ export function usePinInput({
       setValue(newValue);
       onValueChange?.(newValue);
     },
-    [onValueChange]
+    [onValueChange],
   );
 
   const savePinValue = useCallback(
     async (val?: unknown) => {
       const raw = val !== undefined ? val : value;
-      const applied = await executeCommand(
-        graphPath,
-        'SetPinValue',
-        { pinId, nodeId, newValue: raw },
-      );
-      if (!applied) logger.graph.error('Failed to update port value', 'PinInput');
+      const applied = await executeCommand(graphPath, "SetPinValue", {
+        pinId,
+        nodeId,
+        newValue: raw,
+      });
+      if (!applied) logger.graph.error("Failed to update port value", "PinInput");
     },
-    [graphPath, nodeId, pinId, value]
+    [graphPath, nodeId, pinId, value],
   );
 
   const cancelBlurCommit = useCallback(() => {
@@ -98,7 +98,7 @@ export function usePinInput({
         (e.currentTarget as HTMLElement).blur();
       }
     },
-    [initialValue, onValueChange, dataType]
+    [initialValue, onValueChange, dataType],
   );
 
   return {

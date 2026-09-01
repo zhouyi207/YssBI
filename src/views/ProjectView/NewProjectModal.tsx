@@ -34,7 +34,8 @@ function joinPath(parent: string, child: string) {
   const leaf = child.replace(/^[/\\]+/, "");
   if (!base) return leaf;
   if (!leaf) return base;
-  const separator = /^[a-zA-Z]:$/.test(base) || (base.includes("\\") && !base.includes("/")) ? "\\" : "/";
+  const separator =
+    /^[a-zA-Z]:$/.test(base) || (base.includes("\\") && !base.includes("/")) ? "\\" : "/";
   return `${base}${separator}${leaf}`;
 }
 
@@ -46,10 +47,12 @@ function parentDirectoryOf(fullPath: string): string {
 }
 
 function sanitizeDirSegment(name: string) {
-  return (name.trim() || "untitled")
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim() || "untitled";
+  return (
+    (name.trim() || "untitled")
+      .replace(/[\\/:*?"<>|]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim() || "untitled"
+  );
 }
 
 function lastPathSegment(path: string) {
@@ -70,28 +73,28 @@ type FieldErrors = {
 
 type NewProjectIssue =
   | {
-      kind: 'failure';
-      operation: 'defaultPath' | 'browse' | 'create';
+      kind: "failure";
+      operation: "defaultPath" | "browse" | "create";
       error: ProjectPickerErrorPresentation;
     }
-  | { kind: 'recovery'; recovery: ProjectPickerRecoveryPresentation }
-  | { kind: 'stale' };
+  | { kind: "recovery"; recovery: ProjectPickerRecoveryPresentation }
+  | { kind: "stale" };
 
 const emptyFieldErrors = (): FieldErrors => ({ path: false, name: false });
 
 const FAILURE_TITLE_KEYS: Record<
-  Extract<NewProjectIssue, { kind: 'failure' }>['operation'],
+  Extract<NewProjectIssue, { kind: "failure" }>["operation"],
   string
 > = {
-  defaultPath: 'notifications.newProject.defaultPathFailed',
-  browse: 'notifications.newProject.browseFailed',
-  create: 'notifications.newProject.createFailed',
+  defaultPath: "notifications.newProject.defaultPathFailed",
+  browse: "notifications.newProject.browseFailed",
+  create: "notifications.newProject.createFailed",
 };
 
 function NewProjectIssueAlert({ issue, name }: { issue: NewProjectIssue; name: string }) {
   const { t } = useTranslation();
 
-  if (issue.kind === 'failure') {
+  if (issue.kind === "failure") {
     const errorMessage = t(issue.error.messageKey, {
       defaultValue: t(issue.error.fallbackMessageKey),
     });
@@ -106,12 +109,12 @@ function NewProjectIssueAlert({ issue, name }: { issue: NewProjectIssue; name: s
     );
   }
 
-  if (issue.kind === 'recovery') {
+  if (issue.kind === "recovery") {
     return (
       <Alert variant="warning">
         <VscWarning aria-hidden="true" />
         <AlertTitle>
-          {t('notifications.projectPicker.createRecovery', {
+          {t("notifications.projectPicker.createRecovery", {
             name,
             outcome: issue.recovery.action,
           })}
@@ -127,7 +130,7 @@ function NewProjectIssueAlert({ issue, name }: { issue: NewProjectIssue; name: s
     <Alert variant="warning">
       <VscWarning aria-hidden="true" />
       <AlertTitle>
-        {t('projectPicker.issues.staleTitle', { defaultValue: t('common.error') })}
+        {t("projectPicker.issues.staleTitle", { defaultValue: t("common.error") })}
       </AlertTitle>
       <AlertDescription>
         <ProjectPickerStaleDetails />
@@ -172,8 +175,8 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
         if (cancelled) return;
         setPathAuto(false);
         setIssue({
-          kind: 'failure',
-          operation: 'defaultPath',
+          kind: "failure",
+          operation: "defaultPath",
           error: projectPickerErrorPresentation(error),
         });
       }
@@ -211,8 +214,8 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       setPath(joinPath(parent, sanitizeDirSegment(name)));
     } catch (error) {
       setIssue({
-        kind: 'failure',
-        operation: 'browse',
+        kind: "failure",
+        operation: "browse",
         error: projectPickerErrorPresentation(error),
       });
     }
@@ -224,21 +227,21 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
     setBusy(true);
     try {
       const outcome = await onCreate(name.trim(), path.trim());
-      if (outcome.status === 'committed') {
+      if (outcome.status === "committed") {
         onOpenChange(false);
-      } else if (outcome.status === 'failed') {
+      } else if (outcome.status === "failed") {
         setFieldErrors({ path: true, name: true });
-        setIssue({ kind: 'failure', operation: 'create', error: outcome.error });
-      } else if (outcome.status === 'recovery') {
-        setIssue({ kind: 'recovery', recovery: outcome.recovery });
+        setIssue({ kind: "failure", operation: "create", error: outcome.error });
+      } else if (outcome.status === "recovery") {
+        setIssue({ kind: "recovery", recovery: outcome.recovery });
       } else {
-        setIssue({ kind: 'stale' });
+        setIssue({ kind: "stale" });
       }
     } catch (error) {
       setFieldErrors({ path: true, name: true });
       setIssue({
-        kind: 'failure',
-        operation: 'create',
+        kind: "failure",
+        operation: "create",
         error: projectPickerErrorPresentation(error),
       });
     } finally {
@@ -325,13 +328,18 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
         </div>
 
         <DialogFooter className="gap-2 sm:justify-end">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+          >
             {t("common.cancel")}
           </Button>
           <Button
             type="button"
             onClick={() => void handleCreate()}
-            disabled={busy || issue?.kind === 'recovery'}
+            disabled={busy || issue?.kind === "recovery"}
           >
             {busy ? t("projectPicker.creating") : t("projectPicker.newProjectModal.create")}
           </Button>
@@ -339,4 +347,4 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       </DialogContent>
     </Dialog>
   );
-};
+}

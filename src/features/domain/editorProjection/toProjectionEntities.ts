@@ -1,7 +1,7 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
-import { validateEditorGraphProjection } from '@/shared/types/domain/editorProjectionParser';
-import { portAddressKey } from './portAddressKey';
-import type { EditorProjectionEntities } from './types';
+import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
+import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
+import { portAddressKey } from "./portAddressKey";
+import type { EditorProjectionEntities } from "./types";
 
 function emptyRecord<T>(): Record<string, T> {
   return Object.create(null) as Record<string, T>;
@@ -12,9 +12,9 @@ export function toProjectionEntities(
 ): EditorProjectionEntities {
   validateEditorGraphProjection(projection);
 
-  const nodes = emptyRecord<EditorProjectionEntities['nodes'][string]>();
-  const ports = emptyRecord<EditorProjectionEntities['ports'][string]>();
-  const connections = emptyRecord<EditorProjectionEntities['connections'][string]>();
+  const nodes = emptyRecord<EditorProjectionEntities["nodes"][string]>();
+  const ports = emptyRecord<EditorProjectionEntities["ports"][string]>();
+  const connections = emptyRecord<EditorProjectionEntities["connections"][string]>();
   const portKeysByNodeId = emptyRecord<string[]>();
   const connectionIdsByPortKey = emptyRecord<string[]>();
 

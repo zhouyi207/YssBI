@@ -1,19 +1,19 @@
-import type { SerializedDockview } from 'dockview-react';
-import { describe, expect, it } from 'vitest';
+import type { SerializedDockview } from "dockview-react";
+import { describe, expect, it } from "vitest";
 
 import {
   createDefaultLogsDockviewLayout,
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
-} from './logsDockviewLayout';
-import { logDomainPanelId } from '@/features/domain/log/logDomains';
+} from "./logsDockviewLayout";
+import { logDomainPanelId } from "@/features/domain/log/logDomains";
 import {
   createPersistedWorkbenchLayout,
   parsePersistedWorkbenchLayout,
   prepareRootLayoutForPersistence,
   scrubProjectScopedRootLayout,
   workbenchLayoutStorageKey,
-} from './workbenchLayoutPersistence';
+} from "./workbenchLayoutPersistence";
 
 type TestPanel = {
   readonly component: string;
@@ -26,26 +26,26 @@ type MutableGroup = {
   activeView?: string;
 };
 
-type GridWithMaximizedNode = SerializedDockview['grid'] & {
+type GridWithMaximizedNode = SerializedDockview["grid"] & {
   maximizedNode?: unknown;
 };
 
 const ACTIVITY_PANELS: Readonly<Record<string, TestPanel>> = {
   project: {
-    component: 'Project',
-    metadata: { role: 'view', viewId: 'project' },
+    component: "Project",
+    metadata: { role: "view", viewId: "project" },
   },
   nodes: {
-    component: 'Nodes',
-    metadata: { role: 'view', viewId: 'nodes' },
+    component: "Nodes",
+    metadata: { role: "view", viewId: "nodes" },
   },
   data: {
-    component: 'Data',
-    metadata: { role: 'view', viewId: 'data' },
+    component: "Data",
+    metadata: { role: "view", viewId: "data" },
   },
   commands: {
-    component: 'Commands',
-    metadata: { role: 'view', viewId: 'commands' },
+    component: "Commands",
+    metadata: { role: "view", viewId: "commands" },
   },
 };
 
@@ -55,22 +55,22 @@ function gridWithMaximizedNode(layout: SerializedDockview): GridWithMaximizedNod
 
 function getOnlyGridGroup(layout: SerializedDockview): MutableGroup {
   const root = layout.grid.root;
-  if (root.type !== 'branch' || !Array.isArray(root.data) || root.data.length !== 1) {
-    throw new Error('fixture must use a top-level branch with one group');
+  if (root.type !== "branch" || !Array.isArray(root.data) || root.data.length !== 1) {
+    throw new Error("fixture must use a top-level branch with one group");
   }
   const child = root.data[0];
-  if (child.type !== 'leaf') throw new Error('fixture branch child must be a group leaf');
+  if (child.type !== "leaf") throw new Error("fixture branch child must be a group leaf");
   return child.data as MutableGroup;
 }
 
 function rootLayout(
   panels: Readonly<Record<string, TestPanel>> = {
     editor: {
-      component: 'GraphEditor',
+      component: "GraphEditor",
       metadata: {
-        role: 'editor',
-        resourceRef: 'events/Main.yssbi-event',
-        resourceKind: 'event',
+        role: "editor",
+        resourceRef: "events/Main.yssbi-event",
+        resourceKind: "event",
       },
     },
   },
@@ -78,37 +78,44 @@ function rootLayout(
   const allPanels = { ...panels, ...ACTIVITY_PANELS };
   const panelIds = Object.keys(allPanels);
   const activityPanelIds = Object.entries(allPanels)
-    .filter(([, panel]) => panel.metadata.role === 'view'
-      && ['project', 'nodes', 'data', 'commands'].includes(String(panel.metadata.viewId)))
+    .filter(
+      ([, panel]) =>
+        panel.metadata.role === "view" &&
+        ["project", "nodes", "data", "commands"].includes(String(panel.metadata.viewId)),
+    )
     .map(([id]) => id);
   const gridPanelIds = panelIds.filter((id) => !activityPanelIds.includes(id));
   return {
     grid: {
       root: {
-        type: 'branch',
-        data: [{
-          type: 'leaf',
-          data: {
-            id: 'grid-main',
-            views: gridPanelIds,
-            ...(gridPanelIds[0] === undefined ? {} : { activeView: gridPanelIds[0] }),
+        type: "branch",
+        data: [
+          {
+            type: "leaf",
+            data: {
+              id: "grid-main",
+              views: gridPanelIds,
+              ...(gridPanelIds[0] === undefined ? {} : { activeView: gridPanelIds[0] }),
+            },
           },
-        }],
+        ],
       },
       height: 800,
       width: 1200,
-      orientation: 'HORIZONTAL',
+      orientation: "HORIZONTAL",
     },
-    panels: Object.fromEntries(Object.entries(allPanels).map(([id, panel]) => [
-      id,
-      {
+    panels: Object.fromEntries(
+      Object.entries(allPanels).map(([id, panel]) => [
         id,
-        contentComponent: panel.component,
-        ...(panel.title === undefined ? {} : { title: panel.title }),
-        params: { metadata: panel.metadata },
-      },
-    ])),
-    activeGroup: 'grid-main',
+        {
+          id,
+          contentComponent: panel.component,
+          ...(panel.title === undefined ? {} : { title: panel.title }),
+          params: { metadata: panel.metadata },
+        },
+      ]),
+    ),
+    activeGroup: "grid-main",
     floatingGroups: [],
     popoutGroups: [],
     edgeGroups: {
@@ -117,10 +124,10 @@ function rootLayout(
         visible: true,
         collapsed: false,
         group: {
-          id: 'workbench-edge-left',
+          id: "workbench-edge-left",
           views: activityPanelIds,
           activeView: activityPanelIds[0],
-          headerPosition: 'left',
+          headerPosition: "left",
         },
       },
     },
@@ -134,9 +141,9 @@ function payload(root: unknown, logs: unknown = createDefaultLogsDockviewLayout(
   };
 }
 
-function parsedRootStatus(layout: SerializedDockview): 'valid' | 'invalid' {
+function parsedRootStatus(layout: SerializedDockview): "valid" | "invalid" {
   const parsed = parsePersistedWorkbenchLayout(payload(layout));
-  if (!parsed) throw new Error('expected a well-formed persistence envelope');
+  if (!parsed) throw new Error("expected a well-formed persistence envelope");
   return parsed.root.status;
 }
 
@@ -144,12 +151,12 @@ function duplicateLogsDomainLayout(): SerializedDockview {
   const layout = createDefaultLogsDockviewLayout();
   const group = getOnlyGridGroup(layout);
 
-  const duplicateId = 'logs-domain:all-copy';
+  const duplicateId = "logs-domain:all-copy";
   layout.panels[duplicateId] = {
     id: duplicateId,
     contentComponent: LOGS_DOCKVIEW_COMPONENT_ID,
-    title: 'All copy',
-    params: { domain: 'all' },
+    title: "All copy",
+    params: { domain: "all" },
   };
   group.views.push(duplicateId);
   return layout;
@@ -158,32 +165,34 @@ function duplicateLogsDomainLayout(): SerializedDockview {
 function missingLogsDomainLayout(): SerializedDockview {
   const layout = createDefaultLogsDockviewLayout();
   const group = getOnlyGridGroup(layout);
-  const missingPanelId = logDomainPanelId('ui');
+  const missingPanelId = logDomainPanelId("ui");
   delete layout.panels[missingPanelId];
   group.views = group.views.filter((panelId) => panelId !== missingPanelId);
   return layout;
 }
 
-describe('workbench layout persistence', () => {
-  it('uses the current semantic key and exact unversioned envelope', () => {
+describe("workbench layout persistence", () => {
+  it("uses the current semantic key and exact unversioned envelope", () => {
     const root = rootLayout();
     const logs = createDefaultLogsDockviewLayout();
 
-    expect(workbenchLayoutStorageKey('main')).toBe('yssbi-workbench-layout:main');
-    expect(workbenchLayoutStorageKey('')).toBe('yssbi-workbench-layout:main');
+    expect(workbenchLayoutStorageKey("main")).toBe("yssbi-workbench-layout:main");
+    expect(workbenchLayoutStorageKey("")).toBe("yssbi-workbench-layout:main");
     expect(createPersistedWorkbenchLayout(root, logs)).toEqual({
       root,
       nested: { logs },
     });
-    expect(createPersistedWorkbenchLayout(root, logs)).not.toHaveProperty('version');
-    expect(parsePersistedWorkbenchLayout({
-      ...payload(root, logs) as Record<string, unknown>,
-      version: 1,
-    })).toBeNull();
+    expect(createPersistedWorkbenchLayout(root, logs)).not.toHaveProperty("version");
+    expect(
+      parsePersistedWorkbenchLayout({
+        ...(payload(root, logs) as Record<string, unknown>),
+        version: 1,
+      }),
+    ).toBeNull();
     expect(parsePersistedWorkbenchLayout({ root, nested: { logs } })).not.toBeNull();
   });
 
-  it('defines one deterministic default Logs group with all seven domains', () => {
+  it("defines one deterministic default Logs group with all seven domains", () => {
     const first = createDefaultLogsDockviewLayout();
     const second = createDefaultLogsDockviewLayout();
 
@@ -191,22 +200,24 @@ describe('workbench layout persistence', () => {
     expect(second).toEqual(first);
     expect(second).not.toBe(first);
     expect(Object.values(first.panels).map((panel) => panel.params?.domain)).toEqual([
-      'all',
-      'application',
-      'execution',
-      'system',
-      'graph',
-      'data',
-      'ui',
+      "all",
+      "application",
+      "execution",
+      "system",
+      "graph",
+      "data",
+      "ui",
     ]);
-    expect(Object.values(first.panels).every(
-      (panel) => panel.contentComponent === LOGS_DOCKVIEW_COMPONENT_ID,
-    )).toBe(true);
-    expect(first.grid.root.type).toBe('branch');
-    expect(getOnlyGridGroup(first).activeView).toBe('logs-domain:all');
+    expect(
+      Object.values(first.panels).every(
+        (panel) => panel.contentComponent === LOGS_DOCKVIEW_COMPONENT_ID,
+      ),
+    ).toBe(true);
+    expect(first.grid.root.type).toBe("branch");
+    expect(getOnlyGridGroup(first).activeView).toBe("logs-domain:all");
   });
 
-  it('validates root and nested Logs snapshots independently', () => {
+  it("validates root and nested Logs snapshots independently", () => {
     const validRoot = rootLayout();
     const validLogs = createDefaultLogsDockviewLayout();
     const invalidLogs = duplicateLogsDomainLayout();
@@ -214,70 +225,65 @@ describe('workbench layout persistence', () => {
 
     const rootPreserved = parsePersistedWorkbenchLayout(payload(validRoot, invalidLogs));
     expect(rootPreserved).not.toBeNull();
-    expect(rootPreserved?.root).toEqual({ status: 'valid', value: validRoot });
-    expect(rootPreserved?.logs).toEqual({ status: 'invalid' });
+    expect(rootPreserved?.root).toEqual({ status: "valid", value: validRoot });
+    expect(rootPreserved?.logs).toEqual({ status: "invalid" });
 
     const missingLogsResult = parsePersistedWorkbenchLayout(payload(validRoot, missingLogs));
-    expect(missingLogsResult?.root.status).toBe('valid');
-    expect(missingLogsResult?.logs.status).toBe('invalid');
+    expect(missingLogsResult?.root.status).toBe("valid");
+    expect(missingLogsResult?.logs.status).toBe("invalid");
 
     const invalidRoot = structuredClone(validRoot);
-    invalidRoot.panels.editor.contentComponent = 'WorksheetEditor';
+    invalidRoot.panels.editor.contentComponent = "WorksheetEditor";
     const logsPreserved = parsePersistedWorkbenchLayout(payload(invalidRoot, validLogs));
     expect(logsPreserved).not.toBeNull();
-    expect(logsPreserved?.root).toEqual({ status: 'invalid' });
-    expect(logsPreserved?.logs).toEqual({ status: 'valid', value: validLogs });
+    expect(logsPreserved?.root).toEqual({ status: "invalid" });
+    expect(logsPreserved?.logs).toEqual({ status: "valid", value: validLogs });
   });
 
-  it('rejects non-canonical root metadata, singleton conflicts, and transient panels', () => {
+  it("rejects non-canonical root metadata, singleton conflicts, and transient panels", () => {
     const unknownMetadata = rootLayout();
     const metadata = unknownMetadata.panels.editor.params?.metadata as Record<string, unknown>;
-    metadata.legacyId = 'editor';
+    metadata.legacyId = "editor";
 
     const duplicateSingleton = rootLayout({
       projectOne: {
-        component: 'Project',
-        metadata: { role: 'view', viewId: 'project' },
+        component: "Project",
+        metadata: { role: "view", viewId: "project" },
       },
       projectTwo: {
-        component: 'Project',
-        metadata: { role: 'view', viewId: 'project' },
+        component: "Project",
+        metadata: { role: "view", viewId: "project" },
       },
     });
     const inspect = rootLayout({
       inspect: {
-        component: 'Inspect',
-        metadata: { role: 'view', viewId: 'inspect' },
+        component: "Inspect",
+        metadata: { role: "view", viewId: "inspect" },
       },
     });
     const result = rootLayout({
       result: {
-        component: 'Result',
+        component: "Result",
         metadata: {
-          role: 'result',
-          resultKey: 'summary',
-          resultId: '42',
-          title: 'Summary',
-          presentation: { kind: 'inspector' },
+          role: "result",
+          resultKey: "summary",
+          resultId: "42",
+          title: "Summary",
+          presentation: { kind: "inspector" },
           source: null,
         },
       },
     });
 
-    expect([
-      unknownMetadata,
-      duplicateSingleton,
-      inspect,
-      result,
-    ].map(parsedRootStatus)).toEqual([
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
+    expect([unknownMetadata, duplicateSingleton, inspect, result].map(parsedRootStatus)).toEqual([
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
     ]);
   });
 
-  it('rejects floating, popout, dangling, duplicate, and inconsistent root references', () => {
+  it("rejects floating, popout, dangling, duplicate, and inconsistent root references", () => {
     const floating = rootLayout();
     floating.floatingGroups = [{ position: { left: 0, top: 0, width: 100, height: 100 } }] as never;
 
@@ -286,25 +292,25 @@ describe('workbench layout persistence', () => {
 
     const topLevelLeaf = rootLayout();
     const topLevelBranch = topLevelLeaf.grid.root;
-    if (topLevelBranch.type !== 'branch' || !Array.isArray(topLevelBranch.data)) {
-      throw new Error('expected branch fixture');
+    if (topLevelBranch.type !== "branch" || !Array.isArray(topLevelBranch.data)) {
+      throw new Error("expected branch fixture");
     }
     topLevelLeaf.grid.root = structuredClone(topLevelBranch.data[0]);
 
     const danglingPanel = rootLayout();
-    getOnlyGridGroup(danglingPanel).views.push('missing-panel');
+    getOnlyGridGroup(danglingPanel).views.push("missing-panel");
 
     const invalidActiveView = rootLayout();
-    getOnlyGridGroup(invalidActiveView).activeView = 'missing-panel';
+    getOnlyGridGroup(invalidActiveView).activeView = "missing-panel";
 
     const missingActiveView = rootLayout();
     delete getOnlyGridGroup(missingActiveView).activeView;
 
     const emptyActiveView = rootLayout();
-    getOnlyGridGroup(emptyActiveView).activeView = '';
+    getOnlyGridGroup(emptyActiveView).activeView = "";
 
     const invalidActiveGroup = rootLayout();
-    invalidActiveGroup.activeGroup = 'missing-group';
+    invalidActiveGroup.activeGroup = "missing-group";
 
     const duplicateGroup = rootLayout();
     duplicateGroup.edgeGroups = {
@@ -312,61 +318,63 @@ describe('workbench layout persistence', () => {
         size: 300,
         visible: true,
         group: {
-          id: 'grid-main',
+          id: "grid-main",
           views: [],
-          activeView: '',
+          activeView: "",
         },
       },
     };
 
-    expect([
-      floating,
-      popout,
-      topLevelLeaf,
-      danglingPanel,
-      invalidActiveView,
-      missingActiveView,
-      emptyActiveView,
-      invalidActiveGroup,
-      duplicateGroup,
-    ].map(parsedRootStatus)).toEqual([
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
-      'invalid',
+    expect(
+      [
+        floating,
+        popout,
+        topLevelLeaf,
+        danglingPanel,
+        invalidActiveView,
+        missingActiveView,
+        emptyActiveView,
+        invalidActiveGroup,
+        duplicateGroup,
+      ].map(parsedRootStatus),
+    ).toEqual([
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
+      "invalid",
     ]);
   });
 
-  it('rejects unknown Logs domains and invalid components or topology', () => {
+  it("rejects unknown Logs domains and invalid components or topology", () => {
     const unknownDomain = createDefaultLogsDockviewLayout();
-    unknownDomain.panels['logs-domain:all'].params = { domain: 'network' };
+    unknownDomain.panels["logs-domain:all"].params = { domain: "network" };
 
     const wrongComponent = createDefaultLogsDockviewLayout();
-    wrongComponent.panels['logs-domain:all'].contentComponent = 'Logs';
+    wrongComponent.panels["logs-domain:all"].contentComponent = "Logs";
 
     const topLevelLeaf = createDefaultLogsDockviewLayout();
     const topLevelBranch = topLevelLeaf.grid.root;
-    if (topLevelBranch.type !== 'branch' || !Array.isArray(topLevelBranch.data)) {
-      throw new Error('expected branch fixture');
+    if (topLevelBranch.type !== "branch" || !Array.isArray(topLevelBranch.data)) {
+      throw new Error("expected branch fixture");
     }
     topLevelLeaf.grid.root = structuredClone(topLevelBranch.data[0]);
 
     const danglingReference = createDefaultLogsDockviewLayout();
-    getOnlyGridGroup(danglingReference).views.push('missing-domain-panel');
+    getOnlyGridGroup(danglingReference).views.push("missing-domain-panel");
 
     const missingActiveView = createDefaultLogsDockviewLayout();
     delete getOnlyGridGroup(missingActiveView).activeView;
 
     const emptyActiveView = createDefaultLogsDockviewLayout();
-    getOnlyGridGroup(emptyActiveView).activeView = '';
+    getOnlyGridGroup(emptyActiveView).activeView = "";
 
     const invalidActiveGroup = createDefaultLogsDockviewLayout();
-    invalidActiveGroup.activeGroup = 'missing-group';
+    invalidActiveGroup.activeGroup = "missing-group";
 
     for (const logs of [
       unknownDomain,
@@ -379,23 +387,23 @@ describe('workbench layout persistence', () => {
       invalidActiveGroup,
     ]) {
       const parsed = parsePersistedWorkbenchLayout(payload(rootLayout(), logs));
-      expect(parsed?.root.status).toBe('valid');
-      expect(parsed?.logs.status).toBe('invalid');
+      expect(parsed?.root.status).toBe("valid");
+      expect(parsed?.logs.status).toBe("invalid");
     }
   });
 
-  it('validates maximized descriptors and requires their paths to resolve to leaves', () => {
+  it("validates maximized descriptors and requires their paths to resolve to leaves", () => {
     const validRoot = rootLayout();
     gridWithMaximizedNode(validRoot).maximizedNode = { location: [0] };
     const validLogs = createDefaultLogsDockviewLayout();
     gridWithMaximizedNode(validLogs).maximizedNode = { location: [0] };
 
     const parsed = parsePersistedWorkbenchLayout(payload(validRoot, validLogs));
-    expect(parsed?.root).toEqual({ status: 'valid', value: validRoot });
-    expect(parsed?.logs).toEqual({ status: 'valid', value: validLogs });
-    expect(gridWithMaximizedNode(
-      prepareRootLayoutForPersistence(validRoot),
-    ).maximizedNode).toEqual({ location: [0] });
+    expect(parsed?.root).toEqual({ status: "valid", value: validRoot });
+    expect(parsed?.logs).toEqual({ status: "valid", value: validLogs });
+    expect(gridWithMaximizedNode(prepareRootLayoutForPersistence(validRoot)).maximizedNode).toEqual(
+      { location: [0] },
+    );
 
     const invalidDescriptors: unknown[] = [
       {},
@@ -410,74 +418,75 @@ describe('workbench layout persistence', () => {
     for (const descriptor of invalidDescriptors) {
       const invalidRoot = rootLayout();
       gridWithMaximizedNode(invalidRoot).maximizedNode = descriptor;
-      expect(parsedRootStatus(invalidRoot)).toBe('invalid');
+      expect(parsedRootStatus(invalidRoot)).toBe("invalid");
 
       const invalidLogs = createDefaultLogsDockviewLayout();
       gridWithMaximizedNode(invalidLogs).maximizedNode = descriptor;
-      expect(parsePersistedWorkbenchLayout(payload(rootLayout(), invalidLogs))?.logs.status)
-        .toBe('invalid');
+      expect(parsePersistedWorkbenchLayout(payload(rootLayout(), invalidLogs))?.logs.status).toBe(
+        "invalid",
+      );
     }
   });
 
-  it('strips transients and clears maximization when pruning a transient-only leaf', () => {
+  it("strips transients and clears maximization when pruning a transient-only leaf", () => {
     const layout = rootLayout({
       editor: {
-        component: 'GraphEditor',
+        component: "GraphEditor",
         metadata: {
-          role: 'editor',
-          resourceRef: 'events/Main.yssbi-event',
-          resourceKind: 'event',
+          role: "editor",
+          resourceRef: "events/Main.yssbi-event",
+          resourceKind: "event",
         },
       },
       details: {
-        component: 'Details',
-        metadata: { role: 'view', viewId: 'details' },
+        component: "Details",
+        metadata: { role: "view", viewId: "details" },
       },
       inspect: {
-        component: 'Inspect',
-        metadata: { role: 'view', viewId: 'inspect' },
+        component: "Inspect",
+        metadata: { role: "view", viewId: "inspect" },
       },
       result: {
-        component: 'Result',
+        component: "Result",
         metadata: {
-          role: 'result',
-          resultKey: 'summary',
-          resultId: '42',
-          title: 'Summary',
-          presentation: { kind: 'inspector' },
+          role: "result",
+          resultKey: "summary",
+          resultId: "42",
+          title: "Summary",
+          presentation: { kind: "inspector" },
           source: null,
         },
       },
       logs: {
-        component: 'Logs',
-        metadata: { role: 'view', viewId: 'logs' },
+        component: "Logs",
+        metadata: { role: "view", viewId: "logs" },
       },
     });
     layout.grid.root = {
-      type: 'branch',
+      type: "branch",
       data: [
         {
-          type: 'leaf',
+          type: "leaf",
           data: {
-          id: 'grid-main',
-            views: ['editor'],
-            activeView: 'editor',
+            id: "grid-main",
+            views: ["editor"],
+            activeView: "editor",
           },
         },
         {
-          type: 'leaf',
+          type: "leaf",
           data: {
-            id: 'transient-active',
-            views: ['inspect'],
-            activeView: 'inspect',
+            id: "transient-active",
+            views: ["inspect"],
+            activeView: "inspect",
           },
         },
         {
-          type: 'leaf',
+          type: "leaf",
           data: {
-            id: 'empty-grid',
+            id: "empty-grid",
             views: [],
-            activeView: '',
+            activeView: "",
           },
         },
       ],
@@ -488,33 +497,33 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: false,
         group: {
-          id: 'workbench-edge-left',
-          views: ['project', 'nodes', 'data', 'commands'],
-          activeView: 'project',
-          headerPosition: 'left',
+          id: "workbench-edge-left",
+          views: ["project", "nodes", "data", "commands"],
+          activeView: "project",
+          headerPosition: "left",
         },
       },
       right: {
         size: 320,
         visible: true,
         group: {
-          id: 'result-edge',
-          views: ['details', 'result'],
-          activeView: 'details',
+          id: "result-edge",
+          views: ["details", "result"],
+          activeView: "details",
         },
       },
       bottom: {
         size: 200,
         visible: true,
         group: {
-          id: 'logs-edge',
-          views: ['logs'],
-          activeView: 'logs',
+          id: "logs-edge",
+          views: ["logs"],
+          activeView: "logs",
         },
       },
     };
     gridWithMaximizedNode(layout).maximizedNode = { location: [1] };
-    layout.activeGroup = 'transient-active';
+    layout.activeGroup = "transient-active";
     const original = structuredClone(layout);
 
     const persisted = prepareRootLayoutForPersistence(layout);
@@ -522,99 +531,105 @@ describe('workbench layout persistence', () => {
     expect(layout).toEqual(original);
     expect(persisted).not.toBe(layout);
     expect(Object.keys(persisted.panels)).toEqual([
-      'editor',
-      'details',
-      'logs',
-      'project',
-      'nodes',
-      'data',
-      'commands',
+      "editor",
+      "details",
+      "logs",
+      "project",
+      "nodes",
+      "data",
+      "commands",
     ]);
     expect(persisted.grid.root).toEqual({
-      type: 'branch',
-      data: [{
-        type: 'leaf',
-        data: {
-          id: 'grid-main',
-          views: ['editor'],
-          activeView: 'editor',
+      type: "branch",
+      data: [
+        {
+          type: "leaf",
+          data: {
+            id: "grid-main",
+            views: ["editor"],
+            activeView: "editor",
+          },
         },
-      }],
+      ],
     });
     expect(gridWithMaximizedNode(persisted).maximizedNode).toBeUndefined();
     expect(persisted.edgeGroups?.right?.group).toEqual({
-      id: 'result-edge',
-      views: ['details'],
-      activeView: 'details',
+      id: "result-edge",
+      views: ["details"],
+      activeView: "details",
     });
     expect(persisted.edgeGroups?.left?.group).toEqual({
-      id: 'workbench-edge-left',
-      views: ['project', 'nodes', 'data', 'commands'],
-      activeView: 'project',
-      headerPosition: 'left',
+      id: "workbench-edge-left",
+      views: ["project", "nodes", "data", "commands"],
+      activeView: "project",
+      headerPosition: "left",
     });
     expect(persisted.edgeGroups?.bottom?.group).toEqual({
-      id: 'logs-edge',
-      views: ['logs'],
-      activeView: 'logs',
+      id: "logs-edge",
+      views: ["logs"],
+      activeView: "logs",
     });
-    expect(persisted.activeGroup).toBe('grid-main');
-    expect(parsedRootStatus(persisted)).toBe('valid');
+    expect(persisted.activeGroup).toBe("grid-main");
+    expect(parsedRootStatus(persisted)).toBe("valid");
   });
 
-  it('scrubs project-scoped panels while preserving tool panel topology', () => {
+  it("scrubs project-scoped panels while preserving tool panel topology", () => {
     const layout = rootLayout({
       editor: {
-        component: 'GraphEditor',
+        component: "GraphEditor",
         metadata: {
-          role: 'editor',
-          resourceRef: 'events/Main.yssbi-event',
-          resourceKind: 'event',
+          role: "editor",
+          resourceRef: "events/Main.yssbi-event",
+          resourceKind: "event",
         },
       },
       details: {
-        component: 'Details',
-        metadata: { role: 'view', viewId: 'details' },
+        component: "Details",
+        metadata: { role: "view", viewId: "details" },
       },
       inspect: {
-        component: 'Inspect',
-        metadata: { role: 'view', viewId: 'inspect' },
+        component: "Inspect",
+        metadata: { role: "view", viewId: "inspect" },
       },
       result: {
-        component: 'Result',
+        component: "Result",
         metadata: {
-          role: 'result',
-          resultKey: 'summary',
-          resultId: '42',
-          title: 'Summary',
-          presentation: { kind: 'inspector' },
+          role: "result",
+          resultKey: "summary",
+          resultId: "42",
+          title: "Summary",
+          presentation: { kind: "inspector" },
           source: null,
         },
       },
       logs: {
-        component: 'Logs',
-        metadata: { role: 'view', viewId: 'logs' },
+        component: "Logs",
+        metadata: { role: "view", viewId: "logs" },
       },
       output: {
-        component: 'Output',
-        metadata: { role: 'view', viewId: 'output' },
+        component: "Output",
+        metadata: { role: "view", viewId: "output" },
       },
     });
     layout.grid.root = {
-      type: 'branch',
-      data: [{
-        type: 'leaf',
-        data: {
-          id: 'project-grid',
-          views: ['editor', 'inspect'],
-          activeView: 'editor',
-          tabGroups: [{
-            id: 'project-tabs',
-            collapsed: false,
-            panelIds: ['editor', 'inspect'],
-          }],
+      type: "branch",
+      data: [
+        {
+          type: "leaf",
+          data: {
+            id: "project-grid",
+            views: ["editor", "inspect"],
+            activeView: "editor",
+            tabGroups: [
+              {
+                id: "project-tabs",
+                collapsed: false,
+                panelIds: ["editor", "inspect"],
+              },
+            ],
+          },
         },
-      }],
+      ],
     };
     layout.edgeGroups = {
       left: {
@@ -622,10 +637,10 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: false,
         group: {
-          id: 'workbench-edge-left',
-          views: ['project', 'nodes', 'data', 'commands'],
-          activeView: 'project',
-          headerPosition: 'left',
+          id: "workbench-edge-left",
+          views: ["project", "nodes", "data", "commands"],
+          activeView: "project",
+          headerPosition: "left",
         },
       },
       bottom: {
@@ -633,14 +648,16 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: true,
         group: {
-          id: 'tools-edge',
-          views: ['logs', 'result', 'output'],
-          activeView: 'result',
-          tabGroups: [{
-            id: 'tools-tabs',
-            collapsed: false,
-            panelIds: ['logs', 'result', 'output'],
-          }],
+          id: "tools-edge",
+          views: ["logs", "result", "output"],
+          activeView: "result",
+          tabGroups: [
+            {
+              id: "tools-tabs",
+              collapsed: false,
+              panelIds: ["logs", "result", "output"],
+            },
+          ],
         },
       },
       right: {
@@ -648,30 +665,30 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: false,
         group: {
-          id: 'details-edge',
-          views: ['details'],
-          activeView: 'details',
-          headerPosition: 'right',
+          id: "details-edge",
+          views: ["details"],
+          activeView: "details",
+          headerPosition: "right",
         },
       },
     };
     gridWithMaximizedNode(layout).maximizedNode = { location: [0] };
-    layout.activeGroup = 'project-grid';
+    layout.activeGroup = "project-grid";
     const original = structuredClone(layout);
 
     const scrubbed = scrubProjectScopedRootLayout(layout);
 
     expect(layout).toEqual(original);
     expect(Object.keys(scrubbed.panels)).toEqual([
-      'details',
-      'logs',
-      'output',
-      'project',
-      'nodes',
-      'data',
-      'commands',
+      "details",
+      "logs",
+      "output",
+      "project",
+      "nodes",
+      "data",
+      "commands",
     ]);
-    expect(scrubbed.grid.root).toEqual({ type: 'branch', data: [] });
+    expect(scrubbed.grid.root).toEqual({ type: "branch", data: [] });
     expect(gridWithMaximizedNode(scrubbed).maximizedNode).toBeUndefined();
     expect(scrubbed.edgeGroups).toEqual({
       left: {
@@ -679,10 +696,10 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: false,
         group: {
-          id: 'workbench-edge-left',
-          views: ['project', 'nodes', 'data', 'commands'],
-          activeView: 'project',
-          headerPosition: 'left',
+          id: "workbench-edge-left",
+          views: ["project", "nodes", "data", "commands"],
+          activeView: "project",
+          headerPosition: "left",
         },
       },
       bottom: {
@@ -690,14 +707,16 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: true,
         group: {
-          id: 'tools-edge',
-          views: ['logs', 'output'],
-          activeView: 'logs',
-          tabGroups: [{
-            id: 'tools-tabs',
-            collapsed: false,
-            panelIds: ['logs', 'output'],
-          }],
+          id: "tools-edge",
+          views: ["logs", "output"],
+          activeView: "logs",
+          tabGroups: [
+            {
+              id: "tools-tabs",
+              collapsed: false,
+              panelIds: ["logs", "output"],
+            },
+          ],
         },
       },
       right: {
@@ -705,83 +724,89 @@ describe('workbench layout persistence', () => {
         visible: true,
         collapsed: false,
         group: {
-          id: 'details-edge',
-          views: ['details'],
-          activeView: 'details',
-          headerPosition: 'right',
+          id: "details-edge",
+          views: ["details"],
+          activeView: "details",
+          headerPosition: "right",
         },
       },
     });
-    expect(scrubbed.activeGroup).toBe('tools-edge');
-    expect(parsedRootStatus(scrubbed)).toBe('valid');
+    expect(scrubbed.activeGroup).toBe("tools-edge");
+    expect(parsedRootStatus(scrubbed)).toBe("valid");
   });
 
-  it('preserves nested branch depth and sizes when pruning a transient sibling', () => {
+  it("preserves nested branch depth and sizes when pruning a transient sibling", () => {
     const layout = rootLayout({
       editor: {
-        component: 'GraphEditor',
+        component: "GraphEditor",
         metadata: {
-          role: 'editor',
-          resourceRef: 'events/Main.yssbi-event',
-          resourceKind: 'event',
+          role: "editor",
+          resourceRef: "events/Main.yssbi-event",
+          resourceKind: "event",
         },
       },
       inspect: {
-        component: 'Inspect',
-        metadata: { role: 'view', viewId: 'inspect' },
+        component: "Inspect",
+        metadata: { role: "view", viewId: "inspect" },
       },
     });
     layout.grid.root = {
-      type: 'branch',
-      data: [{
-        type: 'branch',
-        size: 720,
-        visible: true,
-        data: [
-          {
-            type: 'leaf',
-            size: 480,
-            visible: true,
-            data: {
-              id: 'grid-main',
-              views: ['editor'],
-              activeView: 'editor',
+      type: "branch",
+      data: [
+        {
+          type: "branch",
+          size: 720,
+          visible: true,
+          data: [
+            {
+              type: "leaf",
+              size: 480,
+              visible: true,
+              data: {
+                id: "grid-main",
+                views: ["editor"],
+                activeView: "editor",
+              },
             },
-          },
-          {
-            type: 'leaf',
-            size: 240,
-            visible: false,
-            data: {
-              id: 'transient-inspect',
-              views: ['inspect'],
-              activeView: 'inspect',
+            {
+              type: "leaf",
+              size: 240,
+              visible: false,
+              data: {
+                id: "transient-inspect",
+                views: ["inspect"],
+                activeView: "inspect",
+              },
             },
-          },
-        ],
-      }],
+          ],
+        },
+      ],
     };
 
     const persisted = prepareRootLayoutForPersistence(layout);
 
     expect(persisted.grid.root).toEqual({
-      type: 'branch',
-      data: [{
-        type: 'branch',
-        size: 720,
-        visible: true,
-        data: [{
-          type: 'leaf',
-          size: 480,
+      type: "branch",
+      data: [
+        {
+          type: "branch",
+          size: 720,
           visible: true,
-          data: {
-            id: 'grid-main',
-            views: ['editor'],
-            activeView: 'editor',
-          },
-        }],
-      }],
+          data: [
+            {
+              type: "leaf",
+              size: 480,
+              visible: true,
+              data: {
+                id: "grid-main",
+                views: ["editor"],
+                activeView: "editor",
+              },
+            },
+          ],
+        },
+      ],
     });
-    expect(parsedRootStatus(persisted)).toBe('valid');
+    expect(parsedRootStatus(persisted)).toBe("valid");
   });
 });

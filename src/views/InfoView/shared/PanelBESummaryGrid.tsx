@@ -1,21 +1,18 @@
-import { formatNum, InfoRow } from './RegressionShared';
-import type { PanelFEInfo } from '@/shared/types/report';
-import type { ModelBasicInfo } from '@/shared/types/report';
+import { formatNum, InfoRow } from "./RegressionShared";
+import type { PanelFEInfo } from "@/shared/types/report";
+import type { ModelBasicInfo } from "@/shared/types/report";
 
 /** Stata xtreg, be style summary grid — Between regression (regression on group means) */
 export function PanelBESummaryGrid({
   info,
   panelFe,
-  effectType = 'entity',
+  effectType = "entity",
 }: {
   info: ModelBasicInfo;
   panelFe: PanelFEInfo;
-  effectType?: 'entity' | 'time';
+  effectType?: "entity" | "time";
 }) {
-  const sdLabel =
-    effectType === 'time'
-      ? 'sd(λ_t + avg(e_.t))'
-      : 'sd(u_i + avg(e_i.))';
+  const sdLabel = effectType === "time" ? "sd(λ_t + avg(e_.t))" : "sd(u_i + avg(e_i.))";
   return (
     <div className="space-y-2 mb-2">
       {/* Header: Between regression */}
@@ -52,15 +49,21 @@ export function PanelBESummaryGrid({
 
       {/* F test and sd(u_i + avg(e_i.)) — Stata layout */}
       <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
-        <InfoRow label={`F(${info.df_model}, ${info.df_residual})`}>{formatNum(info.f_statistic)}</InfoRow>
+        <InfoRow label={`F(${info.df_model}, ${info.df_residual})`}>
+          {formatNum(info.f_statistic)}
+        </InfoRow>
         <InfoRow label="Prob &gt; F">
-          <span className={info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+          <span
+            className={info.prob_f_statistic < 0.05 ? "text-emerald-400" : "text-muted-foreground"}
+          >
             {formatNum(info.prob_f_statistic)}
           </span>
         </InfoRow>
         <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-muted-foreground text-xs">{sdLabel}</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(panelFe.sigma.sigma_u)}</span>
+          <span className="text-foreground text-xs font-mono font-medium">
+            {formatNum(panelFe.sigma.sigma_u)}
+          </span>
         </div>
         <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
       </div>

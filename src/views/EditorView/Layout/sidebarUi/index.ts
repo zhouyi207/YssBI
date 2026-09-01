@@ -6,18 +6,9 @@ export {
 } from "./LocalizedCatalogTreeRow";
 export { SidebarListItem } from "./SidebarListItem";
 export { SidebarRowActionButton } from "./SidebarRowActionButton";
-export {
-  SidebarTreeCategoryRow,
-  type SidebarTreeCategoryRowProps,
-} from "./SidebarTreeCategoryRow";
-export {
-  SidebarTreeSearchInput,
-  type SidebarTreeSearchInputProps,
-} from "./SidebarTreeSearchInput";
-export {
-  SidebarVirtualTree,
-  type SidebarVirtualTreeProps,
-} from "./SidebarVirtualTree";
+export { SidebarTreeCategoryRow, type SidebarTreeCategoryRowProps } from "./SidebarTreeCategoryRow";
+export { SidebarTreeSearchInput, type SidebarTreeSearchInputProps } from "./SidebarTreeSearchInput";
+export { SidebarVirtualTree, type SidebarVirtualTreeProps } from "./SidebarVirtualTree";
 export {
   sidebarGroupRowClass,
   sidebarItemIndent,

@@ -6,15 +6,15 @@ Converts a **scalar** value to another scalar type. Set the target type on the *
 
 Rows = source type, columns = target type. ✓ = supported; — = use a dedicated **DataSeries** conversion node.
 
-| From \ To | Boolean | Int64 | Float64 | String | Categorical | DataSeries |
-|-----------|---------|-------|---------|--------|-------------|------------|
-| **Boolean** | ✓ | ✓ (0/1) | ✓ (0.0/1.0) | ✓ | — | — |
-| **Int64** | ✓ (≠0) | ✓ | ✓ | ✓ | — | — |
-| **Float64** | ✓ (≠0) | ✓ (truncate) | ✓ | ✓ | — | — |
-| **String** | ✓* | ✓* | ✓* | ✓ | — | — |
-| **Null** | → false | → 0 | → 0.0 | → `"null"` | — | — |
-| **Categorical** | — | — | — | — | — | — |
-| **DataSeries** | — | — | — | — | — | — |
+| From \ To       | Boolean | Int64        | Float64     | String     | Categorical | DataSeries |
+| --------------- | ------- | ------------ | ----------- | ---------- | ----------- | ---------- |
+| **Boolean**     | ✓       | ✓ (0/1)      | ✓ (0.0/1.0) | ✓          | —           | —          |
+| **Int64**       | ✓ (≠0)  | ✓            | ✓           | ✓          | —           | —          |
+| **Float64**     | ✓ (≠0)  | ✓ (truncate) | ✓           | ✓          | —           | —          |
+| **String**      | ✓*      | ✓*           | ✓*          | ✓          | —           | —          |
+| **Null**        | → false | → 0          | → 0.0       | → `"null"` | —           | —          |
+| **Categorical** | —       | —            | —           | —          | —           | —          |
+| **DataSeries**  | —       | —            | —           | —          | —           | —          |
 
 \*String parsing: Boolean accepts `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off` (case-insensitive); invalid strings error. Int64/Float64 use standard parse rules.
 

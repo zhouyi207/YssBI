@@ -4,20 +4,20 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import type { PinResultEntry } from '@/shared/types/domain/result';
-import type { RunOutputChannelEvent } from '@/shared/types/domain/runEvent';
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import type { PinResultEntry } from "@/shared/types/domain/result";
+import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
 export type ExecutionEvent =
-  | { event: 'executionStart' }
-  | { event: 'executionComplete'; data: { hasError: boolean } }
-  | { event: 'nodeStart'; data: { nodeId: string } }
-  | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
-  | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
-  | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
-  | { event: 'connectionFlow'; data: { fromPinId: string; toPinId: string } }
+  | { event: "executionStart" }
+  | { event: "executionComplete"; data: { hasError: boolean } }
+  | { event: "nodeStart"; data: { nodeId: string } }
+  | { event: "nodeComplete"; data: { nodeId: string; durationMs?: number } }
+  | { event: "nodeError"; data: { nodeId: string; error: string; durationMs?: number } }
+  | { event: "connectionActive"; data: { fromPinId: string; toPinId: string } }
+  | { event: "connectionFlow"; data: { fromPinId: string; toPinId: string } };
 
 /** 带时间戳的录制事件 */
 export interface RecordedEvent {
@@ -37,7 +37,6 @@ export interface NodeExecutionState {
   durationMs?: number;
 }
 
-
 export interface PinHistoryProjection {
   graphPath: string;
   output: PortAddressDto;
@@ -55,7 +54,7 @@ export interface PinPreviewState {
   graphPath: string;
   port: PortAddressDto;
   generation: number;
-  status: 'pending' | 'ready' | 'error';
+  status: "pending" | "ready" | "error";
   resultId: string | null;
   error: string | null;
 }

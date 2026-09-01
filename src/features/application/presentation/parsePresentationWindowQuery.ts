@@ -4,17 +4,17 @@ export interface PresentationWindowQuery {
 }
 
 function readLocationQueryString(hash: string, search: string): string {
-  const queryStart = hash.indexOf('?');
+  const queryStart = hash.indexOf("?");
   if (queryStart >= 0) return hash.slice(queryStart + 1);
-  return search.startsWith('?') ? search.slice(1) : search;
+  return search.startsWith("?") ? search.slice(1) : search;
 }
 
 export function parsePresentationWindowQueryFromParts(
   hash: string,
-  search = '',
+  search = "",
 ): PresentationWindowQuery {
   const params = new URLSearchParams(readLocationQueryString(hash, search));
-  return { resultId: params.get('resultId'), plotType: params.get('plotType') };
+  return { resultId: params.get("resultId"), plotType: params.get("plotType") };
 }
 
 export function parsePresentationWindowQuery(): PresentationWindowQuery {

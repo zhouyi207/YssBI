@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useExecutionStore } from './useExecutionStore';
-import { ensureGraphExecutionTerminal, recordingHadError } from './executionRecording';
-import { applyExecutionVisualEvent, resetExecutionVisual } from './executionVisualSession';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useExecutionStore } from "./useExecutionStore";
+import { ensureGraphExecutionTerminal, recordingHadError } from "./executionRecording";
+import { applyExecutionVisualEvent, resetExecutionVisual } from "./executionVisualSession";
 import {
   EXECUTION_REPLAY_DEFAULT_DELAY_MS,
   EXECUTION_REPLAY_DELAYS_MS,
-} from './executionReplayDelays';
+} from "./executionReplayDelays";
 
 export function useExecutionPlayback(graphPath: string) {
   const graphState = useExecutionStore((s) => s.graphs[graphPath]);
@@ -26,37 +26,37 @@ export function useExecutionPlayback(graphPath: string) {
     }
   }, []);
 
-  const scheduleSteps = useCallback((rec: typeof recording) => {
-    const { setPlaying, commitExecutionVisual } = useExecutionStore.getState();
+  const scheduleSteps = useCallback(
+    (rec: typeof recording) => {
+      const { setPlaying, commitExecutionVisual } = useExecutionStore.getState();
 
-    const step = () => {
-      if (pausedRef.current) return;
-      const idx = indexRef.current;
-      if (idx >= rec.length) {
-        clearTimer();
-        commitExecutionVisual(graphPath);
-        ensureGraphExecutionTerminal(
-          graphPath,
-          recordingHadError(rec) ? 'error' : 'success',
-        );
-        setPlaying(false);
-        return;
-      }
-      const entry = rec[idx];
-      const event = entry.event;
-      if (event.event === 'executionStart') {
-        // Do not call startExecution — it clears recording and breaks repeat replay.
-        resetExecutionVisual(graphPath);
-      } else {
-        applyExecutionVisualEvent(graphPath, event);
-      }
-      indexRef.current = idx + 1;
-      const delay = EXECUTION_REPLAY_DELAYS_MS[event.event] ?? EXECUTION_REPLAY_DEFAULT_DELAY_MS;
-      timerRef.current = setTimeout(step, delay);
-    };
+      const step = () => {
+        if (pausedRef.current) return;
+        const idx = indexRef.current;
+        if (idx >= rec.length) {
+          clearTimer();
+          commitExecutionVisual(graphPath);
+          ensureGraphExecutionTerminal(graphPath, recordingHadError(rec) ? "error" : "success");
+          setPlaying(false);
+          return;
+        }
+        const entry = rec[idx];
+        const event = entry.event;
+        if (event.event === "executionStart") {
+          // Do not call startExecution — it clears recording and breaks repeat replay.
+          resetExecutionVisual(graphPath);
+        } else {
+          applyExecutionVisualEvent(graphPath, event);
+        }
+        indexRef.current = idx + 1;
+        const delay = EXECUTION_REPLAY_DELAYS_MS[event.event] ?? EXECUTION_REPLAY_DEFAULT_DELAY_MS;
+        timerRef.current = setTimeout(step, delay);
+      };
 
-    step();
-  }, [graphPath, clearTimer]);
+      step();
+    },
+    [graphPath, clearTimer],
+  );
 
   const play = useCallback(() => {
     const store = useExecutionStore.getState();
@@ -109,7 +109,10 @@ export function useExecutionPlayback(graphPath: string) {
   const togglePlayPause = useCallback(() => {
     if (pausedRef.current) {
       resume();
-    } else if (useExecutionStore.getState().isPlaying && useExecutionStore.getState().playbackGraphPath === graphPath) {
+    } else if (
+      useExecutionStore.getState().isPlaying &&
+      useExecutionStore.getState().playbackGraphPath === graphPath
+    ) {
       pause();
     } else {
       play();

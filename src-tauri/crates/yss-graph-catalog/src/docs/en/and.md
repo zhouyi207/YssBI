@@ -6,12 +6,12 @@ $$
 \text{Result} = A \land B
 $$
 
-| $A$ | $B$ | Result |
-|-----|-----|--------|
-| false | false | false |
-| false | true | false |
-| true | false | false |
-| true | true | true |
+| $A$   | $B$   | Result |
+| ----- | ----- | ------ |
+| false | false | false  |
+| false | true  | false  |
+| true  | false | false  |
+| true  | true  | true   |
 
 ## Usage
 

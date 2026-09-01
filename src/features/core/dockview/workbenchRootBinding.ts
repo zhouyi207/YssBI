@@ -1,7 +1,7 @@
-import type { DockviewApi } from 'dockview-react';
-import { workbenchDockviewInternal } from './workbenchDockviewInternal';
+import type { DockviewApi } from "dockview-react";
+import { workbenchDockviewInternal } from "./workbenchDockviewInternal";
 
-const workbenchBindingTokenBrand: unique symbol = Symbol('workbench-dockview-binding');
+const workbenchBindingTokenBrand: unique symbol = Symbol("workbench-dockview-binding");
 
 export type WorkbenchDockviewBindingToken = Readonly<{
   [workbenchBindingTokenBrand]: number;

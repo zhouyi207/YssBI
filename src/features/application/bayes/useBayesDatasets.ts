@@ -1,25 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { databaseRead, useDatabaseRead } from '@/features/application/dataManagement/databaseRead';
-import { createDatabasePublication } from '@/features/application/dataManagement/databasePublication';
-import { databaseRecordFromLoad } from '@/features/application/dataManagement/databaseRecords';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { databaseRead, useDatabaseRead } from "@/features/application/dataManagement/databaseRead";
+import { createDatabasePublication } from "@/features/application/dataManagement/databasePublication";
+import { databaseRecordFromLoad } from "@/features/application/dataManagement/databaseRecords";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { DatabaseService } from '@/services/database/databaseService';
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { DatabaseService } from "@/services/database/databaseService";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type {
   BayesColumnDTypeDTO,
   BayesColumnMetaDTO,
   BayesDatasetSelectionDTO,
-} from '@/shared/types/bayes';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+} from "@/shared/types/bayes";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
 export interface BayesDatasetOption {
-  readonly sourceType: BayesDatasetSelectionDTO['sourceType'];
+  readonly sourceType: BayesDatasetSelectionDTO["sourceType"];
   readonly sourceId: string;
   readonly columns: readonly BayesColumnMetaDTO[];
   readonly displayName: string;
@@ -51,8 +51,9 @@ export function useBayesDatasets(): BayesDatasetsModel {
   );
 
   useEffect(() => {
-    const missingMetadata = Object.values(snapshot.databases)
-      .filter((database) => (database.columns?.length ?? 0) === 0);
+    const missingMetadata = Object.values(snapshot.databases).filter(
+      (database) => (database.columns?.length ?? 0) === 0,
+    );
     const generation = ++requestGeneration.current;
     if (missingMetadata.length === 0) {
       setLoading(false);
@@ -77,31 +78,39 @@ export function useBayesDatasets(): BayesDatasetsModel {
     setLoading(true);
     setIssue(null);
 
-    void Promise.all(missingMetadata.map(async (database) => {
-      try {
-        return {
-          database,
-          meta: await DatabaseService.getDatabaseMeta(identity.projectInstanceId, database.id),
-          error: null,
-        };
-      } catch (error) {
-        return { database, meta: null, error };
-      }
-    })).then((results) => {
+    void Promise.all(
+      missingMetadata.map(async (database) => {
+        try {
+          return {
+            database,
+            meta: await DatabaseService.getDatabaseMeta(identity.projectInstanceId, database.id),
+            error: null,
+          };
+        } catch (error) {
+          return { database, meta: null, error };
+        }
+      }),
+    ).then((results) => {
       if (!isCurrentRequest(request, requestGeneration.current)) return;
 
       const current = databaseRead.getSnapshot();
       let nextIssue: ErrorReference | null = null;
       for (const result of results) {
         if (result.error) {
-          nextIssue ??= toErrorReference(result.error, 'bayes_dataset_metadata_read_failed');
+          nextIssue ??= toErrorReference(result.error, "bayes_dataset_metadata_read_failed");
           continue;
         }
-        if (!result.meta || !isCurrentDatabaseRevision(current.revisions, request.revisions, result.database.id)) {
+        if (
+          !result.meta ||
+          !isCurrentDatabaseRevision(current.revisions, request.revisions, result.database.id)
+        ) {
           continue;
         }
         publication.publishDatabase(
-          databaseRecordFromLoad(result.meta, current.databases[result.database.id] as DatabaseRecord | undefined),
+          databaseRecordFromLoad(
+            result.meta,
+            current.databases[result.database.id] as DatabaseRecord | undefined,
+          ),
         );
       }
       setIssue(nextIssue);
@@ -130,7 +139,7 @@ function isCurrentDatabaseRevision(
 
 function toBayesDataset(database: DeepReadonly<DatabaseRecord>): BayesDatasetOption {
   return {
-    sourceType: 'table',
+    sourceType: "table",
     sourceId: database.id,
     displayName: database.name,
     columns: (database.columns ?? []).map((column) => ({
@@ -143,16 +152,18 @@ function toBayesDataset(database: DeepReadonly<DatabaseRecord>): BayesDatasetOpt
 
 export function bayesColumnDType(type: string): BayesColumnDTypeDTO {
   const normalized = type.toLowerCase();
-  if (normalized.includes('int')) return 'integer';
+  if (normalized.includes("int")) return "integer";
   if (
-    normalized.includes('float')
-    || normalized.includes('double')
-    || normalized.includes('real')
-    || normalized.includes('decimal')
-    || normalized.includes('numeric')
-  ) return 'number';
-  if (normalized.includes('bool')) return 'boolean';
-  if (normalized.includes('date') || normalized.includes('time')) return 'date';
-  if (normalized.includes('char') || normalized.includes('text') || normalized.includes('string')) return 'string';
-  return 'unknown';
+    normalized.includes("float") ||
+    normalized.includes("double") ||
+    normalized.includes("real") ||
+    normalized.includes("decimal") ||
+    normalized.includes("numeric")
+  )
+    return "number";
+  if (normalized.includes("bool")) return "boolean";
+  if (normalized.includes("date") || normalized.includes("time")) return "date";
+  if (normalized.includes("char") || normalized.includes("text") || normalized.includes("string"))
+    return "string";
+  return "unknown";
 }

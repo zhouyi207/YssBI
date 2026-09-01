@@ -1,11 +1,11 @@
-import type { LocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
-import type { LocalizedCatalogResponse } from '@/features/core/nodeCatalog/nodeCatalogStore';
+import type { LocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
+import type { LocalizedCatalogResponse } from "@/features/core/nodeCatalog/nodeCatalogStore";
 import {
   buildLocalizedCatalogTree,
   collectLocalizedCatalogCategoryIds,
   flattenLocalizedCatalogTree,
   type LocalizedCatalogBrowserRow,
-} from '@/features/domain/nodeCatalog/localizedCatalogTree';
+} from "@/features/domain/nodeCatalog/localizedCatalogTree";
 
 export interface LocalizedCatalogBrowserProjection {
   rows: LocalizedCatalogBrowserRow[];
@@ -25,14 +25,8 @@ export function buildLocalizedCatalogBrowser({
   expandedCategoryIds: ReadonlySet<string>;
 }): LocalizedCatalogBrowserProjection {
   const searching = query.trim().length > 0;
-  const items = !catalog
-    ? []
-    : searching
-      ? searchIndex?.search(query) ?? []
-      : catalog.items;
-  const tree = catalog
-    ? buildLocalizedCatalogTree(catalog.categories, items)
-    : [];
+  const items = !catalog ? [] : searching ? (searchIndex?.search(query) ?? []) : catalog.items;
+  const tree = catalog ? buildLocalizedCatalogTree(catalog.categories, items) : [];
   const effectiveExpandedCategoryIds = searching
     ? collectLocalizedCatalogCategoryIds(tree)
     : expandedCategoryIds;

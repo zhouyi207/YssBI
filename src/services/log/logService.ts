@@ -1,20 +1,17 @@
-import { Channel } from '@tauri-apps/api/core';
-import { invokeCommand } from '@/services/ipc';
-import { trackChannel, untrackChannel } from '@/services/devHmrIpc';
-import { clearChannelMessageHandler } from '@/shared/platform/tauriWebview';
-import type {
-  DiagnosticBatchDto,
-  DiagnosticSubscriptionDto,
-} from '@/shared/types/dto/diagnostics';
-import { parseDiagnosticSubscriptionDto } from '@/shared/types/dto/diagnosticsParser';
+import { Channel } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
+import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
+import { clearChannelMessageHandler } from "@/shared/platform/tauriWebview";
+import type { DiagnosticBatchDto, DiagnosticSubscriptionDto } from "@/shared/types/dto/diagnostics";
+import { parseDiagnosticSubscriptionDto } from "@/shared/types/dto/diagnosticsParser";
 import {
   createDiagnosticBatchReceiver,
   DiagnosticStreamDiscontinuityError,
-} from './diagnosticBatchReceiver';
+} from "./diagnosticBatchReceiver";
 
 export interface FrontendDiagnosticEntry {
-  readonly level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
-  readonly domain: 'application' | 'execution' | 'system' | 'graph' | 'data' | 'ui';
+  readonly level: "trace" | "debug" | "info" | "warn" | "error";
+  readonly domain: "application" | "execution" | "system" | "graph" | "data" | "ui";
   readonly target: string;
   readonly event?: string;
   readonly message: string;
@@ -36,7 +33,7 @@ export class LogService {
     entries: readonly FrontendDiagnosticEntry[],
   ): Promise<void> {
     if (entries.length === 0) return;
-    await invokeCommand('submit_frontend_diagnostics', { entries: [...entries] });
+    await invokeCommand("submit_frontend_diagnostics", { entries: [...entries] });
   }
 
   static async subscribeDiagnostics(
@@ -69,7 +66,7 @@ export class LogService {
       let snapshot: DiagnosticSubscriptionDto;
       try {
         snapshot = parseDiagnosticSubscriptionDto(
-          await invokeCommand('subscribe_diagnostics', { onRecords: channel }),
+          await invokeCommand("subscribe_diagnostics", { onRecords: channel }),
         );
         subscriptionId = snapshot.subscriptionId;
       } catch (error) {
@@ -79,7 +76,7 @@ export class LogService {
 
       if (hmrDisposed || receiver.isDisposed()) {
         await LogService.unsubscribeDiagnostics(snapshot.subscriptionId).catch(() => {});
-        throw new Error('Diagnostic subscription was disposed before activation');
+        throw new Error("Diagnostic subscription was disposed before activation");
       }
 
       const discontinuity = receiver.prepare(snapshot);
@@ -115,10 +112,10 @@ export class LogService {
       };
     }
 
-    throw new Error('Diagnostic subscription attempts exhausted');
+    throw new Error("Diagnostic subscription attempts exhausted");
   }
 
   static async unsubscribeDiagnostics(subscriptionId: string): Promise<void> {
-    await invokeCommand('unsubscribe_diagnostics', { subscriptionId });
+    await invokeCommand("unsubscribe_diagnostics", { subscriptionId });
   }
 }

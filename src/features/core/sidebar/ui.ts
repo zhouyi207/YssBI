@@ -1,11 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import {
   useSidebarStore,
   type ProjectTreeCategoryId,
   type SidebarSectionKey,
-} from './sidebarStore';
+} from "./sidebarStore";
 
 export interface SidebarUiSnapshot {
   readonly expandedSections: DeepReadonly<Record<string, boolean>>;
@@ -31,11 +31,15 @@ export interface SidebarUiCapability {
 }
 
 function cloneAndFreeze<T>(value: T): T {
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneAndFreeze(nested)]),
-  )) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        cloneAndFreeze(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function buildSnapshot(): DeepReadonly<SidebarUiSnapshot> {
@@ -66,9 +70,7 @@ export function subscribeSidebarUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useSidebarUi<T>(
-  selector: (snapshot: DeepReadonly<SidebarUiSnapshot>) => T,
-): T {
+export function useSidebarUi<T>(selector: (snapshot: DeepReadonly<SidebarUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeSidebarUi,
     getSidebarUiSnapshot,

@@ -8,42 +8,54 @@
  * 数据类型（可辨识联合）
  */
 export type DataType =
-  | { kind: 'Boolean' }
-  | { kind: 'Int64' }
-  | { kind: 'Float64' }
-  | { kind: 'String' }
-  | { kind: 'Date' }
-  | { kind: 'Datetime' }
-  | { kind: 'Time' }
-  | { kind: 'Categorical' }
-  | { kind: 'Object' }
-  | { kind: 'Any' }
-  | { kind: 'DataFrame' }
-  | { kind: 'Array'; inner: DataType }
-  | { kind: 'DataSeries'; inner: DataType }
-  | { kind: 'Struct'; inner: string }
-  | { kind: 'OneOf'; inner: DataType[] };
+  | { kind: "Boolean" }
+  | { kind: "Int64" }
+  | { kind: "Float64" }
+  | { kind: "String" }
+  | { kind: "Date" }
+  | { kind: "Datetime" }
+  | { kind: "Time" }
+  | { kind: "Categorical" }
+  | { kind: "Object" }
+  | { kind: "Any" }
+  | { kind: "DataFrame" }
+  | { kind: "Array"; inner: DataType }
+  | { kind: "DataSeries"; inner: DataType }
+  | { kind: "Struct"; inner: string }
+  | { kind: "OneOf"; inner: DataType[] };
 
 export function isBackendDataType(value: unknown): value is DataType {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  if (typeof record.kind !== 'string') return false;
+  if (typeof record.kind !== "string") return false;
   const leaves = new Set([
-    'Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time',
-    'Categorical', 'Object', 'Any', 'DataFrame',
+    "Boolean",
+    "Int64",
+    "Float64",
+    "String",
+    "Date",
+    "Datetime",
+    "Time",
+    "Categorical",
+    "Object",
+    "Any",
+    "DataFrame",
   ]);
   if (leaves.has(record.kind)) return Object.keys(record).length === 1;
-  if (Object.keys(record).length !== 2 || !Object.prototype.hasOwnProperty.call(record, 'inner')) {
+  if (Object.keys(record).length !== 2 || !Object.prototype.hasOwnProperty.call(record, "inner")) {
     return false;
   }
-  if (record.kind === 'Struct') return typeof record.inner === 'string' && record.inner.trim() !== '';
-  if (record.kind === 'Array' || record.kind === 'DataSeries') {
+  if (record.kind === "Struct")
+    return typeof record.inner === "string" && record.inner.trim() !== "";
+  if (record.kind === "Array" || record.kind === "DataSeries") {
     return isBackendDataType(record.inner);
   }
-  return record.kind === 'OneOf'
-    && Array.isArray(record.inner)
-    && record.inner.length > 0
-    && record.inner.every(isBackendDataType);
+  return (
+    record.kind === "OneOf" &&
+    Array.isArray(record.inner) &&
+    record.inner.length > 0 &&
+    record.inner.every(isBackendDataType)
+  );
 }
 
 /**
@@ -52,14 +64,14 @@ export function isBackendDataType(value: unknown): value is DataType {
  * Categorical/Date/time/datetime 属列级概念，只作为 DataSeries 元素类型出现。
  */
 export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
-  'Boolean',
-  'Int64',
-  'Float64',
-  'String',
-  'Array',
-  'Object',
-  'DataFrame',
-  'DataSeries',
+  "Boolean",
+  "Int64",
+  "Float64",
+  "String",
+  "Array",
+  "Object",
+  "DataFrame",
+  "DataSeries",
 ] as const;
 
 export type VariableSelectableDataTypeKind = (typeof VARIABLE_SELECTABLE_DATA_TYPE_KINDS)[number];
@@ -72,20 +84,20 @@ export const DEFAULT_OBJECT_VALUE: Readonly<Record<string, number>> = { key_0: 1
 
 /** DataSeries 变量的元素类型可选集（列级类型）。 */
 export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
-  'Boolean',
-  'Int64',
-  'Float64',
-  'String',
-  'Date',
-  'Datetime',
-  'Time',
-  'Categorical',
+  "Boolean",
+  "Int64",
+  "Float64",
+  "String",
+  "Date",
+  "Datetime",
+  "Time",
+  "Categorical",
 ] as const;
 
 export type DataSeriesElementTypeKind = (typeof DATA_SERIES_ELEMENT_TYPE_KINDS)[number];
 
 export function isVariableDataTypeAllowed(dataType: DataType): boolean {
-  return dataType.kind !== 'Any';
+  return dataType.kind !== "Any";
 }
 
 /** 获取 DataType 的 kind 字符串 */
@@ -95,42 +107,47 @@ export function dataTypeKind(dt: DataType): string {
 
 /** 将 DataType 转为显示字符串，如 "Int32"、"Array<String>"、"DataSeries<Float64>" */
 export function dataTypeDisplay(dt: DataType): string {
-  if (isExactNumberUnion(dt)) return 'Number';
-  if (isExactNumericDataSeriesUnion(dt)) return 'DataSeries<Number>';
-  if (dt.kind === 'Array') {
+  if (isExactNumberUnion(dt)) return "Number";
+  if (isExactNumericDataSeriesUnion(dt)) return "DataSeries<Number>";
+  if (dt.kind === "Array") {
     return `Array<${dataTypeDisplay(dt.inner)}>`;
   }
-  if (dt.kind === 'DataSeries') {
-    const innerDisplay = dt.inner.kind === 'OneOf' && isExactNumberUnion(dt.inner)
-      ? dt.inner.inner.map(dataTypeDisplay).join(' | ')
-      : dataTypeDisplay(dt.inner);
+  if (dt.kind === "DataSeries") {
+    const innerDisplay =
+      dt.inner.kind === "OneOf" && isExactNumberUnion(dt.inner)
+        ? dt.inner.inner.map(dataTypeDisplay).join(" | ")
+        : dataTypeDisplay(dt.inner);
     return `DataSeries<${innerDisplay}>`;
   }
-  if (dt.kind === 'Struct') {
+  if (dt.kind === "Struct") {
     return `Struct<${dt.inner}>`;
   }
-  if (dt.kind === 'OneOf') {
-    return dt.inner.map(dataTypeDisplay).join(' | ');
+  if (dt.kind === "OneOf") {
+    return dt.inner.map(dataTypeDisplay).join(" | ");
   }
   return dt.kind;
 }
 
-function hasExactKinds(types: DataType[], expected: readonly DataType['kind'][]): boolean {
-  return types.length === expected.length
-    && expected.every((kind) => types.some((type) => type.kind === kind));
+function hasExactKinds(types: DataType[], expected: readonly DataType["kind"][]): boolean {
+  return (
+    types.length === expected.length &&
+    expected.every((kind) => types.some((type) => type.kind === kind))
+  );
 }
 
 function isExactNumberUnion(dataType: DataType): boolean {
-  return dataType.kind === 'OneOf'
-    && hasExactKinds(dataType.inner, ['Int64', 'Float64']);
+  return dataType.kind === "OneOf" && hasExactKinds(dataType.inner, ["Int64", "Float64"]);
 }
 
 function isExactNumericDataSeriesUnion(dataType: DataType): boolean {
-  if (dataType.kind !== 'OneOf' || dataType.inner.length !== 2) return false;
+  if (dataType.kind !== "OneOf" || dataType.inner.length !== 2) return false;
   const elements = dataType.inner.map((member) =>
-    member.kind === 'DataSeries' ? member.inner : null);
-  return elements.every((element): element is DataType => element !== null)
-    && hasExactKinds(elements, ['Int64', 'Float64']);
+    member.kind === "DataSeries" ? member.inner : null,
+  );
+  return (
+    elements.every((element): element is DataType => element !== null) &&
+    hasExactKinds(elements, ["Int64", "Float64"])
+  );
 }
 
 /** 在顶层（不在 `<>` 内部）按分隔符拆分字符串，对齐 Rust split_top_level */
@@ -140,8 +157,8 @@ function splitTopLevel(s: string, sep: string): string[] {
   let start = 0;
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (c === '<') depth++;
-    else if (c === '>') depth = Math.max(0, depth - 1);
+    if (c === "<") depth++;
+    else if (c === ">") depth = Math.max(0, depth - 1);
     else if (c === sep && depth === 0) {
       const part = s.slice(start, i).trim();
       if (part) parts.push(part);
@@ -157,16 +174,16 @@ function splitTopLevel(s: string, sep: string): string[] {
 function oneOf(types: DataType[]): DataType {
   const flat: DataType[] = [];
   for (const t of types) {
-    if (t.kind === 'Any') return { kind: 'Any' };
-    const members = t.kind === 'OneOf' ? t.inner : [t];
+    if (t.kind === "Any") return { kind: "Any" };
+    const members = t.kind === "OneOf" ? t.inner : [t];
     for (const m of members) {
-      if (m.kind === 'Any') return { kind: 'Any' };
-      if (!flat.some(f => dataTypeDisplay(f) === dataTypeDisplay(m))) flat.push(m);
+      if (m.kind === "Any") return { kind: "Any" };
+      if (!flat.some((f) => dataTypeDisplay(f) === dataTypeDisplay(m))) flat.push(m);
     }
   }
-  if (flat.length === 0) return { kind: 'Any' };
+  if (flat.length === 0) return { kind: "Any" };
   if (flat.length === 1) return flat[0];
-  return { kind: 'OneOf', inner: flat };
+  return { kind: "OneOf", inner: flat };
 }
 
 /**
@@ -177,7 +194,7 @@ function oneOf(types: DataType[]): DataType {
 export function dataTypeFromDisplayString(s: string): DataType | null {
   const trimmed = s.trim();
 
-  const parts = splitTopLevel(trimmed, '|');
+  const parts = splitTopLevel(trimmed, "|");
   if (parts.length > 1) {
     const types: DataType[] = [];
     for (const p of parts) {
@@ -189,109 +206,128 @@ export function dataTypeFromDisplayString(s: string): DataType | null {
   }
 
   switch (trimmed) {
-    case 'Boolean': return { kind: 'Boolean' };
+    case "Boolean":
+      return { kind: "Boolean" };
     // 保真层宽度收敛到运行时规范类型
-    case 'Int8':
-    case 'Int16':
-    case 'Int32':
-    case 'Int64':
-    case 'UInt8':
-    case 'UInt16':
-    case 'UInt32':
-    case 'UInt64': return { kind: 'Int64' };
-    case 'Float32':
-    case 'Float64': return { kind: 'Float64' };
-    case 'String': return { kind: 'String' };
-    case 'Date': return { kind: 'Date' };
-    case 'Time': return { kind: 'Time' };
-    case 'Datetime':
-    case 'DateTime': return { kind: 'Datetime' };
-    case 'Categorical': return { kind: 'Categorical' };
-    case 'Object': return { kind: 'Object' };
-    case 'DataFrame': return { kind: 'DataFrame' };
-    case 'DataSeries': return { kind: 'DataSeries', inner: { kind: 'Any' } };
-    case 'Any': return { kind: 'Any' };
+    case "Int8":
+    case "Int16":
+    case "Int32":
+    case "Int64":
+    case "UInt8":
+    case "UInt16":
+    case "UInt32":
+    case "UInt64":
+      return { kind: "Int64" };
+    case "Float32":
+    case "Float64":
+      return { kind: "Float64" };
+    case "String":
+      return { kind: "String" };
+    case "Date":
+      return { kind: "Date" };
+    case "Time":
+      return { kind: "Time" };
+    case "Datetime":
+    case "DateTime":
+      return { kind: "Datetime" };
+    case "Categorical":
+      return { kind: "Categorical" };
+    case "Object":
+      return { kind: "Object" };
+    case "DataFrame":
+      return { kind: "DataFrame" };
+    case "DataSeries":
+      return { kind: "DataSeries", inner: { kind: "Any" } };
+    case "Any":
+      return { kind: "Any" };
   }
 
   const arrayMatch = trimmed.match(/^Array<(.+)>$/);
   if (arrayMatch) {
     const inner = dataTypeFromDisplayString(arrayMatch[1]);
-    return inner ? { kind: 'Array', inner } : null;
+    return inner ? { kind: "Array", inner } : null;
   }
   const dsMatch = trimmed.match(/^DataSeries<(.+)>$/);
   if (dsMatch) {
     const inner = dataTypeFromDisplayString(dsMatch[1]);
-    return inner ? { kind: 'DataSeries', inner } : null;
+    return inner ? { kind: "DataSeries", inner } : null;
   }
   const structMatch = trimmed.match(/^Struct<(.+)>$/);
   if (structMatch) {
-    return { kind: 'Struct', inner: structMatch[1] };
+    return { kind: "Struct", inner: structMatch[1] };
   }
 
   // 保真层带参数的原始类型字符串收敛（对齐 Rust polars_type_string_to_data_type）
-  if (/^(Datetime|DateTime)\(/.test(trimmed)) return { kind: 'Datetime' };
-  if (/^Time/.test(trimmed)) return { kind: 'Time' };
-  if (/^Decimal\(/.test(trimmed)) return { kind: 'Float64' };
-  if (/^(Categorical|Enum)\(/.test(trimmed)) return { kind: 'Categorical' };
+  if (/^(Datetime|DateTime)\(/.test(trimmed)) return { kind: "Datetime" };
+  if (/^Time/.test(trimmed)) return { kind: "Time" };
+  if (/^Decimal\(/.test(trimmed)) return { kind: "Float64" };
+  if (/^(Categorical|Enum)\(/.test(trimmed)) return { kind: "Categorical" };
 
   return null;
 }
 
 /** 从 kind 字符串创建 DataType（支持后端返回的 type 如 "Date"） */
 export function dataTypeFromKey(key: string, inner?: DataType | string): DataType {
-  const k = (key?.trim() || 'Any') as DataType['kind'];
-  if (k === 'Array') {
-    return { kind: 'Array', inner: (inner as DataType) ?? { kind: 'Any' } };
+  const k = (key?.trim() || "Any") as DataType["kind"];
+  if (k === "Array") {
+    return { kind: "Array", inner: (inner as DataType) ?? { kind: "Any" } };
   }
-  if (k === 'DataSeries') {
-    return { kind: 'DataSeries', inner: (inner as DataType) ?? { kind: 'Any' } };
+  if (k === "DataSeries") {
+    return { kind: "DataSeries", inner: (inner as DataType) ?? { kind: "Any" } };
   }
-  if (k === 'Struct') {
-    return { kind: 'Struct', inner: (inner as string) ?? '' };
+  if (k === "Struct") {
+    return { kind: "Struct", inner: (inner as string) ?? "" };
   }
-  if (k === 'OneOf') {
-    return { kind: 'OneOf', inner: Array.isArray(inner) ? inner : [] };
+  if (k === "OneOf") {
+    return { kind: "OneOf", inner: Array.isArray(inner) ? inner : [] };
   }
   return { kind: k };
 }
 
 /** 检查数据类型是否为基础类型 */
 export function isPrimitiveType(dataType: DataType): boolean {
-  if (dataType.kind === 'OneOf') {
+  if (dataType.kind === "OneOf") {
     return dataType.inner.length > 0 && dataType.inner.every(isPrimitiveType);
   }
-  return ['Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time', 'Categorical'].includes(
-    dataType.kind
-  );
+  return [
+    "Boolean",
+    "Int64",
+    "Float64",
+    "String",
+    "Date",
+    "Datetime",
+    "Time",
+    "Categorical",
+  ].includes(dataType.kind);
 }
 
 /** 检查数据类型是否为复杂类型 */
 export function isComplexType(dataType: DataType): boolean {
-  if (dataType.kind === 'OneOf') {
+  if (dataType.kind === "OneOf") {
     return dataType.inner.length > 0 && dataType.inner.every(isComplexType);
   }
-  return ['DataFrame', 'DataSeries', 'Object', 'Array'].includes(dataType.kind);
+  return ["DataFrame", "DataSeries", "Object", "Array"].includes(dataType.kind);
 }
 
 /** 获取数据类型的默认值 */
 export function getDefaultValue(dataType: DataType): unknown {
   switch (dataType.kind) {
-    case 'Boolean':
+    case "Boolean":
       return false;
-    case 'Int64':
+    case "Int64":
       return 0;
-    case 'Float64':
+    case "Float64":
       return 0.0;
-    case 'String':
-      return '';
-    case 'Date':
-    case 'Datetime':
-    case 'Time':
-    case 'Categorical':
-      return '';
-    case 'Array':
+    case "String":
+      return "";
+    case "Date":
+    case "Datetime":
+    case "Time":
+    case "Categorical":
+      return "";
+    case "Array":
       return [...DEFAULT_ARRAY_VALUE];
-    case 'Object':
+    case "Object":
       return { ...DEFAULT_OBJECT_VALUE };
     default:
       return undefined;

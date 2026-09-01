@@ -6,10 +6,10 @@
  * request generation, and diagnostics together with normalized entities.
  */
 
-import type { NodeId, PinId, GraphPath, ConnectionId } from '../domain/ids';
+import type { NodeId, PinId, GraphPath, ConnectionId } from "../domain/ids";
 export type { NodeId, PinId, GraphPath, ConnectionId };
-import type { PinDirection, PinUI, RuntimePinKind } from '../domain/pin';
-import type { DataType } from '../domain/dataType';
+import type { PinDirection, PinUI, RuntimePinKind } from "../domain/pin";
+import type { DataType } from "../domain/dataType";
 import type {
   DiagnosticDto,
   EditorInputBindingDto,
@@ -24,7 +24,7 @@ import type {
   ResolvedPortStatusDto,
   SchemaSummaryDto,
   TypeSummaryDto,
-} from '../domain/editorProjection';
+} from "../domain/editorProjection";
 
 // ==================== NodeData ====================
 /** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */
@@ -34,7 +34,7 @@ export interface NodeData {
   nodeType: string;
   category: string[];
   title: string;
-  inputs: string[];   // Pin IDs
+  inputs: string[]; // Pin IDs
   outputs: string[]; // Pin IDs
   position: { x: number; y: number };
   /** Backend-authored editor projection fields. */
@@ -45,7 +45,7 @@ export interface NodeData {
   /** 以下为 UI 扩展字段 */
   isInternal?: boolean;
   /** UI projection discriminator; not a creation identity. */
-  paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
+  paramsKind?: "none" | "variable" | "subGraph" | "dataFrame";
   variableId?: string;
   variableName?: string;
   variableType?: string;
@@ -108,15 +108,15 @@ export interface GraphData {
   /** 图资源相对路径（与 Domain `Graph.path`、store 桶键一致） */
   path: string;
   name: string;
-  type: 'event' | 'function';
-  functionInputs?: import('../domain/graph').FunctionSignaturePin[];
-  functionOutputs?: import('../domain/graph').FunctionSignaturePin[];
+  type: "event" | "function";
+  functionInputs?: import("../domain/graph").FunctionSignaturePin[];
+  functionOutputs?: import("../domain/graph").FunctionSignaturePin[];
   nodes: NodeData[];
   pins: PinData[];
   connections: ConnectionData[];
 }
 
 /** Export snapshot shape; domain serialization needs endpoint pairs, not runtime connection identity. */
-export type GraphSnapshotData = Omit<GraphData, 'connections'> & {
-  connections: Array<Pick<ConnectionData, 'from' | 'to'>>;
+export type GraphSnapshotData = Omit<GraphData, "connections"> & {
+  connections: Array<Pick<ConnectionData, "from" | "to">>;
 };

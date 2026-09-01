@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 
 interface ResultPageToolbarProps {
   pageIndex: number;
@@ -24,9 +24,7 @@ export function ResultPageToolbar({
 
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span>
-        {totalCount === 0 ? '0 rows' : `${start}–${end} of ${totalCount}`}
-      </span>
+      <span>{totalCount === 0 ? "0 rows" : `${start}–${end} of ${totalCount}`}</span>
       <Button
         type="button"
         variant="outline"

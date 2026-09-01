@@ -27,11 +27,11 @@ features/core/editor/
 ### Editor window shell
 
 ```tsx
-import { EditorSessionProvider } from '@/features/application/editor';
+import { EditorSessionProvider } from "@/features/application/editor";
 
 <EditorSessionProvider>
   <EditorWindowReady />
-</EditorSessionProvider>
+</EditorSessionProvider>;
 ```
 
 ### Canvas
@@ -40,7 +40,7 @@ import { EditorSessionProvider } from '@/features/application/editor';
 
 ```tsx
 const canvas = useEditorCanvas({
-  mode: 'interactive',
+  mode: "interactive",
   scope: { panelInstanceId, groupId, graphPath, graphKind },
 });
 ```
@@ -63,13 +63,13 @@ const commands = useEditorSessionCommandsContext();
 
 ## Interface rules
 
-| Hook | Interface | Mount/caller |
-|------|-----------|--------------|
-| `EditorSessionProvider` | Stable command context | `EditorWindow` root |
-| `useEditorSessionCommandsContext()` | Explicit command-slice intersection | Application consumers that need commands |
-| `useEditorSessionResources()` | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists |
-| `useEditorSessionDetailActions()` | Variable/DataFrame update commands | Detail panels |
-| `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx` |
+| Hook                                | Interface                                                                                            | Mount/caller                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `EditorSessionProvider`             | Stable command context                                                                               | `EditorWindow` root                      |
+| `useEditorSessionCommandsContext()` | Explicit command-slice intersection                                                                  | Application consumers that need commands |
+| `useEditorSessionResources()`       | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists                |
+| `useEditorSessionDetailActions()`   | Variable/DataFrame update commands                                                                   | Detail panels                            |
+| `useEditorCanvas({ mode, scope })`  | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction`                           | **Only** `Canvas.tsx`                    |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through
 a subtree, or mirror Dockview topology in a store. Add or reuse a named slice

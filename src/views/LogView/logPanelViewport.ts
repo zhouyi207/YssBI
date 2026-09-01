@@ -1,4 +1,4 @@
-import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/shared/config-default';
+import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from "@/shared/config-default";
 
 export const LOG_ROW_STRIDE = LOG_ITEM_HEIGHT + LOG_ITEM_GAP;
 
@@ -8,7 +8,7 @@ export function estimatedLogListHeight(count: number): number {
 
 function withInstantScroll(viewport: HTMLElement, update: () => void): void {
   const previousBehavior = viewport.style.scrollBehavior;
-  viewport.style.scrollBehavior = 'auto';
+  viewport.style.scrollBehavior = "auto";
   update();
   viewport.style.scrollBehavior = previousBehavior;
 }

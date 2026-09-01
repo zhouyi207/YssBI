@@ -1,23 +1,18 @@
-import { createBoundApplicationStore } from '@/features/core/state/applicationStore';
+import { createBoundApplicationStore } from "@/features/core/state/applicationStore";
 
-import { ResultService } from '@/services/result/resultService';
-import { toErrorReference } from '@/features/application/errorReference';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import type { ErrorReference } from '@/features/application/errorReference';
-import type {
-  PinResultEntry,
-  ResultDescriptor,
-  ResultPage,
-  ResultValue,
-} from './types';
+import { ResultService } from "@/services/result/resultService";
+import { toErrorReference } from "@/features/application/errorReference";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { PinResultEntry, ResultDescriptor, ResultPage, ResultValue } from "./types";
 import {
   createResultQueryCoordinator,
   type ResultPageRequest,
   type ResultPinHistoryRequest,
   type ResultQueryReadCapability,
   type ResultQueryScope,
-} from './resultQueryCoordinator';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+} from "./resultQueryCoordinator";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
 interface ResultProjectionState {
   readonly projectInstanceId: string | null;
@@ -49,39 +44,55 @@ function pinHistoryKey(request: ResultPinHistoryRequest): string {
 
 function scopeKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
-    case 'descriptor':
-    case 'value':
+    case "descriptor":
+    case "value":
       return `${scope.kind}:${scope.resultId}`;
-    case 'page':
+    case "page":
       return `page:${pageKey(scope)}`;
-    case 'pinHistory':
+    case "pinHistory":
       return `pinHistory:${pinHistoryKey(scope)}`;
   }
 }
 
 const resultQueryPublication = {
-  publishDescriptor(projectInstanceId: string, resultId: string, descriptor: DeepReadonly<ResultDescriptor | null>) {
+  publishDescriptor(
+    projectInstanceId: string,
+    resultId: string,
+    descriptor: DeepReadonly<ResultDescriptor | null>,
+  ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
       descriptors: { ...state.descriptors, [resultId]: descriptor },
     }));
   },
-  publishValue(projectInstanceId: string, resultId: string, value: DeepReadonly<ResultValue | null>) {
+  publishValue(
+    projectInstanceId: string,
+    resultId: string,
+    value: DeepReadonly<ResultValue | null>,
+  ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
       values: { ...state.values, [resultId]: value },
     }));
   },
-  publishPage(projectInstanceId: string, request: ResultPageRequest, page: DeepReadonly<ResultPage | null>) {
+  publishPage(
+    projectInstanceId: string,
+    request: ResultPageRequest,
+    page: DeepReadonly<ResultPage | null>,
+  ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
       pages: { ...state.pages, [pageKey(request)]: page },
     }));
   },
-  publishPinHistory(projectInstanceId: string, request: ResultPinHistoryRequest, entries: DeepReadonly<readonly PinResultEntry[]>) {
+  publishPinHistory(
+    projectInstanceId: string,
+    request: ResultPinHistoryRequest,
+    entries: DeepReadonly<readonly PinResultEntry[]>,
+  ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
@@ -105,7 +116,8 @@ export const resultQueryRead: ResultQueryReadCapability = {
   getDescriptor: (resultId) => resultProjection.getState().descriptors[resultId] ?? null,
   getValue: (resultId) => resultProjection.getState().values[resultId] ?? null,
   getPage: (request) => resultProjection.getState().pages[pageKey(request)] ?? null,
-  getPinHistory: (request) => resultProjection.getState().pinHistories[pinHistoryKey(request)] ?? null,
+  getPinHistory: (request) =>
+    resultProjection.getState().pinHistories[pinHistoryKey(request)] ?? null,
   getFailure: (scope) => resultProjection.getState().failures[scopeKey(scope)] ?? null,
 };
 

@@ -1,17 +1,17 @@
-import * as ts from 'typescript/unstable/ast';
+import * as ts from "typescript/unstable/ast";
 
-import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
-import type { TypeScriptAuditProject } from '@/tests/helpers/typescriptAudit';
+import type { ArchitectureSource } from "@/tests/helpers/moduleDependencyAudit";
+import type { TypeScriptAuditProject } from "@/tests/helpers/typescriptAudit";
 
 export type FrontendStateAuthorityClass =
-  | 'backend-base'
-  | 'optimistic-overlay'
-  | 'local-draft'
-  | 'frontend-ui';
+  | "backend-base"
+  | "optimistic-overlay"
+  | "local-draft"
+  | "frontend-ui";
 
-export type FrontendWriterLayer = 'Application' | 'CoreUi';
-export type FrontendStateMemberKind = 'field' | 'action';
-export type FrontendStateReaderLayer = 'Views' | 'Application' | 'Core';
+export type FrontendWriterLayer = "Application" | "CoreUi";
+export type FrontendStateMemberKind = "field" | "action";
+export type FrontendStateReaderLayer = "Views" | "Application" | "Core";
 
 export interface FrontendStateAuthorityEntry {
   readonly storeModule: string;
@@ -34,11 +34,11 @@ export interface FrontendStateAuthorityMember extends FrontendStateAuthorityEntr
 
 export interface FrontendStateAuthorityFinding {
   readonly ruleId:
-    | 'frontend-state-authority-missing-member'
-    | 'frontend-state-authority-writer'
-    | 'frontend-state-authority-action-writer'
-    | 'frontend-state-authority-action-cycle'
-    | 'frontend-state-authority-unresolved-delegate';
+    | "frontend-state-authority-missing-member"
+    | "frontend-state-authority-writer"
+    | "frontend-state-authority-action-writer"
+    | "frontend-state-authority-action-cycle"
+    | "frontend-state-authority-unresolved-delegate";
   readonly storeModule: string;
   readonly member: string;
   readonly memberKind: FrontendStateMemberKind;
@@ -47,13 +47,12 @@ export interface FrontendStateAuthorityFinding {
   readonly column?: number;
 }
 
-const memberKey = (member: Pick<FrontendStateAuthorityEntry, 'storeModule' | 'member' | 'memberKind'>): string => (
-  `${member.storeModule}::${member.memberKind}::${member.member}`
-);
+const memberKey = (
+  member: Pick<FrontendStateAuthorityEntry, "storeModule" | "member" | "memberKind">,
+): string => `${member.storeModule}::${member.memberKind}::${member.member}`;
 
-const canonicalPath = (path: string): string => path
-  .replace(/\[[^\]]+\]/g, '.*')
-  .replace(/\b(?:[A-Za-z_$][\w$]*|\d+)\b(?=\.dirty$)/, '*');
+const canonicalPath = (path: string): string =>
+  path.replace(/\[[^\]]+\]/g, ".*").replace(/\b(?:[A-Za-z_$][\w$]*|\d+)\b(?=\.dirty$)/, "*");
 
 function propertyName(node: ts.PropertyName | undefined): string | null {
   if (!node) return null;
@@ -64,9 +63,7 @@ function typeReferenceNames(node: ts.TypeNode): readonly string[] {
   const names: string[] = [];
   const visit = (current: ts.Node): void => {
     if (ts.isTypeReferenceNode(current)) {
-      const name = ts.isIdentifier(current.typeName)
-        ? current.typeName.text
-        : null;
+      const name = ts.isIdentifier(current.typeName) ? current.typeName.text : null;
       if (name) names.push(name);
     }
     current.forEachChild(visit);
@@ -86,20 +83,22 @@ function objectProperty(
   object: ts.ObjectLiteralExpression | undefined,
   name: string,
 ): ts.ObjectLiteralElementLike | null {
-  return object?.properties.find((property) => (
-    !ts.isSpreadAssignment(property) && propertyName(property.name) === name
-  )) ?? null;
+  return (
+    object?.properties.find(
+      (property) => !ts.isSpreadAssignment(property) && propertyName(property.name) === name,
+    ) ?? null
+  );
 }
 
 function typeElementName(member: ts.TypeElement): string | null {
-  if (!ts.isPropertySignatureDeclaration(member)
-    && !ts.isMethodSignatureDeclaration(member)) return null;
+  if (!ts.isPropertySignatureDeclaration(member) && !ts.isMethodSignatureDeclaration(member))
+    return null;
   return propertyName(member.name);
 }
 
 function typeElementType(member: ts.TypeElement): ts.TypeNode | undefined {
-  if (!ts.isPropertySignatureDeclaration(member)
-    && !ts.isMethodSignatureDeclaration(member)) return undefined;
+  if (!ts.isPropertySignatureDeclaration(member) && !ts.isMethodSignatureDeclaration(member))
+    return undefined;
   return member.type;
 }
 
@@ -143,21 +142,25 @@ function storeSnapshot(
   const visit = (node: ts.Node): void => {
     if (snapshot || !ts.isVariableDeclaration(node) || !node.initializer) return;
     const initializer = unwrapExpression(node.initializer);
-    if (!ts.isCallExpression(initializer)
-      || !ts.isIdentifier(initializer.expression)
-      || !['create', 'createStore'].includes(initializer.expression.text)) return;
+    if (
+      !ts.isCallExpression(initializer) ||
+      !ts.isIdentifier(initializer.expression) ||
+      !["create", "createStore"].includes(initializer.expression.text)
+    )
+      return;
     const typeArgument = initializer.typeArguments?.[0];
-    const typeName = typeArgument && ts.isTypeReferenceNode(typeArgument)
-      && ts.isIdentifier(typeArgument.typeName)
-      ? typeArgument.typeName.text
-      : null;
+    const typeName =
+      typeArgument && ts.isTypeReferenceNode(typeArgument) && ts.isIdentifier(typeArgument.typeName)
+        ? typeArgument.typeName.text
+        : null;
     const factory = initializer.arguments[0] ? unwrapExpression(initializer.arguments[0]) : null;
-    const factoryBody = factory && (ts.isArrowFunction(factory) || ts.isFunctionExpression(factory))
-      ? unwrapExpression(factory.body as ts.Expression)
-      : null;
+    const factoryBody =
+      factory && (ts.isArrowFunction(factory) || ts.isFunctionExpression(factory))
+        ? unwrapExpression(factory.body as ts.Expression)
+        : null;
     snapshot = {
       sourceFile,
-      storeType: typeName ? declarations.get(typeName) ?? null : null,
+      storeType: typeName ? (declarations.get(typeName) ?? null) : null,
       storeObject: factoryBody && ts.isObjectLiteralExpression(factoryBody) ? factoryBody : null,
     };
   };
@@ -192,25 +195,24 @@ function nestedTypeHasMember(
   return null;
 }
 
-function memberNode(
-  snapshot: StoreSnapshot,
-  entry: FrontendStateAuthorityEntry,
-): ts.Node | null {
+function memberNode(snapshot: StoreSnapshot, entry: FrontendStateAuthorityEntry): ts.Node | null {
   if (!snapshot.storeType || !snapshot.storeObject) return null;
-  const path = entry.member.split('.');
+  const path = entry.member.split(".");
   const root = path[0];
   const typeMember = declaredMember(snapshot.storeType, root);
   const objectMember = objectProperty(snapshot.storeObject, root);
   if (!typeMember || !objectMember) return null;
-  if (entry.memberKind === 'action') return objectMember;
+  if (entry.memberKind === "action") return objectMember;
   if (path.length === 1) return typeMember;
   const type = typeElementType(typeMember);
-  if (path.length !== 3 || path[1] !== '*' || !type) return null;
-  return nestedTypeHasMember(typeDeclarations(snapshot.sourceFile), type, path[2])
-    ?? null;
+  if (path.length !== 3 || path[1] !== "*" || !type) return null;
+  return nestedTypeHasMember(typeDeclarations(snapshot.sourceFile), type, path[2]) ?? null;
 }
 
-function nodeLocation(sourceFile: ts.SourceFile, node: ts.Node | null): { line: number; column: number } {
+function nodeLocation(
+  sourceFile: ts.SourceFile,
+  node: ts.Node | null,
+): { line: number; column: number } {
   if (!node) return { line: 1, column: 1 };
   const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
   return { line: position.line + 1, column: position.character + 1 };
@@ -226,12 +228,15 @@ export function discoverFrontendStateAuthorityMembers(
     if (!sourcePaths.has(entry.storeModule)) {
       return { ...entry, discovered: false, line: 1, column: 1 };
     }
-    const snapshot = storeSnapshot(context, { path: entry.storeModule, source: '' });
+    const snapshot = storeSnapshot(context, { path: entry.storeModule, source: "" });
     const node = snapshot ? memberNode(snapshot, entry) : null;
-    const location = nodeLocation(snapshot?.sourceFile ?? context.sourceFile(entry.storeModule), node);
+    const location = nodeLocation(
+      snapshot?.sourceFile ?? context.sourceFile(entry.storeModule),
+      node,
+    );
     return {
       ...entry,
-      sourceLayer: 'Core',
+      sourceLayer: "Core",
       discovered: node !== null,
       line: location.line,
       column: location.column,
@@ -241,24 +246,24 @@ export function discoverFrontendStateAuthorityMembers(
 
 export const FRONTEND_STATE_AUTHORITY: readonly FrontendStateAuthorityEntry[] = [
   {
-    storeModule: 'src/features/core/resource/documentStateStore.ts',
-    member: 'documents.*.dirty',
-    memberKind: 'field',
-    authority: 'local-draft',
-    writes: ['documents.*.dirty'],
-    writerModule: '@/features/core/resource/ui',
-    writerLayer: 'CoreUi',
-    readerLayers: ['Views', 'Application', 'Core'],
+    storeModule: "src/features/core/resource/documentStateStore.ts",
+    member: "documents.*.dirty",
+    memberKind: "field",
+    authority: "local-draft",
+    writes: ["documents.*.dirty"],
+    writerModule: "@/features/core/resource/ui",
+    writerLayer: "CoreUi",
+    readerLayers: ["Views", "Application", "Core"],
   },
   {
-    storeModule: 'src/features/core/worksheet/worksheetStore.ts',
-    member: 'updateDocument',
-    memberKind: 'action',
-    authority: 'local-draft',
-    writes: ['draftsByPath.*', 'dirtyByPath.*'],
-    writerModule: '@/features/core/worksheet/ui',
-    writerLayer: 'CoreUi',
-    readerLayers: ['Views', 'Application'],
+    storeModule: "src/features/core/worksheet/worksheetStore.ts",
+    member: "updateDocument",
+    memberKind: "action",
+    authority: "local-draft",
+    writes: ["draftsByPath.*", "dirtyByPath.*"],
+    writerModule: "@/features/core/worksheet/ui",
+    writerLayer: "CoreUi",
+    readerLayers: ["Views", "Application"],
   },
 ];
 
@@ -270,7 +275,7 @@ export function auditFrontendStateAuthority(
   const findings: FrontendStateAuthorityFinding[] = [];
   const actionMembers = new Map(
     members
-      .filter((member) => member.memberKind === 'action')
+      .filter((member) => member.memberKind === "action")
       .map((member) => [memberKey(member), member]),
   );
 
@@ -278,7 +283,7 @@ export function auditFrontendStateAuthority(
     const entry = entries.get(memberKey(member));
     if (!entry || member.discovered === false) {
       findings.push({
-        ruleId: 'frontend-state-authority-missing-member',
+        ruleId: "frontend-state-authority-missing-member",
         storeModule: member.storeModule,
         member: member.member,
         memberKind: member.memberKind,
@@ -289,9 +294,9 @@ export function auditFrontendStateAuthority(
       continue;
     }
 
-    if (member.sourceLayer === 'Views' && entry.writerLayer !== 'CoreUi') {
+    if (member.sourceLayer === "Views" && entry.writerLayer !== "CoreUi") {
       findings.push({
-        ruleId: 'frontend-state-authority-writer',
+        ruleId: "frontend-state-authority-writer",
         storeModule: member.storeModule,
         member: member.member,
         memberKind: member.memberKind,
@@ -300,9 +305,9 @@ export function auditFrontendStateAuthority(
         column: member.column,
       });
     }
-    if (member.memberKind === 'action' && member.writerLayer !== entry.writerLayer) {
+    if (member.memberKind === "action" && member.writerLayer !== entry.writerLayer) {
       findings.push({
-        ruleId: 'frontend-state-authority-action-writer',
+        ruleId: "frontend-state-authority-action-writer",
         storeModule: member.storeModule,
         member: member.member,
         memberKind: member.memberKind,
@@ -317,7 +322,7 @@ export function auditFrontendStateAuthority(
   for (const entry of manifest) {
     if (discoveredKeys.has(memberKey(entry))) continue;
     findings.push({
-      ruleId: 'frontend-state-authority-missing-member',
+      ruleId: "frontend-state-authority-missing-member",
       storeModule: entry.storeModule,
       member: entry.member,
       memberKind: entry.memberKind,
@@ -332,7 +337,7 @@ export function auditFrontendStateAuthority(
     if (!delegate) continue;
     if (!actionMembers.has(delegate)) {
       findings.push({
-        ruleId: 'frontend-state-authority-unresolved-delegate',
+        ruleId: "frontend-state-authority-unresolved-delegate",
         storeModule: member.storeModule,
         member: member.member,
         memberKind: member.memberKind,
@@ -348,7 +353,7 @@ export function auditFrontendStateAuthority(
     while (current) {
       if (++hops > actionMembers.size) {
         findings.push({
-          ruleId: 'frontend-state-authority-action-cycle',
+          ruleId: "frontend-state-authority-action-cycle",
           storeModule: member.storeModule,
           member: member.member,
           memberKind: member.memberKind,
@@ -360,7 +365,7 @@ export function auditFrontendStateAuthority(
       }
       if (!visited.add(current)) {
         findings.push({
-          ruleId: 'frontend-state-authority-action-cycle',
+          ruleId: "frontend-state-authority-action-cycle",
           storeModule: member.storeModule,
           member: member.member,
           memberKind: member.memberKind,

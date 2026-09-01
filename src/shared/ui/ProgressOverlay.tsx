@@ -19,9 +19,7 @@ export interface ProgressOverlayProps {
 export function ProgressOverlay({ progress, onCancel }: ProgressOverlayProps) {
   const { t } = useTranslation();
   const indeterminate = progress.percent === undefined;
-  const pct = indeterminate
-    ? 0
-    : Math.min(100, Math.max(0, (progress.percent ?? 0) * 100));
+  const pct = indeterminate ? 0 : Math.min(100, Math.max(0, (progress.percent ?? 0) * 100));
   const showCloseButton = progress.cancelable === true;
 
   return (
@@ -45,10 +43,10 @@ export function ProgressOverlay({ progress, onCancel }: ProgressOverlayProps) {
           </Button>
         )}
         <CardContent className="px-6 py-5">
-          <div className={`mb-3 flex items-baseline justify-between gap-3 ${showCloseButton ? "pr-8" : ""}`}>
-            <h3 className="truncate text-sm font-medium text-foreground">
-              {progress.stage}
-            </h3>
+          <div
+            className={`mb-3 flex items-baseline justify-between gap-3 ${showCloseButton ? "pr-8" : ""}`}
+          >
+            <h3 className="truncate text-sm font-medium text-foreground">{progress.stage}</h3>
             {!indeterminate && (
               <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {Math.round(pct)}%
@@ -65,9 +63,7 @@ export function ProgressOverlay({ progress, onCancel }: ProgressOverlayProps) {
           )}
 
           {progress.detail && (
-            <p className="mt-2 truncate text-xs text-muted-foreground">
-              {progress.detail}
-            </p>
+            <p className="mt-2 truncate text-xs text-muted-foreground">{progress.detail}</p>
           )}
         </CardContent>
       </Card>

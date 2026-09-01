@@ -1,30 +1,36 @@
-import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import type { DatabaseRow } from '@/shared/types/domain/database';
-import type { DatabaseGridCellRange } from './databaseGridModel';
+import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
+import type { DatabaseRow } from "@/shared/types/domain/database";
+import type { DatabaseGridCellRange } from "./databaseGridModel";
 
 function clipboardCell(value: unknown): string {
-  if (value === null || value === undefined) return '';
+  if (value === null || value === undefined) return "";
   const text = String(value);
   return /["\t\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function serializeRows(rows: readonly (readonly unknown[])[]): string {
-  return rows.map((row) => row.map(clipboardCell).join('\t')).join('\n');
+  return rows.map((row) => row.map(clipboardCell).join("\t")).join("\n");
 }
 
-function primaryCellRange(selection: Extract<DatabaseGridSelection, { type: 'cells' }>) {
+function primaryCellRange(selection: Extract<DatabaseGridSelection, { type: "cells" }>) {
   const active = selection.activeCell;
-  return [...selection.ranges].reverse().find((range) => (
-    active.row >= range.row
-    && active.row < range.row + range.rowCount
-    && active.column >= range.column
-    && active.column < range.column + range.columnCount
-  )) ?? selection.ranges[selection.ranges.length - 1] ?? {
-    row: active.row,
-    column: active.column,
-    rowCount: 1,
-    columnCount: 1,
-  };
+  return (
+    [...selection.ranges]
+      .reverse()
+      .find(
+        (range) =>
+          active.row >= range.row &&
+          active.row < range.row + range.rowCount &&
+          active.column >= range.column &&
+          active.column < range.column + range.columnCount,
+      ) ??
+    selection.ranges[selection.ranges.length - 1] ?? {
+      row: active.row,
+      column: active.column,
+      rowCount: 1,
+      columnCount: 1,
+    }
+  );
 }
 
 function rowsInRange(
@@ -51,11 +57,11 @@ export function databaseGridSelectionToClipboardText(
 ): string | null {
   if (!selection || rows.length === 0 || columnCount <= 0) return null;
 
-  if (selection.type === 'cells') {
+  if (selection.type === "cells") {
     return serializeRows(rowsInRange(rows, primaryCellRange(selection), columnCount));
   }
 
-  if (selection.type === 'rows') {
+  if (selection.type === "rows") {
     const selectedRows = selection.rows
       .filter((rowIndex) => rowIndex >= 0 && rowIndex < rows.length)
       .map((rowIndex) => rows[rowIndex]?.slice(0, columnCount) ?? []);
@@ -66,22 +72,20 @@ export function databaseGridSelectionToClipboardText(
     (columnIndex) => columnIndex >= 0 && columnIndex < columnCount,
   );
   if (selectedColumns.length === 0) return null;
-  return serializeRows(rows.map((row) => (
-    selectedColumns.map((columnIndex) => row[columnIndex])
-  )));
+  return serializeRows(rows.map((row) => selectedColumns.map((columnIndex) => row[columnIndex])));
 }
 
 function parsePlainTsv(text: string): string[][] {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
-  return lines.map((line) => line.split('\t'));
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return lines.map((line) => line.split("\t"));
 }
 
 export function parseDatabaseGridClipboard(text: string): string[][] {
   if (text.length === 0) return [];
 
   const rows: string[][] = [[]];
-  let value = '';
+  let value = "";
   let quoted = false;
   let atFieldStart = true;
 
@@ -93,10 +97,12 @@ export function parseDatabaseGridClipboard(text: string): string[][] {
         index += 1;
       } else if (quoted) {
         const nextCharacter = text[index + 1];
-        if (nextCharacter !== undefined
-          && nextCharacter !== '\t'
-          && nextCharacter !== '\n'
-          && nextCharacter !== '\r') {
+        if (
+          nextCharacter !== undefined &&
+          nextCharacter !== "\t" &&
+          nextCharacter !== "\n" &&
+          nextCharacter !== "\r"
+        ) {
           return parsePlainTsv(text);
         }
         quoted = false;
@@ -108,17 +114,17 @@ export function parseDatabaseGridClipboard(text: string): string[][] {
       }
       continue;
     }
-    if (!quoted && character === '\t') {
+    if (!quoted && character === "\t") {
       rows[rows.length - 1]?.push(value);
-      value = '';
+      value = "";
       atFieldStart = true;
       continue;
     }
-    if (!quoted && (character === '\n' || character === '\r')) {
-      if (character === '\r' && text[index + 1] === '\n') index += 1;
+    if (!quoted && (character === "\n" || character === "\r")) {
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
       rows[rows.length - 1]?.push(value);
       rows.push([]);
-      value = '';
+      value = "";
       atFieldStart = true;
       continue;
     }
@@ -130,7 +136,7 @@ export function parseDatabaseGridClipboard(text: string): string[][] {
 
   const lastRow = rows[rows.length - 1];
   lastRow?.push(value);
-  if (rows.length > 1 && lastRow?.length === 1 && lastRow[0] === '') {
+  if (rows.length > 1 && lastRow?.length === 1 && lastRow[0] === "") {
     rows.pop();
   }
   return rows;

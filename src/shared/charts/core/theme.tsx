@@ -1,8 +1,5 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import type {
-  ChartSeriesColors,
-  ChartThemeColors,
-} from '@/shared/theme/chartTheme';
+import { createContext, useContext, type ReactNode } from "react";
+import type { ChartSeriesColors, ChartThemeColors } from "@/shared/theme/chartTheme";
 
 export interface ChartThemeValue {
   colors: ChartThemeColors;
@@ -18,17 +15,13 @@ export function ChartThemeContextProvider({
   children: ReactNode;
   value: ChartThemeValue;
 }) {
-  return (
-    <ChartThemeContext.Provider value={value}>
-      {children}
-    </ChartThemeContext.Provider>
-  );
+  return <ChartThemeContext.Provider value={value}>{children}</ChartThemeContext.Provider>;
 }
 
 export function useChartTheme(): ChartThemeValue {
   const value = useContext(ChartThemeContext);
   if (!value) {
-    throw new Error('useChartTheme must be used within ChartThemeProvider');
+    throw new Error("useChartTheme must be used within ChartThemeProvider");
   }
   return value;
 }

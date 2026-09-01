@@ -3,8 +3,8 @@
  * 组合 useEditorCanvasActions、useEditorUIActions
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
-import { useCallback, useEffect, useRef } from 'react';
-import { DEFAULT_VIEWPORT } from '@/shared/config-default';
+import { useCallback, useEffect, useRef } from "react";
+import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 import {
   commitViewport,
   editorViewportScope,
@@ -12,9 +12,9 @@ import {
   setViewportLive,
   subscribeToViewport,
   type EditorViewport,
-} from '@/features/core/viewport';
-import { useActiveEditorGroup } from './useActiveEditorGroup';
-import { useEditorUIActions } from './useEditorUIActions';
+} from "@/features/core/viewport";
+import { useActiveEditorGroup } from "./useActiveEditorGroup";
+import { useEditorUIActions } from "./useEditorUIActions";
 
 type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
 
@@ -25,17 +25,20 @@ export function useEditorActions(active: ActiveEditorGroup) {
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
 
-  const setCanvas = useCallback((
-    updater: EditorViewport | ((previous: EditorViewport) => EditorViewport),
-    targetGraphPath?: string,
-  ) => {
-    const groupId = activeGroupIdRef.current;
-    const graphPath = targetGraphPath ?? activeTabIdRef.current;
-    if (!groupId || !graphPath) return;
-    const scope = editorViewportScope(groupId, graphPath);
-    setViewportLive(scope, updater);
-    commitViewport(scope);
-  }, []);
+  const setCanvas = useCallback(
+    (
+      updater: EditorViewport | ((previous: EditorViewport) => EditorViewport),
+      targetGraphPath?: string,
+    ) => {
+      const groupId = activeGroupIdRef.current;
+      const graphPath = targetGraphPath ?? activeTabIdRef.current;
+      if (!groupId || !graphPath) return;
+      const scope = editorViewportScope(groupId, graphPath);
+      setViewportLive(scope, updater);
+      commitViewport(scope);
+    },
+    [],
+  );
   const uiActions = useEditorUIActions();
 
   const viewportScope =

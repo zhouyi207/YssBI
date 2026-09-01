@@ -28,19 +28,16 @@ interface DeleteProjectConfirmDialogProps {
   onConfirm: (project: ManagedProject) => Promise<ProjectPickerLifecycleActionOutcome>;
 }
 
-type DeleteProjectIssue = Exclude<
-  ProjectPickerLifecycleActionOutcome,
-  { status: 'committed' }
->;
+type DeleteProjectIssue = Exclude<ProjectPickerLifecycleActionOutcome, { status: "committed" }>;
 
 function DeleteProjectIssueAlert({ issue }: { issue: DeleteProjectIssue }) {
   const { t } = useTranslation();
 
-  if (issue.status === 'failed') {
+  if (issue.status === "failed") {
     return (
       <Alert variant="destructive">
         <VscError aria-hidden="true" />
-        <AlertTitle>{t('projectPicker.deleteProjectConfirm.failed')}</AlertTitle>
+        <AlertTitle>{t("projectPicker.deleteProjectConfirm.failed")}</AlertTitle>
         <AlertDescription>
           <ProjectPickerErrorDetails error={issue.error} />
         </AlertDescription>
@@ -48,12 +45,12 @@ function DeleteProjectIssueAlert({ issue }: { issue: DeleteProjectIssue }) {
     );
   }
 
-  if (issue.status === 'recovery') {
+  if (issue.status === "recovery") {
     return (
       <Alert variant="warning">
         <VscWarning aria-hidden="true" />
         <AlertTitle>
-          {t('notifications.projectPicker.deleteRecovery', {
+          {t("notifications.projectPicker.deleteRecovery", {
             outcome: issue.recovery.action,
           })}
         </AlertTitle>
@@ -68,7 +65,7 @@ function DeleteProjectIssueAlert({ issue }: { issue: DeleteProjectIssue }) {
     <Alert variant="warning">
       <VscWarning aria-hidden="true" />
       <AlertTitle>
-        {t('projectPicker.issues.staleTitle', { defaultValue: t('common.error') })}
+        {t("projectPicker.issues.staleTitle", { defaultValue: t("common.error") })}
       </AlertTitle>
       <AlertDescription>
         <ProjectPickerStaleDetails />
@@ -96,13 +93,13 @@ export function DeleteProjectConfirmDialog({
     setBusy(true);
     try {
       const outcome = await onConfirm(project);
-      if (outcome.status === 'committed') {
+      if (outcome.status === "committed") {
         onOpenChange(false);
       } else {
         setIssue(outcome);
       }
     } catch (error) {
-      setIssue({ status: 'failed', error: projectPickerErrorPresentation(error) });
+      setIssue({ status: "failed", error: projectPickerErrorPresentation(error) });
     } finally {
       setBusy(false);
     }
@@ -147,7 +144,7 @@ export function DeleteProjectConfirmDialog({
           <Button
             type="button"
             variant="destructive"
-            disabled={busy || !project || issue?.status === 'recovery'}
+            disabled={busy || !project || issue?.status === "recovery"}
             onClick={() => void handleConfirm()}
           >
             {busy
@@ -158,4 +155,4 @@ export function DeleteProjectConfirmDialog({
       </DialogContent>
     </Dialog>
   );
-};
+}

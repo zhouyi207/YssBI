@@ -1,6 +1,6 @@
-import { markResourceDirty } from './documentStateActions';
-import { useDocumentStateStore } from './documentStateStore';
-import type { ResourceKey, ResourceRef } from './resourceTypes';
+import { markResourceDirty } from "./documentStateActions";
+import { useDocumentStateStore } from "./documentStateStore";
+import type { ResourceKey, ResourceRef } from "./resourceTypes";
 
 export interface ResourceUiCapability {
   readonly setDocumentDirty: (resource: ResourceRef, dirty: boolean) => void;

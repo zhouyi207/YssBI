@@ -1,18 +1,18 @@
-import { Channel } from '@tauri-apps/api/core';
+import { Channel } from "@tauri-apps/api/core";
 import type {
   ExecutionChannelEvent,
   RunEvent,
   RunOutputChannelEvent,
-} from '@/shared/types/dto/runEvent';
-import { parseExecutionChannelEvent } from '@/shared/types/dto/runEventParser';
-import { trackChannel } from '@/services/devHmrIpc';
+} from "@/shared/types/dto/runEvent";
+import { parseExecutionChannelEvent } from "@/shared/types/dto/runEventParser";
+import { trackChannel } from "@/services/devHmrIpc";
 
 export class ExecutionChannelDisposedError extends Error {
-  readonly code = 'execution_channel_disposed';
+  readonly code = "execution_channel_disposed";
 
   constructor() {
-    super('execution event channel was disposed before a terminal event');
-    this.name = 'ExecutionChannelDisposedError';
+    super("execution event channel was disposed before a terminal event");
+    this.name = "ExecutionChannelDisposedError";
   }
 }
 
@@ -24,18 +24,19 @@ export type ExecutionStreamDrain = {
 
 type CallbackError = { caught: unknown };
 type StreamSettlement =
-  | { reason: 'terminal'; callbackError?: CallbackError }
-  | { reason: 'invalid'; caught: unknown }
-  | { reason: 'disposed' };
+  | { reason: "terminal"; callbackError?: CallbackError }
+  | { reason: "invalid"; caught: unknown }
+  | { reason: "disposed" };
 
 function deliverRunEvent(
   event: RunEvent,
   onEvent: ((event: RunEvent) => void) | undefined,
   settle: (settlement: StreamSettlement) => void,
 ): void {
-  const terminal = event.kind.type === 'runCompleted'
-    || event.kind.type === 'runErrored'
-    || event.kind.type === 'runCancelled';
+  const terminal =
+    event.kind.type === "runCompleted" ||
+    event.kind.type === "runErrored" ||
+    event.kind.type === "runCancelled";
   if (!terminal) {
     onEvent?.(event);
     return;
@@ -47,7 +48,7 @@ function deliverRunEvent(
   } catch (caught) {
     callbackError = { caught };
   } finally {
-    settle({ reason: 'terminal', callbackError });
+    settle({ reason: "terminal", callbackError });
   }
 }
 
@@ -57,7 +58,7 @@ function deliverExecutionChannelEvent(
   onOutput: ((event: RunOutputChannelEvent) => void) | undefined,
   settle: (settlement: StreamSettlement) => void,
 ): void {
-  if (!('kind' in event)) {
+  if (!("kind" in event)) {
     onOutput?.(event);
     return;
   }
@@ -83,27 +84,22 @@ export function createExecutionStreamDrain(
   return {
     onmessage: (raw) => {
       try {
-        deliverExecutionChannelEvent(
-          parseExecutionChannelEvent(raw),
-          onEvent,
-          onOutput,
-          settle,
-        );
+        deliverExecutionChannelEvent(parseExecutionChannelEvent(raw), onEvent, onOutput, settle);
       } catch (caught) {
-        settle({ reason: 'invalid', caught });
+        settle({ reason: "invalid", caught });
       }
     },
     waitForStreamEnd: async () => {
       const settlement = await streamEnded;
-      if (settlement.reason === 'disposed') {
+      if (settlement.reason === "disposed") {
         throw new ExecutionChannelDisposedError();
       }
-      if (settlement.reason === 'invalid') throw settlement.caught;
+      if (settlement.reason === "invalid") throw settlement.caught;
       if (settlement.callbackError) {
         throw settlement.callbackError.caught;
       }
     },
-    dispose: () => settle({ reason: 'disposed' }),
+    dispose: () => settle({ reason: "disposed" }),
   };
 }
 

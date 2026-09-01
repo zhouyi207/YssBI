@@ -1,10 +1,7 @@
-import { useSyncExternalStore } from 'react';
-import { create } from 'zustand';
-import {
-  freezeProjectionSnapshot,
-  type DeepReadonly,
-} from '@/shared/types/deepReadonly';
-import type { DatabaseId } from '@/shared/types/domain/ids';
+import { useSyncExternalStore } from "react";
+import { create } from "zustand";
+import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
+import type { DatabaseId } from "@/shared/types/domain/ids";
 
 export interface DatabaseCopyFocus {
   readonly rowIndex: number;
@@ -45,35 +42,40 @@ const useDatabaseUiStore = create<DatabaseUiStore>((set) => ({
   copyFocusByDatabase: {},
 
   selectDatabase: (id) => set({ selectedDatabaseId: id }),
-  setQuery: (id, query) => set((state) => ({
-    queryByDatabase: { ...state.queryByDatabase, [id]: query },
-  })),
-  setPage: (id, page) => set((state) => ({
-    pageByDatabase: { ...state.pageByDatabase, [id]: Math.max(0, page) },
-  })),
-  setCopyFocus: (id, focus) => set((state) => ({
-    copyFocusByDatabase: { ...state.copyFocusByDatabase, [id]: focus },
-  })),
-  resetDatabase: (id) => set((state) => {
-    const queryByDatabase = { ...state.queryByDatabase };
-    const pageByDatabase = { ...state.pageByDatabase };
-    const copyFocusByDatabase = { ...state.copyFocusByDatabase };
-    delete queryByDatabase[id];
-    delete pageByDatabase[id];
-    delete copyFocusByDatabase[id];
-    return {
-      selectedDatabaseId: state.selectedDatabaseId === id ? null : state.selectedDatabaseId,
-      queryByDatabase,
-      pageByDatabase,
-      copyFocusByDatabase,
-    };
-  }),
-  resetForProject: () => set({
-    selectedDatabaseId: null,
-    queryByDatabase: {},
-    pageByDatabase: {},
-    copyFocusByDatabase: {},
-  }),
+  setQuery: (id, query) =>
+    set((state) => ({
+      queryByDatabase: { ...state.queryByDatabase, [id]: query },
+    })),
+  setPage: (id, page) =>
+    set((state) => ({
+      pageByDatabase: { ...state.pageByDatabase, [id]: Math.max(0, page) },
+    })),
+  setCopyFocus: (id, focus) =>
+    set((state) => ({
+      copyFocusByDatabase: { ...state.copyFocusByDatabase, [id]: focus },
+    })),
+  resetDatabase: (id) =>
+    set((state) => {
+      const queryByDatabase = { ...state.queryByDatabase };
+      const pageByDatabase = { ...state.pageByDatabase };
+      const copyFocusByDatabase = { ...state.copyFocusByDatabase };
+      delete queryByDatabase[id];
+      delete pageByDatabase[id];
+      delete copyFocusByDatabase[id];
+      return {
+        selectedDatabaseId: state.selectedDatabaseId === id ? null : state.selectedDatabaseId,
+        queryByDatabase,
+        pageByDatabase,
+        copyFocusByDatabase,
+      };
+    }),
+  resetForProject: () =>
+    set({
+      selectedDatabaseId: null,
+      queryByDatabase: {},
+      pageByDatabase: {},
+      copyFocusByDatabase: {},
+    }),
 }));
 
 function buildSnapshot(): DeepReadonly<DatabaseUiSnapshot> {
@@ -102,9 +104,7 @@ export function subscribeDatabaseUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useDatabaseUi<T>(
-  selector: (snapshot: DeepReadonly<DatabaseUiSnapshot>) => T,
-): T {
+export function useDatabaseUi<T>(selector: (snapshot: DeepReadonly<DatabaseUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeDatabaseUi,
     getDatabaseUiSnapshot,

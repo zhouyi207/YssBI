@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { useGraphInteractionStore } from '@/features/core/graphInteraction';
-import { getDragPreview, subscribeDragPreview } from './dragPreview';
+import { useEffect, useRef } from "react";
+import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphInteractionStore } from "@/features/core/graphInteraction";
+import { getDragPreview, subscribeDragPreview } from "./dragPreview";
 
 /**
  * Applies node drag offset imperatively during pointer drag so React nodes
@@ -28,8 +28,8 @@ export function useNodeDragPreview(
         for (const nodeId of lastDraggedRef.current) {
           const el = root.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null;
           const committed = store.getGraphNode(graphPath, nodeId)?.position;
-          const pos = useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId]
-            ?? committed;
+          const pos =
+            useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId] ?? committed;
           if (!el || !pos) continue;
           el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
         }
@@ -40,8 +40,9 @@ export function useNodeDragPreview(
       lastDraggedRef.current = new Set(preview.dragNodeIds);
       for (const nodeId of preview.dragNodeIds) {
         const el = root.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null;
-        const pos = useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId]
-          ?? store.getGraphNode(graphPath, nodeId)?.position;
+        const pos =
+          useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId] ??
+          store.getGraphNode(graphPath, nodeId)?.position;
         if (!el || !pos) continue;
         el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
       }

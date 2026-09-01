@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import type { ErrorReference } from '@/features/application/errorReference';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useWorksheetRead } from '@/features/core/worksheet/read';
-import { worksheetUi } from '@/features/core/worksheet/ui';
-import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useWorksheetRead } from "@/features/core/worksheet/read";
+import { worksheetUi } from "@/features/core/worksheet/ui";
+import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
 import type {
   WorksheetCoordinator,
   WorksheetLoadOutcome,
   WorksheetSaveOutcome,
-} from './worksheetCoordinator';
+} from "./worksheetCoordinator";
 
 export interface WorksheetViewModel {
   readonly document: DeepReadonly<WorksheetDocument> | null;
@@ -23,8 +23,8 @@ export interface WorksheetViewModel {
 }
 
 function issueFor(
-  operation: 'load' | 'save',
-  status: 'failed' | 'rejected' | 'unknown',
+  operation: "load" | "save",
+  status: "failed" | "rejected" | "unknown",
 ): ErrorReference {
   return {
     code: `worksheet_${operation}_${status}`,
@@ -37,9 +37,7 @@ export function useWorksheetViewModel(
   coordinator: WorksheetCoordinator,
 ): WorksheetViewModel {
   const projection = useWorksheetRead((state) => ({
-    document: state.draftsByPath[worksheetPath]
-      ?? state.documents[worksheetPath]
-      ?? null,
+    document: state.draftsByPath[worksheetPath] ?? state.documents[worksheetPath] ?? null,
     dirty: state.dirtyByPath[worksheetPath] === true,
   }));
   const [loading, setLoading] = useState(false);
@@ -52,25 +50,30 @@ export function useWorksheetViewModel(
     setIssue(null);
   }, [worksheetPath]);
 
-  const update = useCallback((patch: Partial<WorksheetDocument>): void => {
-    worksheetUi.updateDraft(worksheetPath, patch);
-    setIssue(null);
-  }, [worksheetPath]);
+  const update = useCallback(
+    (patch: Partial<WorksheetDocument>): void => {
+      worksheetUi.updateDraft(worksheetPath, patch);
+      setIssue(null);
+    },
+    [worksheetPath],
+  );
 
   const save = useCallback(async (): Promise<WorksheetSaveOutcome> => {
     setSaving(true);
     setIssue(null);
     try {
       const outcome = await coordinator.save(worksheetPath);
-      if (outcome.status === 'failed'
-        || outcome.status === 'rejected'
-        || outcome.status === 'unknown') {
-        setIssue(issueFor('save', outcome.status));
+      if (
+        outcome.status === "failed" ||
+        outcome.status === "rejected" ||
+        outcome.status === "unknown"
+      ) {
+        setIssue(issueFor("save", outcome.status));
       }
       return outcome;
     } catch {
-      const outcome = { status: 'failed' as const };
-      setIssue(issueFor('save', outcome.status));
+      const outcome = { status: "failed" as const };
+      setIssue(issueFor("save", outcome.status));
       return outcome;
     } finally {
       setSaving(false);
@@ -82,11 +85,11 @@ export function useWorksheetViewModel(
     setIssue(null);
     try {
       const outcome = await coordinator.load(worksheetPath);
-      if (outcome.status === 'failed') setIssue(issueFor('load', outcome.status));
+      if (outcome.status === "failed") setIssue(issueFor("load", outcome.status));
       return outcome;
     } catch {
-      const outcome = { status: 'failed' as const };
-      setIssue(issueFor('load', outcome.status));
+      const outcome = { status: "failed" as const };
+      setIssue(issueFor("load", outcome.status));
       return outcome;
     } finally {
       setLoading(false);

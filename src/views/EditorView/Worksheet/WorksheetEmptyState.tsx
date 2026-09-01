@@ -1,12 +1,12 @@
-import { useTranslation } from 'react-i18next';
-import { VscGraphLine } from 'react-icons/vsc';
+import { useTranslation } from "react-i18next";
+import { VscGraphLine } from "react-icons/vsc";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
+} from "@/components/ui/empty";
 
 export function WorksheetEmptyState({ messageKey }: { messageKey?: string }) {
   const { t } = useTranslation();
@@ -16,8 +16,8 @@ export function WorksheetEmptyState({ messageKey }: { messageKey?: string }) {
         <EmptyMedia variant="icon" className="size-12 text-muted-foreground">
           <VscGraphLine className="size-6" />
         </EmptyMedia>
-        <EmptyTitle>{t(messageKey ?? 'worksheet.previewEmpty')}</EmptyTitle>
-        <EmptyDescription>{t('worksheet.previewEmptyHint')}</EmptyDescription>
+        <EmptyTitle>{t(messageKey ?? "worksheet.previewEmpty")}</EmptyTitle>
+        <EmptyDescription>{t("worksheet.previewEmptyHint")}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );

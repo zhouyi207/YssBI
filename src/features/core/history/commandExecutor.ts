@@ -1,23 +1,23 @@
-import { getCommandHandler } from './commands';
-import type { AvailableCommandType, CommandHandlerMap } from './commands/registryTypes';
-import { notifyStructuralChange } from './structuralChange';
-import type { CommandHandler, GraphMutationCommandResult } from './types';
+import { getCommandHandler } from "./commands";
+import type { AvailableCommandType, CommandHandlerMap } from "./commands/registryTypes";
+import { notifyStructuralChange } from "./structuralChange";
+import type { CommandHandler, GraphMutationCommandResult } from "./types";
 
 function isAppliedResult(result: unknown): boolean {
   if (result === true) return true;
-  return typeof result === 'object'
-    && result !== null
-    && 'status' in result
-    && (result as { status?: unknown }).status === 'applied';
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "status" in result &&
+    (result as { status?: unknown }).status === "applied"
+  );
 }
 
-type CommandArgs<K extends AvailableCommandType> = Parameters<CommandHandlerMap[K]['execute']>[1];
+type CommandArgs<K extends AvailableCommandType> = Parameters<CommandHandlerMap[K]["execute"]>[1];
 type CommandResult<K extends AvailableCommandType> =
   CommandHandlerMap[K] extends CommandHandler<CommandArgs<K>, infer TResult> ? TResult : never;
 
-export type CommandInvocation<
-  K extends AvailableCommandType = AvailableCommandType,
-> = {
+export type CommandInvocation<K extends AvailableCommandType = AvailableCommandType> = {
   [T in K]: [type: T, args: CommandArgs<T>];
 }[K];
 

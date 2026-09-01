@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next';
-import { cn } from '@/lib/utils';
+import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 
 function MinimizeIcon() {
   return (
@@ -26,10 +26,10 @@ function CloseIcon() {
 }
 
 const chromeButtonBase = cn(
-  'flex shrink-0 self-stretch items-center justify-center rounded-none border-0 p-0 leading-none',
-  'text-muted-foreground outline-none select-none transition-colors',
-  'hover:bg-muted hover:text-foreground dark:hover:bg-muted/50',
-  'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30',
+  "flex shrink-0 self-stretch items-center justify-center rounded-none border-0 p-0 leading-none",
+  "text-muted-foreground outline-none select-none transition-colors",
+  "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
+  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30",
 );
 
 export interface WindowChromeControlsProps {
@@ -70,20 +70,20 @@ export function WindowChromeControls({
   };
 
   return (
-    <div className={cn('flex self-stretch', className)}>
+    <div className={cn("flex self-stretch", className)}>
       <button
         type="button"
         onClick={handleMinimize}
-        className={cn(chromeButtonBase, 'w-10')}
-        aria-label={t('common.minimize')}
+        className={cn(chromeButtonBase, "w-10")}
+        aria-label={t("common.minimize")}
       >
         <MinimizeIcon />
       </button>
       <button
         type="button"
         onClick={handleMaximize}
-        className={cn(chromeButtonBase, 'w-10')}
-        aria-label={maximized ? t('common.restore') : t('common.maximize')}
+        className={cn(chromeButtonBase, "w-10")}
+        aria-label={maximized ? t("common.restore") : t("common.maximize")}
       >
         <MaximizeIcon />
       </button>
@@ -92,10 +92,10 @@ export function WindowChromeControls({
         onClick={handleClose}
         className={cn(
           chromeButtonBase,
-          'w-11 hover:bg-red-600 hover:text-white dark:hover:bg-red-600',
+          "w-11 hover:bg-red-600 hover:text-white dark:hover:bg-red-600",
           closeCornerClassName,
         )}
-        aria-label={t('common.close')}
+        aria-label={t("common.close")}
       >
         <CloseIcon />
       </button>

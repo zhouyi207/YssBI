@@ -1,4 +1,4 @@
-import type { ChartMargin } from './types';
+import type { ChartMargin } from "./types";
 
 export interface ChartBox {
   width: number;

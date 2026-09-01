@@ -1,6 +1,12 @@
-import React, { useMemo } from 'react';
-import { ReportLayout, ReportLazyBoundary, ReportSection, CoefficientsBlock, LazyVARFormulaBlock } from './shared';
-import type { VARSummaryResultData } from '@/shared/types/report';
+import React, { useMemo } from "react";
+import {
+  ReportLayout,
+  ReportLazyBoundary,
+  ReportSection,
+  CoefficientsBlock,
+  LazyVARFormulaBlock,
+} from "./shared";
+import type { VARSummaryResultData } from "@/shared/types/report";
 import {
   VarEquationSummarySection,
   VarGrangerSection,
@@ -10,8 +16,8 @@ import {
   VarReportSubtitle,
   VarStabilitySection,
   VarWaldLagExclusionSection,
-} from './var';
-import { sortVarStableRows, varCoeffsToOLSFormat } from './var/varReportUtils';
+} from "./var";
+import { sortVarStableRows, varCoeffsToOLSFormat } from "./var/varReportUtils";
 
 export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data }) => {
   const {

@@ -1,15 +1,15 @@
-import * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
+import * as React from "react";
+import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-type ScrollAreaOrientation = "vertical" | "horizontal" | "both"
+type ScrollAreaOrientation = "vertical" | "horizontal" | "both";
 
 type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
-  orientation?: ScrollAreaOrientation
-  viewportRef?: React.Ref<HTMLDivElement>
-  onViewportScroll?: React.UIEventHandler<HTMLDivElement>
-}
+  orientation?: ScrollAreaOrientation;
+  viewportRef?: React.Ref<HTMLDivElement>;
+  onViewportScroll?: React.UIEventHandler<HTMLDivElement>;
+};
 
 function ScrollArea({
   className,
@@ -33,7 +33,7 @@ function ScrollArea({
           // Radix's inline table wrapper can add horizontal scrollWidth that drag auto-scroll can move.
           orientation === "vertical" &&
             "[&>div]:block! [&>div]:w-full! [&>div]:min-w-0! [&>div]:max-w-full!",
-          orientation === "horizontal" && "flex flex-row items-start"
+          orientation === "horizontal" && "flex flex-row items-start",
         )}
         ref={viewportRef}
         onScroll={onViewportScroll}
@@ -46,7 +46,7 @@ function ScrollArea({
       )}
       {orientation === "both" && <ScrollAreaPrimitive.Corner />}
     </ScrollAreaPrimitive.Root>
-  )
+  );
 }
 
 function ScrollBar({
@@ -61,7 +61,7 @@ function ScrollBar({
       orientation={orientation}
       className={cn(
         "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
-        className
+        className,
       )}
       {...props}
     >
@@ -70,8 +70,8 @@ function ScrollBar({
         className="relative flex-1 rounded-full bg-border"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
-  )
+  );
 }
 
-export { ScrollArea, ScrollBar }
-export type { ScrollAreaOrientation, ScrollAreaProps }
+export { ScrollArea, ScrollBar };
+export type { ScrollAreaOrientation, ScrollAreaProps };

@@ -8,7 +8,7 @@ import {
   dataFrameNodeSpawnTemplate,
   variableNodeSpawnTemplate,
 } from "@/features/core/dnd/nodeSpawnTemplate";
-import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 
 /**
  * Build drag data for sidebar items (variables, functions, events, data).

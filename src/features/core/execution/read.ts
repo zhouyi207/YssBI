@@ -1,10 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import {
-  freezeProjectionSnapshot,
-  type DeepReadonly,
-} from '@/shared/types/deepReadonly';
-import { useExecutionStore } from './useExecutionStore';
+import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
+import { useExecutionStore } from "./useExecutionStore";
 import type {
   ExecutionStatus,
   GraphExecutionState,
@@ -12,7 +9,7 @@ import type {
   PinHistoryProjection,
   PinPreviewState,
   RunOutputProjection,
-} from '@/shared/types/ui/execution';
+} from "@/shared/types/ui/execution";
 
 export interface GraphExecutionProjection {
   readonly status: ExecutionStatus;
@@ -20,7 +17,7 @@ export interface GraphExecutionProjection {
   readonly nodeStates: ReadonlyMap<string, NodeExecutionState>;
   readonly completedConnections: ReadonlySet<string>;
   readonly flowingConnections: ReadonlySet<string>;
-  readonly recording: readonly import('@/shared/types/ui/execution').RecordedEvent[];
+  readonly recording: readonly import("@/shared/types/ui/execution").RecordedEvent[];
   readonly graphDirty: boolean;
   readonly runOutput: DeepReadonly<RunOutputProjection>;
   readonly pinHistories: ReadonlyMap<string, DeepReadonly<PinHistoryProjection>>;

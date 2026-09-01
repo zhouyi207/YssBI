@@ -1,34 +1,41 @@
-import type { BayesModelDraftDTO, RawExpressionDTO } from '@/shared/types/bayes';
-import { bindRawExpression, bindResponseExpression, collectRawSymbols, createSymbolDrafts, symbolNamesByRole } from './expressionSymbols';
-import { DEFAULT_NORMAL_LIKELIHOOD } from './likelihoodDefaults';
-import { likelihoodParameterNames, mergeInferredParameters } from './parameterInference';
-import { DEFAULT_BAYES_SAMPLER } from './samplerDefaults';
+import type { BayesModelDraftDTO, RawExpressionDTO } from "@/shared/types/bayes";
+import {
+  bindRawExpression,
+  bindResponseExpression,
+  collectRawSymbols,
+  createSymbolDrafts,
+  symbolNamesByRole,
+} from "./expressionSymbols";
+import { DEFAULT_NORMAL_LIKELIHOOD } from "./likelihoodDefaults";
+import { likelihoodParameterNames, mergeInferredParameters } from "./parameterInference";
+import { DEFAULT_BAYES_SAMPLER } from "./samplerDefaults";
 
-export const DEFAULT_BAYES_FORMULA = 'y \\sim \\operatorname{Normal}\\left(a \\cdot x + b, \\sigma\\right)';
+export const DEFAULT_BAYES_FORMULA =
+  "y \\sim \\operatorname{Normal}\\left(a \\cdot x + b, \\sigma\\right)";
 
-const DEFAULT_RESPONSE: RawExpressionDTO = { type: 'symbol', name: 'y' };
+const DEFAULT_RESPONSE: RawExpressionDTO = { type: "symbol", name: "y" };
 const DEFAULT_PREDICTOR: RawExpressionDTO = {
-  type: 'binary',
-  op: 'add',
+  type: "binary",
+  op: "add",
   left: {
-    type: 'binary',
-    op: 'mul',
-    left: { type: 'symbol', name: 'a' },
-    right: { type: 'symbol', name: 'x' },
+    type: "binary",
+    op: "mul",
+    left: { type: "symbol", name: "a" },
+    right: { type: "symbol", name: "x" },
   },
-  right: { type: 'symbol', name: 'b' },
+  right: { type: "symbol", name: "b" },
 };
 
 export function createEmptyBayesDraft(): BayesModelDraftDTO {
   return {
-    formulaText: '',
-    rawResponse: { type: 'symbol', name: 'y' },
+    formulaText: "",
+    rawResponse: { type: "symbol", name: "y" },
     rawPredictor: null,
     symbols: [],
     dataset: null,
     responseBinding: null,
     dataBindings: {},
-    boundResponse: { type: 'data_variable', name: 'y' },
+    boundResponse: { type: "data_variable", name: "y" },
     boundPredictor: null,
     likelihood: DEFAULT_NORMAL_LIKELIHOOD,
     parameters: [],
@@ -46,7 +53,7 @@ export function createDefaultBayesDraft(): BayesModelDraftDTO {
   const symbols = createSymbolDrafts(symbolNames, [], []);
   const parameters = mergeInferredParameters(
     [],
-    symbolNamesByRole(symbols, 'parameter'),
+    symbolNamesByRole(symbols, "parameter"),
     draft.likelihood,
   ).parameters;
 

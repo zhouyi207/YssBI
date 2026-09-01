@@ -1,8 +1,8 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useWorkbenchStore } from './workbenchStore';
-import type { WorkbenchUIState } from './workbenchTypes';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useWorkbenchStore } from "./workbenchStore";
+import type { WorkbenchUIState } from "./workbenchTypes";
 
 export interface WorkbenchUiCapability {
   readonly getSnapshot: () => DeepReadonly<WorkbenchUIState>;
@@ -37,9 +37,7 @@ export function subscribeWorkbenchUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useWorkbenchUi<T>(
-  selector: (state: DeepReadonly<WorkbenchUIState>) => T,
-): T {
+export function useWorkbenchUi<T>(selector: (state: DeepReadonly<WorkbenchUIState>) => T): T {
   const state = useSyncExternalStore(
     subscribeWorkbenchUi,
     getWorkbenchUiSnapshot,
@@ -52,7 +50,6 @@ export const workbenchUi: WorkbenchUiCapability = {
   getSnapshot: getWorkbenchUiSnapshot,
   subscribe: subscribeWorkbenchUi,
   setSettingsOpen: (open) => useWorkbenchStore.getState().setSettingsOpen(open),
-  setNodeDocumentationOpen: (open) =>
-    useWorkbenchStore.getState().setNodeDocumentationOpen(open),
+  setNodeDocumentationOpen: (open) => useWorkbenchStore.getState().setNodeDocumentationOpen(open),
   openSettings: () => useWorkbenchStore.getState().openSettings(),
 };

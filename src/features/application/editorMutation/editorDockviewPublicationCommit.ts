@@ -1,11 +1,7 @@
-import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
-import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import {
-  resourceKey,
-  type ProjectResourceMeta,
-  type ResourceKey,
-} from '@/features/core/resource';
+import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
+import { workbenchDockviewInternal } from "@/features/core/dockview/workbenchDockviewInternal";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { resourceKey, type ProjectResourceMeta, type ResourceKey } from "@/features/core/resource";
 
 interface DockviewResourceMove {
   readonly from: string;
@@ -21,11 +17,7 @@ export function commitEditorDockviewPublication(
     commitBusinessStores();
     return;
   }
-  return commitWithDockview(
-    [...moves],
-    authoritativeResources,
-    commitBusinessStores,
-  );
+  return commitWithDockview([...moves], authoritativeResources, commitBusinessStores);
 }
 
 async function commitWithDockview(
@@ -33,21 +25,23 @@ async function commitWithDockview(
   authoritativeResources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   commitBusinessStores: () => void,
 ): Promise<void> {
-  const removedPanelIds = await workbenchDockviewInternal.runPublicationTransaction((transaction) => {
-    for (const move of moves) transaction.remapResource(move.from, move.to);
+  const removedPanelIds = await workbenchDockviewInternal.runPublicationTransaction(
+    (transaction) => {
+      for (const move of moves) transaction.remapResource(move.from, move.to);
 
-    const removed = transaction.listPanels().flatMap((panel) => {
-      if (panel.metadata.role !== 'editor') return [];
-      const key = resourceKey({
-        id: panel.metadata.resourceRef,
-        kind: panel.metadata.resourceKind,
+      const removed = transaction.listPanels().flatMap((panel) => {
+        if (panel.metadata.role !== "editor") return [];
+        const key = resourceKey({
+          id: panel.metadata.resourceRef,
+          kind: panel.metadata.resourceKind,
+        });
+        return authoritativeResources[key] ? [] : [panel.panelInstanceId];
       });
-      return authoritativeResources[key] ? [] : [panel.panelInstanceId];
-    });
-    transaction.removePanels(removed);
-    commitBusinessStores();
-    return removed;
-  });
+      transaction.removePanels(removed);
+      commitBusinessStores();
+      return removed;
+    },
+  );
 
   const paneState = useEditorPaneStateStore.getState();
   for (const panelInstanceId of removedPanelIds) paneState.release(panelInstanceId);

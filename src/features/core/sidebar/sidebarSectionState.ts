@@ -6,10 +6,8 @@ export const SIDEBAR_SECTION_DEFAULTS = {
 export type SidebarSectionKey = string;
 type SupportedSidebarSectionKey = keyof typeof SIDEBAR_SECTION_DEFAULTS;
 
-export function isSupportedSidebarSectionKey(
-  key: string,
-): key is SupportedSidebarSectionKey {
-  return key === 'dataData';
+export function isSupportedSidebarSectionKey(key: string): key is SupportedSidebarSectionKey {
+  return key === "dataData";
 }
 
 /** Resolve whether a sidebar section is expanded from store state + defaults. */
@@ -29,8 +27,6 @@ export function mergeExpandedSections(
 ): Record<string, boolean> {
   const dataData = expandedSections.dataData;
   return {
-    dataData: typeof dataData === 'boolean'
-      ? dataData
-      : SIDEBAR_SECTION_DEFAULTS.dataData,
+    dataData: typeof dataData === "boolean" ? dataData : SIDEBAR_SECTION_DEFAULTS.dataData,
   };
 }

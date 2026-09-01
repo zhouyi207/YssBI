@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
-import { useEditorCollections } from '@/features/core/editor';
-import { useEditorSessionCommandsContext } from './EditorSessionContext';
+import { useMemo } from "react";
+import { useEditorCollections } from "@/features/core/editor";
+import { useEditorSessionCommandsContext } from "./EditorSessionContext";
 import type {
   EditorSessionDetailActionsSlice,
   EditorSessionResourcesSlice,
-} from './editorSessionTypes';
+} from "./editorSessionTypes";
 
 /** Resource consumers subscribe where the collections are actually used. */
 export function useEditorSessionResources(): EditorSessionResourcesSlice {

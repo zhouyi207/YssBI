@@ -1,7 +1,10 @@
-import { useRef, useEffect } from 'react';
-import { applyViewportTransform, viewportTransformStyle } from '@/features/core/viewport/viewportTransform';
-import { getViewport, subscribeToViewport } from '@/features/core/viewport/viewportSession';
-import type { ViewportScope } from '@/features/core/viewport';
+import { useRef, useEffect } from "react";
+import {
+  applyViewportTransform,
+  viewportTransformStyle,
+} from "@/features/core/viewport/viewportTransform";
+import { getViewport, subscribeToViewport } from "@/features/core/viewport/viewportSession";
+import type { ViewportScope } from "@/features/core/viewport";
 
 export const TransformContainer = ({
   viewportScope,

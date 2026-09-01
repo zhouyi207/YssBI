@@ -9,6 +9,7 @@
 ### 1. 自动显示输入控件
 
 当满足以下条件时，Pin 会自动显示输入控件：
+
 - Pin 是输入方向（`direction === "input"`）
 - Pin 是数据类型（`type !== "exec"`）
 - Pin 未连接（`connected === false` 且 `linkCount === 0`）
@@ -18,17 +19,18 @@
 
 根据 Pin 类型显示不同的输入控件：
 
-| Pin 类型 | 控件类型 | 说明 |
-|---------|---------|------|
-| `int` | 数字输入框 | 整数，步长为 1 |
-| `float`, `number` | 数字输入框 | 浮点数，步长为 0.1 |
-| `bool`, `boolean` | 复选框 | 布尔值 |
-| `string` | 文本输入框 | 字符串 |
-| 其他 | 通用文本输入框 | 尝试 JSON 解析 |
+| Pin 类型          | 控件类型       | 说明               |
+| ----------------- | -------------- | ------------------ |
+| `int`             | 数字输入框     | 整数，步长为 1     |
+| `float`, `number` | 数字输入框     | 浮点数，步长为 0.1 |
+| `bool`, `boolean` | 复选框         | 布尔值             |
+| `string`          | 文本输入框     | 字符串             |
+| 其他              | 通用文本输入框 | 尝试 JSON 解析     |
 
 ### 3. 值的优先级
 
 Pin 值遵循三层优先级（后端实现）：
+
 1. **连接值**（最高）- 如果 Pin 有连接，使用连接的值
 2. **用户值**（中等）- 如果没有连接但用户设置了值，使用用户值
 3. **默认值**（最低）- 如果都没有，使用默认值
@@ -42,12 +44,12 @@ import { Pin } from "./Pins/Pin";
 
 <Pin
   {...pinData}
-  graphPath="event-1"  // 必需：当前图资源路径
-  nodeId="node-123"     // 必需：节点 ID（通过 Pin 的 nodeId 属性）
+  graphPath="event-1" // 必需：当前图资源路径
+  nodeId="node-123" // 必需：节点 ID（通过 Pin 的 nodeId 属性）
   onValueChange={(pinId, value) => {
     console.log(`Pin ${pinId} changed to:`, value);
   }}
-/>
+/>;
 ```
 
 ### 后端 API
@@ -60,14 +62,14 @@ await invoke("update_pin_user_value", {
   graphPath: "event-1",
   nodeId: "node-123",
   pinId: "pin-456",
-  value: 42
+  value: 42,
 });
 
 // 清除 Pin 值（恢复默认值）
 await invoke("clear_pin_user_value", {
   graphPath: "event-1",
   nodeId: "node-123",
-  pinId: "pin-456"
+  pinId: "pin-456",
 });
 ```
 
@@ -98,12 +100,14 @@ Pin.tsx
 ### 事件阻止
 
 输入控件会阻止以下事件传播，避免干扰画布操作：
+
 - `onClick`
 - `onPointerDown`
 
 ## 样式
 
 输入控件使用 Tailwind CSS 样式：
+
 - 默认：半透明黑色背景
 - 聚焦：蓝色边框和环形高亮
 - 尺寸：紧凑型（适合节点内部）

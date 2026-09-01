@@ -1,4 +1,4 @@
-import type { ReadonlyProjectSnapshot } from './read';
+import type { ReadonlyProjectSnapshot } from "./read";
 
 export interface ProjectPublicationCapability {
   readonly publishProjectSnapshot: (snapshot: ReadonlyProjectSnapshot) => void;

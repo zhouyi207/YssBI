@@ -1,8 +1,8 @@
-import { commitFunctionSignature } from '@/features/application/editorMutation/functionSignatureCoordinator';
+import { commitFunctionSignature } from "@/features/application/editorMutation/functionSignatureCoordinator";
 
 export async function updateFunctionSignature(
   functionPath: string,
-  patch: import('@/shared/types').FunctionSignaturePatch,
+  patch: import("@/shared/types").FunctionSignaturePatch,
 ): Promise<void> {
   if (!patch.inputs && !patch.outputs) return;
 

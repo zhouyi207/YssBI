@@ -1,5 +1,5 @@
-import { useEffect, type RefObject } from 'react';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+import { useEffect, type RefObject } from "react";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 
 export interface UseDismissableOverlayOptions {
   ref: RefObject<HTMLElement | null>;
@@ -22,18 +22,15 @@ export function useDismissableOverlay({
       onDismiss();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
       onDismiss();
     };
 
-    const cleanupPointerDown = addGlobalEventListener(
-      window,
-      'pointerdown',
-      handlePointerDown,
-      { capture: true },
-    );
-    const cleanupKeyDown = addGlobalEventListener(window, 'keydown', handleKeyDown);
+    const cleanupPointerDown = addGlobalEventListener(window, "pointerdown", handlePointerDown, {
+      capture: true,
+    });
+    const cleanupKeyDown = addGlobalEventListener(window, "keydown", handleKeyDown);
     return () => {
       cleanupPointerDown();
       cleanupKeyDown();

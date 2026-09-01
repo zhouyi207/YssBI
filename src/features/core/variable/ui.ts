@@ -1,11 +1,8 @@
-import { useSyncExternalStore } from 'react';
-import { create } from 'zustand';
-import {
-  freezeProjectionSnapshot,
-  type DeepReadonly,
-} from '@/shared/types/deepReadonly';
-import type { DataValue } from '@/shared/types/domain/dataValue';
-import type { VariableId, VariableScope } from '@/shared/types/domain';
+import { useSyncExternalStore } from "react";
+import { create } from "zustand";
+import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
+import type { DataValue } from "@/shared/types/domain/dataValue";
+import type { VariableId, VariableScope } from "@/shared/types/domain";
 
 export type VariableDraft = Partial<{
   name: string;
@@ -40,18 +37,20 @@ const useVariableUiStore = create<VariableUiStore>((set) => ({
   draftsById: {},
   scope: null,
 
-  setDraftValue: (id, value) => set((state) => ({
-    draftsById: {
-      ...state.draftsById,
-      [id]: { ...state.draftsById[id], dataValue: structuredClone(value) },
-    },
-  })),
+  setDraftValue: (id, value) =>
+    set((state) => ({
+      draftsById: {
+        ...state.draftsById,
+        [id]: { ...state.draftsById[id], dataValue: structuredClone(value) },
+      },
+    })),
   setScope: (scope) => set({ scope: scope ? structuredClone(scope) : null }),
-  resetDraft: (id) => set((state) => {
-    const draftsById = { ...state.draftsById };
-    delete draftsById[id];
-    return { draftsById };
-  }),
+  resetDraft: (id) =>
+    set((state) => {
+      const draftsById = { ...state.draftsById };
+      delete draftsById[id];
+      return { draftsById };
+    }),
   resetForProject: () => set({ draftsById: {}, scope: null }),
 }));
 
@@ -79,9 +78,7 @@ export function subscribeVariableUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useVariableUi<T>(
-  selector: (snapshot: DeepReadonly<VariableUiSnapshot>) => T,
-): T {
+export function useVariableUi<T>(selector: (snapshot: DeepReadonly<VariableUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeVariableUi,
     getVariableUiSnapshot,

@@ -94,9 +94,7 @@ export const PinInput: React.FC<PinInputProps> = ({
 
   const isNumeric = inputKey === "Int64" || inputKey === "Float64";
 
-  const [inputText, setInputText] = useState(() =>
-    isNumeric ? String(value ?? 0) : ""
-  );
+  const [inputText, setInputText] = useState(() => (isNumeric ? String(value ?? 0) : ""));
 
   useEffect(() => {
     if (!isFocused && isNumeric) {
@@ -111,10 +109,18 @@ export const PinInput: React.FC<PinInputProps> = ({
   const placeholder = inputKey === "string" ? "text" : undefined;
   const { ref, width } = useAutoWidth(measureKey, placeholder);
 
-  const isDropdown = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
+  const isDropdown =
+    metaData?.showWidget &&
+    metaData?.widgetType === "dropdown" &&
+    (metaData?.widgetOptions?.length ?? 0) > 0;
 
   if (isDropdown && metaData?.widgetOptions) {
-    const strValue = inputKey === "string" ? (value != null ? String(value) : metaData.widgetOptions[0] ?? "") : String(value ?? "");
+    const strValue =
+      inputKey === "string"
+        ? value != null
+          ? String(value)
+          : (metaData.widgetOptions[0] ?? "")
+        : String(value ?? "");
     return (
       <div className="min-w-[60px] max-w-[120px]" onClick={stop} onPointerDown={stop}>
         <Select

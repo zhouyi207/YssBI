@@ -1,2 +1,2 @@
 /** Stable IPC validation import surface. */
-export * from '@/shared/types/domain/editorProjectionGuards';
+export * from "@/shared/types/domain/editorProjectionGuards";

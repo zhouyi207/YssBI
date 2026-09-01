@@ -1,21 +1,21 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EditorCommandTarget } from './editorCommandFocus';
+import type { EditorCommandTarget } from "./editorCommandFocus";
 
 const target: EditorCommandTarget = Object.freeze({
-  panelInstanceId: 'panel-main',
-  groupId: 'group-main',
-  resourceRef: 'events/Main.yssbi-event',
-  resourceKind: 'event',
+  panelInstanceId: "panel-main",
+  groupId: "group-main",
+  resourceRef: "events/Main.yssbi-event",
+  resourceKind: "event",
 });
 
 const mocks = vi.hoisted(() => ({
   targetCurrent: true,
-  resolveActiveProjectPath: vi.fn(async () => 'D:/projects/demo'),
+  resolveActiveProjectPath: vi.fn(async () => "D:/projects/demo"),
   captureSettledGraphSaveCommandContext: vi.fn(),
   isGraphSaveCommandRevisionCurrent: vi.fn(() => true),
   saveProjectGraph: vi.fn(async () => undefined),
@@ -26,107 +26,107 @@ const mocks = vi.hoisted(() => ({
   showBlockingIpcError: vi.fn(),
 }));
 
-vi.mock('react-i18next', () => ({
-  initReactI18next: { type: '3rdParty', init: () => undefined },
+vi.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/features/core/dataStore', () => ({
+vi.mock("@/features/core/dataStore", () => ({
   loadActivatedProject: vi.fn(),
   resolveActiveProjectPath: mocks.resolveActiveProjectPath,
 }));
 
-vi.mock('@/features/application/project/projectSession', () => ({
+vi.mock("@/features/application/project/projectSession", () => ({
   resolveActiveProjectPath: mocks.resolveActiveProjectPath,
 }));
 
-vi.mock('@/features/application/worksheet/saveWorksheetDocument', () => ({
+vi.mock("@/features/application/worksheet/saveWorksheetDocument", () => ({
   saveWorksheetDocument: mocks.saveWorksheet,
 }));
 
-vi.mock('@/features/core/layout/layoutTabQueries', () => ({
-  resolveEditorGroupId: () => 'group-later',
+vi.mock("@/features/core/layout/layoutTabQueries", () => ({
+  resolveEditorGroupId: () => "group-later",
   getActiveLayoutTab: () => ({
-    activeTabId: 'events/Later.yssbi-event',
+    activeTabId: "events/Later.yssbi-event",
     tab: {
-      id: 'events/Later.yssbi-event',
-      type: 'event',
-      component: 'GraphEditor',
+      id: "events/Later.yssbi-event",
+      type: "event",
+      component: "GraphEditor",
     },
   }),
 }));
 
-vi.mock('@/features/core/worksheet/worksheetStore', () => ({
+vi.mock("@/features/core/worksheet/worksheetStore", () => ({
   useWorksheetStore: {
     getState: () => ({ saveDocument: mocks.saveWorksheet }),
   },
 }));
 
-vi.mock('@/features/core/resource', () => ({
+vi.mock("@/features/core/resource", () => ({
   markResourceDirty: mocks.markResourceDirty,
 }));
 
-vi.mock('@/services/graph/graphService', () => ({
+vi.mock("@/services/graph/graphService", () => ({
   GraphService: {
     saveProjectGraph: mocks.saveProjectGraph,
   },
 }));
 
-vi.mock('@/features/application/projectCommandContext', () => ({
+vi.mock("@/features/application/projectCommandContext", () => ({
   captureSettledGraphSaveCommandContext: mocks.captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent: mocks.isGraphSaveCommandRevisionCurrent,
 }));
 
-vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
+vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
   warnCallFunctionIssuesBeforeSave: mocks.warnCallFunctionIssuesBeforeSave,
 }));
 
-vi.mock('@/features/application/execution/openInspectableResult', () => ({
+vi.mock("@/features/application/execution/openInspectableResult", () => ({
   openInspectableResult: vi.fn(async () => true),
 }));
 
-vi.mock('./editorCommandFocus', () => ({
+vi.mock("./editorCommandFocus", () => ({
   captureActiveEditorCommandTarget: () => target,
   isEditorCommandTargetCurrent: () => mocks.targetCurrent,
 }));
 
-vi.mock('./blockingErrorDialog', () => ({
+vi.mock("./blockingErrorDialog", () => ({
   showBlockingMessage: mocks.showBlockingMessage,
   showBlockingIpcError: mocks.showBlockingIpcError,
 }));
 
-vi.mock('@/features/core/execution', () => ({
+vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => ({}) },
   getExecutionEventGraph: vi.fn(),
   resolveExecutionGraphPath: vi.fn(),
   graphHasClearableArtifacts: vi.fn(),
 }));
 
-vi.mock('@/features/application/observability/appLogger', () => ({
+vi.mock("@/features/application/observability/appLogger", () => ({
   logger: {
     app: { error: vi.fn() },
     exec: { info: vi.fn(), error: vi.fn() },
   },
 }));
 
-import { useProjectOperations } from './useProjectOperations';
+import { useProjectOperations } from "./useProjectOperations";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function graphSaveContext() {
   return {
-    projectInstanceId: 'project-main',
+    projectInstanceId: "project-main",
     projectEpoch: 1,
     publicationRevision: 1,
     expectedRevision: 7,
-    operationId: 'save-main',
-    operationPendingKey: 'project-main:save-main',
+    operationId: "save-main",
+    operationPendingKey: "project-main:save-main",
     isCurrent: () => true,
     assertCurrent: () => undefined,
   };
 }
 
-describe('useProjectOperations saveGraph target authority', () => {
+describe("useProjectOperations saveGraph target authority", () => {
   let host: HTMLDivElement;
   let root: Root;
   let operations!: ReturnType<typeof useProjectOperations>;
@@ -134,13 +134,13 @@ describe('useProjectOperations saveGraph target authority', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.targetCurrent = true;
-    mocks.resolveActiveProjectPath.mockResolvedValue('D:/projects/demo');
+    mocks.resolveActiveProjectPath.mockResolvedValue("D:/projects/demo");
     mocks.captureSettledGraphSaveCommandContext.mockResolvedValue(graphSaveContext());
     mocks.isGraphSaveCommandRevisionCurrent.mockReturnValue(true);
     mocks.saveProjectGraph.mockResolvedValue(undefined);
     mocks.saveWorksheet.mockResolvedValue(true);
 
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
 
@@ -157,28 +157,29 @@ describe('useProjectOperations saveGraph target authority', () => {
     host.remove();
   });
 
-  it('saves the captured target resource instead of a later active layout tab', async () => {
+  it("saves the captured target resource instead of a later active layout tab", async () => {
     await act(async () => {
       await operations.saveGraph(target);
     });
 
     expect(mocks.warnCallFunctionIssuesBeforeSave).toHaveBeenCalledWith(target.resourceRef);
-    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(
-      target.resourceRef,
-    );
+    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(target.resourceRef);
     expect(mocks.saveProjectGraph).toHaveBeenCalledWith(
-      'project-main',
+      "project-main",
       target.resourceRef,
       7,
-      'save-main',
+      "save-main",
     );
-    expect(mocks.markResourceDirty).toHaveBeenCalledWith({
-      id: target.resourceRef,
-      kind: target.resourceKind,
-    }, false);
+    expect(mocks.markResourceDirty).toHaveBeenCalledWith(
+      {
+        id: target.resourceRef,
+        kind: target.resourceKind,
+      },
+      false,
+    );
   });
 
-  it('stops before graph IPC when the target changes while mutations settle', async () => {
+  it("stops before graph IPC when the target changes while mutations settle", async () => {
     mocks.captureSettledGraphSaveCommandContext.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
       return graphSaveContext();
@@ -188,14 +189,12 @@ describe('useProjectOperations saveGraph target authority', () => {
       await operations.saveGraph(target);
     });
 
-    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(
-      target.resourceRef,
-    );
+    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(target.resourceRef);
     expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
     expect(mocks.markResourceDirty).not.toHaveBeenCalled();
   });
 
-  it('does not clear dirty state when the target changes during graph IPC', async () => {
+  it("does not clear dirty state when the target changes during graph IPC", async () => {
     mocks.saveProjectGraph.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
     });
@@ -209,12 +208,12 @@ describe('useProjectOperations saveGraph target authority', () => {
     expect(mocks.markResourceDirty).not.toHaveBeenCalled();
   });
 
-  it('saves a worksheet by its captured target and ignores stale settlement feedback', async () => {
+  it("saves a worksheet by its captured target and ignores stale settlement feedback", async () => {
     const worksheetTarget: EditorCommandTarget = Object.freeze({
-      panelInstanceId: 'panel-worksheet',
-      groupId: 'group-main',
-      resourceRef: 'worksheets/Summary.yssbi-worksheet',
-      resourceKind: 'worksheet',
+      panelInstanceId: "panel-worksheet",
+      groupId: "group-main",
+      resourceRef: "worksheets/Summary.yssbi-worksheet",
+      resourceKind: "worksheet",
     });
     mocks.saveWorksheet.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;

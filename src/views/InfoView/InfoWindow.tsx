@@ -1,11 +1,16 @@
-import type { FC } from 'react';
-import { useTranslation } from 'react-i18next';
-import { usePresentationWindow } from '@/features/application/presentation';
-import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
-import { ReportView } from './ReportView';
+import type { FC } from "react";
+import { useTranslation } from "react-i18next";
+import { usePresentationWindow } from "@/features/application/presentation";
+import { PresentationWindowShell } from "@/features/application/window/PresentationWindowShell";
+import { ReportView } from "./ReportView";
 
 const INFO_ICON = (
-  <svg className="h-4 w-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg
+    className="h-4 w-4 text-[var(--accent-color)]"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -17,12 +22,9 @@ const INFO_ICON = (
 
 export const InfoWindow: FC = () => {
   const { t } = useTranslation();
-  const { state, windowActions } = usePresentationWindow('info');
+  const { state, windowActions } = usePresentationWindow("info");
 
-  const title =
-    state.status === 'ready'
-      ? state.descriptor.title
-      : t('info.regressionResults');
+  const title = state.status === "ready" ? state.descriptor.title : t("info.regressionResults");
 
   return (
     <PresentationWindowShell
@@ -31,15 +33,15 @@ export const InfoWindow: FC = () => {
       state={state}
       windowActions={windowActions}
       errorMessages={{
-        missingResultId: t('info.missingDataKey'),
-        notFound: t('info.noData'),
-        loadFailed: t('info.failedInitialize'),
+        missingResultId: t("info.missingDataKey"),
+        notFound: t("info.noData"),
+        loadFailed: t("info.failedInitialize"),
       }}
       contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {state.status === 'ready' &&
-      state.payload.mode === 'report' &&
-      state.descriptor.presentation.kind === 'report' ? (
+      {state.status === "ready" &&
+      state.payload.mode === "report" &&
+      state.descriptor.presentation.kind === "report" ? (
         <ReportView
           descriptor={state.descriptor}
           report={state.descriptor.presentation.report}

@@ -1,25 +1,25 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscAdd, VscRemove } from 'react-icons/vsc';
+import { useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { VscAdd, VscRemove } from "react-icons/vsc";
 
-import { Button } from '@/components/ui/button';
-import type { NodeData, PinData, ConnectionData } from '@/shared/types/store/graph';
-import type { GraphMutationCommandResult } from '@/features/core/history/types';
-import { Select } from '@/shared/ui/Select';
-import { graphMutationErrorMessageKey } from '@/features/application/editorMutation/graphMutationError';
+import { Button } from "@/components/ui/button";
+import type { NodeData, PinData, ConnectionData } from "@/shared/types/store/graph";
+import type { GraphMutationCommandResult } from "@/features/core/history/types";
+import { Select } from "@/shared/ui/Select";
+import { graphMutationErrorMessageKey } from "@/features/application/editorMutation/graphMutationError";
 import {
   connectPinsById,
   disconnectConnectionById,
   disconnectPinById,
-} from '@/features/application/editor/edgeOperations';
+} from "@/features/application/editor/edgeOperations";
 
-import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
-import { DetailFieldRow } from '../shared/DetailFieldRow';
+import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import { DetailFieldRow } from "../shared/DetailFieldRow";
 import {
   connectedPeerId,
   listCompatiblePinOptions,
   listPinConnections,
-} from './nodePinConnectionOptions';
+} from "./nodePinConnectionOptions";
 
 interface NodePinConnectionFieldProps {
   graphPath: string;
@@ -65,19 +65,20 @@ function ConnectionRow({
 }
 
 function mutationSucceeded(result: GraphMutationCommandResult): boolean {
-  return result !== false && (result.status === 'applied' || result.status === 'noop');
+  return result !== false && (result.status === "applied" || result.status === "noop");
 }
 
 function mutationMessageKey(result: GraphMutationCommandResult): string | null {
   if (mutationSucceeded(result)) return null;
-  const code = result !== false && result.status === 'rejected'
-    ? result.code
-    : result !== false && result.status === 'conflict'
-      ? 'graph_revision_conflict'
-      : null;
+  const code =
+    result !== false && result.status === "rejected"
+      ? result.code
+      : result !== false && result.status === "conflict"
+        ? "graph_revision_conflict"
+        : null;
   return code
-    ? graphMutationErrorMessageKey(code) ?? 'detail.nodeDoc.connectionFailed'
-    : 'detail.nodeDoc.connectionFailed';
+    ? (graphMutationErrorMessageKey(code) ?? "detail.nodeDoc.connectionFailed")
+    : "detail.nodeDoc.connectionFailed";
 }
 
 export function NodePinConnectionField({
@@ -99,9 +100,14 @@ export function NodePinConnectionField({
     [anchor, connections],
   );
   const connectionTargets = useMemo(
-    () => new Set(connectionRecords
-      .map((connection) => anchor ? connectedPeerId(anchor.id, anchor.direction, connection) : null)
-      .filter((id): id is string => Boolean(id))),
+    () =>
+      new Set(
+        connectionRecords
+          .map((connection) =>
+            anchor ? connectedPeerId(anchor.id, anchor.direction, connection) : null,
+          )
+          .filter((id): id is string => Boolean(id)),
+      ),
     [anchor, connectionRecords],
   );
 
@@ -151,17 +157,18 @@ export function NodePinConnectionField({
     setBusy(false);
   };
 
-  const pinTitle = pin.name || t('detail.nodeDoc.unnamed');
-  if (pin.direction === 'input') {
-    const currentOutputId = connectionRecords[0] && anchor
-      ? connectedPeerId(anchor.id, anchor.direction, connectionRecords[0]) ?? ''
-      : '';
+  const pinTitle = pin.name || t("detail.nodeDoc.unnamed");
+  if (pin.direction === "input") {
+    const currentOutputId =
+      connectionRecords[0] && anchor
+        ? (connectedPeerId(anchor.id, anchor.direction, connectionRecords[0]) ?? "")
+        : "";
     return (
       <div>
         <DetailFieldRow label={pinTitle}>
           <Select
             value={currentOutputId}
-            options={[{ value: '', label: t('detail.nodeDoc.unconnected') }, ...inputOptions]}
+            options={[{ value: "", label: t("detail.nodeDoc.unconnected") }, ...inputOptions]}
             onChange={handleInputChange}
             disabled={busy || !anchor}
             id={`detail-input-${pin.id}`}
@@ -184,7 +191,7 @@ export function NodePinConnectionField({
         type="button"
         variant="ghost"
         size="icon-xs"
-        aria-label={t('detail.nodeDoc.addConnection')}
+        aria-label={t("detail.nodeDoc.addConnection")}
         data-testid={`add-output-connection-${pin.id}`}
         disabled={busy || outputOptions.length === 0}
         onClick={() => setEmptySlots((count) => count + 1)}
@@ -195,9 +202,9 @@ export function NodePinConnectionField({
   );
   const connectedOptions = anchor
     ? listCompatiblePinOptions(anchor, pins, nodes, {
-      connections,
-      includedIds: connectionTargets,
-    })
+        connections,
+        includedIds: connectionTargets,
+      })
     : [];
 
   return (
@@ -206,12 +213,12 @@ export function NodePinConnectionField({
         <div className="flex min-w-0 flex-col gap-1">
           {connectionRecords.map((connection, index) => {
             const targetId = anchor
-              ? connectedPeerId(anchor.id, anchor.direction, connection) ?? ''
-              : '';
+              ? (connectedPeerId(anchor.id, anchor.direction, connection) ?? "")
+              : "";
             return (
               <ConnectionRow
                 key={connection.id}
-                removeLabel={t('detail.nodeDoc.removeConnection')}
+                removeLabel={t("detail.nodeDoc.removeConnection")}
                 onRemove={() => void handleOutputDisconnect(connection.id)}
                 showRemove
                 testId={`remove-output-connection-${pin.id}-${index}`}
@@ -229,14 +236,14 @@ export function NodePinConnectionField({
           {Array.from({ length: pendingCount }, (_, index) => (
             <ConnectionRow
               key={`pending-${index}`}
-              removeLabel={t('detail.nodeDoc.removeConnection')}
+              removeLabel={t("detail.nodeDoc.removeConnection")}
               onRemove={() => setEmptySlots((count) => Math.max(0, count - 1))}
               showRemove={connectionRecords.length + pendingCount > 1}
               testId={`remove-output-connection-${pin.id}-${connectionRecords.length + index}`}
             >
               <Select
                 value=""
-                options={[{ value: '', label: t('detail.nodeDoc.selectInput') }, ...outputOptions]}
+                options={[{ value: "", label: t("detail.nodeDoc.selectInput") }, ...outputOptions]}
                 onChange={handleOutputConnect}
                 disabled={busy || !anchor}
                 id={`detail-output-${pin.id}-${connectionRecords.length + index}`}

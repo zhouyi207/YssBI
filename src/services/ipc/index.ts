@@ -1,4 +1,4 @@
-export { invokeCommand } from './invokeCommand';
+export { invokeCommand } from "./invokeCommand";
 export {
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
@@ -10,4 +10,4 @@ export {
   type ErrorReference,
   type IpcErrorInit,
   type IpcErrorKind,
-} from './ipcError';
+} from "./ipcError";

@@ -4,29 +4,11 @@
     "columns": [
       {
         "name": "x",
-        "values": [
-          0.0,
-          0.5,
-          1.0,
-          1.5,
-          2.0,
-          2.5,
-          3.0,
-          3.5
-        ]
+        "values": [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
       },
       {
         "name": "y",
-        "values": [
-          5.1,
-          4.25,
-          3.55,
-          2.95,
-          2.55,
-          2.2,
-          1.95,
-          1.8
-        ]
+        "values": [5.1, 4.25, 3.55, 2.95, 2.55, 2.2, 1.95, 1.8]
       }
     ]
   },
@@ -102,10 +84,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            3.0,
-            2.0
-          ]
+          "args": [3.0, 2.0]
         }
       },
       {
@@ -115,9 +94,7 @@
         },
         "prior": {
           "distribution": "exponential",
-          "args": [
-            1.0
-          ]
+          "args": [1.0]
         }
       },
       {
@@ -127,10 +104,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            1.0,
-            2.0
-          ]
+          "args": [1.0, 2.0]
         }
       },
       {
@@ -140,9 +114,7 @@
         },
         "prior": {
           "distribution": "exponential",
-          "args": [
-            1.0
-          ]
+          "args": [1.0]
         }
       }
     ],
@@ -159,12 +131,7 @@
     "displayFormula": "y ~ Normal(a * exp(-b * x) + c, sigma)"
   },
   "golden": {
-    "parameters": [
-      "a",
-      "b",
-      "c",
-      "sigma"
-    ],
+    "parameters": ["a", "b", "c", "sigma"],
     "posteriorMean": {
       "a": {
         "expected": 4.0,

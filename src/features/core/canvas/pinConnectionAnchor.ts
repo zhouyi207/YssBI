@@ -1,4 +1,4 @@
-export const PIN_CONNECTION_ANCHOR_SELECTOR = '[data-pin-connection-anchor]';
+export const PIN_CONNECTION_ANCHOR_SELECTOR = "[data-pin-connection-anchor]";
 
 export interface PinConnectionAnchorMeasurement {
   pinId: string;

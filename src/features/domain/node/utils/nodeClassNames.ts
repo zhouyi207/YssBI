@@ -26,7 +26,8 @@ export function getNodeClassName({
   hasError,
   isCompleted,
 }: NodeClassNameOptions): string {
-  const baseClasses = "absolute select-none rounded-md border cursor-move shadow-[var(--node-shadow)]";
+  const baseClasses =
+    "absolute select-none rounded-md border cursor-move shadow-[var(--node-shadow)]";
 
   if (selected) {
     return `${baseClasses} border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30`;
@@ -49,7 +50,7 @@ export function getNodeClassName({
 export function getNodeBackgroundStyle({
   hasError,
   isCompleted,
-}: Pick<NodeClassNameOptions, 'hasError' | 'isCompleted'>): string {
+}: Pick<NodeClassNameOptions, "hasError" | "isCompleted">): string {
   if (hasError) {
     return "linear-gradient(135deg, var(--node-base) 0%, color-mix(in srgb, var(--status-danger) 10%, transparent) 100%)";
   }

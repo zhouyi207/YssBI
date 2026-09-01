@@ -1,11 +1,11 @@
-import { useCallback, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   getLocalizedSearchIndex,
   type LocalizedSearchIndex,
-} from '@/features/core/nodeCatalog/localizedSearchIndex';
+} from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
   selectCatalogRequest,
@@ -13,13 +13,13 @@ import {
   useNodeCatalogStore,
   type CatalogLoadStatus,
   type LocalizedCatalogResponse,
-} from '@/features/core/nodeCatalog/nodeCatalogStore';
-import { CatalogService } from '@/services/nodeSystem/catalogService';
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+} from "@/features/core/nodeCatalog/nodeCatalogStore";
+import { CatalogService } from "@/services/nodeSystem/catalogService";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 export interface LocalizedNodeCatalogState {
   status: CatalogLoadStatus;
@@ -33,16 +33,22 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const request = useNodeCatalogStore((state) => projectInstanceId
-    ? selectCatalogRequest(state, projectInstanceId, locale)
-    : null);
-  const catalog = useNodeCatalogStore((state) => projectInstanceId
-    ? selectCatalogResponse(state, projectInstanceId, locale)
-    : null);
+  const request = useNodeCatalogStore((state) =>
+    projectInstanceId ? selectCatalogRequest(state, projectInstanceId, locale) : null,
+  );
+  const catalog = useNodeCatalogStore((state) =>
+    projectInstanceId ? selectCatalogResponse(state, projectInstanceId, locale) : null,
+  );
 
   useEffect(() => {
-    if (!enabled || !projectInstanceId || request?.status === 'loading' || request?.status === 'ready'
-      || request?.status === 'error') return;
+    if (
+      !enabled ||
+      !projectInstanceId ||
+      request?.status === "loading" ||
+      request?.status === "ready" ||
+      request?.status === "error"
+    )
+      return;
 
     let identity: ReturnType<typeof captureProjectIdentity>;
     try {
@@ -52,9 +58,7 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
     }
     if (identity.projectInstanceId !== projectInstanceId) return;
 
-    const requestIdentity = useNodeCatalogStore
-      .getState()
-      .beginRequest(projectInstanceId, locale);
+    const requestIdentity = useNodeCatalogStore.getState().beginRequest(projectInstanceId, locale);
     if (!requestIdentity) return;
 
     void CatalogService.getLocalizedCatalog(projectInstanceId, locale)
@@ -66,10 +70,12 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
       .catch((error: unknown) => {
         if (!isCurrentProjectIdentity(identity)) return;
         if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-        useNodeCatalogStore.getState().storeError(
-          requestIdentity,
-          toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
-        );
+        useNodeCatalogStore
+          .getState()
+          .storeError(
+            requestIdentity,
+            toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
+          );
       });
   }, [enabled, locale, projectInstanceId, request?.status]);
 
@@ -79,11 +85,11 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
   }, [locale, projectInstanceId]);
 
   if (!enabled) {
-    return { status: 'idle', error: null, catalog: null, searchIndex: null, refresh };
+    return { status: "idle", error: null, catalog: null, searchIndex: null, refresh };
   }
 
   return {
-    status: request?.status ?? 'idle',
+    status: request?.status ?? "idle",
     error: request?.error ?? null,
     catalog,
     searchIndex: catalog ? getLocalizedSearchIndex(catalog) : null,

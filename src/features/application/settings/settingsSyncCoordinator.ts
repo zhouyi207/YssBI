@@ -1,11 +1,11 @@
 import {
   publishSettingsChanged,
   subscribeSettingsChanged,
-} from '@/services/platform/settingsEvents';
+} from "@/services/platform/settingsEvents";
 import {
   applyClientSettingsFromRemote,
   setClientSettingsPublisher,
-} from '@/features/core/settings/settingsStore';
+} from "@/features/core/settings/settingsStore";
 
 export class SettingsSyncCoordinator {
   private unsubscribe: (() => void) | null = null;

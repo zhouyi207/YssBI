@@ -1,6 +1,6 @@
-import type { ExecutionVisualSnapshot } from './executionVisualSession';
+import type { ExecutionVisualSnapshot } from "./executionVisualSession";
 
-const EXEC_STATE_ATTR = 'data-exec-state';
+const EXEC_STATE_ATTR = "data-exec-state";
 
 export function clearExecutionVisualDom(canvas: HTMLElement): void {
   canvas.querySelectorAll(`[${EXEC_STATE_ATTR}]`).forEach((el) => {
@@ -21,15 +21,15 @@ export function syncExecutionVisualDom(canvas: HTMLElement, snap: ExecutionVisua
   if (snap.executingNodeId) {
     canvas
       .querySelector(`[data-node-id="${snap.executingNodeId}"]`)
-      ?.setAttribute(EXEC_STATE_ATTR, 'executing');
+      ?.setAttribute(EXEC_STATE_ATTR, "executing");
   }
 
   for (const nodeId of snap.executedNodeIds) {
     if (nodeId === snap.executingNodeId) continue;
-    canvas.querySelector(`[data-node-id="${nodeId}"]`)?.setAttribute(EXEC_STATE_ATTR, 'completed');
+    canvas.querySelector(`[data-node-id="${nodeId}"]`)?.setAttribute(EXEC_STATE_ATTR, "completed");
   }
 
   for (const nodeId of snap.errorNodeIds) {
-    canvas.querySelector(`[data-node-id="${nodeId}"]`)?.setAttribute(EXEC_STATE_ATTR, 'error');
+    canvas.querySelector(`[data-node-id="${nodeId}"]`)?.setAttribute(EXEC_STATE_ATTR, "error");
   }
 }

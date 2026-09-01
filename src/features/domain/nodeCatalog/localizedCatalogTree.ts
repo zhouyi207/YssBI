@@ -1,8 +1,8 @@
 import type {
   LocalizedCatalogItemDto,
   LocalizedCategoryDto,
-} from '@/shared/types/domain/localizedCatalog';
-import { catalogItemKey } from './catalogItem';
+} from "@/shared/types/domain/localizedCatalog";
+import { catalogItemKey } from "./catalogItem";
 
 export interface LocalizedCatalogTreeNode {
   category: LocalizedCategoryDto;
@@ -12,13 +12,13 @@ export interface LocalizedCatalogTreeNode {
 
 export type LocalizedCatalogBrowserRow =
   | {
-      kind: 'category';
+      kind: "category";
       rowKey: string;
       category: LocalizedCategoryDto;
       depth: number;
     }
   | {
-      kind: 'item';
+      kind: "item";
       rowKey: string;
       item: LocalizedCatalogItemDto;
       depth: number;
@@ -28,18 +28,19 @@ function compareCategories(
   left: LocalizedCatalogTreeNode,
   right: LocalizedCatalogTreeNode,
 ): number {
-  return left.category.order - right.category.order
-    || left.category.title.localeCompare(right.category.title)
-    || left.category.categoryId.localeCompare(right.category.categoryId);
+  return (
+    left.category.order - right.category.order ||
+    left.category.title.localeCompare(right.category.title) ||
+    left.category.categoryId.localeCompare(right.category.categoryId)
+  );
 }
 
-function compareItems(
-  left: LocalizedCatalogItemDto,
-  right: LocalizedCatalogItemDto,
-): number {
-  return left.title.localeCompare(right.title)
-    || left.nodeTypeId.localeCompare(right.nodeTypeId)
-    || catalogItemKey(left).localeCompare(catalogItemKey(right));
+function compareItems(left: LocalizedCatalogItemDto, right: LocalizedCatalogItemDto): number {
+  return (
+    left.title.localeCompare(right.title) ||
+    left.nodeTypeId.localeCompare(right.nodeTypeId) ||
+    catalogItemKey(left).localeCompare(catalogItemKey(right))
+  );
 }
 
 export function buildLocalizedCatalogTree(
@@ -47,11 +48,14 @@ export function buildLocalizedCatalogTree(
   items: readonly LocalizedCatalogItemDto[],
 ): LocalizedCatalogTreeNode[] {
   const nodes = new Map<string, LocalizedCatalogTreeNode>(
-    categories.map((category) => [category.categoryId, {
-      category,
-      children: [],
-      items: [],
-    }]),
+    categories.map((category) => [
+      category.categoryId,
+      {
+        category,
+        children: [],
+        items: [],
+      },
+    ]),
   );
 
   for (const item of items) {
@@ -114,7 +118,7 @@ export function flattenLocalizedCatalogTree(
 
   const visit = (node: LocalizedCatalogTreeNode, depth: number) => {
     rows.push({
-      kind: 'category',
+      kind: "category",
       rowKey: `category:${node.category.categoryId}`,
       category: node.category,
       depth,
@@ -123,7 +127,7 @@ export function flattenLocalizedCatalogTree(
 
     node.items.forEach((item) => {
       rows.push({
-        kind: 'item',
+        kind: "item",
         rowKey: `item:${catalogItemKey(item)}`,
         item,
         depth: depth + 1,

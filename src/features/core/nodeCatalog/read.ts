@@ -1,11 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import {
   useNodeCatalogStore,
   type CatalogRequestState,
   type LocalizedCatalogResponse,
-} from './nodeCatalogStore';
+} from "./nodeCatalogStore";
 
 export interface NodeCatalogProjectionSnapshot {
   readonly responses: DeepReadonly<Record<string, LocalizedCatalogResponse>>;
@@ -20,20 +20,21 @@ export interface NodeCatalogReadCapability {
 
 function cloneAndFreeze<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(cloneAndFreeze)) as T;
-  if (value === null || typeof value !== 'object') return value;
+  if (value === null || typeof value !== "object") return value;
   if (value instanceof Map) {
     return new Map(
-      [...value.entries()].map(([key, nested]) => [
-        cloneAndFreeze(key),
-        cloneAndFreeze(nested),
-      ]),
+      [...value.entries()].map(([key, nested]) => [cloneAndFreeze(key), cloneAndFreeze(nested)]),
     ) as T;
   }
   if (value instanceof Set) return new Set([...value].map(cloneAndFreeze)) as T;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneAndFreeze(nested)]),
-  )) as T;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        cloneAndFreeze(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function buildSnapshot(): DeepReadonly<NodeCatalogProjectionSnapshot> {

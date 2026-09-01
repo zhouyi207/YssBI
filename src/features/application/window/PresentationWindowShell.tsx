@@ -1,13 +1,13 @@
-import type { ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
+import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
-} from '@/features/application/presentation';
-import type { CurrentWindowActions } from './useCurrentWindowActions';
-import { useCustomTitleBar } from './useWindowDecorations';
-import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
-import { WindowChrome } from '@/shared/ui/WindowChrome';
+} from "@/features/application/presentation";
+import type { CurrentWindowActions } from "./useCurrentWindowActions";
+import { useCustomTitleBar } from "./useWindowDecorations";
+import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
+import { WindowChrome } from "@/shared/ui/WindowChrome";
 
 interface PresentationWindowShellProps {
   title: string;
@@ -19,7 +19,7 @@ interface PresentationWindowShellProps {
     loadFailed: string;
   };
   contentClassName?: string;
-  windowActions: Pick<CurrentWindowActions, 'maximized' | 'minimize' | 'toggleMaximize' | 'close'>;
+  windowActions: Pick<CurrentWindowActions, "maximized" | "minimize" | "toggleMaximize" | "close">;
   children: ReactNode;
 }
 
@@ -28,7 +28,7 @@ export function PresentationWindowShell({
   icon,
   state,
   errorMessages,
-  contentClassName = 'flex min-h-0 flex-1 flex-col overflow-hidden',
+  contentClassName = "flex min-h-0 flex-1 flex-col overflow-hidden",
   windowActions,
   children,
 }: PresentationWindowShellProps) {
@@ -36,16 +36,16 @@ export function PresentationWindowShell({
   const customChrome = useCustomTitleBar();
   const error = presentationWindowErrorMessage(state, {
     ...errorMessages,
-    pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
-    executionFailed: t('resultState.executionFailed'),
-    upstreamFailed: t('resultState.upstreamFailed'),
-    cancelled: t('resultState.cancelled'),
+    pending: (completed, total) => t("resultState.pending", { completed, total: total ?? "?" }),
+    executionFailed: t("resultState.executionFailed"),
+    upstreamFailed: t("resultState.upstreamFailed"),
+    cancelled: t("resultState.cancelled"),
   });
 
-  if (state.status === 'loading') {
+  if (state.status === "loading") {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[var(--workbench-bg)] text-muted-foreground">
-        {t('common.initializing')}
+        {t("common.initializing")}
       </div>
     );
   }
@@ -75,7 +75,12 @@ export function PresentationWindowShell({
       <div className={contentClassName}>
         {error ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-            <svg className="h-12 w-12 text-red-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="h-12 w-12 text-red-500/50"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

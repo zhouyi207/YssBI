@@ -1,84 +1,85 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
-import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
-import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
-import type { ChartModel } from '@/shared/types/visualization';
-import { WorksheetChartPreview } from './WorksheetChartPreview';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { clearWorksheetPreviewCache } from "@/services/worksheet/worksheetPreviewCache";
+import { fetchWorksheetPreview } from "@/services/worksheet/worksheetDataService";
+import type { WorksheetDocument, WorksheetPreviewPayload } from "@/shared/types/domain";
+import type { ChartModel } from "@/shared/types/visualization";
+import { WorksheetChartPreview } from "./WorksheetChartPreview";
 
-vi.mock('@/services/worksheet/worksheetDataService', () => ({ fetchWorksheetPreview: vi.fn() }));
-vi.mock('react-i18next', () => ({
+vi.mock("@/services/worksheet/worksheetDataService", () => ({ fetchWorksheetPreview: vi.fn() }));
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { column?: unknown }) => options?.column === undefined
-      ? `localized:${key}`
-      : `localized:${key}:${String(options.column)}`,
+    t: (key: string, options?: { column?: unknown }) =>
+      options?.column === undefined
+        ? `localized:${key}`
+        : `localized:${key}:${String(options.column)}`,
   }),
 }));
-vi.mock('@/shared/charts/ChartRenderer', () => ({
+vi.mock("@/shared/charts/ChartRenderer", () => ({
   ChartRenderer: ({ model, surface }: { model: ChartModel; surface: string }) => (
     <div data-chart-surface={surface}>{`${model.kind} plot`}</div>
   ),
 }));
-vi.mock('./WorksheetEmptyState', () => ({ WorksheetEmptyState: () => <div>empty</div> }));
+vi.mock("./WorksheetEmptyState", () => ({ WorksheetEmptyState: () => <div>empty</div> }));
 
-const projectId = '00000000-0000-0000-0000-000000000701';
+const projectId = "00000000-0000-0000-0000-000000000701";
 const worksheet: WorksheetDocument = {
   schemaVersion: 3,
   revision: 0,
-  databaseId: 'sales',
-  chartType: 'histogram',
-  encodings: { x: 'amount' },
+  databaseId: "sales",
+  chartType: "histogram",
+  encodings: { x: "amount" },
 };
 const chartCases: Array<{
-  kind: 'histogram' | 'line' | 'scatter';
+  kind: "histogram" | "line" | "scatter";
   marker: string;
   payload: WorksheetPreviewPayload;
 }> = [
   {
-    kind: 'histogram',
-    marker: 'histogram plot',
+    kind: "histogram",
+    marker: "histogram plot",
     payload: {
-      kind: 'histogram',
-      bins: [{ label: '10', count: 2 }],
-      xLabel: 'amount',
-      yLabel: 'count',
+      kind: "histogram",
+      bins: [{ label: "10", count: 2 }],
+      xLabel: "amount",
+      yLabel: "count",
     },
   },
   {
-    kind: 'line',
-    marker: 'line plot',
+    kind: "line",
+    marker: "line plot",
     payload: {
-      kind: 'line',
+      kind: "line",
       pair: {
         data: [{ x: 1, y: 2 }],
-        xLabel: 'time',
-        yLabel: 'amount',
-        xFormat: 'number',
-        yFormat: 'number',
+        xLabel: "time",
+        yLabel: "amount",
+        xFormat: "number",
+        yFormat: "number",
       },
     },
   },
   {
-    kind: 'scatter',
-    marker: 'scatter plot',
+    kind: "scatter",
+    marker: "scatter plot",
     payload: {
-      kind: 'scatter',
+      kind: "scatter",
       pair: {
         data: [{ x: 1, y: 2 }],
-        xLabel: 'x',
-        yLabel: 'y',
-        xFormat: 'number',
-        yFormat: 'number',
+        xLabel: "x",
+        yLabel: "y",
+        xFormat: "number",
+        yFormat: "number",
       },
     },
   },
 ];
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('WorksheetChartPreview', () => {
+describe("WorksheetChartPreview", () => {
   let root: Root;
   let host: HTMLDivElement;
 
@@ -88,7 +89,7 @@ describe('WorksheetChartPreview', () => {
     clearWorksheetPreviewCache();
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject(projectId, 0);
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -99,87 +100,111 @@ describe('WorksheetChartPreview', () => {
     vi.useRealTimers();
   });
 
-  it.each(chartCases)(
-    'renders $kind output in the chart region',
-    async ({ marker, payload }) => {
-      vi.mocked(fetchWorksheetPreview).mockResolvedValue(payload);
+  it.each(chartCases)("renders $kind output in the chart region", async ({ marker, payload }) => {
+    vi.mocked(fetchWorksheetPreview).mockResolvedValue(payload);
 
-      act(() => root.render(
-        <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
-      ));
-      await act(async () => vi.advanceTimersByTimeAsync(300));
+    act(() =>
+      root.render(
+        <WorksheetChartPreview
+          worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+          document={worksheet}
+        />,
+      ),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(300));
 
-      const chartRegion = host.querySelector('[data-worksheet-chart-region]');
-      expect(chartRegion).not.toBeNull();
-      expect(chartRegion?.textContent).toContain(marker);
-      expect(chartRegion?.querySelector('[data-chart-surface="plain"]')).not.toBeNull();
-    },
-  );
+    const chartRegion = host.querySelector("[data-worksheet-chart-region]");
+    expect(chartRegion).not.toBeNull();
+    expect(chartRegion?.textContent).toContain(marker);
+    expect(chartRegion?.querySelector('[data-chart-surface="plain"]')).not.toBeNull();
+  });
 
-  it('keeps a machine error outside the chart region and includes its incident ID', async () => {
+  it("keeps a machine error outside the chart region and includes its incident ID", async () => {
     vi.mocked(fetchWorksheetPreview).mockResolvedValue({
-      kind: 'error',
-      code: 'worksheet_preview_backend_failed',
-      incidentId: 'incident-preview-42',
+      kind: "error",
+      code: "worksheet_preview_backend_failed",
+      incidentId: "incident-preview-42",
     });
 
-    act(() => root.render(
-      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
-    ));
+    act(() =>
+      root.render(
+        <WorksheetChartPreview
+          worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+          document={worksheet}
+        />,
+      ),
+    );
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
     const errorElement = host.querySelector('[role="alert"]');
     expect(errorElement).not.toBeNull();
-    expect(errorElement?.closest('[data-worksheet-chart-region]')).toBeNull();
-    expect(errorElement?.textContent).toContain('localized:worksheet.previewLoadFailed');
-    expect(errorElement?.textContent).toContain('localized:common.errorCode');
-    expect(errorElement?.textContent).toContain('worksheet_preview_backend_failed');
-    expect(errorElement?.textContent).toContain('localized:common.incidentId');
-    expect(errorElement?.textContent).toContain('incident-preview-42');
+    expect(errorElement?.closest("[data-worksheet-chart-region]")).toBeNull();
+    expect(errorElement?.textContent).toContain("localized:worksheet.previewLoadFailed");
+    expect(errorElement?.textContent).toContain("localized:common.errorCode");
+    expect(errorElement?.textContent).toContain("worksheet_preview_backend_failed");
+    expect(errorElement?.textContent).toContain("localized:common.incidentId");
+    expect(errorElement?.textContent).toContain("incident-preview-42");
   });
 
-  it('localizes safe missing-column context without transport prose', async () => {
+  it("localizes safe missing-column context without transport prose", async () => {
     vi.mocked(fetchWorksheetPreview).mockResolvedValue({
-      kind: 'error',
-      code: 'worksheet_preview_column_not_found',
+      kind: "error",
+      code: "worksheet_preview_column_not_found",
       incidentId: null,
-      column: 'amount',
+      column: "amount",
     });
 
-    act(() => root.render(
-      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
-    ));
+    act(() =>
+      root.render(
+        <WorksheetChartPreview
+          worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+          document={worksheet}
+        />,
+      ),
+    );
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
     const text = host.querySelector('[role="alert"]')?.textContent;
-    expect(text).toContain('localized:worksheet.previewColumnNotFound:amount');
-    expect(text).toContain('worksheet_preview_column_not_found');
-    expect(text).not.toContain('localized:common.incidentId');
+    expect(text).toContain("localized:worksheet.previewColumnNotFound:amount");
+    expect(text).toContain("worksheet_preview_column_not_found");
+    expect(text).not.toContain("localized:common.incidentId");
   });
 
-  it('maps a rejected raw transport error without displaying its text', async () => {
-    vi.mocked(fetchWorksheetPreview).mockRejectedValue(new Error('private worksheet transport failure'));
+  it("maps a rejected raw transport error without displaying its text", async () => {
+    vi.mocked(fetchWorksheetPreview).mockRejectedValue(
+      new Error("private worksheet transport failure"),
+    );
 
-    act(() => root.render(
-      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
-    ));
+    act(() =>
+      root.render(
+        <WorksheetChartPreview
+          worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+          document={worksheet}
+        />,
+      ),
+    );
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
     const text = host.querySelector('[role="alert"]')?.textContent;
-    expect(text).toContain('localized:worksheet.previewLoadFailed');
-    expect(text).toContain('worksheet_preview_read_failed');
-    expect(text).not.toContain('private worksheet transport failure');
+    expect(text).toContain("localized:worksheet.previewLoadFailed");
+    expect(text).toContain("worksheet_preview_read_failed");
+    expect(text).not.toContain("private worksheet transport failure");
   });
 
-  it('keeps a fetched empty preview outside any chart region', async () => {
-    vi.mocked(fetchWorksheetPreview).mockResolvedValue({ kind: 'empty' });
+  it("keeps a fetched empty preview outside any chart region", async () => {
+    vi.mocked(fetchWorksheetPreview).mockResolvedValue({ kind: "empty" });
 
-    act(() => root.render(
-      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
-    ));
+    act(() =>
+      root.render(
+        <WorksheetChartPreview
+          worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+          document={worksheet}
+        />,
+      ),
+    );
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
-    expect(host.textContent).toContain('empty');
-    expect(host.querySelector('[data-worksheet-chart-region]')).toBeNull();
+    expect(host.textContent).toContain("empty");
+    expect(host.querySelector("[data-worksheet-chart-region]")).toBeNull();
   });
 });

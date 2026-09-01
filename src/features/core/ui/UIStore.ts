@@ -1,14 +1,14 @@
 import {
-    DialogOptions,
-    InputDialogOptions,
-    MessageDialogOptions,
-    ImportDialogOptions,
-    SqliteTableSelectDialogOptions,
-    ExcelSheetSelectDialogOptions,
-    SqlConnectionDialogOptions,
-    SqlRemoteTableSelectDialogOptions,
-    ConfirmTriResult,
-    ProgressState,
+  DialogOptions,
+  InputDialogOptions,
+  MessageDialogOptions,
+  ImportDialogOptions,
+  SqliteTableSelectDialogOptions,
+  ExcelSheetSelectDialogOptions,
+  SqlConnectionDialogOptions,
+  SqlRemoteTableSelectDialogOptions,
+  ConfirmTriResult,
+  ProgressState,
 } from "@/shared/types/ui";
 
 import type { ApplicationUiModal, ApplicationUiState } from "@/shared/types/ui";
@@ -34,7 +34,7 @@ class UIStore {
   }
 
   private emit() {
-    this.listeners.forEach(l => l());
+    this.listeners.forEach((l) => l());
   }
 
   getState(): UIState {
@@ -88,7 +88,7 @@ class UIStore {
    * Use for destructive flows where the user can either commit, abandon, or back out.
    */
   confirm3(
-    options: Omit<DialogOptions, "onConfirm" | "onCancel" | "onDiscard"> & { discardText: string }
+    options: Omit<DialogOptions, "onConfirm" | "onCancel" | "onDiscard"> & { discardText: string },
   ): Promise<ConfirmTriResult> {
     return new Promise((resolve) => {
       this.showDialog({
@@ -203,7 +203,7 @@ class UIStore {
     if (!id) {
       newModals = this.state.modals.slice(0, -1);
     } else {
-      newModals = this.state.modals.filter(m => m.id !== id);
+      newModals = this.state.modals.filter((m) => m.id !== id);
     }
 
     this.state = {
@@ -215,10 +215,7 @@ class UIStore {
 
   // --- Progress Overlay ---
   /** 启动全局进度蒙层；同一时刻只有一个进度任务。 */
-  startProgress(
-    progress: ProgressState,
-    options?: { onCancel?: () => void },
-  ) {
+  startProgress(progress: ProgressState, options?: { onCancel?: () => void }) {
     this.progressOnCancel = options?.onCancel ?? null;
     this.state = {
       ...this.state,

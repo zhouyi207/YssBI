@@ -1,10 +1,10 @@
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import type { GraphOutputRefDto } from '@/shared/types/domain/result';
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import type { GraphOutputRefDto } from "@/shared/types/domain/result";
 
 const part = (value: string): string => `${value.length}:${value}`;
 
 export function portAddressKey(address: PortAddressDto): string {
-  if (address.kind === 'declared') {
+  if (address.kind === "declared") {
     return `declared:${part(address.nodeId)}${part(address.portKey)}`;
   }
 

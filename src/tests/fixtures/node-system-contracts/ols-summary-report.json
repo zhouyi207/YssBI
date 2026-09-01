@@ -1,8 +1,5 @@
 {
-  "betas": [
-    0.5,
-    0.75
-  ],
+  "betas": [0.5, 0.75],
   "coefficients": [
     {
       "coef": 0.5,
@@ -26,27 +23,13 @@
     }
   ],
   "cov_beta": [
-    [
-      0.0625,
-      0.0
-    ],
-    [
-      0.0,
-      0.25
-    ]
+    [0.0625, 0.0],
+    [0.0, 0.25]
   ],
   "diagnostic_info": {
     "cond_no": 2.0,
-    "fitted_values": [
-      1.25,
-      2.0,
-      2.75
-    ],
-    "residuals": [
-      -0.25,
-      0.0,
-      0.25
-    ]
+    "fitted_values": [1.25, 2.0, 2.75],
+    "residuals": [-0.25, 0.0, 0.25]
   },
   "endog_name": "response",
   "model_basic_info": {

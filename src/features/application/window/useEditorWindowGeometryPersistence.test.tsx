@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentAppWindow } from '@/services/platform/appWindow';
-import type { AppWindowHandle } from '@/services/platform/appWindow';
-import { useEditorWindowGeometryPersistence } from './useEditorWindowGeometryPersistence';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { currentAppWindow } from "@/services/platform/appWindow";
+import type { AppWindowHandle } from "@/services/platform/appWindow";
+import { useEditorWindowGeometryPersistence } from "./useEditorWindowGeometryPersistence";
 
-vi.mock('@/services/platform/appWindow', () => ({
+vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
 
@@ -15,12 +15,12 @@ function Harness(): null {
   return null;
 }
 
-describe('useEditorWindowGeometryPersistence', () => {
+describe("useEditorWindowGeometryPersistence", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     localStorage.clear();
@@ -31,12 +31,12 @@ describe('useEditorWindowGeometryPersistence', () => {
     host.remove();
   });
 
-  it('persists restorable geometry when a secondary window closes maximized', async () => {
-    let closeListener: (() => Promise<'allow'>) | undefined;
+  it("persists restorable geometry when a secondary window closes maximized", async () => {
+    let closeListener: (() => Promise<"allow">) | undefined;
     const unlisten = vi.fn();
     vi.mocked(currentAppWindow).mockReturnValue({
-      label: 'window-2',
-      onCloseRequested: vi.fn(async (listener: () => Promise<'allow'>) => {
+      label: "window-2",
+      onCloseRequested: vi.fn(async (listener: () => Promise<"allow">) => {
         closeListener = listener;
         return { ok: true, value: unlisten };
       }),
@@ -50,7 +50,7 @@ describe('useEditorWindowGeometryPersistence', () => {
       await closeListener?.();
     });
 
-    expect(JSON.parse(localStorage.getItem('yssbi-secondary-window-window-2') ?? 'null')).toEqual({
+    expect(JSON.parse(localStorage.getItem("yssbi-secondary-window-window-2") ?? "null")).toEqual({
       width: 1000,
       height: 700,
       x: expect.any(Number),
@@ -59,14 +59,17 @@ describe('useEditorWindowGeometryPersistence', () => {
     });
   });
 
-  it('disposes a close listener that resolves after unmount', async () => {
+  it("disposes a close listener that resolves after unmount", async () => {
     let resolveListener: ((outcome: { ok: true; value: () => void }) => void) | undefined;
     const unlisten = vi.fn();
     vi.mocked(currentAppWindow).mockReturnValue({
-      label: 'window-2',
-      onCloseRequested: vi.fn(() => new Promise<{ ok: true; value: () => void }>((resolve) => {
-        resolveListener = resolve;
-      })),
+      label: "window-2",
+      onCloseRequested: vi.fn(
+        () =>
+          new Promise<{ ok: true; value: () => void }>((resolve) => {
+            resolveListener = resolve;
+          }),
+      ),
     } as unknown as AppWindowHandle);
 
     await act(async () => {

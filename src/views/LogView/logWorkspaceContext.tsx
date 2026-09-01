@@ -1,9 +1,9 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { LogPanelPresentation } from './useLogPanelVirtualList';
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import type { LogPanelPresentation } from "./useLogPanelVirtualList";
 import {
   useLogWorkspaceController,
   type LogWorkspaceController,
-} from './useLogWorkspaceController';
+} from "./useLogWorkspaceController";
 
 export interface LogWorkspaceContextValue extends LogWorkspaceController {
   readonly presentation: LogPanelPresentation;
@@ -16,27 +16,17 @@ export interface LogWorkspaceProviderProps {
   readonly presentation: LogPanelPresentation;
 }
 
-export function LogWorkspaceProvider({
-  children,
-  presentation,
-}: LogWorkspaceProviderProps) {
+export function LogWorkspaceProvider({ children, presentation }: LogWorkspaceProviderProps) {
   const controller = useLogWorkspaceController();
-  const value = useMemo(
-    () => ({ ...controller, presentation }),
-    [controller, presentation],
-  );
+  const value = useMemo(() => ({ ...controller, presentation }), [controller, presentation]);
 
-  return (
-    <LogWorkspaceContext.Provider value={value}>
-      {children}
-    </LogWorkspaceContext.Provider>
-  );
+  return <LogWorkspaceContext.Provider value={value}>{children}</LogWorkspaceContext.Provider>;
 }
 
 export function useLogWorkspaceContext(): LogWorkspaceContextValue {
   const controller = useContext(LogWorkspaceContext);
   if (!controller) {
-    throw new Error('useLogWorkspaceContext must be used within LogWorkspaceProvider');
+    throw new Error("useLogWorkspaceContext must be used within LogWorkspaceProvider");
   }
   return controller;
 }

@@ -14,7 +14,7 @@ export function queryCanvasElement(panelInstanceId: string): HTMLElement | null 
 export function collectSelectionHitTargets(canvasEl: HTMLElement): SelectionHitTarget[] {
   const targets: SelectionHitTarget[] = [];
 
-  canvasEl.querySelectorAll<HTMLElement>('[data-node-id]').forEach((element) => {
+  canvasEl.querySelectorAll<HTMLElement>("[data-node-id]").forEach((element) => {
     const id = element.dataset.nodeId;
     if (!id) return;
 
@@ -37,7 +37,12 @@ export function hitTestSelection(
 ): string[] {
   const selectedIds: string[] = [];
   for (const target of targets) {
-    if (target.left > rect.x2 || target.right < rect.x1 || target.top > rect.y2 || target.bottom < rect.y1) {
+    if (
+      target.left > rect.x2 ||
+      target.right < rect.x1 ||
+      target.top > rect.y2 ||
+      target.bottom < rect.y1
+    ) {
       continue;
     }
     selectedIds.push(target.id);
@@ -53,20 +58,22 @@ export function syncSelectionPreview(
   const nextSet = new Set(nextIds);
   for (const id of previousIds) {
     if (!nextSet.has(id)) {
-      canvasEl.querySelector(`[data-node-id="${id}"]`)?.removeAttribute('data-selection-preview');
+      canvasEl.querySelector(`[data-node-id="${id}"]`)?.removeAttribute("data-selection-preview");
     }
   }
 
   const previousSet = new Set(previousIds);
   for (const id of nextIds) {
     if (!previousSet.has(id)) {
-      canvasEl.querySelector(`[data-node-id="${id}"]`)?.setAttribute('data-selection-preview', 'true');
+      canvasEl
+        .querySelector(`[data-node-id="${id}"]`)
+        ?.setAttribute("data-selection-preview", "true");
     }
   }
 }
 
 export function clearAllSelectionPreview(canvasEl: HTMLElement): void {
   canvasEl.querySelectorAll('[data-selection-preview="true"]').forEach((el) => {
-    el.removeAttribute('data-selection-preview');
+    el.removeAttribute("data-selection-preview");
   });
 }

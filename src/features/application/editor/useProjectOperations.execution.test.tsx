@@ -1,33 +1,33 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProjectService } from '@/services/project/projectService';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProjectService } from "@/services/project/projectService";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { RunEvent } from '@/shared/types/domain/runEvent';
-import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import type { RunEvent } from "@/shared/types/domain/runEvent";
+import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import {
   completePendingMutation,
   registerPendingMutation,
   resetPendingMutations,
-} from '@/features/application/editorMutation/pendingMutationRegistry';
-import { useProjectOperations } from './useProjectOperations';
+} from "@/features/application/editorMutation/pendingMutationRegistry";
+import { useProjectOperations } from "./useProjectOperations";
 
-const projectInstanceId = 'project-instance-1';
-const graphPath = 'events/Main.yssbi-event';
+const projectInstanceId = "project-instance-1";
+const graphPath = "events/Main.yssbi-event";
 
 function runStartedEvent(): RunEvent {
   return {
     run: {
-      projectSessionId: 'backend-session-1',
+      projectSessionId: "backend-session-1",
       graphPath,
-      runId: 'run-stale',
+      runId: "run-stale",
     },
-    kind: { type: 'runStarted' },
+    kind: { type: "runStarted" },
   };
 }
 
@@ -40,36 +40,36 @@ const executionState = {
   completeExecution: vi.fn(),
   failExecution: vi.fn(),
   interruptExecution: vi.fn(),
-  getGraph: vi.fn(() => ({ status: 'completed' })),
+  getGraph: vi.fn(() => ({ status: "completed" })),
   clearGraphRunProjections: vi.fn(),
 };
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@/features/core/execution', () => ({
+vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => executionState },
-  resolveExecutionGraphPath: () => 'events/Main.yssbi-event',
+  resolveExecutionGraphPath: () => "events/Main.yssbi-event",
   getExecutionEventGraph: () => ({
-    graph: { name: 'Main', path: 'events/Main.yssbi-event', type: 'event' },
+    graph: { name: "Main", path: "events/Main.yssbi-event", type: "event" },
   }),
   graphHasClearableArtifacts: () => true,
 }));
-vi.mock('@/features/core/execution/executionRecording', () => ({
+vi.mock("@/features/core/execution/executionRecording", () => ({
   ensureGraphExecutionTerminal: vi.fn(),
 }));
-vi.mock('./resolveExecutionGraphPath', () => ({
+vi.mock("./resolveExecutionGraphPath", () => ({
   resolveExecutionGraphPath: (targetGraphPath?: string) =>
-    targetGraphPath ?? 'events/Main.yssbi-event',
+    targetGraphPath ?? "events/Main.yssbi-event",
   getExecutionEventGraph: () => ({
-    graphPath: 'events/Main.yssbi-event',
-    graph: { name: 'Main', path: 'events/Main.yssbi-event', type: 'event' },
+    graphPath: "events/Main.yssbi-event",
+    graph: { name: "Main", path: "events/Main.yssbi-event", type: "event" },
   }),
 }));
-vi.mock('@/features/application/execution/openInspectableResult', () => ({
+vi.mock("@/features/application/execution/openInspectableResult", () => ({
   openInspectableResult: vi.fn().mockResolvedValue(true),
 }));
-vi.mock('@/features/core/dataStore', () => ({
+vi.mock("@/features/core/dataStore", () => ({
   loadActivatedProject: vi.fn(),
   resolveActiveProjectPath: vi.fn(),
   useGraphDataStore: {
@@ -77,22 +77,22 @@ vi.mock('@/features/core/dataStore', () => ({
       graphEntities: {
         [graphPath]: {
           nodes: {
-            'view-node': { nodeType: 'yssbi.debug.view' },
-            'other-node': { nodeType: 'yssbi.statistics.ols.summary' },
+            "view-node": { nodeType: "yssbi.debug.view" },
+            "other-node": { nodeType: "yssbi.statistics.ols.summary" },
           },
         },
       },
     }),
   },
 }));
-vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
+vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
-describe('useProjectOperations execution demand', () => {
+describe("useProjectOperations execution demand", () => {
   let container: HTMLDivElement;
   let root: Root;
   let operations: ReturnType<typeof useProjectOperations>;
@@ -102,10 +102,10 @@ describe('useProjectOperations execution demand', () => {
     clearProjectLifecycle();
     resetPendingMutations();
     startProjectLifecycle(projectInstanceId);
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    vi.spyOn(ProjectService, 'executeGraphDocument').mockResolvedValue(undefined);
+    vi.spyOn(ProjectService, "executeGraphDocument").mockResolvedValue(undefined);
 
     function Harness() {
       operations = useProjectOperations();
@@ -122,7 +122,7 @@ describe('useProjectOperations execution demand', () => {
     clearProjectLifecycle();
   });
 
-  it('passes explicit Default demand for an ordinary event run', async () => {
+  it("passes explicit Default demand for an ordinary event run", async () => {
     await act(async () => {
       await operations.executeGraph();
     });
@@ -130,15 +130,15 @@ describe('useProjectOperations execution demand', () => {
     expect(ProjectService.executeGraphDocument).toHaveBeenCalledWith(
       projectInstanceId,
       graphPath,
-      { type: 'default' },
+      { type: "default" },
       expect.any(Function),
       expect.any(Function),
     );
   });
 
-  it('waits for pending graph edits before starting execution', async () => {
+  it("waits for pending graph edits before starting execution", async () => {
     registerPendingMutation({
-      operationId: 'pending-message-edit',
+      operationId: "pending-message-edit",
       graphPath,
       baseRevision: 1,
     });
@@ -147,39 +147,39 @@ describe('useProjectOperations execution demand', () => {
     await Promise.resolve();
     expect(ProjectService.executeGraphDocument).not.toHaveBeenCalled();
 
-    completePendingMutation('pending-message-edit');
+    completePendingMutation("pending-message-edit");
     await act(async () => execution);
 
     expect(ProjectService.executeGraphDocument).toHaveBeenCalledOnce();
   });
 
-  it('opens only the backend-requested result window', async () => {
+  it("opens only the backend-requested result window", async () => {
     vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
       async (_projectInstanceId, _graphPath, _demand, onEvent) => {
         onEvent?.({
           ...runStartedEvent(),
           kind: {
-            type: 'pinPreviewResultReady',
+            type: "pinPreviewResultReady",
             output: {
               graphPath,
               port: {
-                kind: 'declared',
-                nodeId: '00000000-0000-0000-0000-000000000001',
-                portKey: 'value',
+                kind: "declared",
+                nodeId: "00000000-0000-0000-0000-000000000001",
+                portKey: "value",
               },
             },
             generation: 3,
-            resultId: '16',
+            resultId: "16",
           },
         });
         expect(openInspectableResult).not.toHaveBeenCalled();
         onEvent?.({
           ...runStartedEvent(),
           kind: {
-            type: 'resultInspectionRequested',
-            resultId: '17',
+            type: "resultInspectionRequested",
+            resultId: "17",
             source: {
-              graphPath: 'functions/Inspect.yssbi-function',
+              graphPath: "functions/Inspect.yssbi-function",
               nodeId: null,
               portAddress: null,
             },
@@ -195,32 +195,33 @@ describe('useProjectOperations execution demand', () => {
 
     expect(openInspectableResult).toHaveBeenCalledOnce();
     expect(openInspectableResult).toHaveBeenCalledWith(
-      { kind: 'result', resultId: '17' },
+      { kind: "result", resultId: "17" },
       expect.any(Function),
     );
   });
 
-  it('clears only frontend run projections', async () => {
+  it("clears only frontend run projections", async () => {
     await act(async () => {
       await operations.clearGraphArtifacts(graphPath);
     });
 
     expect(executionState.clearGraphRunProjections).toHaveBeenCalledWith(graphPath);
-    expect('clearGraphExecutionArtifacts' in ProjectService).toBe(false);
+    expect("clearGraphExecutionArtifacts" in ProjectService).toBe(false);
   });
 
-  it('ignores delayed events and completion after project lifecycle replacement', async () => {
+  it("ignores delayed events and completion after project lifecycle replacement", async () => {
     let emit!: (event: RunEvent) => void;
     let resolveExecution!: () => void;
     vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
-      (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
-        emit = onEvent ?? (() => undefined);
-        resolveExecution = resolve;
-      }),
+      (_projectInstanceId, _graphPath, _demand, onEvent) =>
+        new Promise((resolve) => {
+          emit = onEvent ?? (() => undefined);
+          resolveExecution = resolve;
+        }),
     );
 
     const execution = operations.executeGraph();
-    startProjectLifecycle('project-instance-2');
+    startProjectLifecycle("project-instance-2");
     emit(runStartedEvent());
     resolveExecution();
     await act(async () => execution);

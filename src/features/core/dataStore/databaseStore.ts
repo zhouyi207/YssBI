@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import { logger } from '@/features/core/observability/logger';
+import { create } from "zustand";
+import { DatabaseId } from "@/shared/types/domain/ids";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import { logger } from "@/features/core/observability/logger";
 
 export type { DatabaseRecord };
 
@@ -28,7 +28,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
   addDatabase: (id, db) =>
     set((state) => {
       if (state.databases[id]) {
-        logger.data.warn(`addDatabase: id "${id}" already exists`, 'DatabaseStore');
+        logger.data.warn(`addDatabase: id "${id}" already exists`, "DatabaseStore");
         return state;
       }
 
@@ -44,7 +44,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
     set((state) => {
       const prev = state.databases[id];
       if (!prev) {
-        logger.data.warn(`updateDatabase: id "${id}" not found`, 'DatabaseStore');
+        logger.data.warn(`updateDatabase: id "${id}" not found`, "DatabaseStore");
         return state;
       }
 
@@ -62,7 +62,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
   deleteDatabase: (id) =>
     set((state) => {
       if (!state.databases[id]) {
-        logger.data.warn(`deleteDatabase: id "${id}" not found`, 'DatabaseStore');
+        logger.data.warn(`deleteDatabase: id "${id}" not found`, "DatabaseStore");
         return state;
       }
 
@@ -74,13 +74,13 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
       return { databases: next, revisions };
     }),
 
-  setDatabaseSnapshot: (dbs, revisions) => set({
-    databases: dbs ?? {},
-    revisions: revisions ?? {},
-  }),
+  setDatabaseSnapshot: (dbs, revisions) =>
+    set({
+      databases: dbs ?? {},
+      revisions: revisions ?? {},
+    }),
 
-  setDatabases: (dbs) =>
-    set({ databases: dbs ?? {} }),
+  setDatabases: (dbs) => set({ databases: dbs ?? {} }),
 
   clear: () =>
     set({

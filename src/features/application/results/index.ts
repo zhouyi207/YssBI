@@ -3,12 +3,12 @@ export {
   resultRef,
   resolveInspectableResult,
   resolveInspectableResultRef,
-} from './inspectableResult';
+} from "./inspectableResult";
 export type {
   InspectableResultRef,
   InspectableResultQueryDependencies,
   ResolvedInspectableResultRef,
-} from './inspectableResult';
+} from "./inspectableResult";
 export type {
   ResultPageState,
   ResultRendererKind,
@@ -18,36 +18,36 @@ export type {
   ResultDescriptor,
   ResultPage,
   ResultValue,
-} from './types';
+} from "./types";
 export {
   resultQueryCoordinator,
   resultQueryRead,
   resetResultQuery,
   resetResultQueryProject,
-} from './runtime';
-export { useResultValue } from './useResultValue';
-export { usePagedResultRows } from './usePagedResultRows';
+} from "./runtime";
+export { useResultValue } from "./useResultValue";
+export { usePagedResultRows } from "./usePagedResultRows";
 export {
   plotTypeFromPresentation,
   presentationRoute,
   presentationRouteForDescriptor,
-} from './presentation';
-export { resolveResultRenderer } from './resolveRenderer';
-export { reportResultValuePayload } from './resultValuePayload';
+} from "./presentation";
+export { resolveResultRenderer } from "./resolveRenderer";
+export { reportResultValuePayload } from "./resultValuePayload";
 export {
   ResultViewPresentationProvider,
   useResultViewPresentation,
-} from './resultViewPresentation';
+} from "./resultViewPresentation";
 export {
   UnifiedResultView,
   ResultViewShell,
   JsonTreeView,
   ReadOnlyDataGrid,
   ResultReadError,
-} from './components';
+} from "./components";
 export type {
   ResultQueryCoordinator,
   ResultQueryOutcome,
   ResultQueryReadCapability,
   ResultQueryScope,
-} from './resultQueryCoordinator';
+} from "./resultQueryCoordinator";

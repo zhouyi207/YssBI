@@ -1,35 +1,36 @@
-
-import { currentProjectionLocale, hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { getGraphSourceRevision } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { EMPTY_HISTORY_STATE, useHistoryStore } from '@/features/core/history/historyStore';
-import { HistoryService } from '@/services/nodeSystem/historyService';
-import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
+import {
+  currentProjectionLocale,
+  hydrateGraphProjection,
+} from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { getGraphSourceRevision } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { EMPTY_HISTORY_STATE, useHistoryStore } from "@/features/core/history/historyStore";
+import { HistoryService } from "@/services/nodeSystem/historyService";
+import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 import type {
   HistoryMutationDto,
   HistoryStatusDto,
   MutationRequestDto,
-
   ResourceKeyDto,
   ResourceMutationResultDto,
-} from '@/shared/types/domain/editorMutation';
+} from "@/shared/types/domain/editorMutation";
 import {
   ProjectPublicationError,
   projectPublicationCoordinator,
-} from './projectPublicationCoordinator';
+} from "./projectPublicationCoordinator";
 import {
   completePendingMutation,
   registerPendingMutation,
   type PendingMutationRecord,
-} from './pendingMutationRegistry';
+} from "./pendingMutationRegistry";
 
-export type HistoryDirection = 'undo' | 'redo';
+export type HistoryDirection = "undo" | "redo";
 
 export interface ExecuteHistoryMutationInput {
   direction: HistoryDirection;
@@ -54,9 +55,9 @@ export interface HistoryCoordinatorDependencies {
 }
 
 export type ExecuteHistoryMutationOutcome =
-  | { status: 'applied'; result: ResourceMutationResultDto }
-  | { status: 'conflict' }
-  | { status: 'stale' };
+  | { status: "applied"; result: ResourceMutationResultDto }
+  | { status: "conflict" }
+  | { status: "stale" };
 
 let coordinatorEpoch = 0;
 let historyStatusKnown = false;
@@ -78,11 +79,11 @@ function invalidHistoryResult(message: string): never {
 }
 
 function isHistoryConflict(error: unknown): boolean {
-  return isApplicationIpcErrorCode(error, 'history_revision_conflict');
+  return isApplicationIpcErrorCode(error, "history_revision_conflict");
 }
 
 function anchorResource(graphPath: string): ResourceKeyDto {
-  return { kind: 'graph', key: graphPath };
+  return { kind: "graph", key: graphPath };
 }
 
 function validateHistoryResult(
@@ -91,13 +92,13 @@ function validateHistoryResult(
   result: ResourceMutationResultDto,
 ): string | undefined {
   if (result.deltas.some((delta) => delta.causedBy !== pending.operationId)) {
-    return 'operation correlation does not match the pending request';
+    return "operation correlation does not match the pending request";
   }
-  const anchorDelta = result.deltas.find((delta) =>
-    delta.resource.kind === resource.kind && delta.resource.key === resource.key,
+  const anchorDelta = result.deltas.find(
+    (delta) => delta.resource.kind === resource.kind && delta.resource.key === resource.key,
   );
   if (anchorDelta && anchorDelta.fromRevision !== pending.baseRevision) {
-    return 'anchor revision does not match the request';
+    return "anchor revision does not match the request";
   }
   return undefined;
 }
@@ -155,7 +156,7 @@ export async function executeHistoryMutation(
   overrides: Partial<HistoryCoordinatorDependencies> = {},
 ): Promise<ExecuteHistoryMutationOutcome> {
   if (useHistoryStore.getState().pending) {
-    throw new Error('a history request is already pending');
+    throw new Error("a history request is already pending");
   }
   const dependencies = { ...defaultDependencies, ...overrides };
   const identity = captureProjectIdentity();
@@ -192,17 +193,19 @@ export async function executeHistoryMutation(
         request,
       );
     } catch (error) {
-      if (!isCurrentProjectIdentity(identity)
-        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) {
-        return { status: 'stale' };
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        isApplicationIpcErrorCode(error, "stale_project_lifecycle")
+      ) {
+        return { status: "stale" };
       }
       if (!isHistoryConflict(error)) throw error;
       await hydrateAffectedGraphs([input.graphPath], input.locale, dependencies);
-      if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
-      return { status: 'conflict' };
+      if (!isCurrentProjectIdentity(identity)) return { status: "stale" };
+      return { status: "conflict" };
     }
 
-    if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
+    if (!isCurrentProjectIdentity(identity)) return { status: "stale" };
     try {
       await projectPublicationCoordinator.submit({
         result,
@@ -210,13 +213,13 @@ export async function executeHistoryMutation(
         validate: (candidate) => validateHistoryResult(pending, resource, candidate),
       });
     } catch (error) {
-      if (error instanceof ProjectPublicationError && error.code === 'stale_project_lifecycle') {
-        return { status: 'stale' };
+      if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle") {
+        return { status: "stale" };
       }
       invalidHistoryResult(error instanceof Error ? error.message : String(error));
     }
-    if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
-    return { status: 'applied', result };
+    if (!isCurrentProjectIdentity(identity)) return { status: "stale" };
+    return { status: "applied", result };
   } finally {
     completePendingMutation(operationId);
     pendingHistoryOperations.delete(operationId);
@@ -228,7 +231,7 @@ export async function executeHistoryMutation(
 
 export function undoEditorHistory(graphPath: string): Promise<ExecuteHistoryMutationOutcome> {
   return executeHistoryMutation({
-    direction: 'undo',
+    direction: "undo",
     graphPath,
     locale: currentProjectionLocale(),
   });
@@ -236,7 +239,7 @@ export function undoEditorHistory(graphPath: string): Promise<ExecuteHistoryMuta
 
 export function redoEditorHistory(graphPath: string): Promise<ExecuteHistoryMutationOutcome> {
   return executeHistoryMutation({
-    direction: 'redo',
+    direction: "redo",
     graphPath,
     locale: currentProjectionLocale(),
   });

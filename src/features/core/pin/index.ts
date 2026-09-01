@@ -1,6 +1,6 @@
-export { usePinInput, getDefaultValue } from './usePinInput';
-export { getPinMetaData } from './getPinMetaData';
-export { isSingleLinkPin } from './pins';
+export { usePinInput, getDefaultValue } from "./usePinInput";
+export { getPinMetaData } from "./getPinMetaData";
+export { isSingleLinkPin } from "./pins";
 export {
   getRepeatableSlot,
   findRepeatableSlotForPin,
@@ -8,5 +8,5 @@ export {
   countRepeatableSlotPins,
   canRemoveRepeatablePin,
   matchesRepeatableSlotName,
-} from './repeatablePinUtils';
-export { useRepeatablePinRemovable } from './useRepeatablePinRemovable';
+} from "./repeatablePinUtils";
+export { useRepeatablePinRemovable } from "./useRepeatablePinRemovable";

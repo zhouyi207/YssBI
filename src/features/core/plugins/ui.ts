@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { usePluginStore } from './pluginStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { usePluginStore } from "./pluginStore";
 
 export interface PluginUiSnapshot {
   readonly installedPluginIds: readonly string[];
@@ -38,9 +38,7 @@ export function subscribePluginUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function usePluginUi<T>(
-  selector: (state: DeepReadonly<PluginUiSnapshot>) => T,
-): T {
+export function usePluginUi<T>(selector: (state: DeepReadonly<PluginUiSnapshot>) => T): T {
   const state = useSyncExternalStore(subscribePluginUi, getPluginUiSnapshot, getPluginUiSnapshot);
   return selector(state);
 }

@@ -2,47 +2,42 @@ import {
   isResultPlotKind,
   type GraphOutputRefDto,
   type ResultPresentation,
-} from '@/shared/types/domain/result';
-import type { LayoutTab } from '@/shared/types/layout/layout';
+} from "@/shared/types/domain/result";
+import type { LayoutTab } from "@/shared/types/layout/layout";
 
-export const WORKBENCH_ACTIVITY_VIEW_IDS = [
-  'project',
-  'data',
-  'nodes',
-  'commands',
-] as const;
+export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "data", "nodes", "commands"] as const;
 
 export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[number];
 
 export const WORKBENCH_VIEW_IDS = [
   ...WORKBENCH_ACTIVITY_VIEW_IDS,
-  'details',
-  'assistant',
-  'inspect',
-  'logs',
-  'output',
-  'diagnostics',
+  "details",
+  "assistant",
+  "inspect",
+  "logs",
+  "output",
+  "diagnostics",
 ] as const;
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
-export type EditorResourceKind = 'event' | 'function' | 'worksheet';
+export type EditorResourceKind = "event" | "function" | "worksheet";
 export type WorkbenchComponentId =
-  | 'GraphEditor'
-  | 'WorksheetEditor'
-  | 'Project'
-  | 'Nodes'
-  | 'Data'
-  | 'Commands'
-  | 'Details'
-  | 'Assistant'
-  | 'Inspect'
-  | 'Result'
-  | 'Logs'
-  | 'Output'
-  | 'Diagnostics';
+  | "GraphEditor"
+  | "WorksheetEditor"
+  | "Project"
+  | "Nodes"
+  | "Data"
+  | "Commands"
+  | "Details"
+  | "Assistant"
+  | "Inspect"
+  | "Result"
+  | "Logs"
+  | "Output"
+  | "Diagnostics";
 
 export type EditorPanelMetadata = {
-  readonly role: 'editor';
+  readonly role: "editor";
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
   readonly pinned?: boolean;
@@ -50,12 +45,12 @@ export type EditorPanelMetadata = {
 };
 
 export type ViewPanelMetadata = {
-  readonly role: 'view';
+  readonly role: "view";
   readonly viewId: WorkbenchViewId;
 };
 
 export type ResultPanelMetadata = {
-  readonly role: 'result';
+  readonly role: "result";
   readonly resultKey: string;
   readonly resultId: string;
   readonly title: string;
@@ -63,57 +58,50 @@ export type ResultPanelMetadata = {
   readonly source: GraphOutputRefDto | null;
 };
 
-export type WorkbenchPanelMetadata =
-  | EditorPanelMetadata
-  | ViewPanelMetadata
-  | ResultPanelMetadata;
+export type WorkbenchPanelMetadata = EditorPanelMetadata | ViewPanelMetadata | ResultPanelMetadata;
 
 export interface WorkbenchPanelParams extends Record<string, unknown> {
   readonly metadata: WorkbenchPanelMetadata;
 }
 
-const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>([
-  'event',
-  'function',
-  'worksheet',
-]);
+const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>(["event", "function", "worksheet"]);
 const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
   WORKBENCH_ACTIVITY_VIEW_IDS,
 );
 const WORKBENCH_VIEW_ID_SET = new Set<WorkbenchViewId>(WORKBENCH_VIEW_IDS);
 const RESULT_REPORT_KINDS = new Set([
-  'olsSummary',
-  'binarySummary',
-  'iv2slsSummary',
-  'ivLimlSummary',
-  'praisSummary',
-  'varSummary',
-  'varSoc',
-  'panelSummary',
-  'panelDid',
-  'dfAdfSummary',
-  'dfAdfSummaryList',
-  'vecSummary',
-  'vecRankSummary',
+  "olsSummary",
+  "binarySummary",
+  "iv2slsSummary",
+  "ivLimlSummary",
+  "praisSummary",
+  "varSummary",
+  "varSoc",
+  "panelSummary",
+  "panelDid",
+  "dfAdfSummary",
+  "dfAdfSummaryList",
+  "vecSummary",
+  "vecRankSummary",
 ]);
 
 const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentId>> = {
-  project: 'Project',
-  nodes: 'Nodes',
-  data: 'Data',
-  commands: 'Commands',
-  details: 'Details',
-  assistant: 'Assistant',
-  inspect: 'Inspect',
-  logs: 'Logs',
-  output: 'Output',
-  diagnostics: 'Diagnostics',
+  project: "Project",
+  nodes: "Nodes",
+  data: "Data",
+  commands: "Commands",
+  details: "Details",
+  assistant: "Assistant",
+  inspect: "Inspect",
+  logs: "Logs",
+  output: "Output",
+  diagnostics: "Diagnostics",
 };
 
 type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasKnownKeys(
@@ -122,107 +110,109 @@ function hasKnownKeys(
   optionalKeys: readonly string[] = [],
 ): boolean {
   const allowedKeys = new Set([...requiredKeys, ...optionalKeys]);
-  return requiredKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-    && Object.keys(value).every((key) => allowedKeys.has(key));
+  return (
+    requiredKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key)) &&
+    Object.keys(value).every((key) => allowedKeys.has(key))
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
+  return typeof value === "string" && value.length > 0;
 }
 
 function isResultPresentation(value: unknown): value is ResultPresentation {
-  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
 
   switch (value.kind) {
-    case 'inspector':
-      return hasKnownKeys(value, ['kind']);
-    case 'plot':
-      return hasKnownKeys(value, ['kind', 'chart'])
-        && isResultPlotKind(value.chart);
-    case 'report':
-      return hasKnownKeys(value, ['kind', 'report'])
-        && typeof value.report === 'string'
-        && RESULT_REPORT_KINDS.has(value.report);
+    case "inspector":
+      return hasKnownKeys(value, ["kind"]);
+    case "plot":
+      return hasKnownKeys(value, ["kind", "chart"]) && isResultPlotKind(value.chart);
+    case "report":
+      return (
+        hasKnownKeys(value, ["kind", "report"]) &&
+        typeof value.report === "string" &&
+        RESULT_REPORT_KINDS.has(value.report)
+      );
     default:
       return false;
   }
 }
 
 function isPortAddress(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
 
-  if (value.kind === 'declared') {
-    return hasKnownKeys(value, ['kind', 'nodeId', 'portKey'])
-      && isNonEmptyString(value.nodeId)
-      && isNonEmptyString(value.portKey);
+  if (value.kind === "declared") {
+    return (
+      hasKnownKeys(value, ["kind", "nodeId", "portKey"]) &&
+      isNonEmptyString(value.nodeId) &&
+      isNonEmptyString(value.portKey)
+    );
   }
-  if (value.kind === 'instance') {
-    return hasKnownKeys(value, ['kind', 'nodeId', 'templateKey', 'instanceId'])
-      && isNonEmptyString(value.nodeId)
-      && isNonEmptyString(value.templateKey)
-      && isNonEmptyString(value.instanceId);
+  if (value.kind === "instance") {
+    return (
+      hasKnownKeys(value, ["kind", "nodeId", "templateKey", "instanceId"]) &&
+      isNonEmptyString(value.nodeId) &&
+      isNonEmptyString(value.templateKey) &&
+      isNonEmptyString(value.instanceId)
+    );
   }
   return false;
 }
 
 function isGraphOutputRef(value: unknown): value is GraphOutputRefDto {
-  return isRecord(value)
-    && hasKnownKeys(value, ['graphPath', 'port'])
-    && isNonEmptyString(value.graphPath)
-    && isPortAddress(value.port);
+  return (
+    isRecord(value) &&
+    hasKnownKeys(value, ["graphPath", "port"]) &&
+    isNonEmptyString(value.graphPath) &&
+    isPortAddress(value.port)
+  );
 }
 
-export function isWorkbenchActivityViewId(
-  value: string,
-): value is WorkbenchActivityViewId {
+export function isWorkbenchActivityViewId(value: string): value is WorkbenchActivityViewId {
   return WORKBENCH_ACTIVITY_VIEW_ID_SET.has(value as WorkbenchActivityViewId);
 }
 
 export function isWorkbenchActivityMetadata(
   metadata: WorkbenchPanelMetadata | undefined,
 ): metadata is ViewPanelMetadata & { readonly viewId: WorkbenchActivityViewId } {
-  return metadata?.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
+  return metadata?.role === "view" && isWorkbenchActivityViewId(metadata.viewId);
 }
 
 export function isWorkbenchPersistentViewMetadata(
   metadata: WorkbenchPanelMetadata | undefined,
-): metadata is ViewPanelMetadata & { readonly viewId: 'details' } {
-  return metadata?.role === 'view' && metadata.viewId === 'details';
+): metadata is ViewPanelMetadata & { readonly viewId: "details" } {
+  return metadata?.role === "view" && metadata.viewId === "details";
 }
 
 export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPanelMetadata {
-  if (!isRecord(value) || typeof value.role !== 'string') return false;
+  if (!isRecord(value) || typeof value.role !== "string") return false;
 
   switch (value.role) {
-    case 'editor':
-      return hasKnownKeys(
-        value,
-        ['role', 'resourceRef', 'resourceKind'],
-        ['pinned', 'sticky'],
-      )
-        && isNonEmptyString(value.resourceRef)
-        && typeof value.resourceKind === 'string'
-        && EDITOR_RESOURCE_KINDS.has(value.resourceKind as EditorResourceKind)
-        && (value.pinned === undefined || typeof value.pinned === 'boolean')
-        && (value.sticky === undefined || typeof value.sticky === 'boolean');
-    case 'view':
-      return hasKnownKeys(value, ['role', 'viewId'])
-        && typeof value.viewId === 'string'
-        && WORKBENCH_VIEW_ID_SET.has(value.viewId as WorkbenchViewId);
-    case 'result':
-      return hasKnownKeys(value, [
-        'role',
-        'resultKey',
-        'resultId',
-        'title',
-        'presentation',
-        'source',
-      ])
-        && isNonEmptyString(value.resultKey)
-        && isNonEmptyString(value.resultId)
-        && typeof value.title === 'string'
-        && isResultPresentation(value.presentation)
-        && (value.source === null || isGraphOutputRef(value.source));
+    case "editor":
+      return (
+        hasKnownKeys(value, ["role", "resourceRef", "resourceKind"], ["pinned", "sticky"]) &&
+        isNonEmptyString(value.resourceRef) &&
+        typeof value.resourceKind === "string" &&
+        EDITOR_RESOURCE_KINDS.has(value.resourceKind as EditorResourceKind) &&
+        (value.pinned === undefined || typeof value.pinned === "boolean") &&
+        (value.sticky === undefined || typeof value.sticky === "boolean")
+      );
+    case "view":
+      return (
+        hasKnownKeys(value, ["role", "viewId"]) &&
+        typeof value.viewId === "string" &&
+        WORKBENCH_VIEW_ID_SET.has(value.viewId as WorkbenchViewId)
+      );
+    case "result":
+      return (
+        hasKnownKeys(value, ["role", "resultKey", "resultId", "title", "presentation", "source"]) &&
+        isNonEmptyString(value.resultKey) &&
+        isNonEmptyString(value.resultId) &&
+        typeof value.title === "string" &&
+        isResultPresentation(value.presentation) &&
+        (value.source === null || isGraphOutputRef(value.source))
+      );
     default:
       return false;
   }
@@ -231,10 +221,10 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
 export function componentForWorkbenchMetadata(
   metadata: WorkbenchPanelMetadata,
 ): WorkbenchComponentId {
-  if (metadata.role === 'editor') {
-    return metadata.resourceKind === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor';
+  if (metadata.role === "editor") {
+    return metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor";
   }
-  if (metadata.role === 'result') return 'Result';
+  if (metadata.role === "result") return "Result";
   return COMPONENT_BY_VIEW_ID[metadata.viewId];
 }
 
@@ -242,7 +232,7 @@ export function layoutTabFromEditorMetadata(metadata: EditorPanelMetadata): Layo
   return {
     id: metadata.resourceRef,
     type: metadata.resourceKind,
-    component: metadata.resourceKind === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor',
+    component: metadata.resourceKind === "worksheet" ? "WorksheetEditor" : "GraphEditor",
     ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
     ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
   };

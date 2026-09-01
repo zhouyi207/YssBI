@@ -7,8 +7,11 @@
  *
  * HMR 清理与警告过滤仅在 `import.meta.hot` 下触发；正常完成的操作会主动注销 Channel。
  */
-import type { Channel } from '@tauri-apps/api/core';
-import { clearChannelMessageHandler, installTauriCallbackWarningFilterOnce } from '@/shared/platform/tauriWebview';
+import type { Channel } from "@tauri-apps/api/core";
+import {
+  clearChannelMessageHandler,
+  installTauriCallbackWarningFilterOnce,
+} from "@/shared/platform/tauriWebview";
 
 const activeChannels = new Map<object, (() => void) | undefined>();
 

@@ -1,27 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Variable } from '@/shared/types/domain';
-import type { ResourceMutationResultDto } from '@/shared/types/domain/editorMutation';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
-import { useHistoryStore } from '@/features/core/history';
-import { VariableService } from '@/services/variable/variableService';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { createVariableAction, deleteVariableAction, updateVariableAction } from './variableActions';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Variable } from "@/shared/types/domain";
+import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { useVariableStore } from "@/features/core/dataStore/variableStore";
+import { useHistoryStore } from "@/features/core/history";
+import { VariableService } from "@/services/variable/variableService";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import {
+  createVariableAction,
+  deleteVariableAction,
+  updateVariableAction,
+} from "./variableActions";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => { resolve = settle; });
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
   return { promise, resolve };
 }
 
-const variableResourcePath = 'opaque-variable-path-from-project-index';
+const variableResourcePath = "opaque-variable-path-from-project-index";
 const original: Variable = {
-  id: '00000000-0000-0000-0000-000000000701',
-  name: 'Original',
-  dataType: { kind: 'Int64' },
-  dataValue: { kind: 'Int64', value: 1 },
-  description: '',
-  scope: { type: 'global' },
+  id: "00000000-0000-0000-0000-000000000701",
+  name: "Original",
+  dataType: { kind: "Int64" },
+  dataValue: { kind: "Int64", value: 1 },
+  description: "",
+  scope: { type: "global" },
   tags: [],
 };
 
@@ -55,26 +61,28 @@ function mutation(params: {
 }): ResourceMutationResultDto {
   return {
     operationId: params.operationId,
-    projectInstanceId: 'project-a',
+    projectInstanceId: "project-a",
     publicationRevision: params.revision,
     moves: [],
-    deltas: [{
-      resource: { kind: 'variable', key: `variables/${original.id}` },
-      fromRevision: params.fromRevision ?? (params.before ? 1 : 0),
-      toRevision: params.toRevision ?? (params.before ? 2 : 1),
-      causedBy: params.operationId,
-      payload: {
-        kind: 'variable',
-        patch: { before: variableWire(params.before), after: variableWire(params.after) },
+    deltas: [
+      {
+        resource: { kind: "variable", key: `variables/${original.id}` },
+        fromRevision: params.fromRevision ?? (params.before ? 1 : 0),
+        toRevision: params.toRevision ?? (params.before ? 2 : 1),
+        causedBy: params.operationId,
+        payload: {
+          kind: "variable",
+          patch: { before: variableWire(params.before), after: variableWire(params.after) },
+        },
       },
-    }],
+    ],
     projectionReplacements: [],
-    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+    projectionStatus: { status: "complete", expectedGraphPaths: [] },
     history: params.history ?? { canUndo: true, canRedo: false },
   };
 }
 
-describe('variable command lifecycle guards', () => {
+describe("variable command lifecycle guards", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useVariableStore.getState().clear();
@@ -83,56 +91,55 @@ describe('variable command lifecycle guards', () => {
       resourcePath: variableResourcePath,
     });
     useVariableStore.getState().setVariableRevision(original.id, 1);
-    startProject('project-a');
+    startProject("project-a");
   });
 
-
-  it('does not invoke or publish when the project is replaced inside revision authority read', async () => {
+  it("does not invoke or publish when the project is replaced inside revision authority read", async () => {
     const authority = useVariableStore.getState();
-    vi.spyOn(useVariableStore, 'getState').mockImplementationOnce(() => {
-      startProject('project-b');
+    vi.spyOn(useVariableStore, "getState").mockImplementationOnce(() => {
+      startProject("project-b");
       return authority;
     });
-    const update = vi.spyOn(VariableService, 'updateVariable').mockResolvedValue({
+    const update = vi.spyOn(VariableService, "updateVariable").mockResolvedValue({
       variableId: original.id,
-      variable: { ...original, name: 'Changed' },
+      variable: { ...original, name: "Changed" },
       result: null,
     });
-    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
     const before = {
       variables: structuredClone(authority.variables),
       revisions: structuredClone(authority.revisions),
     };
 
-    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toBeNull();
+    await expect(updateVariableAction(original.id, { name: "Changed" })).resolves.toBeNull();
 
     expect(update).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(useVariableStore.getState()).toMatchObject(before);
   });
 
-  it('returns without effects when variable revision authority is missing', async () => {
+  it("returns without effects when variable revision authority is missing", async () => {
     useVariableStore.getState().setVariableSnapshot({}, {});
-    const update = vi.spyOn(VariableService, 'updateVariable');
-    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const update = vi.spyOn(VariableService, "updateVariable");
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 
-    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toBeNull();
+    await expect(updateVariableAction(original.id, { name: "Changed" })).resolves.toBeNull();
 
     expect(update).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(useVariableStore.getState().variables).toEqual({});
   });
 
-  it('ignores a delayed update completion from the previous project', async () => {
+  it("ignores a delayed update completion from the previous project", async () => {
     const request = deferred<Awaited<ReturnType<typeof VariableService.updateVariable>>>();
-    vi.spyOn(VariableService, 'updateVariable').mockReturnValue(request.promise);
+    vi.spyOn(VariableService, "updateVariable").mockReturnValue(request.promise);
 
-    const completion = updateVariableAction(original.id, { name: 'Changed' });
-    startProject('project-b');
+    const completion = updateVariableAction(original.id, { name: "Changed" });
+    startProject("project-b");
     useVariableStore.getState().clear();
     request.resolve({
       variableId: original.id,
-      variable: { ...original, name: 'Changed' },
+      variable: { ...original, name: "Changed" },
       result: null,
     });
 
@@ -140,18 +147,23 @@ describe('variable command lifecycle guards', () => {
     expect(useVariableStore.getState().variables).toEqual({});
   });
 
-  it('does not issue the follow-up read after a stale create completion', async () => {
+  it("does not issue the follow-up read after a stale create completion", async () => {
     const request = deferred<Awaited<ReturnType<typeof VariableService.createVariable>>>();
-    vi.spyOn(VariableService, 'createVariable').mockReturnValue(request.promise);
-    const getVariable = vi.spyOn(VariableService, 'getVariable');
+    vi.spyOn(VariableService, "createVariable").mockReturnValue(request.promise);
+    const getVariable = vi.spyOn(VariableService, "getVariable");
 
     const completion = createVariableAction({ activeGraphPath: null, isGlobal: true });
-    startProject('project-b');
+    startProject("project-b");
     useVariableStore.getState().clear();
     request.resolve({
       variableId: original.id,
       variable: original,
-      result: mutation({ revision: 1, operationId: crypto.randomUUID(), before: null, after: original }),
+      result: mutation({
+        revision: 1,
+        operationId: crypto.randomUUID(),
+        before: null,
+        after: original,
+      }),
     });
 
     await expect(completion).resolves.toBeNull();
@@ -159,18 +171,18 @@ describe('variable command lifecycle guards', () => {
     expect(useVariableStore.getState().variables).toEqual({});
   });
 
-  it('deduplicates event-first global update and advances the coordinator watermark once', async () => {
+  it("deduplicates event-first global update and advances the coordinator watermark once", async () => {
     const operationId = crypto.randomUUID();
-    const updated = { ...original, name: 'Changed' };
+    const updated = { ...original, name: "Changed" };
     const result = mutation({ revision: 1, operationId, before: original, after: updated });
-    vi.spyOn(VariableService, 'updateVariable').mockImplementation(async (...args) => {
+    vi.spyOn(VariableService, "updateVariable").mockImplementation(async (...args) => {
       expect(args[2]).toBe(1);
       void projectPublicationCoordinator.submit({ result });
       return { variableId: original.id, variable: updated, result };
     });
-    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 
-    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toEqual({
+    await expect(updateVariableAction(original.id, { name: "Changed" })).resolves.toEqual({
       ...updated,
       resourcePath: variableResourcePath,
     });
@@ -182,11 +194,11 @@ describe('variable command lifecycle guards', () => {
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1);
   });
 
-  it('preserves index resource metadata for a direct-first update and event echo', async () => {
+  it("preserves index resource metadata for a direct-first update and event echo", async () => {
     const operationId = crypto.randomUUID();
-    const updated = { ...original, name: 'Direct changed' };
+    const updated = { ...original, name: "Direct changed" };
     const result = mutation({ revision: 1, operationId, before: original, after: updated });
-    vi.spyOn(VariableService, 'updateVariable').mockResolvedValue({
+    vi.spyOn(VariableService, "updateVariable").mockResolvedValue({
       variableId: original.id,
       variable: updated,
       result,
@@ -197,39 +209,41 @@ describe('variable command lifecycle guards', () => {
       resourcePath: variableResourcePath,
     });
     void projectPublicationCoordinator.submit({ result });
-    await vi.waitFor(() => expect(
-      projectPublicationCoordinator.captureCommandLifecycle().publicationRevision,
-    ).toBe(1));
+    await vi.waitFor(() =>
+      expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1),
+    );
     expect(useVariableStore.getState().variables[original.id]).toEqual({
       ...updated,
       resourcePath: variableResourcePath,
     });
   });
 
-  it('deduplicates direct-first create and event echo without a follow-up read', async () => {
+  it("deduplicates direct-first create and event echo without a follow-up read", async () => {
     useVariableStore.getState().clear();
     const created = { ...original };
     const operationId = crypto.randomUUID();
     const result = mutation({ revision: 1, operationId, before: null, after: created });
-    vi.spyOn(VariableService, 'createVariable').mockImplementation(async (...args) => {
+    vi.spyOn(VariableService, "createVariable").mockImplementation(async (...args) => {
       expect(args[2]).toBe(0);
       return { variableId: created.id, variable: created, result };
     });
-    const getVariable = vi.spyOn(VariableService, 'getVariable');
+    const getVariable = vi.spyOn(VariableService, "getVariable");
 
-    await expect(createVariableAction({ activeGraphPath: null, isGlobal: true })).resolves.toBe(created.id);
+    await expect(createVariableAction({ activeGraphPath: null, isGlobal: true })).resolves.toBe(
+      created.id,
+    );
     void projectPublicationCoordinator.submit({ result });
-    await vi.waitFor(() => expect(
-      projectPublicationCoordinator.captureCommandLifecycle().publicationRevision,
-    ).toBe(1));
+    await vi.waitFor(() =>
+      expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1),
+    );
     expect(getVariable).not.toHaveBeenCalled();
     expect(useVariableStore.getState().variables[created.id]).toEqual(created);
   });
 
-  it('applies contiguous global create update delete publications across event and direct orderings', async () => {
+  it("applies contiguous global create update delete publications across event and direct orderings", async () => {
     useVariableStore.getState().clear();
-    const created = { ...original, name: 'Created' };
-    const updated = { ...created, name: 'Updated', description: 'metadata' };
+    const created = { ...original, name: "Created" };
+    const updated = { ...created, name: "Updated", description: "metadata" };
     const createResult = mutation({
       revision: 1,
       operationId: crypto.randomUUID(),
@@ -275,10 +289,10 @@ describe('variable command lifecycle guards', () => {
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(3);
   });
 
-  it('passes the authoritative variable revision to delete and applies only publication result', async () => {
+  it("passes the authoritative variable revision to delete and applies only publication result", async () => {
     const operationId = crypto.randomUUID();
     const result = mutation({ revision: 1, operationId, before: original, after: null });
-    const remove = vi.spyOn(VariableService, 'deleteVariable').mockResolvedValue({
+    const remove = vi.spyOn(VariableService, "deleteVariable").mockResolvedValue({
       variableId: original.id,
       variable: null,
       result,

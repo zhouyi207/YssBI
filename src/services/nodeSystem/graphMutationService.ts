@@ -1,13 +1,13 @@
-import { invokeCommand } from '@/services/ipc';
+import { invokeCommand } from "@/services/ipc";
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
   MutationRequestDto,
-} from '@/shared/types/dto/editorMutation';
+} from "@/shared/types/dto/editorMutation";
 import {
   parseEditorGraphMutationDto,
   parseGraphMutationResultDto,
-} from '@/shared/types/dto/editorMutationWireParser';
+} from "@/shared/types/dto/editorMutationWireParser";
 
 export class GraphMutationService {
   static async mutateGraph(
@@ -16,10 +16,11 @@ export class GraphMutationService {
     locale: string,
     request: MutationRequestDto<EditorGraphMutationDto>,
   ): Promise<GraphMutationResultDto> {
-    const wireRequest = request.payload.type === 'insertReroute'
-      ? { ...request, payload: parseEditorGraphMutationDto(request.payload) }
-      : request;
-    const response: unknown = await invokeCommand('mutate_graph_document', {
+    const wireRequest =
+      request.payload.type === "insertReroute"
+        ? { ...request, payload: parseEditorGraphMutationDto(request.payload) }
+        : request;
+    const response: unknown = await invokeCommand("mutate_graph_document", {
       projectInstanceId,
       graphPath,
       locale,

@@ -1,7 +1,7 @@
-import React from 'react';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import React from "react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function InfoSegmentedToggle<T extends string>({
   value,
@@ -21,7 +21,7 @@ export function InfoSegmentedToggle<T extends string>({
       onValueChange={(next) => next && onValueChange(next as T)}
       variant="outline"
       size="sm"
-      className={cn('text-[11px]', className)}
+      className={cn("text-[11px]", className)}
     >
       {options.map((option) => (
         <ToggleGroupItem key={option.value} value={option.value} className="px-3">
@@ -53,11 +53,11 @@ export function InfoAccentButton({
       disabled={disabled || loading}
       onClick={onClick}
       className={cn(
-        'border-[var(--accent-color)]/40 bg-[var(--accent-color)]/20 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/30',
+        "border-[var(--accent-color)]/40 bg-[var(--accent-color)]/20 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/30",
         className,
       )}
     >
-      {loading ? '...' : children}
+      {loading ? "..." : children}
     </Button>
   );
 }

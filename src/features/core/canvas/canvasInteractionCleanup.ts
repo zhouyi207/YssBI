@@ -2,11 +2,11 @@ import {
   getCanvasInteraction,
   useGraphInteractionStore,
   type CanvasInteraction,
-} from '@/features/core/graphInteraction/graphInteractionStore';
-import { useGestureStore } from '@/features/core/gesture/useGestureStore';
-import { clearCanvasPointerScope } from './pointerScope';
+} from "@/features/core/graphInteraction/graphInteractionStore";
+import { useGestureStore } from "@/features/core/gesture/useGestureStore";
+import { clearCanvasPointerScope } from "./pointerScope";
 
-type ActiveInteractionType = Exclude<CanvasInteraction['type'], 'idle'>;
+type ActiveInteractionType = Exclude<CanvasInteraction["type"], "idle">;
 interface CleanupScope {
   graphPath: string;
   groupId: string;
@@ -19,7 +19,10 @@ function cleanupKey(scope: CleanupScope): string {
   return `${scope.graphPath}\u0000${scope.groupId}\u0000${scope.interactionType}`;
 }
 
-export function registerCanvasInteractionCleanup(scope: CleanupScope, cleanup: () => void): () => void {
+export function registerCanvasInteractionCleanup(
+  scope: CleanupScope,
+  cleanup: () => void,
+): () => void {
   const key = cleanupKey(scope);
   const bucket = cleanups.get(key) ?? new Set<() => void>();
   bucket.add(cleanup);
@@ -32,10 +35,10 @@ export function registerCanvasInteractionCleanup(scope: CleanupScope, cleanup: (
 
 export function startCanvasInteraction(
   graphPath: string,
-  interaction: Exclude<CanvasInteraction, { type: 'idle' }>,
+  interaction: Exclude<CanvasInteraction, { type: "idle" }>,
 ): void {
   const current = useGraphInteractionStore.getState().interactions[graphPath];
-  if (current && current.type !== 'idle') {
+  if (current && current.type !== "idle") {
     cancelCanvasInteraction(graphPath, current.session.groupId);
   }
   useGraphInteractionStore.getState().startInteraction(graphPath, interaction);
@@ -47,9 +50,12 @@ function runCleanupKey(key: string): void {
   for (const cleanup of callbacks ?? []) cleanup();
 }
 
-export function cancelCanvasInteraction(graphPath: string, groupId: string): CanvasInteraction['type'] {
+export function cancelCanvasInteraction(
+  graphPath: string,
+  groupId: string,
+): CanvasInteraction["type"] {
   const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
-  if (interaction.type !== 'idle') {
+  if (interaction.type !== "idle") {
     const key = cleanupKey({ graphPath, groupId, interactionType: interaction.type });
     runCleanupKey(key);
   }

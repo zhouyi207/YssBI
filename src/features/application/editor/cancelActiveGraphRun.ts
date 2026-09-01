@@ -1,5 +1,5 @@
-import { useExecutionStore } from '@/features/core/execution';
-import { ProjectService } from '@/services/project/projectService';
+import { useExecutionStore } from "@/features/core/execution";
+import { ProjectService } from "@/services/project/projectService";
 
 type CancelActiveGraphRunDependencies = {
   cancelGraphRun: (runId: string) => Promise<boolean>;

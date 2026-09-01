@@ -22,7 +22,7 @@ interface MathNodeLayoutProps {
 
 /**
  * Math Node Layout Component
- * 
+ *
  * 职责：
  * - 渲染数学节点布局（中心符号 + Pins）
  * - 纯展示组件，样式逻辑在 hooks 中
@@ -40,18 +40,21 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   onPinValueChange,
 }) => {
   const { centerSymbol } = useNodeStyle(node);
-  
+
   const inputsExec = node.inputs.filter(isExecPin);
   const inputsData = node.inputs.filter((p) => !isExecPin(p));
   const outputsExec = node.outputs.filter(isExecPin);
   const outputsData = node.outputs.filter((p) => !isExecPin(p));
 
-  const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
-    if (!activePin) return "normal";
-    if (pin.id === activePin.id) return "highlighted";
-    if (isPinCompatible(pin, activePin)) return "highlighted";
-    return "dimmed";
-  }, [activePin]);
+  const getPinDragState = useCallback(
+    (pin: PinModel): "normal" | "highlighted" | "dimmed" => {
+      if (!activePin) return "normal";
+      if (pin.id === activePin.id) return "highlighted";
+      if (isPinCompatible(pin, activePin)) return "highlighted";
+      return "dimmed";
+    },
+    [activePin],
+  );
 
   const hasRepeatableInput = inputsData.some((pin) => pin.instanceKind === "userCreated");
 
@@ -77,9 +80,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
       {/* Center Symbol */}
       {centerSymbol && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-2xl font-bold opacity-30 text-black/40">
-            {centerSymbol}
-          </span>
+          <span className="text-2xl font-bold opacity-30 text-black/40">{centerSymbol}</span>
         </div>
       )}
 
@@ -92,7 +93,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
-                    groupId={groupId}
+                groupId={groupId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -108,7 +109,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
-                    groupId={groupId}
+                groupId={groupId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -128,7 +129,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               graphPath={graphPath}
-                    groupId={groupId}
+              groupId={groupId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
@@ -160,7 +161,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               graphPath={graphPath}
-                    groupId={groupId}
+              groupId={groupId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}

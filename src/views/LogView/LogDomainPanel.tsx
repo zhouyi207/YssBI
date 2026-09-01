@@ -1,27 +1,22 @@
-import { useEffect, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { IDockviewPanelProps } from 'dockview-react';
+import { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import type { IDockviewPanelProps } from "dockview-react";
 
-import type { LogsDockviewPanelParams } from '@/features/core/dockview/logsDockviewLayout';
-import { isLogDomainId, applyLogFilter } from '@/features/application/log';
-import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
-import { LogPanelList } from './LogPanelList';
-import { LOG_DOMAIN_TITLE_KEYS } from './logPresentation';
-import { useLogWorkspaceContext } from './logWorkspaceContext';
+import type { LogsDockviewPanelParams } from "@/features/core/dockview/logsDockviewLayout";
+import { isLogDomainId, applyLogFilter } from "@/features/application/log";
+import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import { LogPanelList } from "./LogPanelList";
+import { LOG_DOMAIN_TITLE_KEYS } from "./logPresentation";
+import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
-function isSameDiagnostic(
-  left: DiagnosticRecordDto,
-  right: DiagnosticRecordDto,
-): boolean {
+function isSameDiagnostic(left: DiagnosticRecordDto, right: DiagnosticRecordDto): boolean {
   return left.streamId === right.streamId && left.sequence === right.sequence;
 }
 
-export function LogDomainPanel(
-  props: IDockviewPanelProps<LogsDockviewPanelParams>,
-) {
+export function LogDomainPanel(props: IDockviewPanelProps<LogsDockviewPanelParams>) {
   const domain = props.params?.domain;
   if (!isLogDomainId(domain)) {
-    throw new Error('LogDomainPanel requires a valid domain parameter');
+    throw new Error("LogDomainPanel requires a valid domain parameter");
   }
 
   const { t } = useTranslation();
@@ -41,10 +36,7 @@ export function LogDomainPanel(
     presentation,
     selectLog,
   } = useLogWorkspaceContext();
-  const filteredLogs = useMemo(
-    () => applyLogFilter(logs, filter, domain),
-    [domain, filter, logs],
-  );
+  const filteredLogs = useMemo(() => applyLogFilter(logs, filter, domain), [domain, filter, logs]);
   const selectedIndex = useMemo(() => {
     if (!selectedLog) return null;
     const index = filteredLogs.findIndex((log) => isSameDiagnostic(log, selectedLog));

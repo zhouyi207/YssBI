@@ -1,20 +1,20 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
 import {
   useColumnDistributionStore,
   type DistributionMap,
-} from '@/features/core/dataStore/columnDistributionStore';
+} from "@/features/core/dataStore/columnDistributionStore";
 import {
   useColumnStatsStore,
   type ColumnStatsMap,
-} from '@/features/core/dataStore/columnStatsStore';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
-import type { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatasetOverview } from '@/shared/types/domain/dataframe';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
+} from "@/features/core/dataStore/columnStatsStore";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useDatasetOverviewStore } from "@/features/core/dataStore/datasetOverviewStore";
+import type { DatabaseId } from "@/shared/types/domain/ids";
+import type { DatasetOverview } from "@/shared/types/domain/dataframe";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
 
 export interface DatabaseReadSnapshot {
   readonly databases: DeepReadonly<Record<DatabaseId, DatabaseRecord>>;
@@ -62,9 +62,7 @@ export function subscribeDatabaseRead(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useDatabaseRead<T>(
-  selector: (snapshot: DatabaseReadSnapshot) => T,
-): T {
+export function useDatabaseRead<T>(selector: (snapshot: DatabaseReadSnapshot) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeDatabaseRead,
     getDatabaseSnapshot,

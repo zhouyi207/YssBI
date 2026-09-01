@@ -1,9 +1,9 @@
-import type { TaskErrorDetailsDTO } from '@/shared/types/bayes';
-import { isApplicationIpcError } from '@/features/application/errorReference';
+import type { TaskErrorDetailsDTO } from "@/shared/types/bayes";
+import { isApplicationIpcError } from "@/features/application/errorReference";
 
-const DETAIL_KEYS = ['column', 'row', 'parameter', 'path'] as const;
+const DETAIL_KEYS = ["column", "row", "parameter", "path"] as const;
 
-type DetailKey = typeof DETAIL_KEYS[number];
+type DetailKey = (typeof DETAIL_KEYS)[number];
 
 export interface BayesApplicationError {
   code: string;
@@ -36,8 +36,10 @@ export function normalizeBayesActionError(
 
 function normalizeBayesErrorDetails(value: unknown): TaskErrorDetailsDTO | null {
   if (value === null) return null;
-  if (!isRecord(value)
-    || Object.keys(value).some(key => !DETAIL_KEYS.includes(key as DetailKey))) {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !DETAIL_KEYS.includes(key as DetailKey))
+  ) {
     return null;
   }
 
@@ -62,9 +64,9 @@ function normalizeBayesErrorDetails(value: unknown): TaskErrorDetailsDTO | null 
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+  return typeof value === "string" && value.trim().length > 0;
 }

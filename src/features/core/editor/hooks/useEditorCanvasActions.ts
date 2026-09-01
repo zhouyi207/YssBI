@@ -1,6 +1,6 @@
-import { useCallback, type RefObject } from 'react';
-import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
-import type { EditorViewport } from '@/features/core/viewport';
+import { useCallback, type RefObject } from "react";
+import { commitViewport, setViewportLive, editorViewportScope } from "@/features/core/viewport";
+import type { EditorViewport } from "@/features/core/viewport";
 
 export function useEditorCanvasActions(
   activeGroupIdRef: RefObject<string>,

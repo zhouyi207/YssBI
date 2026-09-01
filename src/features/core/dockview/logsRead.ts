@@ -1,5 +1,5 @@
-import type { SerializedDockview } from 'dockview-react';
-import { logsDockviewRuntime } from './logsRuntime';
+import type { SerializedDockview } from "dockview-react";
+import { logsDockviewRuntime } from "./logsRuntime";
 
 export interface LogsDockviewRead {
   subscribe(listener: () => void): () => void;

@@ -6,12 +6,12 @@ import type {
   NodeId,
   PinData,
   PinId,
-} from '@/shared/types';
+} from "@/shared/types";
 import type {
   CompilationOutcomeDto,
   DiagnosticDto,
   ProjectionBasisDto,
-} from '@/shared/types/domain/editorProjection';
+} from "@/shared/types/domain/editorProjection";
 
 /** Per-graph normalized entity bucket — sole authority for graph topology in the store. */
 export interface GraphEntityBucket {
@@ -40,11 +40,11 @@ export function getGraphBucket(
   return state.graphEntities[graphPath];
 }
 
-export function hasGraphData(state: GraphEntitiesState , graphPath: GraphPath): boolean {
+export function hasGraphData(state: GraphEntitiesState, graphPath: GraphPath): boolean {
   return graphPath in state.graphEntities;
 }
 
-export function getGraphNodeIds(state: GraphEntitiesState , graphPath: GraphPath): NodeId[] {
+export function getGraphNodeIds(state: GraphEntitiesState, graphPath: GraphPath): NodeId[] {
   return state.graphEntities[graphPath]?.graphNodes ?? [];
 }
 

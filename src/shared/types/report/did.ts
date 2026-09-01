@@ -2,8 +2,8 @@
  * 面板 DID 报告 DTO
  */
 
-import { isFiniteNumber, isRecord } from './guards';
-import type { OLSResultData } from './regression';
+import { isFiniteNumber, isRecord } from "./guards";
+import type { OLSResultData } from "./regression";
 
 export interface DidEventStudyPoint {
   rel_time: number;
@@ -36,9 +36,9 @@ export interface DidPlaceboTimingBlock {
 }
 
 export type DidFakeGroupUnavailableCode =
-  | 'no_treated_entities'
-  | 'all_entities_treated'
-  | 'insufficient_valid_permutations';
+  | "no_treated_entities"
+  | "all_entities_treated"
+  | "insufficient_valid_permutations";
 
 interface DidPlaceboFakeGroupBase {
   n_perm: number;
@@ -71,25 +71,25 @@ export type DidPlaceboFakeGroupBlock =
   | DidPlaceboFakeGroupUnavailableBlock;
 
 const FAKE_GROUP_BASE_KEYS = [
-  'available',
-  'n_perm',
-  'n_perm_valid',
-  'min_valid_permutations',
-  'n_entities',
-  'n_treated_entities',
+  "available",
+  "n_perm",
+  "n_perm_valid",
+  "min_valid_permutations",
+  "n_entities",
+  "n_treated_entities",
 ] as const;
 const FAKE_GROUP_SUCCESS_KEYS = [
   ...FAKE_GROUP_BASE_KEYS,
-  'observed_coef',
-  'p_value_ri',
-  'perm_coef_mean',
-  'perm_coef_std',
+  "observed_coef",
+  "p_value_ri",
+  "perm_coef_mean",
+  "perm_coef_std",
 ] as const;
-const FAKE_GROUP_UNAVAILABLE_KEYS = [...FAKE_GROUP_BASE_KEYS, 'unavailableCode'] as const;
+const FAKE_GROUP_UNAVAILABLE_KEYS = [...FAKE_GROUP_BASE_KEYS, "unavailableCode"] as const;
 const FAKE_GROUP_UNAVAILABLE_CODES = new Set<DidFakeGroupUnavailableCode>([
-  'no_treated_entities',
-  'all_entities_treated',
-  'insufficient_valid_permutations',
+  "no_treated_entities",
+  "all_entities_treated",
+  "insufficient_valid_permutations",
 ]);
 
 function isNonNegativeSafeInteger(value: unknown): value is number {
@@ -98,23 +98,25 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
 
 function hasExactKeys(raw: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(raw);
-  return actual.length === keys.length && actual.every(key => keys.includes(key));
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
 }
 
 function hasValidFakeGroupCounts(
   raw: Record<string, unknown>,
 ): raw is Record<string, unknown> & DidPlaceboFakeGroupBase {
-  return isNonNegativeSafeInteger(raw.n_perm)
-    && raw.n_perm > 0
-    && raw.n_perm <= 2000
-    && isNonNegativeSafeInteger(raw.n_perm_valid)
-    && raw.n_perm_valid <= raw.n_perm
-    && isNonNegativeSafeInteger(raw.min_valid_permutations)
-    && raw.min_valid_permutations > 0
-    && isNonNegativeSafeInteger(raw.n_entities)
-    && raw.n_entities > 0
-    && isNonNegativeSafeInteger(raw.n_treated_entities)
-    && raw.n_treated_entities <= raw.n_entities;
+  return (
+    isNonNegativeSafeInteger(raw.n_perm) &&
+    raw.n_perm > 0 &&
+    raw.n_perm <= 2000 &&
+    isNonNegativeSafeInteger(raw.n_perm_valid) &&
+    raw.n_perm_valid <= raw.n_perm &&
+    isNonNegativeSafeInteger(raw.min_valid_permutations) &&
+    raw.min_valid_permutations > 0 &&
+    isNonNegativeSafeInteger(raw.n_entities) &&
+    raw.n_entities > 0 &&
+    isNonNegativeSafeInteger(raw.n_treated_entities) &&
+    raw.n_treated_entities <= raw.n_entities
+  );
 }
 
 export function parseDidPlaceboFakeGroupBlock(raw: unknown): DidPlaceboFakeGroupBlock | null {
@@ -123,13 +125,15 @@ export function parseDidPlaceboFakeGroupBlock(raw: unknown): DidPlaceboFakeGroup
     if (!hasExactKeys(raw, FAKE_GROUP_SUCCESS_KEYS)) return null;
     if (raw.n_perm_valid < raw.min_valid_permutations) return null;
     if (raw.n_treated_entities === 0 || raw.n_treated_entities >= raw.n_entities) return null;
-    if (!isFiniteNumber(raw.observed_coef)
-      || !isFiniteNumber(raw.p_value_ri)
-      || raw.p_value_ri < 0
-      || raw.p_value_ri > 1
-      || !isFiniteNumber(raw.perm_coef_mean)
-      || !isFiniteNumber(raw.perm_coef_std)
-      || raw.perm_coef_std < 0) {
+    if (
+      !isFiniteNumber(raw.observed_coef) ||
+      !isFiniteNumber(raw.p_value_ri) ||
+      raw.p_value_ri < 0 ||
+      raw.p_value_ri > 1 ||
+      !isFiniteNumber(raw.perm_coef_mean) ||
+      !isFiniteNumber(raw.perm_coef_std) ||
+      raw.perm_coef_std < 0
+    ) {
       return null;
     }
     return {
@@ -146,19 +150,22 @@ export function parseDidPlaceboFakeGroupBlock(raw: unknown): DidPlaceboFakeGroup
     };
   }
   if (raw.available !== false || !hasExactKeys(raw, FAKE_GROUP_UNAVAILABLE_KEYS)) return null;
-  if (typeof raw.unavailableCode !== 'string'
-    || !FAKE_GROUP_UNAVAILABLE_CODES.has(raw.unavailableCode as DidFakeGroupUnavailableCode)) {
+  if (
+    typeof raw.unavailableCode !== "string" ||
+    !FAKE_GROUP_UNAVAILABLE_CODES.has(raw.unavailableCode as DidFakeGroupUnavailableCode)
+  ) {
     return null;
   }
 
   const unavailableCode = raw.unavailableCode as DidFakeGroupUnavailableCode;
-  const expectedCounts = unavailableCode === 'no_treated_entities'
-    ? raw.n_treated_entities === 0 && raw.n_perm_valid === 0
-    : unavailableCode === 'all_entities_treated'
-      ? raw.n_treated_entities === raw.n_entities && raw.n_perm_valid === 0
-      : raw.n_treated_entities > 0
-        && raw.n_treated_entities < raw.n_entities
-        && raw.n_perm_valid < raw.min_valid_permutations;
+  const expectedCounts =
+    unavailableCode === "no_treated_entities"
+      ? raw.n_treated_entities === 0 && raw.n_perm_valid === 0
+      : unavailableCode === "all_entities_treated"
+        ? raw.n_treated_entities === raw.n_entities && raw.n_perm_valid === 0
+        : raw.n_treated_entities > 0 &&
+          raw.n_treated_entities < raw.n_entities &&
+          raw.n_perm_valid < raw.min_valid_permutations;
   if (!expectedCounts) return null;
 
   return {
@@ -193,7 +200,7 @@ export interface DidFakeGroupEnginePayload {
 }
 
 export interface PanelDidResultData {
-  kind: 'panel_did';
+  kind: "panel_did";
   title: string;
   endog_name: string;
   treat_name: string;

@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import type { ResourceKey } from './resourceTypes';
+import { create } from "zustand";
+import type { ResourceKey } from "./resourceTypes";
 
 export interface DocumentState {
   resourceKey: ResourceKey;

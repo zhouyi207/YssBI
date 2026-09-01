@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import type { XYPoint } from '@/shared/types/visualization/chartModel';
+import type { ReactNode } from "react";
+import type { XYPoint } from "@/shared/types/visualization/chartModel";
 
 import {
   StatCard,
@@ -8,17 +8,17 @@ import {
   FTestCards,
   OV_VARIANTS,
   formatNum,
-} from './RegressionShared';
-import { ModelSummaryGrid } from './ModelSummaryGrid';
-import { AnovaTable } from './AnovaTable';
-import { CoefficientsBlock } from './CoefficientsBlock';
-import { ACFPACFBlock } from './ACFPACFBlock';
-import { SerialTestsBlock } from './SerialTestsBlock';
-import { VifTable, meanFiniteVif } from './VifTable';
-import { ReportLazyBoundary, ReportSection, ReportSubheading } from './ReportLayout';
-import { LazyKDE, LazyResidualPlot, LazyScatter } from './reportLazyModules';
-import { HypothesisTestBlock } from './HypothesisTestBlock';
-import type { DiagnosticInfo, RegressionResultData } from '@/shared/types/report';
+} from "./RegressionShared";
+import { ModelSummaryGrid } from "./ModelSummaryGrid";
+import { AnovaTable } from "./AnovaTable";
+import { CoefficientsBlock } from "./CoefficientsBlock";
+import { ACFPACFBlock } from "./ACFPACFBlock";
+import { SerialTestsBlock } from "./SerialTestsBlock";
+import { VifTable, meanFiniteVif } from "./VifTable";
+import { ReportLazyBoundary, ReportSection, ReportSubheading } from "./ReportLayout";
+import { LazyKDE, LazyResidualPlot, LazyScatter } from "./reportLazyModules";
+import { HypothesisTestBlock } from "./HypothesisTestBlock";
+import type { DiagnosticInfo, RegressionResultData } from "@/shared/types/report";
 
 export function OmittedVariablesAlert({ diag }: { diag: DiagnosticInfo }) {
   if (!diag.omit_info?.omitted.length) return null;
@@ -42,7 +42,8 @@ export function OmittedVariablesAlert({ diag }: { diag: DiagnosticInfo }) {
         <div>
           <div className="mb-1 font-medium text-amber-400">Omitted variables (collinearity)</div>
           <div className="text-sm text-foreground">
-            The following variables were dropped due to strict multicollinearity (non-dummy variables removed first):
+            The following variables were dropped due to strict multicollinearity (non-dummy
+            variables removed first):
           </div>
           <ul className="mt-2 space-y-1 font-mono text-sm">
             {diag.omit_info.omitted.map((o, i) => (
@@ -111,7 +112,7 @@ export function MulticollinearityBlock({ diag }: { diag: DiagnosticInfo }) {
         <StatCard
           label="Condition Number"
           value={formatNum(diag.cond_no)}
-          sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
+          sub={diag.cond_no > 1000 ? "Possible multicollinearity" : "Acceptable"}
         />
         {diag.vif && diag.vif.length > 0
           ? (() => {
@@ -120,7 +121,7 @@ export function MulticollinearityBlock({ diag }: { diag: DiagnosticInfo }) {
                 <StatCard
                   label="Mean VIF"
                   value={formatNum(meanVif)}
-                  sub={meanVif > 10 ? 'High multicollinearity' : meanVif > 5 ? 'Moderate' : 'Low'}
+                  sub={meanVif > 10 ? "High multicollinearity" : meanVif > 5 ? "Moderate" : "Low"}
                 />
               ) : null;
             })()
@@ -179,10 +180,10 @@ export function OlsStyleDiagnosticsBlock({ diag }: { diag: DiagnosticInfo }) {
           />
           <Chi2TestCards
             cards={[
-              { label: 'Heteroskedasticity', ...diag.im_test.heteroskedasticity },
-              { label: 'Skewness', ...diag.im_test.skewness },
-              { label: 'Kurtosis', ...diag.im_test.kurtosis },
-              { label: 'Total', ...diag.im_test.total },
+              { label: "Heteroskedasticity", ...diag.im_test.heteroskedasticity },
+              { label: "Skewness", ...diag.im_test.skewness },
+              { label: "Kurtosis", ...diag.im_test.kurtosis },
+              { label: "Total", ...diag.im_test.total },
             ]}
           />
         </div>
@@ -194,13 +195,13 @@ export function OlsStyleDiagnosticsBlock({ diag }: { diag: DiagnosticInfo }) {
           <Chi2TestCards
             cards={[
               {
-                label: 'Omnibus',
+                label: "Omnibus",
                 chi2: diag.normality_tests.omnibus_stat,
                 df: 2,
                 p_value: diag.normality_tests.omnibus_p_value,
               },
               {
-                label: 'Jarque-Bera',
+                label: "Jarque-Bera",
                 chi2: diag.normality_tests.jarque_bera_stat,
                 df: 2,
                 p_value: diag.normality_tests.jarque_bera_p_value,
@@ -235,12 +236,12 @@ export function ResidualDiagnosticsSection({
   labels?: ResidualDiagnosticsLabels;
 }) {
   const {
-    leverageTitle = 'Leverage KDE (Stata predict lev, leverage)',
-    fittedTitle = 'Residuals vs Fitted',
+    leverageTitle = "Leverage KDE (Stata predict lev, leverage)",
+    fittedTitle = "Residuals vs Fitted",
     fittedTrailing,
-    scatterTitle = 'Residuals: e vs e_lag1',
-    scatterXLabel = 'e_{t-1}',
-    scatterYLabel = 'e_t',
+    scatterTitle = "Residuals: e vs e_lag1",
+    scatterXLabel = "e_{t-1}",
+    scatterYLabel = "e_t",
     acfResidualLabel,
     serialTestsResidualLabel,
     showNormalitySkewKurtosis = true,
@@ -292,8 +293,8 @@ export function ResidualDiagnosticsSection({
           <ReportLazyBoundary variant="chart">
             <LazyScatter
               data={scatterPoints}
-              xAxis={{ label: scatterXLabel, valueType: 'number' }}
-              yAxis={{ label: scatterYLabel, valueType: 'number' }}
+              xAxis={{ label: scatterXLabel, valueType: "number" }}
+              yAxis={{ label: scatterYLabel, valueType: "number" }}
               height={280}
               symmetricY
               zeroLine
@@ -303,7 +304,11 @@ export function ResidualDiagnosticsSection({
       ) : null}
 
       <ACFPACFBlock residuals={diag.residuals} residualLabel={acfResidualLabel} />
-      <SerialTestsBlock residuals={diag.residuals} exog={diag.exog} residualLabel={serialTestsResidualLabel} />
+      <SerialTestsBlock
+        residuals={diag.residuals}
+        exog={diag.exog}
+        residualLabel={serialTestsResidualLabel}
+      />
 
       {showNormalitySkewKurtosis && diag.normality_tests ? (
         <div className="mt-4">
@@ -340,7 +345,11 @@ export function OlsStyleDiagnosticsSection({
   return (
     <ReportSection title="Diagnostics" icon="diagnostics">
       <OlsStyleDiagnosticsBlock diag={diag} />
-      <ResidualDiagnosticsSection diag={diag} leverageKdeData={leverageKdeData} labels={residualLabels} />
+      <ResidualDiagnosticsSection
+        diag={diag}
+        leverageKdeData={leverageKdeData}
+        labels={residualLabels}
+      />
     </ReportSection>
   );
 }

@@ -3,13 +3,10 @@
  * IPC → Plot 窗口边界单点窄化，禁止 View 层 `as unknown as`。
  */
 
-import type { ResultPlotKind as PlotChart } from '@/shared/types/domain/result';
-import {
-  type PlotCorrelogramBarDTO,
-  parsePlotCorrelogramBar,
-} from '@/shared/types/report';
+import type { ResultPlotKind as PlotChart } from "@/shared/types/domain/result";
+import { type PlotCorrelogramBarDTO, parsePlotCorrelogramBar } from "@/shared/types/report";
 
-export type AxisFormat = 'date' | 'datetime' | 'number';
+export type AxisFormat = "date" | "datetime" | "number";
 
 export interface PlotPointDTO {
   x: number;
@@ -49,30 +46,30 @@ export interface CorrelationPlotDTO {
 }
 
 export type ParsedPlotPayload =
-  | { kind: 'correlogram'; data: CorrelogramPlotDTO }
-  | { kind: 'histogram'; data: HistogramPlotDTO }
-  | { kind: 'correlation'; data: CorrelationPlotDTO }
-  | { kind: 'scatter'; data: XySeriesPlotDTO }
-  | { kind: 'line'; data: XySeriesPlotDTO }
-  | { kind: 'ecdf'; data: XySeriesPlotDTO }
-  | { kind: 'kde'; data: XySeriesPlotDTO }
-  | { kind: 'plot'; data: XySeriesPlotDTO };
+  | { kind: "correlogram"; data: CorrelogramPlotDTO }
+  | { kind: "histogram"; data: HistogramPlotDTO }
+  | { kind: "correlation"; data: CorrelationPlotDTO }
+  | { kind: "scatter"; data: XySeriesPlotDTO }
+  | { kind: "line"; data: XySeriesPlotDTO }
+  | { kind: "ecdf"; data: XySeriesPlotDTO }
+  | { kind: "kde"; data: XySeriesPlotDTO }
+  | { kind: "plot"; data: XySeriesPlotDTO };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
 function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
-  if (typeof value === 'string' && value.length > 0) {
+  if (typeof value === "string" && value.length > 0) {
     return value;
   }
   return undefined;
@@ -83,7 +80,7 @@ function readOptionalAxisFormat(
   key: string,
 ): AxisFormat | undefined {
   const value = record[key];
-  if (value === 'date' || value === 'datetime' || value === 'number') {
+  if (value === "date" || value === "datetime" || value === "number") {
     return value;
   }
   return undefined;
@@ -115,10 +112,10 @@ export function parseXySeriesPlot(raw: unknown): XySeriesPlotDTO | null {
   if (!data) return null;
   return {
     data,
-    xLabel: readOptionalString(raw, 'xLabel'),
-    yLabel: readOptionalString(raw, 'yLabel'),
-    xFormat: readOptionalAxisFormat(raw, 'xFormat'),
-    yFormat: readOptionalAxisFormat(raw, 'yFormat'),
+    xLabel: readOptionalString(raw, "xLabel"),
+    yLabel: readOptionalString(raw, "yLabel"),
+    xFormat: readOptionalAxisFormat(raw, "xFormat"),
+    yFormat: readOptionalAxisFormat(raw, "yFormat"),
   };
 }
 
@@ -126,7 +123,7 @@ function parseHistogramBin(raw: unknown): HistogramBinDTO | null {
   if (!isRecord(raw)) return null;
   const label = raw.label;
   const count = raw.count;
-  if (typeof label !== 'string' || !isNonNegativeInteger(count)) return null;
+  if (typeof label !== "string" || !isNonNegativeInteger(count)) return null;
   return { label, count };
 }
 
@@ -141,8 +138,8 @@ export function parseHistogramPlot(raw: unknown): HistogramPlotDTO | null {
   }
   return {
     data: bins,
-    xLabel: readOptionalString(raw, 'xLabel'),
-    yLabel: readOptionalString(raw, 'yLabel'),
+    xLabel: readOptionalString(raw, "xLabel"),
+    yLabel: readOptionalString(raw, "yLabel"),
   };
 }
 
@@ -169,10 +166,7 @@ export function parseCorrelogramPlot(raw: unknown): CorrelogramPlotDTO | null {
   return { acf, pacf, ciHalfWidth, n };
 }
 
-function parseSquareNullableNumberMatrix(
-  raw: unknown,
-  size: number,
-): (number | null)[][] | null {
+function parseSquareNullableNumberMatrix(raw: unknown, size: number): (number | null)[][] | null {
   if (!Array.isArray(raw) || raw.length !== size) return null;
   const matrix: (number | null)[][] = [];
   for (const row of raw) {
@@ -192,7 +186,7 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
   if (!Array.isArray(raw.labels) || raw.labels.length < 2) return null;
   const labels: string[] = [];
   for (const label of raw.labels) {
-    if (typeof label !== 'string') return null;
+    if (typeof label !== "string") return null;
     labels.push(label);
   }
   const matrix = parseSquareNullableNumberMatrix(raw.matrix, labels.length);
@@ -207,27 +201,26 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
   return { labels, matrix, pMatrix };
 }
 
-
 /** 按 descriptor chart 窄化 plot payload；失败返回 null（由调用方渲染局部 invalid 状态）。 */
 export function parsePlotPayload(chart: PlotChart, raw: unknown): ParsedPlotPayload | null {
   switch (chart) {
-    case 'correlogram': {
+    case "correlogram": {
       const data = parseCorrelogramPlot(raw);
-      return data ? { kind: 'correlogram', data } : null;
+      return data ? { kind: "correlogram", data } : null;
     }
-    case 'histogram': {
+    case "histogram": {
       const data = parseHistogramPlot(raw);
-      return data ? { kind: 'histogram', data } : null;
+      return data ? { kind: "histogram", data } : null;
     }
-    case 'correlation': {
+    case "correlation": {
       const data = parseCorrelationPlot(raw);
-      return data ? { kind: 'correlation', data } : null;
+      return data ? { kind: "correlation", data } : null;
     }
-    case 'scatter':
-    case 'line':
-    case 'plot':
-    case 'ecdf':
-    case 'kde': {
+    case "scatter":
+    case "line":
+    case "plot":
+    case "ecdf":
+    case "kde": {
       const data = parseXySeriesPlot(raw);
       return data ? { kind: chart, data } : null;
     }

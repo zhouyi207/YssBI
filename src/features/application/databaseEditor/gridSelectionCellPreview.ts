@@ -1,10 +1,10 @@
-import { isEmptyGridSelection, type DatabaseGridSelection } from './useSelection';
+import { isEmptyGridSelection, type DatabaseGridSelection } from "./useSelection";
 
 function formatCellForPreview(value: unknown): string {
-  if (value === null) return 'null';
-  if (value === undefined) return '';
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (value === null) return "null";
+  if (value === undefined) return "";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
@@ -15,12 +15,18 @@ function getCellText(
   rowCount: number,
   loadedRows: readonly (readonly unknown[])[],
 ): string {
-  if (!Number.isInteger(row) || !Number.isInteger(column)
-    || row < 0 || row >= rowCount || column < 0 || column >= columnCount) {
-    return '';
+  if (
+    !Number.isInteger(row) ||
+    !Number.isInteger(column) ||
+    row < 0 ||
+    row >= rowCount ||
+    column < 0 ||
+    column >= columnCount
+  ) {
+    return "";
   }
   const rowData = loadedRows[row];
-  if (!rowData) return '';
+  if (!rowData) return "";
   return formatCellForPreview(rowData[column]);
 }
 
@@ -30,9 +36,9 @@ export function getGridSelectionPrimaryCellText(
   rowCount: number,
   loadedRows: readonly (readonly unknown[])[],
 ): string {
-  if (!selection || isEmptyGridSelection(selection)) return '';
+  if (!selection || isEmptyGridSelection(selection)) return "";
 
-  if (selection.type === 'cells') {
+  if (selection.type === "cells") {
     return getCellText(
       selection.activeCell.row,
       selection.activeCell.column,
@@ -41,7 +47,7 @@ export function getGridSelectionPrimaryCellText(
       loadedRows,
     );
   }
-  if (selection.type === 'rows') {
+  if (selection.type === "rows") {
     return getCellText(selection.rows[0], 0, columnCount, rowCount, loadedRows);
   }
   return getCellText(0, selection.columns[0], columnCount, rowCount, loadedRows);

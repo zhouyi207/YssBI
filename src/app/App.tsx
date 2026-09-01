@@ -8,14 +8,36 @@ import { ChartThemeProvider } from "./providers/ChartThemeProvider";
 import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
 import { UIHost } from "./ui/UIHost";
 
-const PlotWindow = React.lazy(() => import("@/views/PlotView/PlotWindow").then(m => ({ default: m.PlotWindow })));
-const DatabaseEditorWindow = React.lazy(() => import("@/views/DatabaseEditor/DatabaseEditorWindow").then(m => ({ default: m.DatabaseEditorWindow })));
-const SourceInspectorWindow = React.lazy(() => import("@/views/SourceInspector/SourceInspectorWindow").then(m => ({ default: m.SourceInspectorWindow })));
-const LogWindow = React.lazy(() => import("@/views/LogView/LogWindow").then(m => ({ default: m.LogWindow })));
-const InfoWindow = React.lazy(() => import("@/views/InfoView/InfoWindow").then(m => ({ default: m.InfoWindow })));
-const EditorWindow = React.lazy(() => import("@/views/EditorView/EditorWindow").then(m => ({ default: m.EditorWindow })));
-const BayesView = React.lazy(() => import("@/views/BayesView/BayesView").then(m => ({ default: m.BayesView })));
-const ProjectPickerScreen = React.lazy(() => import("@/views/ProjectView/ProjectPickerScreen").then(m => ({ default: m.ProjectPickerScreen })));
+const PlotWindow = React.lazy(() =>
+  import("@/views/PlotView/PlotWindow").then((m) => ({ default: m.PlotWindow })),
+);
+const DatabaseEditorWindow = React.lazy(() =>
+  import("@/views/DatabaseEditor/DatabaseEditorWindow").then((m) => ({
+    default: m.DatabaseEditorWindow,
+  })),
+);
+const SourceInspectorWindow = React.lazy(() =>
+  import("@/views/SourceInspector/SourceInspectorWindow").then((m) => ({
+    default: m.SourceInspectorWindow,
+  })),
+);
+const LogWindow = React.lazy(() =>
+  import("@/views/LogView/LogWindow").then((m) => ({ default: m.LogWindow })),
+);
+const InfoWindow = React.lazy(() =>
+  import("@/views/InfoView/InfoWindow").then((m) => ({ default: m.InfoWindow })),
+);
+const EditorWindow = React.lazy(() =>
+  import("@/views/EditorView/EditorWindow").then((m) => ({ default: m.EditorWindow })),
+);
+const BayesView = React.lazy(() =>
+  import("@/views/BayesView/BayesView").then((m) => ({ default: m.BayesView })),
+);
+const ProjectPickerScreen = React.lazy(() =>
+  import("@/views/ProjectView/ProjectPickerScreen").then((m) => ({
+    default: m.ProjectPickerScreen,
+  })),
+);
 
 function AppRouter() {
   return (

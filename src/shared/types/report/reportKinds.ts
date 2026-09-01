@@ -3,29 +3,29 @@
  */
 
 export const REPORT_PAYLOAD_KINDS = [
-  'olsSummary',
-  'binarySummary',
-  'iv2slsSummary',
-  'ivLimlSummary',
-  'praisSummary',
-  'varSummary',
-  'varSoc',
-  'panelSummary',
-  'panelDid',
-  'dfAdfSummary',
-  'dfAdfSummaryList',
-  'vecSummary',
-  'vecRankSummary',
+  "olsSummary",
+  "binarySummary",
+  "iv2slsSummary",
+  "ivLimlSummary",
+  "praisSummary",
+  "varSummary",
+  "varSoc",
+  "panelSummary",
+  "panelDid",
+  "dfAdfSummary",
+  "dfAdfSummaryList",
+  "vecSummary",
+  "vecRankSummary",
 ] as const;
 
 export type ReportPayloadKind = (typeof REPORT_PAYLOAD_KINDS)[number];
 
 const REGRESSION_REPORTS = new Set<ReportPayloadKind>([
-  'olsSummary',
-  'binarySummary',
-  'iv2slsSummary',
-  'ivLimlSummary',
-  'praisSummary',
+  "olsSummary",
+  "binarySummary",
+  "iv2slsSummary",
+  "ivLimlSummary",
+  "praisSummary",
 ]);
 
 export function isRegressionReportKind(kind: ReportPayloadKind): boolean {

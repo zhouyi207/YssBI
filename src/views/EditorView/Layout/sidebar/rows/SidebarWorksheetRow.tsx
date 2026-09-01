@@ -1,8 +1,8 @@
-import { memo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscGraphLine } from 'react-icons/vsc';
-import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
-import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
+import { memo } from "react";
+import { useTranslation } from "react-i18next";
+import { VscGraphLine } from "react-icons/vsc";
+import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
+import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from "../../sidebarUi";
 
 export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({
   worksheetPath,
@@ -26,7 +26,9 @@ export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({
       id={worksheetPath}
       isSelected={isSelected}
       indentDepth={indentDepth}
-      icon={<VscGraphLine size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.worksheet }} />}
+      icon={
+        <VscGraphLine size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.worksheet }} />
+      }
       label={name}
       onClick={(e) => {
         e.stopPropagation();
@@ -40,7 +42,7 @@ export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({
       trailing={
         <SidebarRowActionButton
           isSelected={isSelected}
-          tooltip={t('sidebar.open')}
+          tooltip={t("sidebar.open")}
           onClick={(e) => {
             e.stopPropagation();
             void onOpen(worksheetPath, name);

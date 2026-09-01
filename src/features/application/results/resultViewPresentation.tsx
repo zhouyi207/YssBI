@@ -1,8 +1,8 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from "react";
 
-export type ResultViewPresentation = 'standalone' | 'embedded';
+export type ResultViewPresentation = "standalone" | "embedded";
 
-const ResultViewPresentationContext = createContext<ResultViewPresentation>('standalone');
+const ResultViewPresentationContext = createContext<ResultViewPresentation>("standalone");
 
 export function ResultViewPresentationProvider({
   presentation,

@@ -15,15 +15,36 @@ export const WatermarkView = () => {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-70"
         style={{
-          backgroundImage: 'radial-gradient(circle at 1px 1px, var(--grid-lines) 1px, transparent 1.2px)',
-          backgroundSize: '40px 40px',
-          maskImage: 'radial-gradient(circle at center, black 0%, transparent 68%)',
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, var(--grid-lines) 1px, transparent 1.2px)",
+          backgroundSize: "40px 40px",
+          maskImage: "radial-gradient(circle at center, black 0%, transparent 68%)",
         }}
       />
-      <svg aria-hidden="true" viewBox="0 0 720 320" className="pointer-events-none absolute h-[78%] w-[78%] max-w-[920px] text-[var(--accent-color)] opacity-25">
-        <path d="M22 76h124c52 0 58 76 110 76h208c52 0 58-76 110-76h124" fill="none" stroke="currentColor" strokeWidth="1" />
-        <path d="M22 244h124c52 0 58-76 110-76h208c52 0 58 76 110 76h124" fill="none" stroke="currentColor" strokeWidth="1" />
-        <path className="project-flow-signal" d="M22 76h124c52 0 58 76 110 76h208c52 0 58 92 110 92h124" fill="none" stroke="currentColor" strokeWidth="1.25" />
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 720 320"
+        className="pointer-events-none absolute h-[78%] w-[78%] max-w-[920px] text-[var(--accent-color)] opacity-25"
+      >
+        <path
+          d="M22 76h124c52 0 58 76 110 76h208c52 0 58-76 110-76h124"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+        />
+        <path
+          d="M22 244h124c52 0 58-76 110-76h208c52 0 58 76 110 76h124"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+        />
+        <path
+          className="project-flow-signal"
+          d="M22 76h124c52 0 58 76 110 76h208c52 0 58 92 110 92h124"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.25"
+        />
         <g fill="var(--workbench-bg)" stroke="currentColor" strokeWidth="1.4">
           <circle cx="22" cy="76" r="5" />
           <circle cx="22" cy="244" r="5" />
@@ -35,11 +56,16 @@ export const WatermarkView = () => {
 
       <div className="relative z-10 flex w-full max-w-[620px] flex-col items-center">
         <div className="relative mb-6">
-          <div aria-hidden="true" className="absolute inset-0 scale-[2.2] rounded-full bg-[var(--accent-color)]/15 blur-2xl" />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 scale-[2.2] rounded-full bg-[var(--accent-color)]/15 blur-2xl"
+          />
           <BrandMark className="size-14 rounded-xl shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-color)_55%,transparent),0_16px_42px_color-mix(in_srgb,var(--accent-color)_28%,transparent)]" />
         </div>
         <div className="mb-5 text-center">
-          <p className="font-heading text-lg font-semibold tracking-[-0.035em] text-foreground">YssBI</p>
+          <p className="font-heading text-lg font-semibold tracking-[-0.035em] text-foreground">
+            YssBI
+          </p>
           <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
             {t("aboutModal.description")}
           </p>
@@ -57,8 +83,12 @@ export const WatermarkView = () => {
                 <VscNewFile size={16} />
               </span>
               <span className="flex min-w-0 flex-col items-start gap-0.5">
-                <span className="font-heading text-xs font-semibold text-foreground">{t("canvas.newEventGraph")}</span>
-                <span className="text-[10px] font-normal text-muted-foreground">{t("canvas.coreLogic")}</span>
+                <span className="font-heading text-xs font-semibold text-foreground">
+                  {t("canvas.newEventGraph")}
+                </span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {t("canvas.coreLogic")}
+                </span>
               </span>
             </Button>
             <Button
@@ -71,8 +101,12 @@ export const WatermarkView = () => {
                 <VscSymbolMethod size={16} />
               </span>
               <span className="flex min-w-0 flex-col items-start gap-0.5">
-                <span className="font-heading text-xs font-semibold text-foreground">{t("canvas.newFunction")}</span>
-                <span className="text-[10px] font-normal text-muted-foreground">{t("canvas.reusableRoutine")}</span>
+                <span className="font-heading text-xs font-semibold text-foreground">
+                  {t("canvas.newFunction")}
+                </span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {t("canvas.reusableRoutine")}
+                </span>
               </span>
             </Button>
             <Button
@@ -85,10 +119,16 @@ export const WatermarkView = () => {
                 <VscFolderOpened size={16} />
               </span>
               <span className="flex min-w-0 flex-col items-start gap-1">
-                <span className="font-heading text-xs font-semibold text-foreground">{t("canvas.openFile")}</span>
+                <span className="font-heading text-xs font-semibold text-foreground">
+                  {t("canvas.openFile")}
+                </span>
                 <span className="flex gap-1">
-                  <kbd className="rounded border border-[var(--strong-border)] bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[9px] font-normal text-muted-foreground">Ctrl</kbd>
-                  <kbd className="rounded border border-[var(--strong-border)] bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[9px] font-normal text-muted-foreground">O</kbd>
+                  <kbd className="rounded border border-[var(--strong-border)] bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[9px] font-normal text-muted-foreground">
+                    Ctrl
+                  </kbd>
+                  <kbd className="rounded border border-[var(--strong-border)] bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[9px] font-normal text-muted-foreground">
+                    O
+                  </kbd>
                 </span>
               </span>
             </Button>

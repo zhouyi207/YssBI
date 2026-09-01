@@ -1,14 +1,14 @@
-import type { MouseEvent, ReactNode } from 'react';
-import { VscFolder, VscFolderOpened } from 'react-icons/vsc';
-import { Collapsible, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { cn } from '@/lib/utils';
-import { SidebarChevron } from './SidebarChevron';
+import type { MouseEvent, ReactNode } from "react";
+import { VscFolder, VscFolderOpened } from "react-icons/vsc";
+import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import { SidebarChevron } from "./SidebarChevron";
 import {
   SIDEBAR_ROW_ICON_SIZE,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
   sidebarGroupRowClass,
   sidebarItemIndent,
-} from './sidebarStyles';
+} from "./sidebarStyles";
 
 export interface SidebarTreeCategoryRowProps {
   categoryId: string;
@@ -36,18 +36,12 @@ export function SidebarTreeCategoryRow({
   const FolderIcon = expanded ? VscFolderOpened : VscFolder;
 
   return (
-    <Collapsible
-      open={expanded}
-      disabled={interactionDisabled}
-      onOpenChange={onExpandedChange}
-    >
+    <Collapsible open={expanded} disabled={interactionDisabled} onOpenChange={onExpandedChange}>
       <div
         className={cn(
           sidebarGroupRowClass(),
-          'gap-1 rounded-md text-left transition-none hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-          expanded
-            ? 'text-sidebar-foreground'
-            : 'text-sidebar-foreground/75',
+          "gap-1 rounded-md text-left transition-none hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+          expanded ? "text-sidebar-foreground" : "text-sidebar-foreground/75",
         )}
         style={sidebarItemIndent(depth)}
         onContextMenu={onContextMenu}
@@ -68,8 +62,8 @@ export function SidebarTreeCategoryRow({
               <FolderIcon
                 size={SIDEBAR_ROW_ICON_SIZE}
                 className={cn(
-                  'transition-colors',
-                  expanded ? 'text-sidebar-primary' : 'text-sidebar-foreground/55',
+                  "transition-colors",
+                  expanded ? "text-sidebar-primary" : "text-sidebar-foreground/55",
                 )}
               />
             </span>

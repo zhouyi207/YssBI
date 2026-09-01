@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { InferenceResultDTO } from '@/shared/types/bayes';
+import { useEffect, useRef, useState } from "react";
+import type { InferenceResultDTO } from "@/shared/types/bayes";
 import {
   useBayesArtifacts,
   type BayesArtifactsModel,
@@ -7,26 +7,25 @@ import {
   type BayesDensityPlotData,
   type BayesReadOutcome,
   type BayesTracePlotData,
-} from '@/features/application/bayes';
+} from "@/features/application/bayes";
 
 export interface BayesPlotDataState<T> {
   readonly data: BayesPlotValue<T> | null;
   readonly loading: boolean;
-  readonly error: BayesArtifactsModel['issue'];
+  readonly error: BayesArtifactsModel["issue"];
   readonly parameters: readonly string[];
   readonly parameter: string | undefined;
   readonly setSelectedParameter: (parameter: string) => void;
 }
 
-type PlotReader<T> = (
-  artifacts: BayesArtifactsModel,
-) => Promise<BayesReadOutcome<T>>;
+type PlotReader<T> = (artifacts: BayesArtifactsModel) => Promise<BayesReadOutcome<T>>;
 
-type BayesPlotValue<T> = Extract<BayesReadOutcome<T>, { readonly status: 'ready' }>['value'];
+type BayesPlotValue<T> = Extract<BayesReadOutcome<T>, { readonly status: "ready" }>["value"];
 
 const readTrace: PlotReader<BayesTracePlotData> = (artifacts) => artifacts.readTrace();
 const readDensity: PlotReader<BayesDensityPlotData> = (artifacts) => artifacts.readDensity();
-const readAutocorrelation: PlotReader<BayesAutocorrelationData> = (artifacts) => artifacts.readAutocorrelation();
+const readAutocorrelation: PlotReader<BayesAutocorrelationData> = (artifacts) =>
+  artifacts.readAutocorrelation();
 
 export function useBayesPlotData<T>(
   result: InferenceResultDTO | null,
@@ -43,7 +42,7 @@ export function useBayesPlotData<T>(
     setData(null);
     let current = true;
     void readerRef.current(artifactsRef.current).then((outcome) => {
-      if (!current || outcome.status !== 'ready') return;
+      if (!current || outcome.status !== "ready") return;
       setData(outcome.value);
     });
     return () => {
@@ -79,4 +78,4 @@ export function useBayesAutocorrelationData(
   return useBayesPlotData(result, readAutocorrelation);
 }
 
-export { selectParameter as selectParameterForTask } from '@/features/application/bayes/useBayesArtifacts';
+export { selectParameter as selectParameterForTask } from "@/features/application/bayes/useBayesArtifacts";

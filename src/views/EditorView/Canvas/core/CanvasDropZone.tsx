@@ -16,11 +16,11 @@ export function CanvasDropZone({
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: 'event' | 'function';
-  mode: 'interactive' | 'preview';
+  graphKind: "event" | "function";
+  mode: "interactive" | "preview";
   children: React.ReactNode;
 }) {
-  const interactive = mode === 'interactive';
+  const interactive = mode === "interactive";
   const { setNodeRef } = useDroppable({
     id: getCanvasDropZoneId(panelInstanceId),
     data: { dropType: DROP_TYPES.CANVAS, panelInstanceId, groupId, graphPath, graphKind },
@@ -28,7 +28,7 @@ export function CanvasDropZone({
 
   return (
     <div ref={setNodeRef} className="absolute inset-0 pointer-events-none">
-      <div className={`absolute inset-0 ${interactive ? 'pointer-events-auto' : ''}`}>
+      <div className={`absolute inset-0 ${interactive ? "pointer-events-auto" : ""}`}>
         {children}
       </div>
     </div>

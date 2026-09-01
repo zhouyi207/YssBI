@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
   type LocalizedCatalogResponse,
-} from '@/features/core/nodeCatalog/nodeCatalogStore';
+} from "@/features/core/nodeCatalog/nodeCatalogStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { CatalogService } from '@/services/nodeSystem/catalogService';
-import { toErrorReference } from '@/features/application/errorReference';
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import type { LocalizedNodeCatalogState } from './useLocalizedNodeCatalog';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { CatalogService } from "@/services/nodeSystem/catalogService";
+import { toErrorReference } from "@/features/application/errorReference";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
+import type { LocalizedNodeCatalogState } from "./useLocalizedNodeCatalog";
 
 interface CompatibleNodeCatalogInput {
   enabled: boolean;
@@ -24,13 +24,13 @@ interface CompatibleNodeCatalogInput {
 }
 
 interface CompatibleRequestState {
-  status: LocalizedNodeCatalogState['status'];
-  error: LocalizedNodeCatalogState['error'];
+  status: LocalizedNodeCatalogState["status"];
+  error: LocalizedNodeCatalogState["error"];
   catalog: LocalizedCatalogResponse | null;
 }
 
 const IDLE_STATE: CompatibleRequestState = {
-  status: 'idle',
+  status: "idle",
   error: null,
   catalog: null,
 };
@@ -46,7 +46,7 @@ export function useCompatibleNodeCatalog({
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const [refreshGeneration, setRefreshGeneration] = useState(0);
   const [state, setState] = useState<CompatibleRequestState>(IDLE_STATE);
-  const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : '';
+  const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : "";
 
   useEffect(() => {
     if (!enabled || !projectInstanceId || !graphPath || graphRevision === null || !sourcePort) {
@@ -64,37 +64,39 @@ export function useCompatibleNodeCatalog({
     if (identity.projectInstanceId !== projectInstanceId) return;
 
     let current = true;
-    setState({ status: 'loading', error: null, catalog: null });
+    setState({ status: "loading", error: null, catalog: null });
     void CatalogService.getCompatibleNodeCatalog({
       projectInstanceId,
       graphPath,
       graphRevision,
       sourcePort,
       locale,
-    }).then((catalog) => {
-      if (!current || !isCurrentProjectIdentity(identity)) return;
-      if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-      if (catalog.projectInstanceId !== identity.projectInstanceId || catalog.locale !== locale) {
+    })
+      .then((catalog) => {
+        if (!current || !isCurrentProjectIdentity(identity)) return;
+        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
+        if (catalog.projectInstanceId !== identity.projectInstanceId || catalog.locale !== locale) {
+          setState({
+            status: "error",
+            error: {
+              code: CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
+              incidentId: null,
+            },
+            catalog: null,
+          });
+          return;
+        }
+        setState({ status: "ready", error: null, catalog });
+      })
+      .catch((error: unknown) => {
+        if (!current || !isCurrentProjectIdentity(identity)) return;
+        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
         setState({
-          status: 'error',
-          error: {
-            code: CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
-            incidentId: null,
-          },
+          status: "error",
+          error: toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
           catalog: null,
         });
-        return;
-      }
-      setState({ status: 'ready', error: null, catalog });
-    }).catch((error: unknown) => {
-      if (!current || !isCurrentProjectIdentity(identity)) return;
-      if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-      setState({
-        status: 'error',
-        error: toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
-        catalog: null,
       });
-    });
 
     return () => {
       current = false;
@@ -113,7 +115,7 @@ export function useCompatibleNodeCatalog({
     if (enabled) setRefreshGeneration((generation) => generation + 1);
   }, [enabled]);
   const searchIndex = useMemo(
-    () => state.catalog ? getLocalizedSearchIndex(state.catalog) : null,
+    () => (state.catalog ? getLocalizedSearchIndex(state.catalog) : null),
     [state.catalog],
   );
 

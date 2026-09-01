@@ -1,6 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 
 function productionFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -13,10 +13,10 @@ function productionFiles(directory: string): string[] {
   });
 }
 
-describe('project publication integration boundary', () => {
-  it('has a single project-event publication owner', () => {
-    const owners = productionFiles('src/features/application').filter((path) =>
-      readFileSync(path, 'utf8').includes('publishResourceMutationCommitted:'),
+describe("project publication integration boundary", () => {
+  it("has a single project-event publication owner", () => {
+    const owners = productionFiles("src/features/application").filter((path) =>
+      readFileSync(path, "utf8").includes("publishResourceMutationCommitted:"),
     );
 
     expect(owners).toHaveLength(1);

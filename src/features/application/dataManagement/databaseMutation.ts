@@ -1,10 +1,10 @@
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import {
   captureProjectCommandContext,
   captureRevisionedProjectCommandSnapshot,
-} from '@/features/application/projectCommandContext';
-import type { DatabaseMutationCommandResult } from '@/services/database/databaseService';
+} from "@/features/application/projectCommandContext";
+import type { DatabaseMutationCommandResult } from "@/services/database/databaseService";
 
 interface DatabaseCommandAuthority {
   projectInstanceId: string;
@@ -20,9 +20,11 @@ async function settle<T>(
   aggregate: DatabaseMutationCommandResult<T>,
 ): Promise<T> {
   context.assertCurrent();
-  if (aggregate.mutation.projectInstanceId !== context.projectInstanceId
-    || aggregate.mutation.operationId !== context.operationId) {
-    throw new Error('database mutation receipt correlation is invalid');
+  if (
+    aggregate.mutation.projectInstanceId !== context.projectInstanceId ||
+    aggregate.mutation.operationId !== context.operationId
+  ) {
+    throw new Error("database mutation receipt correlation is invalid");
   }
   await projectPublicationCoordinator.submit({ result: aggregate.mutation });
   context.assertCurrent();

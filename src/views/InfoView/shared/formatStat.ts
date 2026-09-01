@@ -2,14 +2,14 @@
  * InfoView 统计数值展示 — 单点防御，避免裸 `.toFixed()` 在漂移 JSON 上崩溃。
  */
 
-const FALLBACK = '—';
+const FALLBACK = "—";
 
 /** 将未知值窄化为有限 number；拒绝对象/数组等非标量。 */
 export function coerceFiniteNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
     const n = Number(trimmed);
@@ -19,8 +19,8 @@ export function coerceFiniteNumber(value: unknown): number | null {
 }
 
 export function formatNum(value: unknown, decimals = 4): string {
-  if (typeof value === 'number' && !Number.isFinite(value)) {
-    return 'Inf';
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return "Inf";
   }
   const n = coerceFiniteNumber(value);
   if (n === null) return FALLBACK;

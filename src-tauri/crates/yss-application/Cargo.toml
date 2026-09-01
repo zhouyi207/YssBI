@@ -7,12 +7,12 @@ publish = false
 
 [features]
 test-support = [
-    "yss-execution/test-support",
-    "yss-graph-catalog/test-support",
-    "yss-graph-runtime/test-support",
-    "yss-project/test-support",
-    "yss-project-filesystem/test-support",
-    "yss-project-identity/test-support",
+  "yss-execution/test-support",
+  "yss-graph-catalog/test-support",
+  "yss-graph-runtime/test-support",
+  "yss-project/test-support",
+  "yss-project-filesystem/test-support",
+  "yss-project-identity/test-support",
 ]
 
 [dependencies]

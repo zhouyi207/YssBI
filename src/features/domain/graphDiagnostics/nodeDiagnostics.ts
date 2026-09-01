@@ -1,25 +1,22 @@
-import type {
-  DiagnosticDto,
-  DiagnosticLocationDto,
-} from '@/shared/types/domain/editorProjection';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
+import type { DiagnosticDto, DiagnosticLocationDto } from "@/shared/types/domain/editorProjection";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { ConnectionData, NodeData, PinData } from "@/shared/types/store/graph";
 import {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,
   resolveNodePinDisplayLabel,
-} from '@/features/domain/editorProjection';
+} from "@/features/domain/editorProjection";
 
 export interface GraphNodeDiagnosticsBucket {
   readonly graphNodes: readonly string[];
   readonly nodes: Readonly<
     Record<
       string,
-      Pick<DeepReadonly<NodeData>, 'title' | 'display' | 'diagnostics' | 'parameterEditors'>
+      Pick<DeepReadonly<NodeData>, "title" | "display" | "diagnostics" | "parameterEditors">
     >
   >;
-  readonly pins?: Readonly<Record<string, Pick<PinData, 'name' | 'display'>>>;
-  readonly connections?: Readonly<Record<string, Pick<ConnectionData, 'output' | 'input'>>>;
+  readonly pins?: Readonly<Record<string, Pick<PinData, "name" | "display">>>;
+  readonly connections?: Readonly<Record<string, Pick<ConnectionData, "output" | "input">>>;
 }
 
 export interface GraphNodeDiagnostic {
@@ -38,20 +35,21 @@ export function formatDiagnosticLocationLabel(
   const ownerTitle = nodeDisplayTitle(bucket?.nodes[ownerNodeId]);
 
   switch (location.kind) {
-    case 'graph':
-    case 'resource':
+    case "graph":
+    case "resource":
       return ownerTitle;
-    case 'node':
+    case "node":
       return nodeDisplayTitle(bucket?.nodes[location.nodeId]) ?? ownerTitle;
-    case 'port':
+    case "port":
       return resolveNodePinDisplayLabel(bucket, location.address) ?? ownerTitle;
-    case 'parameter': {
+    case "parameter": {
       const nodeTitle = nodeDisplayTitle(bucket?.nodes[location.nodeId]) ?? ownerTitle;
-      const parameterTitle = bucket?.nodes[location.nodeId]?.parameterEditors
-        ?.find((parameter) => parameter.key === location.key)?.display.title;
+      const parameterTitle = bucket?.nodes[location.nodeId]?.parameterEditors?.find(
+        (parameter) => parameter.key === location.key,
+      )?.display.title;
       return formatNodePinDisplayLabel(nodeTitle, parameterTitle) ?? ownerTitle;
     }
-    case 'connection': {
+    case "connection": {
       const connection = bucket?.connections?.[location.connectionId];
       if (!connection || !connection.output || !connection.input) return ownerTitle;
       const output = resolveNodePinDisplayLabel(bucket, connection.output);
@@ -77,10 +75,11 @@ export function collectNodeDiagnostics(
     return (node.diagnostics ?? []).map((diagnostic) => ({
       graphPath,
       nodeId,
-      nodeTitle: nodeDisplayTitle(node) ?? '',
-      locationLabel: formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId)
-        ?? nodeDisplayTitle(node)
-        ?? '',
+      nodeTitle: nodeDisplayTitle(node) ?? "",
+      locationLabel:
+        formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId) ??
+        nodeDisplayTitle(node) ??
+        "",
       diagnostic,
     }));
   });

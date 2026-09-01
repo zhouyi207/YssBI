@@ -1,22 +1,19 @@
-import { useEffect, useState } from 'react';
-import type { IDockviewPanelProps } from 'dockview-react';
+import { useEffect, useState } from "react";
+import type { IDockviewPanelProps } from "dockview-react";
 
-import type { WorkbenchPanelParams } from '@/features/core/dockview';
+import type { WorkbenchPanelParams } from "@/features/core/dockview";
 import {
   synchronizeVisibleGraphPanel,
   type VisibleGraphPanelScope,
-} from './synchronizeVisibleGraphPanel';
+} from "./synchronizeVisibleGraphPanel";
 
 type VisiblePanelApi = Pick<
-  IDockviewPanelProps<WorkbenchPanelParams>['api'],
-  'isVisible' | 'onDidVisibilityChange' | 'onDidGroupChange'
+  IDockviewPanelProps<WorkbenchPanelParams>["api"],
+  "isVisible" | "onDidVisibilityChange" | "onDidGroupChange"
 >;
 
 /** Synchronize only while Dockview keeps this panel in the visible layout. */
-export function useVisibleGraphPanel(
-  api: VisiblePanelApi,
-  scope: VisibleGraphPanelScope,
-): void {
+export function useVisibleGraphPanel(api: VisiblePanelApi, scope: VisibleGraphPanelScope): void {
   const [isVisible, setIsVisible] = useState(() => api.isVisible);
 
   useEffect(() => {

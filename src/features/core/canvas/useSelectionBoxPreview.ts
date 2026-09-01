@@ -1,20 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 import {
   useGraphInteractionStore,
   type GraphInteractionState,
   type SelectionSession,
-} from '@/features/core/graphInteraction/graphInteractionStore';
+} from "@/features/core/graphInteraction/graphInteractionStore";
 
 const BOX_CLASS =
-  'absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15';
+  "absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15";
 
 export function selectionInteractionForScope(
-  state: Pick<GraphInteractionState, 'interactions'>,
+  state: Pick<GraphInteractionState, "interactions">,
   graphPath: string,
   groupId: string,
-): { type: 'selecting'; session: SelectionSession } | null {
+): { type: "selecting"; session: SelectionSession } | null {
   const interaction = state.interactions[graphPath];
-  return interaction?.type === 'selecting' && interaction.session.groupId === groupId
+  return interaction?.type === "selecting" && interaction.session.groupId === groupId
     ? interaction
     : null;
 }
@@ -36,13 +36,13 @@ export function useSelectionBoxPreview(
         graphPath,
         groupId,
       );
-      if (!interaction || interaction.type !== 'selecting') {
-        box.style.display = 'none';
+      if (!interaction || interaction.type !== "selecting") {
+        box.style.display = "none";
         return;
       }
       const bounds = canvas.getBoundingClientRect();
       const session = interaction.session;
-      box.style.display = 'block';
+      box.style.display = "block";
       box.style.left = `${Math.min(session.startX, session.currentX) - bounds.left}px`;
       box.style.top = `${Math.min(session.startY, session.currentY) - bounds.top}px`;
       box.style.width = `${Math.abs(session.startX - session.currentX)}px`;

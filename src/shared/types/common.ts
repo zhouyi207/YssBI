@@ -7,4 +7,10 @@
 export type PinValue = unknown;
 
 /** 通用 JSON 可序列化值 */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };

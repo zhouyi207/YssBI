@@ -1,18 +1,18 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSidebarResourceActions } from './useSidebarResourceActions';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useSidebarResourceActions } from "./useSidebarResourceActions";
 
 const mocks = vi.hoisted(() => ({
   addVariable: vi.fn(),
 }));
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/features/application/editor', () => ({
+vi.mock("@/features/application/editor", () => ({
   useEditorSessionCommandsContext: () => ({
     addVariable: mocks.addVariable,
   }),
@@ -22,29 +22,28 @@ vi.mock('@/features/application/editor', () => ({
   }),
 }));
 
-vi.mock('@/features/application/window', () => ({
+vi.mock("@/features/application/window", () => ({
   openDatabaseEditorWindow: vi.fn(),
 }));
 
-vi.mock('@/features/core/editor', () => ({
+vi.mock("@/features/core/editor", () => ({
   useFunctionCatalog: () => ({}),
 }));
 
-vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
+vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
   useGraphSessionStore: Object.assign(
-    (selector: (state: {
-      focusedSession: { groupId: string; graphPath: string };
-    }) => unknown) => selector({
-      focusedSession: {
-        groupId: 'group-1',
-        graphPath: 'worksheets/Report.yssbi-worksheet',
-      },
-    }),
+    (selector: (state: { focusedSession: { groupId: string; graphPath: string } }) => unknown) =>
+      selector({
+        focusedSession: {
+          groupId: "group-1",
+          graphPath: "worksheets/Report.yssbi-worksheet",
+        },
+      }),
     {
       getState: () => ({
         focusedSession: {
-          groupId: 'group-1',
-          graphPath: 'worksheets/Report.yssbi-worksheet',
+          groupId: "group-1",
+          graphPath: "worksheets/Report.yssbi-worksheet",
         },
       }),
       subscribe: () => () => {},
@@ -52,30 +51,30 @@ vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
   ),
 }));
 
-vi.mock('@/features/core/layout', () => ({
+vi.mock("@/features/core/layout", () => ({
   getActiveLayoutTab: () => ({
     tab: {
-      id: 'worksheets/Report.yssbi-worksheet',
-      type: 'worksheet',
-      component: 'WorksheetEditor',
+      id: "worksheets/Report.yssbi-worksheet",
+      type: "worksheet",
+      component: "WorksheetEditor",
     },
   }),
 }));
 
-vi.mock('@/features/core/resource', () => ({
+vi.mock("@/features/core/resource", () => ({
   useGraphResourcesByKind: () => ({}),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('useSidebarResourceActions', () => {
+describe("useSidebarResourceActions", () => {
   let root: Root;
   let host: HTMLDivElement;
   let actions: ReturnType<typeof useSidebarResourceActions>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     function Harness() {
@@ -90,11 +89,11 @@ describe('useSidebarResourceActions', () => {
     host.remove();
   });
 
-  it('does not expose local Project actions for a worksheet active tab', async () => {
+  it("does not expose local Project actions for a worksheet active tab", async () => {
     expect(actions.canDemoteVariable).toBe(false);
 
     await act(async () => {
-      await actions.addVariable('Threshold', 'Int64', false);
+      await actions.addVariable("Threshold", "Int64", false);
     });
 
     expect(mocks.addVariable).not.toHaveBeenCalled();

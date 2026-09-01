@@ -1,13 +1,7 @@
-import type { FC } from 'react';
-import { useMemo } from 'react';
-import {
-  ReportLayout,
-  ReportSection,
-  formatNum,
-  InfoRow,
-  CoefficientTable,
-} from './shared';
-import type { Coefficient, DFADFSummaryResultData } from '@/shared/types/report';
+import type { FC } from "react";
+import { useMemo } from "react";
+import { ReportLayout, ReportSection, formatNum, InfoRow, CoefficientTable } from "./shared";
+import type { Coefficient, DFADFSummaryResultData } from "@/shared/types/report";
 
 export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) => {
   const {
@@ -38,8 +32,8 @@ export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) =
         std_err: row.std_err,
         t_value: row.t,
         p_value: row.p_value,
-        'confidence_interval_0.025': row.ci_lower,
-        'confidence_interval_0.975': row.ci_upper,
+        "confidence_interval_0.025": row.ci_lower,
+        "confidence_interval_0.975": row.ci_upper,
         is_significant: row.p_value < 0.05,
       })),
     [regression_table],
@@ -59,7 +53,7 @@ export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) =
         <div className="mb-2 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
           <InfoRow label="Z(t)">{formatNum(test_statistic)}</InfoRow>
           <InfoRow label="p-value for Z(t)">
-            <span className={p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+            <span className={p_value < 0.05 ? "text-emerald-400" : "text-muted-foreground"}>
               {formatNum(p_value)}
             </span>
             {!use_t_distribution && (
@@ -67,26 +61,26 @@ export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) =
             )}
           </InfoRow>
           <InfoRow label="1% Critical Value">
-            <span className={reject_1 ? 'text-emerald-400' : 'text-foreground'}>
+            <span className={reject_1 ? "text-emerald-400" : "text-foreground"}>
               {formatNum(critical_value_1pct)}
-              {reject_1 && ' *'}
+              {reject_1 && " *"}
             </span>
           </InfoRow>
           <InfoRow label="5% Critical Value">
-            <span className={reject_5 ? 'text-emerald-400' : 'text-foreground'}>
+            <span className={reject_5 ? "text-emerald-400" : "text-foreground"}>
               {formatNum(critical_value_5pct)}
-              {reject_5 && ' *'}
+              {reject_5 && " *"}
             </span>
           </InfoRow>
           <InfoRow label="10% Critical Value">
-            <span className={reject_10 ? 'text-emerald-400' : 'text-foreground'}>
+            <span className={reject_10 ? "text-emerald-400" : "text-foreground"}>
               {formatNum(critical_value_10pct)}
-              {reject_10 && ' *'}
+              {reject_10 && " *"}
             </span>
           </InfoRow>
           <div className="col-span-2 flex justify-between bg-card px-4 py-2.5">
             <span className="text-xs text-muted-foreground">
-              {use_t_distribution ? 't-distribution' : 'Dickey-Fuller'} critical value
+              {use_t_distribution ? "t-distribution" : "Dickey-Fuller"} critical value
             </span>
             <span className="text-[10px] text-muted-foreground">* Reject H0 at this level</span>
           </div>

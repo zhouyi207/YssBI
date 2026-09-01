@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import {
   getCanvasInteraction,
   getPositionOverride,
@@ -9,12 +9,12 @@ import {
   type GraphInteractionState,
   type NodeDragSession,
   type NodePosition,
-} from './graphInteractionStore';
-import type { GraphPath, NodeId } from '@/shared/types';
+} from "./graphInteractionStore";
+import type { GraphPath, NodeId } from "@/shared/types";
 
 export interface GraphInteractionUiSnapshot {
-  readonly positionOverrides: DeepReadonly<GraphInteractionState['positionOverrides']>;
-  readonly interactions: DeepReadonly<GraphInteractionState['interactions']>;
+  readonly positionOverrides: DeepReadonly<GraphInteractionState["positionOverrides"]>;
+  readonly interactions: DeepReadonly<GraphInteractionState["interactions"]>;
 }
 
 export interface GraphInteractionUiCapability {
@@ -30,7 +30,7 @@ export interface GraphInteractionUiCapability {
   ) => DeepReadonly<NodePosition> | undefined;
   readonly startInteraction: (
     graphPath: GraphPath,
-    interaction: Exclude<CanvasInteraction, { type: 'idle' }>,
+    interaction: Exclude<CanvasInteraction, { type: "idle" }>,
   ) => void;
   readonly updateInteraction: (
     graphPath: GraphPath,
@@ -43,8 +43,8 @@ export interface GraphInteractionUiCapability {
     positions: Record<NodeId, NodePosition>,
     session: NodeDragSession,
   ) => void;
-  readonly finishInteraction: (graphPath: GraphPath, groupId: string) => CanvasInteraction['type'];
-  readonly cancelInteraction: (graphPath: GraphPath, groupId: string) => CanvasInteraction['type'];
+  readonly finishInteraction: (graphPath: GraphPath, groupId: string) => CanvasInteraction["type"];
+  readonly cancelInteraction: (graphPath: GraphPath, groupId: string) => CanvasInteraction["type"];
   readonly setPositionOverride: (
     graphPath: GraphPath,
     nodeId: NodeId,
@@ -56,11 +56,15 @@ export interface GraphInteractionUiCapability {
 
 function cloneAndFreeze<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(cloneAndFreeze)) as T;
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneAndFreeze(nested)]),
-  )) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        cloneAndFreeze(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function buildSnapshot(): DeepReadonly<GraphInteractionUiSnapshot> {
@@ -104,15 +108,10 @@ export function useGraphInteractionUi<T>(
 export const graphInteractionUi: GraphInteractionUiCapability = {
   getSnapshot: getGraphInteractionUiSnapshot,
   subscribe: subscribeGraphInteractionUi,
-  getCanvasInteraction: (graphPath, groupId) => cloneAndFreeze(
-    getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId),
-  ),
+  getCanvasInteraction: (graphPath, groupId) =>
+    cloneAndFreeze(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId)),
   getPositionOverride: (graphPath, nodeId) => {
-    const position = getPositionOverride(
-      useGraphInteractionStore.getState(),
-      graphPath,
-      nodeId,
-    );
+    const position = getPositionOverride(useGraphInteractionStore.getState(), graphPath, nodeId);
     return position ? Object.freeze({ ...position }) : undefined;
   },
   startInteraction: (graphPath, interaction) =>
@@ -120,12 +119,7 @@ export const graphInteractionUi: GraphInteractionUiCapability = {
   updateInteraction: (graphPath, groupId, updater) =>
     useGraphInteractionStore.getState().updateInteraction(graphPath, groupId, updater),
   updateNodeDragFrame: (graphPath, groupId, positions, session) =>
-    useGraphInteractionStore.getState().updateNodeDragFrame(
-      graphPath,
-      groupId,
-      positions,
-      session,
-    ),
+    useGraphInteractionStore.getState().updateNodeDragFrame(graphPath, groupId, positions, session),
   finishInteraction: (graphPath, groupId) =>
     useGraphInteractionStore.getState().finishInteraction(graphPath, groupId),
   cancelInteraction: (graphPath, groupId) =>

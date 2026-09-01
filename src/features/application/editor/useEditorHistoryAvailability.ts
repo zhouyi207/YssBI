@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { ensureHistoryStatus } from '@/features/application/editorMutation/historyCoordinator';
-import { useHistoryStore } from '@/features/core/history';
-import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
+import { useEffect } from "react";
+import { ensureHistoryStatus } from "@/features/application/editorMutation/historyCoordinator";
+import { useHistoryStore } from "@/features/core/history";
+import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEditorGroup";
 
 /** Backend-derived undo/redo availability for the focused editor group's active tab. */
 export function useEditorHistoryAvailability() {

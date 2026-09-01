@@ -1,8 +1,8 @@
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import type { DatabaseId } from '@/shared/types/domain/ids';
-import type { ProjectIdentitySnapshot } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { DatabasePublicationCapability } from '@/features/application/dataManagement/databasePublication';
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { DatabaseId } from "@/shared/types/domain/ids";
+import type { ProjectIdentitySnapshot } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import type { DatabasePublicationCapability } from "@/features/application/dataManagement/databasePublication";
 
 export interface DatabaseMetadataReader {
   readonly read: (
@@ -19,15 +19,18 @@ export interface DatabaseMetadataProjectIdentity {
 export interface DatabaseMetadataCoordinatorDependencies {
   readonly project: DatabaseMetadataProjectIdentity;
   readonly reader: DatabaseMetadataReader;
-  readonly publication: Pick<DatabasePublicationCapability, 'publishDatabase' | 'publishDatabaseFailure'>;
+  readonly publication: Pick<
+    DatabasePublicationCapability,
+    "publishDatabase" | "publishDatabaseFailure"
+  >;
   readonly toErrorReference?: (error: unknown, operation: string) => ErrorReference;
 }
 
 export type DatabaseMetadataOutcome =
-  | { readonly status: 'published' }
-  | { readonly status: 'stale' }
-  | { readonly status: 'notReady' }
-  | { readonly status: 'failed' };
+  | { readonly status: "published" }
+  | { readonly status: "stale" }
+  | { readonly status: "notReady" }
+  | { readonly status: "failed" };
 
 interface RequestGeneration {
   readonly projectGeneration: number;
@@ -42,9 +45,9 @@ export class DatabaseMetadataCoordinator {
   constructor(private readonly dependencies: DatabaseMetadataCoordinatorDependencies) {}
 
   async load(databaseId: DatabaseId): Promise<DatabaseMetadataOutcome> {
-    if (!databaseId.trim()) return { status: 'notReady' };
+    if (!databaseId.trim()) return { status: "notReady" };
     const identity = this.dependencies.project.capture();
-    if (!identity) return { status: 'notReady' };
+    if (!identity) return { status: "notReady" };
 
     const request: RequestGeneration = {
       projectGeneration: this.projectGeneration,
@@ -56,20 +59,20 @@ export class DatabaseMetadataCoordinator {
     try {
       database = await this.dependencies.reader.read(identity.projectInstanceId, databaseId);
     } catch (error) {
-      if (!this.isCurrent(databaseId, request)) return { status: 'stale' };
+      if (!this.isCurrent(databaseId, request)) return { status: "stale" };
       const toError = this.dependencies.toErrorReference ?? toErrorReference;
       this.dependencies.publication.publishDatabaseFailure(
         databaseId,
-        toError(error, 'database_metadata_read_failed'),
+        toError(error, "database_metadata_read_failed"),
       );
-      return { status: 'failed' };
+      return { status: "failed" };
     }
 
-    if (!this.isCurrent(databaseId, request)) return { status: 'stale' };
-    if (!database || database.id !== databaseId) return { status: 'notReady' };
+    if (!this.isCurrent(databaseId, request)) return { status: "stale" };
+    if (!database || database.id !== databaseId) return { status: "notReady" };
 
     this.dependencies.publication.publishDatabase(database);
-    return { status: 'published' };
+    return { status: "published" };
   }
 
   resetProject(): void {
@@ -88,8 +91,10 @@ export class DatabaseMetadataCoordinator {
   }
 
   private isCurrent(databaseId: DatabaseId, request: RequestGeneration): boolean {
-    return this.projectGeneration === request.projectGeneration
-      && this.databaseGenerations.get(databaseId) === request.databaseGeneration
-      && this.dependencies.project.isCurrent(request.identity);
+    return (
+      this.projectGeneration === request.projectGeneration &&
+      this.databaseGenerations.get(databaseId) === request.databaseGeneration &&
+      this.dependencies.project.isCurrent(request.identity)
+    );
   }
 }

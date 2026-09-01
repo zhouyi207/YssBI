@@ -47,7 +47,11 @@ export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: (
               {options.discardText}
             </Button>
           )}
-          <Button onClick={handleConfirm} variant={options.type === "danger" ? "destructive" : "default"} size="lg">
+          <Button
+            onClick={handleConfirm}
+            variant={options.type === "danger" ? "destructive" : "default"}
+            size="lg"
+          >
             {options.confirmText || t("common.confirm")}
           </Button>
         </DialogFooter>

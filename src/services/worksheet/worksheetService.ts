@@ -1,9 +1,8 @@
-import { invokeCommand } from '@/services/ipc';
-import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
-import type { PlotColumnPairPayload } from '@/shared/types/domain/worksheet';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
-import { parseResourceMutationResultDto } from '@/shared/types/dto/resourceMutationResultWireParser';
-
+import { invokeCommand } from "@/services/ipc";
+import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
+import type { PlotColumnPairPayload } from "@/shared/types/domain/worksheet";
+import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
+import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
 export class WorksheetService {
   static async createWorksheet(
@@ -12,12 +11,14 @@ export class WorksheetService {
     name: string,
     databaseId?: string,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invokeCommand<unknown>('create_worksheet', {
-      projectInstanceId,
-      operationId,
-      name,
-      databaseId,
-    }));
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("create_worksheet", {
+        projectInstanceId,
+        operationId,
+        name,
+        databaseId,
+      }),
+    );
   }
 
   static async duplicateWorksheet(
@@ -26,19 +27,21 @@ export class WorksheetService {
     worksheetPath: string,
     expectedRevision: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invokeCommand<unknown>('duplicate_worksheet', {
-      projectInstanceId,
-      operationId,
-      worksheetPath,
-      expectedRevision,
-    }));
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("duplicate_worksheet", {
+        projectInstanceId,
+        operationId,
+        worksheetPath,
+        expectedRevision,
+      }),
+    );
   }
 
   static async loadWorksheet(
     projectInstanceId: string,
     worksheetPath: string,
   ): Promise<WorksheetDocument> {
-    return await invokeCommand('load_worksheet', { projectInstanceId, worksheetPath });
+    return await invokeCommand("load_worksheet", { projectInstanceId, worksheetPath });
   }
 
   static async saveWorksheet(
@@ -48,13 +51,15 @@ export class WorksheetService {
     expectedRevision: number,
     document: WorksheetDocument,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invokeCommand<unknown>('save_worksheet', {
-      projectInstanceId,
-      operationId,
-      worksheetPath,
-      expectedRevision,
-      document,
-    }));
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("save_worksheet", {
+        projectInstanceId,
+        operationId,
+        worksheetPath,
+        expectedRevision,
+        document,
+      }),
+    );
   }
 
   static async renameWorksheet(
@@ -65,14 +70,16 @@ export class WorksheetService {
     newName: string,
     lifecycleToken: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invokeCommand<unknown>('rename_worksheet_resource', {
-      projectInstanceId,
-      operationId,
-      worksheetPath,
-      expectedRevision,
-      newName,
-      lifecycleToken,
-    }));
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("rename_worksheet_resource", {
+        projectInstanceId,
+        operationId,
+        worksheetPath,
+        expectedRevision,
+        newName,
+        lifecycleToken,
+      }),
+    );
   }
 
   static async removeWorksheet(
@@ -81,12 +88,14 @@ export class WorksheetService {
     worksheetPath: string,
     expectedRevision: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invokeCommand<unknown>('remove_worksheet', {
-      projectInstanceId,
-      operationId,
-      worksheetPath,
-      expectedRevision,
-    }));
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("remove_worksheet", {
+        projectInstanceId,
+        operationId,
+        worksheetPath,
+        expectedRevision,
+      }),
+    );
   }
 
   static async getPlotColumnPair(
@@ -96,7 +105,7 @@ export class WorksheetService {
     yCol: string,
     maxPoints?: number,
   ): Promise<PlotColumnPairPayload> {
-    return await invokeCommand('get_plot_column_pair', {
+    return await invokeCommand("get_plot_column_pair", {
       projectInstanceId,
       databaseId,
       xCol,

@@ -1,6 +1,6 @@
-import { formatNum, InfoRow } from './RegressionShared';
-import type { PanelFEInfo } from '@/shared/types/report';
-import type { ModelBasicInfo } from '@/shared/types/report';
+import { formatNum, InfoRow } from "./RegressionShared";
+import type { PanelFEInfo } from "@/shared/types/report";
+import type { ModelBasicInfo } from "@/shared/types/report";
 
 /** Stata xtreg, fe style summary grid */
 export function PanelFESummaryGrid({
@@ -41,9 +41,13 @@ export function PanelFESummaryGrid({
 
       {/* F test */}
       <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
-        <InfoRow label={`F(${info.df_model}, ${info.df_residual})`}>{formatNum(info.f_statistic)}</InfoRow>
+        <InfoRow label={`F(${info.df_model}, ${info.df_residual})`}>
+          {formatNum(info.f_statistic)}
+        </InfoRow>
         <InfoRow label="Prob &gt; F">
-          <span className={info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+          <span
+            className={info.prob_f_statistic < 0.05 ? "text-emerald-400" : "text-muted-foreground"}
+          >
             {formatNum(info.prob_f_statistic)}
           </span>
         </InfoRow>
@@ -62,8 +66,10 @@ export function PanelFESummaryGrid({
         <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-muted-foreground text-xs">rho</span>
           <span className="text-foreground text-xs font-mono font-medium">
-            {formatNum(panelFe.sigma.rho)}{' '}
-            <span className="text-muted-foreground font-normal">(fraction of variance due to u_i)</span>
+            {formatNum(panelFe.sigma.rho)}{" "}
+            <span className="text-muted-foreground font-normal">
+              (fraction of variance due to u_i)
+            </span>
           </span>
         </div>
       </div>

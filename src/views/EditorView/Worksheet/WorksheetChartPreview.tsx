@@ -1,23 +1,24 @@
-import { useTranslation } from 'react-i18next';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useWorksheetChartPreview } from '@/features/application/worksheet/useWorksheetChartPreview';
-import { toWorksheetChartModel } from '@/features/application/worksheet/toWorksheetChartModel';
-import { ChartRenderer } from '@/shared/charts/ChartRenderer';
-import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
-import { WorksheetEmptyState } from './WorksheetEmptyState';
+import { useTranslation } from "react-i18next";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useWorksheetChartPreview } from "@/features/application/worksheet/useWorksheetChartPreview";
+import { toWorksheetChartModel } from "@/features/application/worksheet/toWorksheetChartModel";
+import { ChartRenderer } from "@/shared/charts/ChartRenderer";
+import type { WorksheetDocument, WorksheetPreviewPayload } from "@/shared/types/domain";
+import { WorksheetEmptyState } from "./WorksheetEmptyState";
 
 interface WorksheetChartPreviewProps {
   worksheetPath: string;
   document: WorksheetDocument | null;
 }
 
-type WorksheetPreviewErrorPayload = Extract<WorksheetPreviewPayload, { kind: 'error' }>;
+type WorksheetPreviewErrorPayload = Extract<WorksheetPreviewPayload, { kind: "error" }>;
 
 function WorksheetPreviewError({ error }: { error: WorksheetPreviewErrorPayload }) {
   const { t } = useTranslation();
-  const summary = error.column === undefined
-    ? t('worksheet.previewLoadFailed')
-    : t('worksheet.previewColumnNotFound', { column: error.column });
+  const summary =
+    error.column === undefined
+      ? t("worksheet.previewLoadFailed")
+      : t("worksheet.previewColumnNotFound", { column: error.column });
 
   return (
     <div className="flex h-full items-center justify-center p-4">
@@ -25,11 +26,11 @@ function WorksheetPreviewError({ error }: { error: WorksheetPreviewErrorPayload 
         <AlertTitle>{summary}</AlertTitle>
         <AlertDescription>
           <p>
-            {t('common.errorCode')}: <code>{error.code}</code>
+            {t("common.errorCode")}: <code>{error.code}</code>
           </p>
           {error.incidentId ? (
             <p>
-              {t('common.incidentId')}: <code>{error.incidentId}</code>
+              {t("common.incidentId")}: <code>{error.incidentId}</code>
             </p>
           ) : null}
         </AlertDescription>
@@ -45,10 +46,10 @@ function WorksheetPreviewContent({
   preview: WorksheetPreviewPayload;
   loading: boolean;
 }) {
-  if (preview.kind === 'error') {
+  if (preview.kind === "error") {
     return <WorksheetPreviewError error={preview} />;
   }
-  if (preview.kind === 'empty') {
+  if (preview.kind === "empty") {
     return loading ? null : (
       <div className="absolute inset-0 flex min-h-0">
         <WorksheetEmptyState />
@@ -75,7 +76,7 @@ export function WorksheetChartPreview({ worksheetPath, document }: WorksheetChar
 
   return (
     <div className="relative h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]">
-      {loading && preview.kind !== 'empty' && (
+      {loading && preview.kind !== "empty" && (
         <div className="pointer-events-none absolute inset-0 z-10 bg-[var(--workbench-bg)]/40" />
       )}
       <WorksheetPreviewContent preview={preview} loading={loading} />

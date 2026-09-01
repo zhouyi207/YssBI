@@ -1,20 +1,20 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphRead } from '@/features/core/graph/read';
-import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
-import { formatDiagnosticLocationLabel } from '@/features/domain/graphDiagnostics/nodeDiagnostics';
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
+import type { GraphEntitiesState } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphRead } from "@/features/core/graph/read";
+import { derivePinConnectionView } from "@/features/core/dataStore/pinLinks";
+import { formatDiagnosticLocationLabel } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 
-import type { PinData, PinView } from '@/shared/types/store/graph';
+import type { PinData, PinView } from "@/shared/types/store/graph";
 
-import { DetailPanelShell } from '../shared/DetailPanelShell';
-import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
-import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
-import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
-import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
-import { DetailBadge, DetailText } from '../shared/DetailText';
-import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
+import { DetailPanelShell } from "../shared/DetailPanelShell";
+import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
+import { NodePinInterfacePanel } from "../node/NodePinInterfacePanel";
+import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
+import { DetailBadge, DetailText } from "../shared/DetailText";
+import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 
 const EMPTY_PINS: PinData[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
@@ -23,12 +23,7 @@ function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-
-export function selectNodeDetailNode(
-  state: GraphEntitiesState,
-  graphPath: string,
-  nodeId: string,
-) {
+export function selectNodeDetailNode(state: GraphEntitiesState, graphPath: string, nodeId: string) {
   return state.graphEntities[graphPath]?.nodes[nodeId];
 }
 
@@ -72,31 +67,30 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       id: pin.id,
       name: pin.display?.instanceLabel ?? pin.display?.label ?? pin.name,
       direction: pin.direction,
-      kind: pin.type === 'exec' ? 'Exec' : 'Data',
+      kind: pin.type === "exec" ? "Exec" : "Data",
       typeLabel: pin.resolvedType?.display ?? pin.type,
       optional: false,
       slotKind:
-        pin.instanceKind === 'userCreated'
-          ? 'repeatable'
-          : pin.instanceKind === 'derived'
-            ? 'derivedFromInput'
-            : 'fixed',
+        pin.instanceKind === "userCreated"
+          ? "repeatable"
+          : pin.instanceKind === "derived"
+            ? "derivedFromInput"
+            : "fixed",
       connected: pin.connected,
       connectionIds: pin.connectionIds,
       address: pin.address,
     });
     return {
-      inputs: pins.filter((pin) => pin.direction === 'input').map(toSpec),
-      outputs: pins.filter((pin) => pin.direction === 'output').map(toSpec),
+      inputs: pins.filter((pin) => pin.direction === "input").map(toSpec),
+      outputs: pins.filter((pin) => pin.direction === "output").map(toSpec),
     };
   }, [pins]);
-
 
   if (!node) {
     return (
       <DetailPanelShell>
         <DetailText as="div" tone="muted" className="p-4">
-          {t('detail.nodeNotFound')}
+          {t("detail.nodeNotFound")}
         </DetailText>
       </DetailPanelShell>
     );
@@ -109,7 +103,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
     <DetailPanelShell>
       <DetailForm>
         <DetailReadonlyField
-          label={t('detail.fields.name')}
+          label={t("detail.fields.name")}
           tone="body"
           valueClassName="min-w-0"
           className="min-w-0 truncate font-medium"
@@ -119,7 +113,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       </DetailForm>
 
       {node.capabilities && (
-        <DetailCollapsibleSection title={t('detail.sections.capabilities')}>
+        <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
           <div className="flex flex-wrap gap-1.5 px-1 py-2">
             {Object.entries(node.capabilities)
               .filter(([, enabled]) => enabled)
@@ -130,7 +124,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         </DetailCollapsibleSection>
       )}
       {node.diagnostics && node.diagnostics.length > 0 && (
-        <DetailCollapsibleSection title={t('detail.sections.diagnostics')} defaultOpen>
+        <DetailCollapsibleSection title={t("detail.sections.diagnostics")} defaultOpen>
           <div className="space-y-2 px-1 py-2">
             {node.diagnostics.map((diagnostic, index) => {
               const locationLabel = formatDiagnosticLocationLabel(

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
-import { currentAppWindow } from '@/services/platform/appWindow';
-import type { PlatformFailure, PlatformOutcome } from '@/services/platform/platformTypes';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import { currentAppWindow } from "@/services/platform/appWindow";
+import type { PlatformFailure, PlatformOutcome } from "@/services/platform/platformTypes";
 
 export type WindowActionOutcome =
-  | { readonly status: 'completed' }
-  | { readonly status: 'stale' }
-  | { readonly status: 'failed' };
+  | { readonly status: "completed" }
+  | { readonly status: "stale" }
+  | { readonly status: "failed" };
 
 export interface CurrentWindowActions {
   readonly maximized: boolean;
@@ -18,7 +18,7 @@ export interface CurrentWindowActions {
   readonly close: () => Promise<WindowActionOutcome>;
 }
 
-const WINDOW_ACTION_ERROR_CODE = 'window_action_failed';
+const WINDOW_ACTION_ERROR_CODE = "window_action_failed";
 
 export function useCurrentWindowActions(): CurrentWindowActions {
   const window = useMemo(() => currentAppWindow(), []);
@@ -73,25 +73,26 @@ export function useCurrentWindowActions(): CurrentWindowActions {
     };
   }, [window]);
 
-  const run = useCallback(async (
-    operation: () => Promise<PlatformOutcome<void>>,
-  ): Promise<WindowActionOutcome> => {
-    if (!mounted.current) return { status: 'stale' };
-    try {
-      const outcome = await operation();
-      if (!mounted.current) return { status: 'stale' };
-      if (!outcome.ok) {
-        setIssue(platformIssue(outcome.failure));
-        return { status: 'failed' };
+  const run = useCallback(
+    async (operation: () => Promise<PlatformOutcome<void>>): Promise<WindowActionOutcome> => {
+      if (!mounted.current) return { status: "stale" };
+      try {
+        const outcome = await operation();
+        if (!mounted.current) return { status: "stale" };
+        if (!outcome.ok) {
+          setIssue(platformIssue(outcome.failure));
+          return { status: "failed" };
+        }
+        setIssue(null);
+        return { status: "completed" };
+      } catch (error) {
+        if (!mounted.current) return { status: "stale" };
+        setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
+        return { status: "failed" };
       }
-      setIssue(null);
-      return { status: 'completed' };
-    } catch (error) {
-      if (!mounted.current) return { status: 'stale' };
-      setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
-      return { status: 'failed' };
-    }
-  }, []);
+    },
+    [],
+  );
 
   const show = useCallback(() => run(window.show), [run, window]);
   const setTitle = useCallback((title: string) => run(() => window.setTitle(title)), [run, window]);
@@ -100,32 +101,35 @@ export function useCurrentWindowActions(): CurrentWindowActions {
 
   const toggleMaximize = useCallback(async (): Promise<WindowActionOutcome> => {
     const outcome = await run(window.toggleMaximize);
-    if (outcome.status !== 'completed' || !mounted.current) return outcome;
+    if (outcome.status !== "completed" || !mounted.current) return outcome;
     try {
       const refreshed = await window.isMaximized();
-      if (!mounted.current) return { status: 'stale' };
+      if (!mounted.current) return { status: "stale" };
       if (!refreshed.ok) {
         setIssue(platformIssue(refreshed.failure));
-        return { status: 'failed' };
+        return { status: "failed" };
       }
       setMaximized(refreshed.value);
       return outcome;
     } catch (error) {
-      if (!mounted.current) return { status: 'stale' };
+      if (!mounted.current) return { status: "stale" };
       setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
-      return { status: 'failed' };
+      return { status: "failed" };
     }
   }, [run, window]);
 
-  return useMemo(() => ({
-    maximized,
-    issue,
-    show,
-    setTitle,
-    minimize,
-    toggleMaximize,
-    close,
-  }), [close, issue, maximized, minimize, setTitle, show, toggleMaximize]);
+  return useMemo(
+    () => ({
+      maximized,
+      issue,
+      show,
+      setTitle,
+      minimize,
+      toggleMaximize,
+      close,
+    }),
+    [close, issue, maximized, minimize, setTitle, show, toggleMaximize],
+  );
 }
 
 function platformIssue(failure: PlatformFailure): ErrorReference {

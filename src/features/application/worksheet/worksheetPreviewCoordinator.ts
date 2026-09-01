@@ -1,10 +1,7 @@
-import type { ErrorReference } from '@/features/application/errorReference';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type {
-  WorksheetDocument,
-  WorksheetPreviewPayload,
-} from '@/shared/types/domain/worksheet';
-import { isWorksheetDocument } from './worksheetCoordinator';
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { WorksheetDocument, WorksheetPreviewPayload } from "@/shared/types/domain/worksheet";
+import { isWorksheetDocument } from "./worksheetCoordinator";
 
 export interface WorksheetPreviewIdentity {
   readonly projectInstanceId: string;
@@ -29,22 +26,19 @@ export interface WorksheetPreviewServicePort {
 }
 
 export interface WorksheetPreviewPublication {
-  publish(
-    request: WorksheetPreviewRequest,
-    value: DeepReadonly<WorksheetPreviewPayload>,
-  ): void;
+  publish(request: WorksheetPreviewRequest, value: DeepReadonly<WorksheetPreviewPayload>): void;
   publishFailure(request: WorksheetPreviewRequest, issue: ErrorReference): void;
   clearForProject?(projectInstanceId: string | null): void;
 }
 
 export type WorksheetPreviewOutcome =
   | {
-    readonly status: 'published';
-    readonly value: DeepReadonly<WorksheetPreviewPayload>;
-  }
-  | { readonly status: 'stale' }
-  | { readonly status: 'notReady' }
-  | { readonly status: 'failed' };
+      readonly status: "published";
+      readonly value: DeepReadonly<WorksheetPreviewPayload>;
+    }
+  | { readonly status: "stale" }
+  | { readonly status: "notReady" }
+  | { readonly status: "failed" };
 
 export interface WorksheetPreviewCoordinator {
   query(
@@ -62,42 +56,47 @@ export interface WorksheetPreviewCoordinatorDependencies {
   readonly captureProjectIdentity: () => WorksheetPreviewIdentity | null;
   readonly service: WorksheetPreviewServicePort;
   readonly publication?: WorksheetPreviewPublication;
-  readonly toErrorReference?: (
-    error: unknown,
-    fallbackCode: string,
-  ) => ErrorReference;
+  readonly toErrorReference?: (error: unknown, fallbackCode: string) => ErrorReference;
 }
 
 const MAX_CACHE_ENTRIES = 32;
 
 function fallbackIssue(): ErrorReference {
-  return { code: 'worksheet_preview_read_failed', incidentId: null };
+  return { code: "worksheet_preview_read_failed", incidentId: null };
 }
 
 function isErrorReference(value: unknown): value is ErrorReference {
-  return typeof value === 'object'
-    && value !== null
-    && typeof (value as { code?: unknown }).code === 'string'
-    && ((value as { incidentId?: unknown }).incidentId === null
-      || typeof (value as { incidentId?: unknown }).incidentId === 'string');
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { code?: unknown }).code === "string" &&
+    ((value as { incidentId?: unknown }).incidentId === null ||
+      typeof (value as { incidentId?: unknown }).incidentId === "string")
+  );
 }
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map(cloneValue) as T;
-  if (value === null || typeof value !== 'object') return value;
+  if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneValue(nested)]),
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      cloneValue(nested),
+    ]),
   ) as T;
 }
 
 function freezeValue<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeValue)) as T;
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, freezeValue(nested)]),
-  )) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        freezeValue(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function previewKey(
@@ -144,10 +143,7 @@ export function createWorksheetPreviewCoordinator(
 
   const issueFor = (error: unknown): ErrorReference => {
     try {
-      const mapped = dependencies.toErrorReference?.(
-        error,
-        fallbackIssue().code,
-      );
+      const mapped = dependencies.toErrorReference?.(error, fallbackIssue().code);
       if (isErrorReference(mapped)) return mapped;
     } catch {
       // Error conversion is advisory; the closed fallback is authoritative.
@@ -155,10 +151,7 @@ export function createWorksheetPreviewCoordinator(
     return fallbackIssue();
   };
 
-  const publishFailure = (
-    request: WorksheetPreviewRequest,
-    error: unknown,
-  ): void => {
+  const publishFailure = (request: WorksheetPreviewRequest, error: unknown): void => {
     try {
       dependencies.publication?.publishFailure(request, issueFor(error));
     } catch {
@@ -177,9 +170,11 @@ export function createWorksheetPreviewCoordinator(
       return false;
     }
     const active = captureIdentity();
-    return active !== null
-      && active.projectInstanceId === identity.projectInstanceId
-      && active.epoch === identity.epoch;
+    return (
+      active !== null &&
+      active.projectInstanceId === identity.projectInstanceId &&
+      active.epoch === identity.epoch
+    );
   };
 
   const getCached = (
@@ -202,7 +197,7 @@ export function createWorksheetPreviewCoordinator(
     document: DeepReadonly<WorksheetDocument>,
   ): Promise<WorksheetPreviewOutcome> => {
     const identity = captureIdentity();
-    if (!identity || !isWorksheetDocument(document)) return { status: 'notReady' };
+    if (!identity || !isWorksheetDocument(document)) return { status: "notReady" };
 
     const key = previewKey(identity.projectInstanceId, worksheetPath, document);
     const existing = inFlight.get(key);
@@ -225,7 +220,7 @@ export function createWorksheetPreviewCoordinator(
       if (latestGeneration.get(worksheetPath) === generation) {
         latestGeneration.delete(worksheetPath);
       }
-      return { status: 'published' as const, value: cached };
+      return { status: "published" as const, value: cached };
     }
 
     let requestPromise!: Promise<WorksheetPreviewOutcome>;
@@ -238,27 +233,27 @@ export function createWorksheetPreviewCoordinator(
           mutableDocument(document),
         );
         if (!current(identity, ownerCoordinatorEpoch, worksheetPath, generation)) {
-          return { status: 'stale' };
+          return { status: "stale" };
         }
         if (!isValidPreviewPayload(value)) {
           publishFailure(request, null);
-          return { status: 'failed' };
+          return { status: "failed" };
         }
         const frozen = freezeValue(cloneValue(value)) as DeepReadonly<WorksheetPreviewPayload>;
         if (!current(identity, ownerCoordinatorEpoch, worksheetPath, generation)) {
-          return { status: 'stale' };
+          return { status: "stale" };
         }
         try {
           dependencies.publication?.publish(request, frozen);
         } catch (error) {
           if (!current(identity, ownerCoordinatorEpoch, worksheetPath, generation)) {
-            return { status: 'stale' };
+            return { status: "stale" };
           }
           publishFailure(request, error);
-          return { status: 'failed' };
+          return { status: "failed" };
         }
         if (!current(identity, ownerCoordinatorEpoch, worksheetPath, generation)) {
-          return { status: 'stale' };
+          return { status: "stale" };
         }
         cache.set(key, frozen);
         while (cache.size > MAX_CACHE_ENTRIES) {
@@ -266,13 +261,13 @@ export function createWorksheetPreviewCoordinator(
           if (!oldest) break;
           cache.delete(oldest);
         }
-        return { status: 'published', value: frozen };
+        return { status: "published", value: frozen };
       } catch (error) {
         if (!current(identity, ownerCoordinatorEpoch, worksheetPath, generation)) {
-          return { status: 'stale' };
+          return { status: "stale" };
         }
         publishFailure(request, error);
-        return { status: 'failed' };
+        return { status: "failed" };
       } finally {
         if (inFlight.get(key) === requestPromise) inFlight.delete(key);
         if (latestGeneration.get(worksheetPath) === generation) {
@@ -292,9 +287,7 @@ export function createWorksheetPreviewCoordinator(
     cache.clear();
     inFlight.clear();
     try {
-      dependencies.publication?.clearForProject?.(
-        captureIdentity()?.projectInstanceId ?? null,
-      );
+      dependencies.publication?.clearForProject?.(captureIdentity()?.projectInstanceId ?? null);
     } catch {
       // Cache reset is authoritative even if an optional publication rejects it.
     }
@@ -304,30 +297,39 @@ export function createWorksheetPreviewCoordinator(
 }
 
 function isValidPreviewPayload(value: unknown): value is WorksheetPreviewPayload {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<WorksheetPreviewPayload>;
-  if (candidate.kind === 'empty') return true;
-  if (candidate.kind === 'error') {
-    const error = candidate as Extract<WorksheetPreviewPayload, { kind: 'error' }>;
-    return typeof error.code === 'string'
-      && (error.incidentId === null || typeof error.incidentId === 'string')
-      && (error.column === undefined || typeof error.column === 'string');
+  if (candidate.kind === "empty") return true;
+  if (candidate.kind === "error") {
+    const error = candidate as Extract<WorksheetPreviewPayload, { kind: "error" }>;
+    return (
+      typeof error.code === "string" &&
+      (error.incidentId === null || typeof error.incidentId === "string") &&
+      (error.column === undefined || typeof error.column === "string")
+    );
   }
-  if (candidate.kind === 'histogram') {
-    const histogram = candidate as Extract<WorksheetPreviewPayload, { kind: 'histogram' }>;
-    return Array.isArray(histogram.bins)
-      && histogram.bins.every((bin) => typeof bin.label === 'string'
-        && Number.isFinite(bin.count))
-      && (histogram.xLabel === undefined || typeof histogram.xLabel === 'string')
-      && (histogram.yLabel === undefined || typeof histogram.yLabel === 'string');
+  if (candidate.kind === "histogram") {
+    const histogram = candidate as Extract<WorksheetPreviewPayload, { kind: "histogram" }>;
+    return (
+      Array.isArray(histogram.bins) &&
+      histogram.bins.every((bin) => typeof bin.label === "string" && Number.isFinite(bin.count)) &&
+      (histogram.xLabel === undefined || typeof histogram.xLabel === "string") &&
+      (histogram.yLabel === undefined || typeof histogram.yLabel === "string")
+    );
   }
-  if (candidate.kind !== 'scatter' && candidate.kind !== 'line') return false;
-  const plot = candidate as Extract<WorksheetPreviewPayload, { kind: 'scatter' | 'line' }>;
-  return !!plot.pair
-    && Array.isArray(plot.pair.data)
-    && plot.pair.data.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-    && (plot.pair.xLabel === undefined || typeof plot.pair.xLabel === 'string')
-    && (plot.pair.yLabel === undefined || typeof plot.pair.yLabel === 'string')
-    && (plot.pair.xFormat === 'date' || plot.pair.xFormat === 'datetime' || plot.pair.xFormat === 'number')
-    && (plot.pair.yFormat === 'date' || plot.pair.yFormat === 'datetime' || plot.pair.yFormat === 'number');
+  if (candidate.kind !== "scatter" && candidate.kind !== "line") return false;
+  const plot = candidate as Extract<WorksheetPreviewPayload, { kind: "scatter" | "line" }>;
+  return (
+    !!plot.pair &&
+    Array.isArray(plot.pair.data) &&
+    plot.pair.data.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) &&
+    (plot.pair.xLabel === undefined || typeof plot.pair.xLabel === "string") &&
+    (plot.pair.yLabel === undefined || typeof plot.pair.yLabel === "string") &&
+    (plot.pair.xFormat === "date" ||
+      plot.pair.xFormat === "datetime" ||
+      plot.pair.xFormat === "number") &&
+    (plot.pair.yFormat === "date" ||
+      plot.pair.yFormat === "datetime" ||
+      plot.pair.yFormat === "number")
+  );
 }

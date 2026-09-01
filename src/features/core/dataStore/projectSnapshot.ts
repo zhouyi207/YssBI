@@ -1,6 +1,6 @@
-import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
-import type { GraphData, GraphSnapshotData } from '@/shared/types/store/graph';
-import type { ProjectResourceMeta } from '@/features/core/resource/resourceTypes';
+import type { FunctionSignaturePin } from "@/shared/types/domain/graph";
+import type { GraphData, GraphSnapshotData } from "@/shared/types/store/graph";
+import type { ProjectResourceMeta } from "@/features/core/resource/resourceTypes";
 
 export type FunctionSignatureSnapshot = {
   functionInputs: FunctionSignaturePin[];
@@ -10,17 +10,14 @@ export type FunctionSignatureSnapshot = {
 /** 图快照读取端口（纯函数测试与 projectIOStore 共用） */
 export interface GraphSnapshotAccess {
   graphOrder: string[];
-  getResourceMeta(graphPath: string): Pick<ProjectResourceMeta, 'name' | 'kind' | 'exists'> | null;
+  getResourceMeta(graphPath: string): Pick<ProjectResourceMeta, "name" | "kind" | "exists"> | null;
   getFunctionSignature?(graphPath: string): FunctionSignatureSnapshot | null;
   getGraphNodeIds(graphPath: string): string[];
-  getGraphNode(graphPath: string, nodeId: string): GraphData['nodes'][number] | null;
+  getGraphNode(graphPath: string, nodeId: string): GraphData["nodes"][number] | null;
   getGraphNodePins(graphPath: string, nodeId: string): string[];
-  getGraphPin(graphPath: string, pinId: string): GraphData['pins'][number] | null;
+  getGraphPin(graphPath: string, pinId: string): GraphData["pins"][number] | null;
   getGraphPinConnections(graphPath: string, pinId: string): string[];
-  getGraphConnection(
-    graphPath: string,
-    connectionId: string,
-  ): { from: string; to: string } | null;
+  getGraphConnection(graphPath: string, connectionId: string): { from: string; to: string } | null;
 }
 
 /** 从 store 状态导出图快照；连接只保留 domain 序列化所需的端点。 */
@@ -54,13 +51,13 @@ export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, 
         const graph: GraphSnapshotData = {
           path: graphPath,
           name: meta.name,
-          type: meta.kind === 'function' ? 'function' : 'event',
+          type: meta.kind === "function" ? "function" : "event",
           nodes,
           pins,
           connections,
         };
 
-        if (graph.type === 'function' && access.getFunctionSignature) {
+        if (graph.type === "function" && access.getFunctionSignature) {
           const signature = access.getFunctionSignature(graphPath);
           if (signature) {
             graph.functionInputs = signature.functionInputs;

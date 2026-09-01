@@ -1,6 +1,8 @@
-import type { Coefficient, VARSummaryResultData, VARStableRow } from '@/shared/types/report';
+import type { Coefficient, VARSummaryResultData, VARStableRow } from "@/shared/types/report";
 
-export function varCoeffsToOLSFormat(coefficients: VARSummaryResultData['coefficients']): Coefficient[] {
+export function varCoeffsToOLSFormat(
+  coefficients: VARSummaryResultData["coefficients"],
+): Coefficient[] {
   const eqOrder = [...new Set(coefficients.map((x) => x.eq_name))];
   const mapped = coefficients.map((c, idx) => ({
     variable: c.variable,
@@ -9,10 +11,10 @@ export function varCoeffsToOLSFormat(coefficients: VARSummaryResultData['coeffic
     std_err: c.std_err,
     t_value: c.z_value,
     p_value: c.p_value,
-    'confidence_interval_0.025': c.ci_lower,
-    'confidence_interval_0.975': c.ci_upper,
+    "confidence_interval_0.025": c.ci_lower,
+    "confidence_interval_0.975": c.ci_upper,
     is_significant: c.p_value < 0.05,
-    _sortKey: c.variable === 'const' ? 0 : 1,
+    _sortKey: c.variable === "const" ? 0 : 1,
     _eqOrder: eqOrder.indexOf(c.eq_name),
     _idx: idx,
   }));

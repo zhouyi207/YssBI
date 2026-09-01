@@ -3,15 +3,15 @@ import { cn } from "@/lib/utils";
 import { WindowTitleBar, WindowTitleBarActions } from "./WindowTitleBar";
 
 export type WindowChromeProps = ComponentProps<"div"> & {
-    /** Resolved by the Application/window composition owner. */
-    customChrome: boolean;
-    /** Main editor title bar — higher stacking */
-    elevated?: boolean;
-    /** Child / satellite window title bar */
-    childWindow?: boolean;
-    /** Right-side actions; WindowChromeControls should be included when custom chrome is shown */
-    actions?: ReactNode;
-    children: ReactNode;
+  /** Resolved by the Application/window composition owner. */
+  customChrome: boolean;
+  /** Main editor title bar — higher stacking */
+  elevated?: boolean;
+  /** Child / satellite window title bar */
+  childWindow?: boolean;
+  /** Right-side actions; WindowChromeControls should be included when custom chrome is shown */
+  actions?: ReactNode;
+  children: ReactNode;
 };
 
 /**
@@ -19,67 +19,74 @@ export type WindowChromeProps = ComponentProps<"div"> & {
  * When "native", returns null — OS frame provides title and window controls.
  */
 export function WindowChrome({
-    elevated = false,
-    childWindow = false,
-    actions,
-    className,
-    children,
-    customChrome,
-    ...props
+  elevated = false,
+  childWindow = false,
+  actions,
+  className,
+  children,
+  customChrome,
+  ...props
 }: WindowChromeProps) {
-    if (!customChrome) return null;
+  if (!customChrome) return null;
 
-    return (
-        <WindowTitleBar elevated={elevated} childWindow={childWindow} className={className} {...props}>
-            {children}
-            {actions ? <WindowTitleBarActions>{actions}</WindowTitleBarActions> : null}
-        </WindowTitleBar>
-    );
+  return (
+    <WindowTitleBar elevated={elevated} childWindow={childWindow} className={className} {...props}>
+      {children}
+      {actions ? <WindowTitleBarActions>{actions}</WindowTitleBarActions> : null}
+    </WindowTitleBar>
+  );
 }
 
 export type WindowMenuBarProps = ComponentProps<"div"> & {
-    /** Resolved by the Application/window composition owner. */
-    customChrome: boolean;
-    /** Toolbar buttons shown in both custom and native modes (theme, settings, etc.) */
-    toolbar?: ReactNode;
-    /** Window chrome controls — only rendered when titleBarStyle is custom */
-    windowActions?: ReactNode;
-    children: ReactNode;
+  /** Resolved by the Application/window composition owner. */
+  customChrome: boolean;
+  /** Toolbar buttons shown in both custom and native modes (theme, settings, etc.) */
+  toolbar?: ReactNode;
+  /** Window chrome controls — only rendered when titleBarStyle is custom */
+  windowActions?: ReactNode;
+  children: ReactNode;
 };
 
 /**
  * Menubar / toolbar row that becomes native-style (no drag region, no window controls)
  * when titleBarStyle is "native".
  */
-export function WindowMenuBar({ customChrome, toolbar, windowActions, className, children, ...props }: WindowMenuBarProps) {
-    const showCustomChrome = customChrome;
+export function WindowMenuBar({
+  customChrome,
+  toolbar,
+  windowActions,
+  className,
+  children,
+  ...props
+}: WindowMenuBarProps) {
+  const showCustomChrome = customChrome;
 
-    if (showCustomChrome) {
-        return (
-            <WindowTitleBar elevated className={cn("menubar-container", className)} {...props}>
-                {children}
-                <div className="min-w-5 flex-1 self-stretch" data-tauri-drag-region />
-                {(toolbar || windowActions) ? (
-                    <WindowTitleBarActions>
-                        {toolbar}
-                        {windowActions}
-                    </WindowTitleBarActions>
-                ) : null}
-            </WindowTitleBar>
-        );
-    }
-
+  if (showCustomChrome) {
     return (
-        <div
-            className={cn(
-                "menubar-container flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none",
-                className,
-            )}
-            {...props}
-        >
-            {children}
-            <div className="min-w-0 flex-1" />
-            {toolbar ? <div className="flex h-full shrink-0 items-stretch">{toolbar}</div> : null}
-        </div>
+      <WindowTitleBar elevated className={cn("menubar-container", className)} {...props}>
+        {children}
+        <div className="min-w-5 flex-1 self-stretch" data-tauri-drag-region />
+        {toolbar || windowActions ? (
+          <WindowTitleBarActions>
+            {toolbar}
+            {windowActions}
+          </WindowTitleBarActions>
+        ) : null}
+      </WindowTitleBar>
     );
+  }
+
+  return (
+    <div
+      className={cn(
+        "menubar-container flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <div className="min-w-0 flex-1" />
+      {toolbar ? <div className="flex h-full shrink-0 items-stretch">{toolbar}</div> : null}
+    </div>
+  );
 }

@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
-import { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { computeAcfPacf } from '@/features/application/stats/statsActions';
-import { formatInlineUserError } from '@/features/application/userErrorSummary';
-import type { AcfPacfResponse } from '@/features/application/stats/statsActions';
-import { acfSeriesToBars, pacfSeriesToBars } from '@/shared/types/report';
-import { useChartTheme } from '@/shared/charts/core';
-import { SectionHeader } from './RegressionShared';
-import { InfoAccentButton } from './InfoViewControls';
+import React, { useState } from "react";
+import { Suspense } from "react";
+import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { computeAcfPacf } from "@/features/application/stats/statsActions";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
+import type { AcfPacfResponse } from "@/features/application/stats/statsActions";
+import { acfSeriesToBars, pacfSeriesToBars } from "@/shared/types/report";
+import { useChartTheme } from "@/shared/charts/core";
+import { SectionHeader } from "./RegressionShared";
+import { InfoAccentButton } from "./InfoViewControls";
 
-const CorrelogramChart = React.lazy(() => import('@/shared/charts/statistical/CorrelogramChart'));
+const CorrelogramChart = React.lazy(() => import("@/shared/charts/statistical/CorrelogramChart"));
 
-export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[]; residualLabel?: string }) {
+export function ACFPACFBlock({
+  residuals,
+  residualLabel,
+}: {
+  residuals?: number[];
+  residualLabel?: string;
+}) {
   const { t } = useTranslation();
   const [lag, setLag] = useState(20);
   const [result, setResult] = useState<AcfPacfResponse | null>(null);
@@ -45,10 +51,17 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
   return (
     <div className="mt-6">
       <SectionHeader
-        title={residualLabel ? `ACF & PACF (检验对象: ${residualLabel})` : 'ACF & PACF (Correlogram)'}
+        title={
+          residualLabel ? `ACF & PACF (检验对象: ${residualLabel})` : "ACF & PACF (Correlogram)"
+        }
         icon={
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
           </svg>
         }
       />

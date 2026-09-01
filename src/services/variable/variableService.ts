@@ -1,9 +1,9 @@
-import { invokeCommand } from '@/services/ipc';
-import type { Variable } from '@/shared/types/domain';
-import { dataTypeToBackend } from '@/shared/types/dto/dataType';
-import { dataValueToBackend } from '@/shared/types/dto/dataValue';
-import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import { invokeCommand } from "@/services/ipc";
+import type { Variable } from "@/shared/types/domain";
+import { dataTypeToBackend } from "@/shared/types/dto/dataType";
+import { dataValueToBackend } from "@/shared/types/dto/dataValue";
+import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
+import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 
 export interface VariableMutationCommandResult {
   variableId: string;
@@ -21,7 +21,9 @@ function normalizeCommandResult(raw: VariableMutationWireResult): VariableMutati
   return {
     variableId: raw.variableId,
     variable: raw.variable
-      ? normalizeVariableFromBackend(raw.variable as Parameters<typeof normalizeVariableFromBackend>[0])
+      ? normalizeVariableFromBackend(
+          raw.variable as Parameters<typeof normalizeVariableFromBackend>[0],
+        )
       : null,
     result: raw.result,
   };
@@ -41,9 +43,9 @@ export class VariableService {
     projectInstanceId: string,
     operationId: string,
     expectedCollectionRevision: number,
-    variable: Omit<Variable, 'id' | 'revision'>,
+    variable: Omit<Variable, "id" | "revision">,
   ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>('create_variable', {
+    const raw = await invokeCommand<VariableMutationWireResult>("create_variable", {
       name: variable.name,
       dataType: dataTypeToBackend(variable.dataType),
       dataValue: dataValueToBackend(variable.dataValue),
@@ -61,7 +63,7 @@ export class VariableService {
    * 获取变量
    */
   static async getVariable(projectInstanceId: string, variableId: string): Promise<Variable> {
-    const raw = await invokeCommand<Record<string, unknown>>('get_variable', {
+    const raw = await invokeCommand<Record<string, unknown>>("get_variable", {
       projectInstanceId,
       variableId,
     });
@@ -78,7 +80,7 @@ export class VariableService {
     id: string,
     patch: Partial<Variable>,
   ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>('update_variable', {
+    const raw = await invokeCommand<VariableMutationWireResult>("update_variable", {
       variableId: id,
       name: patch.name ?? null,
       dataType: patch.dataType ? dataTypeToBackend(patch.dataType) : null,
@@ -101,7 +103,7 @@ export class VariableService {
     expectedRevision: number,
     variableId: string,
   ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>('delete_variable', {
+    const raw = await invokeCommand<VariableMutationWireResult>("delete_variable", {
       projectInstanceId,
       operationId,
       expectedRevision,

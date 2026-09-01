@@ -1,13 +1,10 @@
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
-import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
-import { ensureEditorViewport, editorViewportScope } from '@/features/core/viewport';
-import { logger } from '@/features/application/observability/appLogger';
+import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import { buildGraphLayoutTab } from "@/features/core/layout/layoutTabModel";
+import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
+import { logger } from "@/features/application/observability/appLogger";
 
-import {
-  isEditorOpenRejectionHandled,
-  openEditorTab,
-} from './openEditorTab';
-import { switchEditorTab } from './switchEditorTab';
+import { isEditorOpenRejectionHandled, openEditorTab } from "./openEditorTab";
+import { switchEditorTab } from "./switchEditorTab";
 
 export interface OpenGraphInEditorOptions {
   /** `false` = preview tab (sidebar single-click). Default: pinned. */
@@ -19,13 +16,13 @@ export interface OpenGraphInEditorOptions {
 export async function openGraphInEditor(
   graphPath: string,
   name: string,
-  type: 'event' | 'function',
+  type: "event" | "function",
   targetGroupId?: string,
   options?: OpenGraphInEditorOptions,
 ): Promise<WorkbenchPanelInfo | null> {
   logger.graph.trace(
     `openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`,
-    'TabManagement',
+    "TabManagement",
   );
 
   const pinned = options?.pinned !== false;

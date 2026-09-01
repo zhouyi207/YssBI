@@ -1,4 +1,4 @@
-import type { ChartThemeColors } from '@/shared/theme/chartTheme';
+import type { ChartThemeColors } from "@/shared/theme/chartTheme";
 
 export type MarkInteractionEvent = MouseEvent | FocusEvent;
 
@@ -6,17 +6,11 @@ export type MarkInteractionEvent = MouseEvent | FocusEvent;
 export type D3Onable<GElement extends Element = Element, Datum = unknown> = {
   attr(
     name: string,
-    value:
-      | string
-      | number
-      | null
-      | ((this: GElement, datum: Datum) => string | number | null),
+    value: string | number | null | ((this: GElement, datum: Datum) => string | number | null),
   ): D3Onable<GElement, Datum>;
   on(
     typenames: string,
-    listener:
-      | ((this: GElement, event: MarkInteractionEvent, datum: Datum) => void)
-      | null,
+    listener: ((this: GElement, event: MarkInteractionEvent, datum: Datum) => void) | null,
   ): D3Onable<GElement, Datum>;
 };
 
@@ -42,8 +36,7 @@ export function computeAnchorTooltipPosition(input: AnchorTooltipPositionInput):
   top: number;
 } {
   const padding = input.padding ?? 6;
-  let left =
-    input.anchorLeft + input.anchorWidth / 2 - input.tooltipWidth / 2;
+  let left = input.anchorLeft + input.anchorWidth / 2 - input.tooltipWidth / 2;
   left = Math.max(4, Math.min(left, input.containerWidth - input.tooltipWidth - 4));
   const above = input.anchorTop - input.tooltipHeight - padding;
   const below = input.anchorTop + input.anchorHeight + padding;
@@ -73,10 +66,10 @@ export function computePointerTooltipPosition(input: PointerTooltipPositionInput
 
 export function escapeTooltipHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export function tooltipRichBlock(html: string, theme: ChartThemeColors): string {
@@ -121,13 +114,13 @@ export class PlotTooltipController {
 
   show(html: string): void {
     if (!this.tooltipEl) return;
-    this.tooltipEl.style.opacity = '1';
+    this.tooltipEl.style.opacity = "1";
     this.tooltipEl.innerHTML = html;
   }
 
   hide(): void {
     if (!this.tooltipEl) return;
-    this.tooltipEl.style.opacity = '0';
+    this.tooltipEl.style.opacity = "0";
   }
 
   moveToCursor(event: MouseEvent, offset: TooltipOffset = { x: 8, y: -36 }): void {
@@ -164,18 +157,14 @@ export interface AttachMarkTooltipConfig<GElement extends Element, Datum> {
   tooltip: PlotTooltipController;
   getHtml: (datum: Datum, element: GElement) => string;
   getAriaLabel?: (datum: Datum, element: GElement) => string;
-  position?: 'cursor' | 'anchor';
+  position?: "cursor" | "anchor";
   cursorOffset?: TooltipOffset;
-  onEnter?: (
-    element: GElement,
-    datum: Datum,
-    event: MarkInteractionEvent,
-  ) => void;
+  onEnter?: (element: GElement, datum: Datum, event: MarkInteractionEvent) => void;
   onMove?: (element: GElement, datum: Datum, event: MouseEvent) => void;
   onLeave?: (element: GElement, datum: Datum) => void;
 }
 
-type MarkInputMode = 'pointer' | 'keyboard';
+type MarkInputMode = "pointer" | "keyboard";
 
 interface CoordinatedMarkState {
   order: number;
@@ -198,14 +187,9 @@ interface TooltipInteractionState {
   visibleMark: { mark: CoordinatedMarkState; mode: MarkInputMode } | null;
 }
 
-const tooltipInteractionStates = new WeakMap<
-  PlotTooltipController,
-  TooltipInteractionState
->();
+const tooltipInteractionStates = new WeakMap<PlotTooltipController, TooltipInteractionState>();
 
-function getTooltipInteractionState(
-  tooltip: PlotTooltipController,
-): TooltipInteractionState {
+function getTooltipInteractionState(tooltip: PlotTooltipController): TooltipInteractionState {
   const existing = tooltipInteractionStates.get(tooltip);
   if (existing) return existing;
 
@@ -260,34 +244,29 @@ function removeCoordinatedMarks(
   if (removedVisibleMark) renderFallback(tooltip, interaction);
 }
 
-const MARK_TOOLTIP_EVENT_NAMESPACE = '.markTooltip';
+const MARK_TOOLTIP_EVENT_NAMESPACE = ".markTooltip";
 
 /** Pointer and keyboard tooltip wiring for bar, cell, and point marks. */
 export function attachMarkTooltip<GElement extends Element, Datum>(
   selection: D3Onable<GElement, Datum>,
   config: AttachMarkTooltipConfig<GElement, Datum>,
 ): () => void {
-  const position = config.position ?? 'cursor';
+  const position = config.position ?? "cursor";
   const interaction = getTooltipInteractionState(config.tooltip);
   const activeMarks = new Map<GElement, ActiveMarkState<Datum>>();
   let detached = false;
 
-  const isActive = (state: ActiveMarkState<Datum>) =>
-    state.pointerHovered || state.keyboardFocused;
+  const isActive = (state: ActiveMarkState<Datum>) => state.pointerHovered || state.keyboardFocused;
 
   const preferredMode = (state: ActiveMarkState<Datum>): MarkInputMode => {
-    if (state.lastMode === 'pointer' && state.pointerHovered) return 'pointer';
-    if (state.lastMode === 'keyboard' && state.keyboardFocused) return 'keyboard';
-    return state.keyboardFocused ? 'keyboard' : 'pointer';
+    if (state.lastMode === "pointer" && state.pointerHovered) return "pointer";
+    if (state.lastMode === "keyboard" && state.keyboardFocused) return "keyboard";
+    return state.keyboardFocused ? "keyboard" : "pointer";
   };
 
-  const renderMark = (
-    element: GElement,
-    state: ActiveMarkState<Datum>,
-    mode: MarkInputMode,
-  ) => {
+  const renderMark = (element: GElement, state: ActiveMarkState<Datum>, mode: MarkInputMode) => {
     config.tooltip.show(config.getHtml(state.datum, element));
-    if (mode === 'keyboard' || position === 'anchor') {
+    if (mode === "keyboard" || position === "anchor") {
       config.tooltip.moveToAnchor(element.getBoundingClientRect());
     } else if (state.pointerEvent) {
       config.tooltip.moveToCursor(state.pointerEvent, config.cursorOffset);
@@ -326,7 +305,7 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     state.datum = datum;
     state.lastMode = mode;
     state.order = ++interaction.activationOrder;
-    if (mode === 'pointer') {
+    if (mode === "pointer") {
       state.pointerHovered = true;
       state.pointerEvent = event as MouseEvent;
     } else {
@@ -343,7 +322,7 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     const state = activeMarks.get(element);
     if (!state) return;
     state.datum = datum;
-    if (mode === 'pointer') {
+    if (mode === "pointer") {
       state.pointerHovered = false;
       state.pointerEvent = null;
     } else {
@@ -361,43 +340,61 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     removeCoordinatedMarks(config.tooltip, interaction, [state]);
   };
 
-  selection.attr('tabindex', 0);
+  selection.attr("tabindex", 0);
   if (config.getAriaLabel) {
-    selection.attr('aria-label', function (this: GElement, datum: Datum) {
+    selection.attr("aria-label", function (this: GElement, datum: Datum) {
       return config.getAriaLabel?.(datum, this) ?? null;
     });
   }
 
   selection
-    .on(`mouseenter${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
-      activate(this, datum, event, 'pointer');
-    })
-    .on(`mousemove${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
-      const mouseEvent = event as MouseEvent;
-      config.onMove?.(this, datum, mouseEvent);
-      if (position === 'cursor') {
-        const state = activeMarks.get(this);
-        if (state?.pointerHovered) {
-          state.pointerEvent = mouseEvent;
-          state.lastMode = 'pointer';
-          state.order = ++interaction.activationOrder;
-          if (interaction.visibleMark?.mark === state && interaction.visibleMark.mode === 'pointer') {
-            config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
-          } else {
-            renderCoordinatedMark(interaction, state, 'pointer');
+    .on(
+      `mouseenter${MARK_TOOLTIP_EVENT_NAMESPACE}`,
+      function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+        activate(this, datum, event, "pointer");
+      },
+    )
+    .on(
+      `mousemove${MARK_TOOLTIP_EVENT_NAMESPACE}`,
+      function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+        const mouseEvent = event as MouseEvent;
+        config.onMove?.(this, datum, mouseEvent);
+        if (position === "cursor") {
+          const state = activeMarks.get(this);
+          if (state?.pointerHovered) {
+            state.pointerEvent = mouseEvent;
+            state.lastMode = "pointer";
+            state.order = ++interaction.activationOrder;
+            if (
+              interaction.visibleMark?.mark === state &&
+              interaction.visibleMark.mode === "pointer"
+            ) {
+              config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
+            } else {
+              renderCoordinatedMark(interaction, state, "pointer");
+            }
           }
         }
-      }
-    })
-    .on(`mouseleave${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
-      deactivate(this, datum, 'pointer');
-    })
-    .on(`focus${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
-      activate(this, datum, event, 'keyboard');
-    })
-    .on(`blur${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
-      deactivate(this, datum, 'keyboard');
-    });
+      },
+    )
+    .on(
+      `mouseleave${MARK_TOOLTIP_EVENT_NAMESPACE}`,
+      function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
+        deactivate(this, datum, "pointer");
+      },
+    )
+    .on(
+      `focus${MARK_TOOLTIP_EVENT_NAMESPACE}`,
+      function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+        activate(this, datum, event, "keyboard");
+      },
+    )
+    .on(
+      `blur${MARK_TOOLTIP_EVENT_NAMESPACE}`,
+      function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
+        deactivate(this, datum, "keyboard");
+      },
+    );
 
   return () => {
     if (detached) return;

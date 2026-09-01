@@ -1,15 +1,15 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
-import { useSettingsStore } from './settingsStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
+import { useSettingsStore } from "./settingsStore";
 import type {
   AppSettings,
   AppearanceSettings,
   EditorSettings,
   ProjectSettings,
   ThemeSettings,
-} from '@/shared/types/settings';
+} from "@/shared/types/settings";
 
 export interface SettingsReadSnapshot {
   readonly theme: DeepReadonly<ThemeSettings>;

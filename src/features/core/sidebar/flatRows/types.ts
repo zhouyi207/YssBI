@@ -1,9 +1,9 @@
-import type { MouseEvent } from 'react';
+import type { MouseEvent } from "react";
 
 export const SIDEBAR_FLAT_ROW_HEIGHT = 28 as const;
 
 export interface SidebarDatabaseItemRow {
-  kind: 'database';
+  kind: "database";
   rowKey: string;
   level: number;
   id: string;
@@ -12,8 +12,7 @@ export interface SidebarDatabaseItemRow {
   data: unknown;
 }
 
-export type SidebarItemRow =
-  SidebarDatabaseItemRow;
+export type SidebarItemRow = SidebarDatabaseItemRow;
 
 export type SidebarSectionActionConfig = {
   onAdd?: () => void;

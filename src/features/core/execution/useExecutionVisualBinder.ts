@@ -1,9 +1,6 @@
-import { useEffect } from 'react';
-import {
-  getExecutionVisual,
-  subscribeExecutionVisual,
-} from './executionVisualSession';
-import { syncExecutionVisualDom, clearExecutionVisualDom } from './executionVisualDom';
+import { useEffect } from "react";
+import { getExecutionVisual, subscribeExecutionVisual } from "./executionVisualSession";
+import { syncExecutionVisualDom, clearExecutionVisualDom } from "./executionVisualDom";
 
 /** Imperative node execution highlights — no per-event React re-render. */
 export function useExecutionVisualBinder(

@@ -1,8 +1,5 @@
-import { ProjectService } from '@/services/project/projectService';
-import {
-  openPathDialog,
-  type OpenPathDialogOptions,
-} from '@/services/platform/pathDialog';
+import { ProjectService } from "@/services/project/projectService";
+import { openPathDialog, type OpenPathDialogOptions } from "@/services/platform/pathDialog";
 
 export function getDefaultProjectParentDirectory(): Promise<string> {
   return ProjectService.defaultProjectParentDirectory();

@@ -1,14 +1,11 @@
-import { create } from 'zustand';
-import type { ProjectResourceMeta, ResourceKey, ResourceRef } from './resourceTypes';
-import { resourceKey } from './resourceTypes';
+import { create } from "zustand";
+import type { ProjectResourceMeta, ResourceKey, ResourceRef } from "./resourceTypes";
+import { resourceKey } from "./resourceTypes";
 
 interface ResourceStore {
   resources: Record<ResourceKey, ProjectResourceMeta>;
   graphOrder: string[];
-  setSnapshot(snapshot: {
-    resources: ProjectResourceMeta[];
-    graphOrder?: string[];
-  }): void;
+  setSnapshot(snapshot: { resources: ProjectResourceMeta[]; graphOrder?: string[] }): void;
   setResources(resources: ProjectResourceMeta[]): void;
   upsertResource(resource: ProjectResourceMeta): void;
   patchResource(ref: ResourceRef, patch: Partial<ProjectResourceMeta>): void;
@@ -25,9 +22,11 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       resources: Object.fromEntries(
         resources.map((resource) => [resourceKey(resource), resource]),
       ) as Record<ResourceKey, ProjectResourceMeta>,
-      graphOrder: graphOrder ?? resources
-        .filter((resource) => resource.kind === 'event' || resource.kind === 'function')
-        .map((resource) => resource.id),
+      graphOrder:
+        graphOrder ??
+        resources
+          .filter((resource) => resource.kind === "event" || resource.kind === "function")
+          .map((resource) => resource.id),
     }),
 
   setResources: (resources) =>
@@ -45,7 +44,7 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       },
       graphOrder: state.graphOrder.includes(resource.id)
         ? state.graphOrder
-        : resource.kind === 'event' || resource.kind === 'function'
+        : resource.kind === "event" || resource.kind === "function"
           ? [...state.graphOrder, resource.id]
           : state.graphOrder,
     })),

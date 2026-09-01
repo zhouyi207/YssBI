@@ -1,46 +1,43 @@
-import { relative } from 'node:path';
-import * as ts from 'typescript/unstable/ast';
-import type {
-  Symbol as TypeScriptSymbol,
-  Type as TypeScriptType,
-} from 'typescript/unstable/sync';
+import { relative } from "node:path";
+import * as ts from "typescript/unstable/ast";
+import type { Symbol as TypeScriptSymbol, Type as TypeScriptType } from "typescript/unstable/sync";
 
 import type {
   ArchitectureSource,
   ResolvedModuleDependency,
-} from '@/tests/helpers/moduleDependencyAudit';
-import { resolvedModuleDependencies } from '@/tests/helpers/moduleDependencyAudit';
-import { rawTauriInvokeOccurrences } from '@/tests/helpers/tauriInvokeAudit';
+} from "@/tests/helpers/moduleDependencyAudit";
+import { resolvedModuleDependencies } from "@/tests/helpers/moduleDependencyAudit";
+import { rawTauriInvokeOccurrences } from "@/tests/helpers/tauriInvokeAudit";
 import {
   normalizeTypeScriptPath,
   type TypeScriptAuditProject,
-} from '@/tests/helpers/typescriptAudit';
+} from "@/tests/helpers/typescriptAudit";
 import {
   auditFrontendStateAuthority,
   discoverFrontendStateAuthorityMembers,
   type FrontendStateAuthorityEntry,
   type FrontendStateAuthorityFinding,
-} from './frontendStateAuthority';
-import { classifyFrontendSources } from './frontendArchitecturePolicy';
+} from "./frontendStateAuthority";
+import { classifyFrontendSources } from "./frontendArchitecturePolicy";
 import type {
   FrontendArchitecturePolicy,
   FrontendFinding,
   FrontendLayer,
   FrontendResolvedCapability,
-} from './frontendArchitectureModel';
+} from "./frontendArchitectureModel";
 
-const RAW_INVOKE_ADAPTER = 'src/services/ipc/invokeCommand.ts';
-const RAW_DIALOG_ADAPTER = 'src/services/platform/pathDialog.ts';
-const ROOT_DOCKVIEW_CONSUMER = 'src/views/EditorView/Layout/Workspace.tsx';
-const NESTED_DOCKVIEW_CONSUMER = 'src/views/LogView/LogWorkspaceDockview.tsx';
+const RAW_INVOKE_ADAPTER = "src/services/ipc/invokeCommand.ts";
+const RAW_DIALOG_ADAPTER = "src/services/platform/pathDialog.ts";
+const ROOT_DOCKVIEW_CONSUMER = "src/views/EditorView/Layout/Workspace.tsx";
+const NESTED_DOCKVIEW_CONSUMER = "src/views/LogView/LogWorkspaceDockview.tsx";
 
 const PUBLICATION_MEMBERS = new Set([
-  'applyProjection',
-  'hydrateProjection',
-  'publish',
-  'replaceProjection',
-  'setState',
-  'submitPublication',
+  "applyProjection",
+  "hydrateProjection",
+  "publish",
+  "replaceProjection",
+  "setState",
+  "submitPublication",
 ]);
 
 function findingSort(left: FrontendFinding, right: FrontendFinding): number {
@@ -50,17 +47,21 @@ function findingSort(left: FrontendFinding, right: FrontendFinding): number {
     left.fullyQualifiedOwner,
     left.dependencyKind,
     left.canonicalOriginTarget,
-    left.line.toString().padStart(8, '0'),
-    left.column.toString().padStart(8, '0'),
-  ].join('\u0000').localeCompare([
-    right.ruleId,
-    right.repositoryRelativeSourceFile,
-    right.fullyQualifiedOwner,
-    right.dependencyKind,
-    right.canonicalOriginTarget,
-    right.line.toString().padStart(8, '0'),
-    right.column.toString().padStart(8, '0'),
-  ].join('\u0000'));
+    left.line.toString().padStart(8, "0"),
+    left.column.toString().padStart(8, "0"),
+  ]
+    .join("\u0000")
+    .localeCompare(
+      [
+        right.ruleId,
+        right.repositoryRelativeSourceFile,
+        right.fullyQualifiedOwner,
+        right.dependencyKind,
+        right.canonicalOriginTarget,
+        right.line.toString().padStart(8, "0"),
+        right.column.toString().padStart(8, "0"),
+      ].join("\u0000"),
+    );
 }
 
 function findingIdentity(finding: FrontendFinding): string {
@@ -87,7 +88,7 @@ function semanticFinding(
   ruleId: string,
   sourceFile: string,
   sourceLayer: FrontendLayer,
-  dependencyKind: FrontendFinding['dependencyKind'],
+  dependencyKind: FrontendFinding["dependencyKind"],
   canonicalOriginTarget: string,
   targetLayer: FrontendLayer | null,
   importedSymbol: string | null,
@@ -114,8 +115,8 @@ function stateAuthoritySemanticFinding(
   return semanticFinding(
     finding.ruleId,
     finding.storeModule,
-    classification.get(finding.storeModule) ?? 'core',
-    finding.memberKind === 'action' ? 'call' : 'property-access',
+    classification.get(finding.storeModule) ?? "core",
+    finding.memberKind === "action" ? "call" : "property-access",
     `state-authority:${finding.storeModule}::${finding.memberKind}::${finding.member}`,
     null,
     finding.member,
@@ -128,17 +129,20 @@ function exactCapability(
   dependency: ResolvedModuleDependency,
   sourceLayer: FrontendLayer,
 ): FrontendResolvedCapability | null {
-  if (dependency.origin.kind !== 'repository-module' || dependency.importedSymbol === null) {
+  if (dependency.origin.kind !== "repository-module" || dependency.importedSymbol === null) {
     return null;
   }
   const canonicalModule = dependency.origin.declarationTarget;
-  return policy.capabilities.find((capability) => (
-    capability.sourceLayer === sourceLayer
-    && capability.canonicalModule === canonicalModule
-    && capability.exportedSymbols.includes(dependency.importedSymbol!)
-    && (capability.exactConsumers === null
-      || capability.exactConsumers.includes(dependency.repositoryRelativeSourceFile))
-  )) ?? null;
+  return (
+    policy.capabilities.find(
+      (capability) =>
+        capability.sourceLayer === sourceLayer &&
+        capability.canonicalModule === canonicalModule &&
+        capability.exportedSymbols.includes(dependency.importedSymbol!) &&
+        (capability.exactConsumers === null ||
+          capability.exactConsumers.includes(dependency.repositoryRelativeSourceFile)),
+    ) ?? null
+  );
 }
 
 function dependencyAt(
@@ -148,16 +152,22 @@ function dependencyAt(
   importedSymbol: string | null | undefined,
 ): ResolvedModuleDependency | null {
   const location = locationOf(sourceFile, node);
-  return dependencies.find((dependency) => (
-    dependency.location.line === location.line
-    && dependency.location.column === location.column
-    && (importedSymbol === undefined
-      || importedSymbol === null
-      || dependency.importedSymbol === importedSymbol)
-  )) ?? dependencies.find((dependency) => (
-    dependency.location.line === location.line
-    && dependency.location.column === location.column
-  )) ?? null;
+  return (
+    dependencies.find(
+      (dependency) =>
+        dependency.location.line === location.line &&
+        dependency.location.column === location.column &&
+        (importedSymbol === undefined ||
+          importedSymbol === null ||
+          dependency.importedSymbol === importedSymbol),
+    ) ??
+    dependencies.find(
+      (dependency) =>
+        dependency.location.line === location.line &&
+        dependency.location.column === location.column,
+    ) ??
+    null
+  );
 }
 
 function importedBindings(
@@ -203,7 +213,7 @@ function importedDependencyForExpression(
 ): ResolvedModuleDependency | null {
   if (ts.isIdentifier(expression)) {
     const symbol = context.checker.getSymbolAtLocation(expression);
-    return symbol ? bindings.get(symbol) ?? null : null;
+    return symbol ? (bindings.get(symbol) ?? null) : null;
   }
   if (ts.isPropertyAccessExpression(expression)) {
     return importedDependencyForExpression(expression.expression, context, bindings);
@@ -222,21 +232,23 @@ function canonicalTypeSymbolTarget(
   context: TypeScriptAuditProject,
   symbol: TypeScriptSymbol,
 ): string | null {
-  const paths = symbol.declarations.flatMap((handle) => {
-    const declaration = handle.resolve(context.project);
-    if (!declaration) return [];
-    const path = normalizeTypeScriptPath(relative(
-      context.sourceRoot,
-      declaration.getSourceFile().fileName,
-    ));
-    return path.startsWith('src/') ? [`${path}::${symbol.name}`] : [];
-  }).sort();
+  const paths = symbol.declarations
+    .flatMap((handle) => {
+      const declaration = handle.resolve(context.project);
+      if (!declaration) return [];
+      const path = normalizeTypeScriptPath(
+        relative(context.sourceRoot, declaration.getSourceFile().fileName),
+      );
+      return path.startsWith("src/") ? [`${path}::${symbol.name}`] : [];
+    })
+    .sort();
   return paths[0] ?? null;
 }
 
 function typeSymbols(type: TypeScriptType): readonly TypeScriptSymbol[] {
-  const symbols = [type.getAliasSymbol(), type.getSymbol()]
-    .filter((symbol): symbol is TypeScriptSymbol => symbol !== undefined);
+  const symbols = [type.getAliasSymbol(), type.getSymbol()].filter(
+    (symbol): symbol is TypeScriptSymbol => symbol !== undefined,
+  );
   return [...new Map(symbols.map((symbol) => [symbol.id, symbol])).values()];
 }
 
@@ -251,16 +263,16 @@ function typedDependencyForExpression(
     const target = canonicalTypeSymbolTarget(context, symbol);
     return target === null ? [] : [target];
   });
-  return dependencies.find((dependency) => (
-    dependency.symbolDeclarationTarget !== null
-    && targets.includes(dependency.symbolDeclarationTarget)
-  )) ?? null;
+  return (
+    dependencies.find(
+      (dependency) =>
+        dependency.symbolDeclarationTarget !== null &&
+        targets.includes(dependency.symbolDeclarationTarget),
+    ) ?? null
+  );
 }
 
-function memberCapabilityAllows(
-  capability: FrontendResolvedCapability,
-  member: string,
-): boolean {
+function memberCapabilityAllows(capability: FrontendResolvedCapability, member: string): boolean {
   if (capability.memberCapabilities === null) return true;
   return Object.values(capability.memberCapabilities).some((members) => members.includes(member));
 }
@@ -274,62 +286,71 @@ function auditResolvedImports(
 ): FrontendFinding[] {
   const findings: FrontendFinding[] = [];
   for (const dependency of dependencies) {
-    if (dependency.origin.kind === 'external'
-      && dependency.origin.dependency.packageName === '@tauri-apps/plugin-dialog'
-      && source.path !== RAW_DIALOG_ADAPTER) {
-      findings.push(semanticFinding(
-        'frontend.dialog.raw',
-        source.path,
-        sourceLayer,
-        dependency.kind,
-        dependency.canonicalOriginTarget,
-        null,
-        dependency.importedSymbol,
-        dependency.location,
-      ));
+    if (
+      dependency.origin.kind === "external" &&
+      dependency.origin.dependency.packageName === "@tauri-apps/plugin-dialog" &&
+      source.path !== RAW_DIALOG_ADAPTER
+    ) {
+      findings.push(
+        semanticFinding(
+          "frontend.dialog.raw",
+          source.path,
+          sourceLayer,
+          dependency.kind,
+          dependency.canonicalOriginTarget,
+          null,
+          dependency.importedSymbol,
+          dependency.location,
+        ),
+      );
       continue;
     }
-    if (dependency.origin.kind !== 'repository-module') continue;
+    if (dependency.origin.kind !== "repository-module") continue;
     const targetLayer = classification.get(dependency.origin.declarationTarget) ?? null;
     const capability = exactCapability(policy, dependency, sourceLayer);
-    if (sourceLayer === 'views' && targetLayer === 'core' && capability === null) {
-      findings.push(semanticFinding(
-        'frontend.view-core.capability',
-        source.path,
-        sourceLayer,
-        dependency.kind,
-        dependency.canonicalOriginTarget,
-        targetLayer,
-        dependency.importedSymbol,
-        dependency.location,
-      ));
+    if (sourceLayer === "views" && targetLayer === "core" && capability === null) {
+      findings.push(
+        semanticFinding(
+          "frontend.view-core.capability",
+          source.path,
+          sourceLayer,
+          dependency.kind,
+          dependency.canonicalOriginTarget,
+          targetLayer,
+          dependency.importedSymbol,
+          dependency.location,
+        ),
+      );
     }
-    const rawServiceTransport = targetLayer === 'services'
-      && dependency.origin.declarationTarget.startsWith('src/services/ipc/');
-    const rawWireSymbol = targetLayer === 'wire-schema' && capability === null;
-    if (sourceLayer === 'application' && (rawServiceTransport || rawWireSymbol)) {
-      findings.push(semanticFinding(
-        'frontend.application.raw-wire',
-        source.path,
-        sourceLayer,
-        dependency.kind,
-        dependency.canonicalOriginTarget,
-        targetLayer,
-        dependency.importedSymbol,
-        dependency.location,
-      ));
+    const rawServiceTransport =
+      targetLayer === "services" &&
+      dependency.origin.declarationTarget.startsWith("src/services/ipc/");
+    const rawWireSymbol = targetLayer === "wire-schema" && capability === null;
+    if (sourceLayer === "application" && (rawServiceTransport || rawWireSymbol)) {
+      findings.push(
+        semanticFinding(
+          "frontend.application.raw-wire",
+          source.path,
+          sourceLayer,
+          dependency.kind,
+          dependency.canonicalOriginTarget,
+          targetLayer,
+          dependency.importedSymbol,
+          dependency.location,
+        ),
+      );
     }
   }
   return findings;
 }
 
 function dockviewRule(sourceFile: string): {
-  ruleId: 'frontend.dockview.root-constructor' | 'frontend.dockview.nested-constructor';
+  ruleId: "frontend.dockview.root-constructor" | "frontend.dockview.nested-constructor";
   allowedPath: string;
 } {
-  return sourceFile.startsWith('src/views/LogView/')
-    ? { ruleId: 'frontend.dockview.nested-constructor', allowedPath: NESTED_DOCKVIEW_CONSUMER }
-    : { ruleId: 'frontend.dockview.root-constructor', allowedPath: ROOT_DOCKVIEW_CONSUMER };
+  return sourceFile.startsWith("src/views/LogView/")
+    ? { ruleId: "frontend.dockview.nested-constructor", allowedPath: NESTED_DOCKVIEW_CONSUMER }
+    : { ruleId: "frontend.dockview.root-constructor", allowedPath: ROOT_DOCKVIEW_CONSUMER };
 }
 
 function auditSourceExpressions(
@@ -342,80 +363,96 @@ function auditSourceExpressions(
 ): FrontendFinding[] {
   const sourceFile = context.sourceFile(source.path);
   const bindings = importedBindings(context, sourceFile, dependencies);
-  const hasMemberCapabilities = policy.capabilities.some((capability) => (
-    capability.sourceLayer === sourceLayer && capability.memberCapabilities !== null
-  ));
+  const hasMemberCapabilities = policy.capabilities.some(
+    (capability) =>
+      capability.sourceLayer === sourceLayer && capability.memberCapabilities !== null,
+  );
   const findings: FrontendFinding[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const dependency = importedDependencyForExpression(node.expression, context, bindings);
-      if (dependency?.origin.kind === 'external'
-        && dependency.origin.dependency.packageName === '@tauri-apps/api'
-        && dependency.origin.dependency.canonicalSubpath === 'core'
-        && dependency.importedSymbol === 'invoke'
-        && source.path !== RAW_INVOKE_ADAPTER) {
-        findings.push(semanticFinding(
-          'frontend.invoke.raw',
-          source.path,
-          sourceLayer,
-          'call',
-          dependency.canonicalOriginTarget,
-          null,
-          dependency.importedSymbol,
-          locationOf(sourceFile, node),
-        ));
+      if (
+        dependency?.origin.kind === "external" &&
+        dependency.origin.dependency.packageName === "@tauri-apps/api" &&
+        dependency.origin.dependency.canonicalSubpath === "core" &&
+        dependency.importedSymbol === "invoke" &&
+        source.path !== RAW_INVOKE_ADAPTER
+      ) {
+        findings.push(
+          semanticFinding(
+            "frontend.invoke.raw",
+            source.path,
+            sourceLayer,
+            "call",
+            dependency.canonicalOriginTarget,
+            null,
+            dependency.importedSymbol,
+            locationOf(sourceFile, node),
+          ),
+        );
       }
     }
     if (ts.isPropertyAccessExpression(node)) {
-      const dependency = importedDependencyForExpression(node.expression, context, bindings)
-        ?? (hasMemberCapabilities
+      const dependency =
+        importedDependencyForExpression(node.expression, context, bindings) ??
+        (hasMemberCapabilities
           ? typedDependencyForExpression(node.expression, context, dependencies)
           : null);
-      if (dependency?.origin.kind === 'repository-module') {
+      if (dependency?.origin.kind === "repository-module") {
         const targetLayer = classification.get(dependency.origin.declarationTarget) ?? null;
         const capability = exactCapability(policy, dependency, sourceLayer);
         if (capability && !memberCapabilityAllows(capability, node.name.text)) {
-          findings.push(semanticFinding(
-            'frontend.projection-read-mutation',
-            source.path,
-            sourceLayer,
-            'property-access',
-            dependency.canonicalOriginTarget,
-            targetLayer,
-            dependency.importedSymbol,
-            locationOf(sourceFile, node),
-          ));
+          findings.push(
+            semanticFinding(
+              "frontend.projection-read-mutation",
+              source.path,
+              sourceLayer,
+              "property-access",
+              dependency.canonicalOriginTarget,
+              targetLayer,
+              dependency.importedSymbol,
+              locationOf(sourceFile, node),
+            ),
+          );
         }
-        if (sourceLayer === 'views'
-          && targetLayer === 'core'
-          && capability === null
-          && PUBLICATION_MEMBERS.has(node.name.text)) {
-          findings.push(semanticFinding(
-            'frontend.view-publication',
-            source.path,
-            sourceLayer,
-            'property-access',
-            dependency.canonicalOriginTarget,
-            targetLayer,
-            dependency.importedSymbol,
-            locationOf(sourceFile, node),
-          ));
+        if (
+          sourceLayer === "views" &&
+          targetLayer === "core" &&
+          capability === null &&
+          PUBLICATION_MEMBERS.has(node.name.text)
+        ) {
+          findings.push(
+            semanticFinding(
+              "frontend.view-publication",
+              source.path,
+              sourceLayer,
+              "property-access",
+              dependency.canonicalOriginTarget,
+              targetLayer,
+              dependency.importedSymbol,
+              locationOf(sourceFile, node),
+            ),
+          );
         }
-        if (sourceLayer === 'services'
-          && targetLayer === 'core'
-          && node.name.text === 'setState'
-          && ts.isCallExpression(node.parent)
-          && node.parent.expression === node) {
-          findings.push(semanticFinding(
-            'frontend.service-projection-write',
-            source.path,
-            sourceLayer,
-            'call',
-            dependency.canonicalOriginTarget,
-            targetLayer,
-            dependency.importedSymbol,
-            locationOf(sourceFile, node.parent),
-          ));
+        if (
+          sourceLayer === "services" &&
+          targetLayer === "core" &&
+          node.name.text === "setState" &&
+          ts.isCallExpression(node.parent) &&
+          node.parent.expression === node
+        ) {
+          findings.push(
+            semanticFinding(
+              "frontend.service-projection-write",
+              source.path,
+              sourceLayer,
+              "call",
+              dependency.canonicalOriginTarget,
+              targetLayer,
+              dependency.importedSymbol,
+              locationOf(sourceFile, node.parent),
+            ),
+          );
         }
       }
     }
@@ -428,22 +465,26 @@ function auditSourceExpressions(
         : ts.isPropertyAccessExpression(node.tagName)
           ? importedDependencyForExpression(node.tagName.expression, context, bindings)
           : null;
-      if (dependency?.origin.kind === 'external'
-        && dependency.origin.dependency.packageName === 'dockview-react'
-        && (dependency.importedSymbol === 'DockviewReact'
-          || (dependency.importedSymbol === null && namespaceMember === 'DockviewReact'))) {
+      if (
+        dependency?.origin.kind === "external" &&
+        dependency.origin.dependency.packageName === "dockview-react" &&
+        (dependency.importedSymbol === "DockviewReact" ||
+          (dependency.importedSymbol === null && namespaceMember === "DockviewReact"))
+      ) {
         const rule = dockviewRule(source.path);
         if (source.path !== rule.allowedPath) {
-          findings.push(semanticFinding(
-            rule.ruleId,
-            source.path,
-            sourceLayer,
-            'constructor',
-            dependency.canonicalOriginTarget,
-            null,
-            dependency.importedSymbol,
-            locationOf(sourceFile, node),
-          ));
+          findings.push(
+            semanticFinding(
+              rule.ruleId,
+              source.path,
+              sourceLayer,
+              "constructor",
+              dependency.canonicalOriginTarget,
+              null,
+              dependency.importedSymbol,
+              locationOf(sourceFile, node),
+            ),
+          );
         }
       }
     }
@@ -462,25 +503,31 @@ export function auditFrontendSemantics(
   const sourcePaths = new Set(sources.map(({ path }) => path));
   const classificationReport = classifyFrontendSources(sources);
   if (classificationReport.errors.length > 0) {
-    const details = classificationReport.errors.map((error) => (
-      `${error.kind}:${error.sourceFile}`
-    )).sort().join(',');
+    const details = classificationReport.errors
+      .map((error) => `${error.kind}:${error.sourceFile}`)
+      .sort()
+      .join(",");
     throw new Error(`Frontend semantic audit requires total source classification: ${details}`);
   }
   const classification = classificationReport.classification;
   const findings: FrontendFinding[] = rawTauriInvokeOccurrences(context)
-    .filter((occurrence) => sourcePaths.has(occurrence.repositoryRelativeSourceFile)
-      && occurrence.repositoryRelativeSourceFile !== RAW_INVOKE_ADAPTER)
-    .map((occurrence) => semanticFinding(
-      'frontend.invoke.raw',
-      occurrence.repositoryRelativeSourceFile,
-      classification.get(occurrence.repositoryRelativeSourceFile)!,
-      'call',
-      'external:@tauri-apps/api::core',
-      null,
-      'invoke',
-      occurrence,
-    ));
+    .filter(
+      (occurrence) =>
+        sourcePaths.has(occurrence.repositoryRelativeSourceFile) &&
+        occurrence.repositoryRelativeSourceFile !== RAW_INVOKE_ADAPTER,
+    )
+    .map((occurrence) =>
+      semanticFinding(
+        "frontend.invoke.raw",
+        occurrence.repositoryRelativeSourceFile,
+        classification.get(occurrence.repositoryRelativeSourceFile)!,
+        "call",
+        "external:@tauri-apps/api::core",
+        null,
+        "invoke",
+        occurrence,
+      ),
+    );
 
   if (options.stateAuthorityManifest) {
     const stateAuthorityMembers = discoverFrontendStateAuthorityMembers(
@@ -488,36 +535,27 @@ export function auditFrontendSemantics(
       sources,
       options.stateAuthorityManifest,
     );
-    findings.push(...auditFrontendStateAuthority(
-      stateAuthorityMembers,
-      options.stateAuthorityManifest,
-    ).map((finding) => stateAuthoritySemanticFinding(finding, classification)));
+    findings.push(
+      ...auditFrontendStateAuthority(stateAuthorityMembers, options.stateAuthorityManifest).map(
+        (finding) => stateAuthoritySemanticFinding(finding, classification),
+      ),
+    );
   }
 
   for (const source of sources) {
     const sourceLayer = classification.get(source.path);
     if (!sourceLayer) continue;
     const dependencies = resolvedModuleDependencies(context, source);
-    findings.push(...auditResolvedImports(
-      source,
-      sourceLayer,
-      classification,
-      dependencies,
-      policy,
-    ));
-    findings.push(...auditSourceExpressions(
-      context,
-      source,
-      sourceLayer,
-      classification,
-      dependencies,
-      policy,
-    ));
+    findings.push(
+      ...auditResolvedImports(source, sourceLayer, classification, dependencies, policy),
+    );
+    findings.push(
+      ...auditSourceExpressions(context, source, sourceLayer, classification, dependencies, policy),
+    );
   }
-  return [...new Map(findings.map((finding) => [
-    findingIdentity(finding),
-    finding,
-  ])).values()].sort(findingSort);
+  return [...new Map(findings.map((finding) => [findingIdentity(finding), finding])).values()].sort(
+    findingSort,
+  );
 }
 
 export interface FrontendSemanticAuditOptions {

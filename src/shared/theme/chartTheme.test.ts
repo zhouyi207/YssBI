@@ -1,19 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_DARK_THEME } from '@/shared/config-default';
-import { resolveThemeTokens } from './themeTokens';
-import { getChartSeriesColors, getChartThemeColors } from './chartTheme';
+import { describe, expect, it } from "vitest";
+import { DEFAULT_DARK_THEME } from "@/shared/config-default";
+import { resolveThemeTokens } from "./themeTokens";
+import { getChartSeriesColors, getChartThemeColors } from "./chartTheme";
 
-describe('chartTheme', () => {
-  it('derives chart surfaces and typography from resolved semantic tokens', () => {
+describe("chartTheme", () => {
+  it("derives chart surfaces and typography from resolved semantic tokens", () => {
     const tokens = resolveThemeTokens({
       ...DEFAULT_DARK_THEME,
-      workbenchBackground: '#101820',
-      sidebarBackground: '#202a36',
-      foreground: '#f8fafc',
-      mutedForeground: '#a8b3c2',
-      gridColor: '#314052',
-      borderColor: '#405266',
-      selectionColor: '#5eead4',
+      workbenchBackground: "#101820",
+      sidebarBackground: "#202a36",
+      foreground: "#f8fafc",
+      mutedForeground: "#a8b3c2",
+      gridColor: "#314052",
+      borderColor: "#405266",
+      selectionColor: "#5eead4",
     });
 
     expect(getChartThemeColors(tokens)).toEqual({
@@ -29,8 +29,8 @@ describe('chartTheme', () => {
     });
   });
 
-  it('uses the resolved accent for the primary series and fixed semantic statuses', () => {
-    const tokens = resolveThemeTokens({ ...DEFAULT_DARK_THEME, accentColor: '#22c55e' });
+  it("uses the resolved accent for the primary series and fixed semantic statuses", () => {
+    const tokens = resolveThemeTokens({ ...DEFAULT_DARK_THEME, accentColor: "#22c55e" });
     const series = getChartSeriesColors(tokens);
 
     expect(series.primary).toBe(tokens.accent);

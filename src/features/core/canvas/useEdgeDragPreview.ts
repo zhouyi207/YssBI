@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react';
-import type { EdgeData } from '@/features/domain/canvas/edgeData';
-import { computeEdgePath } from './edgePath';
-import { getDragPreview, subscribeDragPreview } from './dragPreview';
+import { useEffect, useRef } from "react";
+import type { EdgeData } from "@/features/domain/canvas/edgeData";
+import { computeEdgePath } from "./edgePath";
+import { getDragPreview, subscribeDragPreview } from "./dragPreview";
 
 function edgeTouchesDrag(edge: EdgeData, dragNodeIds: ReadonlySet<string>): boolean {
-  return dragNodeIds.has(edge.sourceNodeId)
-    || (edge.targetNodeId != null && dragNodeIds.has(edge.targetNodeId));
+  return (
+    dragNodeIds.has(edge.sourceNodeId) ||
+    (edge.targetNodeId != null && dragNodeIds.has(edge.targetNodeId))
+  );
 }
 
 function updateEdgePaths(
@@ -26,8 +28,8 @@ function updateEdgePaths(
     const group = svg.querySelector(`[data-edge-id="${edge.id}"]`);
     if (!group) continue;
 
-    group.querySelectorAll('path').forEach((pathEl) => {
-      pathEl.setAttribute('d', pathData);
+    group.querySelectorAll("path").forEach((pathEl) => {
+      pathEl.setAttribute("d", pathData);
     });
   }
 }

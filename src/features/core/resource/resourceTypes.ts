@@ -1,13 +1,13 @@
-import type { LayoutTab } from '@/shared/types/ui';
+import type { LayoutTab } from "@/shared/types/ui";
 import {
   toGraphResourceUri,
   type GraphResourceKind,
-} from '@/shared/types/domain/graphResourcePath';
+} from "@/shared/types/domain/graphResourcePath";
 import type {
   ProjectResourceMeta,
   ResourceKey,
   ResourceRef,
-} from '@/features/domain/resource/resourceTypes';
+} from "@/features/domain/resource/resourceTypes";
 
 export type {
   BackendProjectResourceMeta,
@@ -15,12 +15,12 @@ export type {
   ResourceKey,
   ResourceKind,
   ResourceRef,
-} from '@/features/domain/resource/resourceTypes';
+} from "@/features/domain/resource/resourceTypes";
 
-type ResourceKeyInput = ResourceRef | Pick<ProjectResourceMeta, 'kind' | 'id' | 'uri'>;
+type ResourceKeyInput = ResourceRef | Pick<ProjectResourceMeta, "kind" | "id" | "uri">;
 
 export function resourceKey(input: ResourceKeyInput): ResourceKey {
-  if ('uri' in input && input.uri) {
+  if ("uri" in input && input.uri) {
     return input.uri;
   }
   return resourceKeyFromRef(input as ResourceRef);
@@ -28,14 +28,14 @@ export function resourceKey(input: ResourceKeyInput): ResourceKey {
 
 function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
   switch (ref.kind) {
-    case 'event':
-    case 'function':
+    case "event":
+    case "function":
       return toGraphResourceUri(ref.kind, ref.id);
-    case 'worksheet':
+    case "worksheet":
       return `yssbi://worksheet/${ref.id}`;
-    case 'database':
+    case "database":
       return `yssbi://database/${ref.id}`;
-    case 'variable':
+    case "variable":
       return `yssbi://variable/${ref.id}`;
   }
 }
@@ -44,7 +44,7 @@ export function buildGraphResourceMeta(
   kind: GraphResourceKind,
   path: string,
   name: string,
-  overrides?: Partial<Omit<ProjectResourceMeta, 'id' | 'kind' | 'name' | 'uri'>>,
+  overrides?: Partial<Omit<ProjectResourceMeta, "id" | "kind" | "name" | "uri">>,
 ): ProjectResourceMeta {
   return {
     id: path,
@@ -61,7 +61,7 @@ export function buildGraphResourceMeta(
 }
 
 export function resourceRefFromLayoutTab(tab: LayoutTab): ResourceRef | null {
-  if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
+  if (tab.type === "event" || tab.type === "function" || tab.type === "worksheet") {
     return { id: tab.id, kind: tab.type };
   }
   return null;

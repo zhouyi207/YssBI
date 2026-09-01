@@ -1,22 +1,22 @@
-import { Input } from '@/components/ui/input';
-import { useHypothesisTestBlock } from '@/features/application/stats/useHypothesisTestBlock';
-import { InfoAccentButton } from './InfoViewControls';
-import { ReportSection } from './ReportLayout';
-import { formatNum } from './RegressionShared';
-import { linearFormToLatex, renderHypothesisLatex } from './utils';
-import type { RegressionResultData } from '@/shared/types/report';
+import { Input } from "@/components/ui/input";
+import { useHypothesisTestBlock } from "@/features/application/stats/useHypothesisTestBlock";
+import { InfoAccentButton } from "./InfoViewControls";
+import { ReportSection } from "./ReportLayout";
+import { formatNum } from "./RegressionShared";
+import { linearFormToLatex, renderHypothesisLatex } from "./utils";
+import type { RegressionResultData } from "@/shared/types/report";
 
 function HypothesisFormulas({
   form,
   paramNames,
-  className = '',
+  className = "",
 }: {
   form: string;
   paramNames: string[];
   className?: string;
 }) {
   const parts = form
-    .split(' ; ')
+    .split(" ; ")
     .map((s) => s.trim())
     .filter(Boolean);
   return (
@@ -50,30 +50,36 @@ export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
               onChange={(e) => setHypothesis(e.target.value)}
               placeholder="e.g. x1 = 0 或 petal_width = -0.5626, petal_length = 0.7（逗号分隔多约束）"
               className="flex-1 font-mono text-sm"
-              onKeyDown={(e) => e.key === 'Enter' && void run()}
+              onKeyDown={(e) => e.key === "Enter" && void run()}
             />
             <InfoAccentButton onClick={() => void run()} disabled={!canRun} loading={loading}>
               Run
             </InfoAccentButton>
           </div>
-          <div className="text-[10px] text-muted-foreground">Param names: {paramNames.join(', ')}</div>
+          <div className="text-[10px] text-muted-foreground">
+            Param names: {paramNames.join(", ")}
+          </div>
           {error ? <div className="font-mono text-xs text-red-400">{error}</div> : null}
           {result ? (
             <div className="overflow-hidden rounded-md border border-border bg-muted">
               <div className="grid grid-cols-2 divide-x divide-border">
                 <div className="min-w-0 p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">H₀ 原假设</div>
+                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    H₀ 原假设
+                  </div>
                   <HypothesisFormulas form={result.h0_form} paramNames={paramNames} />
                 </div>
                 <div className="min-w-0 p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">H₁ 备择假设</div>
+                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    H₁ 备择假设
+                  </div>
                   <HypothesisFormulas form={result.h1_form} paramNames={paramNames} />
                 </div>
               </div>
               <div className="space-y-1.5 border-t border-border px-4 py-3 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">
-                    {result.test_type === 't' ? 't-statistic' : 'F-statistic'}
+                    {result.test_type === "t" ? "t-statistic" : "F-statistic"}
                   </span>
                   <span className="font-mono text-foreground">{formatNum(result.stat, 4)}</span>
                 </div>
@@ -86,7 +92,7 @@ export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">p-value</span>
                   <span
-                    className={`font-mono font-medium ${result.p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}`}
+                    className={`font-mono font-medium ${result.p_value < 0.05 ? "text-emerald-400" : "text-muted-foreground"}`}
                   >
                     {formatNum(result.p_value, 4)}
                   </span>

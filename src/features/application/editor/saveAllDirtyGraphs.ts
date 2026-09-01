@@ -1,35 +1,31 @@
-import i18n from 'i18next';
+import i18n from "i18next";
 
-import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
-import { saveWorksheetDocument } from '@/features/application/worksheet/saveWorksheetDocument';
+import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
+import { saveWorksheetDocument } from "@/features/application/worksheet/saveWorksheetDocument";
 import {
   captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
-} from '@/features/application/projectCommandContext';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import {
-  isResourceDocumentDirty,
-  markResourceDirty,
-  resourceKey,
-} from '@/features/core/resource';
-import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/features/application/observability/appLogger';
+} from "@/features/application/projectCommandContext";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { isResourceDocumentDirty, markResourceDirty, resourceKey } from "@/features/core/resource";
+import { GraphService } from "@/services/graph/graphService";
+import { logger } from "@/features/application/observability/appLogger";
 
-import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
-import { resolveTabDisplayName } from './resolveTabDisplayName';
+import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
+import { resolveTabDisplayName } from "./resolveTabDisplayName";
 
 interface DirtyEditorDocument {
   resourceRef: string;
   title: string;
-  resourceKind: 'event' | 'function' | 'worksheet';
+  resourceKind: "event" | "function" | "worksheet";
 }
 
 function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
   const seen = new Set<string>();
   const dirty: DirtyEditorDocument[] = [];
   for (const panel of workbenchDockviewRead.listPanels()) {
-    if (panel.metadata.role !== 'editor') continue;
+    if (panel.metadata.role !== "editor") continue;
     const { resourceRef, resourceKind } = panel.metadata;
     const key = resourceKey({ id: resourceRef, kind: resourceKind });
     if (seen.has(key) || !isResourceDocumentDirty({ id: resourceRef, kind: resourceKind })) {
@@ -56,13 +52,15 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
   for (const document of dirty) {
     let context: GraphSaveCommandContext | undefined;
     try {
-      if (document.resourceKind === 'worksheet') {
+      if (document.resourceKind === "worksheet") {
         const saved = await saveWorksheetDocument(document.resourceRef);
         if (!saved) {
-          showBlockingMessage(i18n.t('notifications.editor.documentSaveFailed', {
-            title: document.title,
-            error: 'worksheet_save_not_committed',
-          }));
+          showBlockingMessage(
+            i18n.t("notifications.editor.documentSaveFailed", {
+              title: document.title,
+              error: "worksheet_save_not_committed",
+            }),
+          );
           return false;
         }
         continue;
@@ -77,24 +75,28 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         context.operationId,
       );
       if (!isGraphSaveCommandRevisionCurrent(context, document.resourceRef)) return false;
-      markResourceDirty({
-        id: document.resourceRef,
-        kind: document.resourceKind,
-      }, false);
+      markResourceDirty(
+        {
+          id: document.resourceRef,
+          kind: document.resourceKind,
+        },
+        false,
+      );
     } catch (error) {
       if (context && !context.isCurrent()) return false;
       const message = error instanceof Error ? error.message : String(error);
       logger.app.error(
         `Failed to save graph '${document.title}' (${document.resourceRef}): ${message}`,
-        'saveAllDirtyGraphs',
+        "saveAllDirtyGraphs",
       );
       showBlockingIpcError(
         error,
-        document.resourceKind === 'worksheet' ? 'save_worksheet' : 'save_project_graph',
-        (code) => i18n.t('notifications.editor.documentSaveFailed', {
-          title: document.title,
-          error: code,
-        }),
+        document.resourceKind === "worksheet" ? "save_worksheet" : "save_project_graph",
+        (code) =>
+          i18n.t("notifications.editor.documentSaveFailed", {
+            title: document.title,
+            error: code,
+          }),
       );
       return false;
     }

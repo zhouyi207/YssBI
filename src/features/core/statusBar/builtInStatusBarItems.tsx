@@ -8,14 +8,16 @@ import {
 import { cn } from "@/lib/utils";
 import type { StatusBarItemRegistration, StatusBarRenderContext } from "./statusBarItemTypes";
 
-
 function executionDotClass(status: string): string {
   return cn(
     "size-2 rounded-full",
     status === "running" && "animate-pulse bg-yellow-200",
     status === "completed" && "bg-emerald-200",
     status === "error" && "bg-red-200",
-    status !== "running" && status !== "completed" && status !== "error" && "bg-muted-foreground/70",
+    status !== "running" &&
+      status !== "completed" &&
+      status !== "error" &&
+      "bg-muted-foreground/70",
   );
 }
 
@@ -48,7 +50,9 @@ export type BuiltInStatusBarActions = {
   renderViewportStatus: (groupId: string, graphPath: string | null) => React.ReactNode;
 };
 
-export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): StatusBarItemRegistration[] {
+export function createBuiltInStatusBarItems(
+  actions: BuiltInStatusBarActions,
+): StatusBarItemRegistration[] {
   return [
     {
       id: "julia-worker",
@@ -95,7 +99,9 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
         <>
           <VscCircleFilled
             size={9}
-            className={ctx.selectedCount > 0 ? "text-[var(--accent-color)]" : "text-muted-foreground"}
+            className={
+              ctx.selectedCount > 0 ? "text-[var(--accent-color)]" : "text-muted-foreground"
+            }
           />
           <span>{ctx.t("bottomBar.selected", { count: ctx.selectedCount })}</span>
         </>
@@ -105,7 +111,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       id: "execution-status",
       alignment: "right",
       priority: 40,
-      ariaLabel: (ctx) => actions.executionTooltip || ctx.t('bottomBar.openLogsPanel'),
+      ariaLabel: (ctx) => actions.executionTooltip || ctx.t("bottomBar.openLogsPanel"),
       tooltip: () => actions.executionTooltip,
       onClick: () => actions.openLogsPanel(),
       render: (ctx) => (
@@ -125,7 +131,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       render: (ctx) => (
         <>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
-          {actions.renderViewportStatus(ctx.activeEditorGroupId ?? '', ctx.activeTabId)}
+          {actions.renderViewportStatus(ctx.activeEditorGroupId ?? "", ctx.activeTabId)}
         </>
       ),
     },

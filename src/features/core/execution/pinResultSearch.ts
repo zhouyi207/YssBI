@@ -1,6 +1,9 @@
-import { resultRef, type InspectableResultRef } from '@/features/domain/result/inspectableResultRef';
-import type { PinHistoryProjection } from '@/shared/types/ui';
-import { pinHistoryCacheKey } from './pinResultIndex';
+import {
+  resultRef,
+  type InspectableResultRef,
+} from "@/features/domain/result/inspectableResultRef";
+import type { PinHistoryProjection } from "@/shared/types/ui";
+import { pinHistoryCacheKey } from "./pinResultIndex";
 
 export interface PinResultSearchEntry {
   id: string;
@@ -20,15 +23,16 @@ export function buildPinResultSearchEntry(
   history: PinHistoryProjection,
   labels: PinResultSearchLabels,
 ): PinResultSearchEntry | null {
-  const selected = history.entries.find((entry) => entry.resultId === history.selectedResultId)
-    ?? history.entries[history.entries.length - 1];
+  const selected =
+    history.entries.find((entry) => entry.resultId === history.selectedResultId) ??
+    history.entries[history.entries.length - 1];
   if (!selected) return null;
 
   const nodeTitle = labels.nodeTitle.trim();
   const pinName = labels.pinName.trim();
   const sourceTitle = `${selected.state.kind} · ${selected.resultId}`;
   const searchText = [nodeTitle, pinName, sourceTitle, history.graphPath, selected.runId]
-    .join(' ')
+    .join(" ")
     .toLowerCase();
 
   return {

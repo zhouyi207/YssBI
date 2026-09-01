@@ -1,16 +1,16 @@
-import { useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
-import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
-import { executeCommand } from '@/features/core/history';
-import { canDeleteNode } from '@/features/core/dataStore/graphNodeSelectors';
-import { logger } from '@/features/application/observability/appLogger';
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
+import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
+import { useActiveEditorGroup } from "@/features/core/editor/hooks/useActiveEditorGroup";
+import { executeCommand } from "@/features/core/history";
+import { canDeleteNode } from "@/features/core/dataStore/graphNodeSelectors";
+import { logger } from "@/features/application/observability/appLogger";
 import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
-} from '@/features/application/editor/editorCommandFocus';
+} from "@/features/application/editor/editorCommandFocus";
 
 export function useNodeManagement() {
   const { activeTabId } = useActiveEditorGroup();
@@ -24,10 +24,13 @@ export function useNodeManagement() {
       target?: EditorCommandTarget,
     ): Promise<boolean> => {
       const graphPath = target?.resourceRef ?? activeTabId;
-      if (!graphPath || (target && (
-        (target.resourceKind !== 'event' && target.resourceKind !== 'function')
-        || !isEditorCommandTargetCurrent(target)
-      ))) return false;
+      if (
+        !graphPath ||
+        (target &&
+          ((target.resourceKind !== "event" && target.resourceKind !== "function") ||
+            !isEditorCommandTargetCurrent(target)))
+      )
+        return false;
       const outcome = await createNodeFromDescriptor({
         graphPath,
         locale,
@@ -35,7 +38,7 @@ export function useNodeManagement() {
         position,
         connectFrom: null,
       });
-      return outcome.status === 'applied';
+      return outcome.status === "applied";
     },
     [activeTabId, locale],
   );
@@ -43,17 +46,17 @@ export function useNodeManagement() {
   const deleteNode = useCallback(
     async (nodeId: string): Promise<boolean> => {
       if (!activeTabId) {
-        logger.graph.warn('Cannot delete node: no active tab', 'NodeManagement');
+        logger.graph.warn("Cannot delete node: no active tab", "NodeManagement");
         return false;
       }
       if (!canDeleteNode(activeTabId, nodeId)) return false;
 
       try {
-        return await executeCommand(activeTabId, 'DeleteNodes', { nodeIds: [nodeId] });
+        return await executeCommand(activeTabId, "DeleteNodes", { nodeIds: [nodeId] });
       } catch (error) {
         logger.graph.error(
           `Failed to delete node: ${error instanceof Error ? error.message : String(error)}`,
-          'NodeManagement',
+          "NodeManagement",
         );
         return false;
       }
@@ -68,12 +71,12 @@ export function useNodeManagement() {
       if (deletableIds.length === 0) return [];
 
       try {
-        const applied = await executeCommand(activeTabId, 'DeleteNodes', { nodeIds: deletableIds });
+        const applied = await executeCommand(activeTabId, "DeleteNodes", { nodeIds: deletableIds });
         return applied ? deletableIds : [];
       } catch (error) {
         logger.graph.error(
           `Failed to delete nodes: ${error instanceof Error ? error.message : String(error)}`,
-          'NodeManagement',
+          "NodeManagement",
         );
         return [];
       }

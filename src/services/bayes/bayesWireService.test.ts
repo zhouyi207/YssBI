@@ -1,24 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   invokeCommand: vi.fn(),
 }));
 
-vi.mock('@/services/ipc', () => ({
+vi.mock("@/services/ipc", () => ({
   invokeCommand: mocks.invokeCommand,
 }));
 
-import { getBayesInferenceStatus, readBayesInferenceResult } from './bayesInferenceService';
-import { validateBayesModel } from './bayesModelService';
+import { getBayesInferenceStatus, readBayesInferenceResult } from "./bayesInferenceService";
+import { validateBayesModel } from "./bayesModelService";
 
 const task = {
-  taskId: 'task-42',
-  status: 'failed',
+  taskId: "task-42",
+  status: "failed",
   progress: null,
   error: {
-    code: 'julia_bayes_sampling_failed',
+    code: "julia_bayes_sampling_failed",
     details: null,
-    incidentId: 'incident-42',
+    incidentId: "incident-42",
   },
 };
 
@@ -32,60 +32,62 @@ const result = {
     maxTreedepthHits: 0,
     warnings: [],
   },
-  artifactManifest: { taskId: 'task-42', artifacts: [] },
+  artifactManifest: { taskId: "task-42", artifacts: [] },
 };
 
 const report = {
   ok: false,
-  errors: [{ code: 'dataset_required', severity: 'error', path: 'dataset' }],
+  errors: [{ code: "dataset_required", severity: "error", path: "dataset" }],
   warnings: [],
 };
 
-describe('Bayes services enforce the current wire', () => {
+describe("Bayes services enforce the current wire", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('parses asynchronous task responses instead of trusting a generic invoke cast', async () => {
+  it("parses asynchronous task responses instead of trusting a generic invoke cast", async () => {
     mocks.invokeCommand.mockResolvedValueOnce(task);
-    await expect(getBayesInferenceStatus('task-42')).resolves.toEqual(task);
+    await expect(getBayesInferenceStatus("task-42")).resolves.toEqual(task);
 
     mocks.invokeCommand.mockResolvedValueOnce({
       ...task,
-      error: { ...task.error, message: 'legacy backend prose' },
+      error: { ...task.error, message: "legacy backend prose" },
     });
-    await expect(getBayesInferenceStatus('task-42')).rejects.toThrow(
-      'Invalid Bayes inference task response',
+    await expect(getBayesInferenceStatus("task-42")).rejects.toThrow(
+      "Invalid Bayes inference task response",
     );
   });
 
-  it('rejects legacy warning prose in inference results', async () => {
+  it("rejects legacy warning prose in inference results", async () => {
     mocks.invokeCommand.mockResolvedValueOnce({
       ...result,
       diagnostics: {
         ...result.diagnostics,
-        warnings: [{
-          code: 'rhat_too_high',
-          metric: 'rhat',
-          value: 1.2,
-          threshold: 1.01,
-          parameter: 'beta',
-          message: 'legacy backend prose',
-        }],
+        warnings: [
+          {
+            code: "rhat_too_high",
+            metric: "rhat",
+            value: 1.2,
+            threshold: 1.01,
+            parameter: "beta",
+            message: "legacy backend prose",
+          },
+        ],
       },
     });
 
-    await expect(readBayesInferenceResult('task-42')).rejects.toThrow(
-      'Invalid Bayes inference result response',
+    await expect(readBayesInferenceResult("task-42")).rejects.toThrow(
+      "Invalid Bayes inference result response",
     );
   });
 
-  it('rejects legacy validation prose', async () => {
+  it("rejects legacy validation prose", async () => {
     mocks.invokeCommand.mockResolvedValueOnce({
       ...report,
-      errors: [{ ...report.errors[0], hint: 'legacy backend prose' }],
+      errors: [{ ...report.errors[0], hint: "legacy backend prose" }],
     });
 
     await expect(validateBayesModel({} as never)).rejects.toThrow(
-      'Invalid Bayes validation response',
+      "Invalid Bayes validation response",
     );
   });
 });

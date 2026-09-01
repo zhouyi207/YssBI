@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useModifierKeyStore } from './useModifierKeyStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useModifierKeyStore } from "./useModifierKeyStore";
 
 export interface KeyboardUiSnapshot {
   readonly altKey: boolean;
@@ -44,9 +44,7 @@ export function subscribeKeyboardUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useKeyboardUi<T>(
-  selector: (snapshot: DeepReadonly<KeyboardUiSnapshot>) => T,
-): T {
+export function useKeyboardUi<T>(selector: (snapshot: DeepReadonly<KeyboardUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeKeyboardUi,
     getKeyboardUiSnapshot,
@@ -58,7 +56,6 @@ export function useKeyboardUi<T>(
 export const keyboardUi: KeyboardUiCapability = {
   getSnapshot: getKeyboardUiSnapshot,
   subscribe: subscribeKeyboardUi,
-  setModifierKeys: (keys) =>
-    useModifierKeyStore.getState().setModifierKeys(keys),
+  setModifierKeys: (keys) => useModifierKeyStore.getState().setModifierKeys(keys),
   resetModifierKeys: () => useModifierKeyStore.getState().resetModifierKeys(),
 };

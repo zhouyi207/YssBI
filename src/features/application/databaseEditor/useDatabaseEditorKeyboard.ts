@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
-import { isAppModalOpen } from '@/features/core/keyboard';
+import { useEffect, useRef } from "react";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { isAppModalOpen } from "@/features/core/keyboard";
 
 interface useDatabaseEditorKeyboardParams {
   selectAll: () => void;
@@ -10,9 +10,11 @@ interface useDatabaseEditorKeyboardParams {
 function isTextEntryTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
 }
 
 export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParams) {
@@ -25,17 +27,15 @@ export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParam
         return;
       }
 
-      const {
-        selectAll,
-        clearSelection,
-      } = paramsRef.current;
+      const { selectAll, clearSelection } = paramsRef.current;
 
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         clearSelection();
-      } else if (e.ctrlKey && e.key === 'a') {
-        e.preventDefault(); selectAll();
+      } else if (e.ctrlKey && e.key === "a") {
+        e.preventDefault();
+        selectAll();
       }
     };
-    return addGlobalEventListener(window, 'keydown', handler);
+    return addGlobalEventListener(window, "keydown", handler);
   }, []);
 }

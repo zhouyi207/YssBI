@@ -1,39 +1,40 @@
-import { currentProjectionLocale, hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import {
+  currentProjectionLocale,
+  hydrateGraphProjection,
+} from "@/features/application/editorProjection/graphProjectionCoordinator";
 
-import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
-import { captureRevisionedProjectCommandSnapshot } from '@/features/application/projectCommandContext';
+import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
+import { captureRevisionedProjectCommandSnapshot } from "@/features/application/projectCommandContext";
 
-import { setHistoryStatus } from '@/features/application/editorMutation/historyCoordinator';
+import { setHistoryStatus } from "@/features/application/editorMutation/historyCoordinator";
 import {
   ProjectPublicationError,
   projectPublicationCoordinator,
-} from './projectPublicationCoordinator';
-import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
-import { dataTypeDisplay } from '@/shared/types/domain/dataType';
-import type { FunctionSignaturePatch } from '@/shared/types';
+} from "./projectPublicationCoordinator";
+import { hydrateFunctionSignaturesFromProjectIndex } from "@/features/application/graphDocument/functionSignatureSync";
+import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import type { FunctionSignaturePatch } from "@/shared/types";
 import type {
   FunctionDocumentPatchDto,
   FunctionSignatureDto,
   HistoryStatusDto,
   MutationRequestDto,
   ResourceMutationResultDto,
-} from '@/shared/types/domain/editorMutation';
-import { FunctionMutationService } from '@/services/nodeSystem/functionMutationService';
-import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
-import {
-  ProjectService,
-} from '@/services/project/projectService';
-import type { ProjectGraphIndexRow } from '@/shared/types/domain/project';
+} from "@/shared/types/domain/editorMutation";
+import { FunctionMutationService } from "@/services/nodeSystem/functionMutationService";
+import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
+import { ProjectService } from "@/services/project/projectService";
+import type { ProjectGraphIndexRow } from "@/shared/types/domain/project";
 import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   completePendingMutation,
   invalidatePendingMutation,
   registerPendingMutation,
   type PendingMutationRecord,
-} from './pendingMutationRegistry';
+} from "./pendingMutationRegistry";
 
 export interface ExecuteFunctionSignatureMutationInput {
   functionPath: string;
@@ -55,9 +56,9 @@ export interface FunctionSignatureCoordinatorDependencies {
 }
 
 export type ExecuteFunctionSignatureMutationOutcome =
-  | { status: 'applied'; result: ResourceMutationResultDto }
-  | { status: 'stale'; result?: ResourceMutationResultDto }
-  | { status: 'conflict' };
+  | { status: "applied"; result: ResourceMutationResultDto }
+  | { status: "stale"; result?: ResourceMutationResultDto }
+  | { status: "conflict" };
 
 let coordinatorEpoch = 0;
 const pendingSignatureOperations = new Set<string>();
@@ -67,41 +68,37 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
   mutateSignature: (projectInstanceId, functionPath, locale, request) =>
     FunctionMutationService.updateSignature(projectInstanceId, functionPath, locale, request),
   hydrateGraph: hydrateGraphProjection,
-  loadFunctionResources: async (projectInstanceId) => (
-    await ProjectService.getProjectIndex(projectInstanceId)
-  ).graphs,
+  loadFunctionResources: async (projectInstanceId) =>
+    (await ProjectService.getProjectIndex(projectInstanceId)).graphs,
   updateHistoryStatus: setHistoryStatus,
 };
 
-
-
 function isFunctionRevisionConflict(error: unknown): boolean {
-  return isApplicationIpcErrorCode(error, 'function_revision_conflict');
+  return isApplicationIpcErrorCode(error, "function_revision_conflict");
 }
 
 function buildSignature(
   before: FunctionSignatureDto,
   patch: FunctionSignaturePatch,
 ): FunctionSignatureDto {
-  const parameters = patch.inputs === undefined
-    ? before.parameters
-    : patch.inputs
-        .filter((pin) => pin.dataType != null)
-        .map((pin) => ({
-          id: pin.id,
-          name: pin.name,
-          type_name: dataTypeDisplay(pin.dataType!),
-        }));
-  const returnType = patch.outputs === undefined
-    ? before.return_type
-    : patch.outputs.find((pin) => pin.dataType != null)?.dataType;
+  const parameters =
+    patch.inputs === undefined
+      ? before.parameters
+      : patch.inputs
+          .filter((pin) => pin.dataType != null)
+          .map((pin) => ({
+            id: pin.id,
+            name: pin.name,
+            type_name: dataTypeDisplay(pin.dataType!),
+          }));
+  const returnType =
+    patch.outputs === undefined
+      ? before.return_type
+      : patch.outputs.find((pin) => pin.dataType != null)?.dataType;
   return {
     parameters,
-    return_type: typeof returnType === 'string'
-      ? returnType
-      : returnType
-        ? dataTypeDisplay(returnType)
-        : null,
+    return_type:
+      typeof returnType === "string" ? returnType : returnType ? dataTypeDisplay(returnType) : null,
   };
 }
 
@@ -111,18 +108,20 @@ function validateDirectSignatureResult(
   result: ResourceMutationResultDto,
 ): string | undefined {
   if (result.deltas.some((delta) => delta.causedBy !== pending.operationId)) {
-    return 'operation correlation does not match the pending request';
+    return "operation correlation does not match the pending request";
   }
-  const signatureDelta = result.deltas.find((delta) =>
-    delta.resource.kind === 'function' && delta.resource.key === pending.graphPath,
+  const signatureDelta = result.deltas.find(
+    (delta) => delta.resource.kind === "function" && delta.resource.key === pending.graphPath,
   );
-  if (!signatureDelta) return 'function signature delta is missing';
+  if (!signatureDelta) return "function signature delta is missing";
   if (signatureDelta.fromRevision !== pending.baseRevision) {
-    return 'function signature revision does not match the request';
+    return "function signature revision does not match the request";
   }
-  if (signatureDelta.payload.kind !== 'function'
-    || JSON.stringify(signatureDelta.payload.patch) !== JSON.stringify(requestPatch)) {
-    return 'function signature delta does not match the request payload';
+  if (
+    signatureDelta.payload.kind !== "function" ||
+    JSON.stringify(signatureDelta.payload.patch) !== JSON.stringify(requestPatch)
+  ) {
+    return "function signature delta does not match the request payload";
   }
   return undefined;
 }
@@ -142,8 +141,6 @@ async function hydrateAuthoritativeState(
   if (!isCurrentProjectIdentity(identity)) return;
 }
 
-
-
 export async function executeFunctionSignatureMutation(
   input: ExecuteFunctionSignatureMutationInput,
   overrides: Partial<FunctionSignatureCoordinatorDependencies> = {},
@@ -152,7 +149,7 @@ export async function executeFunctionSignatureMutation(
   const { context, authority: meta } = captureRevisionedProjectCommandSnapshot(
     () => useGraphMetaStore.getState().graphs[input.functionPath],
   );
-  if (meta?.type !== 'function' || meta.functionRevision == null || !meta.functionSignature) {
+  if (meta?.type !== "function" || meta.functionRevision == null || !meta.functionSignature) {
     throw new Error(`function signature resource '${input.functionPath}' is not hydrated`);
   }
 
@@ -167,7 +164,7 @@ export async function executeFunctionSignatureMutation(
     baseRevision: meta.functionRevision,
   };
   const request: MutationRequestDto<FunctionDocumentPatchDto> = {
-    resource: { kind: 'function', key: input.functionPath },
+    resource: { kind: "function", key: input.functionPath },
     baseRevision: meta.functionRevision,
     operationId,
     payload: requestPatch,
@@ -189,25 +186,23 @@ export async function executeFunctionSignatureMutation(
         input.locale,
         request,
       );
-      if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
+      if (!isCurrentProjectIdentity(identity)) return { status: "stale", result };
     } catch (error) {
-      if (!isCurrentProjectIdentity(identity)
-        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
-      if (epoch !== coordinatorEpoch) return { status: 'stale' };
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        isApplicationIpcErrorCode(error, "stale_project_lifecycle")
+      )
+        return { status: "stale" };
+      if (epoch !== coordinatorEpoch) return { status: "stale" };
       if (!isFunctionRevisionConflict(error)) throw error;
-      await hydrateAuthoritativeState(
-        [input.functionPath],
-        input.locale,
-        dependencies,
-        identity,
-      );
+      await hydrateAuthoritativeState([input.functionPath], input.locale, dependencies, identity);
       if (!isCurrentProjectIdentity(identity) || epoch !== coordinatorEpoch) {
-        return { status: 'stale' };
+        return { status: "stale" };
       }
-      return { status: 'conflict' };
+      return { status: "conflict" };
     }
 
-    if (epoch !== coordinatorEpoch) return { status: 'stale', result };
+    if (epoch !== coordinatorEpoch) return { status: "stale", result };
     try {
       await projectPublicationCoordinator.submit({
         result,
@@ -215,13 +210,13 @@ export async function executeFunctionSignatureMutation(
         validate: (candidate) => validateDirectSignatureResult(pending, requestPatch, candidate),
       });
     } catch (error) {
-      if (error instanceof ProjectPublicationError && error.code === 'stale_project_lifecycle') {
-        return { status: 'stale', result };
+      if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle") {
+        return { status: "stale", result };
       }
       throw error;
     }
-    if (epoch !== coordinatorEpoch) return { status: 'stale', result };
-    return { status: 'applied', result };
+    if (epoch !== coordinatorEpoch) return { status: "stale", result };
+    return { status: "applied", result };
   } finally {
     completePendingMutation(operationId);
     pendingSignatureOperations.delete(operationId);

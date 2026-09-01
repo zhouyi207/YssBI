@@ -1,13 +1,13 @@
-import { create } from 'zustand';
-import { DatabaseId } from '@/shared/types/domain/ids';
-import type { ColumnDistribution } from '@/shared/types/domain/dataframe';
+import { create } from "zustand";
+import { DatabaseId } from "@/shared/types/domain/ids";
+import type { ColumnDistribution } from "@/shared/types/domain/dataframe";
 export type {
   CategoryCount,
   ColumnDistribution,
   HistogramBin,
   NumericDistribution,
   StringDistribution,
-} from '@/shared/types/domain/dataframe';
+} from "@/shared/types/domain/dataframe";
 
 export type DistributionMap = Record<string, ColumnDistribution>;
 

@@ -6,12 +6,12 @@ $$
 \text{Result} = A \lor B
 $$
 
-| $A$ | $B$ | 结果 |
-|-----|-----|------|
+| $A$   | $B$   | 结果  |
+| ----- | ----- | ----- |
 | false | false | false |
-| false | true | true |
-| true | false | true |
-| true | true | true |
+| false | true  | true  |
+| true  | false | true  |
+| true  | true  | true  |
 
 ## 用法
 

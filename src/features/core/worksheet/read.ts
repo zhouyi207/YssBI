@@ -1,12 +1,9 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
-import {
-  getWorksheetSnapshot as getSnapshot,
-  subscribeWorksheetRead,
-} from './publication';
-import type { OptimisticOperationKey } from './publication';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
+import { getWorksheetSnapshot as getSnapshot, subscribeWorksheetRead } from "./publication";
+import type { OptimisticOperationKey } from "./publication";
 
 export interface WorksheetCommittedSnapshot {
   readonly index: DeepReadonly<readonly WorksheetIndexEntry[]>;
@@ -15,7 +12,7 @@ export interface WorksheetCommittedSnapshot {
 
 export interface PendingWorksheetSave extends OptimisticOperationKey {
   readonly draftFingerprint: string;
-  readonly status: 'pending' | 'acknowledged' | 'unknown';
+  readonly status: "pending" | "acknowledged" | "unknown";
 }
 
 export interface WorksheetReadSnapshot {
@@ -23,9 +20,7 @@ export interface WorksheetReadSnapshot {
   readonly documents: DeepReadonly<Record<string, WorksheetDocument>>;
   readonly draftsByPath: DeepReadonly<Record<string, WorksheetDocument>>;
   readonly dirtyByPath: Readonly<Record<string, boolean>>;
-  readonly pendingSaveByPath: DeepReadonly<
-    Record<string, Record<string, PendingWorksheetSave>>
-  >;
+  readonly pendingSaveByPath: DeepReadonly<Record<string, Record<string, PendingWorksheetSave>>>;
 }
 
 export type ReadonlyWorksheetSnapshot = DeepReadonly<WorksheetReadSnapshot>;
@@ -34,9 +29,7 @@ export function getWorksheetSnapshot(): ReadonlyWorksheetSnapshot {
   return getSnapshot();
 }
 
-export function useWorksheetRead<T>(
-  selector: (state: ReadonlyWorksheetSnapshot) => T,
-): T {
+export function useWorksheetRead<T>(selector: (state: ReadonlyWorksheetSnapshot) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeWorksheetRead,
     getWorksheetSnapshot,

@@ -1,6 +1,6 @@
-import { resolveSectionExpanded } from '../sidebarSectionState';
-import type { SidebarPanelModel } from './sidebarPanelModel';
-import type { SidebarItemRow } from './types';
+import { resolveSectionExpanded } from "../sidebarSectionState";
+import type { SidebarPanelModel } from "./sidebarPanelModel";
+import type { SidebarItemRow } from "./types";
 
 export function buildDataSidebarModel(params: {
   dataframes: Record<string, { name: string; resourcePath?: string }>;
@@ -8,7 +8,7 @@ export function buildDataSidebarModel(params: {
   labels: { data: string; noData: string };
 }): SidebarPanelModel {
   const items: SidebarItemRow[] = Object.entries(params.dataframes).map(([id, data]) => ({
-    kind: 'database',
+    kind: "database",
     rowKey: `database:${id}`,
     level: 1,
     id,
@@ -20,9 +20,9 @@ export function buildDataSidebarModel(params: {
   return {
     sections: [
       {
-        key: 'dataData',
+        key: "dataData",
         label: params.labels.data,
-        expanded: resolveSectionExpanded(params.expandedSections, 'dataData'),
+        expanded: resolveSectionExpanded(params.expandedSections, "dataData"),
         rows: items,
         emptyMessage: params.labels.noData,
       },

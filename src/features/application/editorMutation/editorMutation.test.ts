@@ -1,30 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
-} from '@/shared/types/domain/editorMutation';
-import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { normalizeIpcError } from '@/services/ipc';
-import {
-  executeEditorMutation,
-  resetEditorMutationCoordinator,
-} from './editorMutationCoordinator';
-import { projectPublicationCoordinator } from './projectPublicationCoordinator';
-import {
-  getPendingMutation,
-  resetPendingMutations,
-} from './pendingMutationRegistry';
+} from "@/shared/types/domain/editorMutation";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import { normalizeIpcError } from "@/services/ipc";
+import { executeEditorMutation, resetEditorMutationCoordinator } from "./editorMutationCoordinator";
+import { projectPublicationCoordinator } from "./projectPublicationCoordinator";
+import { getPendingMutation, resetPendingMutations } from "./pendingMutationRegistry";
 
-const graphPath = 'functions/Main.yssbi-function';
-const projectedNodeId = '00000000-0000-0000-0000-000000000603';
+const graphPath = "functions/Main.yssbi-function";
+const projectedNodeId = "00000000-0000-0000-0000-000000000603";
 
 function backendError(code: string) {
-  return normalizeIpcError('mutate_graph_document', { code, details: null, incidentId: null });
+  return normalizeIpcError("mutate_graph_document", { code, details: null, incidentId: null });
 }
 
 function deleteNodeMutation(): EditorGraphMutationDto {
-  return { type: 'deleteNodes', payload: { nodeIds: ['local-node'] } };
+  return { type: "deleteNodes", payload: { nodeIds: ["local-node"] } };
 }
 
 function graphResult(
@@ -33,23 +27,25 @@ function graphResult(
   toRevision = 2,
 ): GraphMutationResultDto {
   return {
-    projectInstanceId: '00000000-0000-0000-0000-000000000601',
+    projectInstanceId: "00000000-0000-0000-0000-000000000601",
     delta: {
       graphPath,
       fromRevision,
       toRevision,
       causedBy: operationId,
       payload: {
-        operations: [{
-          operation: 'remove_node',
-          node: {
-            id: '00000000-0000-0000-0000-000000000604',
-            node_type: 'tests.node',
-            position: { x: 0, y: 0 },
-            parameters: {},
-            user_label: null,
+        operations: [
+          {
+            operation: "remove_node",
+            node: {
+              id: "00000000-0000-0000-0000-000000000604",
+              node_type: "tests.node",
+              position: { x: 0, y: 0 },
+              parameters: {},
+              user_label: null,
+            },
           },
-        }],
+        ],
       },
     },
     projectionReplacement: {
@@ -70,31 +66,30 @@ function graphResult(
   };
 }
 
-describe('executeEditorMutation', () => {
+describe("executeEditorMutation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetPendingMutations();
     resetEditorMutationCoordinator();
-    projectPublicationCoordinator.startProject(
-      '00000000-0000-0000-0000-000000000601',
-      0,
-    );
+    projectPublicationCoordinator.startProject("00000000-0000-0000-0000-000000000601", 0);
     useGraphDataStore.setState({ graphEntities: {} });
-    useGraphDataStore.getState().replaceProjection(
-      graphPath,
-      makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' }).projection,
-      1,
-    );
+    useGraphDataStore
+      .getState()
+      .replaceProjection(
+        graphPath,
+        makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: "Current" }).projection,
+        1,
+      );
   });
 
-  it('registers pending correlation before invoking and applies a correlated committed result', async () => {
+  it("registers pending correlation before invoking and applies a correlated committed result", async () => {
     const updateHistoryStatus = vi.fn();
     let pendingObservedDuringInvoke = false;
 
     const outcome = await executeEditorMutation(
-      { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
+      { graphPath, locale: "en-US", mutation: deleteNodeMutation() },
       {
-        createOperationId: () => 'operation-1',
+        createOperationId: () => "operation-1",
         mutateGraph: async (_projectInstanceId, _path, _locale, request) => {
           pendingObservedDuringInvoke = getPendingMutation(request.operationId) != null;
           return graphResult(request.operationId);
@@ -105,82 +100,84 @@ describe('executeEditorMutation', () => {
     );
 
     expect(pendingObservedDuringInvoke).toBe(true);
-    expect(outcome.status).toBe('applied');
+    expect(outcome.status).toBe("applied");
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
-      nodes: { [projectedNodeId]: { title: 'Revision 2' } },
+      nodes: { [projectedNodeId]: { title: "Revision 2" } },
     });
     expect(updateHistoryStatus).toHaveBeenCalledWith({ canUndo: true, canRedo: false });
-    expect(getPendingMutation('operation-1')).toBeUndefined();
+    expect(getPendingMutation("operation-1")).toBeUndefined();
   });
 
   it.each([
-    ['operation correlation', graphResult('wrong-operation')],
-    ['from revision', graphResult('operation-1', 0, 2)],
-    ['monotonic revision', graphResult('operation-1', 1, 3)],
-  ])('rejects an invalid committed result %s', async (_case, response) => {
+    ["operation correlation", graphResult("wrong-operation")],
+    ["from revision", graphResult("operation-1", 0, 2)],
+    ["monotonic revision", graphResult("operation-1", 1, 3)],
+  ])("rejects an invalid committed result %s", async (_case, response) => {
     const hydrateGraph = vi.fn().mockResolvedValue(true);
 
-    await expect(executeEditorMutation(
-      { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
-      {
-        createOperationId: () => 'operation-1',
-        mutateGraph: vi.fn().mockResolvedValue(response),
-        hydrateGraph,
-        updateHistoryStatus: vi.fn(),
-      },
-    )).rejects.toThrow(/mutation result/i);
+    await expect(
+      executeEditorMutation(
+        { graphPath, locale: "en-US", mutation: deleteNodeMutation() },
+        {
+          createOperationId: () => "operation-1",
+          mutateGraph: vi.fn().mockResolvedValue(response),
+          hydrateGraph,
+          updateHistoryStatus: vi.fn(),
+        },
+      ),
+    ).rejects.toThrow(/mutation result/i);
 
     expect(useGraphDataStore.getState().graphEntities[graphPath].sourceRevision).toBe(1);
-    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, 'en-US');
-    expect(getPendingMutation('operation-1')).toBeUndefined();
+    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, "en-US");
+    expect(getPendingMutation("operation-1")).toBeUndefined();
   });
 
-  it('does not let a stale mutation response replace a newer projection', async () => {
+  it("does not let a stale mutation response replace a newer projection", async () => {
     const hydrateGraph = vi.fn().mockResolvedValue(true);
     const newer = makeEditorProjectionFixture({
       graphPath,
       sourceRevision: 3,
-      title: 'Newer projection',
+      title: "Newer projection",
     });
     const mutateGraph = vi.fn().mockImplementation(async () => {
       useGraphDataStore.getState().replaceProjection(graphPath, newer.projection, 2);
-      return graphResult('operation-1', 1, 2);
+      return graphResult("operation-1", 1, 2);
     });
 
     const outcome = await executeEditorMutation(
-      { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
+      { graphPath, locale: "en-US", mutation: deleteNodeMutation() },
       {
-        createOperationId: () => 'operation-1',
+        createOperationId: () => "operation-1",
         mutateGraph,
         hydrateGraph,
         updateHistoryStatus: vi.fn(),
       },
     );
 
-    expect(outcome.status).toBe('stale');
+    expect(outcome.status).toBe("stale");
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
-      nodes: { 'local-node': { title: 'Newer projection' } },
+      nodes: { "local-node": { title: "Newer projection" } },
     });
-    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, 'en-US');
+    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, "en-US");
   });
 
-  it('clears pending state and requests authoritative hydration on revision conflict', async () => {
+  it("clears pending state and requests authoritative hydration on revision conflict", async () => {
     const hydrateGraph = vi.fn().mockResolvedValue(true);
 
     const outcome = await executeEditorMutation(
-      { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
+      { graphPath, locale: "en-US", mutation: deleteNodeMutation() },
       {
-        createOperationId: () => 'operation-conflict',
-        mutateGraph: vi.fn().mockRejectedValue(backendError('graph_revision_conflict')),
+        createOperationId: () => "operation-conflict",
+        mutateGraph: vi.fn().mockRejectedValue(backendError("graph_revision_conflict")),
         hydrateGraph,
         updateHistoryStatus: vi.fn(),
       },
     );
 
-    expect(outcome.status).toBe('conflict');
-    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, 'en-US');
-    expect(getPendingMutation('operation-conflict')).toBeUndefined();
+    expect(outcome.status).toBe("conflict");
+    expect(hydrateGraph).toHaveBeenCalledWith(graphPath, "en-US");
+    expect(getPendingMutation("operation-conflict")).toBeUndefined();
   });
 });

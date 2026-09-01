@@ -1,16 +1,13 @@
-import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import type { LayoutTab } from '@/shared/types/ui';
+import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import type { LayoutTab } from "@/shared/types/ui";
 
-import { activateGraphTab } from './activateGraphTab';
-import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
-import {
-  detailFocusForEditorResource,
-  setPassiveDetailContext,
-} from './rightSidebarActions';
+import { activateGraphTab } from "./activateGraphTab";
+import { suspendEditorGroupGraphSession } from "./graphSessionLifecycle";
+import { detailFocusForEditorResource, setPassiveDetailContext } from "./rightSidebarActions";
 
 let editorGroupSessionChain: Promise<void> = Promise.resolve();
 let latestTabSwitchRequest = 0;
@@ -28,14 +25,12 @@ function scheduleSuspendPreviousGroup(prevGroupId: string): void {
 function groupContainsEditor(groupId: string): boolean {
   return workbenchDockviewRead
     .listGroupPanels(groupId)
-    .some((panel) => panel.metadata.role === 'editor');
+    .some((panel) => panel.metadata.role === "editor");
 }
 
 /** Synchronize application session focus without writing layout focus back to Dockview. */
 export function focusEditorGroupSync(groupId: string): boolean {
-  const groupExists = workbenchDockviewRead
-    .listGroups()
-    .some((group) => group.groupId === groupId);
+  const groupExists = workbenchDockviewRead.listGroups().some((group) => group.groupId === groupId);
   if (!groupExists || !groupContainsEditor(groupId)) return false;
 
   const previousGroupId = useGraphSessionStore.getState().getFocusedGroupId();
@@ -59,7 +54,7 @@ async function synchronizeTabSession(
   groupId: string,
   tab: LayoutTab,
 ): Promise<boolean> {
-  if (tab.type === 'event' || tab.type === 'function') {
+  if (tab.type === "event" || tab.type === "function") {
     setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
     const loaded = await activateGraphTab(tab.id, groupId);
     if (!loaded || request !== latestTabSwitchRequest) return false;
@@ -67,7 +62,7 @@ async function synchronizeTabSession(
     return true;
   }
 
-  if (tab.type === 'worksheet') {
+  if (tab.type === "worksheet") {
     setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
     const sessionStore = useGraphSessionStore.getState();
     if (sessionStore.getFocusedGroupId() === groupId) {
@@ -99,13 +94,18 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
 
   const panel = workbenchDockviewRead
     .findEditorPanelsByResource(tab.id)
-    .find((candidate) =>
-      candidate.groupId === groupId
-        && candidate.metadata.role === 'editor'
-        && candidate.metadata.resourceKind === tab.type);
+    .find(
+      (candidate) =>
+        candidate.groupId === groupId &&
+        candidate.metadata.role === "editor" &&
+        candidate.metadata.resourceKind === tab.type,
+    );
   if (!panel) return false;
-  if (workbenchDockviewRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId
-    && !await workbenchDockviewControl.activate(panel.panelInstanceId)) return false;
+  if (
+    workbenchDockviewRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId &&
+    !(await workbenchDockviewControl.activate(panel.panelInstanceId))
+  )
+    return false;
   if (request !== latestTabSwitchRequest) return false;
   return synchronizeTabSession(request, groupId, tab);
 }

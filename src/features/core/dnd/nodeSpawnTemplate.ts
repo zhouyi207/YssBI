@@ -1,5 +1,5 @@
-import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import type { NodeSpawnTemplate } from './dndContracts';
+import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
+import type { NodeSpawnTemplate } from "./dndContracts";
 
 function resourceNodeSpawnTemplate(
   descriptor: NodeCreationDescriptor,

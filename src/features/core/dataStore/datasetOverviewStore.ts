@@ -1,7 +1,12 @@
-import { create } from 'zustand';
-import { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatasetOverview } from '@/shared/types/domain/dataframe';
-export type { DataCompleteness, DatasetOverview, SchemaOverview, SizeShape } from '@/shared/types/domain/dataframe';
+import { create } from "zustand";
+import { DatabaseId } from "@/shared/types/domain/ids";
+import type { DatasetOverview } from "@/shared/types/domain/dataframe";
+export type {
+  DataCompleteness,
+  DatasetOverview,
+  SchemaOverview,
+  SizeShape,
+} from "@/shared/types/domain/dataframe";
 
 interface DatasetOverviewStore {
   overviewByDatabase: Record<DatabaseId, DatasetOverview>;

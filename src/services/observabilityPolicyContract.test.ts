@@ -39,8 +39,9 @@ describe("observability policy contract", () => {
 
   it("keeps business application workflows independent from diagnostic storage", () => {
     const applicationFiles = productionFiles("src/features/application", [".ts", ".tsx"]).filter(
-      (path) => !path.startsWith("src/features/application/log/")
-        && !path.startsWith("src/features/application/observability/"),
+      (path) =>
+        !path.startsWith("src/features/application/log/") &&
+        !path.startsWith("src/features/application/observability/"),
     );
     const diagnosticImports =
       /(?:@\/features\/core\/log|@\/services\/log|@\/shared\/types\/dto\/diagnostics)/;

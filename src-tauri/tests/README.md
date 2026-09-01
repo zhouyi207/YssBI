@@ -27,7 +27,6 @@ pnpm test:rs test_complex_node_graph -- --nocapture
 pnpm test:rs test_nested_sequence_tree -- --nocapture
 ```
 
-
 ## 目录约定
 
 - `common/`：集成测试共享 helper、mock、emitter、executor builder；不放测试数据。
@@ -42,6 +41,7 @@ pnpm test:rs test_nested_sequence_tree -- --nocapture
 **测试目标：** 综合测试 sequence、branch、add、equal、print 节点的组合使用
 
 **图结构：**
+
 ```
 sequence1 (3 个输出)
   ├─ Step 0 -> sequence2 (3 个输出)
@@ -57,6 +57,7 @@ sequence1 (3 个输出)
 ```
 
 **测试内容：**
+
 - Sequence 节点的顺序执行
 - Branch 节点的条件分支
 - Add 节点的数学运算
@@ -64,6 +65,7 @@ sequence1 (3 个输出)
 - 数据流和执行流的正确传递
 
 **预期输出顺序：**
+
 1. Sequence2-Step0
 2. Sequence2-Step1
 3. Sequence2-Step2
@@ -71,6 +73,7 @@ sequence1 (3 个输出)
 5. Branch2-True (因为 10+10==20 为 true)
 
 **运行命令：**
+
 ```cmd
 cargo test test_complex_node_graph -- --nocapture
 ```
@@ -82,6 +85,7 @@ cargo test test_complex_node_graph -- --nocapture
 **测试目标：** 测试嵌套的 sequence 树形结构，验证深层次的执行流传递
 
 **图结构：**
+
 ```
 root_sequence (3 个输出)
   ├─ Step 0 -> seq_1_0 (3 个输出)
@@ -104,22 +108,26 @@ root_sequence (3 个输出)
 ```
 
 **测试内容：**
+
 - 三层嵌套的 sequence 节点
 - 1 个根节点 -> 3 个第一层节点 -> 9 个第二层节点 -> 27 个 print 节点
 - 总共 40 个节点的执行流传递
 - 每个 print 节点输出其位置信息
 
 **位置信息格式：**
+
 - `Position: 1-X, 2-Y, Step-Z`
   - `1-X`: 第一层 sequence 的索引 (0-2)
   - `2-Y`: 第二层 sequence 的索引 (0-8)
   - `Step-Z`: 当前步骤索引 (0-2)
 
 **预期输出：**
+
 - 27 条 print 输出，按照树的深度优先顺序执行
 - 每条输出显示其在树中的位置
 
 **运行命令：**
+
 ```cmd
 cargo test test_nested_sequence_tree -- --nocapture
 ```
@@ -133,6 +141,7 @@ cargo test test_nested_sequence_tree -- --nocapture
 ```rust
 fn create_test_registry() -> Arc<NodeRegistry>
 ```
+
 创建测试用的节点注册表，注册所有内置节点。
 
 ### 测试步骤模式
@@ -140,29 +149,34 @@ fn create_test_registry() -> Arc<NodeRegistry>
 每个测试通常遵循以下步骤：
 
 1. **创建注册表和图**
+
    ```rust
    let registry = create_test_registry();
    let graph = Arc::new(GraphData::new("test_name", "Description", registry.clone()));
    ```
 
 2. **创建节点**
+
    ```rust
    let node = graph.create_node("node.type").expect("Failed to create node");
    ```
 
 3. **设置节点参数**
+
    ```rust
    graph.set_pin_user_value(pin_id, Some(DataValue::Int32(10)))
        .expect("Failed to set value");
    ```
 
 4. **连接节点**
+
    ```rust
    graph.connect(source_pin_id, target_pin_id)
        .expect("Failed to connect");
    ```
 
 5. **执行图**
+
    ```rust
    mod common;
    use yssbi_lib::graph::core::GraphRuntime;
@@ -182,16 +196,20 @@ fn create_test_registry() -> Arc<NodeRegistry>
 ## 可用的节点类型
 
 ### 控制流节点
+
 - `flow.sequence` - 顺序执行多个步骤
 - `flow.branch` - 条件分支
 
 ### 数学节点
+
 - `math.add` - 加法运算
 
 ### 逻辑节点
+
 - `logic.equal` - 相等比较
 
 ### 调试节点
+
 - `debug.print` - 打印输出
 
 ## 数据库测试用例
@@ -201,6 +219,7 @@ fn create_test_registry() -> Arc<NodeRegistry>
 **测试目标：** 测试使用 DatabaseEngine::Csv 读取 iris.csv 文件
 
 **测试内容：**
+
 - 创建 CSV 数据库引擎配置
 - 构建 LazyFrame（延迟加载）
 - 获取预览数据（前 10 行）
@@ -209,12 +228,14 @@ fn create_test_registry() -> Arc<NodeRegistry>
 - 使用 Execution 访问模式
 
 **数据集信息：**
+
 - 文件路径: `tests/data/iris.csv`
 - 行数: 150
 - 列数: 5
 - 列名: sepal_length, sepal_width, petal_length, petal_width, species
 
 **运行命令：**
+
 ```cmd
 cargo test test_read_iris_csv -- --nocapture
 ```
@@ -226,6 +247,7 @@ cargo test test_read_iris_csv -- --nocapture
 **测试目标：** 测试读取 CSV 文件并进行基本数据分析
 
 **测试内容：**
+
 - 使用 LazyFrame 读取 CSV 文件
 - 收集完整数据到 DataFrame
 - 显示数据集基本信息（形状、列名、数据类型）
@@ -233,11 +255,13 @@ cargo test test_read_iris_csv -- --nocapture
 - 验证数据结构和列名
 
 **预期输出：**
+
 - 数据集形状: 150 行 x 5 列
 - 数据类型: Float64 (4列) + String (1列)
 - 前 5 行数据的表格展示
 
 **运行命令：**
+
 ```cmd
 cargo test test_iris_data_analysis -- --nocapture
 ```
@@ -249,6 +273,7 @@ cargo test test_iris_data_analysis -- --nocapture
 **测试目标：** 测试使用 LazyFrame 进行数据过滤
 
 **测试内容：**
+
 - 构建 LazyFrame
 - 使用 Lazy API 进行过滤（sepal_length > 6.0）
 - 选择特定列（sepal_length, sepal_width, species）
@@ -256,11 +281,13 @@ cargo test test_iris_data_analysis -- --nocapture
 - 验证过滤条件是否正确应用
 
 **过滤条件：**
+
 - 条件: `sepal_length > 6.0`
 - 选择列: sepal_length, sepal_width, species
 - 预期结果: 61 行 x 3 列
 
 **运行命令：**
+
 ```cmd
 cargo test test_iris_lazy_filtering -- --nocapture
 ```

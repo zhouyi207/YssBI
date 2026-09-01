@@ -3,11 +3,7 @@ export {
   type HypothesisTestRequest,
   type HypothesisTestResponse,
 } from "./hypothesisService";
-export {
-  computeAcfPacf,
-  type AcfPacfRequest,
-  type AcfPacfResponse,
-} from "./acfPacfService";
+export { computeAcfPacf, type AcfPacfRequest, type AcfPacfResponse } from "./acfPacfService";
 export {
   computeSerialTests,
   type SerialTestsRequest,

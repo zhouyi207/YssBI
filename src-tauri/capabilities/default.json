@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": [
-    "*"
-  ],
+  "windows": ["*"],
   "permissions": [
     "core:default",
     "core:window:allow-create",
@@ -25,9 +23,7 @@
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [
-        { "url": "https://github.com/**" }
-      ]
+      "allow": [{ "url": "https://github.com/**" }]
     },
     "dialog:default",
     "clipboard-manager:allow-read-text",

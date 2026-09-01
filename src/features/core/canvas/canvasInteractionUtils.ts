@@ -1,8 +1,8 @@
-import type { RefObject } from 'react';
+import type { RefObject } from "react";
 
-import { getViewport, editorViewportScope } from '@/features/core/viewport';
+import { getViewport, editorViewportScope } from "@/features/core/viewport";
 
-import { queryCanvasElement } from './selectionHitTargets';
+import { queryCanvasElement } from "./selectionHitTargets";
 
 export function resolveTabId(activeTabIdRef: RefObject<string | null>): string | null {
   return activeTabIdRef.current ?? null;

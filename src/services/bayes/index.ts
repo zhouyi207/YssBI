@@ -1,2 +1,2 @@
-export * from './bayesInferenceService';
-export * from './bayesModelService';
+export * from "./bayesInferenceService";
+export * from "./bayesModelService";

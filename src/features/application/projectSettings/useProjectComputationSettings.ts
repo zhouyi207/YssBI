@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { ProjectService } from '@/services/project/projectService';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { formatInlineUserError } from '@/features/application/userErrorSummary';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { ProjectService } from "@/services/project/projectService";
+import { uiStore } from "@/features/core/ui/UIStore";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import {
   RECOMMENDED_PROJECT_COMPUTATION_SETTINGS,
   type ComputationSettingsMutationReceiptDto,
   type ComputationSettingsSnapshotDto,
   type ProjectComputationSettingsDto,
   type StatisticalMissingValuePolicy,
-} from '@/shared/types/domain/projectComputationSettings';
+} from "@/shared/types/domain/projectComputationSettings";
 
 export interface ProjectComputationSettingsDraft {
   absolute: string;
@@ -53,8 +53,14 @@ function draftSettings(
 ): ProjectComputationSettingsDto | null {
   const absolute = Number(draft.absolute);
   const relative = Number(draft.relative);
-  if (!Number.isFinite(absolute) || !Number.isFinite(relative)
-    || absolute < 0 || relative < 0 || (absolute === 0 && relative === 0)) return null;
+  if (
+    !Number.isFinite(absolute) ||
+    !Number.isFinite(relative) ||
+    absolute < 0 ||
+    relative < 0 ||
+    (absolute === 0 && relative === 0)
+  )
+    return null;
   return {
     numeric: { tolerance: { absolute, relative } },
     missingValues: { statistics: draft.statistics },
@@ -65,18 +71,20 @@ function settingsEqual(
   left: ProjectComputationSettingsDto,
   right: ProjectComputationSettingsDto,
 ): boolean {
-  return left.numeric.tolerance.absolute === right.numeric.tolerance.absolute
-    && left.numeric.tolerance.relative === right.numeric.tolerance.relative
-    && left.missingValues.statistics === right.missingValues.statistics;
+  return (
+    left.numeric.tolerance.absolute === right.numeric.tolerance.absolute &&
+    left.numeric.tolerance.relative === right.numeric.tolerance.relative &&
+    left.missingValues.statistics === right.missingValues.statistics
+  );
 }
 
 export function useProjectComputationSettings() {
   const { t } = useTranslation();
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const [confirmed, setConfirmed] = useState<ComputationSettingsSnapshotDto | null>(null);
-  const [draft, replaceDraft] = useState<ProjectComputationSettingsDraft>(() => toDraft(
-    RECOMMENDED_PROJECT_COMPUTATION_SETTINGS,
-  ));
+  const [draft, replaceDraft] = useState<ProjectComputationSettingsDraft>(() =>
+    toDraft(RECOMMENDED_PROJECT_COMPUTATION_SETTINGS),
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isProjectChangeBlocked, setIsProjectChangeBlocked] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -90,7 +98,8 @@ export function useProjectComputationSettings() {
         replaceDraft((currentDraft) => {
           const previousSettings = previous?.settings;
           const currentSettings = draftSettings(currentDraft);
-          return !previousSettings || (currentSettings && settingsEqual(currentSettings, previousSettings))
+          return !previousSettings ||
+            (currentSettings && settingsEqual(currentSettings, previousSettings))
             ? toDraft(snapshot.settings)
             : currentDraft;
         });
@@ -98,7 +107,9 @@ export function useProjectComputationSettings() {
       });
     };
     authorityListeners.add(listener);
-    return () => { authorityListeners.delete(listener); };
+    return () => {
+      authorityListeners.delete(listener);
+    };
   }, [projectInstanceId]);
 
   const parsedDraft = useMemo(() => draftSettings(draft), [draft]);
@@ -106,14 +117,16 @@ export function useProjectComputationSettings() {
     const absolute = Number(draft.absolute);
     const relative = Number(draft.relative);
     if (!Number.isFinite(absolute) || !Number.isFinite(relative) || absolute < 0 || relative < 0) {
-      return 'Numeric tolerances must be finite and nonnegative.';
+      return "Numeric tolerances must be finite and nonnegative.";
     }
     if (absolute === 0 && relative === 0) {
-      return 'Absolute and relative tolerances cannot both be zero.';
+      return "Absolute and relative tolerances cannot both be zero.";
     }
     return null;
   }, [draft.absolute, draft.relative]);
-  const isDirty = Boolean(confirmed && parsedDraft && !settingsEqual(parsedDraft, confirmed.settings));
+  const isDirty = Boolean(
+    confirmed && parsedDraft && !settingsEqual(parsedDraft, confirmed.settings),
+  );
   const previousProjectRef = useRef<string | null | undefined>(undefined);
   const dirtyRef = useRef(isDirty);
   dirtyRef.current = isDirty;
@@ -125,13 +138,17 @@ export function useProjectComputationSettings() {
 
     const load = async () => {
       setError(null);
-      if (previousProject !== undefined && previousProject !== projectInstanceId && dirtyRef.current) {
+      if (
+        previousProject !== undefined &&
+        previousProject !== projectInstanceId &&
+        dirtyRef.current
+      ) {
         const discard = await uiStore.confirm({
-          title: 'Discard computation changes?',
-          message: 'Changing projects will discard your unapplied computation settings.',
-          confirmText: 'Discard',
-          cancelText: 'Keep Draft',
-          type: 'danger',
+          title: "Discard computation changes?",
+          message: "Changing projects will discard your unapplied computation settings.",
+          confirmText: "Discard",
+          cancelText: "Keep Draft",
+          type: "danger",
         });
         if (disposed) return;
         if (!discard) {
@@ -153,8 +170,12 @@ export function useProjectComputationSettings() {
       setIsLoading(true);
       try {
         const snapshot = await ProjectService.getProjectComputationSettings(projectInstanceId);
-        if (disposed || !isCurrentProjectIdentity(identity)
-          || snapshot.projectInstanceId !== identity.projectInstanceId) return;
+        if (
+          disposed ||
+          !isCurrentProjectIdentity(identity) ||
+          snapshot.projectInstanceId !== identity.projectInstanceId
+        )
+          return;
         publish(snapshot);
         setConfirmed(snapshot);
         replaceDraft(toDraft(snapshot.settings));
@@ -168,7 +189,9 @@ export function useProjectComputationSettings() {
     };
 
     void load();
-    return () => { disposed = true; };
+    return () => {
+      disposed = true;
+    };
   }, [projectInstanceId, t]);
 
   const setDraft = useCallback((patch: Partial<ProjectComputationSettingsDraft>) => {
@@ -189,12 +212,14 @@ export function useProjectComputationSettings() {
         settings: parsedDraft,
       });
       if (!isCurrentProjectIdentity(identity)) return;
-      if (receipt.projectInstanceId !== identity.projectInstanceId
-        || receipt.operationId !== operationId) {
-        throw new Error('Computation settings receipt correlation is invalid.');
+      if (
+        receipt.projectInstanceId !== identity.projectInstanceId ||
+        receipt.operationId !== operationId
+      ) {
+        throw new Error("Computation settings receipt correlation is invalid.");
       }
       if (receipt.settingsRevision !== confirmed.settingsRevision + 1) {
-        throw new Error('Computation settings receipt revision is invalid.');
+        throw new Error("Computation settings receipt revision is invalid.");
       }
       const latest = latestByProject.get(identity.projectInstanceId);
       if (latest && latest.settingsRevision > receipt.settingsRevision) return;

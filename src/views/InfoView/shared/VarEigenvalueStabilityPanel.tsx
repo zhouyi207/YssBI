@@ -1,42 +1,36 @@
-import { toVarStabilityPoints } from '@/features/application/stats/toVarStabilityPoints';
+import { toVarStabilityPoints } from "@/features/application/stats/toVarStabilityPoints";
 import {
   VarStabilityChart,
   type VarStabilityPoint,
   type VarStabilityValueField,
-} from '@/shared/charts/statistical';
-import type { VARStableRow } from '@/shared/types/report';
-import { formatNum } from './utils';
-import { VarEigenvalueTable } from './VarModelTable';
+} from "@/shared/charts/statistical";
+import type { VARStableRow } from "@/shared/types/report";
+import { formatNum } from "./utils";
+import { VarEigenvalueTable } from "./VarModelTable";
 
-function formatVarStabilityValue(
-  value: number,
-  field: VarStabilityValueField,
-): string {
-  return field === 'modulus' ? formatNum(value, 6) : formatNum(value);
+function formatVarStabilityValue(value: number, field: VarStabilityValueField): string {
+  return field === "modulus" ? formatNum(value, 6) : formatNum(value);
 }
 
 function getVarPointLabel(index: number): string {
   return `Eigenvalue ${index + 1}`;
 }
 
-function getVarPointAriaLabel(
-  point: VarStabilityPoint,
-  index: number,
-): string {
+function getVarPointAriaLabel(point: VarStabilityPoint, index: number): string {
   return `${getVarPointLabel(index)}, real ${formatNum(point.re)}, imaginary ${formatNum(point.im)}, modulus ${formatNum(point.modulus, 6)}, ${point.status}`;
 }
 
 export function VarEigenvalueStabilityPanel({
   rows,
   unstableMessage,
-  stableMessage = 'All the eigenvalues lie inside the unit circle.',
+  stableMessage = "All the eigenvalues lie inside the unit circle.",
 }: {
   rows: VARStableRow[];
   unstableMessage: string;
   stableMessage?: string;
 }) {
   const points = toVarStabilityPoints(rows);
-  const isUnstable = points.some(point => point.status === 'unstable');
+  const isUnstable = points.some((point) => point.status === "unstable");
 
   return (
     <div className="mb-6 grid min-h-[360px] grid-cols-[auto_1fr] items-stretch gap-4">

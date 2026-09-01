@@ -1,28 +1,28 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDatabaseStore } from '@/features/core/dataStore';
-import { useEditorStore } from '@/features/core/editor';
-import { useResourceStore } from '@/features/core/resource';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { DatabaseService } from '@/services/database/databaseService';
-import { normalizeIpcError } from '@/services/ipc';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { useDatabaseManagement } from './useDatabaseManagement';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useDatabaseStore } from "@/features/core/dataStore";
+import { useEditorStore } from "@/features/core/editor";
+import { useResourceStore } from "@/features/core/resource";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { DatabaseService } from "@/services/database/databaseService";
+import { normalizeIpcError } from "@/services/ipc";
+import { uiStore } from "@/features/core/ui/UIStore";
+import { useDatabaseManagement } from "./useDatabaseManagement";
 
-vi.mock('@/services/platform/pathDialog', () => ({ openPathDialog: vi.fn() }));
+vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog: vi.fn() }));
 
-const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function aggregate(afterName: string | null, operationId: string) {
   const before = {
-    id: 'sales',
-    engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+    id: "sales",
+    engine: { duckDb: { path: "database/project.duckdb", table: "sales" } },
     schemaVersion: 1,
     required: false,
-    name: 'Sales',
+    name: "Sales",
   };
   return {
     data: null,
@@ -31,24 +31,26 @@ function aggregate(afterName: string | null, operationId: string) {
       projectInstanceId,
       publicationRevision: 1,
       moves: [],
-      deltas: [{
-        resource: { kind: 'database' as const, key: 'opaque database resource path' },
-        fromRevision: 4,
-        toRevision: 5,
-        causedBy: operationId,
-        payload: {
-          kind: 'database' as const,
-          patch: { before, after: afterName === null ? null : { ...before, name: afterName } },
+      deltas: [
+        {
+          resource: { kind: "database" as const, key: "opaque database resource path" },
+          fromRevision: 4,
+          toRevision: 5,
+          causedBy: operationId,
+          payload: {
+            kind: "database" as const,
+            patch: { before, after: afterName === null ? null : { ...before, name: afterName } },
+          },
         },
-      }],
+      ],
       projectionReplacements: [],
-      projectionStatus: { status: 'complete' as const, expectedGraphPaths: [] },
+      projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
       history: { canUndo: false, canRedo: false },
     },
   };
 }
 
-describe('useDatabaseManagement revision authority', () => {
+describe("useDatabaseManagement revision authority", () => {
   let root: Root;
   let host: HTMLDivElement;
   let actions: ReturnType<typeof useDatabaseManagement>;
@@ -63,17 +65,17 @@ describe('useDatabaseManagement revision authority', () => {
     useDatabaseStore.setState({
       databases: {
         sales: {
-          id: 'sales',
-          name: 'Sales',
-          resourcePath: 'opaque database resource path',
-          engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+          id: "sales",
+          name: "Sales",
+          resourcePath: "opaque database resource path",
+          engine: { duckDb: { path: "database/project.duckdb", table: "sales" } },
           schemaVersion: 1,
           required: false,
         },
       },
       revisions: { sales: 4 },
     });
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     function Harness() {
@@ -88,57 +90,58 @@ describe('useDatabaseManagement revision authority', () => {
     host.remove();
   });
 
-  it('passes exact database revision and submits the canonical aggregate mutation', async () => {
-    vi.spyOn(DatabaseService, 'renameDatabase').mockImplementation(
-      async (_project, operation) => aggregate('Renamed', operation),
+  it("passes exact database revision and submits the canonical aggregate mutation", async () => {
+    vi.spyOn(DatabaseService, "renameDatabase").mockImplementation(async (_project, operation) =>
+      aggregate("Renamed", operation),
     );
 
-    await act(async () => actions.renameDataFrame('sales', 'Renamed'));
+    await act(async () => actions.renameDataFrame("sales", "Renamed"));
 
     expect(DatabaseService.renameDatabase).toHaveBeenCalledWith(
       projectInstanceId,
       expect.any(String),
       4,
-      'sales',
-      'Renamed',
+      "sales",
+      "Renamed",
     );
     expect(useDatabaseStore.getState().revisions.sales).toBe(5);
-    expect(useDatabaseStore.getState().databases.sales?.name).toBe('Renamed');
+    expect(useDatabaseStore.getState().databases.sales?.name).toBe("Renamed");
   });
 
-  it('maps rename failures to IPC code and incident ID without exposing backend details', async () => {
-    const alert = vi.spyOn(uiStore, 'alert').mockResolvedValue();
-    vi.spyOn(DatabaseService, 'renameDatabase').mockRejectedValue(normalizeIpcError(
-      'rename_database',
-      {
-        code: 'database_revision_conflict',
-        details: { debug: 'sensitive backend detail' },
-        incidentId: 'incident-rename-42',
-      },
-    ));
-
-    await act(async () => actions.renameDataFrame('sales', 'Renamed'));
-
-    expect(alert).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('database_revision_conflict'),
-      incidentId: 'incident-rename-42',
-      type: 'error',
-    }));
-    expect(JSON.stringify(alert.mock.calls)).not.toContain('sensitive backend detail');
-  });
-
-  it('does not perform an independent delete outside canonical publication application', async () => {
-    vi.spyOn(DatabaseService, 'deleteDatabase').mockImplementation(
-      async (_project, operation) => aggregate(null, operation),
+  it("maps rename failures to IPC code and incident ID without exposing backend details", async () => {
+    const alert = vi.spyOn(uiStore, "alert").mockResolvedValue();
+    vi.spyOn(DatabaseService, "renameDatabase").mockRejectedValue(
+      normalizeIpcError("rename_database", {
+        code: "database_revision_conflict",
+        details: { debug: "sensitive backend detail" },
+        incidentId: "incident-rename-42",
+      }),
     );
 
-    await act(async () => actions.deleteDataFrame('sales'));
+    await act(async () => actions.renameDataFrame("sales", "Renamed"));
+
+    expect(alert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("database_revision_conflict"),
+        incidentId: "incident-rename-42",
+        type: "error",
+      }),
+    );
+    expect(JSON.stringify(alert.mock.calls)).not.toContain("sensitive backend detail");
+  });
+
+  it("does not perform an independent delete outside canonical publication application", async () => {
+    vi.spyOn(DatabaseService, "deleteDatabase").mockImplementation(async (_project, operation) =>
+      aggregate(null, operation),
+    );
+
+    await act(async () => actions.deleteDataFrame("sales"));
 
     expect(DatabaseService.deleteDatabase).toHaveBeenCalledWith(
       projectInstanceId,
       expect.any(String),
       4,
-      'sales',
+      "sales",
     );
     expect(useDatabaseStore.getState().databases.sales).toBeUndefined();
     expect(useDatabaseStore.getState().revisions.sales).toBeUndefined();

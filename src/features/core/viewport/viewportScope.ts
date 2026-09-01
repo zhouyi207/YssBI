@@ -4,7 +4,7 @@ export interface ViewportScope {
   graphPath: string;
 }
 
-const SCOPE_SEP = '\x1e';
+const SCOPE_SEP = "\x1e";
 
 export function editorViewportScope(groupId: string, graphPath: string): ViewportScope {
   return { groupId, graphPath };

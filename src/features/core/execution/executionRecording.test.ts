@@ -1,25 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import { recordingHadError, firstNodeErrorMessage } from './executionRecording';
-import type { RecordedEvent } from '@/shared/types/ui/execution';
+import { describe, expect, it } from "vitest";
+import { recordingHadError, firstNodeErrorMessage } from "./executionRecording";
+import type { RecordedEvent } from "@/shared/types/ui/execution";
 
-function entry(event: RecordedEvent['event']): RecordedEvent {
+function entry(event: RecordedEvent["event"]): RecordedEvent {
   return { event, timestamp: 0 };
 }
 
-describe('executionRecording', () => {
-  it('recordingHadError prefers executionComplete over nodeError', () => {
+describe("executionRecording", () => {
+  it("recordingHadError prefers executionComplete over nodeError", () => {
     const recording: RecordedEvent[] = [
-      entry({ event: 'nodeError', data: { nodeId: 'n1', error: 'boom' } }),
-      entry({ event: 'executionComplete', data: { hasError: false } }),
+      entry({ event: "nodeError", data: { nodeId: "n1", error: "boom" } }),
+      entry({ event: "executionComplete", data: { hasError: false } }),
     ];
     expect(recordingHadError(recording)).toBe(false);
   });
 
-  it('recordingHadError falls back to nodeError without executionComplete', () => {
+  it("recordingHadError falls back to nodeError without executionComplete", () => {
     const recording: RecordedEvent[] = [
-      entry({ event: 'nodeError', data: { nodeId: 'n1', error: 'boom' } }),
+      entry({ event: "nodeError", data: { nodeId: "n1", error: "boom" } }),
     ];
     expect(recordingHadError(recording)).toBe(true);
-    expect(firstNodeErrorMessage(recording)).toBe('boom');
+    expect(firstNodeErrorMessage(recording)).toBe("boom");
   });
 });

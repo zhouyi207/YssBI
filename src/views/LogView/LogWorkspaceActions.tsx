@@ -1,13 +1,10 @@
-import type {
-  IDockviewHeaderActionsProps,
-  IDockviewPanel,
-} from 'dockview-react';
+import type { IDockviewHeaderActionsProps, IDockviewPanel } from "dockview-react";
 
-import { isLogDomainId, applyLogFilter } from '@/features/application/log';
-import type { LogDomainId } from '@/features/application/log';
-import { LogPanelStatus } from './LogPanelStatus';
-import { LogPanelToolbar } from './LogPanelToolbar';
-import { useLogWorkspaceContext } from './logWorkspaceContext';
+import { isLogDomainId, applyLogFilter } from "@/features/application/log";
+import type { LogDomainId } from "@/features/application/log";
+import { LogPanelStatus } from "./LogPanelStatus";
+import { LogPanelToolbar } from "./LogPanelToolbar";
+import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
 function panelDomain(panel: IDockviewPanel | undefined): LogDomainId | undefined {
   const domain = panel?.params?.domain;
@@ -21,9 +18,7 @@ function stopHeaderControlPropagation(event: { stopPropagation(): void }): void 
 export function LogWorkspaceActions(props: IDockviewHeaderActionsProps) {
   const { logs, filter } = useLogWorkspaceContext();
   const domain = panelDomain(props.activePanel);
-  const filteredLogCount = domain
-    ? applyLogFilter(logs, filter, domain).length
-    : 0;
+  const filteredLogCount = domain ? applyLogFilter(logs, filter, domain).length : 0;
 
   return (
     <div

@@ -1,9 +1,6 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
-import {
-  applyWorksheetDraftUpdate,
-  discardWorksheetDraft,
-} from './publication';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { WorksheetDocument } from "@/shared/types/domain/worksheet";
+import { applyWorksheetDraftUpdate, discardWorksheetDraft } from "./publication";
 
 export interface WorksheetUi {
   updateDraft(

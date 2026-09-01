@@ -1,38 +1,38 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { normalizeIpcError } from '@/services/ipc';
-import type { DidFakeGroupEnginePayload, DidPlaceboFakeGroupBlock } from '@/shared/types/report';
-import { useDidFakeGroupRi } from './useDidFakeGroupRi';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { normalizeIpcError } from "@/services/ipc";
+import type { DidFakeGroupEnginePayload, DidPlaceboFakeGroupBlock } from "@/shared/types/report";
+import { useDidFakeGroupRi } from "./useDidFakeGroupRi";
 
 const { computeFakeGroupRi } = vi.hoisted(() => ({ computeFakeGroupRi: vi.fn() }));
 
-vi.mock('@/features/application/stats/statsActions', () => ({
+vi.mock("@/features/application/stats/statsActions", () => ({
   PanelDidService: { computeFakeGroupRi },
 }));
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const engine: DidFakeGroupEnginePayload = {
   endog: [1],
   exog_row_major: [1],
   ncols: 1,
-  all_labels: [{ variable: 'Treat×Post' }],
+  all_labels: [{ variable: "Treat×Post" }],
   entity_id: [0],
   time_id: [0],
   post: [1],
   treat: [1],
-  did_label: 'Treat×Post',
+  did_label: "Treat×Post",
   observed_coef: 1,
   constant: false,
-  cov_type: 'nonrobust',
+  cov_type: "nonrobust",
 };
 
 const success = {
@@ -56,14 +56,14 @@ function Harness({ initialResult }: { initialResult: DidPlaceboFakeGroupBlock | 
   return null;
 }
 
-describe('useDidFakeGroupRi', () => {
+describe("useDidFakeGroupRi", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     current = null;
     computeFakeGroupRi.mockReset();
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
   });
@@ -83,56 +83,61 @@ describe('useDidFakeGroupRi', () => {
     });
   }
 
-  it('stores only a fallback code for an unstructured failure', async () => {
-    computeFakeGroupRi.mockRejectedValueOnce(new Error('private transport failure'));
+  it("stores only a fallback code for an unstructured failure", async () => {
+    computeFakeGroupRi.mockRejectedValueOnce(new Error("private transport failure"));
     renderHook();
 
     await run();
 
     expect(current?.error).toEqual({
-      code: 'did_fake_group_request_failed',
+      code: "did_fake_group_request_failed",
       incidentId: null,
     });
-    expect(JSON.stringify(current?.error)).not.toContain('private transport failure');
+    expect(JSON.stringify(current?.error)).not.toContain("private transport failure");
   });
 
-  it('preserves only the IPC code and incident ID', async () => {
-    computeFakeGroupRi.mockRejectedValueOnce(normalizeIpcError('compute_panel_did_fake_group_ri', {
-      code: 'internal_error',
-      details: null,
-      incidentId: 'incident-did-42',
-    }));
+  it("preserves only the IPC code and incident ID", async () => {
+    computeFakeGroupRi.mockRejectedValueOnce(
+      normalizeIpcError("compute_panel_did_fake_group_ri", {
+        code: "internal_error",
+        details: null,
+        incidentId: "incident-did-42",
+      }),
+    );
     renderHook();
 
     await run();
 
     expect(current?.error).toEqual({
-      code: 'internal_error',
-      incidentId: 'incident-did-42',
+      code: "internal_error",
+      incidentId: "incident-did-42",
     });
   });
 
-  it('rejects a legacy command result instead of retaining backend prose', async () => {
-    computeFakeGroupRi.mockResolvedValueOnce({ ...success, method_note: 'legacy backend prose' });
+  it("rejects a legacy command result instead of retaining backend prose", async () => {
+    computeFakeGroupRi.mockResolvedValueOnce({ ...success, method_note: "legacy backend prose" });
     renderHook();
 
     await run();
 
     expect(current?.display).toBeNull();
     expect(current?.error).toEqual({
-      code: 'did_fake_group_invalid_response',
+      code: "did_fake_group_invalid_response",
       incidentId: null,
     });
   });
 
-  it('rejects a legacy initial report result', () => {
-    const legacy = { ...success, method_note: 'legacy report prose' } as unknown as DidPlaceboFakeGroupBlock;
+  it("rejects a legacy initial report result", () => {
+    const legacy = {
+      ...success,
+      method_note: "legacy report prose",
+    } as unknown as DidPlaceboFakeGroupBlock;
 
     renderHook(legacy);
 
     expect(current?.display).toBeNull();
     expect(current?.error).toEqual({
-      code: 'did_fake_group_invalid_initial_result',
+      code: "did_fake_group_invalid_initial_result",
       incidentId: null,
     });
   });

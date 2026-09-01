@@ -1,10 +1,10 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
 import type {
   PendingWorksheetSave,
   WorksheetCommittedSnapshot,
   WorksheetReadSnapshot,
-} from './read';
+} from "./read";
 
 export interface OptimisticOperationKey {
   readonly projectInstanceId: string;
@@ -15,10 +15,7 @@ export interface OptimisticOperationKey {
 
 export interface WorksheetProjectionPublication {
   replaceSnapshot(snapshot: DeepReadonly<WorksheetCommittedSnapshot>): void;
-  applyCommittedDocument(
-    worksheetPath: string,
-    document: DeepReadonly<WorksheetDocument>,
-  ): void;
+  applyCommittedDocument(worksheetPath: string, document: DeepReadonly<WorksheetDocument>): void;
   removeCommittedDocument(worksheetPath: string): void;
   clearForProject(projectInstanceId: string | null): void;
 }
@@ -53,20 +50,26 @@ const listeners = new Set<() => void>();
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map(cloneValue) as T;
-  if (value === null || typeof value !== 'object') return value;
+  if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneValue(nested)]),
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      cloneValue(nested),
+    ]),
   ) as T;
 }
 
 function freezeValue<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeValue)) as T;
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, freezeValue(nested)]),
-  )) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        freezeValue(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function freezeSnapshot(value: WorksheetReadSnapshot): DeepReadonly<WorksheetReadSnapshot> {
@@ -85,7 +88,10 @@ function mutableSnapshot(): MutableWorksheetSnapshot {
     documents: cloneValue(currentSnapshot.documents) as Record<string, WorksheetDocument>,
     draftsByPath: cloneValue(currentSnapshot.draftsByPath) as Record<string, WorksheetDocument>,
     dirtyByPath: cloneValue(currentSnapshot.dirtyByPath) as Record<string, boolean>,
-    pendingSaveByPath: cloneValue(currentSnapshot.pendingSaveByPath) as Record<string, Record<string, PendingWorksheetSave>>,
+    pendingSaveByPath: cloneValue(currentSnapshot.pendingSaveByPath) as Record<
+      string,
+      Record<string, PendingWorksheetSave>
+    >,
   };
 }
 
@@ -110,7 +116,7 @@ function projectMatches(projectInstanceId: string): boolean {
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
-  if (!value || typeof value !== 'object') return value;
+  if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -118,9 +124,7 @@ function stableValue(value: unknown): unknown {
   );
 }
 
-export function worksheetDocumentFingerprint(
-  document: DeepReadonly<WorksheetDocument>,
-): string {
+export function worksheetDocumentFingerprint(document: DeepReadonly<WorksheetDocument>): string {
   return JSON.stringify(stableValue(document));
 }
 
@@ -152,8 +156,8 @@ export function applyWorksheetDraftUpdate(
   worksheetPath: string,
   patch: DeepReadonly<Partial<WorksheetDocument>>,
 ): DeepReadonly<WorksheetDocument> | null {
-  const current = currentSnapshot.draftsByPath[worksheetPath]
-    ?? currentSnapshot.documents[worksheetPath];
+  const current =
+    currentSnapshot.draftsByPath[worksheetPath] ?? currentSnapshot.documents[worksheetPath];
   if (!current) return null;
 
   const next: WorksheetDocument = {
@@ -167,8 +171,9 @@ export function applyWorksheetDraftUpdate(
   const state = mutableSnapshot();
   state.draftsByPath[worksheetPath] = next;
   const committed = state.documents[worksheetPath];
-  state.dirtyByPath[worksheetPath] = committed === undefined
-    || worksheetDocumentFingerprint(next) !== worksheetDocumentFingerprint(committed);
+  state.dirtyByPath[worksheetPath] =
+    committed === undefined ||
+    worksheetDocumentFingerprint(next) !== worksheetDocumentFingerprint(committed);
   publish(state);
   return currentSnapshot.draftsByPath[worksheetPath] ?? null;
 }
@@ -184,23 +189,22 @@ export function rebaseWorksheetDraft(
   worksheetPath: string,
   _committed: DeepReadonly<WorksheetDocument>,
   expectedDraftFingerprint: string,
-): 'rebased' | 'draft-changed' {
+): "rebased" | "draft-changed" {
   const currentDraft = currentSnapshot.draftsByPath[worksheetPath];
-  if (!currentDraft
-    || worksheetDocumentFingerprint(currentDraft) !== expectedDraftFingerprint) {
-    return 'draft-changed';
+  if (!currentDraft || worksheetDocumentFingerprint(currentDraft) !== expectedDraftFingerprint) {
+    return "draft-changed";
   }
 
   const state = mutableSnapshot();
   delete state.draftsByPath[worksheetPath];
   state.dirtyByPath[worksheetPath] = false;
   publish(state);
-  return 'rebased';
+  return "rebased";
 }
 
 function updatePendingSaveStatus(
   key: OptimisticOperationKey,
-  status: PendingWorksheetSave['status'],
+  status: PendingWorksheetSave["status"],
 ): void {
   if (!projectMatches(key.projectInstanceId)) return;
   const operationKey = optimisticOperationKey(key);
@@ -254,9 +258,9 @@ export const worksheetSavePublication: WorksheetSavePublication = {
     publish(state);
   },
 
-  markPendingSaveAcknowledged: (key) => updatePendingSaveStatus(key, 'acknowledged'),
+  markPendingSaveAcknowledged: (key) => updatePendingSaveStatus(key, "acknowledged"),
 
-  markPendingSaveUnknown: (key) => updatePendingSaveStatus(key, 'unknown'),
+  markPendingSaveUnknown: (key) => updatePendingSaveStatus(key, "unknown"),
 
   settlePendingSave: (key) => {
     if (!projectMatches(key.projectInstanceId)) return;
@@ -285,7 +289,9 @@ export const worksheetSavePublication: WorksheetSavePublication = {
     const state = mutableSnapshot();
     for (const [path, records] of Object.entries(state.pendingSaveByPath)) {
       const retained = Object.fromEntries(
-        Object.entries(records).filter(([, record]) => record.projectInstanceId !== projectInstanceId),
+        Object.entries(records).filter(
+          ([, record]) => record.projectInstanceId !== projectInstanceId,
+        ),
       );
       if (Object.keys(retained).length === 0) delete state.pendingSaveByPath[path];
       else state.pendingSaveByPath[path] = retained;

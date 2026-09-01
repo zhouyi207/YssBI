@@ -1,5 +1,5 @@
-import type { ExecutionEvent } from '@/shared/types/ui/execution';
-import { applyExecutionVisualEvent } from './executionVisualSession';
+import type { ExecutionEvent } from "@/shared/types/ui/execution";
+import { applyExecutionVisualEvent } from "./executionVisualSession";
 
 let rafId: number | null = null;
 const pendingByGraph = new Map<string, ExecutionEvent[]>();
@@ -10,7 +10,7 @@ function flushLiveEvents(): void {
 
   for (const [graphPath, events] of pendingByGraph) {
     for (const event of events) {
-      if (event.event === 'connectionFlow') {
+      if (event.event === "connectionFlow") {
         deferredFlows.push({ graphPath, event });
         continue;
       }
@@ -34,10 +34,7 @@ function scheduleFlush(): void {
 }
 
 /** Batch visual execution events per frame. */
-export function enqueueLiveExecutionEvent(
-  graphPath: string,
-  event: ExecutionEvent,
-): void {
+export function enqueueLiveExecutionEvent(graphPath: string, event: ExecutionEvent): void {
   const queue = pendingByGraph.get(graphPath) ?? [];
   queue.push(event);
   pendingByGraph.set(graphPath, queue);

@@ -1,8 +1,8 @@
 import {
   isNodeCreationDescriptor,
   type NodeCreationDescriptor,
-} from '@/features/domain/nodeCatalog/creationDescriptor';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+} from "@/features/domain/nodeCatalog/creationDescriptor";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
 export const DRAG_TYPES = {
   NODE_TEMPLATE: "node-template",
@@ -42,9 +42,7 @@ export type GraphResourceDragPayload = {
 };
 
 /** dnd-kit `active.data.current` 已知 drag source 联合类型 */
-export type CanvasDragPayload =
-  | NodeTemplateDragData
-  | GraphResourceDragPayload;
+export type CanvasDragPayload = NodeTemplateDragData | GraphResourceDragPayload;
 
 /** Sidebar / palette 产生的可落画布 payload */
 export type SidebarDragPayload = NodeTemplateDragData | GraphResourceDragPayload;
@@ -54,7 +52,7 @@ export type CanvasDropData = {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: 'event' | 'function';
+  graphKind: "event" | "function";
 };
 
 export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
@@ -71,7 +69,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function hasDragType(data: unknown, type: DragType): data is Record<string, unknown> & { type: DragType } {
+function hasDragType(
+  data: unknown,
+  type: DragType,
+): data is Record<string, unknown> & { type: DragType } {
   return isRecord(data) && data.type === type;
 }
 
@@ -80,10 +81,12 @@ export function isNodeTemplateDragData(data: unknown): data is NodeTemplateDragD
   const template = data.template;
   if (!isRecord(template)) return false;
   const keys = Object.keys(template);
-  return keys.every((key) => key === 'title' || key === 'descriptor')
-    && keys.includes('descriptor')
-    && (template.title === undefined || typeof template.title === 'string')
-    && isNodeCreationDescriptor(template.descriptor);
+  return (
+    keys.every((key) => key === "title" || key === "descriptor") &&
+    keys.includes("descriptor") &&
+    (template.title === undefined || typeof template.title === "string") &&
+    isNodeCreationDescriptor(template.descriptor)
+  );
 }
 
 export function isGraphResourceDragPayload(data: unknown): data is GraphResourceDragPayload {
@@ -154,11 +157,7 @@ export function getSidebarDragOverlayLabel(state: DeepReadonly<SidebarDragState>
 
 export function getSpawnDragTitle(data: SidebarDragPayload): string {
   if (isGraphResourceDragPayload(data)) return data.sidebarResource.name;
-  return (
-    data.sidebarResource?.name
-    ?? data.template.title
-    ?? data.template.descriptor.nodeTypeId
-  );
+  return data.sidebarResource?.name ?? data.template.title ?? data.template.descriptor.nodeTypeId;
 }
 
 export function buildSidebarDragState(

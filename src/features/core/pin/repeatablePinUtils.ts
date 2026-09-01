@@ -3,7 +3,9 @@ import type { NodeDefinition, PinSlot } from "@/shared/types/domain/node";
 
 export type RepeatablePinSlot = Extract<PinSlot, { slotKind: "repeatable" }>;
 
-export function getRepeatableSlot(definition: NodeDefinition | undefined): RepeatablePinSlot | null {
+export function getRepeatableSlot(
+  definition: NodeDefinition | undefined,
+): RepeatablePinSlot | null {
   if (!definition?.pinSlots) return null;
   const slot = definition.pinSlots.find((s) => s.slotKind === "repeatable");
   return slot?.slotKind === "repeatable" ? slot : null;
@@ -30,7 +32,7 @@ export function matchesRepeatableSlotName(pinName: string, namePrefix: string): 
 
 export function findRepeatableSlotForPin(
   pin: Pin,
-  definition: NodeDefinition | undefined
+  definition: NodeDefinition | undefined,
 ): RepeatablePinSlot | null {
   if (!definition?.pinSlots) return null;
   if (fixedPinNames(definition).has(pin.name)) return null;
@@ -51,17 +53,20 @@ export function isRepeatableSlotPin(pin: Pin, definition: NodeDefinition | undef
 export function countPinsInRepeatableSlot(
   pins: Pin[],
   slot: RepeatablePinSlot,
-  definition: NodeDefinition
+  definition: NodeDefinition,
 ): number {
   return pins.filter(
     (p) =>
       p.direction === slot.template.direction &&
       !fixedPinNames(definition).has(p.name) &&
-      matchesRepeatableSlotName(p.name, slot.namePrefix)
+      matchesRepeatableSlotName(p.name, slot.namePrefix),
   ).length;
 }
 
-export function countRepeatableSlotPins(pins: Pin[], definition: NodeDefinition | undefined): number {
+export function countRepeatableSlotPins(
+  pins: Pin[],
+  definition: NodeDefinition | undefined,
+): number {
   const slot = getRepeatableSlot(definition);
   if (!slot || !definition) return 0;
   return countPinsInRepeatableSlot(pins, slot, definition);
@@ -70,7 +75,7 @@ export function countRepeatableSlotPins(pins: Pin[], definition: NodeDefinition 
 export function canRemoveRepeatablePin(
   pin: Pin,
   definition: NodeDefinition | undefined,
-  pinsOnNode: Pin[]
+  pinsOnNode: Pin[],
 ): boolean {
   const slot = findRepeatableSlotForPin(pin, definition);
   if (!slot || !definition) return false;

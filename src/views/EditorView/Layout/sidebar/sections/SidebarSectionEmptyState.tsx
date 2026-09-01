@@ -1,5 +1,5 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { sidebarItemIndent } from '../../sidebarUi/sidebarStyles';
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { sidebarItemIndent } from "../../sidebarUi/sidebarStyles";
 
 export function SidebarSectionEmptyState({
   level,

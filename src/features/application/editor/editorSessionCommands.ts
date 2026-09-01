@@ -9,19 +9,19 @@ import type {
   EditorSessionTabActions,
   EditorSessionVariableActions,
   EditorSessionWorksheetActions,
-} from './editorSessionTypes';
+} from "./editorSessionTypes";
 
 /** Stable command-only surface assembled by EditorSessionProvider. */
-export type EditorSessionCommands = EditorSessionLayoutBindings
-  & EditorSessionHistoryActions
-  & EditorSessionCanvasActions
-  & EditorSessionTabActions
-  & EditorSessionWorksheetActions
-  & EditorSessionProjectActions
-  & EditorSessionGraphActions
-  & EditorSessionVariableActions
-  & EditorSessionDataframeActions
-  & EditorSessionNodeActions;
+export type EditorSessionCommands = EditorSessionLayoutBindings &
+  EditorSessionHistoryActions &
+  EditorSessionCanvasActions &
+  EditorSessionTabActions &
+  EditorSessionWorksheetActions &
+  EditorSessionProjectActions &
+  EditorSessionGraphActions &
+  EditorSessionVariableActions &
+  EditorSessionDataframeActions &
+  EditorSessionNodeActions;
 
 /** Stable identity container — Provider mutates fields in place so preview canvases avoid context churn. */
 export function createEditorSessionCommandsContainer(): EditorSessionCommands {

@@ -1,6 +1,6 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { EMPTY_HISTORY_STATE, useHistoryStore, type HistoryStoreState } from './historyStore';
-import type { HistoryProjectionSnapshot } from './read';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { EMPTY_HISTORY_STATE, useHistoryStore, type HistoryStoreState } from "./historyStore";
+import type { HistoryProjectionSnapshot } from "./read";
 
 export interface HistoryProjectionPublication {
   replaceSnapshot(snapshot: DeepReadonly<HistoryProjectionSnapshot>): void;

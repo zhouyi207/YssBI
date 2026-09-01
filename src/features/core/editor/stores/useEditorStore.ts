@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-import type { DetailFocus } from '@/shared/types/ui/detail';
+import type { DetailFocus } from "@/shared/types/ui/detail";
 
 export interface EditorContextMenuState {
   x: number;

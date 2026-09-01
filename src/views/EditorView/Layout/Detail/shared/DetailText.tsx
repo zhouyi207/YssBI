@@ -1,6 +1,6 @@
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   detailAccentMonoTextClass,
   detailBadgeClass,
@@ -10,9 +10,9 @@ import {
   detailSectionTitleClass,
   detailSmallMetaTextClass,
   detailSubsectionTitleClass,
-} from './detailStyles';
+} from "./detailStyles";
 
-type DetailTextTone = 'body' | 'muted' | 'smallMuted' | 'mono' | 'accentMono';
+type DetailTextTone = "body" | "muted" | "smallMuted" | "mono" | "accentMono";
 
 const toneClass: Record<DetailTextTone, string> = {
   body: detailBodyTextClass,
@@ -27,16 +27,16 @@ type DetailTextProps<T extends ElementType> = {
   tone?: DetailTextTone;
   className?: string;
   children: ReactNode;
-} & Omit<ComponentPropsWithoutRef<T>, 'as' | 'className' | 'children'>;
+} & Omit<ComponentPropsWithoutRef<T>, "as" | "className" | "children">;
 
-export function DetailText<T extends ElementType = 'span'>({
+export function DetailText<T extends ElementType = "span">({
   as,
-  tone = 'body',
+  tone = "body",
   className,
   children,
   ...props
 }: DetailTextProps<T>) {
-  const Component = as ?? 'span';
+  const Component = as ?? "span";
   return (
     <Component className={cn(toneClass[tone], className)} {...props}>
       {children}
@@ -61,19 +61,19 @@ export function DetailBadge({ children, className, title }: DetailBadgeProps) {
 interface DetailSectionHeaderProps {
   children: ReactNode;
   className?: string;
-  level?: 'section' | 'subsection';
+  level?: "section" | "subsection";
 }
 
 export function DetailSectionHeader({
   children,
   className,
-  level = 'section',
+  level = "section",
 }: DetailSectionHeaderProps) {
   return (
     <div
       className={cn(
-        'flex items-center',
-        level === 'section' ? detailSectionTitleClass : detailSubsectionTitleClass,
+        "flex items-center",
+        level === "section" ? detailSectionTitleClass : detailSubsectionTitleClass,
         className,
       )}
     >

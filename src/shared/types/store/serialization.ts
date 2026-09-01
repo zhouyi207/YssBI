@@ -2,7 +2,7 @@
  * 序列化相关类型（历史遗留；连接事实在 connections / pinConnections）
  */
 
-import type { Variable } from '../domain/variable';
+import type { Variable } from "../domain/variable";
 
 /** 序列化后的 Pin（不含连接状态） */
 export interface SerializedPin {
@@ -33,7 +33,7 @@ export interface SerializedNode {
 export interface SerializedGraphData {
   id: string;
   name: string;
-  type: 'event' | 'function';
+  type: "event" | "function";
   variables: Record<string, Variable>;
   connections: { connections: Array<{ fromPin: string; toPin: string }> };
   nodes: SerializedNode[];

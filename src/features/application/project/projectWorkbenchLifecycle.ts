@@ -1,16 +1,16 @@
-import { ProjectLifecycleProtocolError } from '@/features/application/projectLifecycleReceipt';
-import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
-import { resetProjectScopedRightSidebarState } from '@/features/application/project/projectReset';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
-import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchRead';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { ProjectLifecycleProtocolError } from "@/features/application/projectLifecycleReceipt";
+import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
+import { resetProjectScopedRightSidebarState } from "@/features/application/project/projectReset";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { useEditorPaneStateStore } from "@/features/core/dockview/editorPaneStateStore";
+import { workbenchDockviewInternal } from "@/features/core/dockview/workbenchDockviewInternal";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/features/core/dockview/workbenchRead";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   isProjectLifecycleStateCurrent,
   type ProjectLifecycleStateSnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 function ownsPreviousProject(
   previousProjectInstanceId: string,
@@ -18,15 +18,14 @@ function ownsPreviousProject(
 ): boolean {
   if (!isProjectLifecycleStateCurrent(owner)) return false;
   if (useProjectIOStore.getState().projectInstanceId !== previousProjectInstanceId) {
-    throw new ProjectLifecycleProtocolError('stale project cleanup', true);
+    throw new ProjectLifecycleProtocolError("stale project cleanup", true);
   }
   return true;
 }
 
 function isProjectScopedPanel(panel: WorkbenchPanelInfo): boolean {
-  if (panel.metadata.role === 'editor' || panel.metadata.role === 'result') return true;
-  return panel.metadata.role === 'view'
-    && panel.metadata.viewId === 'inspect';
+  if (panel.metadata.role === "editor" || panel.metadata.role === "result") return true;
+  return panel.metadata.role === "view" && panel.metadata.viewId === "inspect";
 }
 
 export async function removeProjectScopedWorkbenchPanels(

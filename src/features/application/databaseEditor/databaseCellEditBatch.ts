@@ -5,15 +5,15 @@ export interface DatabaseCellEditInput {
 }
 
 export type DatabaseCellEditStepOutcome<TError = unknown> =
-  | { status: 'applied' }
-  | { status: 'noop' }
-  | { status: 'failed'; error: TError };
+  | { status: "applied" }
+  | { status: "noop" }
+  | { status: "failed"; error: TError };
 
 export type DatabaseCellEditBatchOutcome<TError = unknown> =
-  | { status: 'applied'; appliedCount: number }
-  | { status: 'noop'; appliedCount: 0 }
-  | { status: 'cancelled'; appliedCount: number }
-  | { status: 'failed'; appliedCount: number; error: TError };
+  | { status: "applied"; appliedCount: number }
+  | { status: "noop"; appliedCount: 0 }
+  | { status: "cancelled"; appliedCount: number }
+  | { status: "failed"; appliedCount: number; error: TError };
 
 interface RunDatabaseCellEditBatchParams<TError> {
   edits: readonly DatabaseCellEditInput[];
@@ -31,18 +31,18 @@ export async function runDatabaseCellEditBatch<TError>({
   let appliedCount = 0;
 
   for (const edit of edits) {
-    if (!isCurrent()) return { status: 'cancelled', appliedCount };
+    if (!isCurrent()) return { status: "cancelled", appliedCount };
     const outcome = await apply(edit);
-    if (outcome.status === 'applied') appliedCount += 1;
-    if (!isCurrent()) return { status: 'cancelled', appliedCount };
-    if (outcome.status === 'failed') {
+    if (outcome.status === "applied") appliedCount += 1;
+    if (!isCurrent()) return { status: "cancelled", appliedCount };
+    if (outcome.status === "failed") {
       if (appliedCount > 0) await refresh();
-      return { status: 'failed', appliedCount, error: outcome.error };
+      return { status: "failed", appliedCount, error: outcome.error };
     }
   }
 
-  if (!isCurrent()) return { status: 'cancelled', appliedCount };
-  if (appliedCount === 0) return { status: 'noop', appliedCount: 0 };
+  if (!isCurrent()) return { status: "cancelled", appliedCount };
+  if (appliedCount === 0) return { status: "noop", appliedCount: 0 };
   await refresh();
-  return { status: 'applied', appliedCount };
+  return { status: "applied", appliedCount };
 }

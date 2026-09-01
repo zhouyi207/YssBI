@@ -1,20 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 
-import { toErrorReference } from '@/features/application/errorReference';
+import { toErrorReference } from "@/features/application/errorReference";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   fetchWorksheetPreview,
   type WorksheetPreviewProjectIdentity,
-} from '@/services/worksheet/worksheetDataService';
+} from "@/services/worksheet/worksheetDataService";
 import {
   getCachedWorksheetPreview,
   getWorksheetPreview,
-} from '@/services/worksheet/worksheetPreviewCache';
-import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
+} from "@/services/worksheet/worksheetPreviewCache";
+import type { WorksheetDocument, WorksheetPreviewPayload } from "@/shared/types/domain";
 
 export interface WorksheetChartPreviewState {
   readonly preview: WorksheetPreviewPayload;
@@ -26,11 +26,11 @@ export function useWorksheetChartPreview(
   worksheetPath: string,
   document: WorksheetDocument | null,
 ): WorksheetChartPreviewState {
-  const [preview, setPreview] = useState<WorksheetPreviewPayload>({ kind: 'empty' });
+  const [preview, setPreview] = useState<WorksheetPreviewPayload>({ kind: "empty" });
   const [loading, setLoading] = useState(false);
 
   const specKey = useMemo(() => {
-    if (!document) return '';
+    if (!document) return "";
     return JSON.stringify({
       worksheetPath,
       databaseId: document.databaseId,
@@ -41,7 +41,7 @@ export function useWorksheetChartPreview(
 
   useEffect(() => {
     if (!specKey || !document) {
-      setPreview({ kind: 'empty' });
+      setPreview({ kind: "empty" });
       return;
     }
 
@@ -75,8 +75,8 @@ export function useWorksheetChartPreview(
         } catch (error) {
           if (!isCurrentProjectIdentity(identity)) return;
           setPreview({
-            kind: 'error',
-            ...toErrorReference(error, 'worksheet_preview_read_failed'),
+            kind: "error",
+            ...toErrorReference(error, "worksheet_preview_read_failed"),
           });
         } finally {
           if (isCurrentProjectIdentity(identity)) setLoading(false);

@@ -1,5 +1,5 @@
-import type { FC } from 'react';
-import { useRegressionReport } from '@/features/application/stats/useRegressionReport';
+import type { FC } from "react";
+import { useRegressionReport } from "@/features/application/stats/useRegressionReport";
 import {
   ReportLayout,
   ReportLazyBoundary,
@@ -8,8 +8,8 @@ import {
   LazyFormulaBlock,
   RegressionModelCoreSections,
   OlsStyleDiagnosticsSection,
-} from './shared';
-import type { OLSResultData } from '@/shared/types/report';
+} from "./shared";
+import type { OLSResultData } from "@/shared/types/report";
 
 export const OLSComponent: FC<{ data: OLSResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical, leverageKdeData } = useRegressionReport(data);
@@ -28,11 +28,15 @@ export const OLSComponent: FC<{ data: OLSResultData }> = ({ data }) => {
     >
       <ReportSection title="Equation" icon="equation">
         <ReportLazyBoundary variant="formula">
-          <LazyFormulaBlock endogName={data.endog_name || 'y'} coefficients={coefficients} />
+          <LazyFormulaBlock endogName={data.endog_name || "y"} coefficients={coefficients} />
         </ReportLazyBoundary>
       </ReportSection>
 
-      <RegressionModelCoreSections data={data} hasCategorical={hasCategorical} showOmittedVariables />
+      <RegressionModelCoreSections
+        data={data}
+        hasCategorical={hasCategorical}
+        showOmittedVariables
+      />
 
       <OlsStyleDiagnosticsSection diag={diag} leverageKdeData={leverageKdeData} />
     </ReportLayout>

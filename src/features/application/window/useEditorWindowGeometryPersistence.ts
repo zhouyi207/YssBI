@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { currentAppWindow } from '@/services/platform/appWindow';
-import { WindowStateService } from '@/services/window/windowStateService';
-import { logger } from '@/features/application/observability/appLogger';
-import { captureWindowGeometryPreservingMaximized } from './windowGeometryCapture';
-import { readSecondaryWindowState, saveSecondaryWindowState } from './secondaryWindowGeometryStore';
+import { useEffect } from "react";
+import { currentAppWindow } from "@/services/platform/appWindow";
+import { WindowStateService } from "@/services/window/windowStateService";
+import { logger } from "@/features/application/observability/appLogger";
+import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCapture";
+import { readSecondaryWindowState, saveSecondaryWindowState } from "./secondaryWindowGeometryStore";
 
 /**
  * Editor workbench window geometry on close:
@@ -20,31 +20,29 @@ export function useEditorWindowGeometryPersistence(): void {
 
     const setup = async () => {
       const win = currentAppWindow();
-      const isMain = win.label === 'main';
+      const isMain = win.label === "main";
 
       try {
-        const subscription = await win.onCloseRequested(async (): Promise<'allow'> => {
+        const subscription = await win.onCloseRequested(async (): Promise<"allow"> => {
           if (isMain) {
-            const next = await captureWindowGeometryPreservingMaximized(
-              win,
-              () => WindowStateService.get('main'),
+            const next = await captureWindowGeometryPreservingMaximized(win, () =>
+              WindowStateService.get("main"),
             );
-            if (!next) return 'allow';
+            if (!next) return "allow";
             try {
-              await WindowStateService.save('main', next);
+              await WindowStateService.save("main", next);
             } catch {
-              logger.app.error('window state persistence failed', 'Window');
+              logger.app.error("window state persistence failed", "Window");
             }
-            return 'allow';
+            return "allow";
           }
 
-          const next = await captureWindowGeometryPreservingMaximized(
-            win,
-            () => readSecondaryWindowState(win.label),
+          const next = await captureWindowGeometryPreservingMaximized(win, () =>
+            readSecondaryWindowState(win.label),
           );
-          if (!next) return 'allow';
+          if (!next) return "allow";
           saveSecondaryWindowState(win.label, next);
-          return 'allow';
+          return "allow";
         });
 
         if (cancelled) {
@@ -52,10 +50,10 @@ export function useEditorWindowGeometryPersistence(): void {
         } else if (subscription.ok) {
           unlistenClose = subscription.value;
         } else {
-          logger.app.warn('editor window close listener unavailable', 'Window');
+          logger.app.warn("editor window close listener unavailable", "Window");
         }
       } catch {
-        logger.app.warn('editor window close listener unavailable', 'Window');
+        logger.app.warn("editor window close listener unavailable", "Window");
       }
     };
 

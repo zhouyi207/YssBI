@@ -1,6 +1,6 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatNum } from './utils';
-import type { Coefficient } from '@/shared/types/report';
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatNum } from "./utils";
+import type { Coefficient } from "@/shared/types/report";
 
 export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] }) {
   const maxAbs = Math.max(...coefficients.map((c) => Math.abs(c.coef)), 0.001);
@@ -10,12 +10,14 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
       {coefficients.map((coeff, idx) => {
         const pct = (Math.abs(coeff.coef) / maxAbs) * 100;
         const isPositive = coeff.coef >= 0;
-        const label = coeff.category != null
-          ? `${coeff.variable}[${coeff.category}]`
-          : coeff.variable;
+        const label =
+          coeff.category != null ? `${coeff.variable}[${coeff.category}]` : coeff.variable;
 
         return (
-          <div key={`${coeff.variable}-${coeff.category ?? ''}-${idx}`} className="flex items-center gap-3">
+          <div
+            key={`${coeff.variable}-${coeff.category ?? ""}-${idx}`}
+            className="flex items-center gap-3"
+          >
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-xs font-mono text-muted-foreground w-28 text-right shrink-0 truncate cursor-default">
@@ -28,8 +30,8 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
               <div className="w-1/2 flex justify-end">
                 {!isPositive && (
                   <div
-                    className={`h-4 rounded-l transition-all ${coeff.is_significant ? 'bg-rose-500/70' : 'bg-rose-500/25'}`}
-                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '2px' : '0' }}
+                    className={`h-4 rounded-l transition-all ${coeff.is_significant ? "bg-rose-500/70" : "bg-rose-500/25"}`}
+                    style={{ width: `${pct}%`, minWidth: pct > 0 ? "2px" : "0" }}
                   />
                 )}
               </div>
@@ -37,8 +39,8 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
               <div className="w-1/2 flex justify-start">
                 {isPositive && (
                   <div
-                    className={`h-4 rounded-r transition-all ${coeff.is_significant ? 'bg-emerald-500/70' : 'bg-emerald-500/25'}`}
-                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '2px' : '0' }}
+                    className={`h-4 rounded-r transition-all ${coeff.is_significant ? "bg-emerald-500/70" : "bg-emerald-500/25"}`}
+                    style={{ width: `${pct}%`, minWidth: pct > 0 ? "2px" : "0" }}
                   />
                 )}
               </div>

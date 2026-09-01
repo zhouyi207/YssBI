@@ -1,6 +1,6 @@
-import { useDocumentStateStore, type DocumentState } from './documentStateStore';
-import type { ProjectResourceMeta, ResourceKey } from './resourceTypes';
-import { resourceKey } from './resourceTypes';
+import { useDocumentStateStore, type DocumentState } from "./documentStateStore";
+import type { ProjectResourceMeta, ResourceKey } from "./resourceTypes";
+import { resourceKey } from "./resourceTypes";
 
 export interface ResourceSnapshot {
   resources: ProjectResourceMeta[];
@@ -23,11 +23,11 @@ export interface SnapshotReconcileResult {
 export function reconcileResourceSnapshot(
   incoming: ProjectResourceMeta[],
   previousByKey: Record<ResourceKey, ProjectResourceMeta>,
-  documents: Readonly<Record<ResourceKey, DocumentState>> =
-    useDocumentStateStore.getState().documents,
+  documents: Readonly<Record<ResourceKey, DocumentState>> = useDocumentStateStore.getState()
+    .documents,
 ): SnapshotReconcileResult {
   const incomingByKey = new Map(incoming.map((resource) => [resourceKey(resource), resource]));
-  const documentPatches: SnapshotReconcileResult['documentPatches'] = [];
+  const documentPatches: SnapshotReconcileResult["documentPatches"] = [];
   const resources: ProjectResourceMeta[] = [];
 
   for (const resource of incoming) {
@@ -65,7 +65,9 @@ export function reconcileResourceSnapshot(
     });
   }
 
-  for (const [key, previous] of Object.entries(previousByKey) as Array<[ResourceKey, ProjectResourceMeta]>) {
+  for (const [key, previous] of Object.entries(previousByKey) as Array<
+    [ResourceKey, ProjectResourceMeta]
+  >) {
     if (incomingByKey.has(key)) continue;
     const doc = documents[key];
     if (!doc?.loaded && !previous.loaded) continue;
@@ -93,7 +95,7 @@ export function reconcileResourceSnapshot(
 }
 
 export function applySnapshotDocumentPatches(
-  patches: SnapshotReconcileResult['documentPatches'],
+  patches: SnapshotReconcileResult["documentPatches"],
 ): void {
   const store = useDocumentStateStore.getState();
   for (const { key, patch } of patches) {

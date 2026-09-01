@@ -1,9 +1,9 @@
-import { useProjectIOStore } from './projectIOStore';
+import { useProjectIOStore } from "./projectIOStore";
 
 export interface ProjectProjection {
-  readonly status: 'idle' | 'loading' | 'ready' | 'error';
+  readonly status: "idle" | "loading" | "ready" | "error";
   readonly error: { readonly code: string; readonly incidentId: string | null } | null;
-  readonly graphLoadStatus: Readonly<Record<string, 'loading' | 'ready' | 'error'>>;
+  readonly graphLoadStatus: Readonly<Record<string, "loading" | "ready" | "error">>;
   readonly currentPath: string | null;
   readonly projectInstanceId: string | null;
 }

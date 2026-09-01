@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Channel } from '@tauri-apps/api/core';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Channel } from "@tauri-apps/api/core";
 import type {
   DiagnosticBatchDto,
   DiagnosticRecordDto,
   FrontendDiagnosticEntryDto,
-} from '@/shared/types/dto/diagnostics';
+} from "@/shared/types/dto/diagnostics";
 
 const core = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -16,7 +16,7 @@ const channelTracking = vi.hoisted(() => ({
   clear: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock("@tauri-apps/api/core", () => ({
   invoke: core.invoke,
   Channel: class TestChannel<T> {
     onmessage?: (value: T) => void;
@@ -27,33 +27,33 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 
-vi.mock('@/services/devHmrIpc', () => ({
+vi.mock("@/services/devHmrIpc", () => ({
   trackChannel: channelTracking.track,
   untrackChannel: channelTracking.untrack,
 }));
 
-vi.mock('@/shared/platform/tauriWebview', () => ({
+vi.mock("@/shared/platform/tauriWebview", () => ({
   clearChannelMessageHandler: channelTracking.clear,
 }));
 
-import { LogService } from './logService';
+import { LogService } from "./logService";
 
 function record(sequence: number): DiagnosticRecordDto {
   return {
-    streamId: 'stream-1',
+    streamId: "stream-1",
     sequence,
-    timestamp: '2026-08-16T10:11:12.000Z',
-    level: 'info',
-    origin: 'rust',
-    domain: 'application',
-    target: 'app',
+    timestamp: "2026-08-16T10:11:12.000Z",
+    level: "info",
+    origin: "rust",
+    domain: "application",
+    target: "app",
     message: `entry-${sequence}`,
     fields: {},
   };
 }
 
 const batch = (sequence: number): DiagnosticBatchDto => ({
-  streamId: 'stream-1',
+  streamId: "stream-1",
   entries: [record(sequence)],
 });
 
@@ -65,31 +65,33 @@ beforeEach(() => {
   channelTracking.clear.mockClear();
 });
 
-describe('LogService diagnostics contract', () => {
-  it('submits a frontend batch with the fixed command payload', async () => {
+describe("LogService diagnostics contract", () => {
+  it("submits a frontend batch with the fixed command payload", async () => {
     core.invoke.mockResolvedValue(undefined);
-    const entries: FrontendDiagnosticEntryDto[] = [{
-      level: 'warn',
-      domain: 'graph',
-      target: 'GraphManagement',
-      message: 'failed',
-      fields: { retryable: false },
-    }];
+    const entries: FrontendDiagnosticEntryDto[] = [
+      {
+        level: "warn",
+        domain: "graph",
+        target: "GraphManagement",
+        message: "failed",
+        fields: { retryable: false },
+      },
+    ];
 
     await LogService.submitFrontendDiagnostics(entries);
 
-    expect(core.invoke).toHaveBeenCalledWith('submit_frontend_diagnostics', { entries });
+    expect(core.invoke).toHaveBeenCalledWith("submit_frontend_diagnostics", { entries });
   });
 
-  it('applies the initial snapshot before draining early Channel batches', async () => {
+  it("applies the initial snapshot before draining early Channel batches", async () => {
     const received: DiagnosticBatchDto[] = [];
     core.invoke.mockImplementation(async (command: string, args?: unknown) => {
-      if (command !== 'subscribe_diagnostics') return undefined;
+      if (command !== "subscribe_diagnostics") return undefined;
       const channel = (args as { onRecords: Channel<unknown> }).onRecords;
       channel.onmessage?.(batch(2));
       return {
-        subscriptionId: 'subscription-1',
-        streamId: 'stream-1',
+        subscriptionId: "subscription-1",
+        streamId: "stream-1",
         entries: [record(1)],
         latestSequence: 1,
         truncated: false,
@@ -106,11 +108,11 @@ describe('LogService diagnostics contract', () => {
     expect(received).toEqual([batch(2), batch(3)]);
   });
 
-  it('reconnects instead of silently dropping preactivation overflow', async () => {
+  it("reconnects instead of silently dropping preactivation overflow", async () => {
     let subscribeAttempt = 0;
     core.invoke.mockImplementation(async (command: string, args?: unknown) => {
-      if (command === 'unsubscribe_diagnostics') return undefined;
-      if (command !== 'subscribe_diagnostics') return undefined;
+      if (command === "unsubscribe_diagnostics") return undefined;
+      if (command !== "subscribe_diagnostics") return undefined;
       subscribeAttempt += 1;
       const channel = (args as { onRecords: Channel<unknown> }).onRecords;
       if (subscribeAttempt === 1) {
@@ -118,16 +120,16 @@ describe('LogService diagnostics contract', () => {
           channel.onmessage?.(batch(sequence));
         }
         return {
-          subscriptionId: 'subscription-overflowed',
-          streamId: 'stream-1',
+          subscriptionId: "subscription-overflowed",
+          streamId: "stream-1",
           entries: [],
           latestSequence: 0,
           truncated: false,
         };
       }
       return {
-        subscriptionId: 'subscription-reconnected',
-        streamId: 'stream-1',
+        subscriptionId: "subscription-reconnected",
+        streamId: "stream-1",
         entries: [record(65)],
         latestSequence: 65,
         truncated: true,
@@ -136,18 +138,19 @@ describe('LogService diagnostics contract', () => {
 
     const subscription = await LogService.subscribeDiagnostics(vi.fn());
 
-    expect(subscription.snapshot.subscriptionId).toBe('subscription-reconnected');
-    expect(core.invoke.mock.calls.filter(([command]) => command === 'subscribe_diagnostics'))
-      .toHaveLength(2);
-    expect(core.invoke).toHaveBeenCalledWith('unsubscribe_diagnostics', {
-      subscriptionId: 'subscription-overflowed',
+    expect(subscription.snapshot.subscriptionId).toBe("subscription-reconnected");
+    expect(
+      core.invoke.mock.calls.filter(([command]) => command === "subscribe_diagnostics"),
+    ).toHaveLength(2);
+    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
+      subscriptionId: "subscription-overflowed",
     });
   });
 
-  it('unsubscribes once and detaches the Channel handler', async () => {
+  it("unsubscribes once and detaches the Channel handler", async () => {
     core.invoke.mockResolvedValue({
-      subscriptionId: 'subscription-1',
-      streamId: 'stream-1',
+      subscriptionId: "subscription-1",
+      streamId: "stream-1",
       entries: [],
       latestSequence: 0,
       truncated: false,
@@ -158,11 +161,12 @@ describe('LogService diagnostics contract', () => {
     await subscription.unsubscribe();
     await subscription.unsubscribe();
 
-    expect(core.invoke).toHaveBeenCalledWith('unsubscribe_diagnostics', {
-      subscriptionId: 'subscription-1',
+    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
+      subscriptionId: "subscription-1",
     });
-    expect(core.invoke.mock.calls.filter(([command]) => command === 'unsubscribe_diagnostics'))
-      .toHaveLength(1);
+    expect(
+      core.invoke.mock.calls.filter(([command]) => command === "unsubscribe_diagnostics"),
+    ).toHaveLength(1);
     expect(channelTracking.untrack).toHaveBeenCalledOnce();
     expect(channelTracking.clear).toHaveBeenCalledOnce();
   });

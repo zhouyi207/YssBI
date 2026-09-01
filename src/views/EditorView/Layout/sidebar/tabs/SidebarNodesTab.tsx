@@ -1,20 +1,20 @@
-import { useTranslation } from 'react-i18next';
-import { useNodeCatalogBrowser } from '@/features/application/nodeCatalog/useNodeCatalogBrowser';
-import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
-import type { LocalizedCatalogBrowserRow } from '@/features/domain/nodeCatalog/localizedCatalogTree';
+import { useTranslation } from "react-i18next";
+import { useNodeCatalogBrowser } from "@/features/application/nodeCatalog/useNodeCatalogBrowser";
+import { nodeCatalogErrorText } from "@/features/application/nodeCatalog/nodeCatalogErrorPresentation";
+import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/localizedCatalogTree";
 import {
   SidebarTreeSearchInput,
   SidebarVirtualTree,
   sidebarTreeSearchShellClass,
-} from '../../sidebarUi';
-import { SidebarCatalogTreeRow } from '../rows/SidebarCatalogTreeRow';
-import { SidebarTabPanel } from '../sections/SidebarTabPanel';
+} from "../../sidebarUi";
+import { SidebarCatalogTreeRow } from "../rows/SidebarCatalogTreeRow";
+import { SidebarTabPanel } from "../sections/SidebarTabPanel";
 
 const CATEGORY_ROW_HEIGHT = 28;
 const ITEM_ROW_ESTIMATE = 32;
 
 function rowEstimate(row: LocalizedCatalogBrowserRow | undefined): number {
-  return row?.kind === 'category' ? CATEGORY_ROW_HEIGHT : ITEM_ROW_ESTIMATE;
+  return row?.kind === "category" ? CATEGORY_ROW_HEIGHT : ITEM_ROW_ESTIMATE;
 }
 
 export function SidebarNodesTab() {
@@ -40,39 +40,38 @@ export function SidebarNodesTab() {
           <SidebarTreeSearchInput
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={t('canvas.nodePalette.searchPlaceholder')}
-            expandAllLabel={t('canvas.nodePalette.expandAll')}
-            collapseAllLabel={t('canvas.nodePalette.collapseAll')}
+            placeholder={t("canvas.nodePalette.searchPlaceholder")}
+            expandAllLabel={t("canvas.nodePalette.expandAll")}
+            collapseAllLabel={t("canvas.nodePalette.collapseAll")}
             allCategoriesExpanded={allCategoriesExpanded}
             canToggleAllCategories={canToggleAllCategories}
             onToggleAllCategories={toggleAllCategories}
           />
         </div>
       ) : null}
-      {status === 'error' && !catalog ? (
+      {status === "error" && !catalog ? (
         <p role="alert" className="px-2 py-3 text-sm text-destructive">
           {nodeCatalogErrorText(error, t)}
         </p>
       ) : !catalog ? (
         <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
-          {t('common.loading')}
+          {t("common.loading")}
         </p>
       ) : (
         <SidebarVirtualTree
           rows={rows}
-          ariaLabel={t('activityBar.nodes')}
-          emptyMessage={t('sidebar.nodeSearchNoMatches')}
+          ariaLabel={t("activityBar.nodes")}
+          emptyMessage={t("sidebar.nodeSearchNoMatches")}
           getRowKey={(row) => row.rowKey}
           getRowDepth={(row) => row.depth}
           estimateSize={rowEstimate}
           renderRow={(row) => (
             <SidebarCatalogTreeRow
               row={row}
-              expanded={row.kind === 'category'
-                && expandedCategoryIds.has(row.category.categoryId)}
+              expanded={row.kind === "category" && expandedCategoryIds.has(row.category.categoryId)}
               interactionDisabled={queryIsActive}
               onExpandedChange={(expanded) => {
-                if (row.kind === 'category') {
+                if (row.kind === "category") {
                   setCategoryExpanded(row.category.categoryId, expanded);
                 }
               }}

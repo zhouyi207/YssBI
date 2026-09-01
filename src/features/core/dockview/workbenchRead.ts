@@ -1,17 +1,17 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
-import { workbenchDockviewRuntime } from './workbenchDockviewInternal';
+import { workbenchDockviewRuntime } from "./workbenchDockviewInternal";
 import type {
   WorkbenchEdgePosition,
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from './workbenchTypes';
+} from "./workbenchTypes";
 
 export interface WorkbenchDockviewRead {
   readonly isReady: boolean;
   readonly isHydrated: boolean;
-  whenHydrated(): Promise<{ readonly status: 'hydrated' | 'unbound' }>;
+  whenHydrated(): Promise<{ readonly status: "hydrated" | "unbound" }>;
   subscribe(listener: () => void): () => void;
   getSnapshot(): DeepReadonly<{ revision: number; ready: boolean; hydrated: boolean }>;
   getPanel(panelInstanceId: string): DeepReadonly<WorkbenchPanelInfo> | undefined;
@@ -26,9 +26,4 @@ export interface WorkbenchDockviewRead {
 
 export const workbenchDockviewRead: WorkbenchDockviewRead = workbenchDockviewRuntime.read;
 
-export type {
-  WorkbenchEdgePosition,
-  WorkbenchEdgeState,
-  WorkbenchGroupInfo,
-  WorkbenchPanelInfo,
-};
+export type { WorkbenchEdgePosition, WorkbenchEdgeState, WorkbenchGroupInfo, WorkbenchPanelInfo };

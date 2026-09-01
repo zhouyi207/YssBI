@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { currentAppWindow } from '@/services/platform/appWindow';
-import { logger } from '@/features/application/observability/appLogger';
+import { useEffect, useState } from "react";
+import { currentAppWindow } from "@/services/platform/appWindow";
+import { logger } from "@/features/application/observability/appLogger";
 
 /** 跟踪当前 Tauri 窗口是否最大化（用于最大化按钮 tooltip） */
-export function useWindowMaximized(logTag = 'Window') {
+export function useWindowMaximized(logTag = "Window") {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export function useWindowMaximized(logTag = 'Window') {
         if (disposed) return;
         void win.isMaximized().then((result) => {
           if (result.ok && !disposed) setIsMaximized(result.value);
-          else if (!result.ok) logger.sys.warn('window maximized state unavailable', logTag);
+          else if (!result.ok) logger.sys.warn("window maximized state unavailable", logTag);
         });
       });
 

@@ -5,5 +5,5 @@ export interface EdgeData {
   readonly sourceNodeId: string;
   readonly targetNodeId?: string;
   readonly colorKey: string;
-  readonly edgeKind: 'exec' | 'data';
+  readonly edgeKind: "exec" | "data";
 }

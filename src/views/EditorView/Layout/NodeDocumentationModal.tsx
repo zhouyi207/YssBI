@@ -1,30 +1,30 @@
-import { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscBook, VscClose, VscSearch } from 'react-icons/vsc';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { VscBook, VscClose, VscSearch } from "react-icons/vsc";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { Input } from '@/components/ui/input';
-import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
-import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import { catalogItemKey } from '@/features/domain/nodeCatalog/catalogItem';
-import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
-import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { detailProseClass } from './Detail/shared/detailStyles';
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { nodeCatalogErrorText } from "@/features/application/nodeCatalog/nodeCatalogErrorPresentation";
+import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
+import { catalogItemKey } from "@/features/domain/nodeCatalog/catalogItem";
+import type { LocalizedCatalogItem } from "@/features/domain/nodeCatalog/catalogItem";
+import { MarkdownRenderer } from "@/shared/ui/MarkdownRenderer";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { detailProseClass } from "./Detail/shared/detailStyles";
 
 interface NodeDocumentationModalProps {
   open: boolean;
@@ -33,10 +33,10 @@ interface NodeDocumentationModalProps {
 
 function normalizeDocumentationQuery(value: string): string {
   return value
-    .normalize('NFKD')
-    .replace(/\p{Mark}/gu, '')
+    .normalize("NFKD")
+    .replace(/\p{Mark}/gu, "")
     .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}]+/gu, ' ')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
     .trim();
 }
 
@@ -44,10 +44,10 @@ function searchDocumentationItems(
   items: readonly LocalizedCatalogItem[],
   query: string,
 ): LocalizedCatalogItem[] {
-  const terms = normalizeDocumentationQuery(query).split(' ').filter(Boolean);
+  const terms = normalizeDocumentationQuery(query).split(" ").filter(Boolean);
   if (terms.length === 0) return [...items];
   return items.filter((item) => {
-    const text = normalizeDocumentationQuery([item.title, ...item.aliases].join(' '));
+    const text = normalizeDocumentationQuery([item.title, ...item.aliases].join(" "));
     return terms.every((term) => text.includes(term));
   });
 }
@@ -71,25 +71,31 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
       </div>
 
       <dl className="space-y-2">
-        <MetadataRow label={t('nodeDocumentationModal.nodeId')} value={item.nodeTypeId} />
+        <MetadataRow label={t("nodeDocumentationModal.nodeId")} value={item.nodeTypeId} />
         {item.resourcePath !== undefined ? (
-          <MetadataRow label={t('nodeDocumentationModal.resourcePath')} value={item.resourcePath} />
+          <MetadataRow label={t("nodeDocumentationModal.resourcePath")} value={item.resourcePath} />
         ) : null}
         {item.resourceRevision !== undefined ? (
-          <MetadataRow label={t('nodeDocumentationModal.resourceRevision')} value={item.resourceRevision} />
+          <MetadataRow
+            label={t("nodeDocumentationModal.resourceRevision")}
+            value={item.resourceRevision}
+          />
         ) : null}
       </dl>
 
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t('nodeDocumentationModal.ports')}
+          {t("nodeDocumentationModal.ports")}
         </h3>
         {item.ports.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('nodeDocumentationModal.noPorts')}</p>
+          <p className="text-xs text-muted-foreground">{t("nodeDocumentationModal.noPorts")}</p>
         ) : (
           <div className="space-y-1.5">
             {item.ports.map((port) => (
-              <div key={port.key} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <div
+                key={port.key}
+                className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              >
                 <span className="min-w-0 flex-1">{port.label}</span>
                 <code className="text-xs text-muted-foreground">{port.key}</code>
                 <Badge variant="secondary">{port.direction}</Badge>
@@ -102,10 +108,12 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
 
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t('nodeDocumentationModal.parameters')}
+          {t("nodeDocumentationModal.parameters")}
         </h3>
         {item.parameters.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('nodeDocumentationModal.noParameters')}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("nodeDocumentationModal.noParameters")}
+          </p>
         ) : (
           <div className="space-y-1.5">
             {item.parameters.map((parameter) => (
@@ -125,14 +133,16 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
 
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t('detail.nodeDoc.documentation')}
+          {t("detail.nodeDoc.documentation")}
         </h3>
         {item.documentation ? (
           <div className={detailProseClass}>
             <MarkdownRenderer markdown={item.documentation} />
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">{t('nodeDocumentationModal.noDocumentation')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("nodeDocumentationModal.noDocumentation")}
+          </p>
         )}
       </section>
     </div>
@@ -142,7 +152,7 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
 export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentationModalProps) {
   const { t } = useTranslation();
   const { status, error, catalog } = useLocalizedNodeCatalog();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const items = useMemo(
     () => searchDocumentationItems(catalog?.items ?? [], query),
@@ -157,16 +167,16 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <DialogTitle className="normal-case tracking-normal">
-                {t('nodeDocumentationModal.title')}
+                {t("nodeDocumentationModal.title")}
               </DialogTitle>
-              <DialogDescription>{t('nodeDocumentationModal.description')}</DialogDescription>
+              <DialogDescription>{t("nodeDocumentationModal.description")}</DialogDescription>
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               onClick={() => onOpenChange(false)}
-              aria-label={t('nodeDocumentationModal.close')}
+              aria-label={t("nodeDocumentationModal.close")}
             >
               <VscClose size={18} />
             </Button>
@@ -178,18 +188,18 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
             <Input
               className="h-8 shrink-0"
               value={query}
-              placeholder={t('nodeDocumentationModal.searchPlaceholder')}
+              placeholder={t("nodeDocumentationModal.searchPlaceholder")}
               onChange={(event) => setQuery(event.target.value)}
             />
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-1 pr-2">
-                {status === 'error' && !catalog ? (
+                {status === "error" && !catalog ? (
                   <p role="alert" className="px-2 py-3 text-sm text-destructive">
                     {nodeCatalogErrorText(error, t)}
                   </p>
                 ) : !catalog ? (
                   <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
-                    {t('common.loading')}
+                    {t("common.loading")}
                   </p>
                 ) : items.length === 0 ? (
                   <Empty className="min-h-32 gap-2 rounded-none px-2 py-4">
@@ -198,31 +208,33 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
                         <VscSearch />
                       </EmptyMedia>
                       <EmptyTitle className="text-xs font-normal text-muted-foreground">
-                        {t('nodeDocumentationModal.noMatches')}
+                        {t("nodeDocumentationModal.noMatches")}
                       </EmptyTitle>
                     </EmptyHeader>
                   </Empty>
-                ) : items.map((item) => {
-                  const key = catalogItemKey(item);
-                  const selected = key === selectedKey;
-                  return (
-                    <Button
-                      key={key}
-                      type="button"
-                      variant={selected ? 'secondary' : 'ghost'}
-                      className="h-auto w-full justify-start rounded-sm px-2 py-2 text-left font-normal"
-                      data-node-documentation-item={key}
-                      onClick={() => setSelectedKey(selected ? null : key)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate">{item.title}</span>
-                        <span className="block truncate font-mono text-[10px] text-muted-foreground">
-                          {item.nodeTypeId}
+                ) : (
+                  items.map((item) => {
+                    const key = catalogItemKey(item);
+                    const selected = key === selectedKey;
+                    return (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant={selected ? "secondary" : "ghost"}
+                        className="h-auto w-full justify-start rounded-sm px-2 py-2 text-left font-normal"
+                        data-node-documentation-item={key}
+                        onClick={() => setSelectedKey(selected ? null : key)}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate">{item.title}</span>
+                          <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                            {item.nodeTypeId}
+                          </span>
                         </span>
-                      </span>
-                    </Button>
-                  );
-                })}
+                      </Button>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
           </aside>
@@ -237,8 +249,8 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
                     <EmptyMedia variant="icon" className="size-10 text-muted-foreground">
                       <VscBook className="size-5" />
                     </EmptyMedia>
-                    <EmptyTitle>{t('nodeDocumentationModal.selectNode')}</EmptyTitle>
-                    <EmptyDescription>{t('nodeDocumentationModal.description')}</EmptyDescription>
+                    <EmptyTitle>{t("nodeDocumentationModal.selectNode")}</EmptyTitle>
+                    <EmptyDescription>{t("nodeDocumentationModal.description")}</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               )}

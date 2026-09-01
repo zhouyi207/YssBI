@@ -1,10 +1,10 @@
-export { useDockviewPortSnapshot } from './useDockviewPortSnapshot';
+export { useDockviewPortSnapshot } from "./useDockviewPortSnapshot";
 export {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
   useEditorPaneStateStore,
-} from './editorPaneStateStore';
-export type { EditorPaneSelection } from './editorPaneStateStore';
+} from "./editorPaneStateStore";
+export type { EditorPaneSelection } from "./editorPaneStateStore";
 export {
   componentForWorkbenchMetadata,
   isWorkbenchActivityMetadata,
@@ -14,7 +14,7 @@ export {
   layoutTabFromEditorMetadata,
   WORKBENCH_ACTIVITY_VIEW_IDS,
   WORKBENCH_VIEW_IDS,
-} from './workbenchPanelModel';
+} from "./workbenchPanelModel";
 export type {
   EditorPanelMetadata,
   EditorResourceKind,
@@ -25,7 +25,7 @@ export type {
   WorkbenchPanelParams,
   WorkbenchActivityViewId,
   WorkbenchViewId,
-} from './workbenchPanelModel';
+} from "./workbenchPanelModel";
 export {
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
@@ -34,34 +34,22 @@ export {
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_HOME_EDGE,
   WORKBENCH_RESET_BUCKET_ORDER,
-} from './workbenchDockviewDefaults';
-export {
-  workbenchDockviewRead,
-  type WorkbenchDockviewRead,
-} from './workbenchRead';
-export {
-  workbenchDockviewControl,
-  type WorkbenchDockviewControl,
-} from './workbenchControl';
+} from "./workbenchDockviewDefaults";
+export { workbenchDockviewRead, type WorkbenchDockviewRead } from "./workbenchRead";
+export { workbenchDockviewControl, type WorkbenchDockviewControl } from "./workbenchControl";
 export {
   workbenchDockviewRootBinding,
   type WorkbenchDockviewBindingToken,
   type WorkbenchDockviewRootBinding,
-} from './workbenchRootBinding';
-export {
-  logsDockviewRead,
-  type LogsDockviewRead,
-} from './logsRead';
-export {
-  logsDockviewControl,
-  type LogsDockviewControl,
-} from './logsControl';
+} from "./workbenchRootBinding";
+export { logsDockviewRead, type LogsDockviewRead } from "./logsRead";
+export { logsDockviewControl, type LogsDockviewControl } from "./logsControl";
 export {
   logsDockviewRootBinding,
   type LogsDockviewBindingToken,
   type LogsDockviewRootBinding,
-} from './logsRootBinding';
-export { WorkbenchLayoutError } from './workbenchTypes';
+} from "./logsRootBinding";
+export { WorkbenchLayoutError } from "./workbenchTypes";
 export type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,
@@ -75,4 +63,4 @@ export type {
   WorkbenchGroupInfo,
   WorkbenchLayoutErrorCode,
   WorkbenchPanelInfo,
-} from './workbenchTypes';
+} from "./workbenchTypes";

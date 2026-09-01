@@ -1,6 +1,6 @@
-import { AssistantRuntimeProvider } from '@/features/application/assistant/AssistantRuntimeProvider';
+import { AssistantRuntimeProvider } from "@/features/application/assistant/AssistantRuntimeProvider";
 
-import { AssistantThread } from './AssistantThread';
+import { AssistantThread } from "./AssistantThread";
 
 export function AssistantPanel() {
   return (

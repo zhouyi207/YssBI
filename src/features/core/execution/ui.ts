@@ -1,7 +1,7 @@
-import type { RecordedEvent } from '@/shared/types/ui/execution';
-import type { PinHistoryProjection } from '@/shared/types/ui/execution';
-import type { PortAddressDto } from '@/shared/types/domain/editorProjection';
-import { pinHistoryCacheKey } from './pinResultIndex';
+import type { RecordedEvent } from "@/shared/types/ui/execution";
+import type { PinHistoryProjection } from "@/shared/types/ui/execution";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import { pinHistoryCacheKey } from "./pinResultIndex";
 
 export interface ExecutionUi {
   readonly setRecording: (graphPath: string, recording: readonly RecordedEvent[]) => void;
@@ -9,7 +9,7 @@ export interface ExecutionUi {
   readonly resetVisuals: (graphPath: string) => void;
 }
 
-import { useExecutionStore } from './useExecutionStore';
+import { useExecutionStore } from "./useExecutionStore";
 
 export const executionUi: ExecutionUi = {
   setRecording: (graphPath, recording) =>
@@ -19,7 +19,9 @@ export const executionUi: ExecutionUi = {
 };
 
 export interface ExecutionResultUi {
-  readonly recordPinHistory: (projection: import('@/shared/types/ui/execution').PinHistoryProjection) => void;
+  readonly recordPinHistory: (
+    projection: import("@/shared/types/ui/execution").PinHistoryProjection,
+  ) => void;
   readonly getPinHistory: (
     graphPath: string,
     output: PortAddressDto,
@@ -29,10 +31,10 @@ export interface ExecutionResultUi {
 
 export const executionResultUi: ExecutionResultUi = {
   recordPinHistory: (projection) => useExecutionStore.getState().recordPinHistory(projection),
-  getPinHistory: (graphPath, output) => useExecutionStore
-    .getState()
-    .getGraph(graphPath)
-    .pinHistories
-    .get(pinHistoryCacheKey(graphPath, output)),
+  getPinHistory: (graphPath, output) =>
+    useExecutionStore
+      .getState()
+      .getGraph(graphPath)
+      .pinHistories.get(pinHistoryCacheKey(graphPath, output)),
   clearRunOutput: (graphPath) => useExecutionStore.getState().clearRunOutput(graphPath),
 };

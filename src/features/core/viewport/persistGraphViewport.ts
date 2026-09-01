@@ -1,7 +1,7 @@
-import { patchEditorViewStateViewport } from './editorViewStateMemento';
-import { getViewport } from './viewportSession';
-import { projectPathForViewport } from './projectPath';
-import type { ViewportScope } from './viewportScope';
+import { patchEditorViewStateViewport } from "./editorViewStateMemento";
+import { getViewport } from "./viewportSession";
+import { projectPathForViewport } from "./projectPath";
+import type { ViewportScope } from "./viewportScope";
 
 /** Persist the active pane viewport to project-scoped editor view state (per graph path). */
 export function persistGraphViewport(scope: ViewportScope | null | undefined): void {

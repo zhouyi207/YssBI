@@ -1,7 +1,10 @@
-import type { ResourceMoveDto } from '@/shared/types/domain/editorMutation';
-import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
-import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
-import { useGraphSessionStore, type FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
+import type { ResourceMoveDto } from "@/shared/types/domain/editorMutation";
+import { useGraphDataStore, useGraphMetaStore } from "@/features/core/dataStore";
+import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import {
+  useGraphSessionStore,
+  type FocusedGraphSession,
+} from "@/features/core/graphSession/graphSessionStore";
 import {
   buildGraphResourceMeta,
   lookupGraphResource,
@@ -11,12 +14,12 @@ import {
   type DocumentState,
   type ProjectResourceMeta,
   type ResourceKey,
-} from '@/features/core/resource';
-import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewport/viewportScope';
-import { useViewportStore } from '@/features/core/viewport/useViewportStore';
-import type { EditorViewport } from '@/features/core/viewport/editorViewport';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
+} from "@/features/core/resource";
+import { parseViewportScopeKey, viewportScopeKey } from "@/features/core/viewport/viewportScope";
+import { useViewportStore } from "@/features/core/viewport/useViewportStore";
+import type { EditorViewport } from "@/features/core/viewport/editorViewport";
+import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
 
 export interface PreparedResourceMoveSnapshot {
   readonly fromKey: ResourceKey;
@@ -35,12 +38,10 @@ export interface PreparedDocumentMoveSnapshot {
   readonly destinationAfter?: DocumentState;
 }
 
-
 export interface PreparedSessionMoveSnapshot {
   readonly before: FocusedGraphSession | null;
   readonly after: FocusedGraphSession | null;
 }
-
 
 interface PreparedGraphMetaMoveSnapshot {
   readonly source?: GraphMeta;
@@ -56,7 +57,7 @@ interface PreparedViewportMoveSnapshot {
 export interface PreparedGraphResourceMove {
   readonly from: string;
   readonly to: string;
-  readonly kind: 'event' | 'function';
+  readonly kind: "event" | "function";
   readonly name: string;
   readonly hasAuthoritativeDestinationReplacement: boolean;
   readonly resourceSnapshot: PreparedResourceMoveSnapshot;
@@ -68,7 +69,7 @@ export interface PreparedGraphResourceMove {
 }
 
 export interface PreparedWorksheetResourceMove {
-  readonly kind: 'worksheet';
+  readonly kind: "worksheet";
   readonly from: string;
   readonly to: string;
   readonly name: string;
@@ -82,14 +83,17 @@ export type PreparedResourceMove = PreparedGraphResourceMove | PreparedWorksheet
 
 function assertMove(
   move: ResourceMoveDto,
-): asserts move is ResourceMoveDto & { kind: 'event' | 'function' } {
-  if (!move.from || !move.to || move.from === move.to
-    || (move.kind !== 'event' && move.kind !== 'function')
-    || !move.name.trim()) {
-    throw new Error('graph resource move is malformed');
+): asserts move is ResourceMoveDto & { kind: "event" | "function" } {
+  if (
+    !move.from ||
+    !move.to ||
+    move.from === move.to ||
+    (move.kind !== "event" && move.kind !== "function") ||
+    !move.name.trim()
+  ) {
+    throw new Error("graph resource move is malformed");
   }
 }
-
 
 function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot {
   const before = structuredClone(useViewportStore.getState().viewports);
@@ -98,27 +102,32 @@ function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot
     const scope = parseViewportScopeKey(key);
     if (!scope || scope.graphPath !== from) continue;
     const destinationKey = viewportScopeKey({ ...scope, graphPath: to });
-    if (after[destinationKey]) throw new Error(`destination viewport '${destinationKey}' already exists`);
+    if (after[destinationKey])
+      throw new Error(`destination viewport '${destinationKey}' already exists`);
     after[destinationKey] = after[key];
     delete after[key];
   }
   return { before, after };
 }
 
-
 function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetResourceMove {
-  if (!move.from || !move.to || move.from === move.to
-    || move.kind !== 'worksheet' || !move.name.trim()) {
-    throw new Error('worksheet resource move is malformed');
+  if (
+    !move.from ||
+    !move.to ||
+    move.from === move.to ||
+    move.kind !== "worksheet" ||
+    !move.name.trim()
+  ) {
+    throw new Error("worksheet resource move is malformed");
   }
-  const fromKey = resourceKey({ id: move.from, kind: 'worksheet' });
-  const toKey = resourceKey({ id: move.to, kind: 'worksheet' });
+  const fromKey = resourceKey({ id: move.from, kind: "worksheet" });
+  const toKey = resourceKey({ id: move.to, kind: "worksheet" });
   const resources = structuredClone(useResourceStore.getState().resources) as Record<
     ResourceKey,
     ProjectResourceMeta
   >;
   const source = resources[fromKey];
-  if (!source || source.id !== move.from || source.kind !== 'worksheet') {
+  if (!source || source.id !== move.from || source.kind !== "worksheet") {
     throw new Error(`missing source resource identity '${move.from}'`);
   }
   if (resources[toKey]) throw new Error(`destination resource '${move.to}' already exists`);
@@ -127,7 +136,8 @@ function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetR
 
   const worksheet = useWorksheetStore.getState();
   const documents = structuredClone(worksheet.documents);
-  if (documents[move.to]) throw new Error(`destination worksheet document '${move.to}' already exists`);
+  if (documents[move.to])
+    throw new Error(`destination worksheet document '${move.to}' already exists`);
   if (documents[move.from]) {
     documents[move.to] = documents[move.from];
     delete documents[move.from];
@@ -137,9 +147,11 @@ function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetR
   }
   const sourceIndex = worksheet.index.find((entry) => entry.worksheetPath === move.from);
   if (!sourceIndex) throw new Error(`missing source worksheet index '${move.from}'`);
-  const index = worksheet.index.map((entry) => entry.worksheetPath === move.from
-    ? { ...entry, worksheetPath: move.to, name: move.name }
-    : structuredClone(entry));
+  const index = worksheet.index.map((entry) =>
+    entry.worksheetPath === move.from
+      ? { ...entry, worksheetPath: move.to, name: move.name }
+      : structuredClone(entry),
+  );
 
   const documentStates = structuredClone(useDocumentStateStore.getState().documents) as Record<
     ResourceKey,
@@ -152,7 +164,7 @@ function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetR
   }
 
   return Object.freeze({
-    kind: 'worksheet',
+    kind: "worksheet",
     from: move.from,
     to: move.to,
     name: move.name,
@@ -167,7 +179,7 @@ export function prepareResourceMove(
   move: ResourceMoveDto,
   hasAuthoritativeDestinationReplacement: boolean,
 ): PreparedResourceMove {
-  if (move.kind === 'worksheet') {
+  if (move.kind === "worksheet") {
     if (hasAuthoritativeDestinationReplacement) {
       throw new Error(`worksheet move '${move.from}' cannot own a graph projection replacement`);
     }
@@ -190,7 +202,9 @@ export function prepareGraphResourceMove(
     throw new Error(`destination resource '${move.to}' already exists`);
   }
   if (source.loaded !== hasAuthoritativeDestinationReplacement) {
-    throw new Error(`move destination replacement disagrees with source loaded ownership '${move.from}'`);
+    throw new Error(
+      `move destination replacement disagrees with source loaded ownership '${move.from}'`,
+    );
   }
   const graphState = useGraphDataStore.getState();
   if (graphState.graphEntities[move.to]) {
@@ -229,7 +243,9 @@ export function prepareGraphResourceMove(
       source: structuredClone(source),
       destinationBefore: undefined,
       destinationAfter,
-      graphOrderAfter: resourceState.graphOrder.map((path) => path === move.from ? move.to : path),
+      graphOrderAfter: resourceState.graphOrder.map((path) =>
+        path === move.from ? move.to : path,
+      ),
     }),
     documentSnapshot: Object.freeze({
       fromKey,

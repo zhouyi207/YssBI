@@ -12,7 +12,10 @@ import {
 } from "react-icons/vsc";
 import type { ManagedProject } from "@/features/application/project";
 import type { ActionMenuSection } from "@/shared/ui/actionMenu";
-import type { ProjectPickerContextMenuActions, ProjectPickerContextMenuState } from "./projectPickerContextMenuTypes";
+import type {
+  ProjectPickerContextMenuActions,
+  ProjectPickerContextMenuState,
+} from "./projectPickerContextMenuTypes";
 
 function buildListContextMenuSections(
   actions: ProjectPickerContextMenuActions,

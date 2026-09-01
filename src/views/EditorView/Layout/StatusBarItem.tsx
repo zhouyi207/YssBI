@@ -2,11 +2,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { StatusBarItemViewModel } from "@/features/core/statusBar";
 
-export function StatusBarItem({
-  item,
-}: {
-  item: StatusBarItemViewModel;
-}) {
+export function StatusBarItem({ item }: { item: StatusBarItemViewModel }) {
   const interactive = Boolean(item.onClick);
   const accessibleName = item.ariaLabel ?? item.tooltip;
   const cell = (

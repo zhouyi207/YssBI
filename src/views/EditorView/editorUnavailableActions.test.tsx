@@ -1,40 +1,40 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NodeContextMenu } from './ContextMenu/NodeContextMenu';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NodeContextMenu } from "./ContextMenu/NodeContextMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-describe('unavailable node actions', () => {
+describe("unavailable node actions", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
 
   afterEach(() => {
     act(() => root.unmount());
-    document.body.innerHTML = '';
+    document.body.innerHTML = "";
   });
 
   it.each([
     {
-      name: 'managed node',
+      name: "managed node",
       capabilities: { managed: true, canCopy: false, canDelete: false },
     },
     {
-      name: 'copyable but non-deletable node',
+      name: "copyable but non-deletable node",
       capabilities: { managed: false, canCopy: true, canDelete: false },
     },
-  ])('disables delete and cut for a $name', ({ capabilities }) => {
+  ])("disables delete and cut for a $name", ({ capabilities }) => {
     const onCut = vi.fn();
     const onDelete = vi.fn();
     act(() => {
@@ -54,17 +54,19 @@ describe('unavailable node actions', () => {
     });
 
     const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    const cut = items.find((item) => item.textContent?.includes('contextMenu.node.cut'));
-    const deleteButton = items.find((item) => item.textContent?.includes('contextMenu.node.delete'));
-    expect(cut?.hasAttribute('data-disabled')).toBe(true);
-    expect(deleteButton?.hasAttribute('data-disabled')).toBe(true);
+    const cut = items.find((item) => item.textContent?.includes("contextMenu.node.cut"));
+    const deleteButton = items.find((item) =>
+      item.textContent?.includes("contextMenu.node.delete"),
+    );
+    expect(cut?.hasAttribute("data-disabled")).toBe(true);
+    expect(deleteButton?.hasAttribute("data-disabled")).toBe(true);
     cut?.click();
     deleteButton?.click();
     expect(onCut).not.toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
   });
 
-  it('enables duplicate only for an unmanaged copyable node', () => {
+  it("enables duplicate only for an unmanaged copyable node", () => {
     const onDuplicate = vi.fn();
     act(() => {
       root.render(
@@ -82,14 +84,15 @@ describe('unavailable node actions', () => {
       );
     });
 
-    const duplicate = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((button) => button.textContent?.includes('contextMenu.node.duplicate')) as HTMLButtonElement;
-    expect(duplicate.hasAttribute('data-disabled')).toBe(false);
+    const duplicate = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (button) => button.textContent?.includes("contextMenu.node.duplicate"),
+    ) as HTMLButtonElement;
+    expect(duplicate.hasAttribute("data-disabled")).toBe(false);
     act(() => duplicate.click());
     expect(onDuplicate).toHaveBeenCalledOnce();
   });
 
-  it('requires both copy and delete capability before enabling cut', () => {
+  it("requires both copy and delete capability before enabling cut", () => {
     act(() => {
       root.render(
         <NodeContextMenu
@@ -107,9 +110,11 @@ describe('unavailable node actions', () => {
     });
 
     const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    const cut = items.find((item) => item.textContent?.includes('contextMenu.node.cut'));
-    const deleteButton = items.find((item) => item.textContent?.includes('contextMenu.node.delete'));
-    expect(cut?.hasAttribute('data-disabled')).toBe(true);
-    expect(deleteButton?.hasAttribute('data-disabled')).toBe(false);
+    const cut = items.find((item) => item.textContent?.includes("contextMenu.node.cut"));
+    const deleteButton = items.find((item) =>
+      item.textContent?.includes("contextMenu.node.delete"),
+    );
+    expect(cut?.hasAttribute("data-disabled")).toBe(true);
+    expect(deleteButton?.hasAttribute("data-disabled")).toBe(false);
   });
 });

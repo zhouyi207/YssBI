@@ -1,43 +1,42 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 import {
   clearEditorGroupGraphSelection,
   getEditorGroupGraphSelection,
-} from '@/features/core/layout/layoutTabQueries';
-import { getViewport, editorViewportScope } from '@/features/core/viewport';
-import { useModifierKeyStore } from '@/features/core/keyboard';
-import { useWorkbenchStore } from '@/features/core/workbench';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
-import { useHistoryStore } from '@/features/core/history';
-import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import { cancelCanvasInteraction } from '@/features/core/canvas/canvasInteractionCleanup';
-import { useEditorStore } from '@/features/core/editor';
-import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
-import { useEditorSessionCommandsContext } from './EditorSessionContext';
+} from "@/features/core/layout/layoutTabQueries";
+import { getViewport, editorViewportScope } from "@/features/core/viewport";
+import { useModifierKeyStore } from "@/features/core/keyboard";
+import { useWorkbenchStore } from "@/features/core/workbench";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { useHistoryStore } from "@/features/core/history";
+import {
+  getCanvasInteraction,
+  useGraphInteractionStore,
+} from "@/features/core/graphInteraction/graphInteractionStore";
+import { cancelCanvasInteraction } from "@/features/core/canvas/canvasInteractionCleanup";
+import { useEditorStore } from "@/features/core/editor";
+import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
+import { useEditorSessionCommandsContext } from "./EditorSessionContext";
 import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
   shouldIgnoreEditorShortcutEvent,
   type EditorCommandTarget,
-} from './editorCommandFocus';
-import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import { requestCloseWorkbenchPanel } from './workbenchPanelClose';
+} from "./editorCommandFocus";
+import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
   toggleWorkbenchView,
-} from '@/features/application/layout/workbenchLayoutActions';
+} from "@/features/application/layout/workbenchLayoutActions";
 
 function currentEditorCommandTarget(): EditorCommandTarget | null {
   const target = captureActiveEditorCommandTarget();
   return target && isEditorCommandTargetCurrent(target) ? target : null;
 }
 
-function getActiveCanvasLocalPoint(
-  target: EditorCommandTarget,
-  clientX: number,
-  clientY: number,
-) {
+function getActiveCanvasLocalPoint(target: EditorCommandTarget, clientX: number, clientY: number) {
   const element = document.querySelector(
     `[data-editor-panel-instance-id="${target.panelInstanceId}"]`,
   );
@@ -90,18 +89,18 @@ export function useEditorKeyboard(): void {
       const isControlKey = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         const target = currentEditorCommandTarget();
-        if (!target || target.resourceKind === 'worksheet') return;
+        if (!target || target.resourceKind === "worksheet") return;
         const interaction = getCanvasInteraction(
           useGraphInteractionStore.getState(),
           target.resourceRef,
           target.groupId,
         );
-        if (interaction.type !== 'idle') {
+        if (interaction.type !== "idle") {
           event.preventDefault();
           cancelCanvasInteraction(target.resourceRef, target.groupId);
-          if (interaction.type === 'pendingNodeCreation') {
+          if (interaction.type === "pendingNodeCreation") {
             useEditorStore.getState().setContextMenu(null);
           }
           return;
@@ -114,13 +113,13 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (event.key === 'F1') {
+      if (event.key === "F1") {
         event.preventDefault();
         useWorkbenchStore.getState().setNodeDocumentationOpen(true);
         return;
       }
 
-      if (!event.repeat && isControlKey && key === 'a') {
+      if (!event.repeat && isControlKey && key === "a") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -128,19 +127,25 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && key === 'f') {
+      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && key === "f") {
         const target = currentEditorCommandTarget();
         if (target && commands.focusSelectedNodes(target)) event.preventDefault();
         return;
       }
 
-      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && event.key === 'Home') {
+      if (
+        !event.repeat &&
+        !isControlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key === "Home"
+      ) {
         const target = currentEditorCommandTarget();
         if (target && commands.fitCompleteGraph(target)) event.preventDefault();
         return;
       }
 
-      if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (event.key === "Delete" || event.key === "Backspace") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -148,7 +153,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'z') {
+      if (isControlKey && key === "z") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         const { canUndo, canRedo, pending } = useHistoryStore.getState();
@@ -160,7 +165,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'y') {
+      if (isControlKey && key === "y") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         const { canRedo, pending } = useHistoryStore.getState();
@@ -171,7 +176,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'c') {
+      if (isControlKey && key === "c") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -179,7 +184,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'x') {
+      if (isControlKey && key === "x") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -187,7 +192,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'v') {
+      if (isControlKey && key === "v") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -202,7 +207,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'd') {
+      if (isControlKey && key === "d") {
         const target = currentEditorCommandTarget();
         if (!target) return;
         event.preventDefault();
@@ -212,7 +217,7 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 's') {
+      if (isControlKey && key === "s") {
         if (event.shiftKey) {
           event.preventDefault();
           void commands.saveGraphAs();
@@ -225,19 +230,19 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'o') {
+      if (isControlKey && key === "o") {
         event.preventDefault();
         void commands.importGraph();
         return;
       }
 
-      if (isControlKey && key === 'n') {
+      if (isControlKey && key === "n") {
         event.preventDefault();
         void commands.addEvent(undefined, { openAfterCreate: true });
         return;
       }
 
-      if (isControlKey && key === 'w') {
+      if (isControlKey && key === "w") {
         const activePanel = workbenchDockviewRead.getActivePanel();
         if (!activePanel) return;
         event.preventDefault();
@@ -245,12 +250,12 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && event.key === 'Tab') {
+      if (isControlKey && event.key === "Tab") {
         if (cyclePhysicalPanel(event.shiftKey)) event.preventDefault();
         return;
       }
 
-      if (isControlKey && event.key === '\\') {
+      if (isControlKey && event.key === "\\") {
         const target = currentEditorCommandTarget();
         if (!target || !isEditorCommandTargetCurrent(target)) return;
         event.preventDefault();
@@ -258,19 +263,19 @@ export function useEditorKeyboard(): void {
         return;
       }
 
-      if (isControlKey && key === 'b') {
+      if (isControlKey && key === "b") {
         event.preventDefault();
         void toggleActivityWorkbenchGroup();
         return;
       }
 
-      if (isControlKey && key === 'i') {
+      if (isControlKey && key === "i") {
         event.preventDefault();
-        void toggleWorkbenchView('inspect');
+        void toggleWorkbenchView("inspect");
         return;
       }
 
-      if (isControlKey && event.key === '`') {
+      if (isControlKey && event.key === "`") {
         event.preventDefault();
         void toggleBottomWorkbenchGroup();
       }
@@ -288,10 +293,14 @@ export function useEditorKeyboard(): void {
       resetModifierKeys();
     };
 
-    const cleanupKeyDown = addGlobalEventListener(window, 'keydown', handleKeyDown, { capture: true });
-    const cleanupKeyUp = addGlobalEventListener(window, 'keyup', handleKeyUp, { capture: true });
-    const cleanupPointerMove = addGlobalEventListener(window, 'pointermove', handlePointerMove, { capture: true });
-    const cleanupBlur = addGlobalEventListener(window, 'blur', handleBlur);
+    const cleanupKeyDown = addGlobalEventListener(window, "keydown", handleKeyDown, {
+      capture: true,
+    });
+    const cleanupKeyUp = addGlobalEventListener(window, "keyup", handleKeyUp, { capture: true });
+    const cleanupPointerMove = addGlobalEventListener(window, "pointermove", handlePointerMove, {
+      capture: true,
+    });
+    const cleanupBlur = addGlobalEventListener(window, "blur", handleBlur);
 
     return () => {
       cleanupKeyDown();

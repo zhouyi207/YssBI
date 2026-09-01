@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 
-import { act, createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useVisibleGraphPanel } from './useVisibleGraphPanel';
+import { useVisibleGraphPanel } from "./useVisibleGraphPanel";
 
 const mocks = vi.hoisted(() => ({
   synchronizeVisibleGraphPanel: vi.fn(async () => true),
 }));
 
-vi.mock('./synchronizeVisibleGraphPanel', () => ({
+vi.mock("./synchronizeVisibleGraphPanel", () => ({
   synchronizeVisibleGraphPanel: mocks.synchronizeVisibleGraphPanel,
 }));
 
@@ -39,11 +39,11 @@ function createPanelApi() {
   };
 }
 
-describe('useVisibleGraphPanel', () => {
+describe("useVisibleGraphPanel", () => {
   let host: HTMLDivElement;
   let root: Root;
   let api: ReturnType<typeof createPanelApi>;
-  let scope = { groupId: 'group-1', graphPath: 'events/Main.yssbi-event' };
+  let scope = { groupId: "group-1", graphPath: "events/Main.yssbi-event" };
 
   function Harness() {
     useVisibleGraphPanel(api, scope);
@@ -53,8 +53,8 @@ describe('useVisibleGraphPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api = createPanelApi();
-    scope = { groupId: 'group-1', graphPath: 'events/Main.yssbi-event' };
-    host = document.createElement('div');
+    scope = { groupId: "group-1", graphPath: "events/Main.yssbi-event" };
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -64,7 +64,7 @@ describe('useVisibleGraphPanel', () => {
     host.remove();
   });
 
-  it('waits for Dockview visibility before synchronizing a graph panel', async () => {
+  it("waits for Dockview visibility before synchronizing a graph panel", async () => {
     await act(async () => {
       root.render(createElement(Harness));
       await Promise.resolve();

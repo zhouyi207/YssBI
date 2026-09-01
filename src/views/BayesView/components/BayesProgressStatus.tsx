@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import type { TFunction } from 'i18next';
-import { useTranslation } from 'react-i18next';
-import type { BayesInferenceTaskDTO } from '@/shared/types/bayes';
-import { Progress } from '@/components/ui/progress';
+import { useEffect, useRef, useState } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
+import type { BayesInferenceTaskDTO } from "@/shared/types/bayes";
+import { Progress } from "@/components/ui/progress";
 
-export function BayesProgressStatus({ task, stageOverride }: { task: BayesInferenceTaskDTO; stageOverride?: string }) {
+export function BayesProgressStatus({
+  task,
+  stageOverride,
+}: {
+  task: BayesInferenceTaskDTO;
+  stageOverride?: string;
+}) {
   const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   const totalStartedAt = useRef(Date.now());
@@ -41,18 +47,23 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
     const previous = lastSample.current;
     if (previous && completed > previous.completed && timestamp > previous.at) {
       const currentRate = (completed - previous.completed) / ((timestamp - previous.at) / 1_000);
-      smoothedRate.current = smoothedRate.current === null
-        ? currentRate
-        : smoothedRate.current * 0.8 + currentRate * 0.2;
+      smoothedRate.current =
+        smoothedRate.current === null
+          ? currentRate
+          : smoothedRate.current * 0.8 + currentRate * 0.2;
     }
     lastSample.current = { completed, at: timestamp };
   }, [completed]);
 
   const hasSampleCount = completed !== undefined && total !== undefined && total > 0;
   const percentage = bayesOverallProgress(stage, completed, total);
-  const remainingSeconds = hasSampleCount && ['warmup', 'sampling'].includes(stage) && smoothedRate.current && completed > 0
-    ? Math.max(0, (total - completed) / smoothedRate.current)
-    : null;
+  const remainingSeconds =
+    hasSampleCount &&
+    ["warmup", "sampling"].includes(stage) &&
+    smoothedRate.current &&
+    completed > 0
+      ? Math.max(0, (total - completed) / smoothedRate.current)
+      : null;
   const totalElapsedSeconds = Math.max(0, (now - totalStartedAt.current) / 1_000);
   const stageElapsedSeconds = Math.max(0, (now - stageStartedAt.current) / 1_000);
 
@@ -60,7 +71,9 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
     <div className="w-64 space-y-1">
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="truncate text-foreground">{bayesProgressStageLabel(stage, t)}</span>
-        <span className="shrink-0 font-mono text-muted-foreground">{percentage === null ? '' : `${percentage}%`}</span>
+        <span className="shrink-0 font-mono text-muted-foreground">
+          {percentage === null ? "" : `${percentage}%`}
+        </span>
       </div>
       {percentage !== null ? (
         <Progress value={percentage} max={100} className="h-1.5" />
@@ -71,25 +84,34 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
       )}
       <div className="flex justify-between gap-3 text-[10px] text-muted-foreground">
         <span>
-          {hasSampleCount && ['warmup', 'sampling'].includes(stage)
-            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${t('bayes.progress.stageElapsed', { duration: formatDuration(stageElapsedSeconds) })}`
-            : t('bayes.progress.stageElapsed', { duration: formatDuration(stageElapsedSeconds) })}
+          {hasSampleCount && ["warmup", "sampling"].includes(stage)
+            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${t("bayes.progress.stageElapsed", { duration: formatDuration(stageElapsedSeconds) })}`
+            : t("bayes.progress.stageElapsed", { duration: formatDuration(stageElapsedSeconds) })}
         </span>
         <span>
           {remainingSeconds === null
-            ? t('bayes.progress.totalElapsed', { duration: formatDuration(totalElapsedSeconds) })
-            : t('bayes.progress.remainingAndTotal', {
-              remaining: formatDuration(remainingSeconds),
-              total: formatDuration(totalElapsedSeconds),
-            })}
+            ? t("bayes.progress.totalElapsed", { duration: formatDuration(totalElapsedSeconds) })
+            : t("bayes.progress.remainingAndTotal", {
+                remaining: formatDuration(remainingSeconds),
+                total: formatDuration(totalElapsedSeconds),
+              })}
         </span>
       </div>
     </div>
   );
 }
 
-export function bayesOverallProgress(stage: string, completed?: number, total?: number): number | null {
-  if (['warmup', 'sampling'].includes(stage) && completed !== undefined && total !== undefined && total > 0) {
+export function bayesOverallProgress(
+  stage: string,
+  completed?: number,
+  total?: number,
+): number | null {
+  if (
+    ["warmup", "sampling"].includes(stage) &&
+    completed !== undefined &&
+    total !== undefined &&
+    total > 0
+  ) {
     return Math.min(90, Math.round((completed / total) * 90));
   }
   const milestones: Record<string, number> = {
@@ -113,26 +135,26 @@ export function bayesOverallProgress(stage: string, completed?: number, total?: 
 }
 
 const BAYES_PROGRESS_STAGE_KEYS: Record<string, string> = {
-  queued: 'bayes.progress.stages.queued',
-  running: 'bayes.progress.stages.running',
-  materializing_data: 'bayes.progress.stages.materializingData',
-  loading_model: 'bayes.progress.stages.loadingModel',
-  loading_data: 'bayes.progress.stages.loadingData',
-  preparing_response: 'bayes.progress.stages.preparingResponse',
-  loading_kernels: 'bayes.progress.stages.loadingKernels',
-  preparing_kernels: 'bayes.progress.stages.preparingKernels',
-  building_model: 'bayes.progress.stages.buildingModel',
-  initializing_nuts: 'bayes.progress.stages.initializingNuts',
-  warmup: 'bayes.progress.stages.warmup',
-  sampling: 'bayes.progress.stages.sampling',
-  summarizing: 'bayes.progress.stages.summarizing',
-  writing_samples: 'bayes.progress.stages.writingSamples',
-  posterior_predictive: 'bayes.progress.stages.posteriorPredictive',
-  finalizing: 'bayes.progress.stages.finalizing',
-  reading_result: 'bayes.progress.stages.readingResult',
-  writing_artifacts: 'bayes.progress.stages.writingArtifacts',
-  rendering_result: 'bayes.progress.stages.renderingResult',
-  cancelling: 'bayes.progress.stages.cancelling',
+  queued: "bayes.progress.stages.queued",
+  running: "bayes.progress.stages.running",
+  materializing_data: "bayes.progress.stages.materializingData",
+  loading_model: "bayes.progress.stages.loadingModel",
+  loading_data: "bayes.progress.stages.loadingData",
+  preparing_response: "bayes.progress.stages.preparingResponse",
+  loading_kernels: "bayes.progress.stages.loadingKernels",
+  preparing_kernels: "bayes.progress.stages.preparingKernels",
+  building_model: "bayes.progress.stages.buildingModel",
+  initializing_nuts: "bayes.progress.stages.initializingNuts",
+  warmup: "bayes.progress.stages.warmup",
+  sampling: "bayes.progress.stages.sampling",
+  summarizing: "bayes.progress.stages.summarizing",
+  writing_samples: "bayes.progress.stages.writingSamples",
+  posterior_predictive: "bayes.progress.stages.posteriorPredictive",
+  finalizing: "bayes.progress.stages.finalizing",
+  reading_result: "bayes.progress.stages.readingResult",
+  writing_artifacts: "bayes.progress.stages.writingArtifacts",
+  rendering_result: "bayes.progress.stages.renderingResult",
+  cancelling: "bayes.progress.stages.cancelling",
 };
 
 export function bayesProgressStageLabel(stage: string, t: TFunction): string {
@@ -145,6 +167,7 @@ export function formatDuration(seconds: number): string {
   const hours = Math.floor(rounded / 3_600);
   const minutes = Math.floor((rounded % 3_600) / 60);
   const remaining = rounded % 60;
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
-  return `${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+  if (hours > 0)
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
 }

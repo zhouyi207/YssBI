@@ -8,24 +8,24 @@ import {
   isNonNegativeInteger,
   isRecord,
   isString,
-} from './guards';
-import type { Coefficient, ModelBasicInfo } from './regression';
+} from "./guards";
+import type { Coefficient, ModelBasicInfo } from "./regression";
 
 export function parseCoefficient(raw: unknown): Coefficient | null {
   if (!isRecord(raw) || !isString(raw.variable) || !isFiniteNumber(raw.coef)) return null;
-  if (typeof raw.is_significant !== 'boolean') return null;
+  if (typeof raw.is_significant !== "boolean") return null;
   return {
     variable: raw.variable,
-    category: typeof raw.category === 'string' ? raw.category : undefined,
+    category: typeof raw.category === "string" ? raw.category : undefined,
     coef: raw.coef,
     std_err: isFiniteNumber(raw.std_err) ? raw.std_err : undefined,
     t_value: isFiniteNumber(raw.t_value) ? raw.t_value : undefined,
     p_value: isFiniteNumber(raw.p_value) ? raw.p_value : undefined,
-    'confidence_interval_0.025': isFiniteNumber(raw['confidence_interval_0.025'])
-      ? raw['confidence_interval_0.025']
+    "confidence_interval_0.025": isFiniteNumber(raw["confidence_interval_0.025"])
+      ? raw["confidence_interval_0.025"]
       : undefined,
-    'confidence_interval_0.975': isFiniteNumber(raw['confidence_interval_0.975'])
-      ? raw['confidence_interval_0.975']
+    "confidence_interval_0.975": isFiniteNumber(raw["confidence_interval_0.975"])
+      ? raw["confidence_interval_0.975"]
       : undefined,
     is_significant: raw.is_significant,
   };
@@ -43,36 +43,36 @@ export function parseCoefficientList(raw: unknown): Coefficient[] | null {
 }
 
 const MODEL_BASIC_OPTIONAL_KEYS = [
-  'wald_chi2',
-  'prob_wald_chi2',
-  'log_likelihood',
-  'lr_chi2',
-  'prob_lr_chi2',
-  'chibar2',
-  'prob_chibar2',
-  'mle_iter_log_lik_const',
-  'mle_iter_log_lik',
-  'aic',
-  'bic',
+  "wald_chi2",
+  "prob_wald_chi2",
+  "log_likelihood",
+  "lr_chi2",
+  "prob_lr_chi2",
+  "chibar2",
+  "prob_chibar2",
+  "mle_iter_log_lik_const",
+  "mle_iter_log_lik",
+  "aic",
+  "bic",
 ] as const satisfies readonly (keyof ModelBasicInfo)[];
 
 export function parseModelBasicInfo(raw: unknown): ModelBasicInfo | null {
   if (!isRecord(raw)) return null;
   const requiredNumbers = [
-    'num_observation',
-    'r_squared',
-    'adj_r_squared',
-    'f_statistic',
-    'prob_f_statistic',
-    'df_model',
-    'df_residual',
-    'df_total',
-    'ss_model',
-    'ss_residual',
-    'ss_total',
-    'ms_model',
-    'ms_residual',
-    'ms_total',
+    "num_observation",
+    "r_squared",
+    "adj_r_squared",
+    "f_statistic",
+    "prob_f_statistic",
+    "df_model",
+    "df_residual",
+    "df_total",
+    "ss_model",
+    "ss_residual",
+    "ss_total",
+    "ms_model",
+    "ms_residual",
+    "ms_total",
   ] as const;
   for (const key of requiredNumbers) {
     if (!isFiniteNumber(raw[key])) return null;

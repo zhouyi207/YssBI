@@ -1,16 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
 import {
   nodeDisplayTitle,
   pinDisplayTitle,
   portAddressKey,
-} from '@/features/domain/editorProjection';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+} from "@/features/domain/editorProjection";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import {
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
   type PinResultSearchEntry,
-} from '@/features/core/execution/pinResultSearch';
-import { useExecutionStore } from '@/features/core/execution';
+} from "@/features/core/execution/pinResultSearch";
+import { useExecutionStore } from "@/features/core/execution";
 
 export function usePinResultSearch(graphPath: string, query: string) {
   const historyCount = useExecutionStore(
@@ -27,8 +27,8 @@ export function usePinResultSearch(graphPath: string, query: string) {
       const node = graphStore.getGraphNode(history.graphPath, history.output.nodeId);
       const pin = graphStore.getGraphPin(history.graphPath, portAddressKey(history.output));
       return {
-        nodeTitle: nodeDisplayTitle(node) ?? '',
-        pinName: pinDisplayTitle(pin) ?? '',
+        nodeTitle: nodeDisplayTitle(node) ?? "",
+        pinName: pinDisplayTitle(pin) ?? "",
       };
     });
   }, [graphPath, graphBucket, historyCount]);

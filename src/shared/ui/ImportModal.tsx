@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload, VscChevronRight } from "react-icons/vsc";
+import {
+  VscDatabase,
+  VscClose,
+  VscFile,
+  VscTable,
+  VscCloudDownload,
+  VscChevronRight,
+} from "react-icons/vsc";
 import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,25 +32,72 @@ type ImportTypeConfig = {
 };
 
 const CATEGORIES: { id: CategoryId; icon: React.ReactNode; tone: string }[] = [
-  { id: "file", icon: <VscFile size={16} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300" },
-  { id: "sql", icon: <BsDatabaseFill size={15} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300" },
-  { id: "other", icon: <VscCloudDownload size={16} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300" },
+  {
+    id: "file",
+    icon: <VscFile size={16} />,
+    tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300",
+  },
+  {
+    id: "sql",
+    icon: <BsDatabaseFill size={15} />,
+    tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
+  },
+  {
+    id: "other",
+    icon: <VscCloudDownload size={16} />,
+    tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300",
+  },
 ];
 
 const FILE_TYPES: ImportTypeConfig[] = [
-  { id: "csv", icon: <VscFile size={20} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300", comingSoon: false },
-  { id: "xlsx", icon: <VscTable size={20} />, tone: "text-green-600 bg-green-500/10 dark:text-green-300", comingSoon: false },
+  {
+    id: "csv",
+    icon: <VscFile size={20} />,
+    tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300",
+    comingSoon: false,
+  },
+  {
+    id: "xlsx",
+    icon: <VscTable size={20} />,
+    tone: "text-green-600 bg-green-500/10 dark:text-green-300",
+    comingSoon: false,
+  },
 ];
 
 const SQL_TYPES: ImportTypeConfig[] = [
-  { id: "sqlite", icon: <BsDatabaseFill size={19} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300", comingSoon: false },
-  { id: "postgres", icon: <BsDatabaseFill size={19} />, tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300", comingSoon: false },
-  { id: "mysql", icon: <BsDatabaseFill size={19} />, tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300", comingSoon: false },
-  { id: "mariadb", icon: <BsDatabaseFill size={19} />, tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300", comingSoon: false },
+  {
+    id: "sqlite",
+    icon: <BsDatabaseFill size={19} />,
+    tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
+    comingSoon: false,
+  },
+  {
+    id: "postgres",
+    icon: <BsDatabaseFill size={19} />,
+    tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300",
+    comingSoon: false,
+  },
+  {
+    id: "mysql",
+    icon: <BsDatabaseFill size={19} />,
+    tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300",
+    comingSoon: false,
+  },
+  {
+    id: "mariadb",
+    icon: <BsDatabaseFill size={19} />,
+    tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300",
+    comingSoon: false,
+  },
 ];
 
 const OTHER_TYPES: ImportTypeConfig[] = [
-  { id: "api", icon: <VscCloudDownload size={20} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300", comingSoon: true },
+  {
+    id: "api",
+    icon: <VscCloudDownload size={20} />,
+    tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300",
+    comingSoon: true,
+  },
 ];
 
 const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
@@ -81,7 +135,9 @@ function TypeOptionCard({
       )}
     >
       <div className="flex w-full items-start gap-3">
-        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", type.tone)}>
+        <div
+          className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", type.tone)}
+        >
           {type.icon}
         </div>
         <div className="min-w-0 flex-1">
@@ -93,7 +149,9 @@ function TypeOptionCard({
               </Badge>
             )}
           </div>
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
         </div>
         {!type.comingSoon && (
           <VscChevronRight
@@ -106,7 +164,13 @@ function TypeOptionCard({
   );
 }
 
-export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions; onClose: () => void }) => {
+export const ImportModal = ({
+  options,
+  onClose,
+}: {
+  options: ImportDialogOptions;
+  onClose: () => void;
+}) => {
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
   const types = CATEGORY_TYPES[selectedCategory];
@@ -153,7 +217,12 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
                     active && "bg-background shadow-sm",
                   )}
                 >
-                  <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded", cat.tone)}>
+                  <span
+                    className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded",
+                      cat.tone,
+                    )}
+                  >
                     {cat.icon}
                   </span>
                   <span className="truncate">{t(`importModal.categories.${cat.id}`)}</span>
@@ -165,7 +234,12 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
           <ScrollArea className="min-h-0 flex-1">
             <div className="grid gap-2 p-4 sm:grid-cols-1">
               {types.map((type) => (
-                <TypeOptionCard key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
+                <TypeOptionCard
+                  key={type.id}
+                  type={type}
+                  onSelect={options.onSelect}
+                  onClose={onClose}
+                />
               ))}
             </div>
           </ScrollArea>

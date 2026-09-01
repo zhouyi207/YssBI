@@ -4,7 +4,7 @@ export {
   type LocalizedCatalogItem,
   type LocalizedCatalogParameter,
   type LocalizedCatalogPort,
-} from './catalogItem';
+} from "./catalogItem";
 export {
   BUILTIN_NODE_TYPE_IDS,
   isCallFunctionNodeType,
@@ -12,11 +12,11 @@ export {
   isVariableNodeType,
   type NodeTypeId,
   type VariableNodeTypeId,
-} from './identity';
+} from "./identity";
 export {
   buildLocalizedCatalogTree,
   collectLocalizedCatalogCategoryIds,
   flattenLocalizedCatalogTree,
   type LocalizedCatalogBrowserRow,
   type LocalizedCatalogTreeNode,
-} from './localizedCatalogTree';
+} from "./localizedCatalogTree";

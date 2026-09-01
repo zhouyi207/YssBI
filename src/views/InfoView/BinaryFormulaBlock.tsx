@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { InfoSegmentedToggle } from './shared/InfoViewControls';
-import { FormulaMappingTable } from './shared/FormulaMappingTable';
-import { formatNum } from './shared/utils';
-import type { Coefficient } from '@/shared/types/report';
+import React, { useMemo, useState } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { InfoSegmentedToggle } from "./shared/InfoViewControls";
+import { FormulaMappingTable } from "./shared/FormulaMappingTable";
+import { formatNum } from "./shared/utils";
+import type { Coefficient } from "@/shared/types/report";
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);
 }
 
-type EquationMode = 'expanded' | 'symbolic';
+type EquationMode = "expanded" | "symbolic";
 
 interface VariableMapping {
   symbol: string;
@@ -25,12 +25,12 @@ function buildEtaTerms(coefficients: Coefficient[]): string {
   const terms: string[] = [];
   for (const c of coefficients) {
     const coefStr = formatNum(c.coef);
-    if (c.variable === 'const') {
+    if (c.variable === "const") {
       terms.push(coefStr);
       continue;
     }
     const absCoef = formatNum(Math.abs(c.coef));
-    const sign = c.coef >= 0 ? '+' : '-';
+    const sign = c.coef >= 0 ? "+" : "-";
     let varLabel: string;
     if (c.category != null) {
       varLabel = `\\mathbb{1}(\\text{${escapeLatex(c.variable)}} = \\text{${escapeLatex(c.category)}})`;
@@ -43,18 +43,18 @@ function buildEtaTerms(coefficients: Coefficient[]): string {
       terms.push(`${sign} ${absCoef} \\cdot ${varLabel}`);
     }
   }
-  return terms.join(' ');
+  return terms.join(" ");
 }
 
 /** Multi-line formula, no chained equality. Uses \\begin{gathered} for center alignment. */
 function buildExpandedLatex(
   endogName: string,
   coefficients: Coefficient[],
-  modelType: 'Logit' | 'Probit'
+  modelType: "Logit" | "Probit",
 ): string {
   const etaTerms = buildEtaTerms(coefficients);
   const yPart = `P(\\text{${escapeLatex(endogName)}}=1 \\mid x)`;
-  if (modelType === 'Logit') {
+  if (modelType === "Logit") {
     return `\\begin{gathered}
   ${yPart} = \\sigma(\\eta) \\\\
   \\sigma(\\eta) = \\frac{1}{1+e^{-\\eta}} \\\\
@@ -68,17 +68,21 @@ function buildExpandedLatex(
 \\end{gathered}`;
 }
 
-function buildSymbolicData(endogName: string, coefficients: Coefficient[], modelType: 'Logit' | 'Probit') {
+function buildSymbolicData(
+  endogName: string,
+  coefficients: Coefficient[],
+  modelType: "Logit" | "Probit",
+) {
   const mappings: VariableMapping[] = [];
   const terms: string[] = [];
   let xi = 1;
 
-  mappings.push({ symbol: 'y', variable: endogName, coef: NaN });
+  mappings.push({ symbol: "y", variable: endogName, coef: NaN });
 
   for (const c of coefficients) {
-    if (c.variable === 'const') {
-      mappings.push({ symbol: '\\beta_0', variable: 'const', coef: c.coef });
-      terms.push('\\beta_0');
+    if (c.variable === "const") {
+      mappings.push({ symbol: "\\beta_0", variable: "const", coef: c.coef });
+      terms.push("\\beta_0");
       continue;
     }
     const sym = `x_{${xi}}`;
@@ -88,10 +92,10 @@ function buildSymbolicData(endogName: string, coefficients: Coefficient[], model
     xi++;
   }
 
-  const etaPart = terms.join(' + ');
+  const etaPart = terms.join(" + ");
   const yPart = `P(y=1 \\mid x)`;
   const latex =
-    modelType === 'Logit'
+    modelType === "Logit"
       ? `\\begin{gathered}
   ${yPart} = \\sigma(\\eta) \\\\
   \\sigma(\\eta) = \\frac{1}{1+e^{-\\eta}} \\\\
@@ -118,17 +122,21 @@ function renderInlineKatex(latex: string): string | null {
 }
 
 interface BinaryFormulaBlockProps {
-  modelType: 'Logit' | 'Probit';
+  modelType: "Logit" | "Probit";
   endogName: string;
   coefficients: Coefficient[];
 }
 
-const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({ modelType, endogName, coefficients }) => {
-  const [mode, setMode] = useState<EquationMode>('symbolic');
+const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({
+  modelType,
+  endogName,
+  coefficients,
+}) => {
+  const [mode, setMode] = useState<EquationMode>("symbolic");
 
   const expandedHtml = useMemo(
     () => renderKatex(buildExpandedLatex(endogName, coefficients, modelType)),
-    [endogName, coefficients, modelType]
+    [endogName, coefficients, modelType],
   );
 
   const { symbolicHtml, mappings } = useMemo(() => {
@@ -146,8 +154,8 @@ const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({ modelType, endo
           value={mode}
           onValueChange={setMode}
           options={[
-            { value: 'symbolic', label: 'Symbolic' },
-            { value: 'expanded', label: 'Expanded' },
+            { value: "symbolic", label: "Symbolic" },
+            { value: "expanded", label: "Expanded" },
           ]}
         />
       </div>
@@ -156,14 +164,18 @@ const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({ modelType, endo
       <ScrollArea orientation="both">
         <div
           className="px-6 py-5 min-w-full [&_.katex]:text-foreground [&_.katex]:text-[1.05em] [&_.katex-display]:py-3 [&_.katex-display]:leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
+          dangerouslySetInnerHTML={{
+            __html: (mode === "expanded" ? expandedHtml : symbolicHtml) || "",
+          }}
         />
       </ScrollArea>
 
       {/* Mapping table (symbolic mode only) */}
-      {mode === 'symbolic' && (
+      {mode === "symbolic" && (
         <div className="border-t border-border px-4 pb-4 pt-3">
-          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+            Variable Mapping
+          </div>
           <FormulaMappingTable
             mappings={mappings}
             hasCat={hasCat}
@@ -171,7 +183,10 @@ const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({ modelType, endo
             renderSymbol={(symbol) => {
               const symHtml = renderInlineKatex(symbol);
               return symHtml ? (
-                <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+                <span
+                  className="[&_.katex]:text-[var(--accent-color)]"
+                  dangerouslySetInnerHTML={{ __html: symHtml }}
+                />
               ) : (
                 <span className="font-mono text-[var(--accent-color)]">{symbol}</span>
               );

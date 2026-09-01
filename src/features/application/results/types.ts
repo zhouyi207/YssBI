@@ -1,4 +1,4 @@
-import type { ErrorReference } from '@/shared/types/domain/diagnostics';
+import type { ErrorReference } from "@/shared/types/domain/diagnostics";
 
 export type {
   ResultPlotKind as PlotChart,
@@ -8,9 +8,9 @@ export type {
   ResultDescriptor,
   ResultPage,
   ResultValue,
-} from '@/shared/types/domain/result';
+} from "@/shared/types/domain/result";
 
-export type ResultRendererKind = 'sequence' | 'dataseries' | 'scalar' | 'json' | 'plot' | 'info';
+export type ResultRendererKind = "sequence" | "dataseries" | "scalar" | "json" | "plot" | "info";
 
 export interface ResultPageState {
   offset: number;

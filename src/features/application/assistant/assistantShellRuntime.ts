@@ -2,7 +2,7 @@ import {
   useExternalStoreRuntime,
   type AppendMessage,
   type ThreadMessageLike,
-} from '@assistant-ui/react';
+} from "@assistant-ui/react";
 
 const EMPTY_ASSISTANT_MESSAGES: readonly ThreadMessageLike[] = Object.freeze([]);
 

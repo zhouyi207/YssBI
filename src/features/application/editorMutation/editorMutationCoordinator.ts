@@ -1,33 +1,30 @@
-import { markResourceStale } from '@/features/core/resource';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
+import { markResourceStale } from "@/features/core/resource";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
   HistoryStatusDto,
   MutationRequestDto,
-} from '@/shared/types/domain/editorMutation';
-import { GraphMutationService } from '@/services/nodeSystem/graphMutationService';
-import { isApplicationIpcErrorCode } from '@/features/application/errorReference';
-import { hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+} from "@/shared/types/domain/editorMutation";
+import { GraphMutationService } from "@/services/nodeSystem/graphMutationService";
+import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
+import { hydrateGraphProjection } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { applyMutationResult, validateMutationResult } from './applyMutationResult';
-import { setHistoryStatus } from './historyCoordinator';
-import {
-  graphMutationErrorCode,
-  type GraphMutationRejectionCode,
-} from './graphMutationError';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { applyMutationResult, validateMutationResult } from "./applyMutationResult";
+import { setHistoryStatus } from "./historyCoordinator";
+import { graphMutationErrorCode, type GraphMutationRejectionCode } from "./graphMutationError";
 import {
   completePendingMutation,
   registerPendingMutation,
   resetPendingMutations,
   type PendingMutationRecord,
-} from './pendingMutationRegistry';
+} from "./pendingMutationRegistry";
 
 export interface ExecuteEditorMutationInput {
   graphPath: string;
@@ -48,19 +45,15 @@ export interface EditorMutationCoordinatorDependencies {
 }
 
 export type ExecuteEditorMutationOutcome =
-  | { status: 'applied'; result: GraphMutationResultDto }
-  | { status: 'noop'; result: GraphMutationResultDto }
-  | { status: 'stale'; result?: GraphMutationResultDto }
-  | { status: 'conflict' }
-  | { status: 'rejected'; code: GraphMutationRejectionCode };
-
-
+  | { status: "applied"; result: GraphMutationResultDto }
+  | { status: "noop"; result: GraphMutationResultDto }
+  | { status: "stale"; result?: GraphMutationResultDto }
+  | { status: "conflict" }
+  | { status: "rejected"; code: GraphMutationRejectionCode };
 
 function defaultOperationId(): string {
   return crypto.randomUUID();
 }
-
-
 
 const defaultDependencies: EditorMutationCoordinatorDependencies = {
   createOperationId: defaultOperationId,
@@ -71,7 +64,7 @@ const defaultDependencies: EditorMutationCoordinatorDependencies = {
 };
 
 function isRevisionConflict(error: unknown): boolean {
-  return isApplicationIpcErrorCode(error, 'graph_revision_conflict');
+  return isApplicationIpcErrorCode(error, "graph_revision_conflict");
 }
 
 async function requestAuthoritativeHydrate(
@@ -101,7 +94,7 @@ export async function executeEditorMutation(
     baseRevision: basis.graphRevision,
   };
   const request: MutationRequestDto<EditorGraphMutationDto> = {
-    resource: { kind: 'graph', key: input.graphPath },
+    resource: { kind: "graph", key: input.graphPath },
     baseRevision: pending.baseRevision,
     operationId,
     payload: input.mutation,
@@ -118,28 +111,31 @@ export async function executeEditorMutation(
         request,
       );
     } catch (error) {
-      if (!isCurrentProjectIdentity(identity)
-        || isApplicationIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        isApplicationIpcErrorCode(error, "stale_project_lifecycle")
+      )
+        return { status: "stale" };
       if (isRevisionConflict(error)) {
         await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
-        return { status: 'conflict' };
+        return { status: "conflict" };
       }
       const code = graphMutationErrorCode(error);
-      if (code && code !== 'graph_revision_conflict') return { status: 'rejected', code };
+      if (code && code !== "graph_revision_conflict") return { status: "rejected", code };
       throw error;
     }
 
-    if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
+    if (!isCurrentProjectIdentity(identity)) return { status: "stale", result };
 
     try {
       validateMutationResult(identity.projectInstanceId, pending, result);
       if (result.delta.toRevision === result.delta.fromRevision) {
-        return { status: 'noop', result };
+        return { status: "noop", result };
       }
       const applied = applyMutationResult(identity.projectInstanceId, pending, result);
       if (!applied.applied) {
         await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
-        return { status: 'stale', result };
+        return { status: "stale", result };
       }
     } catch (error) {
       await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
@@ -147,13 +143,11 @@ export async function executeEditorMutation(
     }
 
     dependencies.updateHistoryStatus(result.history);
-    return { status: 'applied', result };
+    return { status: "applied", result };
   } finally {
     completePendingMutation(operationId);
   }
 }
-
-
 
 export function resetEditorMutationCoordinator(): void {
   resetPendingMutations();

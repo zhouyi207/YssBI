@@ -1,18 +1,15 @@
-import { useCallback, useMemo, useState } from 'react';
-import { revealDetails } from '@/features/application/editor';
+import { useCallback, useMemo, useState } from "react";
+import { revealDetails } from "@/features/application/editor";
 import {
   useDiagnosticSubscription,
   type DiagnosticSubscriptionStatus,
-} from '@/features/application/log';
-import { useEditorUi } from '@/features/core/editor/ui';
-import { editorUi } from '@/features/core/editor/ui';
-import { logBuffer, useLiveLogs } from '@/features/application/log';
-import { useLogStore } from '@/features/application/log';
-import type { DiagnosticLogFilter } from '@/features/application/log';
-import type {
-  DiagnosticLevel,
-  DiagnosticRecordDto,
-} from '@/shared/types/domain/diagnostics';
+} from "@/features/application/log";
+import { useEditorUi } from "@/features/core/editor/ui";
+import { editorUi } from "@/features/core/editor/ui";
+import { logBuffer, useLiveLogs } from "@/features/application/log";
+import { useLogStore } from "@/features/application/log";
+import type { DiagnosticLogFilter } from "@/features/application/log";
+import type { DiagnosticLevel, DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
 
 export interface LogWorkspaceController {
   readonly logs: readonly DiagnosticRecordDto[];
@@ -45,17 +42,20 @@ export function useLogWorkspaceController(): LogWorkspaceController {
   const clearDetailFocus = editorUi.clearDetailFocus;
   const [refreshScrollToken, setRefreshScrollToken] = useState(0);
 
-  const selectLog = useCallback((log: DiagnosticRecordDto | null) => {
-    setSelectedLog(log);
-    if (log) {
-      void revealDetails({ kind: 'log' });
-      return;
-    }
+  const selectLog = useCallback(
+    (log: DiagnosticRecordDto | null) => {
+      setSelectedLog(log);
+      if (log) {
+        void revealDetails({ kind: "log" });
+        return;
+      }
 
-    if (detailFocus?.kind === 'log') {
-      clearDetailFocus();
-    }
-  }, [clearDetailFocus, detailFocus, setSelectedLog]);
+      if (detailFocus?.kind === "log") {
+        clearDetailFocus();
+      }
+    },
+    [clearDetailFocus, detailFocus, setSelectedLog],
+  );
 
   const clearLogs = useCallback(() => {
     logBuffer.clear();
@@ -69,38 +69,41 @@ export function useLogWorkspaceController(): LogWorkspaceController {
     }
   }, [autoScroll, reconnect]);
 
-  const loading = subscriptionStatus === 'connecting';
+  const loading = subscriptionStatus === "connecting";
   const isInitialLoad = loading && streamId === null && logs.length === 0;
 
-  return useMemo(() => ({
-    logs,
-    filter,
-    selectedLog,
-    autoScroll,
-    loading,
-    isInitialLoad,
-    subscriptionStatus,
-    refreshScrollToken,
-    toggleLevel,
-    setSearchText,
-    setAutoScroll,
-    refreshLogs,
-    clearLogs,
-    selectLog,
-  }), [
-    autoScroll,
-    clearLogs,
-    filter,
-    isInitialLoad,
-    loading,
-    logs,
-    refreshLogs,
-    refreshScrollToken,
-    selectLog,
-    selectedLog,
-    setAutoScroll,
-    setSearchText,
-    subscriptionStatus,
-    toggleLevel,
-  ]);
+  return useMemo(
+    () => ({
+      logs,
+      filter,
+      selectedLog,
+      autoScroll,
+      loading,
+      isInitialLoad,
+      subscriptionStatus,
+      refreshScrollToken,
+      toggleLevel,
+      setSearchText,
+      setAutoScroll,
+      refreshLogs,
+      clearLogs,
+      selectLog,
+    }),
+    [
+      autoScroll,
+      clearLogs,
+      filter,
+      isInitialLoad,
+      loading,
+      logs,
+      refreshLogs,
+      refreshScrollToken,
+      selectLog,
+      selectedLog,
+      setAutoScroll,
+      setSearchText,
+      subscriptionStatus,
+      toggleLevel,
+    ],
+  );
 }

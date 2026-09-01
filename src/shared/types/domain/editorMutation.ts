@@ -1,19 +1,19 @@
-import type { WorksheetDocumentState } from '@/shared/types/domain/worksheet';
-import type { DatabaseDocumentDto } from '@/shared/types/domain/database';
-import type { NodeCreationDescriptorDto } from '@/shared/types/domain/nodeCreationDescriptor';
+import type { WorksheetDocumentState } from "@/shared/types/domain/worksheet";
+import type { DatabaseDocumentDto } from "@/shared/types/domain/database";
+import type { NodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
   NodePositionDto,
   PortAddressDto,
-} from '@/shared/types/domain/editorProjection';
+} from "@/shared/types/domain/editorProjection";
 
 export type ResourceKeyDto =
-  | { kind: 'graph'; key: string }
-  | { kind: 'function'; key: string }
-  | { kind: 'variable'; key: string }
-  | { kind: 'database'; key: string }
-  | { kind: 'worksheet'; key: string };
+  | { kind: "graph"; key: string }
+  | { kind: "function"; key: string }
+  | { kind: "variable"; key: string }
+  | { kind: "database"; key: string }
+  | { kind: "worksheet"; key: string };
 
 export interface MutationRequestDto<TPayload> {
   resource: ResourceKeyDto;
@@ -24,7 +24,7 @@ export interface MutationRequestDto<TPayload> {
 
 export type EditorGraphMutationDto =
   | {
-      type: 'createNode';
+      type: "createNode";
       payload: {
         descriptor: NodeCreationDescriptorDto;
         position: NodePositionDto;
@@ -32,45 +32,45 @@ export type EditorGraphMutationDto =
         connectFrom: PortAddressDto | null;
       };
     }
-  | { type: 'deleteNodes'; payload: { nodeIds: string[] } }
+  | { type: "deleteNodes"; payload: { nodeIds: string[] } }
   | {
-      type: 'setParameters';
+      type: "setParameters";
       payload: { nodeId: string; parameters: Record<string, unknown> };
     }
   | {
-      type: 'moveNodes';
+      type: "moveNodes";
       payload: { positions: Array<{ nodeId: string; position: NodePositionDto }> };
     }
   | {
-      type: 'connect';
+      type: "connect";
       payload: { output: PortAddressDto; input: PortAddressDto; order: string | null };
     }
-  | { type: 'disconnectConnections'; payload: { connectionIds: string[] } }
+  | { type: "disconnectConnections"; payload: { connectionIds: string[] } }
   | {
-      type: 'insertReroute';
+      type: "insertReroute";
       payload: {
         connectionId: string;
         position: NodePositionDto;
       };
     }
-  | { type: 'disconnectPort'; payload: { address: PortAddressDto } }
-  | { type: 'disconnectNode'; payload: { nodeId: string } }
+  | { type: "disconnectPort"; payload: { address: PortAddressDto } }
+  | { type: "disconnectNode"; payload: { nodeId: string } }
   | {
-      type: 'moveConnections';
+      type: "moveConnections";
       payload: { source: PortAddressDto; target: PortAddressDto };
     }
-  | { type: 'setLiteral'; payload: { address: PortAddressDto; literal: unknown | null } }
+  | { type: "setLiteral"; payload: { address: PortAddressDto; literal: unknown | null } }
   | {
-      type: 'addPortInstance';
+      type: "addPortInstance";
       payload: { nodeId: string; template: string; order: string | null };
     }
-  | { type: 'removePortInstance'; payload: { address: PortAddressDto } }
+  | { type: "removePortInstance"; payload: { address: PortAddressDto } }
   | {
-      type: 'duplicateSubgraph';
+      type: "duplicateSubgraph";
       payload: { nodeIds: string[]; offset: NodePositionDto };
     }
   | {
-      type: 'insertSubgraph';
+      type: "insertSubgraph";
       payload: { snapshotJson: string; anchor: NodePositionDto };
     };
 
@@ -84,8 +84,8 @@ export interface HistoryStatusDto {
 export type DocumentPortAddressDto = {
   node_id: string;
   port:
-    | { kind: 'declared'; key: string }
-    | { kind: 'instance'; template: string; instance_id: string };
+    | { kind: "declared"; key: string }
+    | { kind: "instance"; template: string; instance_id: string };
 };
 
 export interface DocumentNodeDto {
@@ -105,12 +105,12 @@ export interface DocumentConnectionDto {
 
 export type DynamicMemberLocatorDto =
   | {
-      kind: 'function_parameter';
+      kind: "function_parameter";
       function: string;
       parameter: string;
     }
   | {
-      kind: 'schema_field';
+      kind: "schema_field";
       source: string;
       field: string;
     };
@@ -120,18 +120,18 @@ export type TypeExprDto =
   | { Generic: string }
   | { Applied: { constructor: string; arguments: TypeExprDto[] } }
   | { Union: TypeExprDto[] }
-  | 'Unknown';
+  | "Unknown";
 
 export type DynamicPortBindingDto =
-  | { kind: 'user_created'; order: string }
+  | { kind: "user_created"; order: string }
   | {
-      kind: 'resolved';
+      kind: "resolved";
       origin: DynamicMemberLocatorDto;
       order: string;
       last_known?: { label: string; value_type?: TypeExprDto };
     }
   | {
-      kind: 'orphan';
+      kind: "orphan";
       origin: DynamicMemberLocatorDto;
       order: string;
       last_known: { label: string; value_type?: TypeExprDto };
@@ -142,17 +142,17 @@ export interface InputStateDto {
 }
 
 export type GraphDocumentOperationDto =
-  | { operation: 'insert_node'; node: DocumentNodeDto }
-  | { operation: 'remove_node'; node: DocumentNodeDto }
-  | { operation: 'update_node'; before: DocumentNodeDto; after: DocumentNodeDto }
+  | { operation: "insert_node"; node: DocumentNodeDto }
+  | { operation: "remove_node"; node: DocumentNodeDto }
+  | { operation: "update_node"; before: DocumentNodeDto; after: DocumentNodeDto }
   | {
-      operation: 'insert_port_binding' | 'remove_port_binding';
+      operation: "insert_port_binding" | "remove_port_binding";
       address: DocumentPortAddressDto;
       binding: DynamicPortBindingDto;
     }
-  | { operation: 'insert_connection' | 'remove_connection'; connection: DocumentConnectionDto }
+  | { operation: "insert_connection" | "remove_connection"; connection: DocumentConnectionDto }
   | {
-      operation: 'set_input_state';
+      operation: "set_input_state";
       address: DocumentPortAddressDto;
       before: InputStateDto | null;
       after: InputStateDto | null;
@@ -198,7 +198,7 @@ export interface ResourcePathMovePatchDto {
   to: string;
 }
 
-export type ResourceLifecycleKindDto = 'event' | 'function' | 'worksheet';
+export type ResourceLifecycleKindDto = "event" | "function" | "worksheet";
 
 export interface ResourceLifecycleStateDto {
   revision: number;
@@ -213,14 +213,14 @@ export interface ResourceLifecyclePatchDto {
 }
 
 export type ResourceDocumentPatchDto =
-  | { kind: 'graph'; patch: GraphDocumentPatchDto }
-  | { kind: 'function'; patch: FunctionDocumentPatchDto }
-  | { kind: 'worksheet'; patch: WorksheetDocumentPatchDto }
-  | { kind: 'resource_lifecycle'; patch: ResourceLifecyclePatchDto }
-  | { kind: 'resource_move'; patch: ResourcePathMovePatchDto }
-  | { kind: 'variable'; patch: VariableDocumentPatchDto }
-  | { kind: 'variable_scope_move'; patch: ResourcePathMovePatchDto }
-  | { kind: 'database'; patch: DatabaseDocumentPatchDto };
+  | { kind: "graph"; patch: GraphDocumentPatchDto }
+  | { kind: "function"; patch: FunctionDocumentPatchDto }
+  | { kind: "worksheet"; patch: WorksheetDocumentPatchDto }
+  | { kind: "resource_lifecycle"; patch: ResourceLifecyclePatchDto }
+  | { kind: "resource_move"; patch: ResourcePathMovePatchDto }
+  | { kind: "variable"; patch: VariableDocumentPatchDto }
+  | { kind: "variable_scope_move"; patch: ResourcePathMovePatchDto }
+  | { kind: "database"; patch: DatabaseDocumentPatchDto };
 
 export interface GraphDeltaDto<TPayload = GraphDocumentPatchDto> {
   graphPath: string;
@@ -246,8 +246,8 @@ export interface GraphMutationResultDto {
 }
 
 export type ProjectionStatusDto =
-  | { status: 'complete'; expectedGraphPaths: string[] }
-  | { status: 'incomplete'; invalidatedGraphPaths: string[] };
+  | { status: "complete"; expectedGraphPaths: string[] }
+  | { status: "incomplete"; invalidatedGraphPaths: string[] };
 
 export interface ResourceMoveDto {
   from: string;

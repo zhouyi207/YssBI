@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentAppWindow, type AppWindowHandle } from '@/services/platform/appWindow';
-import type { PlatformOutcome } from '@/services/platform/platformTypes';
-import { useCurrentWindowActions, type CurrentWindowActions } from './useCurrentWindowActions';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { currentAppWindow, type AppWindowHandle } from "@/services/platform/appWindow";
+import type { PlatformOutcome } from "@/services/platform/platformTypes";
+import { useCurrentWindowActions, type CurrentWindowActions } from "./useCurrentWindowActions";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('@/services/platform/appWindow', () => ({
+vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
 
@@ -20,9 +20,10 @@ interface FakeWindow extends AppWindowHandle {
 function makeWindow(initialMaximized: boolean): FakeWindow {
   let maximized = initialMaximized;
   let resizeListener: (() => void) | undefined;
-  const success = <T,>(value: T): Promise<PlatformOutcome<T>> => Promise.resolve({ ok: true, value } as const);
+  const success = <T,>(value: T): Promise<PlatformOutcome<T>> =>
+    Promise.resolve({ ok: true, value } as const);
   const handle: FakeWindow = {
-    label: 'main',
+    label: "main",
     show: vi.fn(() => success(undefined)),
     setTitle: vi.fn((_title: string) => success(undefined)),
     minimize: vi.fn(() => success(undefined)),
@@ -46,21 +47,23 @@ function makeWindow(initialMaximized: boolean): FakeWindow {
   return handle;
 }
 
-function failure(operation: 'minimizeWindow'): PlatformOutcome<void> {
+function failure(operation: "minimizeWindow"): PlatformOutcome<void> {
   return {
     ok: false,
-    failure: { operation, code: 'operationFailed', incidentId: 'incident-window-42' },
+    failure: { operation, code: "operationFailed", incidentId: "incident-window-42" },
   };
 }
 
-describe('useCurrentWindowActions', () => {
+describe("useCurrentWindowActions", () => {
   let host: HTMLDivElement;
   let root: Root;
   let actions!: CurrentWindowActions;
 
   function Harness() {
     actions = useCurrentWindowActions();
-    return <output data-maximized={String(actions.maximized)} data-issue={actions.issue?.code ?? ''} />;
+    return (
+      <output data-maximized={String(actions.maximized)} data-issue={actions.issue?.code ?? ""} />
+    );
   }
 
   async function flush() {
@@ -72,7 +75,7 @@ describe('useCurrentWindowActions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -82,12 +85,10 @@ describe('useCurrentWindowActions', () => {
     host.remove();
   });
 
-  it('refreshes maximize state only from the currently mounted window generation', async () => {
+  it("refreshes maximize state only from the currently mounted window generation", async () => {
     const previous = makeWindow(false);
     const current = makeWindow(false);
-    vi.mocked(currentAppWindow)
-      .mockReturnValueOnce(previous)
-      .mockReturnValueOnce(current);
+    vi.mocked(currentAppWindow).mockReturnValueOnce(previous).mockReturnValueOnce(current);
 
     await act(async () => root.render(<Harness />));
     await flush();
@@ -101,31 +102,34 @@ describe('useCurrentWindowActions', () => {
       current.triggerResize();
       await Promise.resolve();
     });
-    expect(host.querySelector('output')?.dataset.maximized).toBe('true');
+    expect(host.querySelector("output")?.dataset.maximized).toBe("true");
 
     previous.setMaximized(false);
     await act(async () => {
       previous.triggerResize();
       await Promise.resolve();
     });
-    expect(host.querySelector('output')?.dataset.maximized).toBe('true');
+    expect(host.querySelector("output")?.dataset.maximized).toBe("true");
     expect(previous.isMaximized).toHaveBeenCalledOnce();
   });
 
-  it('maps a typed platform failure to a safe issue without rejecting the action', async () => {
+  it("maps a typed platform failure to a safe issue without rejecting the action", async () => {
     const window = makeWindow(false);
-    vi.mocked(window.minimize).mockResolvedValueOnce(failure('minimizeWindow'));
+    vi.mocked(window.minimize).mockResolvedValueOnce(failure("minimizeWindow"));
     vi.mocked(currentAppWindow).mockReturnValue(window);
 
     await act(async () => root.render(<Harness />));
     await flush();
-    let outcome: Awaited<ReturnType<CurrentWindowActions['minimize']>> | undefined;
+    let outcome: Awaited<ReturnType<CurrentWindowActions["minimize"]>> | undefined;
     await act(async () => {
       outcome = await actions.minimize();
     });
 
-    expect(outcome).toEqual({ status: 'failed' });
-    expect(actions.issue).toEqual({ code: 'window_action_failed', incidentId: 'incident-window-42' });
-    expect(host.querySelector('output')?.dataset.issue).toBe('window_action_failed');
+    expect(outcome).toEqual({ status: "failed" });
+    expect(actions.issue).toEqual({
+      code: "window_action_failed",
+      incidentId: "incident-window-42",
+    });
+    expect(host.querySelector("output")?.dataset.issue).toBe("window_action_failed");
   });
 });

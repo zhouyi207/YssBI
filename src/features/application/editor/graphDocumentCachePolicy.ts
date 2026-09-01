@@ -1,6 +1,6 @@
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { shouldRetainGraphDocument } from './graphDocumentRetention';
-import { unloadGraphDocument } from './graphDocumentUnload';
+import { useGraphDataStore } from "@/features/core/dataStore";
+import { shouldRetainGraphDocument } from "./graphDocumentRetention";
+import { unloadGraphDocument } from "./graphDocumentUnload";
 
 /** Max in-memory graph documents (VS Code-style cap for split-screen). */
 export const MAX_HYDRATED_GRAPH_DOCUMENTS = 4;
@@ -21,7 +21,9 @@ export async function enforceGraphDocumentCacheLimit(): Promise<void> {
     .sort((a, b) => (lastAccessAt.get(a) ?? 0) - (lastAccessAt.get(b) ?? 0));
 
   for (const path of evictionOrder) {
-    if (Object.keys(useGraphDataStore.getState().graphEntities).length <= MAX_HYDRATED_GRAPH_DOCUMENTS) {
+    if (
+      Object.keys(useGraphDataStore.getState().graphEntities).length <= MAX_HYDRATED_GRAPH_DOCUMENTS
+    ) {
       break;
     }
     await unloadGraphDocument(path);

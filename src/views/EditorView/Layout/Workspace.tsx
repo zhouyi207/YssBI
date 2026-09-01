@@ -1,15 +1,5 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useRef,
-  type KeyboardEvent,
-} from 'react';
-import {
-  DockviewReact,
-  type DockviewReadyEvent,
-  type IWatermarkPanelProps,
-} from 'dockview-react';
+import { forwardRef, useCallback, useEffect, useRef, type KeyboardEvent } from "react";
+import { DockviewReact, type DockviewReadyEvent, type IWatermarkPanelProps } from "dockview-react";
 import {
   DndContext,
   DragOverlay,
@@ -18,39 +8,39 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 
-import { executeEditorDragEnd } from '@/features/application/editor/editorDragDropActions';
-import { synchronizeActiveEditorTab } from '@/features/application/editor/switchEditorTab';
-import { useWorkbenchLayout } from '@/features/application/layout/useWorkbenchLayout';
-import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
-import { layoutTabFromEditorMetadata, workbenchDockviewRead } from '@/features/core/dockview';
-import { buildSidebarDragState, isSidebarSpawnDrag, parseCanvasDragPayload } from '@/features/core/dnd';
-import { snapTopLeftToCursor } from '@/features/core/dnd/snapTopLeftToCursorModifier';
-import { keyboardUi } from '@/features/core/keyboard/ui';
-import { useSettingsRead } from '@/features/core/settings/read';
-import { sidebarDragUi } from '@/features/core/sidebarDrag/ui';
-import { resolveYssbiDockviewTheme } from '@/shared/theme/dockviewTheme';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
-import { WatermarkView } from '../Canvas/overlays/WatermarkView';
-import { WorkbenchActivityActions } from './WorkbenchActivityActions';
-import { WorkbenchDockviewTab } from './WorkbenchDockviewTab';
-import { workbenchDockviewComponents } from './WorkbenchDockviewPanels';
-import { WorkspaceDragOverlay } from './WorkspaceDragOverlay';
+import { executeEditorDragEnd } from "@/features/application/editor/editorDragDropActions";
+import { synchronizeActiveEditorTab } from "@/features/application/editor/switchEditorTab";
+import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
+import { workbenchLayoutController } from "@/features/application/layout/workbenchLayoutController";
+import { layoutTabFromEditorMetadata, workbenchDockviewRead } from "@/features/core/dockview";
+import {
+  buildSidebarDragState,
+  isSidebarSpawnDrag,
+  parseCanvasDragPayload,
+} from "@/features/core/dnd";
+import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
+import { keyboardUi } from "@/features/core/keyboard/ui";
+import { useSettingsRead } from "@/features/core/settings/read";
+import { sidebarDragUi } from "@/features/core/sidebarDrag/ui";
+import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { WatermarkView } from "../Canvas/overlays/WatermarkView";
+import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
+import { WorkbenchDockviewTab } from "./WorkbenchDockviewTab";
+import { workbenchDockviewComponents } from "./WorkbenchDockviewPanels";
+import { WorkspaceDragOverlay } from "./WorkspaceDragOverlay";
 
 function WorkbenchDockviewWatermark(_: IWatermarkPanelProps) {
   return <WatermarkView />;
 }
 
-function preventDockviewNativeTabClose(
-  event: KeyboardEvent<HTMLDivElement>,
-): void {
-  if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "Delete" && event.key !== "Backspace") return;
   if (!(event.target instanceof Element)) return;
-  const tab = event.target.closest('.dv-tab');
-  const owningHost = tab?.closest(
-    '[data-yssbi-root-dockview], [data-yssbi-logs-dockview]',
-  );
+  const tab = event.target.closest(".dv-tab");
+  const owningHost = tab?.closest("[data-yssbi-root-dockview], [data-yssbi-logs-dockview]");
   if (!tab || owningHost !== event.currentTarget) return;
   event.preventDefault();
   event.stopPropagation();
@@ -64,32 +54,36 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
   const bindWorkbenchLayout = useWorkbenchLayout();
   const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
   const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  useEffect(
+    () => () => {
+      activationDisposableRef.current?.dispose();
+      activationDisposableRef.current = null;
+      pointerMoveCleanupRef.current?.();
+      pointerMoveCleanupRef.current = null;
+    },
+    [],
   );
 
-  useEffect(() => () => {
-    activationDisposableRef.current?.dispose();
-    activationDisposableRef.current = null;
-    pointerMoveCleanupRef.current?.();
-    pointerMoveCleanupRef.current = null;
-  }, []);
+  const onDockviewReady = useCallback(
+    (event: DockviewReadyEvent) => {
+      bindWorkbenchLayout(event);
+      activationDisposableRef.current?.dispose();
+      activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
+        if (!workbenchDockviewRead.isHydrated || !workbenchLayoutController.projectResourcesReady)
+          return;
 
-  const onDockviewReady = useCallback((event: DockviewReadyEvent) => {
-    bindWorkbenchLayout(event);
-    activationDisposableRef.current?.dispose();
-    activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
-      if (!workbenchDockviewRead.isHydrated
-        || !workbenchLayoutController.projectResourcesReady) return;
-
-      const activePanel = workbenchDockviewRead.getActivePanel();
-      if (activePanel?.metadata.role !== 'editor') return;
-      void synchronizeActiveEditorTab(
-        activePanel.groupId,
-        layoutTabFromEditorMetadata(activePanel.metadata),
-      );
-    });
-  }, [bindWorkbenchLayout]);
+        const activePanel = workbenchDockviewRead.getActivePanel();
+        if (activePanel?.metadata.role !== "editor") return;
+        void synchronizeActiveEditorTab(
+          activePanel.groupId,
+          layoutTabFromEditorMetadata(activePanel.metadata),
+        );
+      });
+    },
+    [bindWorkbenchLayout],
+  );
 
   const finishSidebarDrag = useCallback(() => {
     pointerMoveCleanupRef.current?.();
@@ -101,15 +95,13 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
     const activeData = parseCanvasDragPayload(event.active.data.current);
     if (!isSidebarSpawnDrag(activeData)) return;
     const activatorEvent = event.activatorEvent as PointerEvent;
-    setActiveDrag(buildSidebarDragState(
-      activeData,
-      activatorEvent?.clientX ?? 0,
-      activatorEvent?.clientY ?? 0,
-    ));
+    setActiveDrag(
+      buildSidebarDragState(activeData, activatorEvent?.clientX ?? 0, activatorEvent?.clientY ?? 0),
+    );
     pointerMoveCleanupRef.current?.();
     pointerMoveCleanupRef.current = addGlobalEventListener(
       document,
-      'pointermove',
+      "pointermove",
       (pointerEvent) => {
         updatePosition(pointerEvent.clientX, pointerEvent.clientY);
         setModifierKeys(pointerEvent);
@@ -122,11 +114,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div ref={ref} className="relative flex min-w-0 flex-1 overflow-hidden">
         <div
           data-yssbi-root-dockview
@@ -153,4 +141,4 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
   );
 });
 
-Workspace.displayName = 'Workspace';
+Workspace.displayName = "Workspace";

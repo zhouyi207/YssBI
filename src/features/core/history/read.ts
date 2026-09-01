@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useHistoryStore, type HistoryStoreState } from './historyStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useHistoryStore, type HistoryStoreState } from "./historyStore";
 
 export type HistoryProjectionSnapshot = DeepReadonly<HistoryStoreState>;
 
@@ -38,9 +38,7 @@ export function subscribeHistoryRead(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useHistoryRead<T>(
-  selector: (snapshot: HistoryProjectionSnapshot) => T,
-): T {
+export function useHistoryRead<T>(selector: (snapshot: HistoryProjectionSnapshot) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeHistoryRead,
     getHistorySnapshot,

@@ -1,12 +1,12 @@
-import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { waitForPendingGraphMutations } from '@/features/application/editorMutation/pendingMutationRegistry';
+import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { waitForPendingGraphMutations } from "@/features/application/editorMutation/pendingMutationRegistry";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 export interface ProjectCommandContext {
   projectInstanceId: string;

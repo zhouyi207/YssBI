@@ -1,17 +1,13 @@
-import { useMemo } from 'react';
-import { ClientSideRowModelModule, type ColDef } from 'ag-grid-community';
-import {
-  AgGridReact,
-  type CustomCellRendererProps,
-  type CustomHeaderProps,
-} from 'ag-grid-react';
-import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { useMemo } from "react";
+import { ClientSideRowModelModule, type ColDef } from "ag-grid-community";
+import { AgGridReact, type CustomCellRendererProps, type CustomHeaderProps } from "ag-grid-react";
+import { buildAgGridTheme } from "@/components/data-grid/agGridTheme";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
   DATABASE_EDITOR_ROW_HEIGHT,
   DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-} from '@/shared/config-default';
+} from "@/shared/config-default";
 
 export interface ReadOnlyColumnMeta {
   name: string;
@@ -28,7 +24,7 @@ interface ReadOnlyDataGridProps {
 }
 
 type GridRow = unknown[];
-type ColumnDataKind = 'number' | 'boolean' | 'string';
+type ColumnDataKind = "number" | "boolean" | "string";
 
 type ReadOnlyHeaderProps = CustomHeaderProps<GridRow> & {
   columnType?: string;
@@ -47,29 +43,29 @@ const DEFAULT_COLUMN_DEF: ColDef<GridRow> = {
 };
 
 function dtypeToKind(dtype?: string): ColumnDataKind {
-  const normalized = (dtype ?? '').toLowerCase();
+  const normalized = (dtype ?? "").toLowerCase();
   if (
-    normalized.includes('int') ||
-    normalized.includes('float') ||
-    normalized.includes('double') ||
-    normalized.includes('number')
+    normalized.includes("int") ||
+    normalized.includes("float") ||
+    normalized.includes("double") ||
+    normalized.includes("number")
   ) {
-    return 'number';
+    return "number";
   }
-  if (normalized.includes('bool')) return 'boolean';
-  return 'string';
+  if (normalized.includes("bool")) return "boolean";
+  return "string";
 }
 
 function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
 function ReadOnlyColumnHeader({ displayName, columnType }: ReadOnlyHeaderProps) {
   const kind = dtypeToKind(columnType);
   const typeLabel = columnType || kind;
-  const typeMarker = kind === 'number' ? '123' : kind === 'boolean' ? '✓' : 'ABC';
+  const typeMarker = kind === "number" ? "123" : kind === "boolean" ? "✓" : "ABC";
 
   return (
     <div
@@ -89,19 +85,19 @@ function ReadOnlyColumnHeader({ displayName, columnType }: ReadOnlyHeaderProps) 
 }
 
 function ReadOnlyCellRenderer({ value }: CustomCellRendererProps<GridRow, unknown>) {
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     return (
       <span className="inline-flex h-full w-full items-center justify-center">
         <span
           aria-hidden="true"
           className={[
-            'inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[10px] leading-none',
+            "inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[10px] leading-none",
             value
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-muted-foreground/60 bg-transparent',
-          ].join(' ')}
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-muted-foreground/60 bg-transparent",
+          ].join(" ")}
         >
-          {value ? '✓' : null}
+          {value ? "✓" : null}
         </span>
         <span className="sr-only">{String(value)}</span>
       </span>
@@ -111,10 +107,10 @@ function ReadOnlyCellRenderer({ value }: CustomCellRendererProps<GridRow, unknow
   return (
     <span
       className={[
-        'block w-full truncate',
-        typeof value === 'number' ? 'text-right tabular-nums' : '',
-        value === null || value === undefined ? 'text-muted-foreground' : '',
-      ].join(' ')}
+        "block w-full truncate",
+        typeof value === "number" ? "text-right tabular-nums" : "",
+        value === null || value === undefined ? "text-muted-foreground" : "",
+      ].join(" ")}
     >
       {formatCell(value)}
     </span>
@@ -123,9 +119,7 @@ function ReadOnlyCellRenderer({ value }: CustomCellRendererProps<GridRow, unknow
 
 function RowNumberCellRenderer({ value }: CustomCellRendererProps<GridRow, number>) {
   return (
-    <span className="block w-full text-right tabular-nums text-muted-foreground">
-      {value}
-    </span>
+    <span className="block w-full text-right tabular-nums text-muted-foreground">{value}</span>
   );
 }
 
@@ -165,20 +159,20 @@ export function ReadOnlyDataGrid({
       { length: placeholderCount },
       (_, index) => ({
         colId: `__placeholder_${index}`,
-        headerName: '',
+        headerName: "",
         width: 96,
       }),
     );
 
     return [
       {
-        colId: '__row_number__',
-        headerName: '',
+        colId: "__row_number__",
+        headerName: "",
         lockPinned: true,
-        lockPosition: 'left',
+        lockPosition: "left",
         maxWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
         minWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-        pinned: 'left',
+        pinned: "left",
         resizable: false,
         suppressNavigable: true,
         width: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
@@ -193,9 +187,9 @@ export function ReadOnlyDataGrid({
   return (
     <div
       className={[
-        'relative overflow-hidden rounded-lg border border-border bg-card',
-        fillHeight ? 'h-full min-h-60' : '',
-      ].join(' ')}
+        "relative overflow-hidden rounded-lg border border-border bg-card",
+        fillHeight ? "h-full min-h-60" : "",
+      ].join(" ")}
       style={fillHeight ? undefined : { height }}
     >
       <AgGridReact<GridRow>

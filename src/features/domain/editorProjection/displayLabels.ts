@@ -1,9 +1,9 @@
-import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import type { NodeData, PinData } from '@/shared/types/store/graph';
-import { portAddressKey } from './portAddressKey';
+import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
+import type { NodeData, PinData } from "@/shared/types/store/graph";
+import { portAddressKey } from "./portAddressKey";
 
-type NodeLabelSource = Pick<NodeData, 'title' | 'display'>;
-type PinLabelSource = Pick<PinData, 'name' | 'display'>;
+type NodeLabelSource = Pick<NodeData, "title" | "display">;
+type PinLabelSource = Pick<PinData, "name" | "display">;
 
 export interface NodePinDisplayBucket {
   readonly nodes?: Readonly<Record<string, NodeLabelSource>>;
@@ -20,9 +20,9 @@ export function nodeDisplayTitle(node: NodeLabelSource | undefined): string | nu
 }
 
 export function pinDisplayTitle(pin: PinLabelSource | undefined): string | null {
-  return nonEmpty(pin?.display?.instanceLabel)
-    ?? nonEmpty(pin?.display?.label)
-    ?? nonEmpty(pin?.name);
+  return (
+    nonEmpty(pin?.display?.instanceLabel) ?? nonEmpty(pin?.display?.label) ?? nonEmpty(pin?.name)
+  );
 }
 
 export function formatNodePinDisplayLabel(

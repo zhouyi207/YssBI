@@ -3,11 +3,11 @@
  * 类型增补见 `src/tauri-env.d.ts`。
  */
 
-import type { CSSProperties, PointerEvent } from 'react';
+import type { CSSProperties, PointerEvent } from "react";
 
 /** 标题栏 `data-tauri-drag-region` 内可交互控件：禁止 WebView 窗口拖拽吞掉点击 */
 export const TAURI_NO_DRAG_STYLE: CSSProperties = {
-  WebkitAppRegion: 'no-drag',
+  WebkitAppRegion: "no-drag",
 };
 
 /** 与 `TAURI_NO_DRAG_STYLE` 配合，阻止指针事件冒泡到 drag region */
@@ -19,7 +19,7 @@ export function stopTauriDragPropagation(event: PointerEvent): void {
 export function clearChannelMessageHandler(channel: object): void {
   try {
     const target = channel as { onmessage?: ((message: unknown) => void) | null };
-    if ('onmessage' in target) {
+    if ("onmessage" in target) {
       target.onmessage = () => {};
     }
   } catch {
@@ -30,7 +30,7 @@ export function clearChannelMessageHandler(channel: object): void {
 const BENIGN_CALLBACK_WARNING = "Couldn't find callback id";
 
 function isBenignTauriCallbackWarning(args: unknown[]): boolean {
-  return typeof args[0] === 'string' && args[0].includes(BENIGN_CALLBACK_WARNING);
+  return typeof args[0] === "string" && args[0].includes(BENIGN_CALLBACK_WARNING);
 }
 
 /**

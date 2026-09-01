@@ -1,21 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { ensureEditorViewport, editorViewportScope } from '@/features/core/viewport';
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
 import {
   synchronizeVisibleGraphPanel,
   synchronizeVisibleGraphPanels,
-} from './synchronizeVisibleGraphPanel';
+} from "./synchronizeVisibleGraphPanel";
 
 const dockviewMocks = vi.hoisted(() => ({
   listPanels: vi.fn(),
 }));
 
-vi.mock('@/features/core/dockview/workbenchRead', () => ({
+vi.mock("@/features/core/dockview/workbenchRead", () => ({
   workbenchDockviewRead: dockviewMocks,
 }));
 
-vi.mock('@/features/core/viewport', () => ({
+vi.mock("@/features/core/viewport", () => ({
   ensureEditorViewport: vi.fn(),
   editorViewportScope: vi.fn((groupId: string, graphPath: string) => ({
     groupId,
@@ -23,51 +23,58 @@ vi.mock('@/features/core/viewport', () => ({
   })),
 }));
 
-describe('synchronizeVisibleGraphPanel', () => {
-  const graphPath = 'events/Main.yssbi-event';
+describe("synchronizeVisibleGraphPanel", () => {
+  const graphPath = "events/Main.yssbi-event";
 
   beforeEach(() => {
     vi.clearAllMocks();
     dockviewMocks.listPanels.mockReturnValue([]);
   });
 
-  it('seeds the viewport before loading the visible graph projection', async () => {
+  it("seeds the viewport before loading the visible graph projection", async () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
 
-    await expect(synchronizeVisibleGraphPanel({
-      groupId: 'group-preview',
-      graphPath,
-    })).resolves.toBe(true);
+    await expect(
+      synchronizeVisibleGraphPanel({
+        groupId: "group-preview",
+        graphPath,
+      }),
+    ).resolves.toBe(true);
 
-    expect(editorViewportScope).toHaveBeenCalledWith('group-preview', graphPath);
+    expect(editorViewportScope).toHaveBeenCalledWith("group-preview", graphPath);
     expect(ensureEditorViewport).toHaveBeenCalledWith({
-      groupId: 'group-preview',
+      groupId: "group-preview",
       graphPath,
     });
     expect(loadGraph).toHaveBeenCalledWith(graphPath);
-    expect(vi.mocked(ensureEditorViewport).mock.invocationCallOrder[0])
-      .toBeLessThan(vi.mocked(loadGraph).mock.invocationCallOrder[0]);
+    expect(vi.mocked(ensureEditorViewport).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(loadGraph).mock.invocationCallOrder[0],
+    );
   });
 
-  it('seeds every visible group but loads a shared graph only once', async () => {
+  it("seeds every visible group but loads a shared graph only once", async () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
     dockviewMocks.listPanels.mockReturnValue([
       {
-        groupId: 'group-a',
+        groupId: "group-a",
         visible: true,
-        metadata: { role: 'editor', resourceRef: graphPath, resourceKind: 'event' },
+        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event" },
       },
       {
-        groupId: 'group-b',
+        groupId: "group-b",
         visible: true,
-        metadata: { role: 'editor', resourceRef: graphPath, resourceKind: 'event' },
+        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event" },
       },
       {
-        groupId: 'group-hidden',
+        groupId: "group-hidden",
         visible: false,
-        metadata: { role: 'editor', resourceRef: 'functions/Hidden.yssbi-function', resourceKind: 'function' },
+        metadata: {
+          role: "editor",
+          resourceRef: "functions/Hidden.yssbi-function",
+          resourceKind: "function",
+        },
       },
     ]);
 
@@ -75,11 +82,11 @@ describe('synchronizeVisibleGraphPanel', () => {
 
     expect(ensureEditorViewport).toHaveBeenCalledTimes(2);
     expect(ensureEditorViewport).toHaveBeenNthCalledWith(1, {
-      groupId: 'group-a',
+      groupId: "group-a",
       graphPath,
     });
     expect(ensureEditorViewport).toHaveBeenNthCalledWith(2, {
-      groupId: 'group-b',
+      groupId: "group-b",
       graphPath,
     });
     expect(loadGraph).toHaveBeenCalledOnce();

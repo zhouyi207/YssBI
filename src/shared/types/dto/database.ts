@@ -22,7 +22,7 @@ export type {
   LoadDatabaseResult,
   ParquetEngineConfig,
   SqlEngineConfig,
-} from '../domain/database';
+} from "../domain/database";
 
 export {
   databaseRecordFromLoad,
@@ -30,4 +30,4 @@ export {
   displayNameFromEngine,
   normalizeDatabaseRecord,
   normalizeDatabases,
-} from '../domain/database';
+} from "../domain/database";

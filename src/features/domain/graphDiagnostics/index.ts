@@ -6,4 +6,4 @@ export {
   isFunctionResourceAvailable,
   type CallFunctionIssue,
   type CallFunctionIssueKind,
-} from './callFunctionDiagnostics';
+} from "./callFunctionDiagnostics";

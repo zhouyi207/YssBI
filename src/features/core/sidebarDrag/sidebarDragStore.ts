@@ -11,11 +11,7 @@ export const useSidebarDragStore = create<SidebarDragStore>((set) => ({
   activeDrag: null,
   setActiveDrag: (drag) => set({ activeDrag: drag }),
   updatePosition: (x, y) =>
-    set((state) =>
-      state.activeDrag
-        ? { activeDrag: { ...state.activeDrag, x, y } }
-        : state
-    ),
+    set((state) => (state.activeDrag ? { activeDrag: { ...state.activeDrag, x, y } } : state)),
 }));
 
 export type { SidebarDragState };

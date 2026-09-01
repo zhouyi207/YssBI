@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
-import { act, StrictMode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listen } from '@tauri-apps/api/event';
-import { useProjectSync } from './useProjectSync';
+import { act, StrictMode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { listen } from "@tauri-apps/api/event";
+import { useProjectSync } from "./useProjectSync";
 
-vi.mock('@tauri-apps/api/event', () => ({
+vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(),
 }));
 
-vi.mock('@/features/core/dataStore', () => ({
+vi.mock("@/features/core/dataStore", () => ({
   loadActivatedProject: vi.fn(async () => null),
   useProjectIOStore: {
     getState: () => ({
@@ -38,13 +38,13 @@ function Harness(): null {
   return null;
 }
 
-describe('useProjectSync', () => {
+describe("useProjectSync", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -54,7 +54,7 @@ describe('useProjectSync', () => {
     host.remove();
   });
 
-  it('starts the service-owned project event stream without hydrating project state', async () => {
+  it("starts the service-owned project event stream without hydrating project state", async () => {
     const unlisten = vi.fn();
     vi.mocked(listen).mockResolvedValue(unlisten);
 
@@ -66,7 +66,7 @@ describe('useProjectSync', () => {
     expect(listen).toHaveBeenCalledOnce();
   });
 
-  it('keeps one project listener when StrictMode cleanup races async startup', async () => {
+  it("keeps one project listener when StrictMode cleanup races async startup", async () => {
     const startup = deferred<() => void>();
     const unlisten = vi.fn();
     vi.mocked(listen).mockReturnValue(startup.promise);
@@ -94,7 +94,7 @@ describe('useProjectSync', () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it('keeps a shared listener until the final consumer unmounts', async () => {
+  it("keeps a shared listener until the final consumer unmounts", async () => {
     const unlisten = vi.fn();
     vi.mocked(listen).mockResolvedValue(unlisten);
 
@@ -120,7 +120,7 @@ describe('useProjectSync', () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it('releases a listener that finishes startup after every consumer unmounts', async () => {
+  it("releases a listener that finishes startup after every consumer unmounts", async () => {
     const startup = deferred<() => void>();
     const unlisten = vi.fn();
     vi.mocked(listen).mockReturnValue(startup.promise);
@@ -144,9 +144,9 @@ describe('useProjectSync', () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it('handles stream startup failure and permits a later retry', async () => {
+  it("handles stream startup failure and permits a later retry", async () => {
     const startup = deferred<() => void>();
-    const startupError = new Error('stream unavailable');
+    const startupError = new Error("stream unavailable");
     vi.mocked(listen).mockReturnValueOnce(startup.promise);
 
     await act(async () => {

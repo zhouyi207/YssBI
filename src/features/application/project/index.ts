@@ -12,19 +12,17 @@ export type {
   ProjectPickerRecoveryPresentation,
 } from "./projectPickerOutcomes";
 
-export {
-  createProjectHydrationCoordinator,
-} from './projectHydrationCoordinator';
+export { createProjectHydrationCoordinator } from "./projectHydrationCoordinator";
 export type {
   ProjectHydrationCoordinator,
   ProjectHydrationDependencies,
   ProjectHydrationIdentity,
   ProjectHydrationOutcome,
-} from './projectHydrationCoordinator';
+} from "./projectHydrationCoordinator";
 export {
   createProjectEventIngress,
   DEFAULT_PROJECT_EVENT_QUEUE_CAPACITY,
-} from './projectEventIngress';
+} from "./projectEventIngress";
 export type {
   ProjectEventDrainOutcome,
   ProjectEventEnqueueOutcome,
@@ -33,17 +31,12 @@ export type {
   ProjectEventIngressIssue,
   ProjectEventIngressRecoveryReason,
   ProjectEventStreamItem,
-} from './projectEventIngress';
-export {
-  createProjectEventReconciler,
-} from './projectEventReconciler';
-export { initializeProjectForCurrentWindow } from './projectRuntime';
-export {
-  getDefaultProjectParentDirectory,
-  openProjectPathDialog,
-} from './projectPlatformActions';
-export { getProjectProjection, useProjectProjection } from './projectProjection';
-export type { ProjectProjection } from './projectProjection';
+} from "./projectEventIngress";
+export { createProjectEventReconciler } from "./projectEventReconciler";
+export { initializeProjectForCurrentWindow } from "./projectRuntime";
+export { getDefaultProjectParentDirectory, openProjectPathDialog } from "./projectPlatformActions";
+export { getProjectProjection, useProjectProjection } from "./projectProjection";
+export type { ProjectProjection } from "./projectProjection";
 export type {
   ComputationSettingsChangedPayload,
   GraphDeltaEventPayload,
@@ -58,4 +51,4 @@ export type {
   ProjectReconciliationOutcome,
   ProjectSavedPayload,
   ResourceMutationCommittedPayload,
-} from './projectEventReconciler';
+} from "./projectEventReconciler";

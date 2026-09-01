@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { ChartSize } from './types';
+import { useEffect, useRef, useState, type RefObject } from "react";
+import type { ChartSize } from "./types";
 
 export function useChartContainerSize(): {
   containerRef: RefObject<HTMLDivElement | null>;

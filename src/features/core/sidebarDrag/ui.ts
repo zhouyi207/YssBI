@@ -1,12 +1,9 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { SidebarDragState } from '@/features/core/dnd';
-import {
-  canvasDropHandlerStore,
-  type CanvasDropHandler,
-} from './canvasDropHandlerStore';
-import { useSidebarDragStore } from './sidebarDragStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { SidebarDragState } from "@/features/core/dnd";
+import { canvasDropHandlerStore, type CanvasDropHandler } from "./canvasDropHandlerStore";
+import { useSidebarDragStore } from "./sidebarDragStore";
 
 export interface SidebarDragUiSnapshot {
   readonly activeDrag: DeepReadonly<SidebarDragState> | null;
@@ -27,11 +24,15 @@ export interface SidebarDragUiCapability {
 
 function cloneAndFreeze<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(cloneAndFreeze)) as T;
-  if (value === null || typeof value !== 'object') return value;
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => [key, cloneAndFreeze(nested)]),
-  )) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        cloneAndFreeze(nested),
+      ]),
+    ),
+  ) as T;
 }
 
 function buildSnapshot(): DeepReadonly<SidebarDragUiSnapshot> {
@@ -78,8 +79,6 @@ export const sidebarDragUi: SidebarDragUiCapability = {
   updatePosition: (x, y) => useSidebarDragStore.getState().updatePosition(x, y),
   setCanvasDropHandler: (panelInstanceId, handler) =>
     canvasDropHandlerStore.setHandler(panelInstanceId, handler),
-  getCanvasDropHandler: (panelInstanceId) =>
-    canvasDropHandlerStore.getHandler(panelInstanceId),
-  subscribeCanvasDropHandlers: (listener) =>
-    canvasDropHandlerStore.subscribe(listener),
+  getCanvasDropHandler: (panelInstanceId) => canvasDropHandlerStore.getHandler(panelInstanceId),
+  subscribeCanvasDropHandlers: (listener) => canvasDropHandlerStore.subscribe(listener),
 };

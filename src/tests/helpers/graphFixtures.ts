@@ -1,11 +1,11 @@
-import type { PinDirection } from '@/shared/types/domain/pin';
-import type { DataType } from '@/shared/types/domain/dataType';
-import type { GraphData, PinData } from '@/shared/types/store/graph';
+import type { PinDirection } from "@/shared/types/domain/pin";
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { GraphData, PinData } from "@/shared/types/store/graph";
 
 export interface MakeTestGraphOptions {
   path: string;
   name?: string;
-  type?: 'event' | 'function';
+  type?: "event" | "function";
   /** Node `title`; defaults to `name` or `path` */
   title?: string;
   nodeId?: string;
@@ -20,10 +20,10 @@ export interface MakeTestGraphOptions {
 }
 
 function defaultDataType(type?: string): DataType | undefined {
-  if (!type || type === 'exec') return undefined;
-  if (type === 'Float64') return { kind: 'Float64' };
-  if (type === 'Int64') return { kind: 'Int64' };
-  return { kind: 'Any' };
+  if (!type || type === "exec") return undefined;
+  if (type === "Float64") return { kind: "Float64" };
+  if (type === "Int64") return { kind: "Int64" };
+  return { kind: "Any" };
 }
 
 function makeTestPinData(params: {
@@ -33,16 +33,16 @@ function makeTestPinData(params: {
   name?: string;
   type?: string;
   dataType?: DataType;
-  ui?: PinData['ui'];
+  ui?: PinData["ui"];
 }): PinData {
-  const pinType = params.type ?? 'Float64';
-  const isExec = pinType === 'exec';
+  const pinType = params.type ?? "Float64";
+  const isExec = pinType === "exec";
   const dataType = params.dataType ?? defaultDataType(pinType);
   return {
     id: params.id,
     nodeId: params.nodeId,
-    name: params.name ?? (params.direction === 'input' ? 'In' : 'Out'),
-    type: isExec ? 'exec' : 'object',
+    name: params.name ?? (params.direction === "input" ? "In" : "Out"),
+    type: isExec ? "exec" : "object",
     direction: params.direction,
     dataType,
     ui: params.ui,
@@ -53,22 +53,22 @@ function makeTestPinData(params: {
 export function makeTestGraph(options: MakeTestGraphOptions): GraphData {
   const path = options.path;
   const name = options.name ?? path;
-  const nodeId = options.nodeId ?? 'local-node';
+  const nodeId = options.nodeId ?? "local-node";
   const nodeTitle = options.title ?? name;
-  const inputPinId = options.inputPinId ?? 'local-in';
-  const outputPinId = options.outputPinId ?? 'local-out';
+  const inputPinId = options.inputPinId ?? "local-in";
+  const outputPinId = options.outputPinId ?? "local-out";
   const connected = options.connected !== false;
 
   return {
     path,
     name,
-    type: options.type ?? 'event',
+    type: options.type ?? "event",
     nodes: [
       {
         id: nodeId,
         graphPath: path,
-        nodeType: options.nodeType ?? 'Data:Constant',
-        category: ['Data'],
+        nodeType: options.nodeType ?? "Data:Constant",
+        category: ["Data"],
         title: nodeTitle,
         position: options.position ?? { x: 0, y: 0 },
         inputs: [inputPinId],
@@ -79,13 +79,13 @@ export function makeTestGraph(options: MakeTestGraphOptions): GraphData {
       makeTestPinData({
         id: inputPinId,
         nodeId,
-        direction: 'input',
+        direction: "input",
         type: options.pinType,
       }),
       makeTestPinData({
         id: outputPinId,
         nodeId,
-        direction: 'output',
+        direction: "output",
         type: options.pinType,
         ui: options.outputPinColor ? { color: options.outputPinColor } : undefined,
       }),

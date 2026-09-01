@@ -1,6 +1,6 @@
 /**
  * Domain Types - Connection
- * 
+ *
  * Connection 代表两个 Pin 之间的连接关系
  */
 
@@ -9,8 +9,8 @@
  * 表示从一个输出 Pin 到一个输入 Pin 的连接
  */
 export interface ConnectionItem {
-    fromPin: string;  // 源 Pin ID（输出）
-    toPin: string;    // 目标 Pin ID（输入）
+  fromPin: string; // 源 Pin ID（输出）
+  toPin: string; // 目标 Pin ID（输入）
 }
 
 /**
@@ -18,5 +18,5 @@ export interface ConnectionItem {
  * 包含图中所有的连接关系
  */
 export interface Connection {
-    connections: ConnectionItem[];
+  connections: ConnectionItem[];
 }

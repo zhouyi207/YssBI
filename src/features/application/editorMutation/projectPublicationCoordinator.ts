@@ -1,19 +1,19 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
+import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
 import type {
   FunctionSignatureDto,
   GraphProjectionReplacementDto,
   HistoryStatusDto,
   ResourceMoveDto,
   ResourceMutationResultDto,
-} from '@/shared/types/domain/editorMutation';
+} from "@/shared/types/domain/editorMutation";
 import type {
   FunctionSignaturePin,
   Variable,
   WorksheetDocument,
   WorksheetIndexEntry,
-} from '@/shared/types';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import type { PreparedGraphProjectionReplacements } from '@/features/core/dataStore/graphDataStore';
+} from "@/shared/types";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphDataStore";
 import {
   acceptProjectLifecycleActivation,
   captureProjectIdentity,
@@ -22,31 +22,28 @@ import {
   isCurrentProjectIdentity,
   startProjectLifecycle,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
-import type { FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
-import type { EditorViewport } from '@/features/core/viewport/editorViewport';
-import type { DocumentState, ProjectResourceMeta, ResourceKey } from '@/features/core/resource';
-import { toProjectionEntities } from '@/features/domain/editorProjection';
-import { ProjectService } from '@/services/project/projectService';
-import type { ProjectIndexRow } from '@/shared/types/domain/project';
-import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
-import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { clearWorksheetLifecycleProjects } from '@/features/application/editor/worksheetLifecycleCoordinator';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useHistoryStore } from '@/features/core/history';
-import { useDocumentStateStore, useResourceStore } from '@/features/core/resource';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import type { FocusedGraphSession } from "@/features/core/graphSession/graphSessionStore";
+import type { EditorViewport } from "@/features/core/viewport/editorViewport";
+import type { DocumentState, ProjectResourceMeta, ResourceKey } from "@/features/core/resource";
+import { toProjectionEntities } from "@/features/domain/editorProjection";
+import { ProjectService } from "@/services/project/projectService";
+import type { ProjectIndexRow } from "@/shared/types/domain/project";
+import { clearWorksheetPreviewCache } from "@/services/worksheet/worksheetPreviewCache";
+import { prepareGraphProjectionForPublication } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { clearWorksheetLifecycleProjects } from "@/features/application/editor/worksheetLifecycleCoordinator";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useHistoryStore } from "@/features/core/history";
+import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 import {
   collectResourceMutationGraphPaths,
   commitPreparedPublication,
   fingerprintResourceMutationResult,
   prepareSynchronousPublicationCommit,
-} from './resourceMutationResult';
-import { validateResourceMutationResult } from '@/features/domain/resource/resourceMutationValidation';
-import {
-  prepareResourceMove,
-  type PreparedResourceMove,
-} from './projectPublicationMovePlan';
+} from "./resourceMutationResult";
+import { validateResourceMutationResult } from "@/features/domain/resource/resourceMutationValidation";
+import { prepareResourceMove, type PreparedResourceMove } from "./projectPublicationMovePlan";
 import {
   buildProjectRecoveryPathRemaps,
   buildProjectRecoveryWorksheetPathRemaps,
@@ -54,17 +51,17 @@ import {
   commitPreparedProjectRecovery,
   prepareProjectRecoveryCommit,
   validateProjectRecoveryIndex,
-} from './projectPublicationRecovery';
+} from "./projectPublicationRecovery";
 
 export type ProjectPublicationSuccess =
-  | { status: 'applied'; affectedGraphPaths: ReadonlySet<string> }
-  | { status: 'duplicate'; affectedGraphPaths: ReadonlySet<string> }
-  | { status: 'recovered'; affectedGraphPaths: ReadonlySet<string> };
+  | { status: "applied"; affectedGraphPaths: ReadonlySet<string> }
+  | { status: "duplicate"; affectedGraphPaths: ReadonlySet<string> }
+  | { status: "recovered"; affectedGraphPaths: ReadonlySet<string> };
 
 export type ProjectPublicationErrorCode =
-  | 'stale_project_lifecycle'
-  | 'publication_protocol_error'
-  | 'publication_recovery_failed';
+  | "stale_project_lifecycle"
+  | "publication_protocol_error"
+  | "publication_recovery_failed";
 
 export class ProjectPublicationError extends Error {
   constructor(
@@ -73,8 +70,8 @@ export class ProjectPublicationError extends Error {
     options?: { cause?: unknown },
   ) {
     super(message);
-    this.name = 'ProjectPublicationError';
-    if (options && 'cause' in options) {
+    this.name = "ProjectPublicationError";
+    if (options && "cause" in options) {
       (this as Error & { cause?: unknown }).cause = options.cause;
     }
   }
@@ -101,7 +98,6 @@ export interface PreparedVariableDeltaInstall {
   readonly fromRevision: number;
   readonly toRevision: number;
 }
-
 
 export interface PreparedPublicationStoreState {
   readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
@@ -205,33 +201,29 @@ interface PendingPublication {
 interface ProjectPublicationState {
   appliedRevision: number;
   appliedFingerprint?: string;
-  phase: 'idle' | 'applying' | 'recovering';
+  phase: "idle" | "applying" | "recovering";
   pendingByRevision: Map<number, PendingPublication>;
 }
 
-
-
 function protocolError(message: string, cause?: unknown): ProjectPublicationError {
-  return new ProjectPublicationError('publication_protocol_error', message, { cause });
+  return new ProjectPublicationError("publication_protocol_error", message, { cause });
 }
 
 function recoveryError(message: string, cause?: unknown): ProjectPublicationError {
-  return new ProjectPublicationError('publication_recovery_failed', message, { cause });
+  return new ProjectPublicationError("publication_recovery_failed", message, { cause });
 }
 
 function staleLifecycleError(): ProjectPublicationError {
   return new ProjectPublicationError(
-    'stale_project_lifecycle',
-    'project lifecycle changed before publication settlement',
+    "stale_project_lifecycle",
+    "project lifecycle changed before publication settlement",
   );
 }
-
-
 
 export class ProjectPublicationCoordinator {
   private readonly state: ProjectPublicationState = {
     appliedRevision: 0,
-    phase: 'idle',
+    phase: "idle",
     pendingByRevision: new Map(),
   };
 
@@ -244,7 +236,7 @@ export class ProjectPublicationCoordinator {
 
   validateProjectStart(projectInstanceId: string, appliedRevision: number): void {
     if (!projectInstanceId || !Number.isSafeInteger(appliedRevision) || appliedRevision < 0) {
-      throw protocolError('project publication baseline is malformed');
+      throw protocolError("project publication baseline is malformed");
     }
   }
 
@@ -257,14 +249,16 @@ export class ProjectPublicationCoordinator {
   }
 
   acceptProjectActivation(projectInstanceId: string, activationRevision: number): boolean {
-    if (!projectInstanceId
-      || !Number.isSafeInteger(activationRevision)
-      || activationRevision <= 0) {
-      throw protocolError('project activation identity is malformed');
+    if (
+      !projectInstanceId ||
+      !Number.isSafeInteger(activationRevision) ||
+      activationRevision <= 0
+    ) {
+      throw protocolError("project activation identity is malformed");
     }
     const result = acceptProjectLifecycleActivation(projectInstanceId, activationRevision);
-    if (result === 'stale') return false;
-    if (result === 'activated') {
+    if (result === "stale") return false;
+    if (result === "activated") {
       clearWorksheetPreviewCache();
       clearWorksheetLifecycleProjects();
       this.resetPublicationState(0);
@@ -292,14 +286,14 @@ export class ProjectPublicationCoordinator {
     const existing = this.state.pendingByRevision.get(revision);
     if (existing) {
       if (existing.fingerprint !== fingerprint) {
-        return Promise.reject(protocolError(
-          `publication revision ${revision} conflicts with a different result`,
-        ));
+        return Promise.reject(
+          protocolError(`publication revision ${revision} conflicts with a different result`),
+        );
       }
       return this.addWaiter(existing);
     }
 
-    if (this.state.phase === 'recovering') {
+    if (this.state.phase === "recovering") {
       const pending = this.createPending(input, fingerprint, affectedGraphPaths);
       const snapshotRevision = this.activeRecoverySnapshotRevision;
       if (snapshotRevision !== null && revision <= snapshotRevision) {
@@ -310,9 +304,8 @@ export class ProjectPublicationCoordinator {
       return this.addWaiter(pending);
     }
 
-    if (revision === this.state.appliedRevision
-      && fingerprint === this.state.appliedFingerprint) {
-      return Promise.resolve({ status: 'duplicate', affectedGraphPaths });
+    if (revision === this.state.appliedRevision && fingerprint === this.state.appliedFingerprint) {
+      return Promise.resolve({ status: "duplicate", affectedGraphPaths });
     }
     if (revision <= this.state.appliedRevision) {
       const pending = this.createPending(input, fingerprint, affectedGraphPaths);
@@ -352,7 +345,7 @@ export class ProjectPublicationCoordinator {
     projectInstanceId: string | null;
     epoch: number;
     appliedRevision: number;
-    phase: 'idle' | 'applying' | 'recovering';
+    phase: "idle" | "applying" | "recovering";
     pendingRevisions: number[];
   } {
     const lifecycle = captureProjectLifecycleState();
@@ -364,10 +357,13 @@ export class ProjectPublicationCoordinator {
     };
   }
 
-  private validateSubmission(input: ProjectPublicationSubmission): ProjectPublicationError | undefined {
+  private validateSubmission(
+    input: ProjectPublicationSubmission,
+  ): ProjectPublicationError | undefined {
     const lifecycle = captureProjectLifecycleState();
     if (!lifecycle.projectInstanceId) return staleLifecycleError();
-    if (input.result.projectInstanceId !== lifecycle.projectInstanceId) return staleLifecycleError();
+    if (input.result.projectInstanceId !== lifecycle.projectInstanceId)
+      return staleLifecycleError();
     const validationError = validateResourceMutationResult(input.result);
     if (validationError) return protocolError(validationError);
     const callerError = input.validate?.(input.result);
@@ -401,7 +397,7 @@ export class ProjectPublicationCoordinator {
     this.state.pendingByRevision.clear();
     this.state.appliedRevision = appliedRevision;
     this.state.appliedFingerprint = undefined;
-    this.state.phase = 'idle';
+    this.state.phase = "idle";
     this.activeRecoverySnapshotRevision = null;
     this.driverInFlight = null;
   }
@@ -424,12 +420,14 @@ export class ProjectPublicationCoordinator {
     }
     const driver = this.drive(identity);
     this.driverInFlight = driver;
-    void driver.finally(() => {
-      if (this.driverInFlight !== driver) return;
-      this.driverInFlight = null;
-      if (isCurrentProjectIdentity(identity)) this.state.phase = 'idle';
-      if (this.state.pendingByRevision.size > 0) this.kick();
-    }).catch(() => undefined);
+    void driver
+      .finally(() => {
+        if (this.driverInFlight !== driver) return;
+        this.driverInFlight = null;
+        if (isCurrentProjectIdentity(identity)) this.state.phase = "idle";
+        if (this.state.pendingByRevision.size > 0) this.kick();
+      })
+      .catch(() => undefined);
   }
 
   private async drive(identity: ProjectIdentitySnapshot): Promise<void> {
@@ -456,9 +454,11 @@ export class ProjectPublicationCoordinator {
     this.assertLifecycle(projectInstanceId, epoch);
     if (projection === false) throw new Error(`projection preparation failed for '${graphPath}'`);
     const entities = toProjectionEntities(projection);
-    if (entities.graphPath !== graphPath
-      || projection.graphPath !== graphPath
-      || projection.basis?.graphPath !== graphPath) {
+    if (
+      entities.graphPath !== graphPath ||
+      projection.graphPath !== graphPath ||
+      projection.basis?.graphPath !== graphPath
+    ) {
       throw new Error(`prepared projection identity is invalid for '${graphPath}'`);
     }
     return projection;
@@ -471,11 +471,11 @@ export class ProjectPublicationCoordinator {
     } catch {
       return;
     }
-    this.state.phase = 'applying';
+    this.state.phase = "applying";
     const { projectInstanceId, epoch } = identity;
     try {
       const result = pending.input.result;
-      if (result.projectionStatus.status === 'incomplete') {
+      if (result.projectionStatus.status === "incomplete") {
         pending.requiresRecovery = true;
         return;
       }
@@ -483,7 +483,8 @@ export class ProjectPublicationCoordinator {
         result.projectionReplacements.map((replacement) => replacement.graphPath),
       );
       const moves = result.moves.map((move) =>
-        this.dependencies.prepareMove(move, replacementPaths.has(move.to)));
+        this.dependencies.prepareMove(move, replacementPaths.has(move.to)),
+      );
       this.assertLifecycle(projectInstanceId, epoch);
       if (pending.revision !== this.state.appliedRevision + 1) return;
       const plan = this.dependencies.preparePublication(result, {
@@ -500,10 +501,11 @@ export class ProjectPublicationCoordinator {
       this.state.appliedRevision = pending.revision;
       this.state.pendingByRevision.delete(pending.revision);
       for (const waiter of pending.waiters) {
-        waiter.resolve({ status: 'applied', affectedGraphPaths: pending.affectedGraphPaths });
+        waiter.resolve({ status: "applied", affectedGraphPaths: pending.affectedGraphPaths });
       }
     } catch (error) {
-      if (error instanceof ProjectPublicationError && error.code === 'stale_project_lifecycle') return;
+      if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle")
+        return;
       pending.requiresRecovery = true;
     }
   }
@@ -520,15 +522,9 @@ export class ProjectPublicationCoordinator {
     const { projectInstanceId, epoch } = identity;
     const loadedAtStart = this.dependencies.captureLoadedGraphPaths();
     const coveredAtStart = new Set(this.state.pendingByRevision.values());
-    this.state.phase = 'recovering';
+    this.state.phase = "recovering";
     try {
-      await this.recover(
-        attempt,
-        projectInstanceId,
-        epoch,
-        loadedAtStart,
-        coveredAtStart,
-      );
+      await this.recover(attempt, projectInstanceId, epoch, loadedAtStart, coveredAtStart);
     } finally {
       if (this.ownsLifecycle(projectInstanceId, epoch) && this.recoveryAttempt === attempt) {
         this.activeRecoverySnapshotRevision = null;
@@ -557,19 +553,23 @@ export class ProjectPublicationCoordinator {
       for (const pending of this.state.pendingByRevision.values()) {
         if (pending.revision <= validatedSnapshotRevision) pending.ownerRecoveryAttempt = attempt;
       }
-      const initiallyOwned = [...this.state.pendingByRevision.values()]
-        .filter((pending) => pending.ownerRecoveryAttempt === attempt
-          && pending.revision <= validatedSnapshotRevision);
+      const initiallyOwned = [...this.state.pendingByRevision.values()].filter(
+        (pending) =>
+          pending.ownerRecoveryAttempt === attempt && pending.revision <= validatedSnapshotRevision,
+      );
       const nextContiguous = this.state.pendingByRevision.get(this.state.appliedRevision + 1);
-      if (validatedSnapshotRevision === this.state.appliedRevision
-        && initiallyOwned.length === 0
-        && nextContiguous
-        && !nextContiguous.requiresRecovery) {
+      if (
+        validatedSnapshotRevision === this.state.appliedRevision &&
+        initiallyOwned.length === 0 &&
+        nextContiguous &&
+        !nextContiguous.requiresRecovery
+      ) {
         return;
       }
-      if (validatedSnapshotRevision < this.state.appliedRevision
-        || (validatedSnapshotRevision === this.state.appliedRevision
-          && initiallyOwned.length === 0)) {
+      if (
+        validatedSnapshotRevision < this.state.appliedRevision ||
+        (validatedSnapshotRevision === this.state.appliedRevision && initiallyOwned.length === 0)
+      ) {
         rejectCoveredAtStart = true;
         throw new Error(
           `recovery snapshot revision ${validatedSnapshotRevision} does not advance or cover the attempt`,
@@ -587,9 +587,11 @@ export class ProjectPublicationCoordinator {
       let worksheetPathRemaps: ReadonlyMap<string, string> = new Map();
       for (;;) {
         const observedVersion = this.recoveryVersion;
-        owned = [...this.state.pendingByRevision.values()]
-          .filter((pending) => pending.ownerRecoveryAttempt === attempt
-            && pending.revision <= validatedSnapshotRevision);
+        owned = [...this.state.pendingByRevision.values()].filter(
+          (pending) =>
+            pending.ownerRecoveryAttempt === attempt &&
+            pending.revision <= validatedSnapshotRevision,
+        );
         queuedResults = owned.map((pending) => pending.input.result);
         pathRemaps = buildProjectRecoveryPathRemaps(authoritativeGraphPaths, queuedResults);
         worksheetPathRemaps = buildProjectRecoveryWorksheetPathRemaps(
@@ -633,22 +635,24 @@ export class ProjectPublicationCoordinator {
         if (pending.revision > index.publicationRevision) continue;
         this.state.pendingByRevision.delete(pending.revision);
         for (const waiter of pending.waiters) {
-          waiter.resolve({ status: 'recovered', affectedGraphPaths: pending.affectedGraphPaths });
+          waiter.resolve({ status: "recovered", affectedGraphPaths: pending.affectedGraphPaths });
         }
       }
     } catch (cause) {
       if (!this.ownsLifecycle(projectInstanceId, epoch)) return;
-      if (cause instanceof ProjectPublicationError && cause.code === 'stale_project_lifecycle') return;
-      const error = recoveryError('authoritative project publication recovery failed', cause);
+      if (cause instanceof ProjectPublicationError && cause.code === "stale_project_lifecycle")
+        return;
+      const error = recoveryError("authoritative project publication recovery failed", cause);
       for (const [revision, pending] of this.state.pendingByRevision) {
-        const covered = snapshotRevision === null || rejectCoveredAtStart
-          ? coveredAtStart.has(pending)
-          : pending.ownerRecoveryAttempt === attempt && pending.revision <= snapshotRevision;
+        const covered =
+          snapshotRevision === null || rejectCoveredAtStart
+            ? coveredAtStart.has(pending)
+            : pending.ownerRecoveryAttempt === attempt && pending.revision <= snapshotRevision;
         if (!covered) continue;
         this.state.pendingByRevision.delete(revision);
         for (const waiter of pending.waiters) waiter.reject(error);
       }
-      this.state.phase = 'idle';
+      this.state.phase = "idle";
       this.dependencies.markProjectProjectionStale();
     }
   }
@@ -656,10 +660,11 @@ export class ProjectPublicationCoordinator {
 
 function commitHistoryAfterPublication(plan: PreparedProjectPublication): void | Promise<void> {
   const committed = commitPreparedPublication(plan);
-  const updateHistory = () => useHistoryStore.setState({
-    canUndo: plan.history.canUndo,
-    canRedo: plan.history.canRedo,
-  });
+  const updateHistory = () =>
+    useHistoryStore.setState({
+      canUndo: plan.history.canUndo,
+      canRedo: plan.history.canRedo,
+    });
   if (committed) return committed.then(updateHistory);
   updateHistory();
 }
@@ -675,20 +680,26 @@ const productionDependencies: ProjectPublicationDependencies = {
   commitRecovery: commitPreparedProjectRecovery,
   markProjectProjectionStale: () => {
     useResourceStore.setState((state) => ({
-      resources: Object.fromEntries(Object.entries(state.resources).map(([key, resource]) => [
-        key,
-        resource.kind === 'event' || resource.kind === 'function'
-          ? { ...resource, hasStaleDocument: true }
-          : resource,
-      ])),
+      resources: Object.fromEntries(
+        Object.entries(state.resources).map(([key, resource]) => [
+          key,
+          resource.kind === "event" || resource.kind === "function"
+            ? { ...resource, hasStaleDocument: true }
+            : resource,
+        ]),
+      ),
     }));
     useDocumentStateStore.setState((state) => ({
-      documents: Object.fromEntries(Object.entries(state.documents).map(([key, document]) => [
-        key,
-        { ...document, stale: true },
-      ])),
+      documents: Object.fromEntries(
+        Object.entries(state.documents).map(([key, document]) => [
+          key,
+          { ...document, stale: true },
+        ]),
+      ),
     }));
   },
 };
 
-export const projectPublicationCoordinator = new ProjectPublicationCoordinator(productionDependencies);
+export const projectPublicationCoordinator = new ProjectPublicationCoordinator(
+  productionDependencies,
+);

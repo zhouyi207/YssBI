@@ -1,35 +1,35 @@
-import { isIpcErrorDto, type IpcErrorDto } from '@/shared/types/dto/ipcError';
-import type { ErrorReference } from '@/shared/types/domain/diagnostics';
+import { isIpcErrorDto, type IpcErrorDto } from "@/shared/types/dto/ipcError";
+import type { ErrorReference } from "@/shared/types/domain/diagnostics";
 import {
   IPC_ERROR_BRAND,
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
-} from '@/shared/constants/ipcError';
+} from "@/shared/constants/ipcError";
 
-export type { ErrorReference } from '@/shared/types/domain/diagnostics';
+export type { ErrorReference } from "@/shared/types/domain/diagnostics";
 export {
   IPC_ERROR_BRAND,
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
-} from '@/shared/constants/ipcError';
+} from "@/shared/constants/ipcError";
 
-export type IpcErrorKind = 'backend' | 'transport' | 'malformed';
+export type IpcErrorKind = "backend" | "transport" | "malformed";
 
 export interface IpcErrorInit {
   kind: IpcErrorKind;
   command: string;
   code: string;
-  details: IpcErrorDto['details'];
+  details: IpcErrorDto["details"];
   incidentId: string | null;
   cause: unknown;
 }
 
 function errorMessage(init: IpcErrorInit): string {
-  if (init.kind === 'backend') {
+  if (init.kind === "backend") {
     return `IPC command '${init.command}' failed with code '${init.code}'`;
   }
-  if (init.kind === 'transport') {
-    const detail = init.cause instanceof Error ? `: ${init.cause.message}` : '';
+  if (init.kind === "transport") {
+    const detail = init.cause instanceof Error ? `: ${init.cause.message}` : "";
     return `IPC transport failed for command '${init.command}'${detail}`;
   }
   return `IPC command '${init.command}' rejected with a malformed error payload`;
@@ -40,19 +40,19 @@ export class IpcError extends Error {
   readonly kind: IpcErrorKind;
   readonly command: string;
   readonly code: string;
-  readonly details: IpcErrorDto['details'];
+  readonly details: IpcErrorDto["details"];
   readonly incidentId: string | null;
   declare readonly cause: unknown;
 
   constructor(init: IpcErrorInit) {
     super(errorMessage(init));
-    this.name = 'IpcError';
+    this.name = "IpcError";
     this.kind = init.kind;
     this.command = init.command;
     this.code = init.code;
     this.details = init.details;
     this.incidentId = init.incidentId;
-    Object.defineProperty(this, 'cause', {
+    Object.defineProperty(this, "cause", {
       configurable: true,
       value: init.cause,
     });
@@ -63,7 +63,7 @@ export function normalizeIpcError(command: string, error: unknown): IpcError {
   if (error instanceof IpcError) return error;
   if (error instanceof Error) {
     return new IpcError({
-      kind: 'transport',
+      kind: "transport",
       command,
       code: IPC_TRANSPORT_FAILURE_CODE,
       details: null,
@@ -73,7 +73,7 @@ export function normalizeIpcError(command: string, error: unknown): IpcError {
   }
   if (isIpcErrorDto(error)) {
     return new IpcError({
-      kind: 'backend',
+      kind: "backend",
       command,
       code: error.code,
       details: error.details,
@@ -82,7 +82,7 @@ export function normalizeIpcError(command: string, error: unknown): IpcError {
     });
   }
   return new IpcError({
-    kind: 'malformed',
+    kind: "malformed",
     command,
     code: IPC_MALFORMED_ERROR_CODE,
     details: null,

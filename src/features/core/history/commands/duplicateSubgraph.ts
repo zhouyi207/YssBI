@@ -1,5 +1,5 @@
-import type { CommandHandler, GraphMutationCommandResult } from '../types';
-import { executeGraphIntent } from './executeGraphIntent';
+import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import { executeGraphIntent } from "./executeGraphIntent";
 
 export interface DuplicateSubgraphArgs {
   nodeIds: string[];
@@ -13,7 +13,7 @@ export const duplicateSubgraphCommand: CommandHandler<
   execute(graphPath, args) {
     if (args.nodeIds.length === 0) return false;
     return executeGraphIntent(graphPath, {
-      type: 'duplicateSubgraph',
+      type: "duplicateSubgraph",
       payload: {
         nodeIds: [...args.nodeIds],
         offset: { ...args.offset },

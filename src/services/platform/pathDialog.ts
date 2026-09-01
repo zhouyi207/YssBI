@@ -1,5 +1,5 @@
-import { open, save } from '@tauri-apps/plugin-dialog';
-import type { PlatformFailure, PlatformOperation, PlatformOutcome } from './platformTypes';
+import { open, save } from "@tauri-apps/plugin-dialog";
+import type { PlatformFailure, PlatformOperation, PlatformOutcome } from "./platformTypes";
 
 export interface OpenPathDialogOptions {
   readonly directory?: boolean;
@@ -12,18 +12,18 @@ export interface OpenPathDialogOptions {
   }[];
 }
 
-export type SavePathDialogOptions = Omit<OpenPathDialogOptions, 'directory' | 'multiple'>;
+export type SavePathDialogOptions = Omit<OpenPathDialogOptions, "directory" | "multiple">;
 
 function operationFailure(operation: PlatformOperation): PlatformFailure {
-  return { operation, code: 'operationFailed' };
+  return { operation, code: "operationFailed" };
 }
 
 function invalidResult(operation: PlatformOperation): PlatformFailure {
-  return { operation, code: 'invalidResult', resultKind: 'pathSelection' };
+  return { operation, code: "invalidResult", resultKind: "pathSelection" };
 }
 
 function filters(
-  value: OpenPathDialogOptions['filters'],
+  value: OpenPathDialogOptions["filters"],
 ): { name: string; extensions: string[] }[] | undefined {
   return value?.map((filter) => ({
     name: filter.name,
@@ -43,11 +43,11 @@ export async function openPathDialog(
       filters: filters(options.filters),
     });
     if (!options.multiple && Array.isArray(value)) {
-      return { ok: false, failure: invalidResult('openPathDialog') };
+      return { ok: false, failure: invalidResult("openPathDialog") };
     }
     return { ok: true, value };
   } catch {
-    return { ok: false, failure: operationFailure('openPathDialog') };
+    return { ok: false, failure: operationFailure("openPathDialog") };
   }
 }
 
@@ -64,16 +64,16 @@ export async function savePathDialog(
       }),
     };
   } catch {
-    return { ok: false, failure: operationFailure('savePathDialog') };
+    return { ok: false, failure: operationFailure("savePathDialog") };
   }
 }
 
 export async function selectDatabaseExportPath(): Promise<PlatformOutcome<string | null>> {
   return savePathDialog({
-    title: 'Export Data',
+    title: "Export Data",
     filters: [
-      { name: 'CSV', extensions: ['csv'] },
-      { name: 'Parquet', extensions: ['parquet'] },
+      { name: "CSV", extensions: ["csv"] },
+      { name: "Parquet", extensions: ["parquet"] },
     ],
   });
 }

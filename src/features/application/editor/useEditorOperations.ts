@@ -1,40 +1,40 @@
-import { useCallback } from 'react';
-import { logger } from '@/features/application/observability/appLogger';
+import { useCallback } from "react";
+import { logger } from "@/features/application/observability/appLogger";
 import {
   canCopyNode,
   canCutNode,
   canDeleteNode,
-} from '@/features/core/dataStore/graphNodeSelectors';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+} from "@/features/core/dataStore/graphNodeSelectors";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import {
   getActiveLayoutTab,
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
-} from '@/features/core/layout';
-import { executeCommand, executeCommandWithResult } from '@/features/core/history';
-import type { GraphMutationCommandResult } from '@/features/core/history/types';
+} from "@/features/core/layout";
+import { executeCommand, executeCommandWithResult } from "@/features/core/history";
+import type { GraphMutationCommandResult } from "@/features/core/history/types";
 import {
   redoEditorHistory,
   undoEditorHistory,
-} from '@/features/application/editorMutation/historyCoordinator';
-import { executeSafeGraphMutation } from '@/features/application/editorMutation/safeGraphMutation';
-import { exportEditorSubgraph } from '@/features/application/editorMutation/subgraphExportCoordinator';
-import { insertedNodeIdsFromDelta } from '@/features/application/editorMutation/insertedNodeIdsFromDelta';
-import { readGraphClipboard, writeGraphClipboard } from '@/services/clipboard';
-import { disconnectConnectionsById } from './edgeOperations';
+} from "@/features/application/editorMutation/historyCoordinator";
+import { executeSafeGraphMutation } from "@/features/application/editorMutation/safeGraphMutation";
+import { exportEditorSubgraph } from "@/features/application/editorMutation/subgraphExportCoordinator";
+import { insertedNodeIdsFromDelta } from "@/features/application/editorMutation/insertedNodeIdsFromDelta";
+import { readGraphClipboard, writeGraphClipboard } from "@/services/clipboard";
+import { disconnectConnectionsById } from "./edgeOperations";
 import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
-} from './editorCommandFocus';
-import { revealInspect, setInspectionContext } from './rightSidebarActions';
+} from "./editorCommandFocus";
+import { revealInspect, setInspectionContext } from "./rightSidebarActions";
 
 const DUPLICATE_SUBGRAPH_OFFSET = { x: 40, y: 40 } as const;
-const EDITOR_OPERATIONS_LOG_SOURCE = 'EditorOperations';
+const EDITOR_OPERATIONS_LOG_SOURCE = "EditorOperations";
 
 type GraphEditorCommandTarget = EditorCommandTarget & {
-  readonly resourceKind: 'event' | 'function';
+  readonly resourceKind: "event" | "function";
 };
 
 interface EditorOperationContext {
@@ -52,7 +52,7 @@ function captureEditorOperationContext(
 ): EditorOperationContext | null {
   const target = suppliedTarget ?? captureActiveEditorCommandTarget();
   if (!target || !isEditorCommandTargetCurrent(target)) return null;
-  if (target.resourceKind !== 'event' && target.resourceKind !== 'function') return null;
+  if (target.resourceKind !== "event" && target.resourceKind !== "function") return null;
   return {
     target: target as GraphEditorCommandTarget,
     groupId: target.groupId,
@@ -86,8 +86,10 @@ function isEditorOperationContextCurrent(context: EditorOperationContext): boole
 
 function isCapturedNodeSelectionCurrent(context: SelectionAwareEditorOperationContext): boolean {
   const current = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
-  return current.length === context.nodeSelection.length
-    && current.every((nodeId, index) => nodeId === context.nodeSelection[index]);
+  return (
+    current.length === context.nodeSelection.length &&
+    current.every((nodeId, index) => nodeId === context.nodeSelection[index])
+  );
 }
 
 function logEditorOperationError(operation: string, error: unknown): void {
@@ -96,12 +98,12 @@ function logEditorOperationError(operation: string, error: unknown): void {
 
 function isAppliedMutation(
   outcome: GraphMutationCommandResult | null,
-): outcome is Extract<GraphMutationCommandResult, { status: 'applied' }> {
-  return outcome !== null && outcome !== false && outcome.status === 'applied';
+): outcome is Extract<GraphMutationCommandResult, { status: "applied" }> {
+  return outcome !== null && outcome !== false && outcome.status === "applied";
 }
 
 function mutationOutcomeStatus(outcome: GraphMutationCommandResult | null): string {
-  return outcome !== null && outcome !== false ? outcome.status : 'command unavailable';
+  return outcome !== null && outcome !== false ? outcome.status : "command unavailable";
 }
 
 /** Handles editor-authorized clipboard, history, selection, and node operations. */
@@ -111,7 +113,7 @@ export function useEditorOperations() {
       const update = updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
       if (!update) return;
       const active = getActiveLayoutTab(update.groupId);
-      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+      if (active?.tab.type === "event" || active?.tab.type === "function") {
         setInspectionContext(active.activeTabId, []);
       }
     },
@@ -123,7 +125,7 @@ export function useEditorOperations() {
       const update = updateEditorGroupSelectedNodeIds(updater, targetGroupId);
       if (!update) return;
       const active = getActiveLayoutTab(update.groupId);
-      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+      if (active?.tab.type === "event" || active?.tab.type === "function") {
         setInspectionContext(active.activeTabId, update.nodeIds);
       }
     },
@@ -134,20 +136,17 @@ export function useEditorOperations() {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
     const outcome = await undoEditorHistory(context.graphPath);
-    return outcome.status === 'applied';
+    return outcome.status === "applied";
   }, []);
 
   const redo = useCallback(async (target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
     const outcome = await redoEditorHistory(context.graphPath);
-    return outcome.status === 'applied';
+    return outcome.status === "applied";
   }, []);
 
-  const copyNodes = useCallback(async (
-    nodeIds: string[],
-    target?: EditorCommandTarget,
-  ) => {
+  const copyNodes = useCallback(async (nodeIds: string[], target?: EditorCommandTarget) => {
     try {
       const context = captureEditorOperationContext(target);
       if (!context || nodeIds.length === 0) return false;
@@ -161,83 +160,70 @@ export function useEditorOperations() {
       await writeGraphClipboard(snapshot);
       return true;
     } catch (error) {
-      logEditorOperationError('Copy subgraph', error);
+      logEditorOperationError("Copy subgraph", error);
       return false;
     }
   }, []);
 
-  const copy = useCallback(async (target?: EditorCommandTarget) => {
-    const context = captureSelectionAwareEditorOperationContext(target);
-    if (!context) return false;
-    return copyNodes(context.nodeSelection, target);
-  }, [copyNodes]);
-
-  const duplicateNodes = useCallback(async (
-    nodeIds: string[],
-    offset = DUPLICATE_SUBGRAPH_OFFSET,
-    target?: EditorCommandTarget,
-  ) => {
-    try {
+  const copy = useCallback(
+    async (target?: EditorCommandTarget) => {
       const context = captureSelectionAwareEditorOperationContext(target);
-      if (!context || nodeIds.length === 0) return false;
-      if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const outcome = await executeCommandWithResult(context.graphPath, 'DuplicateSubgraph', {
-        nodeIds: [...nodeIds],
-        offset: { ...offset },
-      });
-      if (!isAppliedMutation(outcome)) {
-        logEditorOperationError('Duplicate subgraph', mutationOutcomeStatus(outcome));
+      if (!context) return false;
+      return copyNodes(context.nodeSelection, target);
+    },
+    [copyNodes],
+  );
+
+  const duplicateNodes = useCallback(
+    async (nodeIds: string[], offset = DUPLICATE_SUBGRAPH_OFFSET, target?: EditorCommandTarget) => {
+      try {
+        const context = captureSelectionAwareEditorOperationContext(target);
+        if (!context || nodeIds.length === 0) return false;
+        if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const outcome = await executeCommandWithResult(context.graphPath, "DuplicateSubgraph", {
+          nodeIds: [...nodeIds],
+          offset: { ...offset },
+        });
+        if (!isAppliedMutation(outcome)) {
+          logEditorOperationError("Duplicate subgraph", mutationOutcomeStatus(outcome));
+          return false;
+        }
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+        if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
+          setSelectedNodeIds(insertedNodeIds, context.groupId);
+        }
+        return true;
+      } catch (error) {
+        logEditorOperationError("Duplicate subgraph", error);
         return false;
       }
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
-      if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
-        setSelectedNodeIds(insertedNodeIds, context.groupId);
-      }
-      return true;
-    } catch (error) {
-      logEditorOperationError('Duplicate subgraph', error);
-      return false;
-    }
-  }, [setSelectedNodeIds]);
+    },
+    [setSelectedNodeIds],
+  );
 
-  const deleteNodesById = useCallback(async (
-    nodeIds: string[],
-    target?: EditorCommandTarget,
-  ) => {
+  const deleteNodesById = useCallback(async (nodeIds: string[], target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || nodeIds.length === 0) return false;
 
     const idsToDelete = nodeIds.filter((id) => canDeleteNode(context.graphPath, id));
     if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
-    return executeSafeGraphMutation(
-      context.graphPath,
-      'Delete nodes',
-      'DeleteNodes',
-      { nodeIds: idsToDelete },
-    );
+    return executeSafeGraphMutation(context.graphPath, "Delete nodes", "DeleteNodes", {
+      nodeIds: idsToDelete,
+    });
   }, []);
 
-  const breakAllNodeLinks = useCallback(async (
-    nodeId: string,
-    target?: EditorCommandTarget,
-  ) => {
+  const breakAllNodeLinks = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphMutation(
-      context.graphPath,
-      'Break all links',
-      'DisconnectNode',
-      { nodeId },
-    );
+    return executeSafeGraphMutation(context.graphPath, "Break all links", "DisconnectNode", {
+      nodeId,
+    });
   }, []);
 
-  const selectLinkedNodes = useCallback(async (
-    nodeId: string,
-    target?: EditorCommandTarget,
-  ) => {
+  const selectLinkedNodes = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context) return false;
     const store = useGraphDataStore.getState();
@@ -262,170 +248,174 @@ export function useEditorOperations() {
     return true;
   }, []);
 
-  const disconnectPinById = useCallback(async (
-    pinId: string,
-    target?: EditorCommandTarget,
-  ) => {
+  const disconnectPinById = useCallback(async (pinId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphMutation(
-      context.graphPath,
-      'Disconnect port',
-      'DisconnectPort',
-      { pinId },
-    );
+    return executeSafeGraphMutation(context.graphPath, "Disconnect port", "DisconnectPort", {
+      pinId,
+    });
   }, []);
 
-  const resetPinValue = useCallback(async (
-    nodeId: string,
-    pinId: string,
-    target?: EditorCommandTarget,
-  ) => {
-    const context = captureEditorOperationContext(target);
-    if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeCommand(
-      context.graphPath,
-      'SetPinValue',
-      { nodeId, pinId, newValue: null },
-    );
-  }, []);
+  const resetPinValue = useCallback(
+    async (nodeId: string, pinId: string, target?: EditorCommandTarget) => {
+      const context = captureEditorOperationContext(target);
+      if (!context || !isEditorOperationContextCurrent(context)) return false;
+      return executeCommand(context.graphPath, "SetPinValue", { nodeId, pinId, newValue: null });
+    },
+    [],
+  );
 
-  const paste = useCallback(async (
-    pos = { x: 0, y: 0 },
-    target?: EditorCommandTarget,
-  ) => {
-    try {
-      const context = captureSelectionAwareEditorOperationContext(target);
-      if (!context) return false;
-      const snapshot = await readGraphClipboard();
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const outcome = await executeCommandWithResult(context.graphPath, 'InsertSubgraph', {
-        snapshotJson: JSON.stringify(snapshot),
-        anchor: { ...pos },
-      });
-      if (!isAppliedMutation(outcome)) {
-        logEditorOperationError('Paste subgraph', mutationOutcomeStatus(outcome));
+  const paste = useCallback(
+    async (pos = { x: 0, y: 0 }, target?: EditorCommandTarget) => {
+      try {
+        const context = captureSelectionAwareEditorOperationContext(target);
+        if (!context) return false;
+        const snapshot = await readGraphClipboard();
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const outcome = await executeCommandWithResult(context.graphPath, "InsertSubgraph", {
+          snapshotJson: JSON.stringify(snapshot),
+          anchor: { ...pos },
+        });
+        if (!isAppliedMutation(outcome)) {
+          logEditorOperationError("Paste subgraph", mutationOutcomeStatus(outcome));
+          return false;
+        }
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+        if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
+          setSelectedNodeIds(insertedNodeIds, context.groupId);
+        }
+        return true;
+      } catch (error) {
+        logEditorOperationError("Paste subgraph", error);
         return false;
       }
+    },
+    [setSelectedNodeIds],
+  );
+
+  const breakConnectionsById = useCallback(
+    async (
+      connectionIds: string[],
+      graphPath: string,
+      groupId: string,
+      target?: EditorCommandTarget,
+    ) => {
+      const context = captureMatchingEditorOperationContext(graphPath, groupId, target);
+      if (!context || connectionIds.length === 0) return false;
+
+      const selectionSnapshot = [...getEditorGroupGraphSelection(groupId).connectionIds];
       if (!isEditorOperationContextCurrent(context)) return false;
-      const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
-      if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
-        setSelectedNodeIds(insertedNodeIds, context.groupId);
-      }
-      return true;
-    } catch (error) {
-      logEditorOperationError('Paste subgraph', error);
-      return false;
-    }
-  }, [setSelectedNodeIds]);
-
-  const breakConnectionsById = useCallback(async (
-    connectionIds: string[],
-    graphPath: string,
-    groupId: string,
-    target?: EditorCommandTarget,
-  ) => {
-    const context = captureMatchingEditorOperationContext(graphPath, groupId, target);
-    if (!context || connectionIds.length === 0) return false;
-
-    const selectionSnapshot = [...getEditorGroupGraphSelection(groupId).connectionIds];
-    if (!isEditorOperationContextCurrent(context)) return false;
-    const applied = await disconnectConnectionsById(graphPath, connectionIds);
-    const currentSelection = [...getEditorGroupGraphSelection(groupId).connectionIds];
-    const selectionUnchanged = currentSelection.length === selectionSnapshot.length
-      && currentSelection.every((id, index) => id === selectionSnapshot[index]);
-    if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
-      setSelectedConnectionIds([], groupId);
-    }
-    return applied;
-  }, [setSelectedConnectionIds]);
-
-  const deleteSelected = useCallback(async (target?: EditorCommandTarget) => {
-    const context = captureEditorOperationContext(target);
-    if (!context) return false;
-    const capturedSelection = getEditorGroupGraphSelection(context.groupId);
-    const connectionSnapshot = [...capturedSelection.connectionIds];
-
-    if (connectionSnapshot.length > 0) {
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const applied = await disconnectConnectionsById(context.graphPath, connectionSnapshot);
-      const currentSelection = [...getEditorGroupGraphSelection(context.groupId).connectionIds];
-      const selectionUnchanged = currentSelection.length === connectionSnapshot.length
-        && currentSelection.every((id, index) => id === connectionSnapshot[index]);
+      const applied = await disconnectConnectionsById(graphPath, connectionIds);
+      const currentSelection = [...getEditorGroupGraphSelection(groupId).connectionIds];
+      const selectionUnchanged =
+        currentSelection.length === selectionSnapshot.length &&
+        currentSelection.every((id, index) => id === selectionSnapshot[index]);
       if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
-        setSelectedConnectionIds([], context.groupId);
+        setSelectedConnectionIds([], groupId);
       }
       return applied;
-    }
+    },
+    [setSelectedConnectionIds],
+  );
 
-    const selectedSnapshot = [...capturedSelection.nodeIds];
-    const selectedIds = new Set(selectedSnapshot);
-    if (selectedIds.size === 0) return false;
-    const dataStore = useGraphDataStore.getState();
-    const idsToDelete = dataStore
-      .getGraphNodeIds(context.graphPath)
-      .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(context.graphPath, nodeId));
-    if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
+  const deleteSelected = useCallback(
+    async (target?: EditorCommandTarget) => {
+      const context = captureEditorOperationContext(target);
+      if (!context) return false;
+      const capturedSelection = getEditorGroupGraphSelection(context.groupId);
+      const connectionSnapshot = [...capturedSelection.connectionIds];
 
-    const applied = await executeSafeGraphMutation(
-      context.graphPath,
-      'Delete selected nodes',
-      'DeleteNodes',
-      { nodeIds: idsToDelete },
-    );
-    const currentSelection = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
-    const selectionUnchanged = currentSelection.length === selectedSnapshot.length
-      && currentSelection.every((nodeId, index) => nodeId === selectedSnapshot[index]);
-    if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
-      setSelectedNodeIds([], context.groupId);
-    }
-    return applied;
-  }, [setSelectedConnectionIds, setSelectedNodeIds]);
-
-  const cutNodes = useCallback(async (
-    nodeIds: string[],
-    target?: EditorCommandTarget,
-  ) => {
-    try {
-      const context = captureSelectionAwareEditorOperationContext(target);
-      if (!context || nodeIds.length === 0) return false;
-      if (!nodeIds.every((nodeId) => canCutNode(context.graphPath, nodeId))) return false;
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const snapshot = await exportEditorSubgraph({
-        graphPath: context.graphPath,
-        nodeIds: [...nodeIds],
-      });
-      if (!isEditorOperationContextCurrent(context)) return false;
-      await writeGraphClipboard(snapshot);
-      if (!isEditorOperationContextCurrent(context)) return false;
-      const outcome = await executeCommandWithResult(context.graphPath, 'DeleteNodes', {
-        nodeIds: [...nodeIds],
-      });
-      if (!isAppliedMutation(outcome)) {
-        logEditorOperationError('Cut subgraph deletion', mutationOutcomeStatus(outcome));
-        return false;
+      if (connectionSnapshot.length > 0) {
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const applied = await disconnectConnectionsById(context.graphPath, connectionSnapshot);
+        const currentSelection = [...getEditorGroupGraphSelection(context.groupId).connectionIds];
+        const selectionUnchanged =
+          currentSelection.length === connectionSnapshot.length &&
+          currentSelection.every((id, index) => id === connectionSnapshot[index]);
+        if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
+          setSelectedConnectionIds([], context.groupId);
+        }
+        return applied;
       }
-      if (isEditorOperationContextCurrent(context) && isCapturedNodeSelectionCurrent(context)) {
+
+      const selectedSnapshot = [...capturedSelection.nodeIds];
+      const selectedIds = new Set(selectedSnapshot);
+      if (selectedIds.size === 0) return false;
+      const dataStore = useGraphDataStore.getState();
+      const idsToDelete = dataStore
+        .getGraphNodeIds(context.graphPath)
+        .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(context.graphPath, nodeId));
+      if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
+
+      const applied = await executeSafeGraphMutation(
+        context.graphPath,
+        "Delete selected nodes",
+        "DeleteNodes",
+        { nodeIds: idsToDelete },
+      );
+      const currentSelection = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
+      const selectionUnchanged =
+        currentSelection.length === selectedSnapshot.length &&
+        currentSelection.every((nodeId, index) => nodeId === selectedSnapshot[index]);
+      if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
         setSelectedNodeIds([], context.groupId);
       }
-      return true;
-    } catch (error) {
-      logEditorOperationError('Cut subgraph', error);
-      return false;
-    }
-  }, [setSelectedNodeIds]);
+      return applied;
+    },
+    [setSelectedConnectionIds, setSelectedNodeIds],
+  );
 
-  const cut = useCallback(async (target?: EditorCommandTarget) => {
-    const context = captureSelectionAwareEditorOperationContext(target);
-    if (!context) return false;
-    return cutNodes(context.nodeSelection, target);
-  }, [cutNodes]);
+  const cutNodes = useCallback(
+    async (nodeIds: string[], target?: EditorCommandTarget) => {
+      try {
+        const context = captureSelectionAwareEditorOperationContext(target);
+        if (!context || nodeIds.length === 0) return false;
+        if (!nodeIds.every((nodeId) => canCutNode(context.graphPath, nodeId))) return false;
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const snapshot = await exportEditorSubgraph({
+          graphPath: context.graphPath,
+          nodeIds: [...nodeIds],
+        });
+        if (!isEditorOperationContextCurrent(context)) return false;
+        await writeGraphClipboard(snapshot);
+        if (!isEditorOperationContextCurrent(context)) return false;
+        const outcome = await executeCommandWithResult(context.graphPath, "DeleteNodes", {
+          nodeIds: [...nodeIds],
+        });
+        if (!isAppliedMutation(outcome)) {
+          logEditorOperationError("Cut subgraph deletion", mutationOutcomeStatus(outcome));
+          return false;
+        }
+        if (isEditorOperationContextCurrent(context) && isCapturedNodeSelectionCurrent(context)) {
+          setSelectedNodeIds([], context.groupId);
+        }
+        return true;
+      } catch (error) {
+        logEditorOperationError("Cut subgraph", error);
+        return false;
+      }
+    },
+    [setSelectedNodeIds],
+  );
 
-  const duplicateSelected = useCallback(async (target?: EditorCommandTarget) => {
-    const context = captureSelectionAwareEditorOperationContext(target);
-    if (!context || context.nodeSelection.length === 0) return false;
-    return duplicateNodes(context.nodeSelection, DUPLICATE_SUBGRAPH_OFFSET, target);
-  }, [duplicateNodes]);
+  const cut = useCallback(
+    async (target?: EditorCommandTarget) => {
+      const context = captureSelectionAwareEditorOperationContext(target);
+      if (!context) return false;
+      return cutNodes(context.nodeSelection, target);
+    },
+    [cutNodes],
+  );
+
+  const duplicateSelected = useCallback(
+    async (target?: EditorCommandTarget) => {
+      const context = captureSelectionAwareEditorOperationContext(target);
+      if (!context || context.nodeSelection.length === 0) return false;
+      return duplicateNodes(context.nodeSelection, DUPLICATE_SUBGRAPH_OFFSET, target);
+    },
+    [duplicateNodes],
+  );
 
   return {
     undo,

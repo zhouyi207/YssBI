@@ -4,14 +4,14 @@
 
 ## 1. 权威性矩阵
 
-| 信息 | 权威来源 | 传输 | 保留 | UI 用途 |
-| --- | --- | --- | --- | --- |
-| Logging | `yss-tracing` 的 Rust `tracing` 管线 | 独立 bounded console/file workers | rolling JSONL；队列满时有损 | 本地排障，不驱动业务状态 |
-| Diagnostics | Rust log 的 sanitized projection + 显式 frontend diagnostics | bounded dispatcher + Tauri Channel | 有损 recent ring | LogView 排障，不驱动业务状态 |
-| IPC error | Rust `CommandError` | command rejection | 不单独保留；内部错误关联 incident | React 按 `code` 本地化并选择反馈表面 |
-| User feedback | React application/view | Zustand UI state / component state | 仅按交互需要 | `Alert`、`Dialog`、字段内错误、状态变化 |
-| Results | Rust `ResultStore` | typed query commands；run events 仅公告 Preview/Open result ID | project-session logical results 与 Pin history | Result/Inspect/Preview/presentation surfaces |
-| Program Output | Rust graph runtime | ordered execution Channel | 单次运行有界前端投影 | 独立 Output 面板 |
+| 信息           | 权威来源                                                     | 传输                                                           | 保留                                           | UI 用途                                      |
+| -------------- | ------------------------------------------------------------ | -------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| Logging        | `yss-tracing` 的 Rust `tracing` 管线                         | 独立 bounded console/file workers                              | rolling JSONL；队列满时有损                    | 本地排障，不驱动业务状态                     |
+| Diagnostics    | Rust log 的 sanitized projection + 显式 frontend diagnostics | bounded dispatcher + Tauri Channel                             | 有损 recent ring                               | LogView 排障，不驱动业务状态                 |
+| IPC error      | Rust `CommandError`                                          | command rejection                                              | 不单独保留；内部错误关联 incident              | React 按 `code` 本地化并选择反馈表面         |
+| User feedback  | React application/view                                       | Zustand UI state / component state                             | 仅按交互需要                                   | `Alert`、`Dialog`、字段内错误、状态变化      |
+| Results        | Rust `ResultStore`                                           | typed query commands；run events 仅公告 Preview/Open result ID | project-session logical results 与 Pin history | Result/Inspect/Preview/presentation surfaces |
+| Program Output | Rust graph runtime                                           | ordered execution Channel                                      | 单次运行有界前端投影                           | 独立 Output 面板                             |
 
 核心规则：
 
@@ -77,7 +77,7 @@ Rolling JSONL、console 和 Rust diagnostics projection 共享 `yss-tracing::Log
 ```ts
 interface LogRecord {
   timestamp: string;
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  level: "trace" | "debug" | "info" | "warn" | "error";
   target: string;
   message: string;
   fields: Record<string, unknown>;
@@ -91,9 +91,9 @@ interface DiagnosticRecordDto {
   streamId: string;
   sequence: number;
   timestamp: string;
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
-  origin: 'rust' | 'frontend';
-  domain: 'application' | 'execution' | 'system' | 'graph' | 'data' | 'ui';
+  level: "trace" | "debug" | "info" | "warn" | "error";
+  origin: "rust" | "frontend";
+  domain: "application" | "execution" | "system" | "graph" | "data" | "ui";
   target: string;
   event?: string;
   message: string;
@@ -206,13 +206,13 @@ command 成功返回的 DTO 也不能借由嵌套 `message`、`detail` 或 `hint
 
 React 根据 use case 决定反馈表面：
 
-| 情况 | 表面 |
-| --- | --- |
-| 页面/区块可继续使用 | shadcn `Alert` / `PageAlert` |
-| 必须确认后才能继续 | 普通单按钮 `Dialog` / `uiStore.alert` |
-| 危险操作确认 | `AlertDialog` |
-| 输入字段问题 | 字段旁 inline error + `aria-describedby` |
-| 成功 | 优先由新状态、列表变化或持久状态显示 |
+| 情况                | 表面                                     |
+| ------------------- | ---------------------------------------- |
+| 页面/区块可继续使用 | shadcn `Alert` / `PageAlert`             |
+| 必须确认后才能继续  | 普通单按钮 `Dialog` / `uiStore.alert`    |
+| 危险操作确认        | `AlertDialog`                            |
+| 输入字段问题        | 字段旁 inline error + `aria-describedby` |
+| 成功                | 优先由新状态、列表变化或持久状态显示     |
 
 不使用 toaster、Sonner、浏览器 `alert/prompt/confirm` 或 native message dialog。路径选择 dialog 是桌面能力例外。
 
@@ -266,7 +266,7 @@ Print 等用户程序输出使用 `RunOutputEvent`，不进入 `tracing`：
 interface RunOutputEvent {
   runId: string;
   sequence: number;
-  stream: 'stdout' | 'stderr';
+  stream: "stdout" | "stderr";
   text: string;
   sourceGraphPath: string;
   sourceNodeId: string;
@@ -284,7 +284,6 @@ interface RunOutputEvent {
 Frontend `runOutputProjection` 最多保留 258 条（256 text + 2 status），拒绝重复/倒序，并在 sequence gap 或本地容量丢失时设置 `projectionDropped`。
 
 Output 面板位于 `src/views/LogView/OutputPanel.tsx`，但它只复用 workbench panel 位置，不读取 diagnostic store。来源路径是 opaque resource path；nested function 输出必须携带实际 `sourceGraphPath`，不能按 root graph 或 node UUID 猜测。
-
 
 ## 7. Review checklist
 

@@ -88,10 +88,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            0.0,
-            10.0
-          ]
+          "args": [0.0, 10.0]
         }
       },
       {
@@ -101,10 +98,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            0.0,
-            10.0
-          ]
+          "args": [0.0, 10.0]
         }
       }
     ],

@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  JuliaRuntimeService,
-  type JuliaWorkerStatus,
-} from "@/services/julia/juliaRuntimeService";
+import { JuliaRuntimeService, type JuliaWorkerStatus } from "@/services/julia/juliaRuntimeService";
 
 export interface JuliaWorkerStatusViewModel {
   state: "checking" | "starting" | "ready" | "unavailable";

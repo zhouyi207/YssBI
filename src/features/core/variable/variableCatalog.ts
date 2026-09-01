@@ -1,7 +1,7 @@
-import type { ProjectVariableIndexRow } from '@/shared/types/domain/project';
-import type { Variable } from '@/shared/types';
-import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
-import type { ProjectResourceMeta } from '@/features/core/resource';
+import type { ProjectVariableIndexRow } from "@/shared/types/domain/project";
+import type { Variable } from "@/shared/types";
+import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
+import type { ProjectResourceMeta } from "@/features/core/resource";
 
 export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {
   return normalizeVariableFromBackend({
@@ -10,7 +10,7 @@ export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {
     name: row.name,
     dataType: row.dataType,
     dataValue: row.dataValue,
-    description: row.description ?? '',
+    description: row.description ?? "",
     scope: row.scope,
     tags: row.tags ?? [],
   });
@@ -37,14 +37,14 @@ export function variableCatalogToResourceMetas(
 ): ProjectResourceMeta[] {
   return Object.entries(variables).map(([id, variable]) => {
     const scope =
-      variable.scope.type === 'event'
-        ? { type: 'event' as const , graphPath: variable.scope.eventPath }
-        : variable.scope.type === 'function'
-          ? { type: 'function' as const , graphPath: variable.scope.functionPath }
-          : { type: 'global' as const };
+      variable.scope.type === "event"
+        ? { type: "event" as const, graphPath: variable.scope.eventPath }
+        : variable.scope.type === "function"
+          ? { type: "function" as const, graphPath: variable.scope.functionPath }
+          : { type: "global" as const };
     return {
       id,
-      kind: 'variable',
+      kind: "variable",
       name: variable.name,
       uri: `yssbi://variable/${id}`,
       scope,

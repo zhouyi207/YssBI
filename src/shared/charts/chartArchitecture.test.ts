@@ -1,11 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { posix, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readdirSync, readFileSync } from "node:fs";
+import { posix, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const sourceRoot = resolve(repositoryRoot, 'src');
+const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const sourceRoot = resolve(repositoryRoot, "src");
 
 const forbiddenRules = [
   { from: /^src\/shared\/charts\//, to: /^@\/(?:views|services|features)\// },
@@ -15,7 +15,7 @@ const forbiddenRules = [
   { from: /^src\/views\/(?!PlotView\/PlotWindow\.tsx)/, to: /^@\/views\/PlotView\// },
 ];
 
-type SourceKind = 'ts' | 'tsx';
+type SourceKind = "ts" | "tsx";
 
 interface ProductionSource {
   path: string;
@@ -24,14 +24,14 @@ interface ProductionSource {
 }
 
 function toRepositoryPath(filePath: string): string {
-  return relative(repositoryRoot, filePath).split(sep).join('/');
+  return relative(repositoryRoot, filePath).split(sep).join("/");
 }
 
 function collectProductionFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true })
     .sort((left, right) => left.name.localeCompare(right.name))
-    .flatMap(entry => {
-      if (entry.name === '.superpowers' || entry.name === '__tests__') return [];
+    .flatMap((entry) => {
+      if (entry.name === ".superpowers" || entry.name === "__tests__") return [];
 
       const entryPath = resolve(directory, entry.name);
       if (entry.isDirectory()) return collectProductionFiles(entryPath);
@@ -44,13 +44,13 @@ function collectProductionFiles(directory: string): string[] {
 function parseProductionSource(filePath: string): ProductionSource {
   return {
     path: toRepositoryPath(filePath),
-    source: readFileSync(filePath, 'utf8'),
-    sourceKind: filePath.endsWith('.tsx') ? 'tsx' : 'ts',
+    source: readFileSync(filePath, "utf8"),
+    sourceKind: filePath.endsWith(".tsx") ? "tsx" : "ts",
   };
 }
 
-type SourceTokenKind = 'identifier' | 'number' | 'punctuator' | 'string';
-type LifecycleOperationKind = 'resize-observer' | 'whole-svg-clear';
+type SourceTokenKind = "identifier" | "number" | "punctuator" | "string";
+type LifecycleOperationKind = "resize-observer" | "whole-svg-clear";
 
 interface SourceToken {
   kind: SourceTokenKind;
@@ -63,93 +63,93 @@ interface LifecycleOperation {
   index: number;
 }
 
-const CONTROL_CONDITION_KEYWORDS = new Set(['catch', 'for', 'if', 'switch', 'while', 'with']);
+const CONTROL_CONDITION_KEYWORDS = new Set(["catch", "for", "if", "switch", "while", "with"]);
 const REGEX_PREFIX_KEYWORDS = new Set([
-  'await',
-  'case',
-  'delete',
-  'do',
-  'else',
-  'in',
-  'instanceof',
-  'new',
-  'of',
-  'return',
-  'throw',
-  'typeof',
-  'void',
-  'yield',
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "of",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
 ]);
 const REGEX_PREFIX_PUNCTUATORS = new Set([
-  '!',
-  '!=',
-  '!==',
-  '%',
-  '%=',
-  '&',
-  '&&',
-  '&&=',
-  '(',
-  '*',
-  '**',
-  '**=',
-  '*=',
-  '+',
-  '+=',
-  ',',
-  '-',
-  '-=',
-  '/',
-  '/=',
-  ':',
-  ';',
-  '=',
-  '==',
-  '===',
-  '=>',
-  '?',
-  '??',
-  '??=',
-  '[',
-  '^',
-  '^=',
-  '{',
-  '|',
-  '||',
-  '||=',
-  '~',
+  "!",
+  "!=",
+  "!==",
+  "%",
+  "%=",
+  "&",
+  "&&",
+  "&&=",
+  "(",
+  "*",
+  "**",
+  "**=",
+  "*=",
+  "+",
+  "+=",
+  ",",
+  "-",
+  "-=",
+  "/",
+  "/=",
+  ":",
+  ";",
+  "=",
+  "==",
+  "===",
+  "=>",
+  "?",
+  "??",
+  "??=",
+  "[",
+  "^",
+  "^=",
+  "{",
+  "|",
+  "||",
+  "||=",
+  "~",
 ]);
 const PUNCTUATORS = [
-  '===',
-  '!==',
-  '>>>',
-  '**=',
-  '&&=',
-  '||=',
-  '??=',
-  '...',
-  '=>',
-  '==',
-  '!=',
-  '<=',
-  '>=',
-  '&&',
-  '||',
-  '??',
-  '++',
-  '--',
-  '+=',
-  '-=',
-  '*=',
-  '/=',
-  '%=',
-  '^=',
-  '&=',
-  '|=',
-  '**',
-  '<<',
-  '>>',
-  '?.',
+  "===",
+  "!==",
+  ">>>",
+  "**=",
+  "&&=",
+  "||=",
+  "??=",
+  "...",
+  "=>",
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "&&",
+  "||",
+  "??",
+  "++",
+  "--",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "^=",
+  "&=",
+  "|=",
+  "**",
+  "<<",
+  ">>",
+  "?.",
 ];
 
 function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
@@ -159,11 +159,11 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
   function readString(): SourceToken {
     const start = index;
     const quote = source[index];
-    let value = '';
+    let value = "";
     index += 1;
     while (index < source.length) {
       const character = source[index];
-      if (character === '\\' && index + 1 < source.length) {
+      if (character === "\\" && index + 1 < source.length) {
         value += source[index + 1];
         index += 2;
       } else if (character === quote) {
@@ -174,7 +174,7 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         index += 1;
       }
     }
-    return { kind: 'string', value, index: start };
+    return { kind: "string", value, index: start };
   }
 
   function skipRegexLiteral(): void {
@@ -182,19 +182,19 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
     let inCharacterClass = false;
     while (index < source.length) {
       const character = source[index];
-      if (character === '\\') {
+      if (character === "\\") {
         index += 2;
-      } else if (character === '[') {
+      } else if (character === "[") {
         inCharacterClass = true;
         index += 1;
-      } else if (character === ']' && inCharacterClass) {
+      } else if (character === "]" && inCharacterClass) {
         inCharacterClass = false;
         index += 1;
-      } else if (character === '/' && !inCharacterClass) {
+      } else if (character === "/" && !inCharacterClass) {
         index += 1;
-        while (/[A-Za-z]/.test(source[index] ?? '')) index += 1;
+        while (/[A-Za-z]/.test(source[index] ?? "")) index += 1;
         return;
-      } else if (character === '\n' || character === '\r') {
+      } else if (character === "\n" || character === "\r") {
         return;
       } else {
         index += 1;
@@ -205,12 +205,12 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
   function scanTemplate(): void {
     index += 1;
     while (index < source.length) {
-      if (source[index] === '\\') {
+      if (source[index] === "\\") {
         index += 2;
-      } else if (source[index] === '`') {
+      } else if (source[index] === "`") {
         index += 1;
         return;
-      } else if (source[index] === '$' && source[index + 1] === '{') {
+      } else if (source[index] === "$" && source[index + 1] === "{") {
         index += 2;
         scanCode(true);
       } else {
@@ -224,12 +224,14 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
     while (cursor < source.length) {
       if (/\s/.test(source[cursor])) {
         cursor += 1;
-      } else if (source[cursor] === '/' && source[cursor + 1] === '/') {
+      } else if (source[cursor] === "/" && source[cursor + 1] === "/") {
         cursor += 2;
-        while (cursor < source.length && source[cursor] !== '\n' && source[cursor] !== '\r') cursor += 1;
-      } else if (source[cursor] === '/' && source[cursor + 1] === '*') {
+        while (cursor < source.length && source[cursor] !== "\n" && source[cursor] !== "\r")
+          cursor += 1;
+      } else if (source[cursor] === "/" && source[cursor + 1] === "*") {
         cursor += 2;
-        while (cursor < source.length && !(source[cursor] === '*' && source[cursor + 1] === '/')) cursor += 1;
+        while (cursor < source.length && !(source[cursor] === "*" && source[cursor + 1] === "/"))
+          cursor += 1;
         cursor = Math.min(source.length, cursor + 2);
       } else {
         return cursor;
@@ -242,7 +244,7 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
     const quote = source[start];
     let cursor = start + 1;
     while (cursor < source.length) {
-      if (source[cursor] === '\\') cursor += 2;
+      if (source[cursor] === "\\") cursor += 2;
       else if (source[cursor] === quote) return cursor + 1;
       else cursor += 1;
     }
@@ -252,19 +254,20 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
   function canStartFunctionTypeParameters(start: number, end: number): boolean {
     const cursor = skipLookaheadTrivia(start);
     if (cursor >= end) return true;
-    if (source.startsWith('...', cursor) || source[cursor] === '{' || source[cursor] === '[') return true;
-    if (!/[A-Za-z_$]/.test(source[cursor] ?? '')) return false;
+    if (source.startsWith("...", cursor) || source[cursor] === "{" || source[cursor] === "[")
+      return true;
+    if (!/[A-Za-z_$]/.test(source[cursor] ?? "")) return false;
 
     let wordEnd = cursor + 1;
-    while (/[A-Za-z0-9_$]/.test(source[wordEnd] ?? '')) wordEnd += 1;
+    while (/[A-Za-z0-9_$]/.test(source[wordEnd] ?? "")) wordEnd += 1;
     const firstWord = source.slice(cursor, wordEnd);
-    return firstWord !== 'abstract' && firstWord !== 'new';
+    return firstWord !== "abstract" && firstWord !== "new";
   }
 
   function hasArrowAfterReturnType(start: number): boolean {
     let cursor = skipLookaheadTrivia(start);
-    if (source.startsWith('=>', cursor)) return true;
-    if (source[cursor] !== ':') return false;
+    if (source.startsWith("=>", cursor)) return true;
+    if (source[cursor] !== ":") return false;
 
     cursor = skipLookaheadTrivia(cursor + 1);
     const delimiters: Array<{ closing: string; parameterStart?: number }> = [];
@@ -278,13 +281,13 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         continue;
       }
       const character = source[cursor];
-      if (character === "'" || character === '"' || character === '`') {
+      if (character === "'" || character === '"' || character === "`") {
         cursor = skipLookaheadQuoted(cursor);
         hasTypeContent = true;
         closedFunctionParameters = false;
         continue;
       }
-      if (source.startsWith('=>', cursor)) {
+      if (source.startsWith("=>", cursor)) {
         if (delimiters.length > 0) {
           cursor += 2;
           continue;
@@ -299,18 +302,26 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
       }
 
       const closing =
-        character === '(' ? ')' : character === '[' ? ']' : character === '{' ? '}' : character === '<' ? '>' : undefined;
+        character === "("
+          ? ")"
+          : character === "["
+            ? "]"
+            : character === "{"
+              ? "}"
+              : character === "<"
+                ? ">"
+                : undefined;
       if (closing) {
         delimiters.push({
           closing,
-          parameterStart: delimiters.length === 0 && character === '(' ? cursor + 1 : undefined,
+          parameterStart: delimiters.length === 0 && character === "(" ? cursor + 1 : undefined,
         });
         cursor += 1;
         hasTypeContent = true;
         closedFunctionParameters = false;
         continue;
       }
-      if (character === ')' || character === ']' || character === '}' || character === '>') {
+      if (character === ")" || character === "]" || character === "}" || character === ">") {
         const delimiter = delimiters.pop();
         if (delimiter?.closing !== character) return false;
 
@@ -318,12 +329,13 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         hasTypeContent = true;
         closedFunctionParameters =
           delimiters.length === 0 &&
-          character === ')' &&
+          character === ")" &&
           delimiter.parameterStart !== undefined &&
           canStartFunctionTypeParameters(delimiter.parameterStart, cursor - 1);
         continue;
       }
-      if (delimiters.length === 0 && (character === ';' || character === ',' || character === '=')) return false;
+      if (delimiters.length === 0 && (character === ";" || character === "," || character === "="))
+        return false;
 
       cursor += 1;
       hasTypeContent = true;
@@ -343,26 +355,26 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         cursor = afterTrivia;
         continue;
       }
-      if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === '`') {
+      if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === "`") {
         cursor = skipLookaheadQuoted(cursor);
         continue;
       }
-      if (source.startsWith('=>', cursor)) {
+      if (source.startsWith("=>", cursor)) {
         cursor += 2;
         continue;
       }
-      if (source[cursor] === '<') {
+      if (source[cursor] === "<") {
         angleDepth += 1;
-      } else if (source[cursor] === '>') {
+      } else if (source[cursor] === ">") {
         angleDepth -= 1;
         if (angleDepth === 0) break;
-      } else if (angleDepth === 1 && source[cursor] === ',') {
+      } else if (angleDepth === 1 && source[cursor] === ",") {
         hasGenericDisambiguator = true;
       } else if (/[A-Za-z_$]/.test(source[cursor])) {
         const wordStart = cursor;
         cursor += 1;
-        while (/[A-Za-z0-9_$]/.test(source[cursor] ?? '')) cursor += 1;
-        if (angleDepth === 1 && source.slice(wordStart, cursor) === 'extends') {
+        while (/[A-Za-z0-9_$]/.test(source[cursor] ?? "")) cursor += 1;
+        if (angleDepth === 1 && source.slice(wordStart, cursor) === "extends") {
           hasGenericDisambiguator = true;
         }
         continue;
@@ -374,13 +386,13 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
     const previousIndex = tokens.length - 1;
     const inTypeAlias =
       previousIndex - 2 >= tokenStart &&
-      tokens[previousIndex].value === '=' &&
-      tokens[previousIndex - 1].kind === 'identifier' &&
-      tokens[previousIndex - 2].value === 'type';
+      tokens[previousIndex].value === "=" &&
+      tokens[previousIndex - 1].kind === "identifier" &&
+      tokens[previousIndex - 2].value === "type";
     if (!hasGenericDisambiguator && !inTypeAlias) return false;
 
     cursor = skipLookaheadTrivia(cursor + 1);
-    if (source[cursor] !== '(') return false;
+    if (source[cursor] !== "(") return false;
 
     let parenthesisDepth = 0;
     while (cursor < source.length) {
@@ -389,12 +401,12 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         cursor = afterTrivia;
         continue;
       }
-      if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === '`') {
+      if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === "`") {
         cursor = skipLookaheadQuoted(cursor);
         continue;
       }
-      if (source[cursor] === '(') parenthesisDepth += 1;
-      if (source[cursor] === ')') {
+      if (source[cursor] === "(") parenthesisDepth += 1;
+      if (source[cursor] === ")") {
         parenthesisDepth -= 1;
         cursor += 1;
         if (parenthesisDepth === 0) break;
@@ -408,44 +420,44 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
   }
 
   function startsJsxElement(canStartExpression: boolean, tokenStart: number): boolean {
-    if (sourceKind !== 'tsx' || !canStartExpression || source[index] !== '<') return false;
+    if (sourceKind !== "tsx" || !canStartExpression || source[index] !== "<") return false;
     if (startsGenericSignature(tokenStart)) return false;
-    if (source[index + 1] === '>') return true;
+    if (source[index + 1] === ">") return true;
 
     let cursor = index + 1;
-    if (!/[A-Za-z_$]/.test(source[cursor] ?? '')) return false;
+    if (!/[A-Za-z_$]/.test(source[cursor] ?? "")) return false;
     cursor += 1;
-    while (/[A-Za-z0-9_$:.-]/.test(source[cursor] ?? '')) cursor += 1;
-    return /[\s/>]/.test(source[cursor] ?? '');
+    while (/[A-Za-z0-9_$:.-]/.test(source[cursor] ?? "")) cursor += 1;
+    return /[\s/>]/.test(source[cursor] ?? "");
   }
 
   function scanJsxElement(): void {
     let elementDepth = 0;
     while (index < source.length) {
-      if (source[index] === '{') {
+      if (source[index] === "{") {
         index += 1;
         scanCode(true);
         continue;
       }
-      if (source[index] !== '<') {
+      if (source[index] !== "<") {
         index += 1;
         continue;
       }
 
-      const closingTag = source[index + 1] === '/';
+      const closingTag = source[index + 1] === "/";
       let selfClosingTag = false;
       index += closingTag ? 2 : 1;
       while (index < source.length) {
         if (source[index] === "'" || source[index] === '"') {
           readString();
-        } else if (source[index] === '{') {
+        } else if (source[index] === "{") {
           index += 1;
           scanCode(true);
-        } else if (source[index] === '/' && source[index + 1] === '>') {
+        } else if (source[index] === "/" && source[index + 1] === ">") {
           selfClosingTag = true;
           index += 2;
           break;
-        } else if (source[index] === '>') {
+        } else if (source[index] === ">") {
           index += 1;
           break;
         } else {
@@ -472,29 +484,31 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
       const previous = tokens[previousIndex];
       const beforePrevious = previousIndex > tokenStart ? tokens[previousIndex - 1] : undefined;
       if (
-        previous.kind === 'identifier' &&
+        previous.kind === "identifier" &&
         CONTROL_CONDITION_KEYWORDS.has(previous.value) &&
-        beforePrevious?.value !== '.' &&
-        beforePrevious?.value !== '?.'
+        beforePrevious?.value !== "." &&
+        beforePrevious?.value !== "?."
       ) {
         return true;
       }
-      return previous.value === 'await' && beforePrevious?.value === 'for';
+      return previous.value === "await" && beforePrevious?.value === "for";
     };
 
     const emit = (kind: SourceTokenKind, value: string, start: number): void => {
       let closesControlCondition = false;
-      if (kind === 'punctuator' && value === '(') {
+      if (kind === "punctuator" && value === "(") {
         controlConditionStack.push(startsControlCondition());
-      } else if (kind === 'punctuator' && value === ')') {
+      } else if (kind === "punctuator" && value === ")") {
         closesControlCondition = controlConditionStack.pop() ?? false;
       }
 
       const token = { kind, value, index: start };
       tokens.push(token);
-      canStartRegex = closesControlCondition || (kind === 'punctuator'
-        ? REGEX_PREFIX_PUNCTUATORS.has(value)
-        : kind === 'identifier' && REGEX_PREFIX_KEYWORDS.has(value));
+      canStartRegex =
+        closesControlCondition ||
+        (kind === "punctuator"
+          ? REGEX_PREFIX_PUNCTUATORS.has(value)
+          : kind === "identifier" && REGEX_PREFIX_KEYWORDS.has(value));
     };
 
     while (index < source.length) {
@@ -504,22 +518,24 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         index += 1;
         continue;
       }
-      if (character === '/' && next === '/') {
+      if (character === "/" && next === "/") {
         index += 2;
-        while (index < source.length && source[index] !== '\n' && source[index] !== '\r') index += 1;
+        while (index < source.length && source[index] !== "\n" && source[index] !== "\r")
+          index += 1;
         continue;
       }
-      if (character === '/' && next === '*') {
+      if (character === "/" && next === "*") {
         index += 2;
-        while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) index += 1;
+        while (index < source.length && !(source[index] === "*" && source[index + 1] === "/"))
+          index += 1;
         index = Math.min(source.length, index + 2);
         continue;
       }
-      if (stopAtExpressionEnd && character === '}' && braceDepth === 0) {
+      if (stopAtExpressionEnd && character === "}" && braceDepth === 0) {
         index += 1;
         return;
       }
-      if (character === '<' && startsJsxElement(canStartRegex, tokenStart)) {
+      if (character === "<" && startsJsxElement(canStartRegex, tokenStart)) {
         scanJsxElement();
         canStartRegex = false;
         continue;
@@ -529,12 +545,12 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
         emit(token.kind, token.value, token.index);
         continue;
       }
-      if (character === '`') {
+      if (character === "`") {
         scanTemplate();
         canStartRegex = false;
         continue;
       }
-      if (character === '/' && canStartRegex) {
+      if (character === "/" && canStartRegex) {
         skipRegexLiteral();
         canStartRegex = false;
         continue;
@@ -542,27 +558,28 @@ function tokenizeSource(source: string, sourceKind: SourceKind): SourceToken[] {
       if (/[A-Za-z_$]/.test(character)) {
         const start = index;
         index += 1;
-        while (/[A-Za-z0-9_$]/.test(source[index] ?? '')) index += 1;
-        emit('identifier', source.slice(start, index), start);
+        while (/[A-Za-z0-9_$]/.test(source[index] ?? "")) index += 1;
+        emit("identifier", source.slice(start, index), start);
         continue;
       }
       if (/[0-9]/.test(character)) {
         const start = index;
         index += 1;
-        while (/[A-Za-z0-9_.]/.test(source[index] ?? '')) index += 1;
-        emit('number', source.slice(start, index), start);
+        while (/[A-Za-z0-9_.]/.test(source[index] ?? "")) index += 1;
+        emit("number", source.slice(start, index), start);
         continue;
       }
-      if (character === '{') braceDepth += 1;
-      if (character === '}' && braceDepth > 0) braceDepth -= 1;
-      const punctuator = PUNCTUATORS.find(candidate => source.startsWith(candidate, index)) ?? character;
-      emit('punctuator', punctuator, index);
+      if (character === "{") braceDepth += 1;
+      if (character === "}" && braceDepth > 0) braceDepth -= 1;
+      const punctuator =
+        PUNCTUATORS.find((candidate) => source.startsWith(candidate, index)) ?? character;
+      emit("punctuator", punctuator, index);
       index += punctuator.length;
     }
   }
 
-  if (source.startsWith('#!')) {
-    while (index < source.length && source[index] !== '\n') index += 1;
+  if (source.startsWith("#!")) {
+    while (index < source.length && source[index] !== "\n") index += 1;
   }
   scanCode();
   return tokens;
@@ -579,8 +596,12 @@ function tokenIs(
 }
 
 function findFromSpecifier(tokens: readonly SourceToken[], start: number): SourceToken | undefined {
-  for (let index = start; index < tokens.length && !tokenIs(tokens, index, 'punctuator', ';'); index += 1) {
-    if (tokenIs(tokens, index, 'identifier', 'from') && tokenIs(tokens, index + 1, 'string')) {
+  for (
+    let index = start;
+    index < tokens.length && !tokenIs(tokens, index, "punctuator", ";");
+    index += 1
+  ) {
+    if (tokenIs(tokens, index, "identifier", "from") && tokenIs(tokens, index + 1, "string")) {
       return tokens[index + 1];
     }
   }
@@ -593,70 +614,75 @@ function collectModuleSpecifiers(source: string, sourceKind: SourceKind): string
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (token.kind === 'identifier' && token.value === 'import') {
-      if (tokenIs(tokens, index - 1, 'punctuator', '.') || tokenIs(tokens, index - 1, 'punctuator', '?.')) continue;
-      if (tokenIs(tokens, index + 1, 'punctuator', '(')) {
-        if (tokenIs(tokens, index + 2, 'string')) specifiers.push(tokens[index + 2]);
+    if (token.kind === "identifier" && token.value === "import") {
+      if (
+        tokenIs(tokens, index - 1, "punctuator", ".") ||
+        tokenIs(tokens, index - 1, "punctuator", "?.")
+      )
+        continue;
+      if (tokenIs(tokens, index + 1, "punctuator", "(")) {
+        if (tokenIs(tokens, index + 2, "string")) specifiers.push(tokens[index + 2]);
         continue;
       }
-      if (tokenIs(tokens, index + 1, 'string')) {
+      if (tokenIs(tokens, index + 1, "string")) {
         specifiers.push(tokens[index + 1]);
         continue;
       }
 
       let cursor = index + 1;
-      if (tokenIs(tokens, cursor, 'identifier', 'type')) cursor += 1;
+      if (tokenIs(tokens, cursor, "identifier", "type")) cursor += 1;
       if (
-        tokenIs(tokens, cursor, 'identifier') &&
-        tokenIs(tokens, cursor + 1, 'punctuator', '=') &&
-        tokenIs(tokens, cursor + 2, 'identifier', 'require') &&
-        tokenIs(tokens, cursor + 3, 'punctuator', '(') &&
-        tokenIs(tokens, cursor + 4, 'string')
+        tokenIs(tokens, cursor, "identifier") &&
+        tokenIs(tokens, cursor + 1, "punctuator", "=") &&
+        tokenIs(tokens, cursor + 2, "identifier", "require") &&
+        tokenIs(tokens, cursor + 3, "punctuator", "(") &&
+        tokenIs(tokens, cursor + 4, "string")
       ) {
         specifiers.push(tokens[cursor + 4]);
         continue;
       }
       if (
-        tokenIs(tokens, cursor, 'identifier') ||
-        tokenIs(tokens, cursor, 'punctuator', '{') ||
-        tokenIs(tokens, cursor, 'punctuator', '*')
+        tokenIs(tokens, cursor, "identifier") ||
+        tokenIs(tokens, cursor, "punctuator", "{") ||
+        tokenIs(tokens, cursor, "punctuator", "*")
       ) {
         const specifier = findFromSpecifier(tokens, cursor + 1);
         if (specifier) specifiers.push(specifier);
       }
-    } else if (token.kind === 'identifier' && token.value === 'export') {
+    } else if (token.kind === "identifier" && token.value === "export") {
       let cursor = index + 1;
-      if (tokenIs(tokens, cursor, 'identifier', 'type')) cursor += 1;
-      if (!tokenIs(tokens, cursor, 'punctuator', '{') && !tokenIs(tokens, cursor, 'punctuator', '*')) continue;
+      if (tokenIs(tokens, cursor, "identifier", "type")) cursor += 1;
+      if (
+        !tokenIs(tokens, cursor, "punctuator", "{") &&
+        !tokenIs(tokens, cursor, "punctuator", "*")
+      )
+        continue;
       const specifier = findFromSpecifier(tokens, cursor + 1);
       if (specifier) specifiers.push(specifier);
     }
   }
 
-  return specifiers.sort((left, right) => left.index - right.index).map(token => token.value);
+  return specifiers.sort((left, right) => left.index - right.index).map((token) => token.value);
 }
 
 function canonicalizeModuleSpecifier(sourcePath: string, specifier: string): string {
-  if (!specifier.startsWith('.')) return specifier;
+  if (!specifier.startsWith(".")) return specifier;
 
   const targetPath = posix.normalize(posix.join(posix.dirname(sourcePath), specifier));
-  if (targetPath === 'src') return '@';
-  return targetPath.startsWith('src/')
-    ? `@/${targetPath.slice('src/'.length)}`
-    : targetPath;
+  if (targetPath === "src") return "@";
+  return targetPath.startsWith("src/") ? `@/${targetPath.slice("src/".length)}` : targetPath;
 }
 
-function collectForbiddenDependencyViolations(
-  sources: readonly ProductionSource[],
-): string[] {
-  return sources.flatMap(source =>
-    collectModuleSpecifiers(source.source, source.sourceKind).flatMap(specifier => {
+function collectForbiddenDependencyViolations(sources: readonly ProductionSource[]): string[] {
+  return sources.flatMap((source) =>
+    collectModuleSpecifiers(source.source, source.sourceKind).flatMap((specifier) => {
       const canonicalSpecifier = canonicalizeModuleSpecifier(source.path, specifier);
-      const diagnostic = canonicalSpecifier === specifier
-        ? specifier
-        : `${specifier} (resolved as ${canonicalSpecifier})`;
+      const diagnostic =
+        canonicalSpecifier === specifier
+          ? specifier
+          : `${specifier} (resolved as ${canonicalSpecifier})`;
       return forbiddenRules
-        .filter(rule => rule.from.test(source.path) && rule.to.test(canonicalSpecifier))
+        .filter((rule) => rule.from.test(source.path) && rule.to.test(canonicalSpecifier))
         .map(() => `${source.path} imports ${diagnostic}`);
     }),
   );
@@ -667,23 +693,23 @@ function collectLifecycleOperations(source: string, sourceKind: SourceKind): Lif
   const operations: LifecycleOperation[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     if (
-      tokenIs(tokens, index, 'identifier', 'selectAll') &&
-      tokenIs(tokens, index + 1, 'punctuator', '(') &&
-      tokenIs(tokens, index + 2, 'string', '*') &&
-      tokenIs(tokens, index + 3, 'punctuator', ')') &&
-      tokenIs(tokens, index + 4, 'punctuator', '.') &&
-      tokenIs(tokens, index + 5, 'identifier', 'remove') &&
-      tokenIs(tokens, index + 6, 'punctuator', '(') &&
-      tokenIs(tokens, index + 7, 'punctuator', ')')
+      tokenIs(tokens, index, "identifier", "selectAll") &&
+      tokenIs(tokens, index + 1, "punctuator", "(") &&
+      tokenIs(tokens, index + 2, "string", "*") &&
+      tokenIs(tokens, index + 3, "punctuator", ")") &&
+      tokenIs(tokens, index + 4, "punctuator", ".") &&
+      tokenIs(tokens, index + 5, "identifier", "remove") &&
+      tokenIs(tokens, index + 6, "punctuator", "(") &&
+      tokenIs(tokens, index + 7, "punctuator", ")")
     ) {
-      operations.push({ kind: 'whole-svg-clear', index: tokens[index].index });
+      operations.push({ kind: "whole-svg-clear", index: tokens[index].index });
     }
     if (
-      tokenIs(tokens, index, 'identifier', 'new') &&
-      tokenIs(tokens, index + 1, 'identifier', 'ResizeObserver') &&
-      tokenIs(tokens, index + 2, 'punctuator', '(')
+      tokenIs(tokens, index, "identifier", "new") &&
+      tokenIs(tokens, index + 1, "identifier", "ResizeObserver") &&
+      tokenIs(tokens, index + 2, "punctuator", "(")
     ) {
-      operations.push({ kind: 'resize-observer', index: tokens[index].index });
+      operations.push({ kind: "resize-observer", index: tokens[index].index });
     }
   }
   return operations;
@@ -696,204 +722,223 @@ function sourceLocation(source: ProductionSource, index: number): string {
 
 const productionSources = collectProductionFiles(sourceRoot).map(parseProductionSource);
 
-describe('chart package architecture', () => {
-  it('keeps dependencies inside the approved package boundaries', () => {
+describe("chart package architecture", () => {
+  it("keeps dependencies inside the approved package boundaries", () => {
     const harmlessModuleText = [
       `const quoted = "import('@/features/quoted-text')";`,
       "const template = `import('@/services/template-text')`;",
       "const matcher = /don't/;",
       "// import('@/views/comment-text');",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(harmlessModuleText, 'ts')).toEqual([]);
+    ].join("\n");
+    expect.soft(collectModuleSpecifiers(harmlessModuleText, "ts")).toEqual([]);
 
     const supportedModuleSyntax = [
       "import '@/shared/charts/core/theme';",
-      'import {',
-      '  ChartRenderer,',
+      "import {",
+      "  ChartRenderer,",
       "} from '@/features/static';",
       "import type FeaturePort = require('@/features/type-port');",
       "import ServicePort = require('@/services/service-port');",
-      'export {',
-      '  ChartRenderer as PublicChartRenderer,',
+      "export {",
+      "  ChartRenderer as PublicChartRenderer,",
       "} from '@/shared/charts';",
       "const lazy = import('@/features/lazy', { with: { type: 'json' } });",
       "const template = `load: ${import('@/services/template-expression')}`;",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(supportedModuleSyntax, 'ts')).toEqual([
-      '@/shared/charts/core/theme',
-      '@/features/static',
-      '@/features/type-port',
-      '@/services/service-port',
-      '@/shared/charts',
-      '@/features/lazy',
-      '@/services/template-expression',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(supportedModuleSyntax, "ts"))
+      .toEqual([
+        "@/shared/charts/core/theme",
+        "@/features/static",
+        "@/features/type-port",
+        "@/services/service-port",
+        "@/shared/charts",
+        "@/features/lazy",
+        "@/services/template-expression",
+      ]);
 
     const jsxModuleSyntax = [
       "const text = <code>import('@/features/jsx-text') don't</code>;",
       "const expression = <span>{import('@/services/jsx-expression')}</span>;",
-      'const compared = left < right;',
-      'const identity = <T,>(value: T) => value;',
+      "const compared = left < right;",
+      "const identity = <T,>(value: T) => value;",
       "const afterJsx = import('@/views/after-jsx');",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(jsxModuleSyntax, 'tsx')).toEqual([
-      '@/services/jsx-expression',
-      '@/views/after-jsx',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(jsxModuleSyntax, "tsx"))
+      .toEqual(["@/services/jsx-expression", "@/views/after-jsx"]);
 
     const statementRegexModules = [
       "if (ready) /don't/.test(text);",
       "import '@/features/after-statement-regex';",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(statementRegexModules, 'ts')).toEqual([
-      '@/features/after-statement-regex',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(statementRegexModules, "ts"))
+      .toEqual(["@/features/after-statement-regex"]);
 
     const tsAssertionModules = [
-      'const model = <ChartModel>input;',
+      "const model = <ChartModel>input;",
       "import '@/features/after-ts-assertion';",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(tsAssertionModules, 'ts')).toEqual([
-      '@/features/after-ts-assertion',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(tsAssertionModules, "ts"))
+      .toEqual(["@/features/after-ts-assertion"]);
 
     const tsxGenericModules = [
-      'type Mapper = <T>(value: T) => T;',
-      'const identity = <T extends unknown>(value: T) => value;',
+      "type Mapper = <T>(value: T) => T;",
+      "const identity = <T extends unknown>(value: T) => value;",
       "import '@/features/after-tsx-generics';",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(tsxGenericModules, 'tsx')).toEqual([
-      '@/features/after-tsx-generics',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(tsxGenericModules, "tsx"))
+      .toEqual(["@/features/after-tsx-generics"]);
 
     const tsxAnnotatedGenericModules = [
-      'const identity = <T extends unknown>(value: T): T => value;',
+      "const identity = <T extends unknown>(value: T): T => value;",
       "import '@/features/after-tsx-return-annotation';",
-    ].join('\n');
-    expect.soft(collectModuleSpecifiers(tsxAnnotatedGenericModules, 'tsx')).toEqual([
-      '@/features/after-tsx-return-annotation',
-    ]);
+    ].join("\n");
+    expect
+      .soft(collectModuleSpecifiers(tsxAnnotatedGenericModules, "tsx"))
+      .toEqual(["@/features/after-tsx-return-annotation"]);
 
     const relativeImportFixture: ProductionSource = {
-      path: 'src/shared/charts/cartesian/RelativeImportFixture.ts',
+      path: "src/shared/charts/cartesian/RelativeImportFixture.ts",
       source: "import '../statistical/RelativeChart';",
-      sourceKind: 'ts',
+      sourceKind: "ts",
     };
-    const relativeFixtureViolations = collectForbiddenDependencyViolations([
-      relativeImportFixture,
-    ]);
-    expect.soft(
-      relativeFixtureViolations,
-      'Relative imports must not bypass chart dependency rules',
-    ).toEqual([
-      'src/shared/charts/cartesian/RelativeImportFixture.ts imports ../statistical/RelativeChart (resolved as @/shared/charts/statistical/RelativeChart)',
-    ]);
+    const relativeFixtureViolations = collectForbiddenDependencyViolations([relativeImportFixture]);
+    expect
+      .soft(relativeFixtureViolations, "Relative imports must not bypass chart dependency rules")
+      .toEqual([
+        "src/shared/charts/cartesian/RelativeImportFixture.ts imports ../statistical/RelativeChart (resolved as @/shared/charts/statistical/RelativeChart)",
+      ]);
 
     const sharedDtoFeatureImports = productionSources
-      .filter(source => source.path.startsWith('src/shared/types/dto/'))
-      .flatMap(source =>
+      .filter((source) => source.path.startsWith("src/shared/types/dto/"))
+      .flatMap((source) =>
         collectModuleSpecifiers(source.source, source.sourceKind)
-          .filter(specifier => specifier.startsWith('@/features/'))
-          .map(specifier => `${source.path} imports ${specifier}`),
+          .filter((specifier) => specifier.startsWith("@/features/"))
+          .map((specifier) => `${source.path} imports ${specifier}`),
       );
-    expect.soft(
-      sharedDtoFeatureImports,
-      `Shared DTOs must not import features:\n${sharedDtoFeatureImports.join('\n')}`,
-    ).toEqual([]);
+    expect
+      .soft(
+        sharedDtoFeatureImports,
+        `Shared DTOs must not import features:\n${sharedDtoFeatureImports.join("\n")}`,
+      )
+      .toEqual([]);
 
     const violations = collectForbiddenDependencyViolations(productionSources);
 
-    expect(violations, `Forbidden chart imports:\n${violations.join('\n')}`).toEqual([]);
+    expect(violations, `Forbidden chart imports:\n${violations.join("\n")}`).toEqual([]);
   });
 
-  it('keeps SVG lifecycle and resize observation in chart core', () => {
-    const wholeSvgClear = ['selectAll(', "'*'", ').remove()'].join('');
-    const resizeObserver = ['new', 'ResizeObserver(callback)'].join(' ');
-    const templateExpressionClear = ['${svg.', wholeSvgClear, '}'].join('');
+  it("keeps SVG lifecycle and resize observation in chart core", () => {
+    const wholeSvgClear = ["selectAll(", "'*'", ").remove()"].join("");
+    const resizeObserver = ["new", "ResizeObserver(callback)"].join(" ");
+    const templateExpressionClear = ["${svg.", wholeSvgClear, "}"].join("");
     const lifecycleSyntax = [
       `const quoted = "${wholeSvgClear}; ${resizeObserver}";`,
       `const template = \`${wholeSvgClear}; ${templateExpressionClear}\`;`,
-      `const lifecyclePattern = /${['new', 'ResizeObserver'].join(' ')}|selectAll/;`,
+      `const lifecyclePattern = /${["new", "ResizeObserver"].join(" ")}|selectAll/;`,
       "const matcher = /don't/;",
       `// ${resizeObserver};`,
       `${resizeObserver};`,
-    ].join('\n');
-    const fixtureOperations = collectLifecycleOperations(lifecycleSyntax, 'ts').map(operation => operation.kind);
-    expect(fixtureOperations).toEqual(['whole-svg-clear', 'resize-observer']);
+    ].join("\n");
+    const fixtureOperations = collectLifecycleOperations(lifecycleSyntax, "ts").map(
+      (operation) => operation.kind,
+    );
+    expect(fixtureOperations).toEqual(["whole-svg-clear", "resize-observer"]);
 
     const jsxLifecycleSyntax = [
       `<code>${wholeSvgClear} don't ${resizeObserver}</code>`,
       `<span>{svg.${wholeSvgClear}}</span>`,
       `<span>{${resizeObserver}}</span>`,
-    ].join('\n');
-    expect.soft(collectLifecycleOperations(jsxLifecycleSyntax, 'tsx').map(operation => operation.kind)).toEqual([
-      'whole-svg-clear',
-      'resize-observer',
-    ]);
+    ].join("\n");
+    expect
+      .soft(
+        collectLifecycleOperations(jsxLifecycleSyntax, "tsx").map((operation) => operation.kind),
+      )
+      .toEqual(["whole-svg-clear", "resize-observer"]);
 
     const statementRegexLifecycle = [
       "if (ready) /don't/.test(text);",
       `${wholeSvgClear};`,
       `${resizeObserver};`,
-    ].join('\n');
-    expect.soft(collectLifecycleOperations(statementRegexLifecycle, 'ts').map(operation => operation.kind)).toEqual([
-      'whole-svg-clear',
-      'resize-observer',
-    ]);
+    ].join("\n");
+    expect
+      .soft(
+        collectLifecycleOperations(statementRegexLifecycle, "ts").map(
+          (operation) => operation.kind,
+        ),
+      )
+      .toEqual(["whole-svg-clear", "resize-observer"]);
 
     const tsAssertionLifecycle = [
-      'const model = <ChartModel>input;',
+      "const model = <ChartModel>input;",
       `${wholeSvgClear};`,
       `${resizeObserver};`,
-    ].join('\n');
-    expect.soft(collectLifecycleOperations(tsAssertionLifecycle, 'ts').map(operation => operation.kind)).toEqual([
-      'whole-svg-clear',
-      'resize-observer',
-    ]);
+    ].join("\n");
+    expect
+      .soft(
+        collectLifecycleOperations(tsAssertionLifecycle, "ts").map((operation) => operation.kind),
+      )
+      .toEqual(["whole-svg-clear", "resize-observer"]);
 
     const tsxGenericLifecycle = [
-      'type Mapper = <T>(value: T) => T;',
-      'const identity = <T extends unknown>(value: T) => value;',
+      "type Mapper = <T>(value: T) => T;",
+      "const identity = <T extends unknown>(value: T) => value;",
       `${wholeSvgClear};`,
       `${resizeObserver};`,
-    ].join('\n');
-    expect.soft(collectLifecycleOperations(tsxGenericLifecycle, 'tsx').map(operation => operation.kind)).toEqual([
-      'whole-svg-clear',
-      'resize-observer',
-    ]);
+    ].join("\n");
+    expect
+      .soft(
+        collectLifecycleOperations(tsxGenericLifecycle, "tsx").map((operation) => operation.kind),
+      )
+      .toEqual(["whole-svg-clear", "resize-observer"]);
 
     const tsxAnnotatedGenericLifecycle = [
-      'const identity = <T extends unknown>(value: T): T => value;',
+      "const identity = <T extends unknown>(value: T): T => value;",
       `${wholeSvgClear};`,
       `${resizeObserver};`,
-    ].join('\n');
-    expect.soft(
-      collectLifecycleOperations(tsxAnnotatedGenericLifecycle, 'tsx').map(operation => operation.kind),
-    ).toEqual(['whole-svg-clear', 'resize-observer']);
+    ].join("\n");
+    expect
+      .soft(
+        collectLifecycleOperations(tsxAnnotatedGenericLifecycle, "tsx").map(
+          (operation) => operation.kind,
+        ),
+      )
+      .toEqual(["whole-svg-clear", "resize-observer"]);
 
     const violations: string[] = [];
 
-    for (const source of productionSources.filter(({ path }) => path.startsWith('src/shared/charts/'))) {
+    for (const source of productionSources.filter(({ path }) =>
+      path.startsWith("src/shared/charts/"),
+    )) {
       for (const operation of collectLifecycleOperations(source.source, source.sourceKind)) {
-        if (operation.kind === 'whole-svg-clear') {
+        if (operation.kind === "whole-svg-clear") {
           violations.push(`${sourceLocation(source, operation.index)} clears the entire SVG`);
-        } else if (source.path !== 'src/shared/charts/core/useChartContainerSize.ts') {
-          violations.push(`${sourceLocation(source, operation.index)} creates ResizeObserver outside chart core`);
+        } else if (source.path !== "src/shared/charts/core/useChartContainerSize.ts") {
+          violations.push(
+            `${sourceLocation(source, operation.index)} creates ResizeObserver outside chart core`,
+          );
         }
       }
     }
 
-    expect(violations, `Forbidden chart lifecycle operations:\n${violations.join('\n')}`).toEqual([]);
+    expect(violations, `Forbidden chart lifecycle operations:\n${violations.join("\n")}`).toEqual(
+      [],
+    );
   });
 
-  it('keeps legacy PlotView and shared plot compatibility paths removed', () => {
+  it("keeps legacy PlotView and shared plot compatibility paths removed", () => {
     const violations = productionSources
-      .map(source => source.path)
-      .filter(path =>
-        path.startsWith('src/shared/plot/') ||
-        (path.startsWith('src/views/PlotView/') && path !== 'src/views/PlotView/PlotWindow.tsx'),
+      .map((source) => source.path)
+      .filter(
+        (path) =>
+          path.startsWith("src/shared/plot/") ||
+          (path.startsWith("src/views/PlotView/") && path !== "src/views/PlotView/PlotWindow.tsx"),
       );
 
-    expect(violations, `Dead chart compatibility paths:\n${violations.join('\n')}`).toEqual([]);
+    expect(violations, `Dead chart compatibility paths:\n${violations.join("\n")}`).toEqual([]);
   });
 });

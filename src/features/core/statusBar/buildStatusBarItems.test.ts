@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildStatusBarItems,
-  createBuiltInStatusBarItems,
-} from "@/features/core/statusBar";
+import { buildStatusBarItems, createBuiltInStatusBarItems } from "@/features/core/statusBar";
 import type { StatusBarRenderContext } from "@/features/core/statusBar";
 
 const ctx: StatusBarRenderContext = {

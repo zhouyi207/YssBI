@@ -1,11 +1,11 @@
-import { ProjectService } from '@/services/project/projectService';
-import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
-import { useProjectIOStore } from './projectIOStore';
+import { ProjectService } from "@/services/project/projectService";
+import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
+import { useProjectIOStore } from "./projectIOStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 interface ReconcilePathRequest {
   readonly identity: ProjectIdentitySnapshot;
@@ -18,8 +18,7 @@ function isSameProjectIdentity(
   left: ProjectIdentitySnapshot,
   right: ProjectIdentitySnapshot,
 ): boolean {
-  return left.projectInstanceId === right.projectInstanceId
-    && left.epoch === right.epoch;
+  return left.projectInstanceId === right.projectInstanceId && left.epoch === right.epoch;
 }
 
 /**
@@ -31,10 +30,7 @@ export async function reconcileProjectPath(): Promise<string | null> {
   if (cached) return cached;
 
   const identity = captureProjectIdentity();
-  if (
-    reconcilePathInFlight
-    && isSameProjectIdentity(reconcilePathInFlight.identity, identity)
-  ) {
+  if (reconcilePathInFlight && isSameProjectIdentity(reconcilePathInFlight.identity, identity)) {
     return reconcilePathInFlight.promise;
   }
 

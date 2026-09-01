@@ -1,19 +1,15 @@
-import type { ErrorReference } from '@/features/application/errorReference';
+import type { ErrorReference } from "@/features/application/errorReference";
 import type {
   GraphDeltaDto,
   ResourceKeyDto,
   ResourceMutationResultDto,
-} from '@/shared/types/domain/editorMutation';
-import type {
-  ComputationSettingsMutationReceiptDto,
-} from '@/shared/types/domain/projectComputationSettings';
-import type {
-  LifecycleMutationResultDto,
-} from '@/shared/types/domain/project';
+} from "@/shared/types/domain/editorMutation";
+import type { ComputationSettingsMutationReceiptDto } from "@/shared/types/domain/projectComputationSettings";
+import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
 import type {
   ProjectHydrationCoordinator,
   ProjectHydrationOutcome,
-} from './projectHydrationCoordinator';
+} from "./projectHydrationCoordinator";
 
 type Awaitable<T> = T | PromiseLike<T>;
 
@@ -51,7 +47,7 @@ export interface ComputationSettingsChangedPayload {
 
 export interface ProjectIndexInvalidatedPayload {
   readonly projectInstanceId: string;
-  readonly source: 'watcher';
+  readonly source: "watcher";
   readonly version: number;
 }
 
@@ -65,24 +61,24 @@ export interface ResourceMutationCommittedPayload {
 }
 
 export type ProjectEvent =
-  | { readonly type: 'ProjectLoaded'; readonly payload: ProjectLoadedPayload }
-  | { readonly type: 'ProjectCleared'; readonly payload: undefined }
+  | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
+  | { readonly type: "ProjectCleared"; readonly payload: undefined }
   | {
-      readonly type: 'ProjectLifecycleCommitted';
+      readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
     }
-  | { readonly type: 'ProjectSaved'; readonly payload: ProjectSavedPayload }
+  | { readonly type: "ProjectSaved"; readonly payload: ProjectSavedPayload }
   | {
-      readonly type: 'ComputationSettingsChanged';
+      readonly type: "ComputationSettingsChanged";
       readonly payload: ComputationSettingsChangedPayload;
     }
   | {
-      readonly type: 'ProjectIndexInvalidated';
+      readonly type: "ProjectIndexInvalidated";
       readonly payload: ProjectIndexInvalidatedPayload;
     }
-  | { readonly type: 'GraphDelta'; readonly payload: GraphDeltaEventPayload }
+  | { readonly type: "GraphDelta"; readonly payload: GraphDeltaEventPayload }
   | {
-      readonly type: 'ResourceMutationCommitted';
+      readonly type: "ResourceMutationCommitted";
       readonly payload: ResourceMutationCommittedPayload;
     };
 
@@ -94,29 +90,22 @@ export interface OptimisticOperationKey {
 }
 
 export type ProjectReconciliationOutcome =
-  | { readonly status: 'applied' }
-  | { readonly status: 'duplicate' }
-  | { readonly status: 'ignored' }
-  | { readonly status: 'recoveryRequested' };
+  | { readonly status: "applied" }
+  | { readonly status: "duplicate" }
+  | { readonly status: "ignored" }
+  | { readonly status: "recoveryRequested" };
 
-export type ProjectRecoveryReason =
-  | 'unknownOutcome'
-  | 'reconcilerRejected'
-  | 'hydrationFailed';
+export type ProjectRecoveryReason = "unknownOutcome" | "reconcilerRejected" | "hydrationFailed";
 
 export interface ProjectEventReconcilerDependencies {
   readonly hydration: Pick<
     ProjectHydrationCoordinator,
-    'loadCurrentProject' | 'refreshResourceIndex' | 'loadGraph' | 'replaceProject'
+    "loadCurrentProject" | "refreshResourceIndex" | "loadGraph" | "replaceProject"
   >;
-  readonly activateProject?: (
-    result: ProjectLoadedPayload['result'],
-  ) => Awaitable<boolean>;
+  readonly activateProject?: (result: ProjectLoadedPayload["result"]) => Awaitable<boolean>;
   readonly currentProjectInstanceId: () => string | null;
   readonly publishProjectCleared?: () => Awaitable<void>;
-  readonly publishLifecycleCommitted?: (
-    result: LifecycleMutationResultDto,
-  ) => Awaitable<void>;
+  readonly publishLifecycleCommitted?: (result: LifecycleMutationResultDto) => Awaitable<void>;
   readonly publishProjectSaved?: (result: ProjectSaveReceipt) => Awaitable<void>;
   readonly publishComputationSettingsChanged?: (
     result: ComputationSettingsMutationReceiptDto,
@@ -131,9 +120,7 @@ export interface ProjectEventReconcilerDependencies {
     failure: ErrorReference,
   ) => void;
   readonly invalidateOptimisticOperation?: (key: OptimisticOperationKey) => void;
-  readonly requestAuthoritativeSnapshot?: (
-    reason: ProjectRecoveryReason,
-  ) => Awaitable<void>;
+  readonly requestAuthoritativeSnapshot?: (reason: ProjectRecoveryReason) => Awaitable<void>;
 }
 
 export interface ProjectEventReconciler {
@@ -155,21 +142,16 @@ interface OperationRecord {
 const MAX_OPERATION_RECORDS = 256;
 
 function operationRecordId(key: OptimisticOperationKey): string {
-  return [
-    key.projectInstanceId,
-    key.resourceKey,
-    key.operationId,
-    key.fromRevision,
-  ].join('\u001f');
+  return [key.projectInstanceId, key.resourceKey, key.operationId, key.fromRevision].join("\u001f");
 }
 
 function resourceKey(resource: ResourceKeyDto): string {
-  return resource.kind === 'graph' ? resource.key : `${resource.kind}:${resource.key}`;
+  return resource.kind === "graph" ? resource.key : `${resource.kind}:${resource.key}`;
 }
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
-  if (!value || typeof value !== 'object') return value;
+  if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -184,9 +166,9 @@ function fingerprint(value: unknown): string {
 function hydrationOutcomeToReconciliation(
   outcome: ProjectHydrationOutcome,
 ): ProjectReconciliationOutcome {
-  if (outcome.status === 'published') return { status: 'applied' };
-  if (outcome.status === 'failed') return { status: 'recoveryRequested' };
-  return { status: 'ignored' };
+  if (outcome.status === "published") return { status: "applied" };
+  if (outcome.status === "failed") return { status: "recoveryRequested" };
+  return { status: "ignored" };
 }
 
 export function createProjectEventReconciler(
@@ -230,21 +212,21 @@ export function createProjectEventReconciler(
     reason: ProjectRecoveryReason,
     requestId: string,
   ): Promise<ProjectReconciliationOutcome> => {
-    if (recoveryRequests.has(requestId)) return { status: 'recoveryRequested' };
+    if (recoveryRequests.has(requestId)) return { status: "recoveryRequested" };
     recoveryRequests.add(requestId);
     try {
       await dependencies.requestAuthoritativeSnapshot?.(reason);
     } catch {
       // Recovery remains the safe result even if the recovery request is rejected.
     }
-    return { status: 'recoveryRequested' };
+    return { status: "recoveryRequested" };
   };
 
   const acceptGraphDelta = async (
     payload: GraphDeltaEventPayload,
   ): Promise<ProjectReconciliationOutcome> => {
     if (dependencies.currentProjectInstanceId() !== payload.projectInstanceId) {
-      return { status: 'ignored' };
+      return { status: "ignored" };
     }
     const eventFingerprint = fingerprint(payload);
     const eventKey = payload.delta.causedBy
@@ -256,9 +238,9 @@ export function createProjectEventReconciler(
         })
       : `graph:${eventFingerprint}`;
     const previous = seenEvents.get(eventKey);
-    if (previous === eventFingerprint) return { status: 'duplicate' };
+    if (previous === eventFingerprint) return { status: "duplicate" };
     if (previous !== undefined) {
-      return { status: 'recoveryRequested' };
+      return { status: "recoveryRequested" };
     }
 
     const operation = payload.delta.causedBy
@@ -271,7 +253,7 @@ export function createProjectEventReconciler(
       : undefined;
     if (operation?.committed) {
       seenEvents.set(eventKey, eventFingerprint);
-      return { status: 'duplicate' };
+      return { status: "duplicate" };
     }
     await dependencies.publishGraphDelta?.(payload);
     seenEvents.set(eventKey, eventFingerprint);
@@ -279,28 +261,30 @@ export function createProjectEventReconciler(
       operation.committed = true;
       settle(operation);
     }
-    return { status: 'applied' };
+    return { status: "applied" };
   };
 
   const acceptResourceReceipt = async (
     result: ResourceMutationResultDto,
   ): Promise<ProjectReconciliationOutcome> => {
     if (dependencies.currentProjectInstanceId() !== result.projectInstanceId) {
-      return { status: 'ignored' };
+      return { status: "ignored" };
     }
     const resultFingerprint = fingerprint(result);
-    if (seenReceipts.has(resultFingerprint)) return { status: 'duplicate' };
+    if (seenReceipts.has(resultFingerprint)) return { status: "duplicate" };
     const operations = result.deltas
       .filter((delta) => delta.causedBy)
-      .map((delta) => rememberOperation({
-        projectInstanceId: result.projectInstanceId,
-        resourceKey: resourceKey(delta.resource),
-        operationId: delta.causedBy!,
-        fromRevision: delta.fromRevision,
-      }));
+      .map((delta) =>
+        rememberOperation({
+          projectInstanceId: result.projectInstanceId,
+          resourceKey: resourceKey(delta.resource),
+          operationId: delta.causedBy!,
+          fromRevision: delta.fromRevision,
+        }),
+      );
     if (operations.length > 0 && operations.every((operation) => operation.committed)) {
       seenReceipts.add(resultFingerprint);
-      return { status: 'duplicate' };
+      return { status: "duplicate" };
     }
     await dependencies.publishResourceMutationCommitted?.(result);
     seenReceipts.add(resultFingerprint);
@@ -308,74 +292,63 @@ export function createProjectEventReconciler(
       operation.committed = true;
       settle(operation);
     }
-    return { status: 'applied' };
+    return { status: "applied" };
   };
 
   const acceptEventInternal = async (
     event: ProjectEvent,
   ): Promise<ProjectReconciliationOutcome> => {
     switch (event.type) {
-      case 'ProjectLoaded': {
+      case "ProjectLoaded": {
         if (dependencies.activateProject) {
           const activated = await dependencies.activateProject(event.payload.result);
-          if (!activated) return { status: 'ignored' };
+          if (!activated) return { status: "ignored" };
           resetForProject(event.payload.result.projectInstanceId);
-          return { status: 'applied' };
+          return { status: "applied" };
         }
         dependencies.hydration.replaceProject();
         resetForProject(event.payload.result.projectInstanceId);
-        return hydrationOutcomeToReconciliation(
-          await dependencies.hydration.loadCurrentProject(),
-        );
+        return hydrationOutcomeToReconciliation(await dependencies.hydration.loadCurrentProject());
       }
-      case 'ProjectCleared':
+      case "ProjectCleared":
         dependencies.hydration.replaceProject();
         resetForProject(null);
         await dependencies.publishProjectCleared?.();
-        return { status: 'applied' };
-      case 'ProjectLifecycleCommitted':
+        return { status: "applied" };
+      case "ProjectLifecycleCommitted":
         await dependencies.publishLifecycleCommitted?.(event.payload.result);
-        return { status: 'applied' };
-      case 'ProjectSaved':
-        if (
-          dependencies.currentProjectInstanceId() !== event.payload.result.projectInstanceId
-        ) {
-          return { status: 'ignored' };
+        return { status: "applied" };
+      case "ProjectSaved":
+        if (dependencies.currentProjectInstanceId() !== event.payload.result.projectInstanceId) {
+          return { status: "ignored" };
         }
         await dependencies.publishProjectSaved?.(event.payload.result);
-        return { status: 'applied' };
-      case 'ComputationSettingsChanged':
-        if (
-          dependencies.currentProjectInstanceId()
-          !== event.payload.result.projectInstanceId
-        ) {
-          return { status: 'ignored' };
+        return { status: "applied" };
+      case "ComputationSettingsChanged":
+        if (dependencies.currentProjectInstanceId() !== event.payload.result.projectInstanceId) {
+          return { status: "ignored" };
         }
         await dependencies.publishComputationSettingsChanged?.(event.payload.result);
-        return { status: 'applied' };
-      case 'ProjectIndexInvalidated':
-        if (
-          dependencies.currentProjectInstanceId() !== event.payload.projectInstanceId
-        ) {
-          return { status: 'ignored' };
+        return { status: "applied" };
+      case "ProjectIndexInvalidated":
+        if (dependencies.currentProjectInstanceId() !== event.payload.projectInstanceId) {
+          return { status: "ignored" };
         }
         return hydrationOutcomeToReconciliation(
           await dependencies.hydration.refreshResourceIndex(),
         );
-      case 'GraphDelta':
+      case "GraphDelta":
         return acceptGraphDelta(event.payload);
-      case 'ResourceMutationCommitted':
+      case "ResourceMutationCommitted":
         return acceptResourceReceipt(event.payload.result);
     }
   };
 
-  const acceptEvent = async (
-    event: ProjectEvent,
-  ): Promise<ProjectReconciliationOutcome> => {
+  const acceptEvent = async (event: ProjectEvent): Promise<ProjectReconciliationOutcome> => {
     try {
       return await acceptEventInternal(event);
     } catch {
-      return { status: 'recoveryRequested' };
+      return { status: "recoveryRequested" };
     }
   };
 
@@ -385,7 +358,7 @@ export function createProjectEventReconciler(
     try {
       return await acceptResourceReceipt(result);
     } catch {
-      return { status: 'recoveryRequested' };
+      return { status: "recoveryRequested" };
     }
   };
 
@@ -401,10 +374,7 @@ export function createProjectEventReconciler(
     record.pending = true;
   };
 
-  const rejectOperation = (
-    key: OptimisticOperationKey,
-    failure: ErrorReference,
-  ): void => {
+  const rejectOperation = (key: OptimisticOperationKey, failure: ErrorReference): void => {
     const record = operationRecords.get(operationRecordId(key));
     if (!record || !record.pending || record.committed) return;
     record.pending = false;
@@ -420,7 +390,7 @@ export function createProjectEventReconciler(
     key: OptimisticOperationKey,
   ): Promise<ProjectReconciliationOutcome> => {
     if (dependencies.currentProjectInstanceId() !== key.projectInstanceId) {
-      return { status: 'ignored' };
+      return { status: "ignored" };
     }
     const record = operationRecords.get(operationRecordId(key));
     if (record?.pending && !record.committed) {
@@ -432,7 +402,7 @@ export function createProjectEventReconciler(
         // Invalidating the overlay is best effort; authoritative recovery is mandatory.
       }
     }
-    return requestRecovery('unknownOutcome', operationRecordId(key));
+    return requestRecovery("unknownOutcome", operationRecordId(key));
   };
 
   function resetForProject(projectInstanceId: string | null): void {

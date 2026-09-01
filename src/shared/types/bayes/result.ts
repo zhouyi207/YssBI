@@ -10,7 +10,7 @@ export interface ParameterSummaryDTO {
   essTail: number | null;
 }
 
-export type DiagnosticMetricDTO = 'rhat' | 'ess_bulk' | 'ess_tail';
+export type DiagnosticMetricDTO = "rhat" | "ess_bulk" | "ess_tail";
 
 export interface DiagnosticWarningDTO {
   code: string;
@@ -29,10 +29,13 @@ export interface InferenceDiagnosticsDTO {
   warnings: DiagnosticWarningDTO[];
 }
 
-
-
-export type ResultArtifactKindDTO = 'summary' | 'metadata' | 'posterior_samples' | 'posterior_predictive' | 'log';
-export type ResultArtifactFormatDTO = 'json' | 'arrow_ipc' | 'text';
+export type ResultArtifactKindDTO =
+  | "summary"
+  | "metadata"
+  | "posterior_samples"
+  | "posterior_predictive"
+  | "log";
+export type ResultArtifactFormatDTO = "json" | "arrow_ipc" | "text";
 
 export interface ResultArtifactDTO {
   kind: ResultArtifactKindDTO;
@@ -51,8 +54,6 @@ export interface InferenceResultDTO {
   diagnostics: InferenceDiagnosticsDTO;
   artifactManifest: ResultArtifactManifestDTO;
 }
-
-
 
 export interface TracePointDTO {
   draw: number;
@@ -118,7 +119,7 @@ export interface PosteriorPredictiveRowDTO {
 
 export interface PosteriorPredictivePageDTO {
   rows: PosteriorPredictiveRowDTO[];
-  responseTransform: 'identity' | 'ln';
+  responseTransform: "identity" | "ln";
   offset: number;
   limit: number;
   total: number;
@@ -145,7 +146,7 @@ export interface TaskErrorDTO {
 
 export interface BayesInferenceTaskDTO {
   taskId: string;
-  status: 'queued' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
+  status: "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
   progress: TaskProgressDTO | null;
   error: TaskErrorDTO | null;
 }

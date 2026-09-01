@@ -23,9 +23,7 @@ export function CanvasContextMenuProvider({
   children: React.ReactNode;
 }) {
   return (
-    <CanvasContextMenuContext.Provider value={value}>
-      {children}
-    </CanvasContextMenuContext.Provider>
+    <CanvasContextMenuContext.Provider value={value}>{children}</CanvasContextMenuContext.Provider>
   );
 }
 

@@ -1,5 +1,5 @@
-import { formatNum } from './RegressionShared';
-import type { ModelBasicInfo } from '@/shared/types/report';
+import { formatNum } from "./RegressionShared";
+import type { ModelBasicInfo } from "@/shared/types/report";
 
 /** MLE iteration log — separate module at bottom (Stata-style) */
 export function PanelMLEIterationBlock({ info }: { info: ModelBasicInfo }) {
@@ -17,7 +17,9 @@ export function PanelMLEIterationBlock({ info }: { info: ModelBasicInfo }) {
       <div className="px-4 py-3 space-y-4">
         {hasConst && (
           <div>
-            <span className="text-muted-foreground text-xs block mb-1.5">Fitting constant-only model:</span>
+            <span className="text-muted-foreground text-xs block mb-1.5">
+              Fitting constant-only model:
+            </span>
             <div className="text-foreground text-xs font-mono space-y-0.5">
               {info.mle_iter_log_lik_const!.map((ll, i) => (
                 <div key={i}>

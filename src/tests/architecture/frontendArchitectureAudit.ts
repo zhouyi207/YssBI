@@ -1,17 +1,11 @@
 import {
   ModuleDependencyResolutionError,
   type ResolvedModuleDependency,
-} from '@/tests/helpers/moduleDependencyAudit';
-import { type TypeScriptAuditProject } from '@/tests/helpers/typescriptAudit';
-import {
-  auditFrontendAssetDependencies,
-} from './frontendAssetDependencyPolicy';
-import {
-  classifyFrontendSources,
-} from './frontendArchitecturePolicy';
-import {
-  auditFrontendExternalDependencies,
-} from './frontendExternalDependencyPolicy';
+} from "@/tests/helpers/moduleDependencyAudit";
+import { type TypeScriptAuditProject } from "@/tests/helpers/typescriptAudit";
+import { auditFrontendAssetDependencies } from "./frontendAssetDependencyPolicy";
+import { classifyFrontendSources } from "./frontendArchitecturePolicy";
+import { auditFrontendExternalDependencies } from "./frontendExternalDependencyPolicy";
 import {
   productionTypeScriptSources,
   resolvedModuleDependencies,
@@ -24,16 +18,16 @@ import {
   type FrontendLayer,
   type ReadonlyPackageManifest,
   type RepositoryTextReader,
-} from './frontendArchitectureModel';
+} from "./frontendArchitectureModel";
 
 function hasLayerEdge(
   policy: FrontendArchitecturePolicy,
   sourceLayer: FrontendLayer,
   targetLayer: FrontendLayer,
 ): boolean {
-  return policy.layerEdges.some(([source, target]) => (
-    source === sourceLayer && target === targetLayer
-  ));
+  return policy.layerEdges.some(
+    ([source, target]) => source === sourceLayer && target === targetLayer,
+  );
 }
 
 function hasExactCapability(
@@ -41,16 +35,18 @@ function hasExactCapability(
   dependency: ResolvedModuleDependency,
   sourceLayer: FrontendLayer,
 ): boolean {
-  if (dependency.origin.kind !== 'repository-module' || dependency.importedSymbol === null) return false;
+  if (dependency.origin.kind !== "repository-module" || dependency.importedSymbol === null)
+    return false;
   const targetModule = dependency.origin.declarationTarget;
   const importedSymbol = dependency.importedSymbol;
-  return policy.capabilities.some((capability) => (
-    capability.sourceLayer === sourceLayer
-    && capability.canonicalModule === targetModule
-    && capability.exportedSymbols.includes(importedSymbol)
-    && (capability.exactConsumers === null
-      || capability.exactConsumers.includes(dependency.repositoryRelativeSourceFile))
-  ));
+  return policy.capabilities.some(
+    (capability) =>
+      capability.sourceLayer === sourceLayer &&
+      capability.canonicalModule === targetModule &&
+      capability.exportedSymbols.includes(importedSymbol) &&
+      (capability.exactConsumers === null ||
+        capability.exactConsumers.includes(dependency.repositoryRelativeSourceFile)),
+  );
 }
 
 function internalFinding(
@@ -59,14 +55,15 @@ function internalFinding(
   targetLayer: FrontendLayer,
   policy: FrontendArchitecturePolicy,
 ): FrontendFinding {
-  const capabilityGoverned = policy.capabilities.some((capability) => (
-    capability.sourceLayer === sourceLayer
-    && dependency.origin.kind === 'repository-module'
-    && capability.canonicalModule === dependency.origin.declarationTarget
-  ));
+  const capabilityGoverned = policy.capabilities.some(
+    (capability) =>
+      capability.sourceLayer === sourceLayer &&
+      dependency.origin.kind === "repository-module" &&
+      capability.canonicalModule === dependency.origin.declarationTarget,
+  );
   return {
     ruleId: capabilityGoverned
-      ? 'frontend.capability.exact-origin-symbol-consumer'
+      ? "frontend.capability.exact-origin-symbol-consumer"
       : `frontend.layer.${sourceLayer}-to-${targetLayer}`,
     repositoryRelativeSourceFile: dependency.repositoryRelativeSourceFile,
     fullyQualifiedOwner: dependency.fullyQualifiedOwner,
@@ -87,7 +84,7 @@ function auditInternalDependencies(
 ): FrontendFinding[] {
   const findings: FrontendFinding[] = [];
   for (const dependency of dependencies) {
-    if (dependency.origin.kind !== 'repository-module') continue;
+    if (dependency.origin.kind !== "repository-module") continue;
     const sourceLayer = classification.get(dependency.repositoryRelativeSourceFile);
     const targetLayer = classification.get(dependency.origin.declarationTarget);
     if (!sourceLayer || !targetLayer || sourceLayer === targetLayer) continue;
@@ -105,17 +102,21 @@ function findingSort(left: FrontendFinding, right: FrontendFinding): number {
     left.fullyQualifiedOwner,
     left.dependencyKind,
     left.canonicalOriginTarget,
-    left.line.toString().padStart(8, '0'),
-    left.column.toString().padStart(8, '0'),
-  ].join('\u0000').localeCompare([
-    right.ruleId,
-    right.repositoryRelativeSourceFile,
-    right.fullyQualifiedOwner,
-    right.dependencyKind,
-    right.canonicalOriginTarget,
-    right.line.toString().padStart(8, '0'),
-    right.column.toString().padStart(8, '0'),
-  ].join('\u0000'));
+    left.line.toString().padStart(8, "0"),
+    left.column.toString().padStart(8, "0"),
+  ]
+    .join("\u0000")
+    .localeCompare(
+      [
+        right.ruleId,
+        right.repositoryRelativeSourceFile,
+        right.fullyQualifiedOwner,
+        right.dependencyKind,
+        right.canonicalOriginTarget,
+        right.line.toString().padStart(8, "0"),
+        right.column.toString().padStart(8, "0"),
+      ].join("\u0000"),
+    );
 }
 
 export function auditFrontendArchitectureDependencies(
@@ -144,27 +145,35 @@ export function auditFrontendArchitectureDependencies(
     moduleDependencies,
     sourceReader,
   );
-  const missingTargets = [...new Set(moduleDependencies.flatMap((dependency) => (
-    dependency.origin.kind === 'repository-module'
-      && !discoveredClassification.classification.has(dependency.origin.declarationTarget)
-      ? [dependency.origin.declarationTarget]
-      : []
-  )))].sort();
+  const missingTargets = [
+    ...new Set(
+      moduleDependencies.flatMap((dependency) =>
+        dependency.origin.kind === "repository-module" &&
+        !discoveredClassification.classification.has(dependency.origin.declarationTarget)
+          ? [dependency.origin.declarationTarget]
+          : [],
+      ),
+    ),
+  ].sort();
   const classification = {
     classification: discoveredClassification.classification,
     errors: [
       ...discoveredClassification.errors,
       ...missingTargets.map((sourceFile) => ({
-        kind: 'unclassified-production-source' as const,
+        kind: "unclassified-production-source" as const,
         sourceFile,
       })),
     ],
   };
-  const asset = auditFrontendAssetDependencies({
-    productionSources,
-    moduleDependencies,
-    stylesheetGraph,
-  }, classification.classification, assetPolicy);
+  const asset = auditFrontendAssetDependencies(
+    {
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph,
+    },
+    classification.classification,
+    assetPolicy,
+  );
   const external = auditFrontendExternalDependencies(
     [...moduleDependencies, ...stylesheetGraph.dependencies],
     classification.classification,
@@ -179,11 +188,11 @@ export function auditFrontendArchitectureDependencies(
   ].sort(findingSort);
   return {
     classification,
-    unresolvedErrors: unresolvedErrors.sort((left, right) => (
+    unresolvedErrors: unresolvedErrors.sort((left, right) =>
       `${left.sourceFile}:${left.line}:${left.column}`.localeCompare(
         `${right.sourceFile}:${right.line}:${right.column}`,
-      )
-    )),
+      ),
+    ),
     moduleDependencies,
     stylesheetGraph,
     external,

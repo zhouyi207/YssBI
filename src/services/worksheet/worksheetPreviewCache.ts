@@ -1,4 +1,4 @@
-import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
+import type { WorksheetDocument, WorksheetPreviewPayload } from "@/shared/types/domain";
 
 const MAX_CACHE_ENTRIES = 32;
 
@@ -11,7 +11,7 @@ const worksheetKeys = new Map<string, Set<string>>();
 const keyOwners = new Map<string, { databaseId: string; worksheetOwner: string }>();
 let cacheGeneration = 0;
 
-function stableEncodingsKey(encodings: WorksheetDocument['encodings']): string {
+function stableEncodingsKey(encodings: WorksheetDocument["encodings"]): string {
   return JSON.stringify({
     x: encodings.x ?? null,
     y: encodings.y ?? null,
@@ -94,7 +94,7 @@ function removeKey(key: string): void {
 }
 
 function writeCache(key: string, preview: WorksheetPreviewPayload) {
-  if (preview.kind === 'error') return;
+  if (preview.kind === "error") return;
 
   if (previewCache.has(key)) {
     previewCache.delete(key);

@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { useRepeatablePinRemovable } from '@/features/core/pin/useRepeatablePinRemovable';
-import { useGraphDataStore } from './graphDataStore';
-import { canCopyNode, canDeleteNode } from './graphNodeSelectors';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { beforeEach, describe, expect, it } from "vitest";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import { useRepeatablePinRemovable } from "@/features/core/pin/useRepeatablePinRemovable";
+import { useGraphDataStore } from "./graphDataStore";
+import { canCopyNode, canDeleteNode } from "./graphNodeSelectors";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const graphPath = 'functions/projected-capabilities';
-const nodeId = 'managed-node';
+const graphPath = "functions/projected-capabilities";
+const nodeId = "managed-node";
 
 function installClipboardNode(canCopy: boolean | undefined, managed: boolean) {
   const fixture = makeEditorProjectionFixture({ graphPath, nodeId });
@@ -44,39 +44,39 @@ function installProjectedCapabilities() {
   return fixture;
 }
 
-describe('projected active-editor capabilities', () => {
+describe("projected active-editor capabilities", () => {
   beforeEach(() => {
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
-  it('protects Rust-managed nodes without a frontend node registry', () => {
+  it("protects Rust-managed nodes without a frontend node registry", () => {
     installProjectedCapabilities();
 
     expect(canDeleteNode(graphPath, nodeId)).toBe(false);
   });
 
-  it('does not copy a node whose Rust projection disables copying', () => {
+  it("does not copy a node whose Rust projection disables copying", () => {
     installProjectedCapabilities();
 
     expect(canCopyNode(graphPath, nodeId)).toBe(false);
   });
 
   it.each([
-    { label: 'claims it is copyable', canCopy: true },
-    { label: 'omits canCopy', canCopy: undefined },
-  ])('gives managed capability precedence when a node $label', ({ canCopy }) => {
+    { label: "claims it is copyable", canCopy: true },
+    { label: "omits canCopy", canCopy: undefined },
+  ])("gives managed capability precedence when a node $label", ({ canCopy }) => {
     installClipboardNode(canCopy, true);
 
     expect(canCopyNode(graphPath, nodeId)).toBe(false);
   });
 
-  it('allows copying an ordinary projected node', () => {
+  it("allows copying an ordinary projected node", () => {
     installClipboardNode(true, false);
 
     expect(canCopyNode(graphPath, nodeId)).toBe(true);
   });
 
-  it('uses the projected port removal capability without a frontend node definition', async () => {
+  it("uses the projected port removal capability without a frontend node definition", async () => {
     const fixture = installProjectedCapabilities();
     let removable = false;
     let host: HTMLDivElement;
@@ -87,7 +87,7 @@ describe('projected active-editor capabilities', () => {
       return null;
     }
 
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
 

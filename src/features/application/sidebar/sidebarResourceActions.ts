@@ -1,14 +1,14 @@
-import { logger } from '@/features/application/observability/appLogger';
+import { logger } from "@/features/application/observability/appLogger";
 
-import { ProjectService } from '@/services/project/projectService';
-import { normalizeApplicationIpcError } from '@/features/application/errorReference';
-import { revealPath } from '@/services/platform/opener';
+import { ProjectService } from "@/services/project/projectService";
+import { normalizeApplicationIpcError } from "@/features/application/errorReference";
+import { revealPath } from "@/services/platform/opener";
 
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
-import { renameResource } from '@/features/application/resource/resourceActions';
+import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
+import { renameResource } from "@/features/application/resource/resourceActions";
 
 export type RevealProjectResourceRequest = {
-  readonly kind: 'graph' | 'database' | 'worksheet';
+  readonly kind: "graph" | "database" | "worksheet";
   readonly resourceId: string;
 };
 
@@ -24,10 +24,10 @@ export async function revealProjectResourceInExplorer(
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;
-    const ipcError = normalizeApplicationIpcError('reveal_project_resource', error);
+    const ipcError = normalizeApplicationIpcError("reveal_project_resource", error);
     logger.app.error(
-      `Failed to reveal project resource code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
-      'SidebarResourceActions',
+      `Failed to reveal project resource code=${ipcError.code} incidentId=${ipcError.incidentId ?? "none"}`,
+      "SidebarResourceActions",
     );
     throw error;
   }
@@ -37,5 +37,5 @@ export async function renameWorksheetResource(
   worksheetPath: string,
   nextName: string,
 ): Promise<void> {
-  await renameResource({ id: worksheetPath, kind: 'worksheet' }, nextName);
+  await renameResource({ id: worksheetPath, kind: "worksheet" }, nextName);
 }

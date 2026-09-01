@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useChartContainerSize } from './useChartContainerSize';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useChartContainerSize } from "./useChartContainerSize";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 class ControllableResizeObserver {
   readonly observe = vi.fn();
@@ -47,7 +47,7 @@ const cancelFrame = vi.fn((frameId: number): void => {
 
 function flushNextFrame(): void {
   const next = pendingFrames.entries().next();
-  if (next.done) throw new Error('Expected a queued animation frame');
+  if (next.done) throw new Error("Expected a queued animation frame");
   const [frameId, callback] = next.value;
   pendingFrames.delete(frameId);
   act(() => callback(0));
@@ -58,12 +58,14 @@ function SizeProbe({ onRender }: { onRender: () => void }) {
   const { containerRef, size } = useChartContainerSize();
   return (
     <div ref={containerRef} data-testid="container">
-      <span data-testid="probe">{size.width}x{size.height}</span>
+      <span data-testid="probe">
+        {size.width}x{size.height}
+      </span>
     </div>
   );
 }
 
-describe('useChartContainerSize', () => {
+describe("useChartContainerSize", () => {
   let host: HTMLDivElement;
   let root: Root;
   let mounted: boolean;
@@ -76,16 +78,14 @@ describe('useChartContainerSize', () => {
     pendingFrames = new Map();
     requestFrame.mockClear();
     cancelFrame.mockClear();
-    vi.stubGlobal('ResizeObserver', ControllableResizeObserver);
-    vi.stubGlobal('requestAnimationFrame', requestFrame);
-    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
-      () => containerWidth,
-    );
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(
+    vi.stubGlobal("ResizeObserver", ControllableResizeObserver);
+    vi.stubGlobal("requestAnimationFrame", requestFrame);
+    vi.stubGlobal("cancelAnimationFrame", cancelFrame);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => containerWidth);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(
       () => containerHeight,
     );
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     mounted = false;
@@ -98,7 +98,7 @@ describe('useChartContainerSize', () => {
     vi.unstubAllGlobals();
   });
 
-  it('coalesces measurements, skips equal sizes, and releases observer resources', () => {
+  it("coalesces measurements, skips equal sizes, and releases observer resources", () => {
     let renderCount = 0;
     mounted = true;
     act(() => root.render(<SizeProbe onRender={() => renderCount++} />));
@@ -106,14 +106,14 @@ describe('useChartContainerSize', () => {
     const container = host.querySelector<HTMLElement>('[data-testid="container"]');
     const probe = host.querySelector<HTMLElement>('[data-testid="probe"]');
     const observer = currentObserver;
-    if (!container || !probe || !observer) throw new Error('Probe did not mount');
+    if (!container || !probe || !observer) throw new Error("Probe did not mount");
     expect(observer.observe).toHaveBeenCalledOnce();
     expect(observer.observe).toHaveBeenCalledWith(container);
 
     flushNextFrame();
-    expect(probe.textContent).toBe('640x320');
+    expect(probe.textContent).toBe("640x320");
     observer.fire(800, 400);
-    expect(probe.textContent).toBe('800x400');
+    expect(probe.textContent).toBe("800x400");
     const rendersAfterResize = renderCount;
     observer.fire(800, 400);
     expect(renderCount).toBe(rendersAfterResize);
@@ -123,7 +123,7 @@ describe('useChartContainerSize', () => {
     observer.queue(960, 480);
     expect(requestFrame).toHaveBeenCalledOnce();
     flushNextFrame();
-    expect(probe.textContent).toBe('960x480');
+    expect(probe.textContent).toBe("960x480");
 
     observer.queue(1024, 512);
     const pendingFrameId = nextFrameId;

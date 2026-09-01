@@ -1,31 +1,30 @@
-import type { ProjectData, Variable } from '@/shared/types';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import { normalizeDatabases } from '@/features/application/dataManagement/databaseRecords';
-import type { ProjectGraphIndexRow, ProjectIndexRow } from '@/shared/types/domain/project';
+import type { ProjectData, Variable } from "@/shared/types";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
+import type { ProjectGraphIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
 import {
   applyVariableCatalogFromIndex,
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
-} from '@/features/core/variable/variableCatalog';
+} from "@/features/core/variable/variableCatalog";
 
 import {
   buildGraphResourceMeta,
   resourceKey,
   type ProjectResourceMeta,
   type ResourceKey,
-} from '@/features/core/resource';
-import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
-import type { WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
-import type { DetailFocus } from '@/shared/types/ui/detail';
-import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
-import { LoadStatus } from '@/shared/types/ui/common';
+} from "@/features/core/resource";
+import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import type { WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
+import type { DetailFocus } from "@/shared/types/ui/detail";
+import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
+import { LoadStatus } from "@/shared/types/ui/common";
 
 export interface AuthoritativeProjectLoadSource {
   readonly path: string | null;
   readonly databases: Record<string, unknown>;
   readonly index: ProjectIndexRow;
 }
-
 
 export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLoadSource {
   readonly projectData: ProjectData;
@@ -83,18 +82,25 @@ function prepareVariables(index: ProjectIndexRow) {
 }
 
 function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta> {
-  return Object.fromEntries(graphs.flatMap((graph) => {
-    if (graph.type !== 'function') return [];
-    return [[graph.path, {
-      path: graph.path,
-      name: graph.name,
-      type: 'function' as const,
-      functionRevision: graph.functionEditorProjection.functionRevision,
-      functionSignature: structuredClone(graph.functionSignature),
-      functionInputs: structuredClone(graph.functionEditorProjection.inputs),
-      functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
-    }]];
-  }));
+  return Object.fromEntries(
+    graphs.flatMap((graph) => {
+      if (graph.type !== "function") return [];
+      return [
+        [
+          graph.path,
+          {
+            path: graph.path,
+            name: graph.name,
+            type: "function" as const,
+            functionRevision: graph.functionEditorProjection.functionRevision,
+            functionSignature: structuredClone(graph.functionSignature),
+            functionInputs: structuredClone(graph.functionEditorProjection.inputs),
+            functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
+          },
+        ],
+      ];
+    }),
+  );
 }
 
 export function buildProjectResourceState(input: {
@@ -105,11 +111,12 @@ export function buildProjectResourceState(input: {
   loadedWorksheetPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
   const resources: ProjectResourceMeta[] = input.graphs.map((graph) =>
-    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }));
+    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }),
+  );
   for (const worksheet of input.worksheets) {
     resources.push({
       id: worksheet.worksheetPath,
-      kind: 'worksheet',
+      kind: "worksheet",
       name: worksheet.name,
       uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
       revision: worksheet.revision,
@@ -124,8 +131,8 @@ export function buildProjectResourceState(input: {
   for (const [id, database] of Object.entries(input.databases)) {
     resources.push({
       id,
-      kind: 'database',
-      name: typeof database.name === 'string' ? database.name : id,
+      kind: "database",
+      name: typeof database.name === "string" ? database.name : id,
       uri: `yssbi://database/${id}`,
       exists: true,
       loaded: true,
@@ -142,10 +149,9 @@ export function buildProjectResourceState(input: {
   };
 }
 
-
 export const defaultAuthoritativeProjectLoadPlanDependencies: Omit<
   AuthoritativeProjectLoadPlanDependencies,
-  'validateCoordinatorStart'
+  "validateCoordinatorStart"
 > = {
   normalizeDatabases,
   normalizeVariables: prepareVariables,
@@ -163,19 +169,19 @@ export function buildAuthoritativeProjectLoadPlan(
   const databaseResourcePaths = Object.fromEntries(
     databaseRows.map((row) => [row.id, row.resourcePath]),
   );
-  const databaseRevisions = Object.fromEntries(
-    databaseRows.map((row) => [row.id, row.revision]),
+  const databaseRevisions = Object.fromEntries(databaseRows.map((row) => [row.id, row.revision]));
+  const databases = Object.fromEntries(
+    Object.entries(normalizedDatabases).map(([id, database]) => [
+      id,
+      { ...database, resourcePath: databaseResourcePaths[id] },
+    ]),
   );
-  const databases = Object.fromEntries(Object.entries(normalizedDatabases).map(([id, database]) => [
-    id,
-    { ...database, resourcePath: databaseResourcePaths[id] },
-  ]));
   const variableState = dependencies.normalizeVariables(source.index);
   const worksheetIndex = source.index.worksheets.map((worksheet) => ({
     worksheetPath: worksheet.worksheetPath,
     name: worksheet.name,
     databaseId: worksheet.databaseId,
-    chartType: worksheet.chartType as WorksheetIndexEntry['chartType'],
+    chartType: worksheet.chartType as WorksheetIndexEntry["chartType"],
     revision: worksheet.revision,
   }));
   const graphMeta = dependencies.prepareFunctionState(source.index.graphs);
@@ -189,10 +195,11 @@ export function buildAuthoritativeProjectLoadPlan(
     worksheetIndex.map((worksheet) => worksheet.worksheetPath),
   );
 
-  const detailFocus = context.detailFocus?.kind === 'worksheet'
-    && authoritativeWorksheetPaths.has(context.detailFocus.worksheetPath)
-    ? structuredClone(context.detailFocus)
-    : null;
+  const detailFocus =
+    context.detailFocus?.kind === "worksheet" &&
+    authoritativeWorksheetPaths.has(context.detailFocus.worksheetPath)
+      ? structuredClone(context.detailFocus)
+      : null;
   dependencies.validateCoordinatorStart(
     source.index.projectInstanceId,
     source.index.publicationRevision,

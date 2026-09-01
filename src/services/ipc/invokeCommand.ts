@@ -1,9 +1,5 @@
-import {
-  invoke,
-  type InvokeArgs,
-  type InvokeOptions,
-} from '@tauri-apps/api/core';
-import { normalizeIpcError } from './ipcError';
+import { invoke, type InvokeArgs, type InvokeOptions } from "@tauri-apps/api/core";
+import { normalizeIpcError } from "./ipcError";
 
 export async function invokeCommand<Result>(
   command: string,

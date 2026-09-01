@@ -1,20 +1,20 @@
-import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscDatabase } from 'react-icons/vsc';
-import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { VscDatabase } from "react-icons/vsc";
+import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useCurrentWindowActions } from '@/features/application/window';
-import { useCustomTitleBar } from '@/features/application/window/useWindowDecorations';
-import { windowInteractiveRegionProps } from '@/features/application/window/windowInteraction';
-import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
-import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
+} from "@/components/ui/select";
+import { useCurrentWindowActions } from "@/features/application/window";
+import { useCustomTitleBar } from "@/features/application/window/useWindowDecorations";
+import { windowInteractiveRegionProps } from "@/features/application/window/windowInteraction";
+import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
+import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
 
 export interface DataframeOption {
   label: string;
@@ -39,32 +39,40 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const windowActions = useCurrentWindowActions();
   const showCustomChrome = useCustomTitleBar();
 
-  const selectValue = selectedDataframeId && dataframes.some((o) => o.value === selectedDataframeId)
-    ? selectedDataframeId
-    : undefined;
+  const selectValue =
+    selectedDataframeId && dataframes.some((o) => o.value === selectedDataframeId)
+      ? selectedDataframeId
+      : undefined;
 
   const toolbarBody = (
     <>
       <div
         className="flex min-w-0 flex-1 items-center gap-2 px-3"
-        {...(showCustomChrome ? { 'data-tauri-drag-region': true } : {})}
+        {...(showCustomChrome ? { "data-tauri-drag-region": true } : {})}
       >
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
           <VscDatabase size={14} />
         </span>
-        <span className="shrink-0 text-[13px] font-semibold tracking-tight text-foreground">{t('databaseEditor.title')}</span>
+        <span className="shrink-0 text-[13px] font-semibold tracking-tight text-foreground">
+          {t("databaseEditor.title")}
+        </span>
         <div
           className="min-w-0 flex-1 max-w-[min(360px,42vw)] pl-1"
           {...windowInteractiveRegionProps}
         >
           {dataframes.length === 0 ? (
-            <span className="text-xs text-muted-foreground">{t('databaseEditor.noDataFrame')}</span>
+            <span className="text-xs text-muted-foreground">{t("databaseEditor.noDataFrame")}</span>
           ) : selectValue === undefined ? (
-            <span className="text-xs text-muted-foreground">{t('databaseEditor.loadingProjectData')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t("databaseEditor.loadingProjectData")}
+            </span>
           ) : (
             <Select value={selectValue} onValueChange={onSelectDataframe}>
-              <SelectTrigger size="sm" className="h-7 border-border bg-muted/40 text-xs shadow-none">
-                <SelectValue placeholder={t('databaseEditor.noDataFrameSelected')} />
+              <SelectTrigger
+                size="sm"
+                className="h-7 border-border bg-muted/40 text-xs shadow-none"
+              >
+                <SelectValue placeholder={t("databaseEditor.noDataFrameSelected")} />
               </SelectTrigger>
               <SelectContent position="popper" className="z-[600] max-h-72">
                 {dataframes.map((opt) => (
@@ -86,12 +94,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <Input
               readOnly
               value={selectedCellText}
-              placeholder={t('databaseEditor.cellPreviewPlaceholder')}
+              placeholder={t("databaseEditor.cellPreviewPlaceholder")}
               className="h-7 w-full text-xs shadow-none"
-              aria-label={t('databaseEditor.cellPreviewPlaceholder')}
+              aria-label={t("databaseEditor.cellPreviewPlaceholder")}
             />
           </TooltipTrigger>
-          {selectedCellText ? <TooltipContent side="bottom">{selectedCellText}</TooltipContent> : null}
+          {selectedCellText ? (
+            <TooltipContent side="bottom">{selectedCellText}</TooltipContent>
+          ) : null}
         </Tooltip>
       </div>
     </>

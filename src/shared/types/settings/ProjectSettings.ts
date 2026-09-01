@@ -1,4 +1,4 @@
 export interface ProjectSettings {
-    projectName: string;
-    exportPath: string;
+  projectName: string;
+  exportPath: string;
 }

@@ -2,7 +2,7 @@
  * VEC / vecrank 报告 DTO
  */
 
-import type { VARLmarDisplay, VARStableRow } from './var';
+import type { VARLmarDisplay, VARStableRow } from "./var";
 
 export interface VECSummaryResultData {
   title: string;

@@ -4,11 +4,11 @@ import type { AppLanguage } from "./LanguageSettings";
 export type TitleBarStyle = "custom" | "native";
 
 export interface AppearanceSettings {
-    colorTheme: string;
-    lastLightColorTheme: string;
-    lastDarkColorTheme: string;
-    language: AppLanguage;
+  colorTheme: string;
+  lastLightColorTheme: string;
+  lastDarkColorTheme: string;
+  language: AppLanguage;
 
-    smoothScroll: boolean;
-    titleBarStyle: TitleBarStyle;
+  smoothScroll: boolean;
+  titleBarStyle: TitleBarStyle;
 }

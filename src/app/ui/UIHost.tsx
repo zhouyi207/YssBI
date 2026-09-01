@@ -10,7 +10,6 @@ import {
   SqlConnectionModal,
   SqliteTableSelectModal,
   SqlRemoteTableSelectModal,
-
 } from "@/shared/ui";
 
 export const UIHost = () => {
@@ -19,39 +18,70 @@ export const UIHost = () => {
 
   return (
     <>
-
       {progress && <ProgressOverlay progress={progress} onCancel={applicationUi.cancelProgress} />}
 
       {top?.type === "message" && (
-        <MessageDialog key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <MessageDialog
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "confirm" && (
-        <Modal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <Modal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "input" && (
-        <InputModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <InputModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "import" && (
-        <ImportModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <ImportModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "sqliteTableSelect" && (
-        <SqliteTableSelectModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <SqliteTableSelectModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "excelSheetSelect" && (
-        <ExcelSheetSelectModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <ExcelSheetSelectModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "sqlConnection" && (
-        <SqlConnectionModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <SqlConnectionModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
 
       {top?.type === "sqlRemoteTableSelect" && (
-        <SqlRemoteTableSelectModal key={top.id} options={top.options} onClose={() => applicationUi.closeModal(top.id)} />
+        <SqlRemoteTableSelectModal
+          key={top.id}
+          options={top.options}
+          onClose={() => applicationUi.closeModal(top.id)}
+        />
       )}
     </>
   );

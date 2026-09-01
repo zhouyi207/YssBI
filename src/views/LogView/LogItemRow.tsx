@@ -1,6 +1,6 @@
-import type { MouseEvent } from 'react';
-import { LOG_ITEM_HEIGHT } from '@/shared/config-default';
-import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
+import type { MouseEvent } from "react";
+import { LOG_ITEM_HEIGHT } from "@/shared/config-default";
+import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
 import {
   formatDiagnosticTime,
   getLogDomainColor,
@@ -8,7 +8,7 @@ import {
   getLogLevelColor,
   LOG_DOMAIN_BACKGROUND,
   LOG_DOMAIN_LABELS,
-} from './logPresentation';
+} from "./logPresentation";
 
 export function LogItemRow({
   log,
@@ -22,7 +22,7 @@ export function LogItemRow({
   const levelColor = getLogLevelColor(log.level);
   const levelBg = getLogLevelBackground(log.level);
   const domainColor = getLogDomainColor(log.domain);
-  const domainBg = LOG_DOMAIN_BACKGROUND[log.domain] ?? 'bg-muted/40';
+  const domainBg = LOG_DOMAIN_BACKGROUND[log.domain] ?? "bg-muted/40";
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.detail === 0) {
@@ -33,10 +33,10 @@ export function LogItemRow({
     const row = event.currentTarget;
     const selection = window.getSelection();
     const hasRowSelection = Boolean(
-      selection
-        && !selection.isCollapsed
-        && ((selection.anchorNode && row.contains(selection.anchorNode))
-          || (selection.focusNode && row.contains(selection.focusNode))),
+      selection &&
+      !selection.isCollapsed &&
+      ((selection.anchorNode && row.contains(selection.anchorNode)) ||
+        (selection.focusNode && row.contains(selection.focusNode))),
     );
     if (!hasRowSelection) onClick();
   };
@@ -46,9 +46,9 @@ export function LogItemRow({
       type="button"
       onClick={handleClick}
       className={[
-        'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/20 px-3 py-1.5 text-left transition-colors',
-        isSelected ? 'bg-primary/10' : 'hover:bg-muted/30',
-      ].join(' ')}
+        "group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/20 px-3 py-1.5 text-left transition-colors",
+        isSelected ? "bg-primary/10" : "hover:bg-muted/30",
+      ].join(" ")}
       style={{ minHeight: LOG_ITEM_HEIGHT }}
     >
       <span className="w-13 shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80">

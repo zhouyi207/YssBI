@@ -1,6 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import type { EditorSessionCommands } from './editorSessionCommands';
-import { useEditorSessionCommands } from './useEditorSessionCommands';
+import { createContext, useContext, type ReactNode } from "react";
+import type { EditorSessionCommands } from "./editorSessionCommands";
+import { useEditorSessionCommands } from "./useEditorSessionCommands";
 
 const EditorSessionCommandsContext = createContext<EditorSessionCommands | null>(null);
 
@@ -17,7 +17,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
 export function useEditorSessionCommandsContext(): EditorSessionCommands {
   const commands = useContext(EditorSessionCommandsContext);
   if (!commands) {
-    throw new Error('useEditorSessionCommandsContext must be used within EditorSessionProvider');
+    throw new Error("useEditorSessionCommandsContext must be used within EditorSessionProvider");
   }
   return commands;
 }

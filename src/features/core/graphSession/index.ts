@@ -3,8 +3,5 @@ export {
   graphSessionUi,
   subscribeGraphSessionUi,
   useGraphSessionUi,
-} from './ui';
-export type {
-  GraphSessionUiCapability,
-  GraphSessionUiSnapshot,
-} from './ui';
+} from "./ui";
+export type { GraphSessionUiCapability, GraphSessionUiSnapshot } from "./ui";

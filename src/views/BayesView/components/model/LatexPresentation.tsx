@@ -1,12 +1,32 @@
-import { useMemo } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-import type { Translation } from './types';
+import { useMemo } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import type { Translation } from "./types";
 
 const LATEX_GREEK_SYMBOLS = new Set([
-  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa',
-  'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'upsilon', 'phi',
-  'chi', 'psi', 'omega',
+  "alpha",
+  "beta",
+  "gamma",
+  "delta",
+  "epsilon",
+  "zeta",
+  "eta",
+  "theta",
+  "iota",
+  "kappa",
+  "lambda",
+  "mu",
+  "nu",
+  "xi",
+  "pi",
+  "rho",
+  "sigma",
+  "tau",
+  "upsilon",
+  "phi",
+  "chi",
+  "psi",
+  "omega",
 ]);
 
 export function latexSymbol(value: string): string {
@@ -22,14 +42,19 @@ export function RecognizedSymbols({ symbols, t }: { symbols: string[]; t: Transl
   const uniqueSymbols = Array.from(new Set(symbols)).sort();
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-      <span>{t('bayes.formula.recognizedSymbols')}</span>
-      {uniqueSymbols.length > 0
-        ? uniqueSymbols.map(symbol => (
-          <span key={symbol} className="rounded border border-border bg-muted/30 px-1.5 py-0.5 text-foreground">
+      <span>{t("bayes.formula.recognizedSymbols")}</span>
+      {uniqueSymbols.length > 0 ? (
+        uniqueSymbols.map((symbol) => (
+          <span
+            key={symbol}
+            className="rounded border border-border bg-muted/30 px-1.5 py-0.5 text-foreground"
+          >
             <LatexInline formulaText={latexSymbol(symbol)} />
           </span>
         ))
-        : <span>{t('bayes.common.none')}</span>}
+      ) : (
+        <span>{t("bayes.common.none")}</span>
+      )}
     </div>
   );
 }
@@ -50,7 +75,7 @@ export function LatexInline({ formulaText }: { formulaText: string }) {
 }
 
 function renderLatex(formulaText: string, displayMode: boolean): string {
-  const latex = formulaText.trim() || '\\cdots';
+  const latex = formulaText.trim() || "\\cdots";
   try {
     return katex.renderToString(latex, {
       displayMode,
@@ -64,14 +89,14 @@ function renderLatex(formulaText: string, displayMode: boolean): string {
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"]/g, (character) => {
     switch (character) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
       case '"':
-        return '&quot;';
+        return "&quot;";
       default:
         return character;
     }

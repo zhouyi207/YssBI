@@ -1,31 +1,26 @@
-import type { DataType } from '@/shared/types/domain/dataType';
-import type { Pin, PinDirection } from '@/shared/types/domain/pin';
-import { isExecPin } from '@/shared/types/domain/pinSemantics';
-import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
-import type {
-  PinDataTypeDefinition,
-  PinSlot,
-  PinDefinitionDTO,
-} from '@/shared/types/domain/node';
-import { structCanAccept } from '@/shared/types/domain/typeSystem';
-import type { PinData } from '@/shared/types/store/graph';
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { Pin, PinDirection } from "@/shared/types/domain/pin";
+import { isExecPin } from "@/shared/types/domain/pinSemantics";
+import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
+import type { PinDataTypeDefinition, PinSlot, PinDefinitionDTO } from "@/shared/types/domain/node";
+import { structCanAccept } from "@/shared/types/domain/typeSystem";
+import type { PinData } from "@/shared/types/store/graph";
 
-export type ConnectionCandidatePin = Pin & Partial<
-  Pick<PinData, 'connections' | 'kind' | 'orphan' | 'resolvedType'>
->;
+export type ConnectionCandidatePin = Pin &
+  Partial<Pick<PinData, "connections" | "kind" | "orphan" | "resolvedType">>;
 
-export type TypeCompatibility = 'compatible' | 'incompatible' | 'indeterminate';
+export type TypeCompatibility = "compatible" | "incompatible" | "indeterminate";
 
 function everyCompatibility(results: TypeCompatibility[]): TypeCompatibility {
-  if (results.some((result) => result === 'incompatible')) return 'incompatible';
-  if (results.some((result) => result === 'indeterminate')) return 'indeterminate';
-  return 'compatible';
+  if (results.some((result) => result === "incompatible")) return "incompatible";
+  if (results.some((result) => result === "indeterminate")) return "indeterminate";
+  return "compatible";
 }
 
 function someCompatibility(results: TypeCompatibility[]): TypeCompatibility {
-  if (results.some((result) => result === 'compatible')) return 'compatible';
-  if (results.some((result) => result === 'indeterminate')) return 'indeterminate';
-  return 'incompatible';
+  if (results.some((result) => result === "compatible")) return "compatible";
+  if (results.some((result) => result === "indeterminate")) return "indeterminate";
+  return "incompatible";
 }
 
 export function getDataTypeCompatibility(
@@ -33,28 +28,28 @@ export function getDataTypeCompatibility(
   target: DataType | null | undefined,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): TypeCompatibility {
-  if (!source || !target) return 'indeterminate';
-  if (source.kind === 'OneOf') {
-    return everyCompatibility(source.inner.map((member) =>
-      getDataTypeCompatibility(member, target, typeSystem)));
+  if (!source || !target) return "indeterminate";
+  if (source.kind === "OneOf") {
+    return everyCompatibility(
+      source.inner.map((member) => getDataTypeCompatibility(member, target, typeSystem)),
+    );
   }
-  if (target.kind === 'OneOf') {
-    return someCompatibility(target.inner.map((member) =>
-      getDataTypeCompatibility(source, member, typeSystem)));
+  if (target.kind === "OneOf") {
+    return someCompatibility(
+      target.inner.map((member) => getDataTypeCompatibility(source, member, typeSystem)),
+    );
   }
-  if (target.kind !== source.kind) return 'incompatible';
-  if (target.kind === 'Array' && source.kind === 'Array') {
+  if (target.kind !== source.kind) return "incompatible";
+  if (target.kind === "Array" && source.kind === "Array") {
     return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
   }
-  if (target.kind === 'DataSeries' && source.kind === 'DataSeries') {
+  if (target.kind === "DataSeries" && source.kind === "DataSeries") {
     return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
   }
-  if (target.kind === 'Struct' && source.kind === 'Struct') {
-    return structCanAccept(target.inner, source.inner, typeSystem)
-      ? 'compatible'
-      : 'incompatible';
+  if (target.kind === "Struct" && source.kind === "Struct") {
+    return structCanAccept(target.inner, source.inner, typeSystem) ? "compatible" : "incompatible";
   }
-  return 'compatible';
+  return "compatible";
 }
 
 function canAcceptDataType(
@@ -62,7 +57,7 @@ function canAcceptDataType(
   source: DataType,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
-  return getDataTypeCompatibility(source, target, typeSystem) === 'compatible';
+  return getDataTypeCompatibility(source, target, typeSystem) === "compatible";
 }
 
 /**
@@ -70,7 +65,7 @@ function canAcceptDataType(
  * Exec pin 不进入数据类型系统；Data pin 缺少 `dataType` 是 schema/乐观创建错误。
  */
 export function buildPinDataType(pin: Pin): DataType {
-  if (isExecPin(pin)) return { kind: 'Any' };
+  if (isExecPin(pin)) return { kind: "Any" };
   if (pin.dataType) return pin.dataType;
   throw new Error(`Pin ${pin.id} (${pin.name}) is missing structured dataType`);
 }
@@ -86,7 +81,7 @@ export function pinAcceptsType(
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   const draggedType = buildPinDataType(draggedPin);
-  if (draggedPin.direction === 'input') {
+  if (draggedPin.direction === "input") {
     return canAcceptDataType(draggedType, candidateType, typeSystem);
   }
   return canAcceptDataType(candidateType, draggedType, typeSystem);
@@ -97,9 +92,9 @@ export function isPinCompatible(
   dragged: ConnectionCandidatePin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
-  const source = candidate.direction === 'output' ? candidate : dragged;
-  const target = candidate.direction === 'input' ? candidate : dragged;
-  return getPinCompatibility(source, target, typeSystem) === 'compatible';
+  const source = candidate.direction === "output" ? candidate : dragged;
+  const target = candidate.direction === "input" ? candidate : dragged;
+  return getPinCompatibility(source, target, typeSystem) === "compatible";
 }
 
 function projectedPinDataType(pin: ConnectionCandidatePin): DataType | null | undefined {
@@ -114,15 +109,18 @@ export function getPinCompatibility(
   target: ConnectionCandidatePin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): TypeCompatibility {
-  if (source.id === target.id
-    || source.nodeId === target.nodeId
-    || source.direction !== 'output'
-    || target.direction !== 'input') return 'incompatible';
+  if (
+    source.id === target.id ||
+    source.nodeId === target.nodeId ||
+    source.direction !== "output" ||
+    target.direction !== "input"
+  )
+    return "incompatible";
 
   const sourceIsExec = isExecPin(source);
   const targetIsExec = isExecPin(target);
-  if (sourceIsExec !== targetIsExec) return 'incompatible';
-  if (sourceIsExec) return 'compatible';
+  if (sourceIsExec !== targetIsExec) return "incompatible";
+  if (sourceIsExec) return "compatible";
   return getDataTypeCompatibility(
     projectedPinDataType(source),
     projectedPinDataType(target),
@@ -131,27 +129,25 @@ export function getPinCompatibility(
 }
 
 export type ConnectionInvalidReason =
-  | 'samePort'
-  | 'sameNode'
-  | 'directionMismatch'
-  | 'kindMismatch'
-  | 'typeMismatch'
-  | 'orphan'
-  | 'capacityReached';
+  | "samePort"
+  | "sameNode"
+  | "directionMismatch"
+  | "kindMismatch"
+  | "typeMismatch"
+  | "orphan"
+  | "capacityReached";
 
 export type ConnectionCompatibility =
-  | { kind: 'append' }
-  | { kind: 'replace' }
-  | { kind: 'invalid'; reason: ConnectionInvalidReason };
+  | { kind: "append" }
+  | { kind: "replace" }
+  | { kind: "invalid"; reason: ConnectionInvalidReason };
 
-function connectionKind(pin: ConnectionCandidatePin): 'data' | 'control' | 'effect' {
-  return pin.kind ?? (isExecPin(pin) ? 'control' : 'data');
+function connectionKind(pin: ConnectionCandidatePin): "data" | "control" | "effect" {
+  return pin.kind ?? (isExecPin(pin) ? "control" : "data");
 }
 
 function canAppendOrReplace(pin: ConnectionCandidatePin): boolean {
-  return pin.connections
-    ? pin.connections.canAppend || pin.connections.canReplace
-    : true;
+  return pin.connections ? pin.connections.canAppend || pin.connections.canReplace : true;
 }
 
 export function resolveConnectionCompatibility(
@@ -159,35 +155,34 @@ export function resolveConnectionCompatibility(
   b: ConnectionCandidatePin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): ConnectionCompatibility {
-  if (a.id === b.id) return { kind: 'invalid', reason: 'samePort' };
-  if (a.nodeId === b.nodeId) return { kind: 'invalid', reason: 'sameNode' };
-  if (a.direction === b.direction) return { kind: 'invalid', reason: 'directionMismatch' };
+  if (a.id === b.id) return { kind: "invalid", reason: "samePort" };
+  if (a.nodeId === b.nodeId) return { kind: "invalid", reason: "sameNode" };
+  if (a.direction === b.direction) return { kind: "invalid", reason: "directionMismatch" };
 
-  const source = a.direction === 'output' ? a : b;
-  const target = a.direction === 'input' ? a : b;
+  const source = a.direction === "output" ? a : b;
+  const target = a.direction === "input" ? a : b;
   const sourceKind = connectionKind(source);
   const targetKind = connectionKind(target);
 
-  if (sourceKind !== targetKind) return { kind: 'invalid', reason: 'kindMismatch' };
-  if (source.orphan || target.orphan) return { kind: 'invalid', reason: 'orphan' };
+  if (sourceKind !== targetKind) return { kind: "invalid", reason: "kindMismatch" };
+  if (source.orphan || target.orphan) return { kind: "invalid", reason: "orphan" };
   if (!canAppendOrReplace(source) || !canAppendOrReplace(target)) {
-    return { kind: 'invalid', reason: 'capacityReached' };
+    return { kind: "invalid", reason: "capacityReached" };
   }
 
-  if (sourceKind === 'data'
-    && getPinCompatibility(source, target, typeSystem) === 'incompatible') {
-    return { kind: 'invalid', reason: 'typeMismatch' };
+  if (sourceKind === "data" && getPinCompatibility(source, target, typeSystem) === "incompatible") {
+    return { kind: "invalid", reason: "typeMismatch" };
   }
 
   return source.connections?.canReplace || target.connections?.canReplace
-    ? { kind: 'replace' }
-    : { kind: 'append' };
+    ? { kind: "replace" }
+    : { kind: "append" };
 }
 
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
-  if (pdt === 'Unknown') return null;
-  if ('Concrete' in pdt) return pdt.Concrete;
-  if ('TypeVar' in pdt) return null;
+  if (pdt === "Unknown") return null;
+  if ("Concrete" in pdt) return pdt.Concrete;
+  if ("TypeVar" in pdt) return null;
   return null;
 }
 
@@ -207,9 +202,9 @@ function generateSlotName(prefix: string, index: number): string {
 function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
   const pins: PinDefinitionDTO[] = [];
   for (const slot of slots) {
-    if (slot.slotKind === 'fixed') {
+    if (slot.slotKind === "fixed") {
       pins.push(slot.pin);
-    } else if (slot.slotKind === 'repeatable') {
+    } else if (slot.slotKind === "repeatable") {
       for (let i = 0; i < slot.minCount; i++) {
         pins.push({ ...slot.template, name: generateSlotName(slot.namePrefix, i) });
       }
@@ -228,7 +223,7 @@ export function findAutoConnectPinIndex(
   draggedPin: Pin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): number {
-  const targetDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
+  const targetDir: PinDirection = draggedPin.direction === "input" ? "output" : "input";
   const draggedIsExec = isExecPin(draggedPin);
   const draggedDataType = draggedIsExec ? null : buildPinDataType(draggedPin);
 
@@ -238,15 +233,15 @@ export function findAutoConnectPinIndex(
     if (p.direction !== targetDir) continue;
 
     if (draggedIsExec) {
-      if (p.kind === 'Exec') return i;
+      if (p.kind === "Exec") return i;
       continue;
     }
-    if (p.kind === 'Exec') continue;
+    if (p.kind === "Exec") continue;
 
     if (!p.dataType) return i;
     const concrete = extractConcreteType(p.dataType);
     if (!concrete) return i; // TypeVar/Unknown -> compatible
-    if (draggedPin.direction === 'input') {
+    if (draggedPin.direction === "input") {
       if (canAcceptDataType(draggedDataType!, concrete, typeSystem)) return i;
     } else {
       if (canAcceptDataType(concrete, draggedDataType!, typeSystem)) return i;

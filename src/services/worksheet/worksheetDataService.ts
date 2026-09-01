@@ -1,11 +1,11 @@
-import { DatabaseService } from '@/services/database/databaseService';
-import { toErrorReference } from '@/services/ipc';
-import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { DatabaseService } from "@/services/database/databaseService";
+import { toErrorReference } from "@/services/ipc";
+import { WorksheetService } from "@/services/worksheet/worksheetService";
 import type {
   ColumnDistribution,
   WorksheetDocument,
   WorksheetPreviewPayload,
-} from '@/shared/types/domain';
+} from "@/shared/types/domain";
 
 export interface WorksheetPreviewProjectIdentity {
   readonly projectInstanceId: string;
@@ -20,13 +20,13 @@ export async function fetchWorksheetPreview(
   const { databaseId, chartType, encodings } = document;
 
   if (!databaseId) {
-    return { kind: 'empty' };
+    return { kind: "empty" };
   }
 
   try {
-    if (chartType === 'histogram') {
+    if (chartType === "histogram") {
       const column = encodings.y ?? encodings.x;
-      if (!column) return { kind: 'empty' };
+      if (!column) return { kind: "empty" };
 
       const distributions = (await DatabaseService.getColumnDistribution(
         identity.projectInstanceId,
@@ -36,32 +36,32 @@ export async function fetchWorksheetPreview(
       const match = distributions.find((d) => d.columnName === column);
       if (!match) {
         return {
-          kind: 'error',
-          code: 'worksheet_preview_column_not_found',
+          kind: "error",
+          code: "worksheet_preview_column_not_found",
           incidentId: null,
           column,
         };
       }
-      if (match.kind === 'numeric') {
+      if (match.kind === "numeric") {
         return {
-          kind: 'histogram',
+          kind: "histogram",
           bins: match.bins,
           xLabel: column,
-          yLabel: 'Count',
+          yLabel: "Count",
         };
       }
       return {
-        kind: 'histogram',
+        kind: "histogram",
         bins: match.categories.map((c) => ({ label: c.label, count: c.value })),
         xLabel: column,
-        yLabel: 'Count',
+        yLabel: "Count",
       };
     }
 
-    if (chartType === 'scatter' || chartType === 'line') {
+    if (chartType === "scatter" || chartType === "line") {
       const xCol = encodings.x;
       const yCol = encodings.y;
-      if (!xCol || !yCol) return { kind: 'empty' };
+      if (!xCol || !yCol) return { kind: "empty" };
 
       const pair = await WorksheetService.getPlotColumnPair(
         identity.projectInstanceId,
@@ -73,14 +73,14 @@ export async function fetchWorksheetPreview(
       return { kind: chartType, pair };
     }
 
-    return { kind: 'empty' };
+    return { kind: "empty" };
   } catch (error) {
     if (!identity.isCurrent()) {
       identity.assertCurrent();
     }
     return {
-      kind: 'error',
-      ...toErrorReference(error, 'worksheet_preview_read_failed'),
+      kind: "error",
+      ...toErrorReference(error, "worksheet_preview_read_failed"),
     };
   }
 }

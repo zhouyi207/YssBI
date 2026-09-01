@@ -1,22 +1,22 @@
-import type React from 'react';
-import type { Pin as PinModel } from '@/shared/types/domain';
-import type { PortKindDto } from '@/shared/types/domain/editorProjection';
-import type { UINode } from '@/shared/types/ui';
-import { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX } from '@/features/domain/node/utils/nodeClassNames';
-import { Pin } from '../Pins/Pin';
-
-export {
+import type React from "react";
+import type { Pin as PinModel } from "@/shared/types/domain";
+import type { PortKindDto } from "@/shared/types/domain/editorProjection";
+import type { UINode } from "@/shared/types/ui";
+import {
   REROUTE_GRIP_SIZE_PX,
   REROUTE_NODE_HEIGHT_PX,
   REROUTE_NODE_WIDTH_PX,
-};
+} from "@/features/domain/node/utils/nodeClassNames";
+import { Pin } from "../Pins/Pin";
+
+export { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX };
 
 interface RerouteNodeLayoutProps {
   node: UINode;
   activePinId?: string | null;
   graphPath?: string;
   groupId?: string;
-  onPinClick?: (pinId: string, direction: 'input' | 'output') => void;
+  onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (event: React.PointerEvent, pin: PinModel) => void;
 }
 
@@ -25,9 +25,12 @@ function projectedRerouteKind(node: UINode): PortKindDto | undefined {
 }
 
 function gripClassName(kind: PortKindDto | undefined): string {
-  const semanticShape = kind === 'effect'
-    ? 'rotate-45 rounded-none'
-    : kind === 'control' ? 'rounded-none' : 'rounded-full';
+  const semanticShape =
+    kind === "effect"
+      ? "rotate-45 rounded-none"
+      : kind === "control"
+        ? "rounded-none"
+        : "rounded-full";
   return `absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border border-current opacity-70 ${semanticShape}`;
 }
 

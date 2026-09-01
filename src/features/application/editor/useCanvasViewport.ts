@@ -1,25 +1,20 @@
 /**
  * Pin offsets and coordinate helpers for Canvas.
  */
-import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import {
-  getViewport,
-  editorViewportScope,
-} from '@/features/core/viewport';
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { useGraphInteractionStore } from '@/features/core/graphInteraction';
-import { measurePinConnectionAnchor } from '@/features/core/canvas/pinConnectionAnchor';
-import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
-
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { getViewport, editorViewportScope } from "@/features/core/viewport";
+import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphInteractionStore } from "@/features/core/graphInteraction";
+import { measurePinConnectionAnchor } from "@/features/core/canvas/pinConnectionAnchor";
+import { resolvePinOffsetWaiters } from "@/features/core/canvas/pinOffsetWaiter";
 
 export function useCanvasViewport(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
   groupId: string | null,
   graphPath: string | null,
 ) {
-  const viewportScope =
-    groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
+  const viewportScope = groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
 
   const graphNodeIds = useGraphDataStore(
@@ -97,7 +92,7 @@ export function useCanvasViewport(
         hasUnmeasurablePin = true;
         continue;
       }
-      const pins = nodeEl.querySelectorAll<HTMLElement>('[data-pin-id]');
+      const pins = nodeEl.querySelectorAll<HTMLElement>("[data-pin-id]");
 
       pins.forEach((pinEl) => {
         const anchor = measurePinConnectionAnchor(pinEl);
@@ -120,9 +115,9 @@ export function useCanvasViewport(
       if (currentKeys.length === prevKeys.length) {
         const isSame = currentKeys.every(
           (k) =>
-            prev[k]
-            && Math.abs(prev[k].x - nextOffsets[k].x) < 0.1
-            && Math.abs(prev[k].y - nextOffsets[k].y) < 0.1,
+            prev[k] &&
+            Math.abs(prev[k].x - nextOffsets[k].x) < 0.1 &&
+            Math.abs(prev[k].y - nextOffsets[k].y) < 0.1,
         );
         if (isSame) return prev;
       }
@@ -137,8 +132,8 @@ export function useCanvasViewport(
       const nodeId = pinNodeIdMap[pinId];
       if (!nodeId) return null;
       const position = graphPath
-        ? useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId]
-          ?? nodePositionMap[nodeId]
+        ? (useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId] ??
+          nodePositionMap[nodeId])
         : nodePositionMap[nodeId];
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;

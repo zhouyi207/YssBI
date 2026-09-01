@@ -1,9 +1,9 @@
-import type { SerializedDockview } from 'dockview-react';
-import { logsDockviewRuntime } from './logsRuntime';
+import type { SerializedDockview } from "dockview-react";
+import { logsDockviewRuntime } from "./logsRuntime";
 
 export interface LogsDockviewControl {
   beginRestore(): number;
-  stageRestore(epoch: number, layout: SerializedDockview): 'staged' | 'applied' | 'stale';
+  stageRestore(epoch: number, layout: SerializedDockview): "staged" | "applied" | "stale";
   captureBoundSnapshot(): void;
   resetToDefault(): void;
 }

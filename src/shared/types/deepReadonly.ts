@@ -15,7 +15,7 @@ export function freezePublished<T extends object>(value: T): Readonly<T> {
 }
 
 function freezeDeep(value: unknown): unknown {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
     return value;
   }
 

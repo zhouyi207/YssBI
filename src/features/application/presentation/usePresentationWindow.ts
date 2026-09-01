@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { WindowKind } from '@/shared/types/settings';
-import { usePersistedWindow } from '@/features/application/window/usePersistedWindow';
-import { usePresentationWindowLifecycle } from '@/features/application/window/usePresentationWindowLifecycle';
+import { useEffect, useMemo, useState } from "react";
+import type { WindowKind } from "@/shared/types/settings";
+import { usePersistedWindow } from "@/features/application/window/usePersistedWindow";
+import { usePresentationWindowLifecycle } from "@/features/application/window/usePresentationWindowLifecycle";
 import {
   useCurrentWindowActions,
   type CurrentWindowActions,
-} from '@/features/application/window/useCurrentWindowActions';
-import { loadPresentationWindow, type PresentationWindowState } from './loadPresentationWindow';
-import { parsePresentationWindowQuery } from './parsePresentationWindowQuery';
+} from "@/features/application/window/useCurrentWindowActions";
+import { loadPresentationWindow, type PresentationWindowState } from "./loadPresentationWindow";
+import { parsePresentationWindowQuery } from "./parsePresentationWindowQuery";
 
 export function usePresentationWindow(windowKind: WindowKind) {
   const query = useMemo(() => parsePresentationWindowQuery(), []);
   const resultId = query.resultId;
   const [state, setState] = useState<PresentationWindowState>(() =>
-    resultId ? { status: 'loading' } : { status: 'missing_result_id' },
+    resultId ? { status: "loading" } : { status: "missing_result_id" },
   );
 
   usePresentationWindowLifecycle(resultId);
@@ -37,7 +37,7 @@ export function usePresentationWindow(windowKind: WindowKind) {
       const next = await loadPresentationWindow(resultId);
       if (cancelled) return;
       setState(next);
-      if (next.status === 'ready') {
+      if (next.status === "ready") {
         await revealWindow(next.descriptor.title);
         return;
       }

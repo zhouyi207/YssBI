@@ -1,18 +1,18 @@
-import type { ComponentType } from 'react';
-import type { ReportKind } from '@/features/application/results/types';
-import { OLSComponent } from './OLSComponent';
-import { VARComponent } from './VARComponent';
-import { VARSocComponent } from './VARSocComponent';
-import { VECComponent } from './VECComponent';
-import { VecRankComponent } from './VecRankComponent';
-import { DFADFComponent } from './DFADFComponent';
-import { DFADFSummaryListComponent } from './DFADFSummaryListComponent';
-import { BinaryComponent } from './BinaryComponent';
-import { PanelComponent } from './PanelComponent';
-import { DIDComponent } from './DIDComponent';
-import { PraisComponent } from './PraisComponent';
-import { TwoSLSComponent } from './2SLSComponent';
-import { LIMLComponent } from './LIMLComponent';
+import type { ComponentType } from "react";
+import type { ReportKind } from "@/features/application/results/types";
+import { OLSComponent } from "./OLSComponent";
+import { VARComponent } from "./VARComponent";
+import { VARSocComponent } from "./VARSocComponent";
+import { VECComponent } from "./VECComponent";
+import { VecRankComponent } from "./VecRankComponent";
+import { DFADFComponent } from "./DFADFComponent";
+import { DFADFSummaryListComponent } from "./DFADFSummaryListComponent";
+import { BinaryComponent } from "./BinaryComponent";
+import { PanelComponent } from "./PanelComponent";
+import { DIDComponent } from "./DIDComponent";
+import { PraisComponent } from "./PraisComponent";
+import { TwoSLSComponent } from "./2SLSComponent";
+import { LIMLComponent } from "./LIMLComponent";
 
 export type ReportViewProps = { data: unknown };
 

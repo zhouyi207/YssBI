@@ -1,12 +1,12 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-import { DEFAULT_VIEWPORT } from '@/shared/config-default';
+import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 
-import type { EditorViewport } from './editorViewport';
-import { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
-import { resetLiveViewports } from './viewportSession';
-import type { ViewportScope } from './viewportScope';
-import { parseViewportScopeKey, viewportScopeKey } from './viewportScope';
+import type { EditorViewport } from "./editorViewport";
+import { resolveInitialGraphViewport } from "./resolveInitialGraphViewport";
+import { resetLiveViewports } from "./viewportSession";
+import type { ViewportScope } from "./viewportScope";
+import { parseViewportScopeKey, viewportScopeKey } from "./viewportScope";
 
 interface ViewportStore {
   /** Committed pane viewports for this session (live gesture preview stays in viewportSession). */
@@ -24,7 +24,7 @@ export const useViewportStore = create<ViewportStore>((set) => ({
     set((state) => {
       const key = viewportScopeKey(scope);
       const current = state.viewports[key] ?? { ...DEFAULT_VIEWPORT };
-      const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+      const next = typeof updater === "function" ? updater(current) : { ...current, ...updater };
 
       if (current.x === next.x && current.y === next.y && current.scale === next.scale) {
         return state;

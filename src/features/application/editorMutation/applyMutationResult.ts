@@ -1,9 +1,9 @@
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { AtomicProjectionApplyResult } from '@/features/core/dataStore/graphDataStore';
-import type { GraphMutationResultDto } from '@/shared/types/domain/editorMutation';
-import type { PendingMutationRecord } from './pendingMutationRegistry';
-import { useResourceStore } from '@/features/core/resource';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import type { AtomicProjectionApplyResult } from "@/features/core/dataStore/graphDataStore";
+import type { GraphMutationResultDto } from "@/shared/types/domain/editorMutation";
+import type { PendingMutationRecord } from "./pendingMutationRegistry";
+import { useResourceStore } from "@/features/core/resource";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
 function invalidResult(message: string): never {
   throw new Error(`invalid mutation result: ${message}`);
@@ -24,7 +24,9 @@ export function validateMutationResult(
     invalidResult(`delta graph path '${delta.graphPath}' does not match '${pending.graphPath}'`);
   }
   if (delta.causedBy !== pending.operationId) {
-    invalidResult(`operation correlation '${String(delta.causedBy)}' does not match '${pending.operationId}'`);
+    invalidResult(
+      `operation correlation '${String(delta.causedBy)}' does not match '${pending.operationId}'`,
+    );
   }
   if (delta.fromRevision !== pending.baseRevision) {
     invalidResult(`from revision ${delta.fromRevision} does not match ${pending.baseRevision}`);
@@ -34,7 +36,9 @@ export function validateMutationResult(
     ? delta.toRevision === delta.fromRevision + 1
     : delta.toRevision === delta.fromRevision;
   if (!validRevision) {
-    invalidResult(`revision ${delta.fromRevision} -> ${delta.toRevision} does not match operations`);
+    invalidResult(
+      `revision ${delta.fromRevision} -> ${delta.toRevision} does not match operations`,
+    );
   }
   if (projectionReplacement.graphPath !== delta.graphPath) {
     invalidResult(
@@ -60,10 +64,9 @@ export function applyMutationResult(
   if (applied.applied) {
     const kind = inferGraphResourceKind(result.delta.graphPath);
     if (kind) {
-      useResourceStore.getState().patchResource(
-        { id: result.delta.graphPath, kind },
-        { revision: result.delta.toRevision },
-      );
+      useResourceStore
+        .getState()
+        .patchResource({ id: result.delta.graphPath, kind }, { revision: result.delta.toRevision });
     }
   }
   return applied;

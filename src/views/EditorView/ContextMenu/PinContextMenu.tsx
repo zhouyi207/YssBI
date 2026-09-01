@@ -1,8 +1,13 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEye, VscLink, VscRefresh, VscTrash } from "react-icons/vsc";
-import { ActionMenu, type ActionMenuPosition, type ActionMenuSection, type ActionMenuItem } from "@/shared/ui/actionMenu";
-import type { PinResultEntry } from '@/shared/types/domain/result';
+import {
+  ActionMenu,
+  type ActionMenuPosition,
+  type ActionMenuSection,
+  type ActionMenuItem,
+} from "@/shared/ui/actionMenu";
+import type { PinResultEntry } from "@/shared/types/domain/result";
 
 export interface PinContextMenuProps {
   position: ActionMenuPosition;
@@ -42,8 +47,20 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   const sections = useMemo((): ActionMenuSection[] => {
     const p = (key: string) => t(`contextMenu.pin.${key}`);
     const primaryItems: ActionMenuItem[] = [
-      { id: "breakLinks", label: p("breakLinks"), icon: <VscLink size={12} />, disabled: !hasLinks, onClick: onBreakLinks },
-      { id: "resetValue", label: p("resetValue"), icon: <VscRefresh size={12} />, disabled: !canReset, onClick: onResetValue },
+      {
+        id: "breakLinks",
+        label: p("breakLinks"),
+        icon: <VscLink size={12} />,
+        disabled: !hasLinks,
+        onClick: onBreakLinks,
+      },
+      {
+        id: "resetValue",
+        label: p("resetValue"),
+        icon: <VscRefresh size={12} />,
+        disabled: !canReset,
+        onClick: onResetValue,
+      },
     ];
 
     if (showView) {
@@ -59,10 +76,12 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
 
     [...(historyEntries ?? [])].reverse().forEach((entry, index) => {
       const createdAt = Number(entry.createdAtMs);
-      const time = Number.isFinite(createdAt) ? new Date(createdAt).toLocaleString() : entry.createdAtMs;
+      const time = Number.isFinite(createdAt)
+        ? new Date(createdAt).toLocaleString()
+        : entry.createdAtMs;
       primaryItems.push({
         id: `view-history-${entry.activationId}`,
-        label: `${entry.resultId} · ${entry.state.kind}${index === 0 ? ` · ${p('historyLatest')}` : ''}`,
+        label: `${entry.resultId} · ${entry.state.kind}${index === 0 ? ` · ${p("historyLatest")}` : ""}`,
         shortcut: `${time} · ${entry.runId}`,
         onClick: () => onViewHistory?.(entry.resultId),
       });
@@ -99,11 +118,5 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
     onRemove,
   ]);
 
-  return (
-    <ActionMenu
-      position={position}
-      sections={sections}
-      onClose={onClose}
-    />
-  );
+  return <ActionMenu position={position} sections={sections} onClose={onClose} />;
 };

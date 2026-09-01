@@ -2,17 +2,13 @@
  * DF / ADF 报告 IPC 窄化
  */
 
-import { isFiniteNumber, isNonNegativeInteger, isRecord, isString } from './guards';
-import { parseObjectArray } from './parseCommon';
-import type {
-  DFADFRegRowData,
-  DFADFSummaryListResultData,
-  DFADFSummaryResultData,
-} from './dfadf';
+import { isFiniteNumber, isNonNegativeInteger, isRecord, isString } from "./guards";
+import { parseObjectArray } from "./parseCommon";
+import type { DFADFRegRowData, DFADFSummaryListResultData, DFADFSummaryResultData } from "./dfadf";
 
 function parseDfAdfRegRow(raw: unknown): DFADFRegRowData | null {
   if (!isRecord(raw) || !isString(raw.variable)) return null;
-  const nums = ['coef', 'std_err', 't', 'p_value', 'ci_lower', 'ci_upper'] as const;
+  const nums = ["coef", "std_err", "t", "p_value", "ci_lower", "ci_upper"] as const;
   for (const key of nums) {
     if (!isFiniteNumber(raw[key])) return null;
   }
@@ -28,11 +24,14 @@ function parseDfAdfRegRow(raw: unknown): DFADFRegRowData | null {
 }
 
 export function parseDfAdfSummaryResultData(raw: unknown): DFADFSummaryResultData | null {
-  if (!isRecord(raw) || !isString(raw.title) || !isString(raw.var_name) || !isString(raw.h0)) return null;
+  if (!isRecord(raw) || !isString(raw.title) || !isString(raw.var_name) || !isString(raw.h0))
+    return null;
   if (!isFiniteNumber(raw.test_statistic) || !isFiniteNumber(raw.p_value)) return null;
-  if (!isFiniteNumber(raw.critical_value_1pct) || !isFiniteNumber(raw.critical_value_5pct)) return null;
+  if (!isFiniteNumber(raw.critical_value_1pct) || !isFiniteNumber(raw.critical_value_5pct))
+    return null;
   if (!isFiniteNumber(raw.critical_value_10pct)) return null;
-  if (typeof raw.use_t_distribution !== 'boolean' || !isNonNegativeInteger(raw.num_obs)) return null;
+  if (typeof raw.use_t_distribution !== "boolean" || !isNonNegativeInteger(raw.num_obs))
+    return null;
   if (!isNonNegativeInteger(raw.lags) || !isString(raw.regression)) return null;
   if (!isFiniteNumber(raw.coef_lagged) || !isFiniteNumber(raw.std_err_lagged)) return null;
   const regression_table = parseObjectArray(raw.regression_table, parseDfAdfRegRow);

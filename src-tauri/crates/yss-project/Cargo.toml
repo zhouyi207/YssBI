@@ -6,10 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [features]
-test-support = [
-    "yss-project-filesystem/test-support",
-    "yss-project-identity/test-support",
-]
+test-support = ["yss-project-filesystem/test-support", "yss-project-identity/test-support"]
 
 [dependencies]
 chrono.workspace = true

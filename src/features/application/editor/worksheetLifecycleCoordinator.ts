@@ -33,4 +33,3 @@ export function clearWorksheetLifecycleProject(projectInstanceId: string): void 
 export function clearWorksheetLifecycleProjects(): void {
   lifecycleTokensByProject.clear();
 }
-

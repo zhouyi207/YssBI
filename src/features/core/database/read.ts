@@ -1,9 +1,9 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
 
 export interface DatabaseReadSnapshot {
   readonly databases: DeepReadonly<Record<string, DatabaseRecord>>;

@@ -1,5 +1,5 @@
-import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import type { DatabaseRow } from '@/shared/types/domain/database';
+import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
+import type { DatabaseRow } from "@/shared/types/domain/database";
 
 export interface DatabaseGridRow {
   values: DatabaseRow;
@@ -22,9 +22,9 @@ export interface DatabaseGridSelectionModifiers {
   extend: boolean;
 }
 
-export type DatabaseColumnKind = 'number' | 'boolean' | 'string';
+export type DatabaseColumnKind = "number" | "boolean" | "string";
 
-const DATA_COLUMN_PREFIX = 'data_';
+const DATA_COLUMN_PREFIX = "data_";
 
 export function dataColumnId(columnIndex: number): string {
   return `${DATA_COLUMN_PREFIX}${columnIndex}`;
@@ -37,18 +37,18 @@ export function dataColumnIndexFromId(columnId: string): number | null {
 }
 
 export function databaseColumnKind(dtype?: string): DatabaseColumnKind {
-  const normalized = (dtype ?? '').toLowerCase();
+  const normalized = (dtype ?? "").toLowerCase();
   if (
-    normalized.includes('int')
-    || normalized.includes('float')
-    || normalized.includes('double')
-    || normalized.includes('number')
-    || normalized.includes('decimal')
+    normalized.includes("int") ||
+    normalized.includes("float") ||
+    normalized.includes("double") ||
+    normalized.includes("number") ||
+    normalized.includes("decimal")
   ) {
-    return 'number';
+    return "number";
   }
-  if (normalized.includes('bool')) return 'boolean';
-  return 'string';
+  if (normalized.includes("bool")) return "boolean";
+  return "string";
 }
 
 export function createCellRange(
@@ -72,27 +72,25 @@ export function createKeyboardCellSelection(
   extend: boolean,
 ) {
   const nextAnchor = extend
-    ? anchor ?? (selection?.type === 'cells' ? selection.activeCell : target)
+    ? (anchor ?? (selection?.type === "cells" ? selection.activeCell : target))
     : target;
   return {
     anchor: nextAnchor,
     selection: {
-      type: 'cells' as const,
+      type: "cells" as const,
       activeCell: target,
       ranges: [createCellRange(nextAnchor, target)],
     },
   };
 }
 
-function rangeContainsCell(
-  range: DatabaseGridCellRange,
-  row: number,
-  column: number,
-): boolean {
-  return row >= range.row
-    && row < range.row + range.rowCount
-    && column >= range.column
-    && column < range.column + range.columnCount;
+function rangeContainsCell(range: DatabaseGridCellRange, row: number, column: number): boolean {
+  return (
+    row >= range.row &&
+    row < range.row + range.rowCount &&
+    column >= range.column &&
+    column < range.column + range.columnCount
+  );
 }
 
 export function isGridCellSelected(
@@ -101,8 +99,8 @@ export function isGridCellSelected(
   column: number,
 ): boolean {
   if (!selection) return false;
-  if (selection.type === 'columns') return selection.columns.includes(column);
-  if (selection.type !== 'cells') return false;
+  if (selection.type === "columns") return selection.columns.includes(column);
+  if (selection.type !== "cells") return false;
   return selection.ranges.some((range) => rangeContainsCell(range, row, column));
 }
 
@@ -111,16 +109,18 @@ export function isGridCellActive(
   row: number,
   column: number,
 ): boolean {
-  return selection?.type === 'cells'
-    && selection.activeCell.row === row
-    && selection.activeCell.column === column;
+  return (
+    selection?.type === "cells" &&
+    selection.activeCell.row === row &&
+    selection.activeCell.column === column
+  );
 }
 
 export function isGridColumnSelected(
   selection: DatabaseGridSelection | null,
   column: number,
 ): boolean {
-  return selection?.type === 'columns' && selection.columns.includes(column);
+  return selection?.type === "columns" && selection.columns.includes(column);
 }
 
 export function updateIndexSelection(
@@ -140,7 +140,5 @@ export function updateIndexSelection(
   }
 
   if (!modifiers.additive) return [index];
-  return current.includes(index)
-    ? current.filter((value) => value !== index)
-    : [...current, index];
+  return current.includes(index) ? current.filter((value) => value !== index) : [...current, index];
 }

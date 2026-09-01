@@ -3,7 +3,7 @@
  * 对齐 Rust `info_nodes.rs` 中 `RegressionResult` / `DiagnosticInfo` 等结构。
  */
 
-import type { PlotPointDTO } from '@/shared/types/domain/plotPayload';
+import type { PlotPointDTO } from "@/shared/types/domain/plotPayload";
 import type {
   Iv2slsEndogenousTest,
   Iv2slsFirstStageResult,
@@ -11,7 +11,7 @@ import type {
   Iv2slsHausmanTest,
   Iv2slsOveridTest,
   IvLimlOveridTest,
-} from './iv';
+} from "./iv";
 
 export interface ModelBasicInfo {
   model_type: string;
@@ -51,8 +51,8 @@ export interface Coefficient {
   std_err?: number;
   t_value?: number;
   p_value?: number;
-  'confidence_interval_0.025'?: number;
-  'confidence_interval_0.975'?: number;
+  "confidence_interval_0.025"?: number;
+  "confidence_interval_0.975"?: number;
   is_significant: boolean;
 }
 
@@ -199,8 +199,8 @@ export interface DiagnosticInfo {
 }
 
 export interface BinaryModelStatistics {
-  kind: 'binary';
-  link: 'logit' | 'probit';
+  kind: "binary";
+  link: "logit" | "probit";
   covariance: number[][];
   standardErrors: number[];
   statisticValues: number[];

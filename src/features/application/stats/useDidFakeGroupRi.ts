@@ -1,23 +1,23 @@
-import { useCallback, useMemo, useState } from 'react';
-import { PanelDidService } from '@/features/application/stats/statsActions';
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
+import { useCallback, useMemo, useState } from "react";
+import { PanelDidService } from "@/features/application/stats/statsActions";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import {
   parseDidPlaceboFakeGroupBlock,
   type DidPlaceboFakeGroupBlock,
   type PanelDidResultData,
-} from '@/shared/types/report';
+} from "@/shared/types/report";
 
 const INVALID_RESPONSE_ERROR: ErrorReference = {
-  code: 'did_fake_group_invalid_response',
+  code: "did_fake_group_invalid_response",
   incidentId: null,
 };
 const INVALID_INITIAL_RESULT_ERROR: ErrorReference = {
-  code: 'did_fake_group_invalid_initial_result',
+  code: "did_fake_group_invalid_initial_result",
   incidentId: null,
 };
 
 export function useDidFakeGroupRi(
-  fakeGroupEngine: PanelDidResultData['fake_group_engine'],
+  fakeGroupEngine: PanelDidResultData["fake_group_engine"],
   initialResult: DidPlaceboFakeGroupBlock | null | undefined,
 ) {
   const [permReps, setPermReps] = useState(399);
@@ -27,13 +27,14 @@ export function useDidFakeGroupRi(
   const [requestError, setRequestError] = useState<ErrorReference | null>(null);
 
   const parsedInitialResult = useMemo(
-    () => initialResult == null ? null : parseDidPlaceboFakeGroupBlock(initialResult),
+    () => (initialResult == null ? null : parseDidPlaceboFakeGroupBlock(initialResult)),
     [initialResult],
   );
   const display = result ?? parsedInitialResult;
-  const initialResultError = initialResult != null && parsedInitialResult === null && result === null
-    ? INVALID_INITIAL_RESULT_ERROR
-    : null;
+  const initialResultError =
+    initialResult != null && parsedInitialResult === null && result === null
+      ? INVALID_INITIAL_RESULT_ERROR
+      : null;
   const error = requestError ?? initialResultError;
 
   const run = useCallback(async () => {
@@ -57,7 +58,7 @@ export function useDidFakeGroupRi(
       }
       setResult(parsed);
     } catch (caught) {
-      setRequestError(toErrorReference(caught, 'did_fake_group_request_failed'));
+      setRequestError(toErrorReference(caught, "did_fake_group_request_failed"));
     } finally {
       setLoading(false);
     }

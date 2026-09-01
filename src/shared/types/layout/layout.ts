@@ -5,12 +5,11 @@
  * 用于管理编辑器的窗口布局
  */
 
-
 /** 编辑器 Tab 语义类型（与 ResourceKind / DetailFocus 对齐） */
-export type LayoutTabType = 'event' | 'function' | 'worksheet';
+export type LayoutTabType = "event" | "function" | "worksheet";
 
 /** Tab 挂载的编辑器组件名 */
-export type LayoutTabComponent = 'GraphEditor' | 'WorksheetEditor';
+export type LayoutTabComponent = "GraphEditor" | "WorksheetEditor";
 
 /**
  * 布局标签页

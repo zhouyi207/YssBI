@@ -1,4 +1,4 @@
-import { requestCloseWorkbenchPanel } from './workbenchPanelClose';
+import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 
 interface CloseGraphDocumentPanelRequest {
   panelInstanceId: string;
@@ -10,7 +10,7 @@ export async function closeGraphDocumentPanel({
   panelInstanceId,
   afterPanelRemoved,
 }: CloseGraphDocumentPanelRequest): Promise<boolean> {
-  if (!await requestCloseWorkbenchPanel(panelInstanceId)) return false;
+  if (!(await requestCloseWorkbenchPanel(panelInstanceId))) return false;
   await afterPanelRemoved();
   return true;
 }

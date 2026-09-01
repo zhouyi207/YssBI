@@ -1,5 +1,5 @@
-import { formatNum, InfoRow } from './RegressionShared';
-import type { ModelBasicInfo } from '@/shared/types/report';
+import { formatNum, InfoRow } from "./RegressionShared";
+import type { ModelBasicInfo } from "@/shared/types/report";
 
 /** Model summary for binary choice models (Logit, Probit) */
 export function BinaryModelSummaryGrid({
@@ -19,7 +19,11 @@ export function BinaryModelSummaryGrid({
         <>
           <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.wald_chi2)}</InfoRow>
           <InfoRow label="Prob &gt; chi2">
-            <span className={(info.prob_wald_chi2 ?? 1) < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
+            <span
+              className={
+                (info.prob_wald_chi2 ?? 1) < 0.05 ? "text-emerald-400" : "text-muted-foreground"
+              }
+            >
               {formatNum(info.prob_wald_chi2 ?? 0)}
             </span>
           </InfoRow>
@@ -38,7 +42,9 @@ export function BinaryModelSummaryGrid({
       {executionTimeMs != null && (
         <div className="bg-card px-4 py-2.5 flex justify-between col-span-2 border-t border-border">
           <span className="text-muted-foreground text-xs">后端计算耗时</span>
-          <span className="text-[var(--accent-color)] text-xs font-mono font-medium">{executionTimeMs} ms</span>
+          <span className="text-[var(--accent-color)] text-xs font-mono font-medium">
+            {executionTimeMs} ms
+          </span>
         </div>
       )}
     </div>

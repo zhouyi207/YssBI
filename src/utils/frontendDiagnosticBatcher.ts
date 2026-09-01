@@ -1,6 +1,6 @@
 export interface FrontendDiagnosticEntry {
-  readonly level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
-  readonly domain: 'application' | 'execution' | 'system' | 'graph' | 'data' | 'ui';
+  readonly level: "trace" | "debug" | "info" | "warn" | "error";
+  readonly domain: "application" | "execution" | "system" | "graph" | "data" | "ui";
   readonly target: string;
   readonly event?: string;
   readonly message: string;
@@ -34,10 +34,10 @@ function truncateUtf8(message: string, maxBytes: number): string {
   const encoder = new TextEncoder();
   if (encoder.encode(message).byteLength <= maxBytes) return message;
 
-  const suffix = maxBytes >= 3 ? '…' : '.'.repeat(maxBytes);
+  const suffix = maxBytes >= 3 ? "…" : ".".repeat(maxBytes);
   const contentBudget = maxBytes - encoder.encode(suffix).byteLength;
   let bytes = 0;
-  let content = '';
+  let content = "";
   for (const character of message) {
     const characterBytes = encoder.encode(character).byteLength;
     if (bytes + characterBytes > contentBudget) break;
@@ -50,10 +50,10 @@ function truncateUtf8(message: string, maxBytes: number): string {
 export function createFrontendDiagnosticBatcher(
   options: FrontendDiagnosticBatcherOptions,
 ): FrontendDiagnosticBatcher {
-  const maxBatchEntries = positiveInteger(options.maxBatchEntries, 'maxBatchEntries');
-  const maxPendingEntries = positiveInteger(options.maxPendingEntries, 'maxPendingEntries');
-  const maxDelayMs = positiveInteger(options.maxDelayMs, 'maxDelayMs');
-  const maxMessageBytes = positiveInteger(options.maxMessageBytes, 'maxMessageBytes');
+  const maxBatchEntries = positiveInteger(options.maxBatchEntries, "maxBatchEntries");
+  const maxPendingEntries = positiveInteger(options.maxPendingEntries, "maxPendingEntries");
+  const maxDelayMs = positiveInteger(options.maxDelayMs, "maxDelayMs");
+  const maxMessageBytes = positiveInteger(options.maxMessageBytes, "maxMessageBytes");
 
   let pending: FrontendDiagnosticEntry[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;

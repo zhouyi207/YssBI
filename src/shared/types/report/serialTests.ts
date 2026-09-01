@@ -3,7 +3,7 @@
  * IPC 边界经 `normalizeSerialTestsResponse` 窄化。
  */
 
-import { isFiniteNumber, isNonNegativeInteger, isRecord } from './guards';
+import { isFiniteNumber, isNonNegativeInteger, isRecord } from "./guards";
 
 export interface SerialTestWithLagDTO {
   stat: number;
@@ -34,7 +34,12 @@ function normalizeSerialTestWithLag(raw: unknown): SerialTestWithLagDTO | undefi
   const stat = raw.stat;
   const p_value = raw.p_value;
   const lags = raw.lags;
-  if (!isFiniteNumber(stat) || !isFiniteNumber(p_value) || !isNonNegativeInteger(lags) || lags < 1) {
+  if (
+    !isFiniteNumber(stat) ||
+    !isFiniteNumber(p_value) ||
+    !isNonNegativeInteger(lags) ||
+    lags < 1
+  ) {
     return undefined;
   }
   return { stat, p_value, lags };

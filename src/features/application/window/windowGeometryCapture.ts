@@ -1,8 +1,8 @@
-import type { WindowState } from '@/shared/types/settings';
-import type { AppWindowHandle } from '@/services/platform/appWindow';
+import type { WindowState } from "@/shared/types/settings";
+import type { AppWindowHandle } from "@/services/platform/appWindow";
 
 export async function captureWindowGeometry(
-  win: Pick<AppWindowHandle, 'isMaximized' | 'innerSize' | 'outerPosition'>,
+  win: Pick<AppWindowHandle, "isMaximized" | "innerSize" | "outerPosition">,
 ): Promise<WindowState | null> {
   try {
     const isMaximized = await win.isMaximized();
@@ -27,7 +27,7 @@ export async function captureWindowGeometry(
 }
 
 export async function captureWindowGeometryPreservingMaximized(
-  win: Pick<AppWindowHandle, 'isMaximized' | 'innerSize' | 'outerPosition'>,
+  win: Pick<AppWindowHandle, "isMaximized" | "innerSize" | "outerPosition">,
   readPrevious: () => WindowState | Promise<WindowState>,
 ): Promise<WindowState | null> {
   try {

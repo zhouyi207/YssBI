@@ -1,60 +1,54 @@
-import { describe, expect, it } from 'vitest';
-import editorProjectionContract from '@/tests/fixtures/node-system-contracts/editor-projection.json';
-import type {
-  EditorGraphProjectionDto,
-  PortAddressDto,
-} from '@/shared/types/dto/editorProjection';
-import { isEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionGuards';
-import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
-import {
-  portAddressKey,
-  toProjectionEntities,
-} from './index';
+import { describe, expect, it } from "vitest";
+import editorProjectionContract from "@/tests/fixtures/node-system-contracts/editor-projection.json";
+import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
+import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
+import { validateEditorGraphProjection } from "@/shared/types/dto/editorProjectionParser";
+import { portAddressKey, toProjectionEntities } from "./index";
 
 const declaredOutput: PortAddressDto = {
-  kind: 'declared',
-  nodeId: 'node-1',
-  portKey: 'output',
+  kind: "declared",
+  nodeId: "node-1",
+  portKey: "output",
 };
 
 const instanceInput: PortAddressDto = {
-  kind: 'instance',
-  nodeId: 'node-1',
-  templateKey: 'input',
-  instanceId: 'instance-1',
+  kind: "instance",
+  nodeId: "node-1",
+  templateKey: "input",
+  instanceId: "instance-1",
 };
 
 function validProjection(): EditorGraphProjectionDto {
   return {
     basis: {
-      graphPath: 'functions/main',
+      graphPath: "functions/main",
       graphRevision: 7,
-      registryFingerprint: '0101010101010101010101010101010101010101010101010101010101010101',
-      resourceVersions: { 'functions/helper': '3' },
+      registryFingerprint: "0101010101010101010101010101010101010101010101010101010101010101",
+      resourceVersions: { "functions/helper": "3" },
     },
-    graphPath: 'functions/main',
+    graphPath: "functions/main",
     sourceRevision: 7,
     nodes: [
       {
-        graphPath: 'functions/main',
+        graphPath: "functions/main",
         sourceRevision: 7,
-        nodeId: 'node-1',
-        nodeTypeId: 'statistics.linear-regression',
+        nodeId: "node-1",
+        nodeTypeId: "statistics.linear-regression",
         position: { x: 120.5, y: -32 },
         display: {
-          title: '线性回归',
-          userLabel: '主要模型',
-          iconId: 'chart-line',
-          styleId: 'analysis',
+          title: "线性回归",
+          userLabel: "主要模型",
+          iconId: "chart-line",
+          styleId: "analysis",
         },
         ports: [
           {
             address: declaredOutput,
-            templateKey: 'output',
-            display: { label: '结果', instanceLabel: null },
-            direction: 'output',
-            kind: 'data',
-            instanceKind: 'declared',
+            templateKey: "output",
+            display: { label: "结果", instanceLabel: null },
+            direction: "output",
+            kind: "data",
+            instanceKind: "declared",
             orphan: false,
             canRemove: false,
             connections: {
@@ -67,20 +61,20 @@ function validProjection(): EditorGraphProjectionDto {
             },
             input: null,
             resolvedType: {
-              display: 'Model',
+              display: "Model",
               resolved: true,
-              dataType: { kind: 'Struct', inner: 'Model' },
+              dataType: { kind: "Struct", inner: "Model" },
             },
-            resolvedSchema: { kind: 'derived', fields: [] },
-            status: 'resolved',
+            resolvedSchema: { kind: "derived", fields: [] },
+            status: "resolved",
           },
           {
             address: instanceInput,
-            templateKey: 'input',
-            display: { label: '变量', instanceLabel: '变量 1' },
-            direction: 'input',
-            kind: 'data',
-            instanceKind: 'userCreated',
+            templateKey: "input",
+            display: { label: "变量", instanceLabel: "变量 1" },
+            direction: "input",
+            kind: "data",
+            instanceKind: "userCreated",
             orphan: false,
             canRemove: true,
             connections: {
@@ -94,22 +88,22 @@ function validProjection(): EditorGraphProjectionDto {
             input: {
               literalOverride: 42,
               protocolDefault: 0,
-              effective: 'connections',
+              effective: "connections",
             },
-            resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
-            resolvedSchema: { kind: 'input', fields: [] },
-            status: 'resolved',
+            resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+            resolvedSchema: { kind: "input", fields: [] },
+            status: "resolved",
           },
         ],
         parameterEditors: [
           {
-            key: 'formula',
-            display: { title: '公式', description: '模型公式' },
-            editor: 'text',
-            presentation: 'inlineAndDetail',
-            valueType: { kind: 'Int64' },
+            key: "formula",
+            display: { title: "公式", description: "模型公式" },
+            editor: "text",
+            presentation: "inlineAndDetail",
+            valueType: { kind: "Int64" },
             multiline: true,
-            value: 'y ~ x',
+            value: "y ~ x",
             configuration: null,
             inheritedValue: null,
             valueSource: null,
@@ -127,63 +121,63 @@ function validProjection(): EditorGraphProjectionDto {
         },
         diagnostics: [
           {
-            code: 'node.warning',
-            message: '节点警告',
-            severity: 'warning',
+            code: "node.warning",
+            message: "节点警告",
+            severity: "warning",
             blocking: false,
-            location: { kind: 'port', address: instanceInput },
-            related: [{ kind: 'node', nodeId: 'node-1' }],
+            location: { kind: "port", address: instanceInput },
+            related: [{ kind: "node", nodeId: "node-1" }],
           },
         ],
       },
     ],
     connections: [
       {
-        connectionId: 'connection-1',
+        connectionId: "connection-1",
         output: declaredOutput,
         input: instanceInput,
-        order: 'a',
+        order: "a",
       },
     ],
     diagnostics: [
       {
-        code: 'graph.info',
-        message: '图诊断',
-        severity: 'information',
+        code: "graph.info",
+        message: "图诊断",
+        severity: "information",
         blocking: false,
-        location: { kind: 'graph' },
-        related: [{ kind: 'resource', identity: 'functions/helper' }],
+        location: { kind: "graph" },
+        related: [{ kind: "resource", identity: "functions/helper" }],
       },
     ],
-    outcome: { type: 'success' },
+    outcome: { type: "success" },
     hasBlockingDiagnostics: false,
   };
 }
 
-describe('portAddressKey', () => {
-  it('is stable for equal addresses and distinguishes address variants', () => {
+describe("portAddressKey", () => {
+  it("is stable for equal addresses and distinguishes address variants", () => {
     expect(portAddressKey(declaredOutput)).toBe(portAddressKey({ ...declaredOutput }));
     expect(portAddressKey(declaredOutput)).not.toBe(portAddressKey(instanceInput));
   });
 
-  it('does not collide when address parts contain delimiters', () => {
+  it("does not collide when address parts contain delimiters", () => {
     const first: PortAddressDto = {
-      kind: 'declared',
-      nodeId: 'a:b',
-      portKey: 'c',
+      kind: "declared",
+      nodeId: "a:b",
+      portKey: "c",
     };
     const second: PortAddressDto = {
-      kind: 'declared',
-      nodeId: 'a',
-      portKey: 'b:c',
+      kind: "declared",
+      nodeId: "a",
+      portKey: "b:c",
     };
 
     expect(portAddressKey(first)).not.toBe(portAddressKey(second));
   });
 });
 
-describe('validateEditorGraphProjection', () => {
-  it('requires strict parameter editor presentation metadata', () => {
+describe("validateEditorGraphProjection", () => {
+  it("requires strict parameter editor presentation metadata", () => {
     expect(isEditorGraphProjectionDto(editorProjectionContract)).toBe(true);
 
     const missing = structuredClone(editorProjectionContract) as any;
@@ -191,62 +185,119 @@ describe('validateEditorGraphProjection', () => {
     expect(isEditorGraphProjectionDto(missing)).toBe(false);
 
     const invalid = structuredClone(editorProjectionContract) as any;
-    invalid.nodes[0].parameterEditors[0].presentation = 'inlineOnly';
+    invalid.nodes[0].parameterEditors[0].presentation = "inlineOnly";
     expect(isEditorGraphProjectionDto(invalid)).toBe(false);
   });
 
   it.each([
-    ['missing inheritedValue', (editor: Record<string, unknown>) => { delete editor.inheritedValue; }],
-    ['missing valueSource', (editor: Record<string, unknown>) => { delete editor.valueSource; }],
-    ['missing options', (editor: Record<string, unknown>) => { delete editor.options; }],
-    ['invalid valueSource casing', (editor: Record<string, unknown>) => {
-      editor.valueSource = 'Project';
-    }],
-    ['non-string options', (editor: Record<string, unknown>) => { editor.options = [1]; }],
-    ['missing valueType', (editor: Record<string, unknown>) => { delete editor.valueType; }],
-    ['string valueType', (editor: Record<string, unknown>) => { editor.valueType = 'Boolean'; }],
-    ['malformed valueType', (editor: Record<string, unknown>) => {
-      editor.valueType = { kind: 'Array' };
-    }],
-    ['valueType with an extra key', (editor: Record<string, unknown>) => {
-      editor.valueType = { kind: 'Boolean', extra: true };
-    }],
-    ['parameter editor with an extra key', (editor: Record<string, unknown>) => {
-      editor.extra = true;
-    }],
-  ])('rejects parameter editor %s', (_, mutate) => {
-    const projection = structuredClone(editorProjectionContract) as unknown as Record<string, unknown>;
+    [
+      "missing inheritedValue",
+      (editor: Record<string, unknown>) => {
+        delete editor.inheritedValue;
+      },
+    ],
+    [
+      "missing valueSource",
+      (editor: Record<string, unknown>) => {
+        delete editor.valueSource;
+      },
+    ],
+    [
+      "missing options",
+      (editor: Record<string, unknown>) => {
+        delete editor.options;
+      },
+    ],
+    [
+      "invalid valueSource casing",
+      (editor: Record<string, unknown>) => {
+        editor.valueSource = "Project";
+      },
+    ],
+    [
+      "non-string options",
+      (editor: Record<string, unknown>) => {
+        editor.options = [1];
+      },
+    ],
+    [
+      "missing valueType",
+      (editor: Record<string, unknown>) => {
+        delete editor.valueType;
+      },
+    ],
+    [
+      "string valueType",
+      (editor: Record<string, unknown>) => {
+        editor.valueType = "Boolean";
+      },
+    ],
+    [
+      "malformed valueType",
+      (editor: Record<string, unknown>) => {
+        editor.valueType = { kind: "Array" };
+      },
+    ],
+    [
+      "valueType with an extra key",
+      (editor: Record<string, unknown>) => {
+        editor.valueType = { kind: "Boolean", extra: true };
+      },
+    ],
+    [
+      "parameter editor with an extra key",
+      (editor: Record<string, unknown>) => {
+        editor.extra = true;
+      },
+    ],
+  ])("rejects parameter editor %s", (_, mutate) => {
+    const projection = structuredClone(editorProjectionContract) as unknown as Record<
+      string,
+      unknown
+    >;
     const node = (projection.nodes as Array<Record<string, unknown>>)[0];
     const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
     mutate(editor);
     expect(isEditorGraphProjectionDto(projection)).toBe(false);
   });
 
-  it('returns a valid projection unchanged', () => {
+  it("returns a valid projection unchanged", () => {
     const projection = validProjection();
     expect(validateEditorGraphProjection(projection)).toBe(projection);
   });
 
   it.each([
-    ['basis graph path', (projection: EditorGraphProjectionDto) => {
-      projection.basis.graphPath = 'functions/other';
-    }],
-    ['node graph path', (projection: EditorGraphProjectionDto) => {
-      projection.nodes[0].graphPath = 'functions/other';
-    }],
-    ['basis revision', (projection: EditorGraphProjectionDto) => {
-      projection.basis.graphRevision = 8;
-    }],
-    ['node revision', (projection: EditorGraphProjectionDto) => {
-      projection.nodes[0].sourceRevision = 8;
-    }],
-  ])('rejects mismatched %s', (_, mutate) => {
+    [
+      "basis graph path",
+      (projection: EditorGraphProjectionDto) => {
+        projection.basis.graphPath = "functions/other";
+      },
+    ],
+    [
+      "node graph path",
+      (projection: EditorGraphProjectionDto) => {
+        projection.nodes[0].graphPath = "functions/other";
+      },
+    ],
+    [
+      "basis revision",
+      (projection: EditorGraphProjectionDto) => {
+        projection.basis.graphRevision = 8;
+      },
+    ],
+    [
+      "node revision",
+      (projection: EditorGraphProjectionDto) => {
+        projection.nodes[0].sourceRevision = 8;
+      },
+    ],
+  ])("rejects mismatched %s", (_, mutate) => {
     const projection = validProjection();
     mutate(projection);
     expect(() => validateEditorGraphProjection(projection)).toThrow(/does not match/);
   });
 
-  it('rejects duplicate node, port, and connection identities', () => {
+  it("rejects duplicate node, port, and connection identities", () => {
     const duplicateNode = validProjection();
     duplicateNode.nodes.push(structuredClone(duplicateNode.nodes[0]));
     expect(() => validateEditorGraphProjection(duplicateNode)).toThrow(/duplicate node/);
@@ -257,25 +308,29 @@ describe('validateEditorGraphProjection', () => {
 
     const duplicateConnection = validProjection();
     duplicateConnection.connections.push(structuredClone(duplicateConnection.connections[0]));
-    expect(() => validateEditorGraphProjection(duplicateConnection)).toThrow(/duplicate connection/);
+    expect(() => validateEditorGraphProjection(duplicateConnection)).toThrow(
+      /duplicate connection/,
+    );
   });
 
-  it('strictly validates Rust-issued schema-aware editor wire data', () => {
+  it("strictly validates Rust-issued schema-aware editor wire data", () => {
     const projection = validProjection();
     projection.nodes[0].parameterEditors[0].configuration = {
-      kind: 'filterPredicate',
+      kind: "filterPredicate",
       available: true,
       unavailableReason: null,
-      columns: [{
-        name: 'amount',
-        dataType: 'float64',
-        operators: ['equal', 'greaterThan', 'isNull'],
-        literalTypes: ['integer', 'decimal'],
-      }],
+      columns: [
+        {
+          name: "amount",
+          dataType: "float64",
+          operators: ["equal", "greaterThan", "isNull"],
+          literalTypes: ["integer", "decimal"],
+        },
+      ],
       value: {
-        column: 'amount',
-        operator: 'greaterThan',
-        value: { type: 'decimal', value: '9007199254740993.5' },
+        column: "amount",
+        operator: "greaterThan",
+        value: { type: "decimal", value: "9007199254740993.5" },
       },
     };
     expect(validateEditorGraphProjection(projection)).toBe(projection);
@@ -286,29 +341,29 @@ describe('validateEditorGraphProjection', () => {
 
     const lossy = structuredClone(projection);
     const configuration = lossy.nodes[0].parameterEditors[0].configuration;
-    if (configuration?.kind !== 'filterPredicate' || !configuration.value?.value) {
-      throw new Error('test fixture mismatch');
+    if (configuration?.kind !== "filterPredicate" || !configuration.value?.value) {
+      throw new Error("test fixture mismatch");
     }
     configuration.value.value.value = 9007199254740994 as never;
     expect(() => validateEditorGraphProjection(lossy)).toThrow(/parameter editor/);
   });
 
-  it('rejects a port address owned by a different node', () => {
+  it("rejects a port address owned by a different node", () => {
     const projection = validProjection();
     projection.nodes[0].ports[0].address = {
       ...declaredOutput,
-      nodeId: 'node-2',
+      nodeId: "node-2",
     };
 
     expect(() => validateEditorGraphProjection(projection)).toThrow(/owned by node 'node-2'/);
   });
 
-  it('rejects connections that reference a missing port', () => {
+  it("rejects connections that reference a missing port", () => {
     const missingEndpointProjection = validProjection();
     missingEndpointProjection.connections[0].input = {
-      kind: 'declared',
-      nodeId: 'node-1',
-      portKey: 'missing',
+      kind: "declared",
+      nodeId: "node-1",
+      portKey: "missing",
     };
 
     expect(() => validateEditorGraphProjection(missingEndpointProjection)).toThrow(
@@ -317,32 +372,35 @@ describe('validateEditorGraphProjection', () => {
   });
 
   it.each([
-    ['output', 0, 'input'],
-    ['input', 1, 'output'],
-  ] as const)('rejects a connection whose %s endpoint has the wrong direction', (_, portIndex, direction) => {
-    const wrongDirectionProjection = validProjection();
-    wrongDirectionProjection.nodes[0].ports[portIndex].direction = direction;
+    ["output", 0, "input"],
+    ["input", 1, "output"],
+  ] as const)(
+    "rejects a connection whose %s endpoint has the wrong direction",
+    (_, portIndex, direction) => {
+      const wrongDirectionProjection = validProjection();
+      wrongDirectionProjection.nodes[0].ports[portIndex].direction = direction;
 
-    expect(() => validateEditorGraphProjection(wrongDirectionProjection)).toThrow(
-      /connection 'connection-1'.*direction/,
-    );
-  });
+      expect(() => validateEditorGraphProjection(wrongDirectionProjection)).toThrow(
+        /connection 'connection-1'.*direction/,
+      );
+    },
+  );
 });
 
-describe('toProjectionEntities', () => {
-  it('converts a valid projection without a registry and preserves projected data', () => {
+describe("toProjectionEntities", () => {
+  it("converts a valid projection without a registry and preserves projected data", () => {
     const projection = validProjection();
     const entities = toProjectionEntities(projection);
     const outputKey = portAddressKey(declaredOutput);
     const inputKey = portAddressKey(instanceInput);
 
     expect(entities.basis).toEqual(projection.basis);
-    expect(entities.graphPath).toBe('functions/main');
+    expect(entities.graphPath).toBe("functions/main");
     expect(entities.sourceRevision).toBe(7);
-    expect(entities.nodes['node-1']).toMatchObject({
-      nodeTypeId: 'statistics.linear-regression',
+    expect(entities.nodes["node-1"]).toMatchObject({
+      nodeTypeId: "statistics.linear-regression",
       position: { x: 120.5, y: -32 },
-      display: { title: '线性回归', userLabel: '主要模型' },
+      display: { title: "线性回归", userLabel: "主要模型" },
       parameterEditors: projection.nodes[0].parameterEditors,
       diagnostics: projection.nodes[0].diagnostics,
     });
@@ -352,15 +410,15 @@ describe('toProjectionEntities', () => {
       input: {
         literalOverride: 42,
         protocolDefault: 0,
-        effective: 'connections',
+        effective: "connections",
       },
     });
-    expect(entities.connections['connection-1']).toEqual(projection.connections[0]);
-    expect(entities.portKeysByNodeId['node-1']).toEqual([outputKey, inputKey]);
-    expect(entities.connectionIdsByPortKey[outputKey]).toEqual(['connection-1']);
-    expect(entities.connectionIdsByPortKey[inputKey]).toEqual(['connection-1']);
+    expect(entities.connections["connection-1"]).toEqual(projection.connections[0]);
+    expect(entities.portKeysByNodeId["node-1"]).toEqual([outputKey, inputKey]);
+    expect(entities.connectionIdsByPortKey[outputKey]).toEqual(["connection-1"]);
+    expect(entities.connectionIdsByPortKey[inputKey]).toEqual(["connection-1"]);
     expect(entities.diagnostics).toEqual(projection.diagnostics);
-    expect(entities.outcome).toEqual({ type: 'success' });
+    expect(entities.outcome).toEqual({ type: "success" });
     expect(entities.hasBlockingDiagnostics).toBe(false);
   });
 });

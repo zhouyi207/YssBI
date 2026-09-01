@@ -42,20 +42,20 @@ root Dockview 是以下物理事实的唯一 authority：
 
 root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
 
-| 角色 | 内容 | deterministic home |
-|---|---|---|
-| `editor` | Graph/Function/Worksheet editor | 当前 central grid group |
-| `view:project` | Project activity panel | left Activity edge |
-| `view:nodes` | Nodes activity panel | left Activity edge |
-| `view:data` | Data activity panel | left Activity edge |
-| `view:commands` | Commands activity panel | left Activity edge |
-| `view:details` | permanent fixed Details | right edge index 0 |
-| `view:assistant` | movable/closable Assistant | right edge index 1 on default/reset |
-| `view:inspect` | contextual Inspect | right edge |
-| `result` | 一个可检查结果 | right edge |
-| `view:logs` | Logs workspace | bottom edge |
-| `view:output` | Run Output | bottom edge |
-| `view:diagnostics` | Compiler/runtime diagnostics | bottom edge |
+| 角色               | 内容                            | deterministic home                  |
+| ------------------ | ------------------------------- | ----------------------------------- |
+| `editor`           | Graph/Function/Worksheet editor | 当前 central grid group             |
+| `view:project`     | Project activity panel          | left Activity edge                  |
+| `view:nodes`       | Nodes activity panel            | left Activity edge                  |
+| `view:data`        | Data activity panel             | left Activity edge                  |
+| `view:commands`    | Commands activity panel         | left Activity edge                  |
+| `view:details`     | permanent fixed Details         | right edge index 0                  |
+| `view:assistant`   | movable/closable Assistant      | right edge index 1 on default/reset |
+| `view:inspect`     | contextual Inspect              | right edge                          |
+| `result`           | 一个可检查结果                  | right edge                          |
+| `view:logs`        | Logs workspace                  | bottom edge                         |
+| `view:output`      | Run Output                      | bottom edge                         |
+| `view:diagnostics` | Compiler/runtime diagnostics    | bottom edge                         |
 
 默认空布局建立 central grid group，并放置：
 
@@ -98,13 +98,13 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 以下 identity 永远分离：
 
-| Identity | 含义 |
-|---|---|
-| `resourceRef` | editor 打开的 opaque backend resource path；同一资源可有多个 editor panel |
-| `resultKey` | logical Result panel key；同 key 执行 upsert，不同 key 可并存 |
-| `resultId` | Rust `ResultStore` 中当前 payload 的 opaque identity |
-| `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity |
-| `groupId` | Dockview 当前物理 group 的 identity；panel 移动后可改变 |
+| Identity          | 含义                                                                      |
+| ----------------- | ------------------------------------------------------------------------- |
+| `resourceRef`     | editor 打开的 opaque backend resource path；同一资源可有多个 editor panel |
+| `resultKey`       | logical Result panel key；同 key 执行 upsert，不同 key 可并存             |
+| `resultId`        | Rust `ResultStore` 中当前 payload 的 opaque identity                      |
+| `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity                         |
+| `groupId`         | Dockview 当前物理 group 的 identity；panel 移动后可改变                   |
 
 不得从 `panelInstanceId` 或 `groupId` 推导 `resourceRef`、`resultKey` 或 `resultId`，也不得把这些 identity 合并为一个 tab id。
 
@@ -245,13 +245,13 @@ Persistence invariant：
 
 工作台 chrome 使用以下紧凑层级：
 
-| 高度 | 用途 | Token |
-|---:|---|---|
-| `36px` | Menubar/titlebar chrome | `--titlebar-height` |
+|   高度 | 用途                             | Token                                                             |
+| -----: | -------------------------------- | ----------------------------------------------------------------- |
+| `36px` | Menubar/titlebar chrome          | `--titlebar-height`                                               |
 | `32px` | root tabs 与 collapsed root edge | `--workbench-tab-height` / `DockviewTheme.edgeGroupCollapsedSize` |
-| `30px` | Logs nested domain tabs | `--logs-tab-height` |
-| `28px` | panel toolbar | `--panel-toolbar-height` |
-| `26px` | Status Bar | `--statusbar-height` |
+| `30px` | Logs nested domain tabs          | `--logs-tab-height`                                               |
+| `28px` | panel toolbar                    | `--panel-toolbar-height`                                          |
+| `26px` | Status Bar                       | `--statusbar-height`                                              |
 
 ## 10. Verification
 

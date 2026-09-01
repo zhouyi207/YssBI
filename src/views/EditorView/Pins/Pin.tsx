@@ -4,7 +4,11 @@ import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
-import { isExecPin, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
+import {
+  isExecPin,
+  scalarPinInputKey,
+  PRIMITIVE_SCALAR_INPUT_KEYS,
+} from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
@@ -13,36 +17,38 @@ import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dataValueFromBackend } from "@/shared/types/domain/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
-import { useGraphRead } from '@/features/core/graph/read';
-import { useGraphInteractionUi } from '@/features/core/graphInteraction/ui';
-import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
+import { useGraphRead } from "@/features/core/graph/read";
+import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
+import type { ConnectionFeedback } from "@/features/core/canvas/connectionInteraction";
 
 export function pinConnectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
   if (!feedback) return {};
-  return feedback.kind === 'invalid'
+  return feedback.kind === "invalid"
     ? {
-        'data-connection-feedback': feedback.kind,
-        'data-connection-invalid-reason': feedback.reason,
+        "data-connection-feedback": feedback.kind,
+        "data-connection-invalid-reason": feedback.reason,
       }
-    : { 'data-connection-feedback': feedback.kind };
+    : { "data-connection-feedback": feedback.kind };
 }
 
 export function pinConnectionFeedbackClass(feedback: ConnectionFeedback | null): string {
-  if (!feedback) return '';
-  if (feedback.kind === 'invalid') return 'ring-2 ring-red-500/90';
-  return feedback.kind === 'replace'
-    ? 'ring-2 ring-amber-500/90'
-    : 'ring-2 ring-emerald-500/90';
+  if (!feedback) return "";
+  if (feedback.kind === "invalid") return "ring-2 ring-red-500/90";
+  return feedback.kind === "replace" ? "ring-2 ring-amber-500/90" : "ring-2 ring-emerald-500/90";
 }
-import { buildPinViewParams, evaluatePinViewState, pinViewDisabledTitle } from "@/features/core/execution/pinViewTarget";
-import { executionResultUi } from '@/features/core/execution';
-import { useExecutionRead } from '@/features/core/execution/read';
+import {
+  buildPinViewParams,
+  evaluatePinViewState,
+  pinViewDisabledTitle,
+} from "@/features/core/execution/pinViewTarget";
+import { executionResultUi } from "@/features/core/execution";
+import { useExecutionRead } from "@/features/core/execution/read";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
 import {
   isPinPreviewActionAvailable,
   requestAndOpenPinPreview,
 } from "@/features/application/editor/requestPinPreview";
-import type { PinHistoryProjection } from '@/shared/types/ui';
+import type { PinHistoryProjection } from "@/shared/types/ui";
 import type {
   PortAddressDto,
   PortKindDto,
@@ -52,7 +58,11 @@ import type {
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
   if (v == null) return v;
-  if (typeof v === "object" && !Array.isArray(v) && ("String" in v || "Boolean" in v || "Int64" in v || "Float64" in v || "Null" in v)) {
+  if (
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    ("String" in v || "Boolean" in v || "Int64" in v || "Float64" in v || "Null" in v)
+  ) {
     return dataValueToRaw(dataValueFromBackend(v as Parameters<typeof dataValueFromBackend>[0]));
   }
   return v;
@@ -117,10 +127,7 @@ export const Pin: React.FC<PinProps> = (props) => {
   const { t } = useTranslation();
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const pinSemantics = useMemo(
-    () => ({ type: type ?? 'object', dataType }),
-    [type, dataType],
-  );
+  const pinSemantics = useMemo(() => ({ type: type ?? "object", dataType }), [type, dataType]);
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
 
@@ -139,10 +146,11 @@ export const Pin: React.FC<PinProps> = (props) => {
   const connectionFeedback = useGraphInteractionUi((state) => {
     if (!graphPath || !groupId) return null;
     const interaction = state.interactions[graphPath];
-    if (!interaction || interaction.type === 'idle' || interaction.session.groupId !== groupId) {
+    if (!interaction || interaction.type === "idle" || interaction.session.groupId !== groupId) {
       return null;
     }
-    if (interaction?.type !== 'drawingConnection' && interaction?.type !== 'movingConnections') return null;
+    if (interaction?.type !== "drawingConnection" && interaction?.type !== "movingConnections")
+      return null;
     const session = interaction.session;
     return session.snappedTarget?.id === id || session.hoveredTarget?.id === id
       ? session.feedback
@@ -150,7 +158,7 @@ export const Pin: React.FC<PinProps> = (props) => {
   });
   const connectionIds = useGraphRead((snapshot) =>
     graphPath
-      ? snapshot.graphEntities[graphPath]?.pinConnections[id] ?? EMPTY_CONNECTION_IDS
+      ? (snapshot.graphEntities[graphPath]?.pinConnections[id] ?? EMPTY_CONNECTION_IDS)
       : EMPTY_CONNECTION_IDS,
   );
   const graphConnections = useGraphRead((snapshot) =>
@@ -161,17 +169,20 @@ export const Pin: React.FC<PinProps> = (props) => {
   );
   const recordPinHistory = executionResultUi.recordPinHistory;
   const connections = useMemo(
-    () => connectionIds.flatMap((connectionId) => {
-      const connection = graphConnections?.[connectionId];
-      return connection?.output && connection.input
-        ? [{
-            connectionId: connection.id,
-            output: connection.output,
-            input: connection.input,
-            order: connection.order ?? null,
-          }]
-        : [];
-    }),
+    () =>
+      connectionIds.flatMap((connectionId) => {
+        const connection = graphConnections?.[connectionId];
+        return connection?.output && connection.input
+          ? [
+              {
+                connectionId: connection.id,
+                output: connection.output,
+                input: connection.input,
+                order: connection.order ?? null,
+              },
+            ]
+          : [];
+      }),
     [connectionIds, graphConnections],
   );
 
@@ -190,10 +201,7 @@ export const Pin: React.FC<PinProps> = (props) => {
   );
 
   const viewState = useMemo(
-    () =>
-      viewParams
-        ? evaluatePinViewState(viewParams)
-        : null,
+    () => (viewParams ? evaluatePinViewState(viewParams) : null),
     [viewParams],
   );
 
@@ -206,12 +214,11 @@ export const Pin: React.FC<PinProps> = (props) => {
   });
   const showViewMenu = (viewState?.showMenu ?? false) || previewActionAvailable;
   const viewEnabled = (viewState?.enabled ?? false) || previewActionAvailable;
-  const viewDisabledReason = previewActionAvailable
-    ? null
-    : (viewState?.disabledReason ?? null);
-  const historyOutputs = useMemo(() => viewState?.refs.flatMap((ref) =>
-    ref.kind === 'outputPin' ? [ref.output] : [],
-  ) ?? [], [viewState]);
+  const viewDisabledReason = previewActionAvailable ? null : (viewState?.disabledReason ?? null);
+  const historyOutputs = useMemo(
+    () => viewState?.refs.flatMap((ref) => (ref.kind === "outputPin" ? [ref.output] : [])) ?? [],
+    [viewState],
+  );
   const firstHistoryOutput = historyOutputs[0];
 
   const handleRemovePin = useCallback(() => {
@@ -228,9 +235,9 @@ export const Pin: React.FC<PinProps> = (props) => {
       void openPinInspectableView(viewParams, t).then(() => {
         if (!firstHistoryOutput) return;
         const history = executionResultUi.getPinHistory(graphPath, firstHistoryOutput);
-        setHistoryProjection(history
-          ? structuredClone(history) as unknown as PinHistoryProjection
-          : undefined);
+        setHistoryProjection(
+          history ? (structuredClone(history) as unknown as PinHistoryProjection) : undefined,
+        );
       });
       return;
     }
@@ -258,22 +265,24 @@ export const Pin: React.FC<PinProps> = (props) => {
     userValue != null &&
     userValue !== undefined;
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    },
-    []
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
-  const shouldPulse = !optional && !isConnected && direction === "input" && !isExecPin(pinSemantics);
+  const shouldPulse =
+    !optional && !isConnected && direction === "input" && !isExecPin(pinSemantics);
 
-  const isDropdownPin = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
+  const isDropdownPin =
+    metaData?.showWidget &&
+    metaData?.widgetType === "dropdown" &&
+    (metaData?.widgetOptions?.length ?? 0) > 0;
   const showInput =
     (!isConnected || forceShowInput === true) &&
     scalarInputKey != null &&
-    (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) || (scalarInputKey === "string" && isDropdownPin)) &&
+    (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) ||
+      (scalarInputKey === "string" && isDropdownPin)) &&
     !visualSpec.container &&
     (direction === "input" || forceShowInput === true) &&
     graphPath &&
@@ -287,30 +296,34 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const feedbackTooltip = connectionFeedback?.kind === 'invalid'
-    ? t(`canvas.connection.feedback.${connectionFeedback.reason}`)
-    : null;
-  const pinTooltip = feedbackTooltip ?? (validationWarning
-    ? `${name} (${visualSpec.label}) — ${validationWarning}`
-    : `${name} (${visualSpec.label})`);
+  const feedbackTooltip =
+    connectionFeedback?.kind === "invalid"
+      ? t(`canvas.connection.feedback.${connectionFeedback.reason}`)
+      : null;
+  const pinTooltip =
+    feedbackTooltip ??
+    (validationWarning
+      ? `${name} (${visualSpec.label}) — ${validationWarning}`
+      : `${name} (${visualSpec.label})`);
 
   const pulseStrokeProps = shouldPulse
     ? {
-        fill: 'none' as const,
+        fill: "none" as const,
         stroke: baseColor,
         strokeWidth: 2.5,
-        strokeDasharray: visualSpec.shape === 'exec' ? '6 24' : visualSpec.shape === 'gridRect' ? '8 28' : '7 21',
-        className: 'pin-flow-stroke',
-        filter: 'url(#pinGlow)',
+        strokeDasharray:
+          visualSpec.shape === "exec" ? "6 24" : visualSpec.shape === "gridRect" ? "8 28" : "7 21",
+        className: "pin-flow-stroke",
+        filter: "url(#pinGlow)",
       }
     : null;
 
   const renderPinShape = () => {
     const { fill, stroke, strokeWidth } = renderStyle;
-    const dashed = visualSpec.dashedStroke && !shouldPulse ? { strokeDasharray: '2 2' } : {};
+    const dashed = visualSpec.dashedStroke && !shouldPulse ? { strokeDasharray: "2 2" } : {};
 
     switch (visualSpec.shape) {
-      case 'exec':
+      case "exec":
         return (
           <>
             <path
@@ -321,35 +334,74 @@ export const Pin: React.FC<PinProps> = (props) => {
               strokeLinejoin="miter"
               {...dashed}
             />
-            {pulseStrokeProps && <path d="M2 2 L7 2 L11 6 L7 10 L2 10 Z" strokeLinejoin="miter" {...pulseStrokeProps} />}
+            {pulseStrokeProps && (
+              <path
+                d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
+                strokeLinejoin="miter"
+                {...pulseStrokeProps}
+              />
+            )}
           </>
         );
-      case 'gridRect':
+      case "gridRect":
         return (
           <>
             <g>
-              <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+              <rect
+                x="1.5"
+                y="1.5"
+                width="9"
+                height="9"
+                rx="1"
+                fill={fill}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                {...dashed}
+              />
               <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={stroke} strokeWidth="0.8" />
               <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={stroke} strokeWidth="0.8" />
             </g>
-            {pulseStrokeProps && <rect x="1.5" y="1.5" width="9" height="9" rx="1" {...pulseStrokeProps} />}
+            {pulseStrokeProps && (
+              <rect x="1.5" y="1.5" width="9" height="9" rx="1" {...pulseStrokeProps} />
+            )}
           </>
         );
-      case 'roundedRect':
+      case "roundedRect":
         return (
           <>
-            <rect x="2" y="2" width="8" height="8" rx="1.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
-            {pulseStrokeProps && <rect x="2" y="2" width="8" height="8" rx="1.5" {...pulseStrokeProps} />}
+            <rect
+              x="2"
+              y="2"
+              width="8"
+              height="8"
+              rx="1.5"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              {...dashed}
+            />
+            {pulseStrokeProps && (
+              <rect x="2" y="2" width="8" height="8" rx="1.5" {...pulseStrokeProps} />
+            )}
           </>
         );
-      case 'diamond':
+      case "diamond":
         return (
           <>
-            <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="miter" {...dashed} />
-            {pulseStrokeProps && <polygon points="6,1 11,6 6,11 1,6" strokeLinejoin="miter" {...pulseStrokeProps} />}
+            <polygon
+              points="6,1 11,6 6,11 1,6"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="miter"
+              {...dashed}
+            />
+            {pulseStrokeProps && (
+              <polygon points="6,1 11,6 6,11 1,6" strokeLinejoin="miter" {...pulseStrokeProps} />
+            )}
           </>
         );
-      case 'hexagon':
+      case "hexagon":
         return (
           <>
             <polygon
@@ -372,7 +424,15 @@ export const Pin: React.FC<PinProps> = (props) => {
       default:
         return (
           <>
-            <circle cx="6" cy="6" r="4.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+            <circle
+              cx="6"
+              cy="6"
+              r="4.5"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              {...dashed}
+            />
             {pulseStrokeProps && <circle cx="6" cy="6" r="4.5" {...pulseStrokeProps} />}
           </>
         );
@@ -385,121 +445,116 @@ export const Pin: React.FC<PinProps> = (props) => {
         <div
           className={`
        group relative flex items-center h-7 shrink-0 pin-container transition-opacity
-        ${direction === "input"
-          ? "flex-row justify-start"
-          : "flex-row-reverse justify-end"
-        }
+        ${direction === "input" ? "flex-row justify-start" : "flex-row-reverse justify-end"}
       `}
           style={dragStyle}
           data-pin-id={id}
           {...pinConnectionFeedbackAttributes(connectionFeedback)}
-          data-validation-warning={validationWarning ? 'true' : undefined}
+          data-validation-warning={validationWarning ? "true" : undefined}
           onContextMenu={handleContextMenu}
         >
-      {/* Pin Icon Container - 唯一连接锚点 */}
-      <div
-        data-pin-connection-anchor={id}
-        className={`
+          {/* Pin Icon Container - 唯一连接锚点 */}
+          <div
+            data-pin-connection-anchor={id}
+            className={`
           relative w-6 h-6 flex items-center justify-center cursor-crosshair shrink-0 z-20 pin-circle rounded-full
           ${direction === "input" ? "mr-1" : "ml-1"}
           ${contextMenu ? "ring-2 ring-[var(--accent-color)]/60" : ""}
           ${validationWarning ? "ring-2 ring-amber-500/80" : ""}
           ${pinConnectionFeedbackClass(connectionFeedback)}
         `}
-        onPointerDown={(e) => {
-          if (!onPinPointerDown) return;
-          e.stopPropagation();
-          e.preventDefault();
-          onPinPointerDown(e, props);
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onPinClick?.(id, direction);
-        }}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          className="overflow-visible"
-          style={{ display: "block" }}
-        >
-          {renderPinShape()}
-          {shouldPulse && (
-            <defs>
-              <filter id="pinGlow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" />
-              </filter>
-            </defs>
-          )}
-          {isConnected && visualSpec.edgeKind === 'data' && (
-            <circle
-              cx="6"
-              cy="6"
-              r="1.2"
-              fill="white"
-              className="pointer-events-none"
-            />
-          )}
-        </svg>
-      </div>
+            onPointerDown={(e) => {
+              if (!onPinPointerDown) return;
+              e.stopPropagation();
+              e.preventDefault();
+              onPinPointerDown(e, props);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPinClick?.(id, direction);
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              className="overflow-visible"
+              style={{ display: "block" }}
+            >
+              {renderPinShape()}
+              {shouldPulse && (
+                <defs>
+                  <filter id="pinGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" />
+                  </filter>
+                </defs>
+              )}
+              {isConnected && visualSpec.edgeKind === "data" && (
+                <circle cx="6" cy="6" r="1.2" fill="white" className="pointer-events-none" />
+              )}
+            </svg>
+          </div>
 
-      {/* Label - 增加 hover 效果，右键菜单打开时高亮 */}
-      <span
-        className={`
+          {/* Label - 增加 hover 效果，右键菜单打开时高亮 */}
+          <span
+            className={`
           text-[10px] font-bold select-none tracking-wide px-1 z-10 pointer-events-none
           transition-colors
-          ${contextMenu
-            ? "text-[var(--accent-color)]"
-            : isConnected
-              ? "text-foreground"
-              : "text-muted-foreground"}
+          ${
+            contextMenu
+              ? "text-[var(--accent-color)]"
+              : isConnected
+                ? "text-foreground"
+                : "text-muted-foreground"
+          }
           ${!contextMenu ? "group-hover:text-foreground" : ""}
         `}
-      >
-        {name}
-      </span>
+          >
+            {name}
+          </span>
 
-      {showInput && (
-        <PinInput
-          pinId={id}
-          nodeId={nodeId}
-          graphPath={graphPath}
-          dataType={dataType}
-          metaData={metaData}
-          value={toDisplayValue(userValue ?? defaultValue)}
-          onValueChange={(value) => onValueChange?.(id, value)}
-        />
-      )}
+          {showInput && (
+            <PinInput
+              pinId={id}
+              nodeId={nodeId}
+              graphPath={graphPath}
+              dataType={dataType}
+              metaData={metaData}
+              value={toDisplayValue(userValue ?? defaultValue)}
+              onValueChange={(value) => onValueChange?.(id, value)}
+            />
+          )}
 
-      {contextMenu && (
-        <PinContextMenu
-          position={contextMenu}
-          removable={canRemovePin}
-          hasLinks={hasLinks}
-          canReset={canReset}
-          onBreakLinks={menuActions ? () => void menuActions.disconnectPin(id) : undefined}
-          onResetValue={menuActions ? () => void menuActions.resetPinValue(nodeId, id) : undefined}
-          showView={showViewMenu}
-          viewEnabled={viewEnabled}
-          viewDisabledTitle={pinViewDisabledTitle(viewDisabledReason, t)}
-          onView={handleView}
-          historyEntries={historyProjection?.entries}
-          onViewHistory={(resultId) => {
-            if (!historyProjection) return;
-            recordPinHistory({
-              ...historyProjection,
-              selectedResultId: resultId,
-            });
-            void openPinInspectableView(viewParams!, t, { selectedResultId: resultId });
-          }}
-          onRemove={handleRemovePin}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
+          {contextMenu && (
+            <PinContextMenu
+              position={contextMenu}
+              removable={canRemovePin}
+              hasLinks={hasLinks}
+              canReset={canReset}
+              onBreakLinks={menuActions ? () => void menuActions.disconnectPin(id) : undefined}
+              onResetValue={
+                menuActions ? () => void menuActions.resetPinValue(nodeId, id) : undefined
+              }
+              showView={showViewMenu}
+              viewEnabled={viewEnabled}
+              viewDisabledTitle={pinViewDisabledTitle(viewDisabledReason, t)}
+              onView={handleView}
+              historyEntries={historyProjection?.entries}
+              onViewHistory={(resultId) => {
+                if (!historyProjection) return;
+                recordPinHistory({
+                  ...historyProjection,
+                  selectedResultId: resultId,
+                });
+                void openPinInspectableView(viewParams!, t, { selectedResultId: resultId });
+              }}
+              onRemove={handleRemovePin}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
         </div>
       </TooltipTrigger>
-      <TooltipContent side={direction === 'input' ? 'left' : 'right'}>{pinTooltip}</TooltipContent>
+      <TooltipContent side={direction === "input" ? "left" : "right"}>{pinTooltip}</TooltipContent>
     </Tooltip>
   );
 };

@@ -1,46 +1,45 @@
 // @vitest-environment happy-dom
 
-import { act, createElement, useRef } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act, createElement, useRef } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { ViewportScope } from '@/features/core/viewport';
-import {
-  getViewport,
-  resetLiveViewports,
-} from '@/features/core/viewport';
-import { useCanvasWheelZoom } from './useCanvasWheelZoom';
+import type { ViewportScope } from "@/features/core/viewport";
+import { getViewport, resetLiveViewports } from "@/features/core/viewport";
+import { useCanvasWheelZoom } from "./useCanvasWheelZoom";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const viewportScope: ViewportScope = {
-  groupId: 'group-1',
-  graphPath: 'events/Main.yssbi-event',
+  groupId: "group-1",
+  graphPath: "events/Main.yssbi-event",
 };
 
-describe('useCanvasWheelZoom', () => {
+describe("useCanvasWheelZoom", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   function Harness({ interactive }: { interactive: boolean }) {
     const canvasRef = useRef<HTMLDivElement>(null);
     useCanvasWheelZoom(canvasRef, viewportScope, interactive);
-    return createElement('div', { ref: canvasRef });
+    return createElement("div", { ref: canvasRef });
   }
 
   function dispatchWheel(canvas: Element): void {
-    canvas.dispatchEvent(new WheelEvent('wheel', {
-      bubbles: true,
-      cancelable: true,
-      clientX: 100,
-      clientY: 100,
-      deltaY: -100,
-    }));
+    canvas.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 100,
+        clientY: 100,
+        deltaY: -100,
+      }),
+    );
   }
 
   beforeEach(() => {
     resetLiveViewports(viewportScope);
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -51,7 +50,7 @@ describe('useCanvasWheelZoom', () => {
     host.remove();
   });
 
-  it('rebinds wheel zoom across inactive and active panel transitions', async () => {
+  it("rebinds wheel zoom across inactive and active panel transitions", async () => {
     await act(async () => {
       root.render(createElement(Harness, { interactive: true }));
       await Promise.resolve();

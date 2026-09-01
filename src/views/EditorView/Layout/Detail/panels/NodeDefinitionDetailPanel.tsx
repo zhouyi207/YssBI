@@ -1,8 +1,8 @@
-import { useTranslation } from 'react-i18next';
-import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import { DetailPanelShell } from '../shared/DetailPanelShell';
-import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
-import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
+import { useTranslation } from "react-i18next";
+import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
+import { DetailPanelShell } from "../shared/DetailPanelShell";
+import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
+import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 
 interface NodeDefinitionDetailPanelProps {
   nodeType: string;
@@ -16,7 +16,7 @@ export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPane
   return (
     <DetailPanelShell>
       <DetailForm>
-        <DetailReadonlyField label={t('detail.fields.type')} tone="muted">
+        <DetailReadonlyField label={t("detail.fields.type")} tone="muted">
           {nodeType}
         </DetailReadonlyField>
       </DetailForm>

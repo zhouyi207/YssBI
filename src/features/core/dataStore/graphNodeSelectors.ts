@@ -1,6 +1,6 @@
-import type { NodeData } from '@/shared/types/store/graph';
+import type { NodeData } from "@/shared/types/store/graph";
 
-import { useGraphDataStore } from './graphDataStore';
+import { useGraphDataStore } from "./graphDataStore";
 
 function projectedNodeCapabilities(graphPath: string, nodeId: string) {
   return useGraphDataStore.getState().getGraphNode(graphPath, nodeId)?.capabilities;
@@ -20,12 +20,8 @@ export function canCutNode(graphPath: string, nodeId: string): boolean {
   return canCopyNode(graphPath, nodeId) && canDeleteNode(graphPath, nodeId);
 }
 
-
 /** Find an internal node in a graph by nodeType (store-native, no links rebuild). */
-export function findInternalNodeInGraph(
-  graphPath: string,
-  nodeType: string,
-): NodeData | undefined {
+export function findInternalNodeInGraph(graphPath: string, nodeType: string): NodeData | undefined {
   const state = useGraphDataStore.getState();
   const nodeIds = state.getGraphNodeIds(graphPath);
   for (const nodeId of nodeIds) {

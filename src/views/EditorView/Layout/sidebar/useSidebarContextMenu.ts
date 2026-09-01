@@ -1,26 +1,29 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePositionedActionMenu } from "@/shared/ui/actionMenu";
-import type { SidebarContextMenuTarget, SidebarInputDialogState } from "../sidebarContextMenu/sidebarContextMenuTypes";
-import { formatInlineUserError } from '@/features/application/userErrorSummary';
+import type {
+  SidebarContextMenuTarget,
+  SidebarInputDialogState,
+} from "../sidebarContextMenu/sidebarContextMenuTypes";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 
 export function useSidebarContextMenu() {
   const { t } = useTranslation();
-  const {
-    contextMenu,
-    openActionMenu,
-    closeActionMenu,
-  } = usePositionedActionMenu<SidebarContextMenuTarget>();
+  const { contextMenu, openActionMenu, closeActionMenu } =
+    usePositionedActionMenu<SidebarContextMenuTarget>();
   const [inputDialog, setInputDialog] = useState<SidebarInputDialogState | null>(null);
 
-  const openInputDialog = useCallback((
-    title: string,
-    value: string,
-    onSubmit: SidebarInputDialogState["onSubmit"],
-    submitLabel?: string,
-  ) => {
-    setInputDialog({ title, value, onSubmit, submitLabel, error: null });
-  }, []);
+  const openInputDialog = useCallback(
+    (
+      title: string,
+      value: string,
+      onSubmit: SidebarInputDialogState["onSubmit"],
+      submitLabel?: string,
+    ) => {
+      setInputDialog({ title, value, onSubmit, submitLabel, error: null });
+    },
+    [],
+  );
 
   const submitInputDialog = useCallback(async () => {
     if (!inputDialog) return;
@@ -30,7 +33,7 @@ export function useSidebarContextMenu() {
       await inputDialog.onSubmit(value);
       setInputDialog(null);
     } catch (error) {
-      const message = t('notifications.sidebar.actionFailed', {
+      const message = t("notifications.sidebar.actionFailed", {
         error: formatInlineUserError(error, t),
       });
       setInputDialog((prev) => (prev ? { ...prev, error: message } : null));

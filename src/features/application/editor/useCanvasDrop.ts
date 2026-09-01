@@ -1,22 +1,18 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
-import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import {
-  BUILTIN_NODE_TYPE_IDS,
-  type VariableNodeTypeId,
-} from '@/features/domain/nodeCatalog';
+import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
+import { BUILTIN_NODE_TYPE_IDS, type VariableNodeTypeId } from "@/features/domain/nodeCatalog";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import type { Pin } from '@/shared/types/domain/pin';
+import type { Pin } from "@/shared/types/domain/pin";
 import {
   isGraphResourceDragState,
   isNodeTemplateDragState,
   type SidebarDragState,
-} from '@/features/core/dnd';
-import type { EditorVariables } from '@/features/core/editor';
+} from "@/features/core/dnd";
+import type { EditorVariables } from "@/features/core/editor";
 import {
   clientToWorldInCanvas,
   findResourceNodeSpawnTemplate,
@@ -84,22 +80,24 @@ export function useCanvasDrop({
     (nodeId: string) => {
       if (!graphPath) return;
       const store = useGraphDataStore.getState();
-      const template = store.getGraphNodePins(graphPath, nodeId)
+      const template = store
+        .getGraphNodePins(graphPath, nodeId)
         .map((pinId) => store.getGraphPin(graphPath, pinId))
-        .find((pin) => pin?.instanceKind === 'userCreated' && pin.templateKey)
-        ?.templateKey;
+        .find((pin) => pin?.instanceKind === "userCreated" && pin.templateKey)?.templateKey;
       if (!template) return;
-      void executeCommand(graphPath, 'AddRepeatablePin', { nodeId, template });
+      void executeCommand(graphPath, "AddRepeatablePin", { nodeId, template });
     },
-    [graphPath]
+    [graphPath],
   );
 
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
       if (!graphPath) return Promise.resolve();
-      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined);
+      return executeCommand(graphPath, "RemoveRepeatablePin", { nodeId, pinId }).then(
+        () => undefined,
+      );
     },
-    [graphPath]
+    [graphPath],
   );
 
   const handleContextMenu = useCallback(
@@ -118,25 +116,22 @@ export function useCanvasDrop({
       }
       setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
     },
-    [setContextMenu]
+    [setContextMenu],
   );
 
   const spawnFromVariableMenu = useCallback(
     async (menu: VariableDropMenu, nodeTypeId: VariableNodeTypeId) => {
       setVariableDropMenu(null);
       const resourcePath = variables[menu.variableId]?.resourcePath;
-      const template = resourcePath && catalog
-        ? findResourceNodeSpawnTemplate(catalog.items, resourcePath, 'variable', nodeTypeId)
-        : null;
+      const template =
+        resourcePath && catalog
+          ? findResourceNodeSpawnTemplate(catalog.items, resourcePath, "variable", nodeTypeId)
+          : null;
       if (!template) {
         refreshCatalog();
         return;
       }
-      await spawnNodeFromTemplate(
-        template,
-        { x: menu.worldX, y: menu.worldY },
-        { createNode },
-      );
+      await spawnNodeFromTemplate(template, { x: menu.worldX, y: menu.worldY }, { createNode });
     },
     [catalog, createNode, refreshCatalog, variables],
   );
@@ -154,16 +149,18 @@ export function useCanvasDrop({
   const handleSidebarCanvasDrop = useCallback(
     async (dragState: SidebarDragState) => {
       const canvas = canvasElementRef.current;
-      if (!canvas || !graphPath || !isPointInsideCanvas(canvas, dragState.x, dragState.y)) return false;
+      if (!canvas || !graphPath || !isPointInsideCanvas(canvas, dragState.x, dragState.y))
+        return false;
 
       let template = isNodeTemplateDragState(dragState) ? dragState.template : null;
       if (isGraphResourceDragState(dragState)) {
         if (
-          dragState.sidebarResource.type !== 'function'
-          || dragState.sidebarResource.id === graphPath
-        ) return false;
+          dragState.sidebarResource.type !== "function" ||
+          dragState.sidebarResource.id === graphPath
+        )
+          return false;
         template = catalog
-          ? findResourceNodeSpawnTemplate(catalog.items, dragState.sidebarResource.id, 'function')
+          ? findResourceNodeSpawnTemplate(catalog.items, dragState.sidebarResource.id, "function")
           : null;
         if (!template) {
           refreshCatalog();
@@ -185,7 +182,9 @@ export function useCanvasDrop({
   );
 
   useEffect(() => {
-    canvasDropHandlerStore.setHandler(panelInstanceId, (dragState) => handleSidebarCanvasDrop(dragState));
+    canvasDropHandlerStore.setHandler(panelInstanceId, (dragState) =>
+      handleSidebarCanvasDrop(dragState),
+    );
     return () => canvasDropHandlerStore.setHandler(panelInstanceId, null);
   }, [handleSidebarCanvasDrop, panelInstanceId]);
 

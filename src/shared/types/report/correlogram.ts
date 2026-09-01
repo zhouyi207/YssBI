@@ -4,7 +4,7 @@
  * - Plot（Rust Correlogram 节点）：含 Ljung-Box Q / p-value
  */
 
-import { isFiniteNumber, isNonNegativeInteger, isRecord } from './guards';
+import { isFiniteNumber, isNonNegativeInteger, isRecord } from "./guards";
 
 /** Info 报告 / 残差 ACF·PACF 柱条（无 Q 统计量） */
 export interface CorrelogramBarDTO {
@@ -38,10 +38,10 @@ export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | n
   const qStat = raw.qStat;
   const pValue = raw.pValue;
   if (
-    !isNonNegativeInteger(lag)
-    || !isFiniteNumber(value)
-    || !isFiniteNumber(qStat)
-    || !isFiniteNumber(pValue)
+    !isNonNegativeInteger(lag) ||
+    !isFiniteNumber(value) ||
+    !isFiniteNumber(qStat) ||
+    !isFiniteNumber(pValue)
   ) {
     return null;
   }

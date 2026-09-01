@@ -1,6 +1,6 @@
-import type { PlotCorrelogramBarDTO } from '@/shared/types/report';
+import type { PlotCorrelogramBarDTO } from "@/shared/types/report";
 
-export type AxisValueType = 'number' | 'date' | 'datetime';
+export type AxisValueType = "number" | "date" | "datetime";
 
 export interface XYPoint {
   x: number;
@@ -14,7 +14,7 @@ export interface AxisModel {
 
 export type ChartModel =
   | {
-      kind: 'scatter';
+      kind: "scatter";
       points: XYPoint[];
       xAxis: AxisModel;
       yAxis: AxisModel;
@@ -23,29 +23,29 @@ export type ChartModel =
       highlightIndices?: number[];
     }
   | {
-      kind: 'line';
+      kind: "line";
       points: XYPoint[];
       xAxis: AxisModel;
       yAxis: AxisModel;
       showPoints: boolean;
     }
   | {
-      kind: 'histogram';
+      kind: "histogram";
       bins: { label: string; count: number }[];
       xLabel?: string;
       yLabel?: string;
       compact?: boolean;
     }
-  | { kind: 'ecdf'; points: XYPoint[]; xAxis: AxisModel; yAxis: AxisModel }
-  | { kind: 'kde'; points: XYPoint[]; xAxis: AxisModel; yAxis: AxisModel; xMin?: number }
+  | { kind: "ecdf"; points: XYPoint[]; xAxis: AxisModel; yAxis: AxisModel }
+  | { kind: "kde"; points: XYPoint[]; xAxis: AxisModel; yAxis: AxisModel; xMin?: number }
   | {
-      kind: 'correlation';
+      kind: "correlation";
       labels: string[];
       matrix: (number | null)[][];
       pMatrix?: (number | null)[][];
     }
   | {
-      kind: 'correlogram';
+      kind: "correlogram";
       acf: PlotCorrelogramBarDTO[];
       pacf: PlotCorrelogramBarDTO[];
       ciHalfWidth: number;

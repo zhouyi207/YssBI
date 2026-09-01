@@ -1,25 +1,25 @@
-import { useRef } from 'react';
-import { useActiveEditorGroup, useEditorActions } from '@/features/core/editor';
-import { useEditorOperations } from './useEditorOperations';
-import { useGraphCanvasCommands } from './useGraphCanvasCommands';
-import { useTabManagement } from './useTabManagement';
-import { useOpenWorksheet, useWorksheetManagement } from './useWorksheetManagement';
-import { useProjectOperations } from './useProjectOperations';
+import { useRef } from "react";
+import { useActiveEditorGroup, useEditorActions } from "@/features/core/editor";
+import { useEditorOperations } from "./useEditorOperations";
+import { useGraphCanvasCommands } from "./useGraphCanvasCommands";
+import { useTabManagement } from "./useTabManagement";
+import { useOpenWorksheet, useWorksheetManagement } from "./useWorksheetManagement";
+import { useProjectOperations } from "./useProjectOperations";
 import {
   useGraphManagement,
   useVariableManagement,
   useDatabaseManagement,
   useNodeManagement,
-} from '@/features/application/dataManagement';
+} from "@/features/application/dataManagement";
 import {
   pickEditorSessionLayoutBindings,
   pickEditorSessionNodeActions,
-} from './editorSessionTypes';
+} from "./editorSessionTypes";
 import {
   createEditorSessionCommandsContainer,
   patchEditorSessionCommands,
   type EditorSessionCommands,
-} from './editorSessionCommands';
+} from "./editorSessionCommands";
 
 /**
  * Builds the command surface once per provider mount.

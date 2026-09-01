@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { snapTopLeftToCursor } from './snapTopLeftToCursorModifier';
+import { describe, expect, it } from "vitest";
+import { snapTopLeftToCursor } from "./snapTopLeftToCursorModifier";
 
-describe('snapTopLeftToCursor', () => {
-  it('offsets transform so overlay top-left follows the pointer', () => {
+describe("snapTopLeftToCursor", () => {
+  it("offsets transform so overlay top-left follows the pointer", () => {
     const transform = snapTopLeftToCursor({
       activatorEvent: { clientX: 150, clientY: 220 } as PointerEvent,
       active: null,
@@ -32,7 +32,7 @@ describe('snapTopLeftToCursor', () => {
     });
   });
 
-  it('returns transform unchanged when rects or activator are missing', () => {
+  it("returns transform unchanged when rects or activator are missing", () => {
     const base = { x: 4, y: 6, scaleX: 1, scaleY: 1 };
     expect(
       snapTopLeftToCursor({

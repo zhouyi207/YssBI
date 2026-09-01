@@ -1,8 +1,8 @@
-import { useEffect, useId, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscError } from 'react-icons/vsc';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { useEffect, useId, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { VscError } from "react-icons/vsc";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import type { DataType } from '@/shared/types/domain/dataType';
-import type { DataValue } from '@/shared/types/domain/dataValue';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { DataValue } from "@/shared/types/domain/dataValue";
 import {
   dataValueToEditableJson,
   isJsonEditableVariableType,
@@ -22,7 +22,7 @@ import {
   parseDataFrameValueFromJson,
   parseDataSeriesValueFromJson,
   parseObjectValueFromJson,
-} from './variableValueUtils';
+} from "./variableValueUtils";
 
 interface VariableValueEditorModalProps {
   open: boolean;
@@ -33,7 +33,7 @@ interface VariableValueEditorModalProps {
 }
 
 const jsonTextareaClass =
-  'min-h-[220px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30';
+  "min-h-[220px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 
 export function VariableValueEditorModal({
   open,
@@ -43,7 +43,7 @@ export function VariableValueEditorModal({
   onSave,
 }: VariableValueEditorModalProps) {
   const { t } = useTranslation();
-  const [jsonDraft, setJsonDraft] = useState('');
+  const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const jsonErrorId = useId();
 
@@ -55,26 +55,24 @@ export function VariableValueEditorModal({
 
   const handleClear = () => {
     setJsonError(null);
-    onSave({ kind: 'Null' });
+    onSave({ kind: "Null" });
     onClose();
   };
 
   const handleSave = () => {
-    let result:
-      | { ok: true; value: DataValue }
-      | { ok: false; error: string };
+    let result: { ok: true; value: DataValue } | { ok: false; error: string };
 
     switch (dataType.kind) {
-      case 'Array':
-        result = parseArrayValueFromJson(jsonDraft, dataType.inner ?? { kind: 'Any' });
+      case "Array":
+        result = parseArrayValueFromJson(jsonDraft, dataType.inner ?? { kind: "Any" });
         break;
-      case 'Object':
+      case "Object":
         result = parseObjectValueFromJson(jsonDraft);
         break;
-      case 'DataFrame':
+      case "DataFrame":
         result = parseDataFrameValueFromJson(jsonDraft);
         break;
-      case 'DataSeries':
+      case "DataSeries":
         result = parseDataSeriesValueFromJson(jsonDraft);
         break;
       default:
@@ -106,7 +104,7 @@ export function VariableValueEditorModal({
 
         <div className="min-h-0 flex-1 px-6 py-5">
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <Label htmlFor="variable-value-json">{t('detail.variableValue.jsonLabel')}</Label>
+            <Label htmlFor="variable-value-json">{t("detail.variableValue.jsonLabel")}</Label>
             <ScrollArea className="min-h-0 flex-1">
               <textarea
                 id="variable-value-json"
@@ -132,13 +130,13 @@ export function VariableValueEditorModal({
 
         <DialogFooter className="border-t border-border px-6 py-4">
           <Button type="button" variant="ghost" size="lg" onClick={onClose}>
-            {t('common.cancel')}
+            {t("common.cancel")}
           </Button>
           <Button type="button" variant="outline" size="lg" onClick={handleClear}>
-            {t('detail.variableValue.clear')}
+            {t("detail.variableValue.clear")}
           </Button>
           <Button type="button" size="lg" onClick={handleSave}>
-            {t('common.confirm')}
+            {t("common.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

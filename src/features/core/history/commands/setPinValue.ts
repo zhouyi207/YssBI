@@ -1,6 +1,6 @@
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { CommandHandler, GraphMutationCommandResult } from '../types';
-import { executeGraphIntent } from './executeGraphIntent';
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import { executeGraphIntent } from "./executeGraphIntent";
 
 export interface SetPinValueArgs {
   pinId: string;
@@ -16,7 +16,7 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphMutationCo
       throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);
     }
     return executeGraphIntent(graphPath, {
-      type: 'setLiteral',
+      type: "setLiteral",
       payload: { address: pin.address, literal: args.newValue ?? null },
     });
   },

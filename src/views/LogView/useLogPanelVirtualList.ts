@@ -1,16 +1,11 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  type UIEvent,
-} from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/shared/config-default';
-import type { DiagnosticRecordDto } from '@/shared/types/domain/diagnostics';
-import { isLogViewportPinnedToBottom } from './logPanelScroll';
-import { snapLogViewportToBottom } from './logPanelViewport';
+import { useCallback, useLayoutEffect, useRef, type UIEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from "@/shared/config-default";
+import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import { isLogViewportPinnedToBottom } from "./logPanelScroll";
+import { snapLogViewportToBottom } from "./logPanelViewport";
 
-export type LogPanelPresentation = 'embedded' | 'standalone';
+export type LogPanelPresentation = "embedded" | "standalone";
 
 export interface UseLogPanelVirtualListOptions {
   readonly filteredLogs: readonly DiagnosticRecordDto[];
@@ -66,11 +61,7 @@ export function useLogPanelVirtualList({
 
   const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    pinnedToBottomRef.current = isLogViewportPinnedToBottom(
-      scrollTop,
-      scrollHeight,
-      clientHeight,
-    );
+    pinnedToBottomRef.current = isLogViewportPinnedToBottom(scrollTop, scrollHeight, clientHeight);
   }, []);
 
   useLayoutEffect(() => {

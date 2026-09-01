@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { VscExtensions, VscServerProcess } from 'react-icons/vsc';
+import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { VscExtensions, VscServerProcess } from "react-icons/vsc";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -12,22 +12,22 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
-} from '@/components/ui/popover';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+} from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   BUILT_IN_PLUGIN_MANIFESTS,
   getInstalledPluginManifests,
   JULIA_PLUGIN_ID,
   type PluginManifest,
-} from '@/features/application/plugins/pluginCatalog';
-import { installJuliaPlugin } from '@/features/application/plugins/installJuliaPlugin';
+} from "@/features/application/plugins/pluginCatalog";
+import { installJuliaPlugin } from "@/features/application/plugins/installJuliaPlugin";
 import {
   useJuliaWorkerStatus,
   type JuliaWorkerStatusViewModel,
-} from '@/features/application/statusBar/useJuliaWorkerStatus';
-import { openBayesWindow } from '@/features/application/window';
-import { pluginUi, usePluginUi } from '@/features/core/plugins/ui';
-import { cn } from '@/lib/utils';
+} from "@/features/application/statusBar/useJuliaWorkerStatus";
+import { openBayesWindow } from "@/features/application/window";
+import { pluginUi, usePluginUi } from "@/features/core/plugins/ui";
+import { cn } from "@/lib/utils";
 
 function stopControlPropagation(event: { stopPropagation(): void }): void {
   event.stopPropagation();
@@ -38,7 +38,7 @@ function JuliaMark({ className }: { className?: string }) {
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex size-5 items-center justify-center rounded-[5px] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-rose-400 text-[9px] font-bold tracking-[-0.08em] text-white shadow-sm',
+        "inline-flex size-5 items-center justify-center rounded-[5px] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-rose-400 text-[9px] font-bold tracking-[-0.08em] text-white shadow-sm",
         className,
       )}
     >
@@ -66,7 +66,7 @@ function PluginActivityButton({
             size="icon"
             data-workbench-plugin-action
             data-workbench-plugin-slot={dataSlot}
-            data-workbench-plugin-manager={dataSlot === 'manager' ? true : undefined}
+            data-workbench-plugin-manager={dataSlot === "manager" ? true : undefined}
             aria-label={label}
             className="relative size-10 bg-transparent p-0 text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
           >
@@ -87,13 +87,14 @@ function PluginActivityButton({
 
 function JuliaPluginPanel({ status }: { status: JuliaWorkerStatusViewModel }) {
   const { t } = useTranslation();
-  const statusVariant = status.state === 'ready'
-    ? 'success'
-    : status.state === 'starting'
-      ? 'warning'
-      : status.state === 'unavailable'
-        ? 'destructive'
-        : 'secondary';
+  const statusVariant =
+    status.state === "ready"
+      ? "success"
+      : status.state === "starting"
+        ? "warning"
+        : status.state === "unavailable"
+          ? "destructive"
+          : "secondary";
 
   return (
     <div data-workbench-plugin-view="julia" className="-m-0.5 overflow-hidden">
@@ -101,24 +102,20 @@ function JuliaPluginPanel({ status }: { status: JuliaWorkerStatusViewModel }) {
         <div className="flex items-start gap-3">
           <JuliaMark className="mt-0.5 size-8 rounded-lg text-xs" />
           <div className="min-w-0">
-            <PopoverTitle>{t('plugins.julia.title')}</PopoverTitle>
-            <PopoverDescription>{t('plugins.julia.description')}</PopoverDescription>
+            <PopoverTitle>{t("plugins.julia.title")}</PopoverTitle>
+            <PopoverDescription>{t("plugins.julia.description")}</PopoverDescription>
           </div>
         </div>
       </PopoverHeader>
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">{t('plugins.julia.status')}</span>
+          <span className="text-muted-foreground">{t("plugins.julia.status")}</span>
           <Badge variant={statusVariant}>{status.label}</Badge>
         </div>
         <p className="text-muted-foreground">{status.tooltip}</p>
-        <Button
-          type="button"
-          className="w-full"
-          onClick={() => void openBayesWindow()}
-        >
+        <Button type="button" className="w-full" onClick={() => void openBayesWindow()}>
           <VscServerProcess />
-          {t('plugins.julia.openBayes')}
+          {t("plugins.julia.openBayes")}
         </Button>
       </div>
     </div>
@@ -131,23 +128,16 @@ function JuliaPluginActivitySlot() {
 
   return (
     <Popover>
-      <PluginActivityButton
-        label={t('plugins.julia.title')}
-        dataSlot={JULIA_PLUGIN_ID}
-      >
+      <PluginActivityButton label={t("plugins.julia.title")} dataSlot={JULIA_PLUGIN_ID}>
         <JuliaMark
           className={cn(
-            'size-5',
-            status.state === 'starting' && 'animate-pulse',
-            status.state === 'unavailable' && 'grayscale',
+            "size-5",
+            status.state === "starting" && "animate-pulse",
+            status.state === "unavailable" && "grayscale",
           )}
         />
       </PluginActivityButton>
-      <PopoverContent
-        side="right"
-        align="end"
-        className="w-80 gap-0 p-2.5"
-      >
+      <PopoverContent side="right" align="end" className="w-80 gap-0 p-2.5">
         <JuliaPluginPanel status={status} />
       </PopoverContent>
     </Popover>
@@ -159,20 +149,23 @@ function PluginManagerPanel() {
   const installedPluginIds = usePluginUi((state) => state.installedPluginIds);
   const uninstallPlugin = pluginUi.uninstallPlugin;
   const [installingPluginId, setInstallingPluginId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
 
-  const install = useCallback(async (manifest: PluginManifest) => {
-    if (manifest.id !== JULIA_PLUGIN_ID) {
-      return;
-    }
+  const install = useCallback(
+    async (manifest: PluginManifest) => {
+      if (manifest.id !== JULIA_PLUGIN_ID) {
+        return;
+      }
 
-    setInstallingPluginId(manifest.id);
-    try {
-      await installJuliaPlugin(t);
-    } finally {
-      setInstallingPluginId(null);
-    }
-  }, [t]);
+      setInstallingPluginId(manifest.id);
+      try {
+        await installJuliaPlugin(t);
+      } finally {
+        setInstallingPluginId(null);
+      }
+    },
+    [t],
+  );
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleManifests = BUILT_IN_PLUGIN_MANIFESTS.filter((manifest) => {
@@ -180,26 +173,27 @@ function PluginManagerPanel() {
       return true;
     }
 
-    return [manifest.id, t(manifest.titleKey), t(manifest.descriptionKey)]
-      .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+    return [manifest.id, t(manifest.titleKey), t(manifest.descriptionKey)].some((value) =>
+      value.toLocaleLowerCase().includes(normalizedQuery),
+    );
   });
 
   return (
     <div data-workbench-plugin-manager-content className="-m-0.5 overflow-hidden">
       <PopoverHeader className="border-b border-border/70 bg-muted/20 p-4">
-        <PopoverTitle>{t('plugins.manager.title')}</PopoverTitle>
-        <PopoverDescription>{t('plugins.manager.description')}</PopoverDescription>
+        <PopoverTitle>{t("plugins.manager.title")}</PopoverTitle>
+        <PopoverDescription>{t("plugins.manager.description")}</PopoverDescription>
       </PopoverHeader>
       <div className="space-y-3 p-3">
         <Input
           data-workbench-plugin-search
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('plugins.manager.searchPlaceholder')}
-          aria-label={t('plugins.manager.searchPlaceholder')}
+          placeholder={t("plugins.manager.searchPlaceholder")}
+          aria-label={t("plugins.manager.searchPlaceholder")}
         />
         {visibleManifests.length === 0 ? (
-          <p className="px-1 py-2 text-muted-foreground">{t('plugins.manager.noResults')}</p>
+          <p className="px-1 py-2 text-muted-foreground">{t("plugins.manager.noResults")}</p>
         ) : null}
         {visibleManifests.map((manifest) => {
           const installed = installedPluginIds.includes(manifest.id);
@@ -225,7 +219,7 @@ function PluginManagerPanel() {
                   size="sm"
                   onClick={() => uninstallPlugin(manifest.id)}
                 >
-                  {t('plugins.manager.remove')}
+                  {t("plugins.manager.remove")}
                 </Button>
               ) : (
                 <Button
@@ -234,7 +228,7 @@ function PluginManagerPanel() {
                   disabled={installing}
                   onClick={() => void install(manifest)}
                 >
-                  {installing ? t('plugins.manager.installing') : t('plugins.manager.install')}
+                  {installing ? t("plugins.manager.installing") : t("plugins.manager.install")}
                 </Button>
               )}
             </div>
@@ -250,17 +244,10 @@ function PluginManagerActivitySlot() {
 
   return (
     <Popover>
-      <PluginActivityButton
-        label={t('plugins.manager.title')}
-        dataSlot="manager"
-      >
+      <PluginActivityButton label={t("plugins.manager.title")} dataSlot="manager">
         <VscExtensions size={18} />
       </PluginActivityButton>
-      <PopoverContent
-        side="right"
-        align="end"
-        className="w-80 gap-0 p-2.5"
-      >
+      <PopoverContent side="right" align="end" className="w-80 gap-0 p-2.5">
         <PluginManagerPanel />
       </PopoverContent>
     </Popover>
@@ -279,11 +266,9 @@ export function PluginActivityActions() {
       onMouseDown={stopControlPropagation}
     >
       <PluginManagerActivitySlot />
-      {installedManifests.map((manifest) => (
-        manifest.id === JULIA_PLUGIN_ID
-          ? <JuliaPluginActivitySlot key={manifest.id} />
-          : null
-      ))}
+      {installedManifests.map((manifest) =>
+        manifest.id === JULIA_PLUGIN_ID ? <JuliaPluginActivitySlot key={manifest.id} /> : null,
+      )}
     </div>
   );
 }

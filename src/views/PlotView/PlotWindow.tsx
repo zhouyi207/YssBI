@@ -1,11 +1,16 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { parsePlotPayload, usePresentationWindow } from '@/features/application/presentation';
-import { PlotResultView } from '@/features/application/presentation/PlotResultView';
-import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { parsePlotPayload, usePresentationWindow } from "@/features/application/presentation";
+import { PlotResultView } from "@/features/application/presentation/PlotResultView";
+import { PresentationWindowShell } from "@/features/application/window/PresentationWindowShell";
 
 const PLOT_ICON = (
-  <svg className="h-4 w-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg
+    className="h-4 w-4 text-[var(--accent-color)]"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -17,16 +22,14 @@ const PLOT_ICON = (
 
 export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
-  const { state, windowActions } = usePresentationWindow('plot');
+  const { state, windowActions } = usePresentationWindow("plot");
 
   const plotPayload = useMemo(() => {
-    if (state.status !== 'ready' || state.payload.mode !== 'plot') return null;
+    if (state.status !== "ready" || state.payload.mode !== "plot") return null;
     return parsePlotPayload(state.payload.chart, state.payload.data);
   }, [state]);
 
-
-  const title =
-    state.status === 'ready' ? state.descriptor.title : t('plot.title');
+  const title = state.status === "ready" ? state.descriptor.title : t("plot.title");
 
   return (
     <PresentationWindowShell
@@ -35,16 +38,13 @@ export const PlotWindow: React.FC = () => {
       state={state}
       windowActions={windowActions}
       errorMessages={{
-        missingResultId: t('info.missingDataKey'),
-        notFound: t('plot.noData'),
-        loadFailed: t('plot.failedInitialize'),
+        missingResultId: t("info.missingDataKey"),
+        notFound: t("plot.noData"),
+        loadFailed: t("plot.failedInitialize"),
       }}
       contentClassName="flex min-h-0 flex-1 flex-col p-4"
     >
-      <PlotResultView
-        payload={plotPayload}
-        invalidContent={t('plot.invalidData')}
-      />
+      <PlotResultView payload={plotPayload} invalidContent={t("plot.invalidData")} />
     </PresentationWindowShell>
   );
 };

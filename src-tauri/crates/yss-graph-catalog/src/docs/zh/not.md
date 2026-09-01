@@ -6,10 +6,10 @@ $$
 \text{Result} = \lnot A
 $$
 
-| $A$ | 结果 |
-|-----|------|
-| false | true |
-| true | false |
+| $A$   | 结果  |
+| ----- | ----- |
+| false | true  |
+| true  | false |
 
 ## 用法
 

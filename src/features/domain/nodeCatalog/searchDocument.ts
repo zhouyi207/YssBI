@@ -1,5 +1,5 @@
-import { pinyin } from 'pinyin-pro';
-import type { LocalizedCatalogItemDto } from '@/shared/types/domain/localizedCatalog';
+import { pinyin } from "pinyin-pro";
+import type { LocalizedCatalogItemDto } from "@/shared/types/domain/localizedCatalog";
 
 export interface CatalogSearchDocument {
   nodeTypeId: string;
@@ -14,41 +14,39 @@ export interface CatalogSearchDocument {
 
 const HAN_CHARACTER = /\p{Script=Han}/u;
 const PINYIN_OPTIONS = {
-  toneType: 'none',
-  type: 'array',
-  mode: 'normal',
-  nonZh: 'consecutive',
+  toneType: "none",
+  type: "array",
+  mode: "normal",
+  nonZh: "consecutive",
 } as const;
 
 export function normalizeCatalogSearchText(value: string): string {
   return value
-    .normalize('NFKD')
-    .replace(/\p{Mark}/gu, '')
+    .normalize("NFKD")
+    .replace(/\p{Mark}/gu, "")
     .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}]+/gu, ' ')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
     .trim();
 }
 
 function normalizedUnique(values: Iterable<string>): string[] {
-  return [...new Set(
-    [...values]
-      .map(normalizeCatalogSearchText)
-      .filter(Boolean),
-  )];
+  return [...new Set([...values].map(normalizeCatalogSearchText).filter(Boolean))];
 }
 
-function pinyinForms(values: readonly string[], pattern: 'pinyin' | 'first'): string[] {
-  return normalizedUnique(values
-    .filter((value) => HAN_CHARACTER.test(value))
-    .map((value) => pinyin(value, {
-      ...PINYIN_OPTIONS,
-      pattern,
-    }).join(pattern === 'first' ? '' : ' ')));
+function pinyinForms(values: readonly string[], pattern: "pinyin" | "first"): string[] {
+  return normalizedUnique(
+    values
+      .filter((value) => HAN_CHARACTER.test(value))
+      .map((value) =>
+        pinyin(value, {
+          ...PINYIN_OPTIONS,
+          pattern,
+        }).join(pattern === "first" ? "" : " "),
+      ),
+  );
 }
 
-export function buildCatalogSearchDocument(
-  item: LocalizedCatalogItemDto,
-): CatalogSearchDocument {
+export function buildCatalogSearchDocument(item: LocalizedCatalogItemDto): CatalogSearchDocument {
   const localizedTitle = normalizeCatalogSearchText(item.title);
   const aliases = normalizedUnique(item.aliases);
   const technicalTerms = normalizedUnique(item.technicalTerms);
@@ -69,8 +67,8 @@ export function buildCatalogSearchDocument(
     technicalTerms,
     backendSearchText,
     resourceNames,
-    pinyinFull: pinyinForms(pinyinSources, 'pinyin'),
-    pinyinInitials: pinyinForms(pinyinSources, 'first'),
+    pinyinFull: pinyinForms(pinyinSources, "pinyin"),
+    pinyinInitials: pinyinForms(pinyinSources, "first"),
   };
 }
 
@@ -78,7 +76,7 @@ export function matchesCatalogSearchDocument(
   document: CatalogSearchDocument,
   query: string,
 ): boolean {
-  const terms = normalizeCatalogSearchText(query).split(' ').filter(Boolean);
+  const terms = normalizeCatalogSearchText(query).split(" ").filter(Boolean);
   if (terms.length === 0) return true;
 
   const text = normalizedUnique([
@@ -90,6 +88,6 @@ export function matchesCatalogSearchDocument(
     ...document.resourceNames,
     ...document.pinyinFull,
     ...document.pinyinInitials,
-  ]).join(' ');
+  ]).join(" ");
   return terms.every((term) => text.includes(term));
 }

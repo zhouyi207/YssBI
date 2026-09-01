@@ -1,6 +1,6 @@
-import type { NodePositionDto } from '@/shared/types/domain/editorProjection';
-import type { CommandHandler, GraphMutationCommandResult } from '../types';
-import { executeGraphIntent } from './executeGraphIntent';
+import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
+import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import { executeGraphIntent } from "./executeGraphIntent";
 
 export interface MoveNodesArgs {
   positions: Array<{ nodeId: string; position: NodePositionDto }>;
@@ -9,7 +9,7 @@ export interface MoveNodesArgs {
 export const moveNodesCommand: CommandHandler<MoveNodesArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     return executeGraphIntent(graphPath, {
-      type: 'moveNodes',
+      type: "moveNodes",
       payload: { positions: args.positions },
     });
   },

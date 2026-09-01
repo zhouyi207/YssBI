@@ -1,7 +1,7 @@
-import type { DockviewApi } from 'dockview-react';
-import { logsDockviewRuntime } from './logsRuntime';
+import type { DockviewApi } from "dockview-react";
+import { logsDockviewRuntime } from "./logsRuntime";
 
-const logsBindingTokenBrand: unique symbol = Symbol('logs-dockview-binding');
+const logsBindingTokenBrand: unique symbol = Symbol("logs-dockview-binding");
 
 export type LogsDockviewBindingToken = Readonly<{
   [logsBindingTokenBrand]: number;

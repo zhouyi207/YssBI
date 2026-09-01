@@ -1,8 +1,8 @@
-import type { ChangeEvent } from 'react';
-import { VscCollapseAll, VscExpandAll, VscSearch } from 'react-icons/vsc';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import type { ChangeEvent } from "react";
+import { VscCollapseAll, VscExpandAll, VscSearch } from "react-icons/vsc";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface SidebarTreeSearchInputProps {
   value: string;

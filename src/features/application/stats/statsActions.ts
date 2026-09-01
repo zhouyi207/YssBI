@@ -1,14 +1,14 @@
 import {
   computeAcfPacf as computeAcfPacfService,
   type AcfPacfRequest as ServiceAcfPacfRequest,
-} from '@/services/stats/acfPacfService';
+} from "@/services/stats/acfPacfService";
 import {
   computeSerialTests as computeSerialTestsService,
   type SerialTestsRequest as ServiceSerialTestsRequest,
-} from '@/services/stats/serialTestsService';
-import { hypothesisTest as hypothesisTestService } from '@/services/stats/hypothesisService';
-import { parseAtValues as parseAtValuesService } from '@/services/stats/parseAtService';
-import { PanelDidService } from '@/services/stats/panelDidService';
+} from "@/services/stats/serialTestsService";
+import { hypothesisTest as hypothesisTestService } from "@/services/stats/hypothesisService";
+import { parseAtValues as parseAtValuesService } from "@/services/stats/parseAtService";
+import { PanelDidService } from "@/services/stats/panelDidService";
 
 export { PanelDidService };
 
@@ -55,16 +55,15 @@ export interface SerialTestsResponse {
 
 export interface SerialTestsRequest extends ServiceSerialTestsRequest {}
 
-export async function computeSerialTests(
-  req: SerialTestsRequest,
-): Promise<SerialTestsResponse> {
+export async function computeSerialTests(req: SerialTestsRequest): Promise<SerialTestsResponse> {
   return computeSerialTestsService(req);
 }
 
+export { hypothesisTestService as hypothesisTest };
+export { useRegressionReport } from "./useRegressionReport";
 export {
-  hypothesisTestService as hypothesisTest,
-};
-export { useRegressionReport } from './useRegressionReport';
-export { useHypothesisTestBlock, useHypothesisTestBlock as useStatsBlock } from './useHypothesisTestBlock';
-export { useDidFakeGroupRi } from './useDidFakeGroupRi';
-export type { HypothesisTestResponse } from '@/services/stats/hypothesisService';
+  useHypothesisTestBlock,
+  useHypothesisTestBlock as useStatsBlock,
+} from "./useHypothesisTestBlock";
+export { useDidFakeGroupRi } from "./useDidFakeGroupRi";
+export type { HypothesisTestResponse } from "@/services/stats/hypothesisService";

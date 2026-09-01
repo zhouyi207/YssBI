@@ -1,13 +1,13 @@
-import type { FC } from 'react';
-import { useRegressionReport } from '@/features/application/stats/useRegressionReport';
+import type { FC } from "react";
+import { useRegressionReport } from "@/features/application/stats/useRegressionReport";
 import {
   ReportLayout,
   RSquaredBadge,
   RegressionModelCoreSections,
   OlsStyleDiagnosticsSection,
   IvReportSections,
-} from './shared';
-import type { OLSResultData } from '@/shared/types/report';
+} from "./shared";
+import type { OLSResultData } from "@/shared/types/report";
 
 export type { OLSResultData };
 
@@ -31,7 +31,7 @@ export const TwoSLSComponent: FC<{ data: OLSResultData }> = ({ data }) => {
     >
       <IvReportSections
         variant="2sls"
-        endogName={data.endog_name || 'y'}
+        endogName={data.endog_name || "y"}
         coefficients={coefficients}
         diag={diag}
       />

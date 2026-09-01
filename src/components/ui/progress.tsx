@@ -3,7 +3,9 @@ import { Progress as ProgressPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-export interface ProgressProps extends React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root> {
+export interface ProgressProps extends React.ComponentPropsWithoutRef<
+  typeof ProgressPrimitive.Root
+> {
   /** 上限，与 `value` 组成 0~max 的比例；默认 1 表示 `value` 为 0~1 */
   max?: number;
 }

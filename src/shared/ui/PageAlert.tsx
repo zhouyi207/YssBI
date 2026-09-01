@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react';
-import { VscClose, VscError, VscInfo, VscWarning } from 'react-icons/vsc';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import type { ReactNode } from "react";
+import { VscClose, VscError, VscInfo, VscWarning } from "react-icons/vsc";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export interface PageAlertProps {
   title: ReactNode;
   description?: ReactNode;
-  variant?: 'info' | 'warning' | 'destructive';
+  variant?: "info" | "warning" | "destructive";
   actionLabel?: string;
   onAction?: () => void;
   dismissLabel?: string;
@@ -23,7 +23,7 @@ const icons = {
 export function PageAlert({
   title,
   description,
-  variant = 'info',
+  variant = "info",
   actionLabel,
   onAction,
   dismissLabel,

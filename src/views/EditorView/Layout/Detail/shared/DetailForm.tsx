@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import { DetailFieldRow } from './DetailFieldRow';
-import { DetailText } from './DetailText';
-import { detailTableClass } from './detailStyles';
-
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { DetailFieldRow } from "./DetailFieldRow";
+import { DetailText } from "./DetailText";
+import { detailTableClass } from "./detailStyles";
 
 interface DetailFormProps {
   children: ReactNode;
@@ -16,7 +15,7 @@ export function DetailForm({ children, className }: DetailFormProps) {
   return (
     <Card
       className={cn(
-        'rounded-none border-0 bg-transparent py-0 shadow-none',
+        "rounded-none border-0 bg-transparent py-0 shadow-none",
         detailTableClass,
         className,
       )}
@@ -25,7 +24,6 @@ export function DetailForm({ children, className }: DetailFormProps) {
     </Card>
   );
 }
-
 
 interface DetailCommitInputProps {
   value: string;
@@ -38,7 +36,7 @@ export function DetailCommitInput({
   value,
   onCommit,
   className,
-  type = 'text',
+  type = "text",
 }: DetailCommitInputProps) {
   const [draft, setDraft] = useState(value);
   const skipNextBlurCommitRef = useRef(false);
@@ -57,11 +55,11 @@ export function DetailCommitInput({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       event.currentTarget.blur();
       return;
     }
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       skipNextBlurCommitRef.current = true;
       setDraft(value);
       event.currentTarget.blur();
@@ -80,11 +78,10 @@ export function DetailCommitInput({
   );
 }
 
-
 interface DetailReadonlyFieldProps {
   label: ReactNode;
   children: ReactNode;
-  tone?: 'body' | 'muted' | 'smallMuted' | 'mono' | 'accentMono';
+  tone?: "body" | "muted" | "smallMuted" | "mono" | "accentMono";
   className?: string;
   labelClassName?: string;
   valueClassName?: string;
@@ -93,22 +90,18 @@ interface DetailReadonlyFieldProps {
 export function DetailReadonlyField({
   label,
   children,
-  tone = 'muted',
+  tone = "muted",
   className,
   labelClassName,
   valueClassName,
 }: DetailReadonlyFieldProps) {
   return (
-    <DetailFieldRow
-      label={label}
-      labelClassName={labelClassName}
-      valueClassName={valueClassName}
-    >
+    <DetailFieldRow label={label} labelClassName={labelClassName} valueClassName={valueClassName}>
       <DetailText
         as="div"
         tone={tone}
         className={cn(
-          'flex min-h-8 min-w-0 items-center justify-end truncate px-2 py-1 text-right',
+          "flex min-h-8 min-w-0 items-center justify-end truncate px-2 py-1 text-right",
           className,
         )}
       >

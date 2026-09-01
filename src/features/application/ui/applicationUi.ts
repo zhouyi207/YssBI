@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import { uiStore } from '@/features/core/ui/UIStore';
-import type { ApplicationUiState } from '@/shared/types/ui';
+import { uiStore } from "@/features/core/ui/UIStore";
+import type { ApplicationUiState } from "@/shared/types/ui";
 
 function getApplicationUiSnapshot(): ApplicationUiState {
   return uiStore.getState();

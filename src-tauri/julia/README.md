@@ -6,8 +6,8 @@ The Julia worker is a separate, restartable process owned by Rust. It is the pro
 
 `worker.jl` registers exactly one scientific operation:
 
-| Operation | Handler | Purpose |
-|---|---|---|
+| Operation   | Handler                           | Purpose                                                                      |
+| ----------- | --------------------------------- | ---------------------------------------------------------------------------- |
 | `bayes_fit` | `ops/bayes_fit.jl::run_bayes_fit` | Fit supported Turing regression models and publish typed inference artifacts |
 
 Bayes helpers live under `ops/bayes/`:

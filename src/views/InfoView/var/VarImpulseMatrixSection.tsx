@@ -1,9 +1,9 @@
-import { TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ReportSection } from '../shared/ReportLayout';
-import type { ReportSectionIcon } from '../shared/reportIcons';
-import { formatNum } from '../shared/RegressionShared';
-import { InfoStatsTable } from '../shared/InfoStatsTable';
-import { infoVarHeadClass, VarModelCell, VarModelRow } from '../shared/VarModelTable';
+import { TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ReportSection } from "../shared/ReportLayout";
+import type { ReportSectionIcon } from "../shared/reportIcons";
+import { formatNum } from "../shared/RegressionShared";
+import { InfoStatsTable } from "../shared/InfoStatsTable";
+import { infoVarHeadClass, VarModelCell, VarModelRow } from "../shared/VarModelTable";
 
 export function VarImpulseMatrixSection({
   title,
@@ -22,7 +22,10 @@ export function VarImpulseMatrixSection({
 
   return (
     <ReportSection title={title} icon={icon}>
-      <InfoStatsTable className="mb-6 overflow-x-auto bg-muted" tableClassName="min-w-[400px] text-left text-sm">
+      <InfoStatsTable
+        className="mb-6 overflow-x-auto bg-muted"
+        tableClassName="min-w-[400px] text-left text-sm"
+      >
         <TableHeader>
           <TableRow className="border-b border-border hover:bg-transparent">
             <TableHead className={infoVarHeadClass}>{stepHeader}</TableHead>

@@ -1,9 +1,9 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { freezeProjectionSnapshot } from '@/shared/types/deepReadonly';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
-import type { VariableId, Variable } from '@/shared/types/domain';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
+import { useVariableStore } from "@/features/core/dataStore/variableStore";
+import type { VariableId, Variable } from "@/shared/types/domain";
 
 export interface VariableReadSnapshot {
   readonly variables: DeepReadonly<Record<VariableId, Variable>>;
@@ -42,9 +42,7 @@ export function subscribeVariableRead(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useVariableRead<T>(
-  selector: (snapshot: VariableReadSnapshot) => T,
-): T {
+export function useVariableRead<T>(selector: (snapshot: VariableReadSnapshot) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeVariableRead,
     getVariableSnapshot,

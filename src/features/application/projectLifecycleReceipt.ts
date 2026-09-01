@@ -1,15 +1,15 @@
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
   type ProjectLifecycleStateSnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type {
   LifecycleMutationKind,
   LifecycleMutationResultDto,
   ProjectRecordRow,
-} from '@/shared/types/domain/project';
+} from "@/shared/types/domain/project";
 
 export interface PreparedProjectLifecycleTransition {
   readonly projectInstanceId: string;
@@ -24,8 +24,8 @@ export interface ProjectLifecycleReceiptDependencies {
   markProjectStale(): void;
 }
 
-export type ProjectLifecycleReceiptSource = 'direct' | 'event';
-export type ProjectLifecycleReceiptStatus = 'applied' | 'duplicate' | 'stale';
+export type ProjectLifecycleReceiptSource = "direct" | "event";
+export type ProjectLifecycleReceiptStatus = "applied" | "duplicate" | "stale";
 
 export interface ProjectLifecycleReceiptSettlement {
   status: ProjectLifecycleReceiptStatus;
@@ -44,7 +44,7 @@ export interface PendingProjectLifecycleOperation {
 interface ProjectLifecycleRegistryEntry extends PendingProjectLifecycleOperation {
   readonly expectsActiveProject: boolean;
   readonly registrationGeneration: number;
-  state: 'pending' | 'processing' | 'complete' | 'directLost';
+  state: "pending" | "processing" | "complete" | "directLost";
   fingerprint?: string;
   processing?: Promise<ProjectLifecycleReceiptSettlement>;
   settled?: ProjectLifecycleReceiptSettlement;
@@ -60,20 +60,20 @@ const registrationGenerations = new Map<string, number>();
 let lifecycleClock = () => Date.now();
 
 export class ProjectLifecycleProtocolError extends Error {
-  readonly code = 'project_lifecycle_protocol_error';
+  readonly code = "project_lifecycle_protocol_error";
 
   constructor(
     message: string,
     readonly zeroEffects = false,
   ) {
     super(message);
-    this.name = 'ProjectLifecycleProtocolError';
+    this.name = "ProjectLifecycleProtocolError";
   }
 }
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
-  if (!value || typeof value !== 'object') return value;
+  if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -112,27 +112,29 @@ function validateReceipt(
   entry: ProjectLifecycleRegistryEntry,
   result: LifecycleMutationResultDto,
 ): void {
-  const isInactiveRegistryCleanup = entry.kind === 'delete'
-    && !entry.expectsActiveProject
-    && result.kind === 'registryCleanup';
-  const isActiveRegistryCleanupRejection = entry.kind === 'delete'
-    && entry.expectsActiveProject
-    && result.kind === 'registryCleanup'
-    && result.oldProjectInstanceId === null
-    && result.newProjectInstanceId === null
-    && result.phase === 'registryCommitted'
-    && result.outcome === 'registryFailed'
-    && result.record !== null
-    && result.path === null
-    && result.recovery?.required === true
-    && result.recovery.action === 'cleanupRegistry'
-    && result.recovery.path === null
-    && result.recovery.identity === null
-    && !result.invalidation.project
-    && result.invalidation.registry;
-  if (result.kind !== entry.kind
-    && !isInactiveRegistryCleanup
-    && !isActiveRegistryCleanupRejection) {
+  const isInactiveRegistryCleanup =
+    entry.kind === "delete" && !entry.expectsActiveProject && result.kind === "registryCleanup";
+  const isActiveRegistryCleanupRejection =
+    entry.kind === "delete" &&
+    entry.expectsActiveProject &&
+    result.kind === "registryCleanup" &&
+    result.oldProjectInstanceId === null &&
+    result.newProjectInstanceId === null &&
+    result.phase === "registryCommitted" &&
+    result.outcome === "registryFailed" &&
+    result.record !== null &&
+    result.path === null &&
+    result.recovery?.required === true &&
+    result.recovery.action === "cleanupRegistry" &&
+    result.recovery.path === null &&
+    result.recovery.identity === null &&
+    !result.invalidation.project &&
+    result.invalidation.registry;
+  if (
+    result.kind !== entry.kind &&
+    !isInactiveRegistryCleanup &&
+    !isActiveRegistryCleanupRejection
+  ) {
     throw new ProjectLifecycleProtocolError(
       `operation '${result.operationId}' changed lifecycle kind`,
       true,
@@ -189,11 +191,13 @@ async function rehydrateAndTransition(
   assertEntryCurrent(entry);
   if (!prepared) {
     dependencies.markProjectStale();
-    throw new Error('Project lifecycle hydration preparation returned no project');
+    throw new Error("Project lifecycle hydration preparation returned no project");
   }
-  if (result.outcome === 'committed'
-    && result.newProjectInstanceId
-    && prepared.projectInstanceId !== result.newProjectInstanceId) {
+  if (
+    result.outcome === "committed" &&
+    result.newProjectInstanceId &&
+    prepared.projectInstanceId !== result.newProjectInstanceId
+  ) {
     dependencies.markProjectStale();
     throw new ProjectLifecycleProtocolError(
       `operation '${entry.operationId}' prepared an unexpected project identity`,
@@ -218,22 +222,24 @@ async function processReceipt(
   result: LifecycleMutationResultDto,
   dependencies: ProjectLifecycleReceiptDependencies,
 ): Promise<ProjectLifecycleReceiptSettlement> {
-  if (!entryIsCurrent(entry)) return { status: 'stale', result };
+  if (!entryIsCurrent(entry)) return { status: "stale", result };
 
-  if (result.kind === 'delete' && result.invalidation.project) {
+  if (result.kind === "delete" && result.invalidation.project) {
     assertEntryCurrent(entry);
     projectPublicationCoordinator.cancelProject();
     const owner = captureOwnedTransition(entry);
     await dependencies.clearProject(owner);
-    if (!isProjectLifecycleStateCurrent(owner)) return { status: 'stale', result };
+    if (!isProjectLifecycleStateCurrent(owner)) return { status: "stale", result };
     if (useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId) {
       throw new ProjectLifecycleProtocolError(
         `operation '${entry.operationId}' cleared an unexpected project store identity`,
       );
     }
-  } else if (result.kind === 'saveAs'
-    && result.invalidation.project
-    && (result.outcome === 'committed' || result.outcome === 'activationFailed')) {
+  } else if (
+    result.kind === "saveAs" &&
+    result.invalidation.project &&
+    (result.outcome === "committed" || result.outcome === "activationFailed")
+  ) {
     await rehydrateAndTransition(entry, result, dependencies);
   }
 
@@ -244,7 +250,7 @@ async function processReceipt(
     assertEntryCurrent(entry);
   }
 
-  return { status: 'applied', result, registryProjects };
+  return { status: "applied", result, registryProjects };
 }
 
 export function registerPendingProjectLifecycleOperation(options: {
@@ -260,22 +266,24 @@ export function registerPendingProjectLifecycleOperation(options: {
     );
   }
   if (pendingOperations.size >= MAX_PENDING_LIFECYCLE_OPERATIONS) {
-    const completed = [...pendingOperations.entries()]
-      .find(([, entry]) => entry.state === 'complete' && entry.notificationClaimed);
+    const completed = [...pendingOperations.entries()].find(
+      ([, entry]) => entry.state === "complete" && entry.notificationClaimed,
+    );
     if (completed) pendingOperations.delete(completed[0]);
   }
   if (pendingOperations.size >= MAX_PENDING_LIFECYCLE_OPERATIONS) {
-    throw new ProjectLifecycleProtocolError('Too many pending project lifecycle operations');
+    throw new ProjectLifecycleProtocolError("Too many pending project lifecycle operations");
   }
   const lifecycle = captureProjectLifecycleState();
   const storeProjectInstanceId = useProjectIOStore.getState().projectInstanceId;
   if (storeProjectInstanceId !== lifecycle.projectInstanceId) {
     throw new ProjectLifecycleProtocolError(
-      'Project store identity does not match the application lifecycle owner',
+      "Project store identity does not match the application lifecycle owner",
     );
   }
-  const expectsActiveProject = options.expectsActiveProject
-    ?? (options.kind !== 'create' && lifecycle.projectInstanceId !== null);
+  const expectsActiveProject =
+    options.expectsActiveProject ??
+    (options.kind !== "create" && lifecycle.projectInstanceId !== null);
   const registrationGeneration = (registrationGenerations.get(operationId) ?? 0) + 1;
   registrationGenerations.set(operationId, registrationGeneration);
   const entry: ProjectLifecycleRegistryEntry = {
@@ -285,7 +293,7 @@ export function registerPendingProjectLifecycleOperation(options: {
     projectInstanceId: lifecycle.projectInstanceId,
     coordinatorEpoch: lifecycle.epoch,
     expectsActiveProject,
-    state: 'pending',
+    state: "pending",
     notificationClaimed: false,
     isCurrent: () => entryIsCurrent(entry),
   };
@@ -300,35 +308,35 @@ export async function applyProjectLifecycleReceipt(
 ): Promise<ProjectLifecycleReceiptSettlement> {
   sweepLifecycleRegistry();
   const entry = pendingOperations.get(result.operationId);
-  if (!entry) return { status: 'stale', result };
-  if (source === 'event' && entry.registrationGeneration > 1 && !entry.fingerprint) {
-    return { status: 'stale', result };
+  if (!entry) return { status: "stale", result };
+  if (source === "event" && entry.registrationGeneration > 1 && !entry.fingerprint) {
+    return { status: "stale", result };
   }
   validateReceipt(entry, result);
-  if (!entryIsCurrent(entry)) return { status: 'stale', result };
-  if (entry.state === 'complete' && entry.settled) {
-    return { ...entry.settled, status: 'duplicate' };
+  if (!entryIsCurrent(entry)) return { status: "stale", result };
+  if (entry.state === "complete" && entry.settled) {
+    return { ...entry.settled, status: "duplicate" };
   }
 
-  if (entry.state === 'processing' && entry.processing) {
+  if (entry.state === "processing" && entry.processing) {
     try {
       const settled = await entry.processing;
-      return { ...settled, status: 'duplicate' };
+      return { ...settled, status: "duplicate" };
     } catch (error) {
-      if (source === 'event') throw error;
+      if (source === "event") throw error;
     }
-    if (!entryIsCurrent(entry)) return { status: 'stale', result };
+    if (!entryIsCurrent(entry)) return { status: "stale", result };
   }
 
-  entry.state = 'processing';
+  entry.state = "processing";
   const processing = processReceipt(entry, result, dependencies);
   entry.processing = processing;
   try {
     const settlement = await processing;
-    if (entry.processing !== processing) return { status: 'duplicate', result };
+    if (entry.processing !== processing) return { status: "duplicate", result };
     entry.processing = undefined;
-    entry.state = settlement.status === 'applied' ? 'complete' : 'pending';
-    if (entry.state === 'complete') {
+    entry.state = settlement.status === "applied" ? "complete" : "pending";
+    if (entry.state === "complete") {
       entry.settled = settlement;
       entry.expiresAt = lifecycleClock() + PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS;
     }
@@ -336,7 +344,7 @@ export async function applyProjectLifecycleReceipt(
   } catch (error) {
     if (entry.processing === processing) {
       entry.processing = undefined;
-      entry.state = 'pending';
+      entry.state = "pending";
     }
     throw error;
   }
@@ -347,10 +355,7 @@ export function claimProjectLifecycleInitiatorSettlement(
 ): ProjectLifecycleReceiptSettlement | undefined {
   sweepLifecycleRegistry();
   const entry = pendingOperations.get(operationId);
-  if (!entry
-    || entry.notificationClaimed
-    || entry.state !== 'complete'
-    || !entry.settled) {
+  if (!entry || entry.notificationClaimed || entry.state !== "complete" || !entry.settled) {
     return undefined;
   }
   entry.notificationClaimed = true;
@@ -368,8 +373,8 @@ export async function recoverProjectLifecycleDirectFailure(
   sweepLifecycleRegistry();
   let entry = pendingOperations.get(operationId);
   if (!entry) return undefined;
-  if (entry.state === 'complete') return entry.settled;
-  if (entry.state === 'processing' && entry.processing) {
+  if (entry.state === "complete") return entry.settled;
+  if (entry.state === "processing" && entry.processing) {
     try {
       return await entry.processing;
     } catch {
@@ -378,8 +383,8 @@ export async function recoverProjectLifecycleDirectFailure(
       if (!entry) return undefined;
     }
   }
-  if (entry.state === 'pending') {
-    entry.state = 'directLost';
+  if (entry.state === "pending") {
+    entry.state = "directLost";
     entry.expiresAt = lifecycleClock() + PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS;
   }
   return undefined;
@@ -387,7 +392,7 @@ export async function recoverProjectLifecycleDirectFailure(
 
 export function cancelPendingProjectLifecycleOperation(operationId: string): void {
   const entry = pendingOperations.get(operationId);
-  if (entry && entry.state !== 'complete') pendingOperations.delete(operationId);
+  if (entry && entry.state !== "complete") pendingOperations.delete(operationId);
 }
 
 export function getProjectLifecycleRegistrySizeForTests(): number {

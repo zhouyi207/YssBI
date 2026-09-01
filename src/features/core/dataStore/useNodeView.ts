@@ -6,25 +6,32 @@
  *   - graph-scoped pins        输入/输出 Pin
  *   - graph-scoped connections 连接状态（派生 connected / connectionIds）
  */
-import { useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import type { UINode } from '@/shared/types/ui';
-import { useGraphDataStore } from './graphDataStore';
-import { toUiNode } from './nodeView';
+import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
+import type { UINode } from "@/shared/types/ui";
+import { useGraphDataStore } from "./graphDataStore";
+import { toUiNode } from "./nodeView";
 
 export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
-  const nodeData = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
-
+  const nodeData = useGraphDataStore((s) =>
+    graphPath ? s.getGraphNode(graphPath, nodeId) : undefined,
+  );
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
-      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPin(graphPath, pid)) : [],
+      graphPath
+        ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPin(graphPath, pid))
+        : [],
     ),
   );
 
   const pinConns = useGraphDataStore(
     useShallow((s) =>
-      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPinConnections(graphPath, pid)) : [],
+      graphPath
+        ? s
+            .getGraphNodePins(graphPath, nodeId)
+            .map((pid) => s.getGraphPinConnections(graphPath, pid))
+        : [],
     ),
   );
 

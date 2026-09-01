@@ -2,9 +2,9 @@
  * IV / 2SLS / LIML 报告 DTO（对齐 Rust `info_nodes.rs`）
  */
 
-import { isFiniteNumber, isRecord, isString, isStringArray } from './guards';
-import type { Coefficient } from './regression';
-import { parseCoefficientList } from './parseCommon';
+import { isFiniteNumber, isRecord, isString, isStringArray } from "./guards";
+import type { Coefficient } from "./regression";
+import { parseCoefficientList } from "./parseCommon";
 
 export interface IvLimlOveridTest {
   anderson_rubin_stat: number;
@@ -50,7 +50,7 @@ export interface Iv2slsStockYogoCv {
 }
 
 export interface Iv2slsOveridTest {
-  test_type: 'sargan_basmann' | 'wooldridge';
+  test_type: "sargan_basmann" | "wooldridge";
   sargan_stat?: number;
   sargan_p_value?: number;
   basmann_stat?: number;

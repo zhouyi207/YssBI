@@ -1,46 +1,46 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEditorStore } from '@/features/core/editor';
-import { PROJECT_TREE_EXPANSION_DEFAULTS, useSidebarStore } from '@/features/core/sidebar';
-import { useVariableManagement } from './useVariableManagement';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEditorStore } from "@/features/core/editor";
+import { PROJECT_TREE_EXPANSION_DEFAULTS, useSidebarStore } from "@/features/core/sidebar";
+import { useVariableManagement } from "./useVariableManagement";
 
 const mocks = vi.hoisted(() => ({
   createVariableAction: vi.fn(),
   revealWorkbenchView: vi.fn(),
 }));
 
-vi.mock('./variableActions', () => ({
+vi.mock("./variableActions", () => ({
   createVariableAction: mocks.createVariableAction,
 }));
 
-vi.mock('@/features/application/layout/workbenchLayoutActions', () => ({
+vi.mock("@/features/application/layout/workbenchLayoutActions", () => ({
   revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 
-vi.mock('@/features/core/editor/hooks/useActiveEditorGroup', () => ({
+vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
   useActiveEditorGroup: () => ({
-    activeTabId: 'functions/Detail.yssbi-function',
-    tabs: [{ id: 'functions/Detail.yssbi-function', type: 'function' }],
+    activeTabId: "functions/Detail.yssbi-function",
+    tabs: [{ id: "functions/Detail.yssbi-function", type: "function" }],
   }),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('useVariableManagement', () => {
+describe("useVariableManagement", () => {
   let root: Root;
   let host: HTMLDivElement;
   let actions: ReturnType<typeof useVariableManagement>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.createVariableAction.mockResolvedValue('variable-1');
-    useEditorStore.setState({ variablesGraphScopePath: 'functions/Detail.yssbi-function' });
+    mocks.createVariableAction.mockResolvedValue("variable-1");
+    useEditorStore.setState({ variablesGraphScopePath: "functions/Detail.yssbi-function" });
     useSidebarStore.setState({
       projectTreeExpandedCategories: { ...PROJECT_TREE_EXPANSION_DEFAULTS },
     });
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     function Harness() {
@@ -55,38 +55,38 @@ describe('useVariableManagement', () => {
     host.remove();
   });
 
-  it('uses an explicit Project graph scope over the remembered Detail scope', async () => {
+  it("uses an explicit Project graph scope over the remembered Detail scope", async () => {
     const scope = {
-      graphPath: 'events/Main.yssbi-event',
-      graphType: 'event' as const,
+      graphPath: "events/Main.yssbi-event",
+      graphType: "event" as const,
     };
 
     await act(async () => {
-      await actions.addVariable('Threshold', 'Int64', false, { graphScope: scope });
+      await actions.addVariable("Threshold", "Int64", false, { graphScope: scope });
     });
 
-    expect(mocks.createVariableAction).toHaveBeenCalledWith(expect.objectContaining({
-      activeGraphPath: scope.graphPath,
-      graphType: scope.graphType,
-      isGlobal: false,
-    }));
-    expect(mocks.revealWorkbenchView).toHaveBeenCalledWith('project');
-    expect(useSidebarStore.getState().projectTreeExpandedCategories)
-      .toMatchObject({
-        'project.variables': true,
-        'project.localVariables': true,
-      });
+    expect(mocks.createVariableAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeGraphPath: scope.graphPath,
+        graphType: scope.graphType,
+        isGlobal: false,
+      }),
+    );
+    expect(mocks.revealWorkbenchView).toHaveBeenCalledWith("project");
+    expect(useSidebarStore.getState().projectTreeExpandedCategories).toMatchObject({
+      "project.variables": true,
+      "project.localVariables": true,
+    });
   });
 
-  it('expands the Variables and global folders for a global variable', async () => {
+  it("expands the Variables and global folders for a global variable", async () => {
     await act(async () => {
-      await actions.addVariable('Theme', 'String', true);
+      await actions.addVariable("Theme", "String", true);
     });
 
-    expect(useSidebarStore.getState().projectTreeExpandedCategories)
-      .toMatchObject({
-        'project.variables': true,
-        'project.globalVariables': true,
-      });
+    expect(useSidebarStore.getState().projectTreeExpandedCategories).toMatchObject({
+      "project.variables": true,
+      "project.globalVariables": true,
+    });
   });
 });

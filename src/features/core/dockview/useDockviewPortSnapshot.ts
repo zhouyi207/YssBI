@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
 interface DockviewSnapshotPort<TSnapshot> {
   subscribe(listener: () => void): () => void;
@@ -8,9 +8,5 @@ interface DockviewSnapshotPort<TSnapshot> {
 export function useDockviewPortSnapshot<TSnapshot>(
   port: DockviewSnapshotPort<TSnapshot>,
 ): TSnapshot {
-  return useSyncExternalStore(
-    port.subscribe,
-    port.getSnapshot,
-    port.getSnapshot,
-  );
+  return useSyncExternalStore(port.subscribe, port.getSnapshot, port.getSnapshot);
 }

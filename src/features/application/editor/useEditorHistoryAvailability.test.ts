@@ -1,25 +1,27 @@
 // @vitest-environment happy-dom
-import { act, createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useHistoryStore } from '@/features/core/history';
-import { HistoryService } from '@/services/nodeSystem/historyService';
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useHistoryStore } from "@/features/core/history";
+import { HistoryService } from "@/services/nodeSystem/historyService";
 import {
   resetHistoryCoordinator,
   setHistoryStatus,
-} from '@/features/application/editorMutation/historyCoordinator';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { useEditorHistoryAvailability } from './useEditorHistoryAvailability';
+} from "@/features/application/editorMutation/historyCoordinator";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const activeEditor = vi.hoisted(() => ({ activeTabId: 'events/Main.yssbi-event' as string | null }));
-const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+const activeEditor = vi.hoisted(() => ({
+  activeTabId: "events/Main.yssbi-event" as string | null,
+}));
+const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 
-vi.mock('@/features/core/editor/hooks/useActiveEditorGroup', () => ({
+vi.mock("@/features/core/editor/hooks/useActiveEditorGroup", () => ({
   useActiveEditorGroup: () => ({ activeTabId: activeEditor.activeTabId }),
 }));
-vi.mock('@/services/nodeSystem/historyService', () => ({
+vi.mock("@/services/nodeSystem/historyService", () => ({
   HistoryService: {
     getStatus: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     undo: vi.fn(),
@@ -27,7 +29,7 @@ vi.mock('@/services/nodeSystem/historyService', () => ({
   },
 }));
 
-describe('useEditorHistoryAvailability', () => {
+describe("useEditorHistoryAvailability", () => {
   let host: HTMLDivElement;
   let root: Root;
   let current: ReturnType<typeof useEditorHistoryAvailability> | undefined;
@@ -41,9 +43,9 @@ describe('useEditorHistoryAvailability', () => {
     vi.clearAllMocks();
     resetHistoryCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    activeEditor.activeTabId = 'events/Main.yssbi-event';
+    activeEditor.activeTabId = "events/Main.yssbi-event";
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -53,8 +55,7 @@ describe('useEditorHistoryAvailability', () => {
     host.remove();
   });
 
-
-  it('queries backend history status when availability is first consumed', async () => {
+  it("queries backend history status when availability is first consumed", async () => {
     vi.mocked(HistoryService.getStatus).mockResolvedValueOnce({ canUndo: true, canRedo: false });
 
     await act(async () => {
@@ -67,12 +68,12 @@ describe('useEditorHistoryAvailability', () => {
     expect(current).toMatchObject({ canUndo: true, canRedo: false, pending: false });
   });
 
-  it('uses project history status only for an active graph and masks it while pending', () => {
+  it("uses project history status only for an active graph and masks it while pending", () => {
     setHistoryStatus({ canUndo: true, canRedo: true });
     act(() => root.render(createElement(Harness)));
 
     expect(current).toEqual({
-      activeTabId: 'events/Main.yssbi-event',
+      activeTabId: "events/Main.yssbi-event",
       canUndo: true,
       canRedo: true,
       pending: false,

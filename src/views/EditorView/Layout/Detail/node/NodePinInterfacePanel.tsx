@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useGraphRead } from '@/features/core/graph/read';
-import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
-import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
-import { detailEmptyHintClass } from '../shared/detailStyles';
-import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
-import { NodePinConnectionField } from './NodePinConnectionField';
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { useGraphRead } from "@/features/core/graph/read";
+import type { ConnectionData, NodeData, PinData } from "@/shared/types/store/graph";
+import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import { detailEmptyHintClass } from "../shared/detailStyles";
+import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
+import { NodePinConnectionField } from "./NodePinConnectionField";
 
 interface NodePinInterfacePanelProps {
   graphPath: string;
@@ -49,11 +49,7 @@ function PinList({
   );
 }
 
-export function NodePinInterfacePanel({
-  graphPath,
-  inputs,
-  outputs,
-}: NodePinInterfacePanelProps) {
+export function NodePinInterfacePanel({ graphPath, inputs, outputs }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
   const graphPins = useMemo(
@@ -61,7 +57,10 @@ export function NodePinInterfacePanel({
     [bucket],
   );
   const graphConnections = useMemo(
-    () => Object.values(bucket?.connections ?? {}).map((connection) => structuredClone(connection) as ConnectionData),
+    () =>
+      Object.values(bucket?.connections ?? {}).map(
+        (connection) => structuredClone(connection) as ConnectionData,
+      ),
     [bucket],
   );
   const graphNodes = useMemo(
@@ -71,24 +70,20 @@ export function NodePinInterfacePanel({
 
   return (
     <>
-      <DetailCollapsibleSection
-        title={t('detail.nodeDoc.inputs')}
-      >
+      <DetailCollapsibleSection title={t("detail.nodeDoc.inputs")}>
         <PinList
           graphPath={graphPath}
-          emptyLabel={t('detail.nodeDoc.noInputs')}
+          emptyLabel={t("detail.nodeDoc.noInputs")}
           pins={inputs}
           graphPins={graphPins}
           nodes={graphNodes}
           connections={graphConnections}
         />
       </DetailCollapsibleSection>
-      <DetailCollapsibleSection
-        title={t('detail.nodeDoc.outputs')}
-      >
+      <DetailCollapsibleSection title={t("detail.nodeDoc.outputs")}>
         <PinList
           graphPath={graphPath}
-          emptyLabel={t('detail.nodeDoc.noOutputs')}
+          emptyLabel={t("detail.nodeDoc.noOutputs")}
           pins={outputs}
           graphPins={graphPins}
           nodes={graphNodes}

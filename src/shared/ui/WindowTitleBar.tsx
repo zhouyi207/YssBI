@@ -1,7 +1,7 @@
-import { useEffect, type ComponentProps, type MouseEventHandler } from 'react';
-import { cn } from '@/lib/utils';
+import { useEffect, type ComponentProps, type MouseEventHandler } from "react";
+import { cn } from "@/lib/utils";
 
-export type WindowTitleBarProps = ComponentProps<'div'> & {
+export type WindowTitleBarProps = ComponentProps<"div"> & {
   /** 子窗口标题栏（Info / Plot / Log 等）提高 stacking */
   childWindow?: boolean;
   /** 主编辑窗口顶层标题栏，提高 z-index */
@@ -20,14 +20,14 @@ export function WindowTitleBar({
   ...props
 }: WindowTitleBarProps) {
   useEffect(() => {
-    const endDrag = () => window.dispatchEvent(new Event('yssbi-window-drag-end'));
-    window.addEventListener('mouseup', endDrag, true);
-    window.addEventListener('pointerup', endDrag, true);
-    window.addEventListener('blur', endDrag);
+    const endDrag = () => window.dispatchEvent(new Event("yssbi-window-drag-end"));
+    window.addEventListener("mouseup", endDrag, true);
+    window.addEventListener("pointerup", endDrag, true);
+    window.addEventListener("blur", endDrag);
     return () => {
-      window.removeEventListener('mouseup', endDrag, true);
-      window.removeEventListener('pointerup', endDrag, true);
-      window.removeEventListener('blur', endDrag);
+      window.removeEventListener("mouseup", endDrag, true);
+      window.removeEventListener("pointerup", endDrag, true);
+      window.removeEventListener("blur", endDrag);
     };
   }, []);
 
@@ -36,7 +36,7 @@ export function WindowTitleBar({
     if (activeElement instanceof HTMLElement && activeElement !== event.currentTarget) {
       activeElement.blur();
     }
-    window.dispatchEvent(new Event('yssbi-window-drag-start'));
+    window.dispatchEvent(new Event("yssbi-window-drag-start"));
     onMouseDownCapture?.(event);
   };
 
@@ -45,9 +45,9 @@ export function WindowTitleBar({
       data-tauri-drag-region
       onMouseDownCapture={handleMouseDownCapture}
       className={cn(
-        'flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none',
-        childWindow && 'z-50',
-        elevated ? 'relative z-100' : 'relative',
+        "flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none",
+        childWindow && "z-50",
+        elevated ? "relative z-100" : "relative",
         className,
       )}
       {...props}
@@ -56,8 +56,8 @@ export function WindowTitleBar({
 }
 
 /** 标题栏右侧工具钮 + 窗口控制区，保证 stretch 与 hover 铺满高度 */
-export function WindowTitleBarActions({ className, ...props }: ComponentProps<'div'>) {
+export function WindowTitleBarActions({ className, ...props }: ComponentProps<"div">) {
   return (
-    <div className={cn('flex h-full shrink-0 self-stretch items-stretch', className)} {...props} />
+    <div className={cn("flex h-full shrink-0 self-stretch items-stretch", className)} {...props} />
   );
 }

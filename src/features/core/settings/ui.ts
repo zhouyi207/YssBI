@@ -1,10 +1,10 @@
-import { useSettingsStore } from './settingsStore';
+import { useSettingsStore } from "./settingsStore";
 import type {
   AppearanceSettings,
   EditorSettings,
   ProjectSettings,
   ThemeSettings,
-} from '@/shared/types/settings';
+} from "@/shared/types/settings";
 
 export interface SettingsUiCapability {
   readonly setTheme: (theme: string) => void;

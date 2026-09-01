@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import type { ErrorReference } from '@/features/application/errorReference';
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import type { ResultPage } from '@/shared/types/domain/result';
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { ResultPage } from "@/shared/types/domain/result";
 import type {
   ResultPageRequest,
   ResultQueryCoordinator,
   ResultQueryOutcome,
   ResultQueryReadCapability,
-} from './resultQueryCoordinator';
-import { resultQueryCoordinator, resultQueryRead } from './runtime';
+} from "./resultQueryCoordinator";
+import { resultQueryCoordinator, resultQueryRead } from "./runtime";
 
 const DEFAULT_PAGE_SIZE = 200;
 const EMPTY_ROWS: readonly unknown[][] = [];
@@ -38,8 +38,8 @@ export interface PagedResultRowsState {
 }
 
 function rowsFromPage(page: DeepReadonly<ResultPage> | null): readonly (readonly unknown[])[] {
-  if (!page || page.valueKind !== 'sequence') return EMPTY_ROWS;
-  return page.values.map((value) => Array.isArray(value) ? value : [value]);
+  if (!page || page.valueKind !== "sequence") return EMPTY_ROWS;
+  return page.values.map((value) => (Array.isArray(value) ? value : [value]));
 }
 
 export function usePagedResultRows(
@@ -57,50 +57,54 @@ export function usePagedResultRows(
   const [loadedPage, setLoadedPage] = useState<DeepReadonly<ResultPage> | null>(null);
   const requestedOffset = pageIndex * safePageSize;
   const request: ResultPageRequest = {
-    resultId: resultId ?? '',
+    resultId: resultId ?? "",
     offset: requestedOffset,
     limit: safePageSize,
   };
   const projectedPage = useSyncExternalStore(
     dependencies.read.subscribe,
-    () => resultId === null ? null : dependencies.read.getPage(request),
-    () => resultId === null ? null : dependencies.read.getPage(request),
+    () => (resultId === null ? null : dependencies.read.getPage(request)),
+    () => (resultId === null ? null : dependencies.read.getPage(request)),
   );
   const page = projectedPage ?? loadedPage;
   const effectiveTotalCount = page?.totalCount ?? Math.max(0, totalCount);
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / safePageSize));
   const boundedPageIndex = Math.min(pageIndex, totalPages - 1);
-  const error = resultId === null
-    ? null
-    : dependencies.read.getFailure({ kind: 'page', ...request });
+  const error =
+    resultId === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
 
   useEffect(() => {
     setPageIndex(0);
     setLoadedPage(null);
   }, [resultId, totalCount, safePageSize]);
 
-  const loadPage = useCallback(async (nextPageIndex: number): Promise<ResultQueryOutcome> => {
-    if (resultId === null) return { status: 'notReady' };
-    const nextOffset = Math.max(0, nextPageIndex) * safePageSize;
-    setLoading(true);
-    try {
-      const outcome = await dependencies.coordinator.loadPage({
-        resultId,
-        offset: nextOffset,
-        limit: safePageSize,
-      });
-      if (outcome.status === 'published') {
-        setLoadedPage(dependencies.read.getPage({
+  const loadPage = useCallback(
+    async (nextPageIndex: number): Promise<ResultQueryOutcome> => {
+      if (resultId === null) return { status: "notReady" };
+      const nextOffset = Math.max(0, nextPageIndex) * safePageSize;
+      setLoading(true);
+      try {
+        const outcome = await dependencies.coordinator.loadPage({
           resultId,
           offset: nextOffset,
           limit: safePageSize,
-        }));
+        });
+        if (outcome.status === "published") {
+          setLoadedPage(
+            dependencies.read.getPage({
+              resultId,
+              offset: nextOffset,
+              limit: safePageSize,
+            }),
+          );
+        }
+        return outcome;
+      } finally {
+        setLoading(false);
       }
-      return outcome;
-    } finally {
-      setLoading(false);
-    }
-  }, [dependencies.coordinator, dependencies.read, resultId, safePageSize]);
+    },
+    [dependencies.coordinator, dependencies.read, resultId, safePageSize],
+  );
 
   useEffect(() => {
     if (resultId === null || effectiveTotalCount <= 0) {
@@ -110,14 +114,18 @@ export function usePagedResultRows(
     void loadPage(boundedPageIndex);
   }, [boundedPageIndex, effectiveTotalCount, loadPage, resultId]);
 
-  const goToPage = useCallback((nextPageIndex: number): void => {
-    const clamped = Math.max(0, Math.min(nextPageIndex, totalPages - 1));
-    setPageIndex(clamped);
-  }, [totalPages]);
+  const goToPage = useCallback(
+    (nextPageIndex: number): void => {
+      const clamped = Math.max(0, Math.min(nextPageIndex, totalPages - 1));
+      setPageIndex(clamped);
+    },
+    [totalPages],
+  );
 
-  const reload = useCallback(async (): Promise<ResultQueryOutcome> => (
-    loadPage(boundedPageIndex)
-  ), [boundedPageIndex, loadPage]);
+  const reload = useCallback(
+    async (): Promise<ResultQueryOutcome> => loadPage(boundedPageIndex),
+    [boundedPageIndex, loadPage],
+  );
 
   return {
     offset: page?.offset ?? requestedOffset,

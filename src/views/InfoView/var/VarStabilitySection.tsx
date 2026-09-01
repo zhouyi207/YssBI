@@ -1,6 +1,6 @@
-import { ReportSection } from '../shared/ReportLayout';
-import { VarEigenvalueStabilityPanel } from '../shared/VarEigenvalueStabilityPanel';
-import type { VARStableRow } from '@/shared/types/report';
+import { ReportSection } from "../shared/ReportLayout";
+import { VarEigenvalueStabilityPanel } from "../shared/VarEigenvalueStabilityPanel";
+import type { VARStableRow } from "@/shared/types/report";
 
 export function VarStabilitySection({ rows }: { rows: VARStableRow[] }) {
   if (rows.length === 0) return null;

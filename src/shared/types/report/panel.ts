@@ -2,11 +2,11 @@
  * 面板回归报告 DTO
  */
 
-import type { OLSResultData } from './regression';
+import type { OLSResultData } from "./regression";
 
 export interface PanelSelectionTest {
   id: string;
-  group: 'model_choice' | 'effect_choice' | string;
+  group: "model_choice" | "effect_choice" | string;
   label: string;
   h0: string;
   stat_type: string;
@@ -14,7 +14,7 @@ export interface PanelSelectionTest {
   df1?: number;
   df2?: number;
   p_value?: number;
-  decision: 'significant' | 'not_significant' | 'unavailable' | string;
+  decision: "significant" | "not_significant" | "unavailable" | string;
   recommendation: string;
   note?: string;
 }

@@ -1,28 +1,28 @@
-import type { TFunction } from 'i18next';
-import { showWorkbenchLayoutError } from '@/features/application/layout/workbenchLayoutErrorFeedback';
+import type { TFunction } from "i18next";
+import { showWorkbenchLayoutError } from "@/features/application/layout/workbenchLayoutErrorFeedback";
 import {
   openPresentationWindow,
   presentationWindowPayloadFromDescriptor,
-} from '@/features/application/window';
-import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+} from "@/features/application/window";
+import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,
-} from '@/features/core/execution/pinViewTarget';
-import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
+} from "@/features/core/execution/pinViewTarget";
+import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   resolveInspectableResult,
   resolveInspectableResultRef,
   type InspectableResultRef,
-} from '@/features/application/results';
-import type { ResultDescriptor } from '@/shared/types/domain/result';
-import type { PinHistoryProjection } from '@/shared/types/ui/execution';
-import { resultQueryCoordinator, resultQueryRead } from '@/features/application/results';
-import { resultPanelKey } from '@/features/domain/result';
+} from "@/features/application/results";
+import type { ResultDescriptor } from "@/shared/types/domain/result";
+import type { PinHistoryProjection } from "@/shared/types/ui/execution";
+import { resultQueryCoordinator, resultQueryRead } from "@/features/application/results";
+import { resultPanelKey } from "@/features/domain/result";
 
 export async function launchInspectablePresentation(
   descriptor: ResultDescriptor,
@@ -53,16 +53,14 @@ export async function openInspectableResult(
     );
     if (!isCurrentProjectIdentity(project)) return false;
     if (resolved.history) {
-      useExecutionStore.getState().recordPinHistory(
-        structuredClone(resolved.history) as PinHistoryProjection,
-      );
+      useExecutionStore
+        .getState()
+        .recordPinHistory(structuredClone(resolved.history) as PinHistoryProjection);
     }
     descriptor = resolved.ref
-      ? structuredClone(await resolveInspectableResult(
-        resolved.ref,
-        dependencies,
-        options?.selectedResultId,
-      )) as ResultDescriptor | null
+      ? (structuredClone(
+          await resolveInspectableResult(resolved.ref, dependencies, options?.selectedResultId),
+        ) as ResultDescriptor | null)
       : null;
     if (!isCurrentProjectIdentity(project) || !descriptor) return false;
   } catch {
@@ -92,9 +90,11 @@ export async function openPinInspectableView(
 ): Promise<boolean> {
   const { refs } = evaluatePinViewState(params);
   for (const ref of refs) {
-    if (await openInspectableResult(ref, t, {
-      selectedResultId: options?.selectedResultId,
-    })) {
+    if (
+      await openInspectableResult(ref, t, {
+        selectedResultId: options?.selectedResultId,
+      })
+    ) {
       return true;
     }
   }

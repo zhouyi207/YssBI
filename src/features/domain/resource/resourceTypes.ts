@@ -1,6 +1,6 @@
-import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
+import type { GraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
-export type ResourceKind = GraphResourceKind | 'worksheet' | 'database' | 'variable';
+export type ResourceKind = GraphResourceKind | "worksheet" | "database" | "variable";
 
 /** Canonical store key — always equals `ProjectResourceMeta.uri`. */
 export type ResourceKey = string;
@@ -16,7 +16,7 @@ export interface ProjectResourceMeta {
   name: string;
   uri: string;
   parentId?: string;
-  scope?: { type: 'global' | 'event' | 'function'; graphPath?: string };
+  scope?: { type: "global" | "event" | "function"; graphPath?: string };
   revision?: number;
   exists: boolean;
   loaded: boolean;

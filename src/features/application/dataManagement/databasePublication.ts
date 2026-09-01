@@ -1,26 +1,27 @@
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import {
   useColumnDistributionStore,
   type DistributionMap,
-} from '@/features/core/dataStore/columnDistributionStore';
+} from "@/features/core/dataStore/columnDistributionStore";
 import {
   useColumnStatsStore,
   type ColumnStatsMap,
-} from '@/features/core/dataStore/columnStatsStore';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
-import type { ColumnDistribution, ColumnStats, DatasetOverview } from '@/shared/types/domain/dataframe';
-import type { DatabaseId } from '@/shared/types/domain/ids';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import type { ErrorReference } from '@/features/application/errorReference';
-import type { DatabaseReadSnapshot } from '@/features/application/dataManagement/databaseRead';
+} from "@/features/core/dataStore/columnStatsStore";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useDatasetOverviewStore } from "@/features/core/dataStore/datasetOverviewStore";
+import type {
+  ColumnDistribution,
+  ColumnStats,
+  DatasetOverview,
+} from "@/shared/types/domain/dataframe";
+import type { DatabaseId } from "@/shared/types/domain/ids";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { ErrorReference } from "@/features/application/errorReference";
+import type { DatabaseReadSnapshot } from "@/features/application/dataManagement/databaseRead";
 
 export interface DatabasePublicationCapability {
   readonly replaceSnapshot: (snapshot: DatabaseReadSnapshot) => void;
-  readonly publishDatabase: (
-    database: DeepReadonly<DatabaseRecord>,
-    revision?: number,
-  ) => void;
+  readonly publishDatabase: (database: DeepReadonly<DatabaseRecord>, revision?: number) => void;
   readonly publishDatabaseRevision: (id: DatabaseId, revision: number) => void;
   readonly removeDatabase: (id: DatabaseId) => void;
   readonly publishColumnStats: (id: DatabaseId, stats: readonly ColumnStats[]) => void;
@@ -30,7 +31,10 @@ export interface DatabasePublicationCapability {
     distributions: readonly ColumnDistribution[],
   ) => void;
   readonly removeColumnDistribution: (id: DatabaseId) => void;
-  readonly publishDatasetOverview: (id: DatabaseId, overview: DeepReadonly<DatasetOverview>) => void;
+  readonly publishDatasetOverview: (
+    id: DatabaseId,
+    overview: DeepReadonly<DatasetOverview>,
+  ) => void;
   readonly removeDatasetOverview: (id: DatabaseId) => void;
   readonly publishDatabaseFailure: (id: DatabaseId, error: ErrorReference) => void;
   readonly clearForProject: () => void;
@@ -46,9 +50,7 @@ function toStatsMap(stats: readonly ColumnStats[]): ColumnStatsMap {
   ) as ColumnStatsMap;
 }
 
-function toDistributionMap(
-  distributions: readonly ColumnDistribution[],
-): DistributionMap {
+function toDistributionMap(distributions: readonly ColumnDistribution[]): DistributionMap {
   return Object.fromEntries(
     distributions.map((distribution) => [
       distribution.columnName,
@@ -67,13 +69,22 @@ export function createDatabasePublication(
         revisions: clone(snapshot.revisions) as unknown as Record<string, number>,
       });
       useColumnStatsStore.setState({
-        statsByDatabase: clone(snapshot.statsByDatabase) as unknown as Record<string, ColumnStatsMap>,
+        statsByDatabase: clone(snapshot.statsByDatabase) as unknown as Record<
+          string,
+          ColumnStatsMap
+        >,
       });
       useColumnDistributionStore.setState({
-        distByDatabase: clone(snapshot.distByDatabase) as unknown as Record<string, DistributionMap>,
+        distByDatabase: clone(snapshot.distByDatabase) as unknown as Record<
+          string,
+          DistributionMap
+        >,
       });
       useDatasetOverviewStore.setState({
-        overviewByDatabase: clone(snapshot.overviewByDatabase) as unknown as Record<string, DatasetOverview>,
+        overviewByDatabase: clone(snapshot.overviewByDatabase) as unknown as Record<
+          string,
+          DatasetOverview
+        >,
       });
     },
 
@@ -83,9 +94,10 @@ export function createDatabasePublication(
           ...state.databases,
           [database.id]: clone(database) as unknown as DatabaseRecord,
         },
-        revisions: revision === undefined
-          ? state.revisions
-          : { ...state.revisions, [database.id]: revision },
+        revisions:
+          revision === undefined
+            ? state.revisions
+            : { ...state.revisions, [database.id]: revision },
       }));
     },
 

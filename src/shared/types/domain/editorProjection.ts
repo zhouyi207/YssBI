@@ -1,5 +1,5 @@
-import type { DataType } from '@/shared/types/domain/dataType';
-import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { FunctionSignaturePin } from "@/shared/types/domain/graph";
 
 export interface FunctionEditorProjectionDto {
   functionRevision: number;
@@ -14,13 +14,13 @@ export interface ProjectionBasisDto {
   resourceVersions: Record<string, string>;
 }
 
-export type CompilationStageDto = 'analysis' | 'lowering';
+export type CompilationStageDto = "analysis" | "lowering";
 
 export type CompilationOutcomeDto =
-  | { type: 'success' }
-  | { type: 'analysisBlocked' }
+  | { type: "success" }
+  | { type: "analysisBlocked" }
   | {
-      type: 'internalFailure';
+      type: "internalFailure";
       stage: CompilationStageDto;
       code: string;
       nodeId: string | null;
@@ -66,7 +66,10 @@ export interface EditorNodeProjectionDto {
   diagnostics: DiagnosticDto[];
 }
 
-export interface NodePositionDto { x: number; y: number }
+export interface NodePositionDto {
+  x: number;
+  y: number;
+}
 
 export interface EditorConnectionProjectionDto {
   connectionId: string;
@@ -109,13 +112,16 @@ export interface ResolvedPortDto {
 }
 
 export type PortAddressDto =
-  | { kind: 'declared'; nodeId: string; portKey: string }
-  | { kind: 'instance'; nodeId: string; templateKey: string; instanceId: string };
+  | { kind: "declared"; nodeId: string; portKey: string }
+  | { kind: "instance"; nodeId: string; templateKey: string; instanceId: string };
 
-export interface PortDisplayDto { label: string; instanceLabel: string | null }
-export type PortDirectionDto = 'input' | 'output';
-export type PortKindDto = 'data' | 'control' | 'effect';
-export type PortInstanceKindDto = 'declared' | 'userCreated' | 'derived';
+export interface PortDisplayDto {
+  label: string;
+  instanceLabel: string | null;
+}
+export type PortDirectionDto = "input" | "output";
+export type PortKindDto = "data" | "control" | "effect";
+export type PortInstanceKindDto = "declared" | "userCreated" | "derived";
 
 export interface PortConnectionCapabilityDto {
   current: number;
@@ -133,10 +139,10 @@ export interface EditorInputBindingDto {
 }
 
 export type EffectiveInputBindingKindDto =
-  | 'connections'
-  | 'literal'
-  | 'protocolDefault'
-  | 'unbound';
+  | "connections"
+  | "literal"
+  | "protocolDefault"
+  | "unbound";
 
 export interface TypeSummaryDto {
   display: string;
@@ -155,24 +161,18 @@ export interface SchemaFieldDto {
 }
 
 export type RelationalScalarTypeDto =
-  | 'boolean'
-  | 'int64'
-  | 'float64'
-  | 'string'
-  | 'date'
-  | 'dateTime'
-  | 'unknown';
+  | "boolean"
+  | "int64"
+  | "float64"
+  | "string"
+  | "date"
+  | "dateTime"
+  | "unknown";
 
-export type SchemaSummaryKindDto =
-  | 'input'
-  | 'project'
-  | 'append'
-  | 'rename'
-  | 'filter'
-  | 'derived';
+export type SchemaSummaryKindDto = "input" | "project" | "append" | "rename" | "filter" | "derived";
 
-export type ResolvedPortStatusDto = 'resolved' | 'orphan';
-export type ParameterPresentationDto = 'detailPanel' | 'inlineAndDetail';
+export type ResolvedPortStatusDto = "resolved" | "orphan";
+export type ParameterPresentationDto = "detailPanel" | "inlineAndDetail";
 
 export interface ParameterEditorDto {
   key: string;
@@ -184,7 +184,7 @@ export interface ParameterEditorDto {
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;
   inheritedValue: unknown | null;
-  valueSource: 'project' | 'node' | null;
+  valueSource: "project" | "node" | null;
   options: string[] | null;
 }
 
@@ -194,20 +194,20 @@ export interface DataframeColumnOptionDto {
 }
 
 export type FilterOperatorDto =
-  | 'equal'
-  | 'notEqual'
-  | 'lessThan'
-  | 'lessThanOrEqual'
-  | 'greaterThan'
-  | 'greaterThanOrEqual'
-  | 'isNull'
-  | 'isNotNull';
+  | "equal"
+  | "notEqual"
+  | "lessThan"
+  | "lessThanOrEqual"
+  | "greaterThan"
+  | "greaterThanOrEqual"
+  | "isNull"
+  | "isNotNull";
 
 export type FilterLiteralDto =
-  | { type: 'boolean'; value: boolean }
-  | { type: 'integer'; value: string }
-  | { type: 'decimal'; value: string }
-  | { type: 'string'; value: string };
+  | { type: "boolean"; value: boolean }
+  | { type: "integer"; value: string }
+  | { type: "decimal"; value: string }
+  | { type: "string"; value: string };
 
 export interface FilterPredicateDto {
   column: string;
@@ -217,25 +217,30 @@ export interface FilterPredicateDto {
 
 export type SchemaAwareParameterEditorDto =
   | {
-      kind: 'projectColumns';
+      kind: "projectColumns";
       available: boolean;
       unavailableReason: string | null;
       options: DataframeColumnOptionDto[];
       value: string[];
     }
   | {
-      kind: 'filterPredicate';
+      kind: "filterPredicate";
       available: boolean;
       unavailableReason: string | null;
-      columns: Array<DataframeColumnOptionDto & {
-        operators: FilterOperatorDto[];
-        literalTypes: FilterLiteralDto['type'][];
-      }>;
+      columns: Array<
+        DataframeColumnOptionDto & {
+          operators: FilterOperatorDto[];
+          literalTypes: FilterLiteralDto["type"][];
+        }
+      >;
       value: FilterPredicateDto | null;
     };
 
-export interface ParameterDisplayDto { title: string; description: string | null }
-export type ParameterEditorKindDto = 'auto' | 'text' | 'number' | 'toggle' | 'select' | 'resource';
+export interface ParameterDisplayDto {
+  title: string;
+  description: string | null;
+}
+export type ParameterEditorKindDto = "auto" | "text" | "number" | "toggle" | "select" | "resource";
 
 export interface DiagnosticDto {
   code: string;
@@ -246,12 +251,12 @@ export interface DiagnosticDto {
   related: DiagnosticLocationDto[];
 }
 
-export type DiagnosticSeverityDto = 'error' | 'warning' | 'information';
+export type DiagnosticSeverityDto = "error" | "warning" | "information";
 
 export type DiagnosticLocationDto =
-  | { kind: 'graph' }
-  | { kind: 'node'; nodeId: string }
-  | { kind: 'port'; address: PortAddressDto }
-  | { kind: 'connection'; connectionId: string }
-  | { kind: 'parameter'; nodeId: string; key: string }
-  | { kind: 'resource'; identity: string };
+  | { kind: "graph" }
+  | { kind: "node"; nodeId: string }
+  | { kind: "port"; address: PortAddressDto }
+  | { kind: "connection"; connectionId: string }
+  | { kind: "parameter"; nodeId: string; key: string }
+  | { kind: "resource"; identity: string };

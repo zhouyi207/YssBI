@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
-import type { MouseEvent } from 'react';
-import type { ActionMenuPosition } from './ActionMenu';
+import { useCallback, useState } from "react";
+import type { MouseEvent } from "react";
+import type { ActionMenuPosition } from "./ActionMenu";
 
 export interface PositionedActionMenuState<TTarget> extends ActionMenuPosition {
   target: TTarget;

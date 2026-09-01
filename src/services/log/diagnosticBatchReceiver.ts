@@ -1,19 +1,16 @@
-import type {
-  DiagnosticBatchDto,
-  DiagnosticSubscriptionDto,
-} from '@/shared/types/dto/diagnostics';
-import { parseDiagnosticBatchDto } from '@/shared/types/dto/diagnosticsParser';
+import type { DiagnosticBatchDto, DiagnosticSubscriptionDto } from "@/shared/types/dto/diagnostics";
+import { parseDiagnosticBatchDto } from "@/shared/types/dto/diagnosticsParser";
 
 const MAX_PENDING_BATCHES = 64;
 
-export type DiagnosticStreamDiscontinuity = 'preactivation-overflow' | 'sequence-gap';
+export type DiagnosticStreamDiscontinuity = "preactivation-overflow" | "sequence-gap";
 
 export class DiagnosticStreamDiscontinuityError extends Error {
   readonly reason: DiagnosticStreamDiscontinuity;
 
   constructor(reason: DiagnosticStreamDiscontinuity) {
     super(`Diagnostic stream requires reconnect: ${reason}`);
-    this.name = 'DiagnosticStreamDiscontinuityError';
+    this.name = "DiagnosticStreamDiscontinuityError";
     this.reason = reason;
   }
 }
@@ -54,19 +51,19 @@ function inspectSequence(
 export function createDiagnosticBatchReceiver(
   onRecords: (batch: DiagnosticBatchDto) => void,
   onError: (error: unknown) => void = (error) => {
-    console.error('[Diagnostics] Invalid or discontinuous channel batch', error);
+    console.error("[Diagnostics] Invalid or discontinuous channel batch", error);
   },
   maxPendingBatches = MAX_PENDING_BATCHES,
 ): DiagnosticBatchReceiver {
   if (!Number.isInteger(maxPendingBatches) || maxPendingBatches <= 0) {
-    throw new Error('Diagnostic pending batch capacity must be a positive integer');
+    throw new Error("Diagnostic pending batch capacity must be a positive integer");
   }
 
   let active = false;
   let disposed = false;
   let prepared = false;
   let pending: DiagnosticBatchDto[] = [];
-  let streamId = '';
+  let streamId = "";
   let watermark = 0;
   let discontinuity: DiagnosticStreamDiscontinuity | null = null;
 
@@ -83,7 +80,7 @@ export function createDiagnosticBatchReceiver(
     streamId = inspection.streamId;
     watermark = inspection.watermark;
     if (inspection.gap) {
-      const error = new DiagnosticStreamDiscontinuityError('sequence-gap');
+      const error = new DiagnosticStreamDiscontinuityError("sequence-gap");
       onError(error);
     }
     return inspection.gap;
@@ -100,12 +97,12 @@ export function createDiagnosticBatchReceiver(
           return;
         }
         if (pending.length >= maxPendingBatches) {
-          discontinuity = 'preactivation-overflow';
+          discontinuity = "preactivation-overflow";
           pending = [];
           return;
         }
         if (prepared && acceptPreparedBatch(batch)) {
-          discontinuity = 'sequence-gap';
+          discontinuity = "sequence-gap";
           pending = [];
           return;
         }
@@ -115,13 +112,13 @@ export function createDiagnosticBatchReceiver(
       }
     },
     prepare: (snapshot) => {
-      if (disposed) return 'preactivation-overflow';
+      if (disposed) return "preactivation-overflow";
       if (discontinuity) return discontinuity;
       streamId = snapshot.streamId;
       watermark = snapshot.latestSequence;
       for (const batch of pending) {
         if (acceptPreparedBatch(batch)) {
-          discontinuity = 'sequence-gap';
+          discontinuity = "sequence-gap";
           pending = [];
           return discontinuity;
         }
@@ -135,7 +132,7 @@ export function createDiagnosticBatchReceiver(
         throw new DiagnosticStreamDiscontinuityError(discontinuity);
       }
       if (!prepared) {
-        throw new Error('Diagnostic receiver must be prepared before activation');
+        throw new Error("Diagnostic receiver must be prepared before activation");
       }
       active = true;
       const queued = pending;

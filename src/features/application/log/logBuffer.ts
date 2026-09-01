@@ -1,9 +1,9 @@
-import { LOG_BUFFER_MAX } from '@/shared/config-default';
+import { LOG_BUFFER_MAX } from "@/shared/config-default";
 import type {
   DiagnosticBatchDto,
   DiagnosticRecordDto,
   DiagnosticSubscriptionDto,
-} from '@/shared/types/domain/diagnostics';
+} from "@/shared/types/domain/diagnostics";
 
 export interface LogSnapshot {
   streamId: string | null;
@@ -60,7 +60,7 @@ function hasSequenceGap(
 
 export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): DiagnosticLogBuffer {
   if (!Number.isInteger(maxEntries) || maxEntries <= 0) {
-    throw new Error('Diagnostic log buffer capacity must be a positive integer');
+    throw new Error("Diagnostic log buffer capacity must be a positive integer");
   }
 
   let streamId: string | null = null;
@@ -90,9 +90,7 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
       const recent = recentDistinctEntries(subscription.entries, subscription.streamId, maxEntries);
       const snapshotGap = hasSequenceGap(
         recent.allSequences,
-        subscription.truncated
-          ? (recent.allSequences[0] ?? subscription.latestSequence + 1)
-          : 1,
+        subscription.truncated ? (recent.allSequences[0] ?? subscription.latestSequence + 1) : 1,
         subscription.latestSequence,
       );
       streamId = subscription.streamId;
@@ -115,7 +113,8 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
       const sequenceGap = hasSequenceGap(recentIncoming.allSequences, watermark + 1);
       streamId = batch.streamId;
       entries = sameStream ? [...entries, ...incoming] : incoming;
-      latestSequence = incoming[incoming.length - 1]?.sequence ?? (sameStream ? latestSequence : null);
+      latestSequence =
+        incoming[incoming.length - 1]?.sequence ?? (sameStream ? latestSequence : null);
       truncated = truncated || !sameStream || sequenceGap || recentIncoming.truncated;
       if (entries.length > maxEntries) {
         entries = entries.slice(entries.length - maxEntries);

@@ -1,4 +1,4 @@
-import { workbenchDockviewRuntime } from './workbenchDockviewInternal';
+import { workbenchDockviewRuntime } from "./workbenchDockviewInternal";
 import type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,
@@ -10,7 +10,7 @@ import type {
   WorkbenchDockviewControlContract,
   WorkbenchEdgePosition,
   WorkbenchPanelInfo,
-} from './workbenchTypes';
+} from "./workbenchTypes";
 
 export interface WorkbenchDockviewControl {
   ensureCentralGroup(): Promise<string>;
@@ -26,7 +26,7 @@ export interface WorkbenchDockviewControl {
   setEdgeCollapsed(position: WorkbenchEdgePosition, collapsed: boolean): Promise<boolean>;
   setEdgeSize(position: WorkbenchEdgePosition, size: number): Promise<boolean>;
   remapResource(from: string, to: string): Promise<number>;
-  serialize(): Promise<import('dockview-react').SerializedDockview>;
+  serialize(): Promise<import("dockview-react").SerializedDockview>;
 }
 
 export const workbenchDockviewControl: WorkbenchDockviewControl = workbenchDockviewRuntime.control;

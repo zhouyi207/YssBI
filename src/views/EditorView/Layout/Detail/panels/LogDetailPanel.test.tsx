@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LogDetailPanel } from './LogDetailPanel';
+import { LogDetailPanel } from "./LogDetailPanel";
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   }),
@@ -13,12 +13,12 @@ vi.mock('react-i18next', () => ({
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('LogDetailPanel', () => {
+describe("LogDetailPanel", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -28,23 +28,23 @@ describe('LogDetailPanel', () => {
     host.remove();
   });
 
-  it('renders metadata and multiline message content', () => {
+  it("renders metadata and multiline message content", () => {
     act(() => {
       root.render(
         <div>
           <LogDetailPanel
             log={{
-              streamId: 'stream-1',
+              streamId: "stream-1",
               sequence: 42,
-              timestamp: '2026-07-14T17:28:00.000Z',
-              level: 'error',
-              origin: 'rust',
-              domain: 'graph',
-              target: 'graph-runtime',
-              event: 'graph.run.failed',
-              source: 'events/on-start',
-              message: 'First line\nSecond line',
-              fields: { graphPath: 'events/on-start' },
+              timestamp: "2026-07-14T17:28:00.000Z",
+              level: "error",
+              origin: "rust",
+              domain: "graph",
+              target: "graph-runtime",
+              event: "graph.run.failed",
+              source: "events/on-start",
+              message: "First line\nSecond line",
+              fields: { graphPath: "events/on-start" },
             }}
           />
         </div>,
@@ -53,28 +53,29 @@ describe('LogDetailPanel', () => {
 
     const cards = Array.from(host.querySelectorAll('[data-slot="card"]'));
     const metadataCard = cards.find(
-      (card) => card.textContent?.includes('2026-07-14T17:28:00.000Z')
-        && card.textContent.includes('stream-1')
-        && card.textContent.includes('42')
-        && card.textContent.includes('error')
-        && card.textContent.includes('GRAPH')
-        && card.textContent.includes('rust')
-        && card.textContent.includes('graph-runtime')
-        && card.textContent.includes('graph.run.failed')
-        && card.textContent.includes('events/on-start'),
+      (card) =>
+        card.textContent?.includes("2026-07-14T17:28:00.000Z") &&
+        card.textContent.includes("stream-1") &&
+        card.textContent.includes("42") &&
+        card.textContent.includes("error") &&
+        card.textContent.includes("GRAPH") &&
+        card.textContent.includes("rust") &&
+        card.textContent.includes("graph-runtime") &&
+        card.textContent.includes("graph.run.failed") &&
+        card.textContent.includes("events/on-start"),
     );
     expect(metadataCard).toBeDefined();
 
     const messageBoundary = Array.from(
       host.querySelectorAll<HTMLElement>('[data-slot="collapsible-content"]'),
-    ).find((content) => content.textContent?.includes('First line\nSecond line'));
-    const message = messageBoundary?.querySelector('pre');
+    ).find((content) => content.textContent?.includes("First line\nSecond line"));
+    const message = messageBoundary?.querySelector("pre");
     expect(messageBoundary).not.toBeNull();
-    expect(message?.textContent).toBe('First line\nSecond line');
+    expect(message?.textContent).toBe("First line\nSecond line");
 
     const fieldsContent = Array.from(
       host.querySelectorAll<HTMLElement>('[data-slot="collapsible-content"]'),
-    ).find((content) => content.textContent?.includes('graphPath'));
-    expect(fieldsContent?.textContent).toContain('events/on-start');
+    ).find((content) => content.textContent?.includes("graphPath"));
+    expect(fieldsContent?.textContent).toContain("events/on-start");
   });
 });

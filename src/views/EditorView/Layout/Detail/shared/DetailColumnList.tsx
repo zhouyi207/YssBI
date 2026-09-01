@@ -1,5 +1,12 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   detailAccentMonoTextClass,
   detailEmptyHintClass,
@@ -7,13 +14,13 @@ import {
   detailNestedScrollClass,
   detailNestedTableClass,
   detailNestedTableHeadClass,
-} from './detailStyles';
-import { DetailText } from './DetailText';
+} from "./detailStyles";
+import { DetailText } from "./DetailText";
 
 interface DetailColumnListProps {
   columns: Array<{ name: string; type: string }>;
   emptyMessage?: string;
-  variant?: 'list' | 'table';
+  variant?: "list" | "table";
   columnLabel?: string;
   typeLabel?: string;
 }
@@ -21,7 +28,7 @@ interface DetailColumnListProps {
 export function DetailColumnList({
   columns,
   emptyMessage,
-  variant = 'list',
+  variant = "list",
   columnLabel,
   typeLabel,
 }: DetailColumnListProps) {
@@ -33,7 +40,7 @@ export function DetailColumnList({
     ) : null;
   }
 
-  if (variant === 'table') {
+  if (variant === "table") {
     return (
       <ScrollArea className={detailNestedScrollClass} orientation="vertical">
         <Table className={detailNestedTableClass}>
@@ -48,8 +55,12 @@ export function DetailColumnList({
           <TableBody>
             {columns.map((column) => (
               <TableRow key={column.name} className="border-border/50">
-                <TableCell className="px-3 py-2 font-medium text-foreground">{column.name}</TableCell>
-                <TableCell className={`px-3 py-2 ${detailAccentMonoTextClass}`}>{column.type}</TableCell>
+                <TableCell className="px-3 py-2 font-medium text-foreground">
+                  {column.name}
+                </TableCell>
+                <TableCell className={`px-3 py-2 ${detailAccentMonoTextClass}`}>
+                  {column.type}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -1,8 +1,6 @@
-export type CanvasMutationOutcome =
-  | { status: 'applied' }
-  | { status: 'failed'; message?: string };
+export type CanvasMutationOutcome = { status: "applied" } | { status: "failed"; message?: string };
 
-export type CanvasConnectionIntent = 'connect' | 'moveConnections';
+export type CanvasConnectionIntent = "connect" | "moveConnections";
 
 export interface CanvasConnectionMutation {
   graphPath: string;

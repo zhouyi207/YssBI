@@ -8,14 +8,14 @@ export interface ProjectLifecycleStateSnapshot {
   readonly epoch: number;
 }
 
-export type ProjectLifecycleActivationResult = 'activated' | 'duplicate' | 'stale';
+export type ProjectLifecycleActivationResult = "activated" | "duplicate" | "stale";
 
 export class ProjectLifecycleError extends Error {
-  readonly code = 'stale_project_lifecycle';
+  readonly code = "stale_project_lifecycle";
 
   constructor() {
-    super('project lifecycle changed before publication settlement');
-    this.name = 'ProjectLifecycleError';
+    super("project lifecycle changed before publication settlement");
+    this.name = "ProjectLifecycleError";
   }
 }
 
@@ -41,13 +41,13 @@ export function acceptProjectLifecycleActivation(
   projectInstanceId: string,
   activationRevision: number,
 ): ProjectLifecycleActivationResult {
-  if (activationRevision < latestActivationRevision) return 'stale';
+  if (activationRevision < latestActivationRevision) return "stale";
   if (activationRevision === latestActivationRevision) {
-    return activeProjectInstanceId === projectInstanceId ? 'duplicate' : 'stale';
+    return activeProjectInstanceId === projectInstanceId ? "duplicate" : "stale";
   }
   latestActivationRevision = activationRevision;
   startProjectLifecycle(projectInstanceId);
-  return 'activated';
+  return "activated";
 }
 
 export function captureProjectLifecycleState(): ProjectLifecycleStateSnapshot {
@@ -57,11 +57,8 @@ export function captureProjectLifecycleState(): ProjectLifecycleStateSnapshot {
   });
 }
 
-export function isProjectLifecycleStateCurrent(
-  snapshot: ProjectLifecycleStateSnapshot,
-): boolean {
-  return activeProjectInstanceId === snapshot.projectInstanceId
-    && projectEpoch === snapshot.epoch;
+export function isProjectLifecycleStateCurrent(snapshot: ProjectLifecycleStateSnapshot): boolean {
+  return activeProjectInstanceId === snapshot.projectInstanceId && projectEpoch === snapshot.epoch;
 }
 
 export function captureProjectIdentity(): ProjectIdentitySnapshot {
@@ -73,8 +70,7 @@ export function captureProjectIdentity(): ProjectIdentitySnapshot {
 }
 
 export function isCurrentProjectIdentity(identity: ProjectIdentitySnapshot): boolean {
-  return activeProjectInstanceId === identity.projectInstanceId
-    && projectEpoch === identity.epoch;
+  return activeProjectInstanceId === identity.projectInstanceId && projectEpoch === identity.epoch;
 }
 
 export function assertCurrentProjectIdentity(identity: ProjectIdentitySnapshot): void {

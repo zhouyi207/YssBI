@@ -67,10 +67,10 @@ DuckDB-backed DataView edit 使用 SQL 增量 mutation：
 
 Delete-column 在真正 drop 前捕获 `DuckDbColumnSnapshot`。这是该 operation 的 undo admission limit，不是 `EditHistory` stack length：
 
-| Limit | Value |
-|---|---:|
-| `MAX_DELETE_COLUMN_SNAPSHOT_ROWS` | 50,000 rows |
-| `MAX_DELETE_COLUMN_SNAPSHOT_BYTES` | 16 MiB |
+| Limit                              |       Value |
+| ---------------------------------- | ----------: |
+| `MAX_DELETE_COLUMN_SNAPSHOT_ROWS`  | 50,000 rows |
+| `MAX_DELETE_COLUMN_SNAPSHOT_BYTES` |      16 MiB |
 
 Snapshot 保存：
 
@@ -105,10 +105,10 @@ Row count 与 snapshot size 等跨整数类型/容量计算使用 checked conver
 
 DataView 将列 cast 为 Categorical 后保存时，DuckDB 使用 `_yssbi_enum_{table}_{column}` ENUM type。读写存在物理不对称：
 
-| Path | DuckDB/Arrow behavior | Module adaptation |
-|---|---|---|
-| Read | ENUM 通过 Arrow Dictionary 返回 | `restore_categorical_columns` 根据 DuckDB schema 恢复 Polars Enum/Categorical |
-| Write | DuckDB Appender 接受 category literal，不接受 Dictionary 直写 ENUM | Categorical/Enum 先转换为 String/Utf8 再 append |
+| Path  | DuckDB/Arrow behavior                                              | Module adaptation                                                             |
+| ----- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Read  | ENUM 通过 Arrow Dictionary 返回                                    | `restore_categorical_columns` 根据 DuckDB schema 恢复 Polars Enum/Categorical |
+| Write | DuckDB Appender 接受 category literal，不接受 Dictionary 直写 ENUM | Categorical/Enum 先转换为 String/Utf8 再 append                               |
 
 因此 ENUM ingest 的 String bridge 是当前 production contract，不是多余 round-trip。
 
@@ -144,25 +144,25 @@ DuckDB overview 仍准确提供：
 
 ## 8. Module map
 
-| File | Responsibility |
-|---|---|
-| `src/database_instance.rs` | State-dependent query/edit/export interface |
-| `src/runtime/` | Session identity、declaration observations/revisions、admission/drain/recovery 与 physical state routing |
-| `src/session_api.rs` | Immutable catalog/data/query snapshots 与 prepared/committed mutation handoff |
-| `src/plot_query.rs` | Revision-checked numeric plot column query |
-| `src/project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
-| `../../src/schema/database.rs` | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion |
-| `../yss-database-edit/` | EditOperation、EditHistory 与 EditState |
-| `../yss-database-schema/` | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization |
-| `../yss-tabular-polars/src/edit.rs` | checked JSON/Polars edit apply、reverse 与 cast |
-| `../yss-duckdb/src/edit.rs` | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits |
-| `../yss-duckdb/src/column_snapshot.rs` | Bounded reversible delete-column snapshot |
-| `../yss-duckdb/src/table.rs` | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query |
-| `../yss-duckdb/src/profile.rs` | DuckDB physical stats/distribution/overview SQL |
-| `../yss-duckdb/src/sql.rs` | Identifier/literal quoting 与 editable dtype allowlist |
-| `../yss-duckdb/src/export.rs` | Typed DuckDB CSV/Parquet `COPY` export |
-| `../yss-dataset-profile/` | Profile DTO 与 Loaded DataFrame profile calculation |
-| `../yss-sql-source/` | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization |
-| `../yss-tabular-io/` | Loaded DataFrame/Excel filesystem I/O |
+| File                                   | Responsibility                                                                                           |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/database_instance.rs`             | State-dependent query/edit/export interface                                                              |
+| `src/runtime/`                         | Session identity、declaration observations/revisions、admission/drain/recovery 与 physical state routing |
+| `src/session_api.rs`                   | Immutable catalog/data/query snapshots 与 prepared/committed mutation handoff                            |
+| `src/plot_query.rs`                    | Revision-checked numeric plot column query                                                               |
+| `src/project_storage.rs`               | Project-relative DuckDB runtime binding 与 physical table/metadata removal                               |
+| `../../src/schema/database.rs`         | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion                                               |
+| `../yss-database-edit/`                | EditOperation、EditHistory 与 EditState                                                                  |
+| `../yss-database-schema/`              | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization                                  |
+| `../yss-tabular-polars/src/edit.rs`    | checked JSON/Polars edit apply、reverse 与 cast                                                          |
+| `../yss-duckdb/src/edit.rs`            | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits                            |
+| `../yss-duckdb/src/column_snapshot.rs` | Bounded reversible delete-column snapshot                                                                |
+| `../yss-duckdb/src/table.rs`           | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query                                             |
+| `../yss-duckdb/src/profile.rs`         | DuckDB physical stats/distribution/overview SQL                                                          |
+| `../yss-duckdb/src/sql.rs`             | Identifier/literal quoting 与 editable dtype allowlist                                                   |
+| `../yss-duckdb/src/export.rs`          | Typed DuckDB CSV/Parquet `COPY` export                                                                   |
+| `../yss-dataset-profile/`              | Profile DTO 与 Loaded DataFrame profile calculation                                                      |
+| `../yss-sql-source/`                   | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization              |
+| `../yss-tabular-io/`                   | Loaded DataFrame/Excel filesystem I/O                                                                    |
 
 验证命令以 [`docs/development/LOCAL_WORKFLOW.md`](../../../docs/development/LOCAL_WORKFLOW.md) 为准，从 repository root 通过 `pnpm` scripts 运行。

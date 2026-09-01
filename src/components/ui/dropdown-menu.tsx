@@ -8,11 +8,15 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
 
-function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+function DropdownMenuPortal({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
   return <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />;
 }
 
-function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+function DropdownMenuTrigger({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
 }
 
@@ -29,7 +33,7 @@ function DropdownMenuContent({
         className={cn(
           "z-[520] min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl",
           "data-[state=open]:animate-fade-in data-[state=open]:animate-zoom-in",
-          className
+          className,
         )}
         {...props}
       />
@@ -46,7 +50,10 @@ function DropdownMenuItem({
   inset,
   variant = "default",
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & { inset?: boolean; variant?: "default" | "destructive" }) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
+  inset?: boolean;
+  variant?: "default" | "destructive";
+}) {
   return (
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
@@ -56,7 +63,7 @@ function DropdownMenuItem({
         "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors",
         "focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset=true]:pl-8",
         "data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10",
-        className
+        className,
       )}
       {...props}
     />
@@ -74,7 +81,7 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
         "relative flex cursor-default select-none items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none transition-colors focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        className
+        className,
       )}
       checked={checked}
       {...props}
@@ -105,7 +112,7 @@ function DropdownMenuSubTrigger({
       data-inset={inset}
       className={cn(
         "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-muted data-[state=open]:bg-muted data-[inset=true]:pl-8",
-        className
+        className,
       )}
       {...props}
     >
@@ -122,14 +129,26 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuPrimitive.SubContent
       data-slot="dropdown-menu-sub-content"
-      className={cn("z-[520] min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl", className)}
+      className={cn(
+        "z-[520] min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl",
+        className,
+      )}
       {...props}
     />
   );
 }
 
-function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
-  return <DropdownMenuPrimitive.Separator data-slot="dropdown-menu-separator" className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      {...props}
+    />
+  );
 }
 
 function DropdownMenuLabel({
@@ -137,11 +156,27 @@ function DropdownMenuLabel({
   inset,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Label> & { inset?: boolean }) {
-  return <DropdownMenuPrimitive.Label data-slot="dropdown-menu-label" data-inset={inset} className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground data-[inset=true]:pl-8", className)} {...props} />;
+  return (
+    <DropdownMenuPrimitive.Label
+      data-slot="dropdown-menu-label"
+      data-inset={inset}
+      className={cn(
+        "px-2 py-1.5 text-xs font-medium text-muted-foreground data-[inset=true]:pl-8",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
-  return <span data-slot="dropdown-menu-shortcut" className={cn("ml-auto text-xs tracking-widest text-muted-foreground", className)} {...props} />;
+  return (
+    <span
+      data-slot="dropdown-menu-shortcut"
+      className={cn("ml-auto text-xs tracking-widest text-muted-foreground", className)}
+      {...props}
+    />
+  );
 }
 
 export {

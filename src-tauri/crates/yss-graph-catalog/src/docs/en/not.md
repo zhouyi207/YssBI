@@ -6,10 +6,10 @@ $$
 \text{Result} = \lnot A
 $$
 
-| $A$ | Result |
-|-----|--------|
-| false | true |
-| true | false |
+| $A$   | Result |
+| ----- | ------ |
+| false | true   |
+| true  | false  |
 
 ## Usage
 

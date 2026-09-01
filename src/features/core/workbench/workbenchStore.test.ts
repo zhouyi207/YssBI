@@ -1,14 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  DEFAULT_WORKBENCH_UI_STATE,
-  useWorkbenchStore,
-} from './workbenchStore';
+import { beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_WORKBENCH_UI_STATE, useWorkbenchStore } from "./workbenchStore";
 
 function uiState() {
-  const {
-    isSettingsOpen,
-    isNodeDocumentationOpen,
-  } = useWorkbenchStore.getState();
+  const { isSettingsOpen, isNodeDocumentationOpen } = useWorkbenchStore.getState();
 
   return {
     isSettingsOpen,
@@ -16,25 +10,25 @@ function uiState() {
   };
 }
 
-describe('workbenchStore', () => {
+describe("workbenchStore", () => {
   beforeEach(() => {
     useWorkbenchStore.getState().resetWorkbenchUIState();
   });
 
-  it('keeps only non-placement workbench UI state', () => {
+  it("keeps only non-placement workbench UI state", () => {
     const state = useWorkbenchStore.getState();
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
 
-    expect(state).not.toHaveProperty('sidebarUserHidden');
-    expect(state).not.toHaveProperty('detailUserHidden');
-    expect(state).not.toHaveProperty('panelCollapsed');
-    expect(state).not.toHaveProperty('zenMode');
-    expect(state).not.toHaveProperty('activeEditorGroupId');
-    expect(state).not.toHaveProperty('tabs');
+    expect(state).not.toHaveProperty("sidebarUserHidden");
+    expect(state).not.toHaveProperty("detailUserHidden");
+    expect(state).not.toHaveProperty("panelCollapsed");
+    expect(state).not.toHaveProperty("zenMode");
+    expect(state).not.toHaveProperty("activeEditorGroupId");
+    expect(state).not.toHaveProperty("tabs");
   });
 
-  it('updates modal state, then resets it', () => {
+  it("updates modal state, then resets it", () => {
     const commands = useWorkbenchStore.getState();
 
     commands.openSettings();

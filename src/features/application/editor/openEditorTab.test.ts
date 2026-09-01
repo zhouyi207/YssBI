@@ -1,44 +1,44 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type WorkbenchGroupInfo,
   type WorkbenchPanelInfo,
-} from '@/features/core/dockview/workbenchRead';
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
+} from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
   groups: [] as WorkbenchGroupInfo[],
   openEditor: vi.fn(),
-  ensureCentralGroup: vi.fn(async () => 'central-group'),
+  ensureCentralGroup: vi.fn(async () => "central-group"),
   requestCloseWorkbenchPanels: vi.fn(async () => true),
   showWorkbenchLayoutError: vi.fn(),
 }));
 
-vi.mock('@/features/application/layout/workbenchLayoutErrorFeedback', () => ({
+vi.mock("@/features/application/layout/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
 }));
 
-vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
+vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
   useGraphSessionStore: {
     getState: () => ({ focusedSession: null }),
   },
 }));
 
-vi.mock('./resolveTabDisplayName', () => ({
+vi.mock("./resolveTabDisplayName", () => ({
   resolveTabDisplayName: (_ref: unknown, fallback: string) => fallback,
 }));
 
-vi.mock('./rightSidebarActions', () => ({
+vi.mock("./rightSidebarActions", () => ({
   revealDetails: vi.fn(async () => undefined),
 }));
 
-vi.mock('./workbenchPanelClose', () => ({
+vi.mock("./workbenchPanelClose", () => ({
   requestCloseWorkbenchPanels: mocks.requestCloseWorkbenchPanels,
 }));
 
-import { openEditorTab } from './openEditorTab';
+import { openEditorTab } from "./openEditorTab";
 
 function editorPanel(
   panelInstanceId: string,
@@ -49,106 +49,101 @@ function editorPanel(
   return {
     panelInstanceId,
     groupId,
-    component: 'GraphEditor',
+    component: "GraphEditor",
     title: resourceRef,
     metadata: {
-      role: 'editor',
+      role: "editor",
       resourceRef,
-      resourceKind: 'event',
+      resourceKind: "event",
       ...metadata,
     },
     active: true,
-    location: { type: 'grid' },
+    location: { type: "grid" },
   };
 }
 
-function group(
-  groupId: string,
-  panelInstanceIds: readonly string[],
-): WorkbenchGroupInfo {
+function group(groupId: string, panelInstanceIds: readonly string[]): WorkbenchGroupInfo {
   return {
     groupId,
     panelInstanceIds,
     activePanelInstanceId: panelInstanceIds[0],
     active: true,
-    location: { type: 'grid' },
+    location: { type: "grid" },
   };
 }
 
-describe('openEditorTab', () => {
+describe("openEditorTab", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mocks.panels = [];
     mocks.groups = [];
     mocks.openEditor.mockReset();
     mocks.ensureCentralGroup.mockReset();
-    mocks.ensureCentralGroup.mockResolvedValue('central-group');
+    mocks.ensureCentralGroup.mockResolvedValue("central-group");
     mocks.requestCloseWorkbenchPanels.mockReset();
     mocks.requestCloseWorkbenchPanels.mockResolvedValue(true);
     mocks.showWorkbenchLayoutError.mockReset();
 
-    vi.spyOn(workbenchDockviewRead, 'listGroups').mockImplementation(() => mocks.groups);
-    vi.spyOn(workbenchDockviewRead, 'listGroupPanels').mockImplementation(
-      (groupId) => mocks.panels.filter((panel) => panel.groupId === groupId),
+    vi.spyOn(workbenchDockviewRead, "listGroups").mockImplementation(() => mocks.groups);
+    vi.spyOn(workbenchDockviewRead, "listGroupPanels").mockImplementation((groupId) =>
+      mocks.panels.filter((panel) => panel.groupId === groupId),
     );
-    vi.spyOn(workbenchDockviewRead, 'findEditorPanelsByResource').mockImplementation(
-      (resourceRef) => mocks.panels.filter(
-        (panel) => panel.metadata.role === 'editor'
-          && panel.metadata.resourceRef === resourceRef,
-      ),
+    vi.spyOn(workbenchDockviewRead, "findEditorPanelsByResource").mockImplementation(
+      (resourceRef) =>
+        mocks.panels.filter(
+          (panel) => panel.metadata.role === "editor" && panel.metadata.resourceRef === resourceRef,
+        ),
     );
-    vi.spyOn(workbenchDockviewRead, 'getActiveEditorPanel').mockImplementation(() => {
+    vi.spyOn(workbenchDockviewRead, "getActiveEditorPanel").mockImplementation(() => {
       const active = mocks.panels.find((panel) => panel.active);
-      return active?.metadata.role === 'editor' ? active : undefined;
+      return active?.metadata.role === "editor" ? active : undefined;
     });
-    vi.spyOn(workbenchDockviewControl, 'ensureCentralGroup')
-      .mockImplementation(mocks.ensureCentralGroup);
-    vi.spyOn(workbenchDockviewControl, 'openEditor').mockImplementation(mocks.openEditor);
+    vi.spyOn(workbenchDockviewControl, "ensureCentralGroup").mockImplementation(
+      mocks.ensureCentralGroup,
+    );
+    vi.spyOn(workbenchDockviewControl, "openEditor").mockImplementation(mocks.openEditor);
   });
 
-  it('preserves an existing pinned and sticky editor during a preview open', async () => {
-    const existing = editorPanel(
-      'panel-main',
-      'group-main',
-      'events/Main.yssbi-event',
-      { pinned: true, sticky: true },
-    );
+  it("preserves an existing pinned and sticky editor during a preview open", async () => {
+    const existing = editorPanel("panel-main", "group-main", "events/Main.yssbi-event", {
+      pinned: true,
+      sticky: true,
+    });
     mocks.panels = [existing];
     mocks.groups = [group(existing.groupId, [existing.panelInstanceId])];
     mocks.openEditor.mockResolvedValue(existing);
 
-    await openEditorTab({
-      id: 'events/Main.yssbi-event',
-      type: 'event',
-      component: 'GraphEditor',
-      pinned: false,
-    }, {
-      targetGroupId: 'group-main',
-      pinned: false,
-    });
+    await openEditorTab(
+      {
+        id: "events/Main.yssbi-event",
+        type: "event",
+        component: "GraphEditor",
+        pinned: false,
+      },
+      {
+        targetGroupId: "group-main",
+        pinned: false,
+      },
+    );
 
-    expect(mocks.openEditor).toHaveBeenCalledWith(expect.objectContaining({
-      resourceRef: 'events/Main.yssbi-event',
-      pinned: true,
-      sticky: true,
-      mode: 'reuse-resource',
-    }));
+    expect(mocks.openEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceRef: "events/Main.yssbi-event",
+        pinned: true,
+        sticky: true,
+        mode: "reuse-resource",
+      }),
+    );
     expect(mocks.requestCloseWorkbenchPanels).not.toHaveBeenCalled();
   });
 
-  it('re-resolves to an ensured central group after closing the sole preview group', async () => {
-    const preview = editorPanel(
-      'panel-preview',
-      'group-preview',
-      'events/Preview.yssbi-event',
-      { pinned: false },
-    );
-    const opened = editorPanel(
-      'panel-next',
-      'central-group',
-      'events/Next.yssbi-event',
-      { pinned: false },
-    );
+  it("re-resolves to an ensured central group after closing the sole preview group", async () => {
+    const preview = editorPanel("panel-preview", "group-preview", "events/Preview.yssbi-event", {
+      pinned: false,
+    });
+    const opened = editorPanel("panel-next", "central-group", "events/Next.yssbi-event", {
+      pinned: false,
+    });
     mocks.panels = [preview];
     mocks.groups = [group(preview.groupId, [preview.panelInstanceId])];
     mocks.requestCloseWorkbenchPanels.mockImplementationOnce(async () => {
@@ -158,24 +153,29 @@ describe('openEditorTab', () => {
     });
     mocks.openEditor.mockResolvedValue(opened);
 
-    await expect(openEditorTab({
-      id: 'events/Next.yssbi-event',
-      type: 'event',
-      component: 'GraphEditor',
-      pinned: false,
-    }, {
-      targetGroupId: preview.groupId,
-      pinned: false,
-    })).resolves.toBe(opened);
+    await expect(
+      openEditorTab(
+        {
+          id: "events/Next.yssbi-event",
+          type: "event",
+          component: "GraphEditor",
+          pinned: false,
+        },
+        {
+          targetGroupId: preview.groupId,
+          pinned: false,
+        },
+      ),
+    ).resolves.toBe(opened);
 
-    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith([
-      preview.panelInstanceId,
-    ]);
+    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith([preview.panelInstanceId]);
     expect(mocks.ensureCentralGroup).toHaveBeenCalledOnce();
-    expect(mocks.openEditor).toHaveBeenCalledWith(expect.objectContaining({
-      resourceRef: 'events/Next.yssbi-event',
-      targetGroupId: 'central-group',
-      pinned: false,
-    }));
+    expect(mocks.openEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceRef: "events/Next.yssbi-event",
+        targetGroupId: "central-group",
+        pinned: false,
+      }),
+    );
   });
 });

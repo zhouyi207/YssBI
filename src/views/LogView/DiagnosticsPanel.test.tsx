@@ -1,54 +1,54 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useEditorStore } from '@/features/core/editor';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { portAddressKey } from '@/features/domain/editorProjection';
-import type { DiagnosticDto } from '@/shared/types/dto/editorProjection';
-import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useEditorStore } from "@/features/core/editor";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { portAddressKey } from "@/features/domain/editorProjection";
+import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
+import { DiagnosticsPanel } from "./DiagnosticsPanel";
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
-const graphPath = 'events/Main.yssbi-event';
+const graphPath = "events/Main.yssbi-event";
 
 function diagnostic(nodeId: string, code: string, message: string): DiagnosticDto {
   return {
     code,
     message,
-    severity: code === 'node.error' ? 'error' : 'warning',
-    blocking: code === 'node.error',
-    location: { kind: 'node', nodeId },
+    severity: code === "node.error" ? "error" : "warning",
+    blocking: code === "node.error",
+    location: { kind: "node", nodeId },
     related: [],
   };
 }
 
 const bucket = {
-  graphNodes: ['node-a', 'node-b'],
+  graphNodes: ["node-a", "node-b"],
   nodes: {
-    'node-a': {
-      id: 'node-a',
-      title: 'Node A',
-      diagnostics: [diagnostic('node-a', 'node.error', 'A is invalid')],
+    "node-a": {
+      id: "node-a",
+      title: "Node A",
+      diagnostics: [diagnostic("node-a", "node.error", "A is invalid")],
     },
-    'node-b': {
-      id: 'node-b',
-      title: 'Node B',
-      diagnostics: [diagnostic('node-b', 'node.warning', 'B needs review')],
+    "node-b": {
+      id: "node-b",
+      title: "Node B",
+      diagnostics: [diagnostic("node-b", "node.warning", "B needs review")],
     },
   },
 } as unknown as GraphEntityBucket;
 
-describe('DiagnosticsPanel', () => {
+describe("DiagnosticsPanel", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -56,7 +56,7 @@ describe('DiagnosticsPanel', () => {
     useGraphDataStore.setState({ graphEntities: {} });
     useEditorStore.getState().clearDetailFocus();
     useGraphSessionStore.getState().reset();
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -66,100 +66,118 @@ describe('DiagnosticsPanel', () => {
     host.remove();
   });
 
-  it('lists diagnostics for every node in the focused graph', () => {
+  it("lists diagnostics for every node in the focused graph", () => {
     useGraphDataStore.setState({ graphEntities: { [graphPath]: bucket } });
-    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
-      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+      root.render(
+        <TooltipProvider>
+          <DiagnosticsPanel />
+        </TooltipProvider>,
+      );
     });
 
-    expect(host.querySelectorAll('[data-diagnostics-row]')).toHaveLength(2);
-    expect(host.textContent).toContain('Node A');
-    expect(host.textContent).toContain('A is invalid');
-    expect(host.textContent).toContain('Node B');
-    expect(host.textContent).toContain('B needs review');
+    expect(host.querySelectorAll("[data-diagnostics-row]")).toHaveLength(2);
+    expect(host.textContent).toContain("Node A");
+    expect(host.textContent).toContain("A is invalid");
+    expect(host.textContent).toContain("Node B");
+    expect(host.textContent).toContain("B needs review");
 
-    const firstRow = host.querySelector<HTMLButtonElement>('[data-diagnostics-row]');
+    const firstRow = host.querySelector<HTMLButtonElement>("[data-diagnostics-row]");
     expect(firstRow).not.toBeNull();
     act(() => firstRow?.click());
     expect(useEditorStore.getState().detailFocus).toEqual({
-      kind: 'node',
-      id: 'node-a',
+      kind: "node",
+      id: "node-a",
       graphPath,
     });
   });
 
-  it('renders a shared header without exposing the focused graph path', () => {
-    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+  it("renders a shared header without exposing the focused graph path", () => {
+    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
-      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+      root.render(
+        <TooltipProvider>
+          <DiagnosticsPanel />
+        </TooltipProvider>,
+      );
     });
 
-    const header = host.querySelector('[data-diagnostics-panel-header]');
-    expect(header?.textContent).toContain('panel.diagnostics');
-    expect(header?.textContent).toContain('panel.diagnosticsCount');
+    const header = host.querySelector("[data-diagnostics-panel-header]");
+    expect(header?.textContent).toContain("panel.diagnostics");
+    expect(header?.textContent).toContain("panel.diagnosticsCount");
     expect(header?.textContent).not.toContain(graphPath);
   });
 
-  it('shows an empty state when the focused graph has no node diagnostics', () => {
-    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+  it("shows an empty state when the focused graph has no node diagnostics", () => {
+    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
     useGraphDataStore.setState({
       graphEntities: {
         [graphPath]: {
           ...bucket,
           nodes: {
-            'node-a': { ...bucket.nodes['node-a'], diagnostics: [] },
-            'node-b': { ...bucket.nodes['node-b'], diagnostics: [] },
+            "node-a": { ...bucket.nodes["node-a"], diagnostics: [] },
+            "node-b": { ...bucket.nodes["node-b"], diagnostics: [] },
           },
         },
       },
     });
 
     act(() => {
-      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+      root.render(
+        <TooltipProvider>
+          <DiagnosticsPanel />
+        </TooltipProvider>,
+      );
     });
 
-    expect(host.querySelectorAll('[data-diagnostics-row]')).toHaveLength(0);
-    expect(host.textContent).toContain('panel.diagnosticsEmpty');
+    expect(host.querySelectorAll("[data-diagnostics-row]")).toHaveLength(0);
+    expect(host.textContent).toContain("panel.diagnosticsEmpty");
   });
 
-  it('shows semantic port locations without exposing node or pin identities', () => {
-    const address = { kind: 'declared' as const, nodeId: 'node-a', portKey: 'value' };
+  it("shows semantic port locations without exposing node or pin identities", () => {
+    const address = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
     const pinId = portAddressKey(address);
     const portBucket = {
       ...bucket,
-      graphNodes: ['node-a'],
+      graphNodes: ["node-a"],
       nodes: {
         ...bucket.nodes,
-        'node-a': {
-          ...bucket.nodes['node-a'],
-          diagnostics: [{
-            ...diagnostic('node-a', 'node.error', 'Value is invalid'),
-            location: { kind: 'port' as const, address },
-          }],
+        "node-a": {
+          ...bucket.nodes["node-a"],
+          diagnostics: [
+            {
+              ...diagnostic("node-a", "node.error", "Value is invalid"),
+              location: { kind: "port" as const, address },
+            },
+          ],
         },
       },
       pins: {
         [pinId]: {
           id: pinId,
-          nodeId: 'node-a',
-          name: 'raw-value',
-          display: { label: 'Value', instanceLabel: null },
+          nodeId: "node-a",
+          name: "raw-value",
+          display: { label: "Value", instanceLabel: null },
           address,
         },
       },
     } as unknown as GraphEntityBucket;
     useGraphDataStore.setState({ graphEntities: { [graphPath]: portBucket } });
-    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
-      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+      root.render(
+        <TooltipProvider>
+          <DiagnosticsPanel />
+        </TooltipProvider>,
+      );
     });
 
-    expect(host.textContent).toContain('Node A · Value');
-    expect(host.textContent).not.toContain('node-a');
+    expect(host.textContent).toContain("Node A · Value");
+    expect(host.textContent).not.toContain("node-a");
     expect(host.textContent).not.toContain(pinId);
   });
 });

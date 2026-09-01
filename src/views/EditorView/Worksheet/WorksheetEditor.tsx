@@ -1,15 +1,18 @@
-import { useContext, useEffect } from 'react';
-import { GroupContext, useEditorGroupWorkspace } from '@/features/application/editor/editorGroupContext';
-import { useWorksheetRead } from '@/features/core/worksheet/read';
-import { loadWorksheetDocumentForView } from '@/features/application/worksheet/worksheetViewActions';
-import { WorksheetChartPreview } from './WorksheetChartPreview';
-import { WorksheetEmptyState } from './WorksheetEmptyState';
+import { useContext, useEffect } from "react";
+import {
+  GroupContext,
+  useEditorGroupWorkspace,
+} from "@/features/application/editor/editorGroupContext";
+import { useWorksheetRead } from "@/features/core/worksheet/read";
+import { loadWorksheetDocumentForView } from "@/features/application/worksheet/worksheetViewActions";
+import { WorksheetChartPreview } from "./WorksheetChartPreview";
+import { WorksheetEmptyState } from "./WorksheetEmptyState";
 
 export function WorksheetEditor() {
   const groupId = useContext(GroupContext);
   const { activeTabId } = useEditorGroupWorkspace(groupId);
   const document = useWorksheetRead((snapshot) =>
-    activeTabId ? snapshot.documents[activeTabId] ?? null : null,
+    activeTabId ? (snapshot.documents[activeTabId] ?? null) : null,
   );
   const hasActiveDocument = useWorksheetRead((snapshot) =>
     activeTabId ? Boolean(snapshot.documents[activeTabId]) : false,

@@ -1,14 +1,17 @@
-import { ReportSection } from '../shared/ReportLayout';
-import { formatNum } from '../shared/RegressionShared';
-import { VarModelCell, VarModelRow, VarModelTable } from '../shared/VarModelTable';
-import type { VAREquationDisplay } from '@/shared/types/report';
+import { ReportSection } from "../shared/ReportLayout";
+import { formatNum } from "../shared/RegressionShared";
+import { VarModelCell, VarModelRow, VarModelTable } from "../shared/VarModelTable";
+import type { VAREquationDisplay } from "@/shared/types/report";
 
 export function VarEquationSummarySection({ equations }: { equations: VAREquationDisplay[] }) {
   if (equations.length === 0) return null;
 
   return (
     <ReportSection title="Equation Summary" icon="anova">
-      <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'RMSE', 'R-sq', 'chi2', 'P>chi2']}>
+      <VarModelTable
+        className="mb-6"
+        columns={["Equation", "Parms", "RMSE", "R-sq", "chi2", "P>chi2"]}
+      >
         {equations.map((eq, i) => (
           <VarModelRow key={i}>
             <VarModelCell>{eq.eq_name}</VarModelCell>

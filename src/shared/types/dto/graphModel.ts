@@ -3,10 +3,10 @@
  * 项目快照导出边界只接受规范化的 store 数据。
  */
 
-import type { Graph } from '../domain/graph';
-import type { Pin } from '../domain/pin';
-import { connectionDataToItems } from './graphConverters';
-import type { GraphSnapshotData, NodeData, PinData } from '../store/graph';
+import type { Graph } from "../domain/graph";
+import type { Pin } from "../domain/pin";
+import { connectionDataToItems } from "./graphConverters";
+import type { GraphSnapshotData, NodeData, PinData } from "../store/graph";
 
 function pinDataToDomainPin(pin: PinData): Pin {
   return {
@@ -24,21 +24,19 @@ function pinDataToDomainPin(pin: PinData): Pin {
   };
 }
 
-function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph['nodes'] {
+function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph["nodes"] {
   return nodes.map((node) => ({
     id: node.id,
     nodeType: node.nodeType,
     category: node.category,
     title: node.title,
-    inputs: node.inputs
-      .map((pinId) => pinMap.get(pinId))
-      .filter((pin): pin is Pin => pin != null),
+    inputs: node.inputs.map((pinId) => pinMap.get(pinId)).filter((pin): pin is Pin => pin != null),
     outputs: node.outputs
       .map((pinId) => pinMap.get(pinId))
       .filter((pin): pin is Pin => pin != null),
     position: node.position,
     isInternal: node.isInternal,
-  })) as Graph['nodes'];
+  })) as Graph["nodes"];
 }
 
 /** Store 图 → domain Graph（ProjectData 快照） */

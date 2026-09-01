@@ -1,9 +1,9 @@
-import { memo } from 'react';
-import type { SidebarRenderRow } from './sidebarRenderRows';
-import { SidebarDataRow } from '../rows/SidebarDataRow';
-import { SidebarGroupRow } from '../rows/SidebarGroupRow';
-import { useSidebarFlatRowContext } from './sidebarFlatRowContext';
-import { SidebarSectionEmptyState } from './SidebarSectionEmptyState';
+import { memo } from "react";
+import type { SidebarRenderRow } from "./sidebarRenderRows";
+import { SidebarDataRow } from "../rows/SidebarDataRow";
+import { SidebarGroupRow } from "../rows/SidebarGroupRow";
+import { useSidebarFlatRowContext } from "./sidebarFlatRowContext";
+import { SidebarSectionEmptyState } from "./SidebarSectionEmptyState";
 
 export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
   row,
@@ -13,7 +13,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
   const ctx = useSidebarFlatRowContext();
 
   switch (row.kind) {
-    case 'section': {
+    case "section": {
       const actions = ctx.sectionActions[row.sectionKey];
       return (
         <SidebarGroupRow
@@ -27,7 +27,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
         />
       );
     }
-    case 'sectionEmpty':
+    case "sectionEmpty":
       return (
         <SidebarSectionEmptyState
           level={row.level}
@@ -35,7 +35,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
           onContextMenu={ctx.sectionActions[row.sectionKey]?.onContentContextMenu}
         />
       );
-    case 'database':
+    case "database":
       return (
         <SidebarDataRow
           id={row.id}
@@ -43,7 +43,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
           name={row.name}
           data={row.data}
           indentDepth={row.level}
-          isSelected={ctx.detailTarget?.kind === 'data' && ctx.detailTarget.id === row.id}
+          isSelected={ctx.detailTarget?.kind === "data" && ctx.detailTarget.id === row.id}
           onContextMenu={(e) => ctx.onDatabaseContextMenu?.(e, row.id, row.name)}
         />
       );

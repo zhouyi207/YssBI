@@ -4,8 +4,5 @@ export {
   GraphClipboardError,
   readGraphClipboard,
   writeGraphClipboard,
-} from './graphClipboardService';
-export type {
-  GraphClipboardEnvelope,
-  GraphClipboardErrorCode,
-} from './graphClipboardService';
+} from "./graphClipboardService";
+export type { GraphClipboardEnvelope, GraphClipboardErrorCode } from "./graphClipboardService";

@@ -1,32 +1,26 @@
-import {
-  useEffect,
-  useState,
-  type FunctionComponent,
-} from 'react';
-import type { IDockviewPanelProps } from 'dockview-react';
+import { useEffect, useState, type FunctionComponent } from "react";
+import type { IDockviewPanelProps } from "dockview-react";
 
-import type { WorkbenchComponentId, WorkbenchPanelParams } from '@/features/core/dockview';
-import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
-import { GroupContext } from '@/features/application/editor/editorGroupContext';
-import { AssistantPanel } from '@/views/AssistantView/AssistantPanel';
-import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
-import { OutputPanel } from '@/views/LogView/OutputPanel';
-import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';
-import { GraphEditor } from '../Canvas/core/GraphEditor';
-import { WorksheetEditor } from '../Worksheet/WorksheetEditor';
-import { DetailsPane } from './Detail/DetailsPane';
-import { InspectPane } from './Detail/InspectPane';
+import type { WorkbenchComponentId, WorkbenchPanelParams } from "@/features/core/dockview";
+import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
+import { GroupContext } from "@/features/application/editor/editorGroupContext";
+import { AssistantPanel } from "@/views/AssistantView/AssistantPanel";
+import { LogWorkspaceDockview } from "@/views/LogView/LogWorkspaceDockview";
+import { OutputPanel } from "@/views/LogView/OutputPanel";
+import { DiagnosticsPanel } from "@/views/LogView/DiagnosticsPanel";
+import { GraphEditor } from "../Canvas/core/GraphEditor";
+import { WorksheetEditor } from "../Worksheet/WorksheetEditor";
+import { DetailsPane } from "./Detail/DetailsPane";
+import { InspectPane } from "./Detail/InspectPane";
 import {
   WorkbenchCommandsPanel,
   WorkbenchDataPanel,
   WorkbenchNodesPanel,
   WorkbenchProjectPanel,
-} from './WorkbenchActivityPanels';
-import { ResultPanel } from './result/ResultPanel';
+} from "./WorkbenchActivityPanels";
+import { ResultPanel } from "./result/ResultPanel";
 
-function useLivePanelGroupId(
-  api: IDockviewPanelProps<WorkbenchPanelParams>['api'],
-): string {
+function useLivePanelGroupId(api: IDockviewPanelProps<WorkbenchPanelParams>["api"]): string {
   const [groupId, setGroupId] = useState(() => api.group.id);
 
   useEffect(() => {
@@ -39,14 +33,12 @@ function useLivePanelGroupId(
   return groupId;
 }
 
-export function WorkbenchEditorPanel(
-  props: IDockviewPanelProps<WorkbenchPanelParams>,
-) {
+export function WorkbenchEditorPanel(props: IDockviewPanelProps<WorkbenchPanelParams>) {
   const groupId = useLivePanelGroupId(props.api);
   const metadata = props.params.metadata;
-  if (metadata.role !== 'editor') return null;
+  if (metadata.role !== "editor") return null;
 
-  const isWorksheet = metadata.resourceKind === 'worksheet';
+  const isWorksheet = metadata.resourceKind === "worksheet";
 
   const panel = (
     <div
@@ -83,11 +75,11 @@ function GraphEditorPanel({
   graphPath,
   graphKind,
 }: {
-  api: IDockviewPanelProps<WorkbenchPanelParams>['api'];
+  api: IDockviewPanelProps<WorkbenchPanelParams>["api"];
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: 'event' | 'function';
+  graphKind: "event" | "function";
 }) {
   useVisibleGraphPanel(api, { groupId, graphPath });
   return (
@@ -101,16 +93,10 @@ function GraphEditorPanel({
 }
 
 function MainLogsPanel() {
-  return (
-    <LogWorkspaceDockview
-      layout={{ kind: 'main' }}
-    />
-  );
+  return <LogWorkspaceDockview layout={{ kind: "main" }} />;
 }
 
-type WorkbenchDockviewComponent = FunctionComponent<
-  IDockviewPanelProps<WorkbenchPanelParams>
->;
+type WorkbenchDockviewComponent = FunctionComponent<IDockviewPanelProps<WorkbenchPanelParams>>;
 
 export const workbenchDockviewComponents = {
   GraphEditor: WorkbenchEditorPanel,

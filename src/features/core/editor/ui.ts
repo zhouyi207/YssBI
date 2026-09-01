@@ -1,11 +1,8 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import {
-  useEditorStore,
-  type EditorContextMenuState,
-} from './stores/useEditorStore';
-import type { DetailFocus } from '@/shared/types/ui/detail';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useEditorStore, type EditorContextMenuState } from "./stores/useEditorStore";
+import type { DetailFocus } from "@/shared/types/ui/detail";
 
 export interface EditorUiSnapshot {
   readonly contextMenu: DeepReadonly<EditorContextMenuState> | null;
@@ -25,9 +22,7 @@ export interface EditorUiCapability {
 function buildSnapshot(): DeepReadonly<EditorUiSnapshot> {
   const state = useEditorStore.getState();
   return Object.freeze({
-    contextMenu: state.contextMenu
-      ? Object.freeze({ ...state.contextMenu })
-      : null,
+    contextMenu: state.contextMenu ? Object.freeze({ ...state.contextMenu }) : null,
     detailFocus: state.detailFocus,
     variablesGraphScopePath: state.variablesGraphScopePath,
   });
@@ -52,9 +47,7 @@ export function subscribeEditorUi(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useEditorUi<T>(
-  selector: (snapshot: DeepReadonly<EditorUiSnapshot>) => T,
-): T {
+export function useEditorUi<T>(selector: (snapshot: DeepReadonly<EditorUiSnapshot>) => T): T {
   const snapshot = useSyncExternalStore(
     subscribeEditorUi,
     getEditorUiSnapshot,
@@ -66,10 +59,8 @@ export function useEditorUi<T>(
 export const editorUi: EditorUiCapability = {
   getSnapshot: getEditorUiSnapshot,
   subscribe: subscribeEditorUi,
-  setContextMenu: (menu) =>
-    useEditorStore.getState().setContextMenu(menu ? { ...menu } : null),
-  setDetailFocus: (focus) =>
-    useEditorStore.getState().setDetailFocus(focus as DetailFocus),
+  setContextMenu: (menu) => useEditorStore.getState().setContextMenu(menu ? { ...menu } : null),
+  setDetailFocus: (focus) => useEditorStore.getState().setDetailFocus(focus as DetailFocus),
   clearDetailFocus: () => useEditorStore.getState().clearDetailFocus(),
   setVariablesGraphScope: (graphPath) =>
     useEditorStore.getState().setVariablesGraphScope(graphPath),

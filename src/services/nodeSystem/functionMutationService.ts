@@ -1,9 +1,9 @@
-import { invokeCommand } from '@/services/ipc';
+import { invokeCommand } from "@/services/ipc";
 import type {
   FunctionDocumentPatchDto,
   MutationRequestDto,
   ResourceMutationResultDto,
-} from '@/shared/types/dto/editorMutation';
+} from "@/shared/types/dto/editorMutation";
 
 export class FunctionMutationService {
   static updateSignature(
@@ -12,7 +12,7 @@ export class FunctionMutationService {
     locale: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invokeCommand<ResourceMutationResultDto>('update_function_signature', {
+    return invokeCommand<ResourceMutationResultDto>("update_function_signature", {
       projectInstanceId,
       functionPath,
       locale,

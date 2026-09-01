@@ -1,11 +1,7 @@
-import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatNum } from './RegressionShared';
-import type { VifEntry } from '@/shared/types/report';
-import {
-  InfoStatsTable,
-  infoStatsCellClass,
-  infoStatsHeadClass,
-} from './InfoStatsTable';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatNum } from "./RegressionShared";
+import type { VifEntry } from "@/shared/types/report";
+import { InfoStatsTable, infoStatsCellClass, infoStatsHeadClass } from "./InfoStatsTable";
 
 function vifRowKey(row: VifEntry, idx: number): string {
   return row.category != null ? `${row.variable}-${row.category}` : `${row.variable}-${idx}`;
@@ -26,8 +22,13 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
       </TableHeader>
       <TableBody>
         {rows.map((row, idx) => (
-          <TableRow key={vifRowKey(row, idx)} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{row.variable}</TableCell>
+          <TableRow
+            key={vifRowKey(row, idx)}
+            className="border-b border-border last:border-b-0 hover:bg-muted/40"
+          >
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
+              {row.variable}
+            </TableCell>
             {hasCategory && (
               <TableCell className={infoStatsCellClass}>
                 {row.category != null ? (
@@ -39,8 +40,12 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
                 )}
               </TableCell>
             )}
-            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatNum(row.vif)}</TableCell>
-            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatNum(row.tolerance)}</TableCell>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
+              {formatNum(row.vif)}
+            </TableCell>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
+              {formatNum(row.tolerance)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

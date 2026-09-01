@@ -1,5 +1,5 @@
-import type { FC } from 'react';
-import { useRegressionReport } from '@/features/application/stats/useRegressionReport';
+import type { FC } from "react";
+import { useRegressionReport } from "@/features/application/stats/useRegressionReport";
 import {
   ReportLayout,
   ReportLazyBoundary,
@@ -12,8 +12,8 @@ import {
   HypothesisTestBlock,
   MarginsBlock,
   formatNum,
-} from './shared';
-import type { OLSResultData } from '@/shared/types/report';
+} from "./shared";
+import type { OLSResultData } from "@/shared/types/report";
 
 export type { OLSResultData };
 
@@ -38,8 +38,8 @@ export const BinaryComponent: FC<{ data: OLSResultData }> = ({ data }) => {
       <ReportSection title="Equation" icon="equation">
         <ReportLazyBoundary variant="formula">
           <LazyBinaryFormulaBlock
-            modelType={info.model_type === 'Probit' ? 'Probit' : 'Logit'}
-            endogName={data.endog_name || 'y'}
+            modelType={info.model_type === "Probit" ? "Probit" : "Logit"}
+            endogName={data.endog_name || "y"}
             coefficients={coefficients}
           />
         </ReportLazyBoundary>
@@ -59,7 +59,7 @@ export const BinaryComponent: FC<{ data: OLSResultData }> = ({ data }) => {
         coefficients={coefficients}
         hasCategorical={hasCategorical}
         useZStat
-        showOddsRatio={info.model_type === 'Logit'}
+        showOddsRatio={info.model_type === "Logit"}
       />
 
       <MarginsBlock data={data} />
@@ -70,8 +70,8 @@ export const BinaryComponent: FC<{ data: OLSResultData }> = ({ data }) => {
           <ReportLazyBoundary variant="chart">
             <LazyScatter
               data={diag.fitted_values.map((x, i) => ({ x, y: (diag.residuals ?? [])[i] ?? 0 }))}
-              xAxis={{ label: 'Fitted (P)', valueType: 'number' }}
-              yAxis={{ label: 'Residual (y - P)', valueType: 'number' }}
+              xAxis={{ label: "Fitted (P)", valueType: "number" }}
+              yAxis={{ label: "Residual (y - P)", valueType: "number" }}
               height={280}
               symmetricY
               zeroLine

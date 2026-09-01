@@ -16,12 +16,12 @@ When historical notes conflict with current behavior, use this order:
 
 ## Files
 
-| File | Version | Period | Meaning |
-|---|---|---|---|
-| `v0_0.md` | v0.0 | 2026-02-27 – 2026-05-20 | Initial statistics, graph, data, and UI foundation history |
-| `v0_1.md` | v0.1 | 2026-06-23 – 2026-06-30 | Data, editor, type-system, and UI convergence history |
-| `v0_2.md` | v0.2 | 2026-07-01 – 2026-08-24 | Resource lifecycle, graph architecture, execution, and workbench convergence history |
-| `v0_3(待完成).md` | v0.3 | 2026-08-25 onward | Open backlog carried into the next release line |
+| File              | Version | Period                  | Meaning                                                                              |
+| ----------------- | ------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `v0_0.md`         | v0.0    | 2026-02-27 – 2026-05-20 | Initial statistics, graph, data, and UI foundation history                           |
+| `v0_1.md`         | v0.1    | 2026-06-23 – 2026-06-30 | Data, editor, type-system, and UI convergence history                                |
+| `v0_2.md`         | v0.2    | 2026-07-01 – 2026-08-24 | Resource lifecycle, graph architecture, execution, and workbench convergence history |
+| `v0_3(待完成).md` | v0.3    | 2026-08-25 onward       | Open backlog carried into the next release line                                      |
 
 ## Status vocabulary
 

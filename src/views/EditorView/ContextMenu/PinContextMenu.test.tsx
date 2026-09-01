@@ -1,24 +1,25 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PinContextMenu } from './PinContextMenu';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PinContextMenu } from "./PinContextMenu";
 
-vi.mock('react-i18next', () => ({
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 let container: HTMLDivElement;
 let portal: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  container = document.createElement('div');
-  portal = document.createElement('div');
-  portal.id = 'portal';
+  container = document.createElement("div");
+  portal = document.createElement("div");
+  portal.id = "portal";
   document.body.append(container, portal);
   root = createRoot(container);
 });
@@ -29,26 +30,32 @@ afterEach(() => {
   portal.remove();
 });
 
-describe('PinContextMenu', () => {
-  it('omits promote to variable and retains supported actions', () => {
-    renderMenu({ removable: true, hasLinks: true, canReset: true, showView: true, viewEnabled: true });
+describe("PinContextMenu", () => {
+  it("omits promote to variable and retains supported actions", () => {
+    renderMenu({
+      removable: true,
+      hasLinks: true,
+      canReset: true,
+      showView: true,
+      viewEnabled: true,
+    });
 
-    expect(item('promoteToVar')).toBeUndefined();
-    expect(item('breakLinks')).toBeDefined();
-    expect(item('resetValue')).toBeDefined();
-    expect(item('view')).toBeDefined();
-    expect(item('removePin')).toBeDefined();
+    expect(item("promoteToVar")).toBeUndefined();
+    expect(item("breakLinks")).toBeDefined();
+    expect(item("resetValue")).toBeDefined();
+    expect(item("view")).toBeDefined();
+    expect(item("removePin")).toBeDefined();
   });
 
-  it('preserves disabled state for unavailable supported actions', () => {
+  it("preserves disabled state for unavailable supported actions", () => {
     renderMenu({ removable: false, hasLinks: false, canReset: false });
 
-    expect(item('breakLinks')?.hasAttribute('data-disabled')).toBe(true);
-    expect(item('resetValue')?.hasAttribute('data-disabled')).toBe(true);
-    expect(item('removePin')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item("breakLinks")?.hasAttribute("data-disabled")).toBe(true);
+    expect(item("resetValue")?.hasAttribute("data-disabled")).toBe(true);
+    expect(item("removePin")?.hasAttribute("data-disabled")).toBe(true);
   });
 
-  it('invokes enabled break, reset, view, and remove actions', () => {
+  it("invokes enabled break, reset, view, and remove actions", () => {
     const onBreakLinks = vi.fn();
     const onResetValue = vi.fn();
     const onView = vi.fn();
@@ -66,22 +73,25 @@ describe('PinContextMenu', () => {
     });
 
     for (const [label, callback] of [
-      ['breakLinks', onBreakLinks],
-      ['resetValue', onResetValue],
-      ['view', onView],
-      ['removePin', onRemove],
+      ["breakLinks", onBreakLinks],
+      ["resetValue", onResetValue],
+      ["view", onView],
+      ["removePin", onRemove],
     ] as const) {
-      renderMenu({
-        removable: true,
-        hasLinks: true,
-        canReset: true,
-        onBreakLinks,
-        onResetValue,
-        showView: true,
-        viewEnabled: true,
-        onView,
-        onRemove,
-      }, label);
+      renderMenu(
+        {
+          removable: true,
+          hasLinks: true,
+          canReset: true,
+          onBreakLinks,
+          onResetValue,
+          showView: true,
+          viewEnabled: true,
+          onView,
+          onRemove,
+        },
+        label,
+      );
       act(() => item(label)?.click());
       expect(callback).toHaveBeenCalledOnce();
     }
@@ -89,8 +99,9 @@ describe('PinContextMenu', () => {
 });
 
 function item(label: string): HTMLElement | undefined {
-  return [...portal.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-    .find((button) => button.textContent?.includes(`contextMenu.pin.${label}`));
+  return [...portal.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((button) =>
+    button.textContent?.includes(`contextMenu.pin.${label}`),
+  );
 }
 
 function renderMenu(
@@ -99,12 +110,7 @@ function renderMenu(
 ): void {
   act(() => {
     root.render(
-      <PinContextMenu
-        key={key}
-        position={{ x: 0, y: 0 }}
-        onClose={vi.fn()}
-        {...overrides}
-      />,
+      <PinContextMenu key={key} position={{ x: 0, y: 0 }} onClose={vi.fn()} {...overrides} />,
     );
   });
 }

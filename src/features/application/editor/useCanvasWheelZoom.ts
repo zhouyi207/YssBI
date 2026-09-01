@@ -1,6 +1,6 @@
-import { useEffect, type RefObject } from 'react';
-import { attachCanvasWheelZoom } from '@/features/core/viewport';
-import type { ViewportScope } from '@/features/core/viewport';
+import { useEffect, type RefObject } from "react";
+import { attachCanvasWheelZoom } from "@/features/core/viewport";
+import type { ViewportScope } from "@/features/core/viewport";
 
 export function useCanvasWheelZoom(
   canvasElementRef: RefObject<HTMLDivElement | null>,

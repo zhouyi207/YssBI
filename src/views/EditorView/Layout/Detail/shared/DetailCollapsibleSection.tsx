@@ -1,12 +1,8 @@
-import { type ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { cn } from '@/lib/utils';
-import { DetailText } from './DetailText';
+import { type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import { DetailText } from "./DetailText";
 
 interface DetailCollapsibleSectionProps {
   title: ReactNode;
@@ -22,10 +18,7 @@ export function DetailCollapsibleSection({
   contentClassName,
 }: DetailCollapsibleSectionProps) {
   return (
-    <Collapsible
-      defaultOpen={defaultOpen}
-      className="group/collapsible border-b border-border/60"
-    >
+    <Collapsible defaultOpen={defaultOpen} className="group/collapsible border-b border-border/60">
       <CollapsibleTrigger asChild>
         <Button
           type="button"
@@ -47,7 +40,7 @@ export function DetailCollapsibleSection({
           </svg>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className={cn('px-3 pb-2 pt-1', contentClassName)}>
+      <CollapsibleContent className={cn("px-3 pb-2 pt-1", contentClassName)}>
         {children}
       </CollapsibleContent>
     </Collapsible>

@@ -1,11 +1,11 @@
-import { create } from 'zustand';
-import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
+import { create } from "zustand";
+import type { WorksheetDocument, WorksheetIndexEntry } from "@/shared/types/domain/worksheet";
 
 import {
   clearResourceDocumentState,
   markResourceDirty,
   markResourceLoaded,
-} from '@/features/core/resource';
+} from "@/features/core/resource";
 
 interface WorksheetStore {
   index: WorksheetIndexEntry[];
@@ -29,13 +29,13 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
 
   upsertDocument: (worksheetPath, document) =>
     set((state) => {
-      markResourceLoaded({ id: worksheetPath, kind: 'worksheet' });
+      markResourceLoaded({ id: worksheetPath, kind: "worksheet" });
       return { documents: { ...state.documents, [worksheetPath]: document } };
     }),
 
   removeDocument: (worksheetPath) =>
     set((state) => {
-      clearResourceDocumentState({ id: worksheetPath, kind: 'worksheet' });
+      clearResourceDocumentState({ id: worksheetPath, kind: "worksheet" });
       const documents = { ...state.documents };
       delete documents[worksheetPath];
       return {
@@ -60,7 +60,6 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
   },
 
   markDirty: (worksheetPath) => {
-    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
+    markResourceDirty({ id: worksheetPath, kind: "worksheet" }, true);
   },
-
 }));

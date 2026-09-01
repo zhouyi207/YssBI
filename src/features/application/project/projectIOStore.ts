@@ -1,59 +1,60 @@
-import { createBoundApplicationStore } from '@/features/core/state/applicationStore';
-import { LoadStatus } from '@/shared/types/ui/common';
-import type { ProjectData, Variable } from '@/shared/types';
+import { createBoundApplicationStore } from "@/features/core/state/applicationStore";
+import { LoadStatus } from "@/shared/types/ui/common";
+import type { ProjectData, Variable } from "@/shared/types";
+import { ProjectService, type ProjectActivationResult } from "@/services/project/projectService";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
+import { logger } from "@/features/application/observability/appLogger";
+
+import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
+import type { DatabaseRecord } from "@/shared/types/domain/database";
+import { useVariableStore } from "@/features/core/dataStore/variableStore";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+
+import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import {
-  ProjectService,
-  type ProjectActivationResult,
-} from '@/services/project/projectService';
-import { toErrorReference, type ErrorReference } from '@/features/application/errorReference';
-import { normalizeVariableFromBackend } from '@/shared/types/domain/variable';
-import { logger } from '@/features/application/observability/appLogger';
-
-import { normalizeDatabases } from '@/features/application/dataManagement/databaseRecords';
-import type { DatabaseRecord } from '@/shared/types/domain/database';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+  buildGraphResourceMeta,
+  useResourceStore,
+  type ProjectResourceMeta,
+} from "@/features/core/resource";
 import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
-} from '@/features/core/resource/resourceSnapshotReconcile';
-import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
+} from "@/features/core/resource/resourceSnapshotReconcile";
+import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   applyVariableCatalogFromIndex,
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
-} from '@/features/core/variable/variableCatalog';
-import { resetClientProjectState } from '@/features/application/project/projectReset';
-import { reconcileProjectPresentation } from '@/features/application/project/projectPresentationReconciler';
-import { removeProjectScopedWorkbenchPanels } from '@/features/application/project/projectWorkbenchLifecycle';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { resetFunctionSignatureCoordinator } from '@/features/application/editorMutation/functionSignatureCoordinator';
-import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
+} from "@/features/core/variable/variableCatalog";
+import { resetClientProjectState } from "@/features/application/project/projectReset";
+import { reconcileProjectPresentation } from "@/features/application/project/projectPresentationReconciler";
+import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
+import { resetHistoryCoordinator } from "@/features/application/editorMutation/historyCoordinator";
 import {
   beginGraphLoadLifecycle,
   loadGraphProjection,
   resetGraphProjectionCoordinator,
-} from '@/features/application/editorProjection/graphProjectionCoordinator';
-import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
-import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
-import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { useViewportStore } from '@/features/core/viewport';
-import { useGraphInteractionStore } from '@/features/core/graphInteraction';
-import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useColumnStatsStore } from '@/features/core/dataStore/columnStatsStore';
-import { useColumnDistributionStore } from '@/features/core/dataStore/columnDistributionStore';
-import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
+} from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { hydrateFunctionSignaturesFromProjectIndex } from "@/features/application/graphDocument/functionSignatureSync";
+import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
+import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { useViewportStore } from "@/features/core/viewport";
+import { useGraphInteractionStore } from "@/features/core/graphInteraction";
+import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
+import { useColumnStatsStore } from "@/features/core/dataStore/columnStatsStore";
+import { useColumnDistributionStore } from "@/features/core/dataStore/columnDistributionStore";
+import { useDatasetOverviewStore } from "@/features/core/dataStore/datasetOverviewStore";
 import {
   buildAuthoritativeProjectLoadPlan,
   defaultAuthoritativeProjectLoadPlanDependencies,
   type AuthoritativeProjectLoadPlanDependencies,
   type PreparedAuthoritativeProjectLoad as BasePreparedAuthoritativeProjectLoad,
-} from '@/features/application/project/authoritativeProjectLoadPlan';
+} from "@/features/application/project/authoritativeProjectLoadPlan";
 import {
   ProjectLifecycleError,
   assertCurrentProjectIdentity,
@@ -62,22 +63,22 @@ import {
   isProjectLifecycleStateCurrent,
   type ProjectIdentitySnapshot,
   type ProjectLifecycleStateSnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { useHistoryStore } from '@/features/core/history';
-import { isGraphCachedInMemory } from '@/features/core/dataStore/graphDocumentLoadPolicy';
-import { setProjectPathForViewport } from '@/features/core/viewport/projectPath';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { useHistoryStore } from "@/features/core/history";
+import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
+import { setProjectPathForViewport } from "@/features/core/viewport/projectPath";
 
-export type { AuthoritativeProjectLoadPlanDependencies } from '@/features/application/project/authoritativeProjectLoadPlan';
+export type { AuthoritativeProjectLoadPlanDependencies } from "@/features/application/project/authoritativeProjectLoadPlan";
 export type PreparedAuthoritativeProjectLoad = BasePreparedAuthoritativeProjectLoad & {
   readonly identity: ProjectIdentitySnapshot;
 };
 
-export type GraphLoadStatus = 'loading' | 'ready' | 'error';
+export type GraphLoadStatus = "loading" | "ready" | "error";
 
-export const PROJECT_LOAD_CONTRACT_ERROR_CODE = 'project_load_contract_error';
-export const PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE = 'project_resource_index_contract_error';
-export const GRAPH_PROJECTION_CONTRACT_ERROR_CODE = 'graph_projection_contract_error';
-const PROJECT_LOAD_COMMIT_ERROR_CODE = 'project_load_commit_error';
+export const PROJECT_LOAD_CONTRACT_ERROR_CODE = "project_load_contract_error";
+export const PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE = "project_resource_index_contract_error";
+export const GRAPH_PROJECTION_CONTRACT_ERROR_CODE = "graph_projection_contract_error";
+const PROJECT_LOAD_COMMIT_ERROR_CODE = "project_load_commit_error";
 
 function errorReferenceForLog(reference: ErrorReference): string {
   return reference.incidentId
@@ -87,7 +88,7 @@ function errorReferenceForLog(reference: ErrorReference): string {
 
 function logProjectIOError(context: string, reference: ErrorReference): void {
   try {
-    logger.sys.error(`${context} ${errorReferenceForLog(reference)}`, 'ProjectIOStore');
+    logger.sys.error(`${context} ${errorReferenceForLog(reference)}`, "ProjectIOStore");
   } catch {
     // Diagnostics must not control project state transitions.
   }
@@ -116,23 +117,25 @@ interface ProjectIOStore {
 
 /** 将后端变量 DTO 规范化为前端 Variable */
 function normalizeVariables(
-  vars: Record<string, Variable | Record<string, unknown>>
+  vars: Record<string, Variable | Record<string, unknown>>,
 ): Record<string, Variable> {
   const result: Record<string, Variable> = {};
   for (const [id, v] of Object.entries(vars)) {
-    const raw = typeof v === 'object' && v !== null ? { ...v, id } : { id };
-    result[id] = normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
+    const raw = typeof v === "object" && v !== null ? { ...v, id } : { id };
+    result[id] = normalizeVariableFromBackend(
+      raw as Parameters<typeof normalizeVariableFromBackend>[0],
+    );
   }
   return result;
 }
 
 function buildResourceIndex(params: {
-  graphs: Array<{ path: string; name: string; type: 'event' | 'function'; revision?: number }>;
+  graphs: Array<{ path: string; name: string; type: "event" | "function"; revision?: number }>;
   worksheets: Array<{
     worksheetPath: string;
     name: string;
     databaseId: string;
-    chartType: import('@/shared/types/domain/worksheet').WorksheetChartType;
+    chartType: import("@/shared/types/domain/worksheet").WorksheetChartType;
     revision: number;
   }>;
   variables: Record<string, Variable>;
@@ -140,14 +143,16 @@ function buildResourceIndex(params: {
 }): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = [];
   for (const graph of params.graphs) {
-    resources.push(buildGraphResourceMeta(graph.type, graph.path, graph.name, {
-      revision: graph.revision,
-    }));
+    resources.push(
+      buildGraphResourceMeta(graph.type, graph.path, graph.name, {
+        revision: graph.revision,
+      }),
+    );
   }
   for (const worksheet of params.worksheets) {
     resources.push({
       id: worksheet.worksheetPath,
-      kind: 'worksheet',
+      kind: "worksheet",
       name: worksheet.name,
       uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
       revision: worksheet.revision,
@@ -160,10 +165,10 @@ function buildResourceIndex(params: {
   }
   resources.push(...variableCatalogToResourceMetas(params.variables));
   for (const [id, database] of Object.entries(params.databases)) {
-    const name = typeof database.name === 'string' ? database.name : id;
+    const name = typeof database.name === "string" ? database.name : id;
     resources.push({
       id,
-      kind: 'database',
+      kind: "database",
       name,
       uri: `yssbi://database/${id}`,
       exists: true,
@@ -208,20 +213,19 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     if (!isCurrentProjectIdentity(identity)) return false;
     if (index.projectInstanceId !== identity.projectInstanceId) return false;
     const variableCatalog = applyVariableCatalogFromIndex(index.variables);
-    useVariableStore.getState().setVariableSnapshot(
-      variableCatalog,
-      variableRevisionsFromIndex(index.variables),
-    );
+    useVariableStore
+      .getState()
+      .setVariableSnapshot(variableCatalog, variableRevisionsFromIndex(index.variables));
 
     const databaseRows = index.databases;
-    const databasePaths = Object.fromEntries(
-      databaseRows.map((row) => [row.id, row.resourcePath]),
-    );
+    const databasePaths = Object.fromEntries(databaseRows.map((row) => [row.id, row.resourcePath]));
     useDatabaseStore.setState((state) => ({
-      databases: Object.fromEntries(Object.entries(state.databases).map(([id, database]) => [
-        id,
-        { ...database, resourcePath: databasePaths[id] },
-      ])),
+      databases: Object.fromEntries(
+        Object.entries(state.databases).map(([id, database]) => [
+          id,
+          { ...database, resourcePath: databasePaths[id] },
+        ]),
+      ),
       revisions: Object.fromEntries(databaseRows.map((row) => [row.id, row.revision])),
     }));
 
@@ -231,7 +235,8 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       worksheetPath: worksheet.worksheetPath,
       name: worksheet.name,
       databaseId: worksheet.databaseId,
-      chartType: worksheet.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
+      chartType:
+        worksheet.chartType as import("@/shared/types/domain/worksheet").WorksheetChartType,
       revision: worksheet.revision,
     }));
     useWorksheetStore.getState().setIndex(worksheetIndex);
@@ -258,7 +263,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     if (!isCurrentProjectIdentity(identity)) return false;
     const error = toErrorReference(err, PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE);
     useProjectIOStore.setState({ error });
-    logProjectIOError('Failed to refresh resource index', error);
+    logProjectIOError("Failed to refresh resource index", error);
     return false;
   }
 }
@@ -281,7 +286,7 @@ export async function prepareAuthoritativeProjectLoad(
   const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
   assertCurrentProjectIdentity(identity);
   if (index.projectInstanceId !== identity.projectInstanceId) {
-    throw new Error('Project index identity does not match the requested project');
+    throw new Error("Project index identity does not match the requested project");
   }
   const prepared = buildAuthoritativeProjectLoadPlan(
     { path, databases, index },
@@ -317,13 +322,10 @@ export async function commitPreparedAuthoritativeProjectLoad(
   assertCurrentProjectIdentity(prepared.identity);
   const previousProjectInstanceId = useProjectIOStore.getState().projectInstanceId;
   const nextProjectInstanceId = prepared.index.projectInstanceId;
-  const isProjectReplacement = previousProjectInstanceId !== null
-    && previousProjectInstanceId !== nextProjectInstanceId;
+  const isProjectReplacement =
+    previousProjectInstanceId !== null && previousProjectInstanceId !== nextProjectInstanceId;
   if (isProjectReplacement) {
-    await removeProjectScopedWorkbenchPanels(
-      previousProjectInstanceId,
-      prepared.identity,
-    );
+    await removeProjectScopedWorkbenchPanels(previousProjectInstanceId, prepared.identity);
   }
   assertCurrentProjectIdentity(prepared.identity);
   if (useProjectIOStore.getState().projectInstanceId !== previousProjectInstanceId) {
@@ -334,55 +336,81 @@ export async function commitPreparedAuthoritativeProjectLoad(
     nextProjectInstanceId,
     prepared.index.publicationRevision,
   );
-  commitProjectLoadStep('graph projection coordinator', resetGraphProjectionCoordinator);
+  commitProjectLoadStep("graph projection coordinator", resetGraphProjectionCoordinator);
   loadGraphInFlight.clear();
-  commitProjectLoadStep('graph load status', () => useProjectIOStore.setState({
-    graphLoadStatus: {},
-  }));
-  commitProjectLoadStep('function signature coordinator', resetFunctionSignatureCoordinator);
-  commitProjectLoadStep('history coordinator', resetHistoryCoordinator);
+  commitProjectLoadStep("graph load status", () =>
+    useProjectIOStore.setState({
+      graphLoadStatus: {},
+    }),
+  );
+  commitProjectLoadStep("function signature coordinator", resetFunctionSignatureCoordinator);
+  commitProjectLoadStep("history coordinator", resetHistoryCoordinator);
 
-  commitProjectLoadStep('detail focus', () => useEditorStore.setState({
-    detailFocus: isProjectReplacement ? null : prepared.storeState.detailFocus,
-  }));
-  commitProjectLoadStep('viewport', () => useViewportStore.setState({ viewports: {} }));
-  commitProjectLoadStep('graph interaction', () => useGraphInteractionStore.setState({
-    positionOverrides: {},
-  }));
-  commitProjectLoadStep('column stats', () => useColumnStatsStore.setState({ statsByDatabase: {} }));
-  commitProjectLoadStep('column distribution', () => useColumnDistributionStore.setState({
-    distByDatabase: {},
-  }));
-  commitProjectLoadStep('dataset overview', () => useDatasetOverviewStore.setState({
-    overviewByDatabase: {},
-  }));
-  commitProjectLoadStep('database', () => useDatabaseStore.setState({
-    databases: prepared.storeState.databases,
-    revisions: prepared.storeState.databaseRevisions,
-  }));
-  commitProjectLoadStep('variable', () => useVariableStore.setState({
-    variables: prepared.storeState.variables,
-    revisions: prepared.storeState.variableRevisions,
-  }));
-  commitProjectLoadStep('worksheet', () => useWorksheetStore.setState({
-    index: prepared.storeState.worksheetIndex,
-    documents: {},
-  }));
-  commitProjectLoadStep('documents', () => useDocumentStateStore.setState({ documents: {} }));
-  commitProjectLoadStep('resources', () => useResourceStore.setState({
-    resources: prepared.storeState.resources,
-    graphOrder: prepared.storeState.graphOrder,
-  }));
-  commitProjectLoadStep('function metadata', () => useGraphMetaStore.setState({
-    graphs: prepared.storeState.graphMeta,
-  }));
-  commitProjectLoadStep('graph session', () => useGraphSessionStore.setState({ focusedSession: null }));
-  commitProjectLoadStep('graph data', () => useGraphDataStore.setState({ graphEntities: {} }));
-  commitProjectLoadStep('history', () => useHistoryStore.setState(prepared.storeState.history));
-  commitProjectLoadStep('project IO', () => useProjectIOStore.setState(prepared.storeState.projectIO));
-  commitProjectLoadStep('open tab reconcile', reconcileProjectPresentation);
-  commitProjectLoadStep('completion log', () => {
-    logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
+  commitProjectLoadStep("detail focus", () =>
+    useEditorStore.setState({
+      detailFocus: isProjectReplacement ? null : prepared.storeState.detailFocus,
+    }),
+  );
+  commitProjectLoadStep("viewport", () => useViewportStore.setState({ viewports: {} }));
+  commitProjectLoadStep("graph interaction", () =>
+    useGraphInteractionStore.setState({
+      positionOverrides: {},
+    }),
+  );
+  commitProjectLoadStep("column stats", () =>
+    useColumnStatsStore.setState({ statsByDatabase: {} }),
+  );
+  commitProjectLoadStep("column distribution", () =>
+    useColumnDistributionStore.setState({
+      distByDatabase: {},
+    }),
+  );
+  commitProjectLoadStep("dataset overview", () =>
+    useDatasetOverviewStore.setState({
+      overviewByDatabase: {},
+    }),
+  );
+  commitProjectLoadStep("database", () =>
+    useDatabaseStore.setState({
+      databases: prepared.storeState.databases,
+      revisions: prepared.storeState.databaseRevisions,
+    }),
+  );
+  commitProjectLoadStep("variable", () =>
+    useVariableStore.setState({
+      variables: prepared.storeState.variables,
+      revisions: prepared.storeState.variableRevisions,
+    }),
+  );
+  commitProjectLoadStep("worksheet", () =>
+    useWorksheetStore.setState({
+      index: prepared.storeState.worksheetIndex,
+      documents: {},
+    }),
+  );
+  commitProjectLoadStep("documents", () => useDocumentStateStore.setState({ documents: {} }));
+  commitProjectLoadStep("resources", () =>
+    useResourceStore.setState({
+      resources: prepared.storeState.resources,
+      graphOrder: prepared.storeState.graphOrder,
+    }),
+  );
+  commitProjectLoadStep("function metadata", () =>
+    useGraphMetaStore.setState({
+      graphs: prepared.storeState.graphMeta,
+    }),
+  );
+  commitProjectLoadStep("graph session", () =>
+    useGraphSessionStore.setState({ focusedSession: null }),
+  );
+  commitProjectLoadStep("graph data", () => useGraphDataStore.setState({ graphEntities: {} }));
+  commitProjectLoadStep("history", () => useHistoryStore.setState(prepared.storeState.history));
+  commitProjectLoadStep("project IO", () =>
+    useProjectIOStore.setState(prepared.storeState.projectIO),
+  );
+  commitProjectLoadStep("open tab reconcile", reconcileProjectPresentation);
+  commitProjectLoadStep("completion log", () => {
+    logger.sys.info("Project loaded (index from Rust)", "ProjectIOStore");
   });
   return prepared.projectData;
 }
@@ -417,7 +445,7 @@ async function loadProjectForIdentity(
       if (!isCurrentProjectIdentity(identity)) return null;
       const error = toErrorReference(err, PROJECT_LOAD_CONTRACT_ERROR_CODE);
       useProjectIOStore.setState({ status: LoadStatus.Error, error });
-      logProjectIOError('Failed to load project', error);
+      logProjectIOError("Failed to load project", error);
       return null;
     } finally {
       if (loadProjectInFlight === entry) loadProjectInFlight = null;
@@ -430,10 +458,12 @@ async function loadProjectForIdentity(
 export function loadActivatedProject(
   activation: ProjectActivationResult,
 ): Promise<ProjectData | null> {
-  if (!projectPublicationCoordinator.acceptProjectActivation(
-    activation.projectInstanceId,
-    activation.activationRevision,
-  )) {
+  if (
+    !projectPublicationCoordinator.acceptProjectActivation(
+      activation.projectInstanceId,
+      activation.activationRevision,
+    )
+  ) {
     return Promise.resolve(null);
   }
   return loadProjectForIdentity(captureProjectIdentity());
@@ -484,35 +514,45 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     if (!commitOwnedClear(() => set({ graphLoadStatus: {} }))) return;
     if (!commitOwnedClear(() => set({ projectInstanceId: null }))) return;
     expectedProjectInstanceId = null;
-    if (!commitOwnedClear(() => {
-      useGraphDataStore.setState({ graphEntities: {} });
-    })) return;
+    if (
+      !commitOwnedClear(() => {
+        useGraphDataStore.setState({ graphEntities: {} });
+      })
+    )
+      return;
 
     const normalizedVariables = normalizeVariables(project.variables);
     let normalizedDatabases: Record<string, DatabaseRecord> = {};
-    if (!commitOwnedClear(() => {
-      normalizedDatabases = applyDatabasesFromRaw(
-        project.databases as Record<string, unknown>,
-      );
-    })) return;
-    if (!commitOwnedClear(() => {
-      useVariableStore.getState().setVariables(normalizedVariables);
-    })) return;
-    if (!commitOwnedClear(() => {
-      useResourceStore.getState().setSnapshot({
-        resources: buildResourceIndex({
-          graphs: Object.values(project.graphs).map((graph) => ({
-            path: graph.path,
-            name: graph.name,
-            type: graph.type,
-          })),
-          worksheets: [],
-          variables: normalizedVariables,
-          databases: normalizedDatabases,
-        }),
-        graphOrder: Object.values(project.graphs).map((graph) => graph.path),
-      });
-    })) return;
+    if (
+      !commitOwnedClear(() => {
+        normalizedDatabases = applyDatabasesFromRaw(project.databases as Record<string, unknown>);
+      })
+    )
+      return;
+    if (
+      !commitOwnedClear(() => {
+        useVariableStore.getState().setVariables(normalizedVariables);
+      })
+    )
+      return;
+    if (
+      !commitOwnedClear(() => {
+        useResourceStore.getState().setSnapshot({
+          resources: buildResourceIndex({
+            graphs: Object.values(project.graphs).map((graph) => ({
+              path: graph.path,
+              name: graph.name,
+              type: graph.type,
+            })),
+            worksheets: [],
+            variables: normalizedVariables,
+            databases: normalizedDatabases,
+          }),
+          graphOrder: Object.values(project.graphs).map((graph) => graph.path),
+        });
+      })
+    )
+      return;
     if (!commitOwnedClear(reconcileProjectPresentation)) return;
     commitOwnedClear(() => {
       set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
@@ -522,7 +562,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
   loadGraph: async (graphPath) => {
     if (isGraphCachedInMemory(graphPath)) {
       set((state) => ({
-        graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'ready' },
+        graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "ready" },
       }));
       return true;
     }
@@ -531,14 +571,14 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     if (existing) return existing.promise;
 
     set((state) => ({
-      graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'loading' },
+      graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "loading" },
     }));
     const lifecycleToken = beginGraphLoadLifecycle(graphPath);
     const pending = loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
         const error = toErrorReference(err, GRAPH_PROJECTION_CONTRACT_ERROR_CODE);
         set({ error });
-        logProjectIOError('Failed to load graph projection', error);
+        logProjectIOError("Failed to load graph projection", error);
         return false;
       })
       .then((loaded) => {
@@ -547,7 +587,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
           set((state) => ({
             graphLoadStatus: {
               ...state.graphLoadStatus,
-              [graphPath]: loaded ? 'ready' : 'error',
+              [graphPath]: loaded ? "ready" : "error",
             },
           }));
         }
@@ -563,7 +603,6 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     loadGraphInFlight.set(graphPath, { lifecycleToken, promise: pending });
     return pending;
   },
-
 }));
 
 setProjectPathForViewport(useProjectIOStore.getState().currentPath);

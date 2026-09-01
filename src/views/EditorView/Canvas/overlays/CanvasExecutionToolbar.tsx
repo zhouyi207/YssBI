@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useExecutionPlayback } from "@/features/core/execution/useExecutionPlayback";
-import { useExecutionRead } from '@/features/core/execution/read';
+import { useExecutionRead } from "@/features/core/execution/read";
 import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
 import {
   VscClearAll,
@@ -40,18 +40,21 @@ export function CanvasExecutionToolbar({
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
-  const { stop: stopReplay, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } =
-    useExecutionPlayback(graphPath);
+  const {
+    stop: stopReplay,
+    togglePlayPause,
+    isPlaying,
+    isPaused,
+    hasRecording,
+    graphDirty,
+  } = useExecutionPlayback(graphPath);
   const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 
   const playbackActive = isPlaying || isPaused;
   const isLiveRunning = graphStatus === "running";
   const canReplay = hasRecording && !graphDirty && !isLiveRunning;
-  const canClear =
-    !isLiveRunning
-    && !playbackActive
-    && graphHasClearableArtifacts(graphState);
+  const canClear = !isLiveRunning && !playbackActive && graphHasClearableArtifacts(graphState);
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">

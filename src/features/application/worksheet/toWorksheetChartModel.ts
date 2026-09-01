@@ -1,32 +1,32 @@
-import type { WorksheetPreviewPayload } from '@/shared/types/domain';
-import type { ChartModel } from '@/shared/types/visualization';
+import type { WorksheetPreviewPayload } from "@/shared/types/domain";
+import type { ChartModel } from "@/shared/types/visualization";
 
 export function toWorksheetChartModel(payload: WorksheetPreviewPayload): ChartModel | null {
   switch (payload.kind) {
-    case 'histogram':
+    case "histogram":
       return {
-        kind: 'histogram',
+        kind: "histogram",
         bins: payload.bins,
         xLabel: payload.xLabel,
         yLabel: payload.yLabel,
       };
-    case 'scatter':
+    case "scatter":
       return {
-        kind: 'scatter',
+        kind: "scatter",
         points: payload.pair.data,
         xAxis: { label: payload.pair.xLabel, valueType: payload.pair.xFormat },
         yAxis: { label: payload.pair.yLabel, valueType: payload.pair.yFormat },
       };
-    case 'line':
+    case "line":
       return {
-        kind: 'line',
+        kind: "line",
         points: payload.pair.data,
         xAxis: { label: payload.pair.xLabel, valueType: payload.pair.xFormat },
         yAxis: { label: payload.pair.yLabel, valueType: payload.pair.yFormat },
         showPoints: true,
       };
-    case 'empty':
-    case 'error':
+    case "empty":
+    case "error":
       return null;
   }
 }

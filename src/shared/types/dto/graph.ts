@@ -4,10 +4,8 @@
  * 序列化时后端使用 snake_case，前端接收后保持 JSON 原始格式
  */
 
-
-import type { PinDirection } from '../domain/pin';
-import type { DataType } from '../domain/dataType';
-
+import type { PinDirection } from "../domain/pin";
+import type { DataType } from "../domain/dataType";
 
 // ==================== Node DTO ====================
 
@@ -15,7 +13,6 @@ export interface NodePositionDTO {
   x: number;
   y: number;
 }
-
 
 // ==================== Pin DTO ====================
 
@@ -51,7 +48,6 @@ export interface ConnectionItemDTO {
 export interface ConnectionDTO {
   connections: ConnectionItemDTO[];
 }
-
 
 export interface GraphValidationWarningDTO {
   code: string;

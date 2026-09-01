@@ -2,12 +2,12 @@
  * Info 报告 IPC 单点窄化：ReportKind → 已校验 payload
  */
 
-import { isRegressionReportKind, type ReportPayloadKind } from './reportKinds';
-import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from './parseDfadf';
-import { parsePanelDidResultData, parsePanelSummaryResult } from './parsePanel';
-import { parseRegressionResultData } from './parseRegression';
-import { parseVarSocResultData, parseVarSummaryResultData } from './parseVar';
-import { parseVecRankResultData, parseVecSummaryResultData } from './parseVec';
+import { isRegressionReportKind, type ReportPayloadKind } from "./reportKinds";
+import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./parseDfadf";
+import { parsePanelDidResultData, parsePanelSummaryResult } from "./parsePanel";
+import { parseRegressionResultData } from "./parseRegression";
+import { parseVarSocResultData, parseVarSummaryResultData } from "./parseVar";
+import { parseVecRankResultData, parseVecSummaryResultData } from "./parseVec";
 
 /**
  * 在报告进入 InfoView 前窄化 JSON。
@@ -20,21 +20,21 @@ export function parseReportPayload(report: ReportPayloadKind, raw: unknown): unk
     return parseRegressionResultData(raw);
   }
   switch (report) {
-    case 'varSummary':
+    case "varSummary":
       return parseVarSummaryResultData(raw);
-    case 'varSoc':
+    case "varSoc":
       return parseVarSocResultData(raw);
-    case 'panelSummary':
+    case "panelSummary":
       return parsePanelSummaryResult(raw);
-    case 'panelDid':
+    case "panelDid":
       return parsePanelDidResultData(raw);
-    case 'dfAdfSummary':
+    case "dfAdfSummary":
       return parseDfAdfSummaryResultData(raw);
-    case 'dfAdfSummaryList':
+    case "dfAdfSummaryList":
       return parseDfAdfSummaryListResultData(raw);
-    case 'vecSummary':
+    case "vecSummary":
       return parseVecSummaryResultData(raw);
-    case 'vecRankSummary':
+    case "vecRankSummary":
       return parseVecRankResultData(raw);
     default:
       return null;

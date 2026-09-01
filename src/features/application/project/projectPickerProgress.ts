@@ -22,39 +22,39 @@ export interface ProjectPickerProgressRun<T> {
   cancelled: boolean;
 }
 
-export type ProjectPickerProgressTask = 'scan' | 'cleanup' | 'create' | 'open';
+export type ProjectPickerProgressTask = "scan" | "cleanup" | "create" | "open";
 
 export function projectPickerProgressInitial(
   task: ProjectPickerProgressTask,
-): RunProjectPickerProgressOptions['initial'] {
+): RunProjectPickerProgressOptions["initial"] {
   switch (task) {
-    case 'scan':
+    case "scan":
       return {
-        stage: i18n.t('projectPicker.loading.scanning'),
-        detail: i18n.t('projectPicker.loading.scanningFolder'),
+        stage: i18n.t("projectPicker.loading.scanning"),
+        detail: i18n.t("projectPicker.loading.scanningFolder"),
         cancelable: true,
       };
-    case 'cleanup':
+    case "cleanup":
       return {
-        stage: i18n.t('projectPicker.loading.cleanup'),
+        stage: i18n.t("projectPicker.loading.cleanup"),
         cancelable: true,
       };
-    case 'create':
+    case "create":
       return {
-        stage: i18n.t('projectPicker.loading.creating'),
+        stage: i18n.t("projectPicker.loading.creating"),
         percent: 0.2,
       };
-    case 'open':
+    case "open":
       return {
-        stage: i18n.t('projectPicker.loading.opening'),
-        detail: i18n.t('projectPicker.loading.readingFile'),
+        stage: i18n.t("projectPicker.loading.opening"),
+        detail: i18n.t("projectPicker.loading.readingFile"),
         percent: 0.1,
       };
   }
 }
 
 export function projectPickerScanFolderTitle(): string {
-  return i18n.t('projectPicker.scanFolderTitle');
+  return i18n.t("projectPicker.scanFolderTitle");
 }
 
 /** 统一项目选择页进度蒙层生命周期（start → update → finish）。 */
@@ -167,7 +167,7 @@ export function applyCleanupProgressEvent(
   if (event.kind === "removing") {
     update({
       detail: i18n.t("projectPicker.loading.cleanupRemoving", { removed: event.removed }),
-      percent: 0.85 + 0.1 * Math.min(event.removed, event.total) / Math.max(event.total, 1),
+      percent: 0.85 + (0.1 * Math.min(event.removed, event.total)) / Math.max(event.total, 1),
     });
   }
 }

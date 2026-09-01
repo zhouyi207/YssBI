@@ -1,19 +1,19 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { SidebarEmptyState } from './SidebarEmptyState';
-import { SidebarSectionEmptyState } from './SidebarSectionEmptyState';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarEmptyState } from "./SidebarEmptyState";
+import { SidebarSectionEmptyState } from "./SidebarSectionEmptyState";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('Sidebar empty-state components', () => {
+describe("Sidebar empty-state components", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -23,7 +23,7 @@ describe('Sidebar empty-state components', () => {
     host.remove();
   });
 
-  it('renders a wrapping tab-level state without a scrollbar viewport', () => {
+  it("renders a wrapping tab-level state without a scrollbar viewport", () => {
     act(() => {
       root.render(
         <SidebarEmptyState
@@ -33,12 +33,12 @@ describe('Sidebar empty-state components', () => {
       );
     });
 
-    expect(host.textContent).toContain('Node catalog unavailable');
-    expect(host.textContent).toContain('Waiting for stable catalog descriptors');
+    expect(host.textContent).toContain("Node catalog unavailable");
+    expect(host.textContent).toContain("Waiting for stable catalog descriptors");
     expect(host.querySelector('[data-slot="scroll-area-viewport"]')).toBeNull();
   });
 
-  it('renders a section state with the full accessible label', () => {
+  it("renders a section state with the full accessible label", () => {
     act(() => {
       root.render(
         <TooltipProvider>
@@ -60,7 +60,7 @@ describe('Sidebar empty-state components', () => {
     expect(document.activeElement).toBe(message);
   });
 
-  it('forwards section context-menu events', () => {
+  it("forwards section context-menu events", () => {
     let contextMenuCalls = 0;
     act(() => {
       root.render(
@@ -78,7 +78,7 @@ describe('Sidebar empty-state components', () => {
 
     const message = host.querySelector('[aria-label="No events"]');
     act(() => {
-      message?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      message?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
     });
 
     expect(contextMenuCalls).toBe(1);

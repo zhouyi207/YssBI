@@ -1,23 +1,20 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import * as correlogramModule from './correlogram';
-import {
-  normalizeDurbinWatsonResult,
-  normalizeSerialTestsResponse,
-} from './serialTests';
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import * as correlogramModule from "./correlogram";
+import { normalizeDurbinWatsonResult, normalizeSerialTestsResponse } from "./serialTests";
 import {
   acfSeriesToBars,
   hasLjungBoxStats,
   parsePlotCorrelogramBar,
   pacfSeriesToBars,
-} from './correlogram';
-import { parseIv2slsFirstStageResult } from './iv';
-import { parseRegressionResultData } from './parseRegression';
-import { parseReportPayload } from './parseReportPayload';
+} from "./correlogram";
+import { parseIv2slsFirstStageResult } from "./iv";
+import { parseRegressionResultData } from "./parseRegression";
+import { parseReportPayload } from "./parseReportPayload";
 
-describe('normalizeSerialTestsResponse', () => {
-  it('accepts dw as { d: number }', () => {
+describe("normalizeSerialTestsResponse", () => {
+  it("accepts dw as { d: number }", () => {
     const result = normalizeSerialTestsResponse({
       dw: { d: 1.85 },
       q: { stat: 2.1, p_value: 0.3, lags: 5 },
@@ -26,12 +23,12 @@ describe('normalizeSerialTestsResponse', () => {
     expect(result?.q?.lags).toBe(5);
   });
 
-  it('rejects a bare number for dw', () => {
+  it("rejects a bare number for dw", () => {
     expect(normalizeSerialTestsResponse({ dw: 1.85 })).toBeNull();
     expect(normalizeDurbinWatsonResult(1.85)).toBeNull();
   });
 
-  it('rejects malformed bg while keeping dw', () => {
+  it("rejects malformed bg while keeping dw", () => {
     expect(
       normalizeSerialTestsResponse({
         dw: { d: 2 },
@@ -41,12 +38,12 @@ describe('normalizeSerialTestsResponse', () => {
   });
 });
 
-describe('correlogram report DTO', () => {
-  it('keeps tooltip HTML builders out of the report type boundary', () => {
-    expect(correlogramModule).not.toHaveProperty('correlogramLjungBoxTooltipHtml');
+describe("correlogram report DTO", () => {
+  it("keeps tooltip HTML builders out of the report type boundary", () => {
+    expect(correlogramModule).not.toHaveProperty("correlogramLjungBoxTooltipHtml");
   });
 
-  it('builds report bars without ljung-box stats', () => {
+  it("builds report bars without ljung-box stats", () => {
     const acf = acfSeriesToBars([1, 0.5, 0.2]);
     expect(acf[0]).toEqual({ lag: 0, value: 1 });
     expect(hasLjungBoxStats(acf[0])).toBe(false);
@@ -54,7 +51,7 @@ describe('correlogram report DTO', () => {
     expect(pacf[0].lag).toBe(1);
   });
 
-  it('parses plot bar with required qStat and pValue', () => {
+  it("parses plot bar with required qStat and pValue", () => {
     const bar = parsePlotCorrelogramBar({
       lag: 2,
       value: 0.3,
@@ -67,16 +64,16 @@ describe('correlogram report DTO', () => {
   });
 });
 
-describe('parseIv2slsFirstStageResult', () => {
-  it('accepts Rust-shaped first stage JSON', () => {
+describe("parseIv2slsFirstStageResult", () => {
+  it("accepts Rust-shaped first stage JSON", () => {
     const result = parseIv2slsFirstStageResult({
-      endog_name: 'y1',
-      var_names: ['x1', 'z1'],
+      endog_name: "y1",
+      var_names: ["x1", "z1"],
       r_squared: 0.42,
       adj_r_squared: 0.4,
       coefficients: [
         {
-          variable: 'x1',
+          variable: "x1",
           coef: 1.2,
           std_err: 0.3,
           t_value: 4,
@@ -85,28 +82,28 @@ describe('parseIv2slsFirstStageResult', () => {
         },
       ],
     });
-    expect(result?.endog_name).toBe('y1');
-    expect(result?.coefficients[0]?.variable).toBe('x1');
+    expect(result?.endog_name).toBe("y1");
+    expect(result?.coefficients[0]?.variable).toBe("x1");
   });
 
-  it('rejects missing is_significant on coefficients', () => {
+  it("rejects missing is_significant on coefficients", () => {
     expect(
       parseIv2slsFirstStageResult({
-        endog_name: 'y1',
-        var_names: ['x1'],
+        endog_name: "y1",
+        var_names: ["x1"],
         r_squared: 0.1,
         adj_r_squared: 0.05,
-        coefficients: [{ variable: 'x1', coef: 1 }],
+        coefficients: [{ variable: "x1", coef: 1 }],
       }),
     ).toBeNull();
   });
 });
 
 const MINIMAL_REGRESSION = {
-  title: 'OLS',
+  title: "OLS",
   model_basic_info: {
-    model_type: 'OLS',
-    method: 'Least Squares',
+    model_type: "OLS",
+    method: "Least Squares",
     num_observation: 100,
     r_squared: 0.5,
     adj_r_squared: 0.48,
@@ -121,26 +118,26 @@ const MINIMAL_REGRESSION = {
     ms_model: 25,
     ms_residual: 0.5,
     ms_total: 1,
-    covariance_type: 'nonrobust',
+    covariance_type: "nonrobust",
   },
-  coefficients: [{ variable: 'const', coef: 1, is_significant: true }],
+  coefficients: [{ variable: "const", coef: 1, is_significant: true }],
   diagnostic_info: { cond_no: 10 },
 };
 
-describe('parseRegressionResultData', () => {
-  it('accepts minimal OLS-shaped payload', () => {
-    expect(parseRegressionResultData(MINIMAL_REGRESSION)?.title).toBe('OLS');
+describe("parseRegressionResultData", () => {
+  it("accepts minimal OLS-shaped payload", () => {
+    expect(parseRegressionResultData(MINIMAL_REGRESSION)?.title).toBe("OLS");
   });
 
-  it('preserves binary model statistics and hypothesis inputs', () => {
+  it("preserves binary model statistics and hypothesis inputs", () => {
     const parsed = parseRegressionResultData({
       ...MINIMAL_REGRESSION,
-      title: 'LOGIT Summary',
+      title: "LOGIT Summary",
       betas: [0.25],
       cov_beta: [[0.0625]],
       model_statistics: {
-        kind: 'binary',
-        link: 'logit',
+        kind: "binary",
+        link: "logit",
         covariance: [[0.0625]],
         standardErrors: [0.25],
         statisticValues: [1],
@@ -163,16 +160,18 @@ describe('parseRegressionResultData', () => {
 
     expect(parsed?.betas).toEqual([0.25]);
     expect(parsed?.cov_beta).toEqual([[0.0625]]);
-    expect(parsed?.model_statistics).toEqual(expect.objectContaining({
-      kind: 'binary',
-      link: 'logit',
-      covariance: [[0.0625]],
-      logLikelihood: -8.5,
-      converged: true,
-    }));
+    expect(parsed?.model_statistics).toEqual(
+      expect.objectContaining({
+        kind: "binary",
+        link: "logit",
+        covariance: [[0.0625]],
+        logLikelihood: -8.5,
+        converged: true,
+      }),
+    );
   });
 
-  it('parses backend leverage KDE points', () => {
+  it("parses backend leverage KDE points", () => {
     const parsed = parseRegressionResultData({
       ...MINIMAL_REGRESSION,
       diagnostic_info: {
@@ -188,8 +187,8 @@ describe('parseRegressionResultData', () => {
   it.each([
     [{ x: Number.NaN, y: 1 }],
     [{ x: 0, y: Number.POSITIVE_INFINITY }],
-    [{ x: 0, y: 'bad' }],
-  ])('rejects malformed leverage KDE points: %j', leverage_kde => {
+    [{ x: 0, y: "bad" }],
+  ])("rejects malformed leverage KDE points: %j", (leverage_kde) => {
     expect(
       parseRegressionResultData({
         ...MINIMAL_REGRESSION,
@@ -198,28 +197,28 @@ describe('parseRegressionResultData', () => {
     ).toBeNull();
   });
 
-  it('rejects missing cond_no', () => {
-    expect(
-      parseRegressionResultData({ ...MINIMAL_REGRESSION, diagnostic_info: {} }),
-    ).toBeNull();
+  it("rejects missing cond_no", () => {
+    expect(parseRegressionResultData({ ...MINIMAL_REGRESSION, diagnostic_info: {} })).toBeNull();
   });
 });
 
-describe('parseReportPayload', () => {
-  it('dispatches regression reports through shared parser', () => {
-    expect(parseReportPayload('olsSummary', MINIMAL_REGRESSION)).not.toBeNull();
+describe("parseReportPayload", () => {
+  it("dispatches regression reports through shared parser", () => {
+    expect(parseReportPayload("olsSummary", MINIMAL_REGRESSION)).not.toBeNull();
   });
 
-  it('accepts the Rust OLS Summary report output', () => {
-    const payload: unknown = JSON.parse(readFileSync(
-      resolve('src/tests/fixtures/node-system-contracts/ols-summary-report.json'),
-      'utf8',
-    ));
+  it("accepts the Rust OLS Summary report output", () => {
+    const payload: unknown = JSON.parse(
+      readFileSync(
+        resolve("src/tests/fixtures/node-system-contracts/ols-summary-report.json"),
+        "utf8",
+      ),
+    );
 
-    expect(parseReportPayload('olsSummary', payload)).not.toBeNull();
+    expect(parseReportPayload("olsSummary", payload)).not.toBeNull();
   });
 
-  it('rejects panel_did without kind discriminator', () => {
-    expect(parseReportPayload('panelDid', { title: 'DID' })).toBeNull();
+  it("rejects panel_did without kind discriminator", () => {
+    expect(parseReportPayload("panelDid", { title: "DID" })).toBeNull();
   });
 });

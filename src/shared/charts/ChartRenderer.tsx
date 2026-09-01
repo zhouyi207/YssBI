@@ -1,16 +1,16 @@
-import type React from 'react';
-import { EcdfChart } from './cartesian/EcdfChart';
-import { HistogramChart } from './cartesian/HistogramChart';
-import { KdeChart } from './cartesian/KdeChart';
-import { LineChart } from './cartesian/LineChart';
-import { ScatterChart } from './cartesian/ScatterChart';
-import { useChartTheme } from './core/theme';
-import type { ChartSurfaceVariant } from './core/types';
-import { CorrelationMatrixChart } from './statistical/CorrelationMatrixChart';
-import { CorrelogramChart } from './statistical/CorrelogramChart';
-import type { ChartModel } from '@/shared/types/visualization/chartModel';
+import type React from "react";
+import { EcdfChart } from "./cartesian/EcdfChart";
+import { HistogramChart } from "./cartesian/HistogramChart";
+import { KdeChart } from "./cartesian/KdeChart";
+import { LineChart } from "./cartesian/LineChart";
+import { ScatterChart } from "./cartesian/ScatterChart";
+import { useChartTheme } from "./core/theme";
+import type { ChartSurfaceVariant } from "./core/types";
+import { CorrelationMatrixChart } from "./statistical/CorrelationMatrixChart";
+import { CorrelogramChart } from "./statistical/CorrelogramChart";
+import type { ChartModel } from "@/shared/types/visualization/chartModel";
 
-type ChartModelKind = ChartModel['kind'];
+type ChartModelKind = ChartModel["kind"];
 type ChartRendererMap = {
   [K in ChartModelKind]: React.ComponentType<{
     model: Extract<ChartModel, { kind: K }>;
@@ -32,9 +32,11 @@ const chartRenderers = {
   ),
   line: ({ model, surface }) => (
     <div
-      className={surface === 'card'
-        ? 'h-full min-h-0 overflow-hidden rounded-lg border border-border bg-card'
-        : 'h-full min-h-0 overflow-hidden'}
+      className={
+        surface === "card"
+          ? "h-full min-h-0 overflow-hidden rounded-lg border border-border bg-card"
+          : "h-full min-h-0 overflow-hidden"
+      }
     >
       <LineChart
         data={model.points}
@@ -54,12 +56,7 @@ const chartRenderers = {
     />
   ),
   ecdf: ({ model, surface }) => (
-    <EcdfChart
-      data={model.points}
-      xAxis={model.xAxis}
-      yAxis={model.yAxis}
-      surface={surface}
-    />
+    <EcdfChart data={model.points} xAxis={model.xAxis} yAxis={model.yAxis} surface={surface} />
   ),
   kde: ({ model, surface }) => (
     <KdeChart
@@ -67,9 +64,7 @@ const chartRenderers = {
       xLabel={model.xAxis.label}
       yLabel={model.yAxis.label}
       xMin={model.xMin}
-      className={surface === 'card'
-        ? 'rounded-lg border border-border bg-card'
-        : undefined}
+      className={surface === "card" ? "rounded-lg border border-border bg-card" : undefined}
     />
   ),
   correlation: ({ model, surface }) => (
@@ -108,7 +103,7 @@ export interface ChartRendererProps {
   surface?: ChartSurfaceVariant;
 }
 
-export function ChartRenderer({ model, surface = 'card' }: ChartRendererProps) {
+export function ChartRenderer({ model, surface = "card" }: ChartRendererProps) {
   const Renderer = chartRenderers[model.kind] as React.ComponentType<{
     model: ChartModel;
     surface: ChartSurfaceVariant;

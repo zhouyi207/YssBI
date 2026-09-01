@@ -1,7 +1,7 @@
-import { dataTypeKind } from '@/shared/types/domain/dataType';
-import type { DataType } from '@/shared/types/domain/dataType';
-import type { Variable } from '@/shared/types/domain/variable';
-import { variableVisibleInGraph } from '@/shared/types/domain/variable';
+import { dataTypeKind } from "@/shared/types/domain/dataType";
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { Variable } from "@/shared/types/domain/variable";
+import { variableVisibleInGraph } from "@/shared/types/domain/variable";
 
 export interface VariableListEntry {
   id: string;
@@ -26,7 +26,7 @@ export function selectGlobalVariableEntries(
 ): Record<string, VariableListEntry> {
   const result: Record<string, VariableListEntry> = {};
   for (const variable of Object.values(variables)) {
-    if (variable.scope.type !== 'global') continue;
+    if (variable.scope.type !== "global") continue;
     result[variable.id] = toListEntry(variable);
   }
   return result;
@@ -35,11 +35,11 @@ export function selectGlobalVariableEntries(
 export function selectLocalVariableEntriesForGraph(
   variables: Record<string, Variable>,
   graphPath: string,
-  graphKind: 'event' | 'function',
+  graphKind: "event" | "function",
 ): VariableListEntry[] {
   const entries: VariableListEntry[] = [];
   for (const variable of Object.values(variables)) {
-    if (variable.scope.type === 'global') continue;
+    if (variable.scope.type === "global") continue;
     if (!variableVisibleInGraph(variable.scope, graphPath, graphKind)) continue;
     entries.push(toListEntry(variable));
   }
@@ -48,7 +48,7 @@ export function selectLocalVariableEntriesForGraph(
 
 export function partitionVariableCatalog(
   variables: Record<string, Variable>,
-  graphScope?: { graphPath: string; graphKind: 'event' | 'function' },
+  graphScope?: { graphPath: string; graphKind: "event" | "function" },
 ): { global: Record<string, VariableListEntry>; local: Record<string, VariableListEntry> } {
   const global = selectGlobalVariableEntries(variables);
   const local: Record<string, VariableListEntry> = {};

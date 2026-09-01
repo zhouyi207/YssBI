@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react';
-import type { ResultDescriptor } from '../types';
-import { resolveResultRenderer } from '../resolveRenderer';
+import type { ReactNode } from "react";
+import type { ResultDescriptor } from "../types";
+import { resolveResultRenderer } from "../resolveRenderer";
 import {
   JsonResultView,
   ScalarResultView,
   DataSeriesResultView,
   SequenceResultView,
-} from './renderers/ResultRenderers';
+} from "./renderers/ResultRenderers";
 
 export interface UnifiedResultViewProps {
   payload: ResultDescriptor;
@@ -17,16 +17,16 @@ export function UnifiedResultView({ payload, renderInfo }: UnifiedResultViewProp
   const kind = resolveResultRenderer(payload);
 
   switch (kind) {
-    case 'sequence':
+    case "sequence":
       return <SequenceResultView payload={payload} />;
-    case 'dataseries':
+    case "dataseries":
       return <DataSeriesResultView payload={payload} />;
-    case 'scalar':
+    case "scalar":
       return <ScalarResultView payload={payload} />;
 
-    case 'info':
+    case "info":
       return renderInfo?.(payload) ?? null;
-    case 'json':
+    case "json":
       return <JsonResultView payload={payload} />;
     default:
       return <JsonResultView payload={payload} />;

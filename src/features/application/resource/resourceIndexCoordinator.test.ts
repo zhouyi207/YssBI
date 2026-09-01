@@ -1,21 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   captureProjectIdentity,
   clearProjectLifecycle,
   startProjectLifecycle,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   commitAfterCommand,
   notifyIndexInvalidated,
   resetResourceIndexCoordinatorForTests,
-} from './resourceIndexCoordinator';
+} from "./resourceIndexCoordinator";
 
-describe('resourceIndexCoordinator', () => {
+describe("resourceIndexCoordinator", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     resetResourceIndexCoordinatorForTests();
-    startProjectLifecycle('project-instance-a');
+    startProjectLifecycle("project-instance-a");
   });
 
   afterEach(() => {
@@ -25,9 +25,9 @@ describe('resourceIndexCoordinator', () => {
     vi.restoreAllMocks();
   });
 
-  it('refreshes immediately after a successful command', async () => {
+  it("refreshes immediately after a successful command", async () => {
     const refreshResourceIndex = vi.fn().mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, 'getState').mockReturnValue({
+    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
       ...useProjectIOStore.getState(),
       refreshResourceIndex,
     });
@@ -37,9 +37,9 @@ describe('resourceIndexCoordinator', () => {
     expect(refreshResourceIndex).toHaveBeenCalledTimes(1);
   });
 
-  it('coalesces repeated external invalidations into one refresh', async () => {
+  it("coalesces repeated external invalidations into one refresh", async () => {
     const refreshResourceIndex = vi.fn().mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, 'getState').mockReturnValue({
+    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
       ...useProjectIOStore.getState(),
       refreshResourceIndex,
     });
@@ -53,21 +53,22 @@ describe('resourceIndexCoordinator', () => {
     expect(refreshResourceIndex).toHaveBeenCalledTimes(1);
   });
 
-  it('does not let a project A command refresh suppress a project B watcher invalidation', async () => {
+  it("does not let a project A command refresh suppress a project B watcher invalidation", async () => {
     let resolveCommandRefresh!: (result: boolean) => void;
     const commandRefreshPending = new Promise<boolean>((resolve) => {
       resolveCommandRefresh = resolve;
     });
-    const refreshResourceIndex = vi.fn()
+    const refreshResourceIndex = vi
+      .fn()
       .mockImplementationOnce(() => commandRefreshPending)
       .mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, 'getState').mockReturnValue({
+    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
       ...useProjectIOStore.getState(),
       refreshResourceIndex,
     });
 
     const commandRefresh = commitAfterCommand();
-    startProjectLifecycle('project-instance-b');
+    startProjectLifecycle("project-instance-b");
     const watcherRefresh = notifyIndexInvalidated(captureProjectIdentity(), 1);
 
     await vi.advanceTimersByTimeAsync(50);
@@ -78,15 +79,16 @@ describe('resourceIndexCoordinator', () => {
     await Promise.all([commandRefresh, watcherRefresh]);
   });
 
-  it('refreshes again when a higher watcher version arrives during a pending refresh', async () => {
+  it("refreshes again when a higher watcher version arrives during a pending refresh", async () => {
     let resolveFirstRefresh!: (result: boolean) => void;
     const firstRefreshPending = new Promise<boolean>((resolve) => {
       resolveFirstRefresh = resolve;
     });
-    const refreshResourceIndex = vi.fn()
+    const refreshResourceIndex = vi
+      .fn()
       .mockImplementationOnce(() => firstRefreshPending)
       .mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, 'getState').mockReturnValue({
+    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
       ...useProjectIOStore.getState(),
       refreshResourceIndex,
     });

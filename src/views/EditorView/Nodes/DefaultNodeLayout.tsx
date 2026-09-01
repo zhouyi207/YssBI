@@ -20,15 +20,14 @@ interface DefaultNodeLayoutProps {
 }
 
 const formatInlineSummary = (value: unknown): string => {
-  if (value == null) return '—';
-  const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+  if (value == null) return "—";
+  const rendered = typeof value === "string" ? value : JSON.stringify(value);
   return rendered.length <= 48 ? rendered : `${rendered.slice(0, 47)}…`;
 };
 
-
 /**
  * Default Node Layout Component
- * 
+ *
  * 职责：
  * - 渲染默认节点布局（标题 + Pins）
  * - 直接渲染后端投影的标题、副标题和 Pin 元数据
@@ -45,8 +44,9 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const inlineParameters = (node.parameterEditors ?? [])
-    .filter((parameter) => parameter.presentation === 'inlineAndDetail');
+  const inlineParameters = (node.parameterEditors ?? []).filter(
+    (parameter) => parameter.presentation === "inlineAndDetail",
+  );
   const inputsExec = node.inputs.filter(isExecPin);
   const inputsData = node.inputs.filter((p) => !isExecPin(p));
   const outputsExec = node.outputs.filter(isExecPin);
@@ -63,25 +63,24 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
       }
     : undefined;
 
-  const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
-    if (!activePin) return "normal";
-    if (pin.id === activePin.id) return "highlighted";
-    if (isPinCompatible(pin, activePin)) return "highlighted";
-    return "dimmed";
-  }, [activePin]);
+  const getPinDragState = useCallback(
+    (pin: PinModel): "normal" | "highlighted" | "dimmed" => {
+      if (!activePin) return "normal";
+      if (pin.id === activePin.id) return "highlighted";
+      if (isPinCompatible(pin, activePin)) return "highlighted";
+      return "dimmed";
+    },
+    [activePin],
+  );
 
   return (
     <>
       {/* Header */}
-      <div
-        className="flex items-center justify-between gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]"
-      >
+      <div className="flex items-center justify-between gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate tracking-[-0.015em]">{node.title}</span>
           {node.display?.userLabel ? (
-            <span className="text-[10px] font-normal opacity-70">
-              {node.display.userLabel}
-            </span>
+            <span className="text-[10px] font-normal opacity-70">{node.display.userLabel}</span>
           ) : null}
         </div>
         <div className="shrink-0 font-mono text-[8px] font-medium uppercase tracking-[0.08em] opacity-45">
@@ -159,7 +158,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
-                    groupId={groupId}
+                  groupId={groupId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}
@@ -179,7 +178,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
-                    groupId={groupId}
+                  groupId={groupId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}

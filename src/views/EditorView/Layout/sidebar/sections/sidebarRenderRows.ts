@@ -1,10 +1,10 @@
-import type { SidebarItemRow, SidebarPanelModel } from '@/features/core/sidebar/flatRows';
-import type { SidebarSectionKey } from '@/features/core/sidebar';
+import type { SidebarItemRow, SidebarPanelModel } from "@/features/core/sidebar/flatRows";
+import type { SidebarSectionKey } from "@/features/core/sidebar";
 
 export type SidebarRenderRow =
   | SidebarItemRow
   | {
-      kind: 'section';
+      kind: "section";
       rowKey: string;
       sectionKey: SidebarSectionKey;
       level: 0;
@@ -12,7 +12,7 @@ export type SidebarRenderRow =
       expanded: boolean;
     }
   | {
-      kind: 'sectionEmpty';
+      kind: "sectionEmpty";
       rowKey: string;
       sectionKey: SidebarSectionKey;
       level: 1;
@@ -22,7 +22,7 @@ export type SidebarRenderRow =
 export function flattenSidebarPanelModel(model: SidebarPanelModel): SidebarRenderRow[] {
   return model.sections.flatMap<SidebarRenderRow>((section) => {
     const header: SidebarRenderRow = {
-      kind: 'section',
+      kind: "section",
       rowKey: `section:${section.key}`,
       sectionKey: section.key,
       level: 0,
@@ -35,7 +35,7 @@ export function flattenSidebarPanelModel(model: SidebarPanelModel): SidebarRende
     return [
       header,
       {
-        kind: 'sectionEmpty',
+        kind: "sectionEmpty",
         rowKey: `section-empty:${section.key}`,
         sectionKey: section.key,
         level: 1,

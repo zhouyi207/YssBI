@@ -2,38 +2,41 @@
  * 面板 / DID 报告 IPC 窄化
  */
 
-import { assignPresentKeys, isRecord, isString } from './guards';
-import { parseRegressionResultData } from './parseRegression';
-import type { OLSResultData } from './regression';
-import type { PanelSummaryResult } from './panel';
-import type { PanelDidResultData } from './did';
+import { assignPresentKeys, isRecord, isString } from "./guards";
+import { parseRegressionResultData } from "./parseRegression";
+import type { OLSResultData } from "./regression";
+import type { PanelSummaryResult } from "./panel";
+import type { PanelDidResultData } from "./did";
 
 const PANEL_MODEL_KEYS = [
-  'mixed_ols',
-  'fe',
-  'fe_time',
-  'fe_twoway',
-  'lsdv',
-  'lsdv_time',
-  'lsdv_twoway',
-  'fd',
-  're_fgls',
-  're_mle',
-  're_be',
-  're_fgls_time',
-  're_mle_time',
-  're_be_time',
-  're_fgls_twoway',
-  're_mle_twoway',
+  "mixed_ols",
+  "fe",
+  "fe_time",
+  "fe_twoway",
+  "lsdv",
+  "lsdv_time",
+  "lsdv_twoway",
+  "fd",
+  "re_fgls",
+  "re_mle",
+  "re_be",
+  "re_fgls_time",
+  "re_mle_time",
+  "re_be_time",
+  "re_fgls_twoway",
+  "re_mle_twoway",
 ] as const;
 
-const PANEL_SUMMARY_OPTIONAL_KEYS = ['selection_tests', 'errors'] as const satisfies readonly (keyof PanelSummaryResult)[];
+const PANEL_SUMMARY_OPTIONAL_KEYS = [
+  "selection_tests",
+  "errors",
+] as const satisfies readonly (keyof PanelSummaryResult)[];
 
 const PANEL_DID_OPTIONAL_KEYS = [
-  'parallel_trends',
-  'placebo',
-  'fake_group_engine',
-  'placebo_fake_group',
+  "parallel_trends",
+  "placebo",
+  "fake_group_engine",
+  "placebo_fake_group",
 ] as const satisfies readonly (keyof PanelDidResultData)[];
 
 function parsePanelNestedModels(raw: Record<string, unknown>): Partial<PanelSummaryResult> | null {
@@ -65,8 +68,13 @@ export function parsePanelSummaryResult(raw: unknown): PanelSummaryResult | null
 }
 
 export function parsePanelDidResultData(raw: unknown): PanelDidResultData | null {
-  if (!isRecord(raw) || raw.kind !== 'panel_did') return null;
-  if (!isString(raw.title) || !isString(raw.endog_name) || !isString(raw.treat_name) || !isString(raw.post_name)) {
+  if (!isRecord(raw) || raw.kind !== "panel_did") return null;
+  if (
+    !isString(raw.title) ||
+    !isString(raw.endog_name) ||
+    !isString(raw.treat_name) ||
+    !isString(raw.post_name)
+  ) {
     return null;
   }
   let fe_twoway: OLSResultData | undefined;
@@ -77,13 +85,13 @@ export function parsePanelDidResultData(raw: unknown): PanelDidResultData | null
   }
   return assignPresentKeys(
     {
-      kind: 'panel_did' as const,
+      kind: "panel_did" as const,
       title: raw.title,
       endog_name: raw.endog_name,
       treat_name: raw.treat_name,
       post_name: raw.post_name,
       fe_twoway,
-      error: typeof raw.error === 'string' ? raw.error : undefined,
+      error: typeof raw.error === "string" ? raw.error : undefined,
     },
     raw,
     PANEL_DID_OPTIONAL_KEYS,

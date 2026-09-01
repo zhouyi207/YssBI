@@ -1,31 +1,28 @@
 /** Sidebar UI state with localStorage-backed section and Project tree expansion. */
-import { create } from 'zustand';
+import { create } from "zustand";
 import {
   isSupportedSidebarSectionKey,
   mergeExpandedSections,
   resolveSectionExpanded,
   type SidebarSectionKey,
-} from './sidebarSectionState';
+} from "./sidebarSectionState";
 import {
   PROJECT_TREE_CATEGORY_IDS,
   PROJECT_TREE_EXPANSION_DEFAULTS,
   type ProjectTreeCategoryId,
-} from './projectTreeState';
+} from "./projectTreeState";
 
-export {
-  SIDEBAR_SECTION_DEFAULTS,
-  type SidebarSectionKey,
-} from './sidebarSectionState';
+export { SIDEBAR_SECTION_DEFAULTS, type SidebarSectionKey } from "./sidebarSectionState";
 export {
   PROJECT_TREE_CATEGORY_IDS,
   PROJECT_TREE_EXPANSION_DEFAULTS,
   type ProjectTreeCategoryId,
-} from './projectTreeState';
+} from "./projectTreeState";
 
-export * from './flatRows';
+export * from "./flatRows";
 
-const SECTIONS_KEY = 'yssbi-sidebar-sections';
-const PROJECT_TREE_EXPANDED_CATEGORIES_KEY = 'yssbi-project-tree-expanded-categories';
+const SECTIONS_KEY = "yssbi-sidebar-sections";
+const PROJECT_TREE_EXPANDED_CATEGORIES_KEY = "yssbi-project-tree-expanded-categories";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -62,9 +59,10 @@ function loadProjectTreeExpandedCategories(): Record<ProjectTreeCategoryId, bool
     {},
   );
   const filtered = Object.fromEntries(
-    Object.entries(persisted).filter(([categoryId, expanded]) => (
-      isProjectTreeCategoryId(categoryId) && typeof expanded === 'boolean'
-    )),
+    Object.entries(persisted).filter(
+      ([categoryId, expanded]) =>
+        isProjectTreeCategoryId(categoryId) && typeof expanded === "boolean",
+    ),
   ) as Partial<Record<ProjectTreeCategoryId, boolean>>;
   return { ...PROJECT_TREE_EXPANSION_DEFAULTS, ...filtered };
 }
@@ -87,7 +85,7 @@ export interface SidebarStore {
 
 export const useSidebarStore = create<SidebarStore>((set, get) => ({
   expandedSections: loadExpandedSections(),
-  projectTreeQuery: '',
+  projectTreeQuery: "",
   projectTreeExpandedCategories: loadProjectTreeExpandedCategories(),
 
   toggleSection: (key) => {
@@ -113,21 +111,23 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
 
   setProjectTreeQuery: (projectTreeQuery) => set({ projectTreeQuery }),
 
-  setProjectTreeCategoryExpanded: (categoryId, expanded) => set((state) => {
-    const projectTreeExpandedCategories = {
-      ...state.projectTreeExpandedCategories,
-      [categoryId]: expanded,
-    };
-    saveToStorage(PROJECT_TREE_EXPANDED_CATEGORIES_KEY, projectTreeExpandedCategories);
-    return { projectTreeExpandedCategories };
-  }),
+  setProjectTreeCategoryExpanded: (categoryId, expanded) =>
+    set((state) => {
+      const projectTreeExpandedCategories = {
+        ...state.projectTreeExpandedCategories,
+        [categoryId]: expanded,
+      };
+      saveToStorage(PROJECT_TREE_EXPANDED_CATEGORIES_KEY, projectTreeExpandedCategories);
+      return { projectTreeExpandedCategories };
+    }),
 
-  setProjectTreeCategoriesExpanded: (categoryIds, expanded) => set((state) => {
-    const projectTreeExpandedCategories = { ...state.projectTreeExpandedCategories };
-    for (const categoryId of categoryIds) projectTreeExpandedCategories[categoryId] = expanded;
-    saveToStorage(PROJECT_TREE_EXPANDED_CATEGORIES_KEY, projectTreeExpandedCategories);
-    return { projectTreeExpandedCategories };
-  }),
+  setProjectTreeCategoriesExpanded: (categoryIds, expanded) =>
+    set((state) => {
+      const projectTreeExpandedCategories = { ...state.projectTreeExpandedCategories };
+      for (const categoryId of categoryIds) projectTreeExpandedCategories[categoryId] = expanded;
+      saveToStorage(PROJECT_TREE_EXPANDED_CATEGORIES_KEY, projectTreeExpandedCategories);
+      return { projectTreeExpandedCategories };
+    }),
 
-  resetProjectTreeQuery: () => set({ projectTreeQuery: '' }),
+  resetProjectTreeQuery: () => set({ projectTreeQuery: "" }),
 }));

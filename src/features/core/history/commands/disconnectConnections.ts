@@ -1,15 +1,18 @@
-import type { CommandHandler, GraphMutationCommandResult } from '../types';
-import { executeGraphIntent } from './executeGraphIntent';
+import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import { executeGraphIntent } from "./executeGraphIntent";
 
 export interface DisconnectConnectionsArgs {
   connectionIds: string[];
 }
 
-export const disconnectConnectionsCommand: CommandHandler<DisconnectConnectionsArgs, GraphMutationCommandResult> = {
+export const disconnectConnectionsCommand: CommandHandler<
+  DisconnectConnectionsArgs,
+  GraphMutationCommandResult
+> = {
   execute(graphPath, args) {
     if (args.connectionIds.length === 0) return false;
     return executeGraphIntent(graphPath, {
-      type: 'disconnectConnections',
+      type: "disconnectConnections",
       payload: { connectionIds: args.connectionIds },
     });
   },

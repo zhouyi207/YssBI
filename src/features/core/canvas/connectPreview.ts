@@ -1,8 +1,14 @@
-import { useGraphInteractionStore, getCanvasInteraction } from '@/features/core/graphInteraction/graphInteractionStore';
-import type { Pin } from '@/shared/types/domain';
-import type { ConnectionFeedback } from './connectionInteraction';
+import {
+  useGraphInteractionStore,
+  getCanvasInteraction,
+} from "@/features/core/graphInteraction/graphInteractionStore";
+import type { Pin } from "@/shared/types/domain";
+import type { ConnectionFeedback } from "./connectionInteraction";
 
-export interface CanvasPreviewScope { graphPath: string; groupId: string }
+export interface CanvasPreviewScope {
+  graphPath: string;
+  groupId: string;
+}
 export type ConnectPreviewState = {
   active: boolean;
   startPin: Pin | null;
@@ -12,7 +18,14 @@ export type ConnectPreviewState = {
   feedback: ConnectionFeedback | null;
   highlightedConnectionIds: string[];
 };
-const IDLE: ConnectPreviewState = { active: false, startPin: null, worldX: 0, worldY: 0, feedback: null, highlightedConnectionIds: [] };
+const IDLE: ConnectPreviewState = {
+  active: false,
+  startPin: null,
+  worldX: 0,
+  worldY: 0,
+  feedback: null,
+  highlightedConnectionIds: [],
+};
 const cache = new Map<string, { interactions: object; preview: ConnectPreviewState }>();
 
 export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewState {
@@ -20,13 +33,20 @@ export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewStat
   const key = `${scope.graphPath}\u0000${scope.groupId}`;
   const cached = cache.get(key);
   if (cached?.interactions === interactions) return cached.preview;
-  const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), scope.graphPath, scope.groupId);
-  if (interaction.type !== 'drawingConnection' && interaction.type !== 'movingConnections') {
+  const interaction = getCanvasInteraction(
+    useGraphInteractionStore.getState(),
+    scope.graphPath,
+    scope.groupId,
+  );
+  if (interaction.type !== "drawingConnection" && interaction.type !== "movingConnections") {
     cache.set(key, { interactions, preview: IDLE });
     return IDLE;
   }
   const feedback = interaction.session.feedback;
-  const end = interaction.session.snappedWorld ?? { x: interaction.session.worldX, y: interaction.session.worldY };
+  const end = interaction.session.snappedWorld ?? {
+    x: interaction.session.worldX,
+    y: interaction.session.worldY,
+  };
   const preview: ConnectPreviewState = {
     active: true,
     startPin: interaction.session.source as Pin,
@@ -34,9 +54,8 @@ export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewStat
     worldY: end.y,
     groupId: interaction.session.groupId,
     feedback,
-    highlightedConnectionIds: feedback?.kind === 'replace'
-      ? [...feedback.displacedConnectionIds]
-      : [],
+    highlightedConnectionIds:
+      feedback?.kind === "replace" ? [...feedback.displacedConnectionIds] : [],
   };
   cache.set(key, { interactions, preview });
   return preview;

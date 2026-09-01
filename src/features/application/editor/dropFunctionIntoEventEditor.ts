@@ -1,17 +1,19 @@
-import type { DragEndEvent } from '@dnd-kit/core';
-import type { GraphResourceDragData } from '@/features/core/dnd';
+import type { DragEndEvent } from "@dnd-kit/core";
+import type { GraphResourceDragData } from "@/features/core/dnd";
 import {
   DRAG_TYPES,
   resolveDragClientPoint,
   type GraphResourceDragState,
   type SidebarDragState,
-} from '@/features/core/dnd';
-import { canCreateFunctionNodeInGraph } from '@/features/application/editor/canvasDrop';
-import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
-import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
-import { useSidebarDragStore } from '@/features/core/sidebarDrag';
+} from "@/features/core/dnd";
+import { canCreateFunctionNodeInGraph } from "@/features/application/editor/canvasDrop";
+import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { workbenchDockviewControl } from "@/features/core/dockview/workbenchControl";
+import { useSidebarDragStore } from "@/features/core/sidebarDrag";
 
-export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activatorEvent' | 'delta'>): {
+export function resolveDropPointerFromDragEnd(
+  event: Pick<DragEndEvent, "activatorEvent" | "delta">,
+): {
   x: number;
   y: number;
 } | null {
@@ -26,7 +28,7 @@ export function buildFunctionGraphResourceDragState(
 ): GraphResourceDragState {
   return {
     type: DRAG_TYPES.GRAPH_RESOURCE,
-    sidebarResource: { id: functionPath, name, type: 'function' },
+    sidebarResource: { id: functionPath, name, type: "function" },
     x: clientX,
     y: clientY,
   };
@@ -44,7 +46,7 @@ export interface CanvasDropTarget {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: 'event' | 'function';
+  graphKind: "event" | "function";
 }
 
 export async function tryDropFunctionIntoCanvas(
@@ -53,12 +55,13 @@ export async function tryDropFunctionIntoCanvas(
   modifiers: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean },
 ): Promise<boolean> {
   if (dragState.type !== DRAG_TYPES.GRAPH_RESOURCE) return false;
-  if (!canCreateFunctionNodeInGraph(target.graphKind, target.graphPath, dragState.sidebarResource)) return false;
+  if (!canCreateFunctionNodeInGraph(target.graphKind, target.graphPath, dragState.sidebarResource))
+    return false;
 
   const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
   if (!handler) return false;
 
-  if (!await workbenchDockviewControl.activate(target.panelInstanceId)) return false;
+  if (!(await workbenchDockviewControl.activate(target.panelInstanceId))) return false;
   const handled = await handler(dragState, modifiers);
   return handled === true;
 }

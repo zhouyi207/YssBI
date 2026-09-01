@@ -1,7 +1,7 @@
-import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
-import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
-import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
-import { useEditorGroupPlacement } from './useEditorGroupPlacement';
+import { workbenchDockviewRead } from "@/features/core/dockview/workbenchRead";
+import { useDockviewPortSnapshot } from "@/features/core/dockview/useDockviewPortSnapshot";
+import { createGraphSelection } from "@/features/core/layout/layoutTabQueries";
+import { useEditorGroupPlacement } from "./useEditorGroupPlacement";
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
   useDockviewPortSnapshot(workbenchDockviewRead);

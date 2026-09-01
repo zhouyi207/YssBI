@@ -1,22 +1,16 @@
-import type { TFunction } from 'i18next';
-import { useId, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { setNodeParameters } from '@/features/application/editor/setNodeParameters';
-import type { DataType } from '@/shared/types/domain/dataType';
-import type {
-  DiagnosticDto,
-  ParameterEditorDto,
-} from '@/shared/types/domain/editorProjection';
-import { formatInlineUserError } from '@/features/application/userErrorSummary';
-import { DetailReadonlyField } from '../../shared/DetailForm';
-import { DetailFieldRow } from '../../shared/DetailFieldRow';
-import { detailInlineInputClass } from '../../shared/detailStyles';
-import {
-  FilterPredicateEditor,
-  ProjectColumnsEditor,
-} from './RelationalParameterEditors';
+import type { TFunction } from "i18next";
+import { useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { setNodeParameters } from "@/features/application/editor/setNodeParameters";
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
+import { DetailReadonlyField } from "../../shared/DetailForm";
+import { DetailFieldRow } from "../../shared/DetailFieldRow";
+import { detailInlineInputClass } from "../../shared/detailStyles";
+import { FilterPredicateEditor, ProjectColumnsEditor } from "./RelationalParameterEditors";
 
 interface NodeParameterEditorProps {
   graphPath: string;
@@ -28,57 +22,49 @@ interface NodeParameterEditorProps {
 }
 
 function projectedDraft(parameter: ParameterEditorDto): string {
-  return parameter.value === null || parameter.value === undefined
-    ? ''
-    : String(parameter.value);
+  return parameter.value === null || parameter.value === undefined ? "" : String(parameter.value);
 }
 
-type NumberDraftError =
-  | 'required'
-  | 'notFinite'
-  | 'notInteger'
-  | 'outOfRange'
-  | 'unsupportedType';
+type NumberDraftError = "required" | "notFinite" | "notInteger" | "outOfRange" | "unsupportedType";
 
 function parseNumberDraft(
   draft: string,
   valueType: DataType | null,
 ): { ok: true; value: number } | { ok: false; error: NumberDraftError } {
   const trimmed = draft.trim();
-  if (trimmed.length === 0) return { ok: false, error: 'required' };
+  if (trimmed.length === 0) return { ok: false, error: "required" };
   const value = Number(trimmed);
-  if (!Number.isFinite(value)) return { ok: false, error: 'notFinite' };
-  if (valueType?.kind === 'Int64') {
-    if (!Number.isInteger(value)) return { ok: false, error: 'notInteger' };
-    if (!Number.isSafeInteger(value)) return { ok: false, error: 'outOfRange' };
+  if (!Number.isFinite(value)) return { ok: false, error: "notFinite" };
+  if (valueType?.kind === "Int64") {
+    if (!Number.isInteger(value)) return { ok: false, error: "notInteger" };
+    if (!Number.isSafeInteger(value)) return { ok: false, error: "outOfRange" };
   }
-  if (valueType?.kind !== 'Int64' && valueType?.kind !== 'Float64') {
-    return { ok: false, error: 'unsupportedType' };
+  if (valueType?.kind !== "Int64" && valueType?.kind !== "Float64") {
+    return { ok: false, error: "unsupportedType" };
   }
   return { ok: true, value };
 }
 
 function numberDraftErrorMessage(error: NumberDraftError, t: TFunction): string {
   const keys = {
-    required: 'notifications.parameter.enterNumber',
-    notFinite: 'notifications.parameter.enterFiniteNumber',
-    notInteger: 'notifications.parameter.enterInteger',
-    outOfRange: 'notifications.parameter.enterSupportedInteger',
-    unsupportedType: 'notifications.parameter.unsupportedNumericType',
+    required: "notifications.parameter.enterNumber",
+    notFinite: "notifications.parameter.enterFiniteNumber",
+    notInteger: "notifications.parameter.enterInteger",
+    outOfRange: "notifications.parameter.enterSupportedInteger",
+    unsupportedType: "notifications.parameter.unsupportedNumericType",
   } as const;
   return t(keys[error]);
 }
 
-
 type FailedMutationOutcome =
-  | { status: 'stale' }
-  | { status: 'conflict' }
-  | { status: 'rejected'; code: string };
+  | { status: "stale" }
+  | { status: "conflict" }
+  | { status: "rejected"; code: string };
 
 function mutationOutcomeError(outcome: FailedMutationOutcome, t: TFunction): string {
-  if (outcome.status === 'stale') return t('notifications.parameter.stale');
-  if (outcome.status === 'conflict') return t('notifications.parameter.conflict');
-  return t('notifications.parameter.rejected', { code: outcome.code });
+  if (outcome.status === "stale") return t("notifications.parameter.stale");
+  if (outcome.status === "conflict") return t("notifications.parameter.conflict");
+  return t("notifications.parameter.rejected", { code: outcome.code });
 }
 
 interface CommitCallbacks {
@@ -100,9 +86,12 @@ export function NodeParameterEditor({
   const fieldErrorId = useId();
   const pendingRef = useRef(false);
   const errors = diagnostics
-    .filter((diagnostic) => diagnostic.location.kind === 'parameter'
-      && diagnostic.location.nodeId === nodeId
-      && diagnostic.location.key === parameter.key)
+    .filter(
+      (diagnostic) =>
+        diagnostic.location.kind === "parameter" &&
+        diagnostic.location.nodeId === nodeId &&
+        diagnostic.location.key === parameter.key,
+    )
     .map((diagnostic) => diagnostic.message);
   if (localError) errors.push(localError);
 
@@ -122,18 +111,22 @@ export function NodeParameterEditor({
         locale,
         parameters: { [parameter.key]: value },
       });
-      if (outcome.status !== 'applied' && outcome.status !== 'noop') {
-        setLocalError(t('notifications.parameter.updateFailed', {
-          error: mutationOutcomeError(outcome, t),
-        }));
+      if (outcome.status !== "applied" && outcome.status !== "noop") {
+        setLocalError(
+          t("notifications.parameter.updateFailed", {
+            error: mutationOutcomeError(outcome, t),
+          }),
+        );
         callbacks.onRejected?.();
         return;
       }
       callbacks.onResolved?.();
     } catch (error) {
-      setLocalError(t('notifications.parameter.updateFailed', {
-        error: formatInlineUserError(error, t),
-      }));
+      setLocalError(
+        t("notifications.parameter.updateFailed", {
+          error: formatInlineUserError(error, t),
+        }),
+      );
       callbacks.onRejected?.();
     } finally {
       pendingRef.current = false;
@@ -152,7 +145,7 @@ export function NodeParameterEditor({
       />
     );
   }
-  if (configuration?.kind === 'projectColumns') {
+  if (configuration?.kind === "projectColumns") {
     return (
       <div className="space-y-2">
         <p className="text-xs font-medium text-foreground">{parameter.display.title}</p>
@@ -165,7 +158,7 @@ export function NodeParameterEditor({
       </div>
     );
   }
-  if (configuration?.kind === 'filterPredicate') {
+  if (configuration?.kind === "filterPredicate") {
     return (
       <div className="space-y-2">
         <p className="text-xs font-medium text-foreground">{parameter.display.title}</p>
@@ -178,7 +171,7 @@ export function NodeParameterEditor({
       </div>
     );
   }
-  if (parameter.editor === 'toggle') {
+  if (parameter.editor === "toggle") {
     return (
       <DetailFieldRow label={parameter.display.title}>
         <div className="space-y-1">
@@ -195,7 +188,7 @@ export function NodeParameterEditor({
       </DetailFieldRow>
     );
   }
-  if (parameter.editor === 'number' || parameter.editor === 'text') {
+  if (parameter.editor === "number" || parameter.editor === "text") {
     return (
       <OrdinaryValueEditor
         parameter={parameter}
@@ -212,13 +205,18 @@ export function NodeParameterEditor({
   );
 }
 
-function ProjectedOverrideEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {
+function ProjectedOverrideEditor({
+  parameter,
+  pending,
+  errors,
+  onCommit,
+}: OrdinaryValueEditorProps) {
   const inherited = parameter.inheritedValue;
   const errorId = useId();
-  const source = parameter.valueSource ?? (parameter.value == null ? 'project' : 'node');
-  const effectiveValue = source === 'project' ? inherited : parameter.value;
-  const setSource = (next: 'project' | 'node') => {
-    onCommit(next === 'project' ? null : inherited);
+  const source = parameter.valueSource ?? (parameter.value == null ? "project" : "node");
+  const effectiveValue = source === "project" ? inherited : parameter.value;
+  const setSource = (next: "project" | "node") => {
+    onCommit(next === "project" ? null : inherited);
   };
 
   return (
@@ -231,16 +229,14 @@ function ProjectedOverrideEditor({ parameter, pending, errors, onCommit }: Ordin
           disabled={pending}
           aria-invalid={errors.length > 0}
           aria-describedby={errors.length > 0 ? errorId : undefined}
-          onChange={(event) => setSource(event.target.value as 'project' | 'node')}
+          onChange={(event) => setSource(event.target.value as "project" | "node")}
         >
           <option value="project">Inherit project setting</option>
           <option value="node">Node override</option>
         </select>
       </DetailFieldRow>
-      {source === 'project' ? (
-        <DetailReadonlyField label="Effective value">
-          {String(effectiveValue)}
-        </DetailReadonlyField>
+      {source === "project" ? (
+        <DetailReadonlyField label="Effective value">{String(effectiveValue)}</DetailReadonlyField>
       ) : parameter.options?.length ? (
         <DetailFieldRow label="Effective value">
           <select
@@ -252,7 +248,11 @@ function ProjectedOverrideEditor({ parameter, pending, errors, onCommit }: Ordin
             aria-describedby={errors.length > 0 ? errorId : undefined}
             onChange={(event) => onCommit(event.target.value)}
           >
-            {parameter.options.map((option) => <option key={option} value={option}>{option}</option>)}
+            {parameter.options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
           </select>
         </DetailFieldRow>
       ) : (
@@ -264,9 +264,9 @@ function ProjectedOverrideEditor({ parameter, pending, errors, onCommit }: Ordin
           onCommit={onCommit}
         />
       )}
-      {source === 'project' || parameter.options?.length
-        ? <ParameterErrorList id={errorId} errors={errors} />
-        : null}
+      {source === "project" || parameter.options?.length ? (
+        <ParameterErrorList id={errorId} errors={errors} />
+      ) : null}
     </div>
   );
 }
@@ -279,7 +279,13 @@ interface OrdinaryValueEditorProps {
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;
 }
 
-function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErrorId, onCommit }: OrdinaryValueEditorProps) {
+function OrdinaryValueEditor({
+  parameter,
+  pending,
+  errors,
+  errorId: providedErrorId,
+  onCommit,
+}: OrdinaryValueEditorProps) {
   const { t } = useTranslation();
   const generatedErrorId = useId();
   const errorId = providedErrorId ?? generatedErrorId;
@@ -299,7 +305,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
   };
   const submit = (value: unknown) => onCommit(value, { onRejected: reset });
   const commitDraft = (resetInvalid = false) => {
-    if (parameter.editor === 'number') {
+    if (parameter.editor === "number") {
       const parsed = parseNumberDraft(draft, parameter.valueType);
       if (!parsed.ok) {
         setParseError(numberDraftErrorMessage(parsed.error, t));
@@ -313,11 +319,11 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
     submit(draft);
   };
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
       reset();
       setParseError(null);
-    } else if (event.key === 'Enter' && !parameter.multiline) {
+    } else if (event.key === "Enter" && !parameter.multiline) {
       event.preventDefault();
       commitDraft();
     }
@@ -326,9 +332,9 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
   const sharedProps = {
     value: draft,
     disabled: pending,
-    'aria-label': parameter.display.title,
-    'aria-invalid': visibleErrors.length > 0,
-    'aria-describedby': visibleErrors.length > 0 ? errorId : undefined,
+    "aria-label": parameter.display.title,
+    "aria-invalid": visibleErrors.length > 0,
+    "aria-describedby": visibleErrors.length > 0 ? errorId : undefined,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setDraft(event.target.value);
       setParseError(null);
@@ -340,7 +346,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
   return (
     <DetailFieldRow label={parameter.display.title}>
       <div className="space-y-1">
-        {parameter.editor === 'text' && parameter.multiline ? (
+        {parameter.editor === "text" && parameter.multiline ? (
           <textarea
             {...sharedProps}
             className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -349,7 +355,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
           <Input
             {...sharedProps}
             type="text"
-            inputMode={parameter.editor === 'number' ? 'decimal' : undefined}
+            inputMode={parameter.editor === "number" ? "decimal" : undefined}
             className={detailInlineInputClass}
           />
         )}
@@ -363,7 +369,9 @@ function ParameterErrorList({ id, errors }: { id: string; errors: readonly strin
   if (errors.length === 0) return null;
   return (
     <div id={id} role="alert" className="space-y-1 text-xs text-destructive">
-      {errors.map((error, index) => <p key={`${index}-${error}`}>{error}</p>)}
+      {errors.map((error, index) => (
+        <p key={`${index}-${error}`}>{error}</p>
+      ))}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import type { RegressionResultData } from '@/shared/types/report';
+import { useMemo } from "react";
+import type { RegressionResultData } from "@/shared/types/report";
 
 export function useRegressionReport(data: RegressionResultData) {
   const { model_basic_info: info, coefficients, diagnostic_info: diag } = data;

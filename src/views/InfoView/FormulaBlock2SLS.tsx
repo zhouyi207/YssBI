@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { InfoSegmentedToggle } from './shared/InfoViewControls';
-import { formatNum } from './shared/utils';
-import type { Coefficient } from '@/shared/types/report';
-import type { Iv2slsFirstStageResult } from '@/shared/types/report';
+import React, { useMemo, useState } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { InfoSegmentedToggle } from "./shared/InfoViewControls";
+import { formatNum } from "./shared/utils";
+import type { Coefficient } from "@/shared/types/report";
+import type { Iv2slsFirstStageResult } from "@/shared/types/report";
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);
 }
 
-type EquationMode = 'stage1' | 'stage2' | 'final';
+type EquationMode = "stage1" | "stage2" | "final";
 
 interface FormulaBlock2SLSProps {
   endogName: string;
@@ -32,28 +32,28 @@ function buildStage1Latex(firstStage: Iv2slsFirstStageResult[]): string {
       if (terms.length === 0) {
         terms.push(`${coefStr} \\cdot ${varLabel}`);
       } else {
-        const sign = c.coef >= 0 ? '+' : '-';
+        const sign = c.coef >= 0 ? "+" : "-";
         terms.push(`${sign} ${formatNum(Math.abs(c.coef))} \\cdot ${varLabel}`);
       }
     }
     const lhs = `\\widehat{\\text{${escapeLatex(fs.endog_name)}}}`;
-    lines.push(`${lhs} = ${terms.join(' ')}`);
+    lines.push(`${lhs} = ${terms.join(" ")}`);
   }
-  return lines.join(' \\\\ ');
+  return lines.join(" \\\\ ");
 }
 
 function buildStage2Latex(
   endogName: string,
   coefficients: Coefficient[],
-  endogVarNames: string[]
+  endogVarNames: string[],
 ): string {
   const lhs = `\\text{${escapeLatex(endogName)}}`;
   const terms: string[] = [];
   for (const c of coefficients) {
     const coefStr = formatNum(c.coef);
     let varLabel: string;
-    if (c.variable === 'const') {
-      varLabel = '1';
+    if (c.variable === "const") {
+      varLabel = "1";
     } else if (endogVarNames.includes(c.variable)) {
       varLabel = `\\widehat{\\text{${escapeLatex(c.variable)}}}`;
     } else {
@@ -62,11 +62,11 @@ function buildStage2Latex(
     if (terms.length === 0) {
       terms.push(`${coefStr} \\cdot ${varLabel}`);
     } else {
-      const sign = c.coef >= 0 ? '+' : '-';
+      const sign = c.coef >= 0 ? "+" : "-";
       terms.push(`${sign} ${formatNum(Math.abs(c.coef))} \\cdot ${varLabel}`);
     }
   }
-  return `${lhs} = ${terms.join(' ')} + \\varepsilon`;
+  return `${lhs} = ${terms.join(" ")} + \\varepsilon`;
 }
 
 function buildFinalLatex(endogName: string, coefficients: Coefficient[]): string {
@@ -75,19 +75,19 @@ function buildFinalLatex(endogName: string, coefficients: Coefficient[]): string
   for (const c of coefficients) {
     const coefStr = formatNum(c.coef);
     let varLabel: string;
-    if (c.variable === 'const') {
-      varLabel = '1';
+    if (c.variable === "const") {
+      varLabel = "1";
     } else {
       varLabel = `\\text{${escapeLatex(c.variable)}}`;
     }
     if (terms.length === 0) {
       terms.push(`${coefStr} \\cdot ${varLabel}`);
     } else {
-      const sign = c.coef >= 0 ? '+' : '-';
+      const sign = c.coef >= 0 ? "+" : "-";
       terms.push(`${sign} ${formatNum(Math.abs(c.coef))} \\cdot ${varLabel}`);
     }
   }
-  return `${lhs} = ${terms.join(' ')} + \\varepsilon`;
+  return `${lhs} = ${terms.join(" ")} + \\varepsilon`;
 }
 
 function renderKatex(latex: string, displayMode = true): string | null {
@@ -103,35 +103,31 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
   coefficients,
   firstStage,
 }) => {
-  const [mode, setMode] = useState<EquationMode>('stage1');
+  const [mode, setMode] = useState<EquationMode>("stage1");
 
   const stage1Html = useMemo(
     () => renderKatex(`\\begin{aligned} ${buildStage1Latex(firstStage)} \\end{aligned}`),
-    [firstStage]
+    [firstStage],
   );
 
-  const endogVarNames = useMemo(
-    () => firstStage.map((fs) => fs.endog_name),
-    [firstStage]
-  );
+  const endogVarNames = useMemo(() => firstStage.map((fs) => fs.endog_name), [firstStage]);
 
   const stage2Html = useMemo(
     () => renderKatex(buildStage2Latex(endogName, coefficients, endogVarNames)),
-    [endogName, coefficients, endogVarNames]
+    [endogName, coefficients, endogVarNames],
   );
 
   const finalHtml = useMemo(
     () => renderKatex(buildFinalLatex(endogName, coefficients)),
-    [endogName, coefficients]
+    [endogName, coefficients],
   );
 
-  const currentHtml =
-    mode === 'stage1' ? stage1Html : mode === 'stage2' ? stage2Html : finalHtml;
+  const currentHtml = mode === "stage1" ? stage1Html : mode === "stage2" ? stage2Html : finalHtml;
 
   const modeLabels: { key: EquationMode; label: string }[] = [
-    { key: 'stage1', label: 'Stage 1' },
-    { key: 'stage2', label: 'Stage 2' },
-    { key: 'final', label: 'Final' },
+    { key: "stage1", label: "Stage 1" },
+    { key: "stage2", label: "Stage 2" },
+    { key: "final", label: "Final" },
   ];
 
   return (
@@ -149,16 +145,16 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
       <ScrollArea orientation="horizontal">
         <div
           className="px-6 py-4 w-max min-w-full [&_.katex]:text-foreground"
-          dangerouslySetInnerHTML={{ __html: currentHtml || '' }}
+          dangerouslySetInnerHTML={{ __html: currentHtml || "" }}
         />
       </ScrollArea>
 
       {/* Mode description */}
       <div className="border-t border-border px-4 pb-4 pt-3">
         <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1 px-1">
-          {mode === 'stage1' && 'Stage 1: Each endogenous regressed on exog + instruments'}
-          {mode === 'stage2' && 'Stage 2: Y regressed on exog + fitted endog (ŷ = Zγ̂)'}
-          {mode === 'final' && 'Final (structural): Y = f(exog, endog) with 2SLS coefficients'}
+          {mode === "stage1" && "Stage 1: Each endogenous regressed on exog + instruments"}
+          {mode === "stage2" && "Stage 2: Y regressed on exog + fitted endog (ŷ = Zγ̂)"}
+          {mode === "final" && "Final (structural): Y = f(exog, endog) with 2SLS coefficients"}
         </div>
       </div>
     </div>

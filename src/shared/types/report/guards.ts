@@ -1,19 +1,19 @@
 /** IPC / JSON 边界窄化共用守卫 */
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
 export function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 export function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export function isString(value: unknown): value is string {
-  return typeof value === 'string';
+  return typeof value === "string";
 }
 
 export function isStringArray(value: unknown): value is string[] {
@@ -21,10 +21,7 @@ export function isStringArray(value: unknown): value is string[] {
 }
 
 /** 已校验 record 上的可选 string 字段 */
-export function optionalString(
-  raw: Record<string, unknown>,
-  key: string,
-): string | undefined {
+export function optionalString(raw: Record<string, unknown>, key: string): string | undefined {
   return isString(raw[key]) ? raw[key] : undefined;
 }
 

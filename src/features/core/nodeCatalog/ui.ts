@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import { useNodeCatalogTreeStore } from './nodeCatalogTreeStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useNodeCatalogTreeStore } from "./nodeCatalogTreeStore";
 
 export interface NodeCatalogUiSnapshot {
   readonly scopeKey: string | null;

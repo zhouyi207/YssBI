@@ -1,23 +1,17 @@
-export const DIAGNOSTIC_LEVELS = [
-  'trace',
-  'debug',
-  'info',
-  'warn',
-  'error',
-] as const;
+export const DIAGNOSTIC_LEVELS = ["trace", "debug", "info", "warn", "error"] as const;
 
 export type DiagnosticLevel = (typeof DIAGNOSTIC_LEVELS)[number];
 
-export const DIAGNOSTIC_ORIGINS = ['rust', 'frontend'] as const;
+export const DIAGNOSTIC_ORIGINS = ["rust", "frontend"] as const;
 export type DiagnosticOrigin = (typeof DIAGNOSTIC_ORIGINS)[number];
 
 export const DIAGNOSTIC_DOMAINS = [
-  'application',
-  'execution',
-  'system',
-  'graph',
-  'data',
-  'ui',
+  "application",
+  "execution",
+  "system",
+  "graph",
+  "data",
+  "ui",
 ] as const;
 export type DiagnosticDomain = (typeof DIAGNOSTIC_DOMAINS)[number];
 

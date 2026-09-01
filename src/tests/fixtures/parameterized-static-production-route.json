@@ -11,24 +11,13 @@
     ],
     "items": [
       {
-        "aliases": [
-          "select columns",
-          "projection",
-          "dataframe"
-        ],
-        "backendSearchText": [
-          "Project DataFrame",
-          "select columns",
-          "projection",
-          "dataframe"
-        ],
+        "aliases": ["select columns", "projection", "dataframe"],
+        "backendSearchText": ["Project DataFrame", "select columns", "projection", "dataframe"],
         "categoryId": "dataframe",
         "creation": {
           "kind": "parameterizedStatic",
           "nodeTypeId": "yssbi.dataframe.project",
-          "requiredParameters": [
-            "columns"
-          ]
+          "requiredParameters": ["columns"]
         },
         "documentation": "Selects direct source columns without renaming or derived expressions.",
         "iconId": "builtin.dataframe",
@@ -56,11 +45,7 @@
         ],
         "resourceNames": [],
         "styleId": "builtin.dataframe",
-        "technicalTerms": [
-          "select columns",
-          "projection",
-          "dataframe"
-        ],
+        "technicalTerms": ["select columns", "projection", "dataframe"],
         "title": "Project DataFrame"
       }
     ],
@@ -509,10 +494,7 @@
                     "kind": "projectColumns",
                     "options": [],
                     "unavailableReason": "Connect DataFrame input",
-                    "value": [
-                      "amount",
-                      "region"
-                    ]
+                    "value": ["amount", "region"]
                   },
                   "display": {
                     "description": "Source columns to keep, in output order.",
@@ -524,10 +506,7 @@
                   "multiline": false,
                   "options": null,
                   "presentation": "detailPanel",
-                  "value": [
-                    "amount",
-                    "region"
-                  ],
+                  "value": ["amount", "region"],
                   "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
@@ -1059,9 +1038,7 @@
         "descriptor": {
           "kind": "parameterizedStatic",
           "nodeTypeId": "yssbi.dataframe.project",
-          "requiredParameters": [
-            "columns"
-          ]
+          "requiredParameters": ["columns"]
         },
         "position": {
           "x": 320.0,
@@ -1490,10 +1467,7 @@
                     "kind": "projectColumns",
                     "options": [],
                     "unavailableReason": "Connect DataFrame input",
-                    "value": [
-                      "amount",
-                      "region"
-                    ]
+                    "value": ["amount", "region"]
                   },
                   "display": {
                     "description": "Source columns to keep, in output order.",
@@ -1505,10 +1479,7 @@
                   "multiline": false,
                   "options": null,
                   "presentation": "detailPanel",
-                  "value": [
-                    "amount",
-                    "region"
-                  ],
+                  "value": ["amount", "region"],
                   "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
@@ -2375,10 +2346,7 @@
               "kind": "projectColumns",
               "options": [],
               "unavailableReason": "Connect DataFrame input",
-              "value": [
-                "amount",
-                "region"
-              ]
+              "value": ["amount", "region"]
             },
             "display": {
               "description": "Source columns to keep, in output order.",
@@ -2390,10 +2358,7 @@
             "multiline": false,
             "options": null,
             "presentation": "detailPanel",
-            "value": [
-              "amount",
-              "region"
-            ],
+            "value": ["amount", "region"],
             "valueSource": null,
             "valueType": {
               "inner": "yssbi.dataframe.project_columns",
@@ -2766,10 +2731,7 @@
       "payload": {
         "nodeId": "00000000-0000-0000-0000-000000000009",
         "parameters": {
-          "columns": [
-            "region",
-            "amount"
-          ]
+          "columns": ["region", "amount"]
         }
       },
       "type": "setParameters"
@@ -2787,10 +2749,7 @@
                 "id": "00000000-0000-0000-0000-000000000009",
                 "node_type": "yssbi.dataframe.project",
                 "parameters": {
-                  "columns": [
-                    "region",
-                    "amount"
-                  ]
+                  "columns": ["region", "amount"]
                 },
                 "position": {
                   "x": 320.0,
@@ -3191,10 +3150,7 @@
                     "kind": "projectColumns",
                     "options": [],
                     "unavailableReason": "Connect DataFrame input",
-                    "value": [
-                      "amount",
-                      "region"
-                    ]
+                    "value": ["amount", "region"]
                   },
                   "display": {
                     "description": "Source columns to keep, in output order.",
@@ -3206,10 +3162,7 @@
                   "multiline": false,
                   "options": null,
                   "presentation": "detailPanel",
-                  "value": [
-                    "amount",
-                    "region"
-                  ],
+                  "value": ["amount", "region"],
                   "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
@@ -3595,10 +3548,7 @@
                       }
                     ],
                     "unavailableReason": null,
-                    "value": [
-                      "region",
-                      "amount"
-                    ]
+                    "value": ["region", "amount"]
                   },
                   "display": {
                     "description": "Source columns to keep, in output order.",
@@ -3610,10 +3560,7 @@
                   "multiline": false,
                   "options": null,
                   "presentation": "detailPanel",
-                  "value": [
-                    "region",
-                    "amount"
-                  ],
+                  "value": ["region", "amount"],
                   "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
@@ -3737,9 +3684,6 @@
         }
       }
     },
-    "selectedColumns": [
-      "region",
-      "amount"
-    ]
+    "selectedColumns": ["region", "amount"]
   }
 }

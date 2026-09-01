@@ -1,4 +1,4 @@
-import { useExecutionRead } from '@/features/core/execution/read';
+import { useExecutionRead } from "@/features/core/execution/read";
 
 const IDLE = {
   nodeState: null,
@@ -18,8 +18,8 @@ export function useNodeExecution(nodeId: string, graphPath?: string, enabled = t
 
   if (!enabled || !graphPath) return IDLE;
 
-  const hasError = nodeState?.status === 'error';
-  const isCompleted = nodeState?.status === 'completed';
+  const hasError = nodeState?.status === "error";
+  const isCompleted = nodeState?.status === "completed";
 
   return {
     nodeState,

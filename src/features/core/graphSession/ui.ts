@@ -1,10 +1,7 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from "react";
 
-import type { DeepReadonly } from '@/shared/types/deepReadonly';
-import {
-  useGraphSessionStore,
-  type FocusedGraphSession,
-} from './graphSessionStore';
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useGraphSessionStore, type FocusedGraphSession } from "./graphSessionStore";
 
 export interface GraphSessionUiSnapshot {
   readonly focusedSession: DeepReadonly<FocusedGraphSession> | null;
@@ -22,9 +19,7 @@ export interface GraphSessionUiCapability {
 function buildSnapshot(): DeepReadonly<GraphSessionUiSnapshot> {
   const focusedSession = useGraphSessionStore.getState().focusedSession;
   return Object.freeze({
-    focusedSession: focusedSession
-      ? Object.freeze({ ...focusedSession })
-      : null,
+    focusedSession: focusedSession ? Object.freeze({ ...focusedSession }) : null,
   });
 }
 
@@ -63,8 +58,7 @@ export const graphSessionUi: GraphSessionUiCapability = {
   subscribe: subscribeGraphSessionUi,
   setFocusedSession: (groupId, graphPath) =>
     useGraphSessionStore.getState().setFocusedSession(groupId, graphPath),
-  clearFocusedSession: (groupId) =>
-    useGraphSessionStore.getState().clearFocusedSession(groupId),
+  clearFocusedSession: (groupId) => useGraphSessionStore.getState().clearFocusedSession(groupId),
   remapFocusedGraphPath: (from, to) =>
     useGraphSessionStore.getState().remapFocusedGraphPath(from, to),
   reset: () => useGraphSessionStore.getState().reset(),

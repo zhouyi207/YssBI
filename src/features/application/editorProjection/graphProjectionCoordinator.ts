@@ -1,18 +1,18 @@
-import i18n from 'i18next';
-import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import i18n from "i18next";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 
-import { markResourceStale, useResourceStore } from '@/features/core/resource';
-import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import type { EditorGraphProjectionDto } from '@/shared/types/domain/editorProjection';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/features/application/observability/appLogger';
+import { markResourceStale, useResourceStore } from "@/features/core/resource";
+import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { logger } from "@/features/application/observability/appLogger";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 const latestGenerationByGraph = new Map<string, number>();
 const lifecycleTokenByGraph = new Map<string, number>();
@@ -29,7 +29,8 @@ let nextLifecycleToken = Date.now() * 1_000;
 let coordinatorEpoch = 0;
 
 function nextRequestGeneration(graphPath: string): number {
-  const bucketGeneration = useGraphDataStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
+  const bucketGeneration =
+    useGraphDataStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
   const generation = Math.max(latestGenerationByGraph.get(graphPath) ?? 0, bucketGeneration) + 1;
   latestGenerationByGraph.set(graphPath, generation);
   return generation;
@@ -46,9 +47,11 @@ function ownsLatestRequest(
   requestEpoch: number,
   lifecycleToken: number,
 ): boolean {
-  return requestEpoch === coordinatorEpoch
-    && lifecycleTokenByGraph.get(graphPath) === lifecycleToken
-    && latestGenerationByGraph.get(graphPath) === requestGeneration;
+  return (
+    requestEpoch === coordinatorEpoch &&
+    lifecycleTokenByGraph.get(graphPath) === lifecycleToken &&
+    latestGenerationByGraph.get(graphPath) === requestGeneration
+  );
 }
 
 function startGraphLifecycle(graphPath: string): number {
@@ -66,14 +69,18 @@ function hasInstalledGenerationAtLeast(graphPath: string, requestGeneration: num
   return bucket != null && bucket.requestGeneration >= requestGeneration;
 }
 
-type ProjectionRequestOperation = 'load' | 'hydrate';
+type ProjectionRequestOperation = "load" | "hydrate";
 
 async function requestGraphProjection(
   graphPath: string,
   operation: ProjectionRequestOperation,
   lifecycleToken: number,
   identity: ProjectIdentitySnapshot,
-  request: (graphPath: string, locale: string, lifecycleToken: number) => Promise<EditorGraphProjectionDto>,
+  request: (
+    graphPath: string,
+    locale: string,
+    lifecycleToken: number,
+  ) => Promise<EditorGraphProjectionDto>,
   locale = currentProjectionLocale(),
 ): Promise<boolean> {
   const requestGeneration = nextRequestGeneration(graphPath);
@@ -87,8 +94,8 @@ async function requestGraphProjection(
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(
-      `Graph projection ${operation} IPC failed for '${graphPath}': ${formatErrorMessage(error, 'Unknown IPC error')}`,
-      'GraphProjectionCoordinator',
+      `Graph projection ${operation} IPC failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
+      "GraphProjectionCoordinator",
     );
     if (ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)) {
       setGraphProjectionStale(graphPath, true);
@@ -96,29 +103,32 @@ async function requestGraphProjection(
     return false;
   }
 
-  if (!isCurrentProjectIdentity(identity)
-    || !ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)) return false;
+  if (
+    !isCurrentProjectIdentity(identity) ||
+    !ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)
+  )
+    return false;
   const result = useGraphDataStore
     .getState()
     .replaceProjection(graphPath, projection, requestGeneration);
   if (result.applied) {
     const kind = inferGraphResourceKind(graphPath);
     if (kind) {
-      useResourceStore.getState().patchResource(
-        { id: graphPath, kind },
-        { revision: projection.sourceRevision },
-      );
+      useResourceStore
+        .getState()
+        .patchResource({ id: graphPath, kind }, { revision: projection.sourceRevision });
     }
   }
-  if (!result.applied && result.reason === 'invalid') {
+  if (!result.applied && result.reason === "invalid") {
     logger.graph.error(
-      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(result.error, 'Unknown projection contract error')}`,
-      'GraphProjectionCoordinator',
+      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(result.error, "Unknown projection contract error")}`,
+      "GraphProjectionCoordinator",
     );
   }
-  const current = result.applied
-    || (result.reason === 'stale-generation'
-      && hasInstalledGenerationAtLeast(graphPath, requestGeneration));
+  const current =
+    result.applied ||
+    (result.reason === "stale-generation" &&
+      hasInstalledGenerationAtLeast(graphPath, requestGeneration));
   if (current) setGraphProjectionStale(graphPath, false);
   return current;
 }
@@ -165,15 +175,18 @@ export async function prepareGraphProjectionForPublication(
       lifecycleToken,
       projectInstanceId,
     );
-    if (!isCurrentProjectIdentity(identity)
-      || requestEpoch !== coordinatorEpoch
-      || lifecycleTokenByGraph.get(graphPath) !== lifecycleToken) return false;
+    if (
+      !isCurrentProjectIdentity(identity) ||
+      requestEpoch !== coordinatorEpoch ||
+      lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
+    )
+      return false;
     return projection;
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(
-      `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, 'Unknown IPC error')}`,
-      'GraphProjectionCoordinator',
+      `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
+      "GraphProjectionCoordinator",
     );
     return false;
   }
@@ -191,15 +204,11 @@ export function loadGraphProjection(
   }
   return requestGraphProjection(
     graphPath,
-    'load',
+    "load",
     lifecycleToken,
     identity,
-    (path, locale, token) => GraphProjectionService.loadGraph(
-      path,
-      locale,
-      token,
-      identity.projectInstanceId,
-    ),
+    (path, locale, token) =>
+      GraphProjectionService.loadGraph(path, locale, token, identity.projectInstanceId),
   );
 }
 
@@ -211,22 +220,16 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
   const identity = captureProjectIdentity();
   return requestGraphProjection(
     graphPath,
-    'hydrate',
+    "hydrate",
     currentOrStartGraphLifecycle(graphPath),
     identity,
-    (path, requestLocale) => GraphProjectionService.hydrateGraph(
-      identity.projectInstanceId,
-      path,
-      requestLocale,
-    ),
+    (path, requestLocale) =>
+      GraphProjectionService.hydrateGraph(identity.projectInstanceId, path, requestLocale),
     locale,
   );
 }
 
-function completeInvalidation(
-  graphPath: string,
-  pending: PendingInvalidation,
-): void {
+function completeInvalidation(graphPath: string, pending: PendingInvalidation): void {
   if (pendingInvalidationByGraph.get(graphPath) !== pending) return;
   const resolveTrailing = pending.resolveTrailing;
   const rejectTrailing = pending.rejectTrailing;

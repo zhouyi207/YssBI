@@ -1,6 +1,5 @@
-
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { activateCurrentEditorTab } from './switchEditorTab';
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { activateCurrentEditorTab } from "./switchEditorTab";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 150;

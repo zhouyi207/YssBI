@@ -1,1 +1,1 @@
-export type * from '@/shared/types/dto/editorProjection';
+export type * from "@/shared/types/dto/editorProjection";

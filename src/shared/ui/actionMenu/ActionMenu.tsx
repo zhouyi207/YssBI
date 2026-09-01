@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -6,8 +6,8 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
+} from "@/components/ui/context-menu";
+import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 
 export interface ActionMenuPosition {
   x: number;
@@ -35,14 +35,12 @@ interface ActionMenuProps {
   onClose: () => void;
 }
 
-const actionMenuContentClass =
-  'max-w-[min(13.5rem,calc(100vw-1rem))]';
+const actionMenuContentClass = "max-w-[min(13.5rem,calc(100vw-1rem))]";
 
-const actionMenuItemClass =
-  'w-full justify-start';
+const actionMenuItemClass = "w-full justify-start";
 
 const actionMenuIconClass =
-  'flex size-3.5 shrink-0 items-center justify-center text-muted-foreground';
+  "flex size-3.5 shrink-0 items-center justify-center text-muted-foreground";
 
 /**
  * Programmatic action menu backed by shadcn/Radix ContextMenu.
@@ -65,18 +63,23 @@ export function ActionMenu({ position, sections, onClose }: ActionMenuProps) {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
-    trigger.dispatchEvent(new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: position.x,
-      clientY: position.y,
-    }));
+    trigger.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: position.x,
+        clientY: position.y,
+      }),
+    );
   }, [position.x, position.y, visibleSections.length]);
 
-  const handleOpenChange = React.useCallback((nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) onClose();
-  }, [onClose]);
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      setOpen(nextOpen);
+      if (!nextOpen) onClose();
+    },
+    [onClose],
+  );
 
   if (visibleSections.length === 0) return null;
 
@@ -97,15 +100,13 @@ export function ActionMenu({ position, sections, onClose }: ActionMenuProps) {
       >
         {visibleSections.map((section, sectionIndex) => (
           <React.Fragment key={`section-${sectionIndex}`}>
-            {sectionIndex > 0 ? (
-              <ContextMenuSeparator />
-            ) : null}
+            {sectionIndex > 0 ? <ContextMenuSeparator /> : null}
             {section.items.map((item) => (
               <ContextMenuItem
                 key={item.id}
                 disabled={item.disabled}
                 title={item.disabled ? item.title : undefined}
-                variant={item.danger ? 'destructive' : 'default'}
+                variant={item.danger ? "destructive" : "default"}
                 className={actionMenuItemClass}
                 onSelect={(event) => {
                   if (item.disabled) {
@@ -117,9 +118,7 @@ export function ActionMenu({ position, sections, onClose }: ActionMenuProps) {
               >
                 <span className={actionMenuIconClass}>{item.icon ?? null}</span>
                 <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-                {item.shortcut ? (
-                  <ContextMenuShortcut>{item.shortcut}</ContextMenuShortcut>
-                ) : null}
+                {item.shortcut ? <ContextMenuShortcut>{item.shortcut}</ContextMenuShortcut> : null}
               </ContextMenuItem>
             ))}
           </React.Fragment>

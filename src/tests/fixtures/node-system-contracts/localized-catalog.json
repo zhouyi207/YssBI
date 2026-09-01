@@ -122,17 +122,8 @@
   ],
   "items": [
     {
-      "aliases": [
-        "constant",
-        "literal",
-        "value"
-      ],
-      "backendSearchText": [
-        "Boolean Constant",
-        "constant",
-        "literal",
-        "value"
-      ],
+      "aliases": ["constant", "literal", "value"],
+      "backendSearchText": ["Boolean Constant", "constant", "literal", "value"],
       "categoryId": "constants",
       "creation": {
         "kind": "static",
@@ -158,32 +149,17 @@
       ],
       "resourceNames": [],
       "styleId": "builtin.default",
-      "technicalTerms": [
-        "constant",
-        "literal",
-        "value"
-      ],
+      "technicalTerms": ["constant", "literal", "value"],
       "title": "Boolean Constant"
     },
     {
-      "aliases": [
-        "select columns",
-        "projection",
-        "dataframe"
-      ],
-      "backendSearchText": [
-        "Project DataFrame",
-        "select columns",
-        "projection",
-        "dataframe"
-      ],
+      "aliases": ["select columns", "projection", "dataframe"],
+      "backendSearchText": ["Project DataFrame", "select columns", "projection", "dataframe"],
       "categoryId": "dataframe",
       "creation": {
         "kind": "parameterizedStatic",
         "nodeTypeId": "yssbi.dataframe.project",
-        "requiredParameters": [
-          "columns"
-        ]
+        "requiredParameters": ["columns"]
       },
       "documentation": null,
       "iconId": "builtin.dataframe",
@@ -211,24 +187,12 @@
       ],
       "resourceNames": [],
       "styleId": "builtin.dataframe",
-      "technicalTerms": [
-        "select columns",
-        "projection",
-        "dataframe"
-      ],
+      "technicalTerms": ["select columns", "projection", "dataframe"],
       "title": "Project DataFrame"
     },
     {
-      "aliases": [
-        "data frame",
-        "table",
-        "source"
-      ],
-      "backendSearchText": [
-        "data frame",
-        "table",
-        "source"
-      ],
+      "aliases": ["data frame", "table", "source"],
+      "backendSearchText": ["data frame", "table", "source"],
       "categoryId": "dataframe",
       "creation": {
         "createArgs": {
@@ -257,31 +221,16 @@
           "label": "DataFrame"
         }
       ],
-      "resourceNames": [
-        "Contract Database"
-      ],
+      "resourceNames": ["Contract Database"],
       "resourcePath": "databases/contract-database",
       "resourceRevision": 13,
       "styleId": "builtin.dataframe",
-      "technicalTerms": [
-        "Contract Database",
-        "data frame",
-        "source",
-        "table"
-      ],
+      "technicalTerms": ["Contract Database", "data frame", "source", "table"],
       "title": "Contract Database"
     },
     {
-      "aliases": [
-        "call",
-        "invoke",
-        "function"
-      ],
-      "backendSearchText": [
-        "call",
-        "invoke",
-        "function"
-      ],
+      "aliases": ["call", "invoke", "function"],
+      "backendSearchText": ["call", "invoke", "function"],
       "categoryId": "project",
       "creation": {
         "createArgs": {
@@ -328,31 +277,16 @@
           "label": "Then"
         }
       ],
-      "resourceNames": [
-        "Contract Function"
-      ],
+      "resourceNames": ["Contract Function"],
       "resourcePath": "functions/contract-function",
       "resourceRevision": 11,
       "styleId": "builtin.default",
-      "technicalTerms": [
-        "Contract Function",
-        "call",
-        "function",
-        "invoke"
-      ],
+      "technicalTerms": ["Contract Function", "call", "function", "invoke"],
       "title": "Contract Function"
     },
     {
-      "aliases": [
-        "get",
-        "read",
-        "variable"
-      ],
-      "backendSearchText": [
-        "get",
-        "read",
-        "variable"
-      ],
+      "aliases": ["get", "read", "variable"],
+      "backendSearchText": ["get", "read", "variable"],
       "categoryId": "project",
       "creation": {
         "createArgs": {
@@ -381,18 +315,11 @@
           "label": "Value"
         }
       ],
-      "resourceNames": [
-        "Contract Variable"
-      ],
+      "resourceNames": ["Contract Variable"],
       "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
       "resourceRevision": 12,
       "styleId": "builtin.default",
-      "technicalTerms": [
-        "Contract Variable",
-        "get",
-        "read",
-        "variable"
-      ],
+      "technicalTerms": ["Contract Variable", "get", "read", "variable"],
       "title": "Contract Variable"
     }
   ],

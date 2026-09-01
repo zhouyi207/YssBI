@@ -1,14 +1,14 @@
-import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import type { SidebarInputDialogState } from '../sidebarContextMenu/sidebarContextMenuTypes';
+} from "@/components/ui/dialog";
+import type { SidebarInputDialogState } from "../sidebarContextMenu/sidebarContextMenuTypes";
 
 export function SidebarRenameDialog({
   dialog,
@@ -44,7 +44,7 @@ export function SidebarRenameDialog({
                 value={dialog.value}
                 onChange={(e) => onValueChange(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') onCancel();
+                  if (e.key === "Escape") onCancel();
                 }}
                 className="h-8 text-xs"
                 aria-invalid={!!dialog.error}
@@ -60,7 +60,7 @@ export function SidebarRenameDialog({
                 {cancelLabel}
               </Button>
               <Button type="submit" size="sm">
-                {dialog.submitLabel ?? t('common.ok')}
+                {dialog.submitLabel ?? t("common.ok")}
               </Button>
             </DialogFooter>
           </form>

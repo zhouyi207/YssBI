@@ -1,17 +1,14 @@
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { useProjectIOStore } from '@/features/application/project/projectIOStore';
-import { markResourceLoaded } from '@/features/core/resource';
-import { ensureEditorViewport } from '@/features/core/viewport';
-import { editorViewportScope } from '@/features/core/viewport/viewportScope';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import { unloadGraphDocument } from './graphDocumentUnload';
-import { logger } from '@/features/application/observability/appLogger';
-import {
-  enforceGraphDocumentCacheLimit,
-  touchGraphDocument,
-} from './graphDocumentCachePolicy';
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
+import { useGraphDataStore } from "@/features/core/dataStore";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { markResourceLoaded } from "@/features/core/resource";
+import { ensureEditorViewport } from "@/features/core/viewport";
+import { editorViewportScope } from "@/features/core/viewport/viewportScope";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { unloadGraphDocument } from "./graphDocumentUnload";
+import { logger } from "@/features/application/observability/appLogger";
+import { enforceGraphDocumentCacheLimit, touchGraphDocument } from "./graphDocumentCachePolicy";
 
 let graphCleanupChain: Promise<void> = Promise.resolve();
 
@@ -24,7 +21,7 @@ function scheduleGraphCleanup(previousGraphPath?: string): void {
     .catch((error) => {
       logger.graph.warn(
         `Background graph cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
-        'activateGraphTab',
+        "activateGraphTab",
       );
     });
 }

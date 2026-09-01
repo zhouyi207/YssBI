@@ -1,8 +1,8 @@
-import type { EditorViewport } from './editorViewport';
-import { DEFAULT_VIEWPORT } from '@/shared/config-default';
-import { useViewportStore } from './useViewportStore';
-import type { ViewportScope } from './viewportScope';
-import { viewportScopeKey } from './viewportScope';
+import type { EditorViewport } from "./editorViewport";
+import { DEFAULT_VIEWPORT } from "@/shared/config-default";
+import { useViewportStore } from "./useViewportStore";
+import type { ViewportScope } from "./viewportScope";
+import { viewportScopeKey } from "./viewportScope";
 
 function viewportEqual(a: EditorViewport, b: EditorViewport): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
@@ -30,7 +30,7 @@ export function setViewportLive(
   updater: Partial<EditorViewport> | ((prev: EditorViewport) => EditorViewport),
 ): void {
   const prev = getViewport(scope);
-  const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+  const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
   if (viewportEqual(prev, next)) return;
   liveByScope.set(viewportScopeKey(scope), next);
   notify(scope, next);
@@ -99,7 +99,10 @@ export function scheduleViewportPersist(
   }, delayMs);
 }
 
-export function clearViewportTimers(timers: { commit?: number | null; persist?: number | null }): void {
+export function clearViewportTimers(timers: {
+  commit?: number | null;
+  persist?: number | null;
+}): void {
   if (timers.commit != null) window.clearTimeout(timers.commit);
   if (timers.persist != null) window.clearTimeout(timers.persist);
 }

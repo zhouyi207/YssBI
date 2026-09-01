@@ -1,9 +1,9 @@
-import type { ExecutionEvent } from '@/shared/types/ui/execution';
+import type { ExecutionEvent } from "@/shared/types/ui/execution";
 
 export type ExecutionVisualSnapshot = {
   active: boolean;
   graphPath: string | null;
-  status: 'idle' | 'running' | 'completed' | 'error';
+  status: "idle" | "running" | "completed" | "error";
   executingNodeId: string | null;
   executedNodeIds: Set<string>;
   errorNodeIds: Set<string>;
@@ -22,7 +22,7 @@ function idleSnapshot(): ExecutionVisualSnapshot {
   return {
     active: false,
     graphPath: null,
-    status: 'idle',
+    status: "idle",
     executingNodeId: null,
     executedNodeIds: new Set(),
     errorNodeIds: new Set(),
@@ -52,7 +52,7 @@ export function resetExecutionVisual(graphPath: string): void {
   snapshot = {
     active: true,
     graphPath,
-    status: 'running',
+    status: "running",
     executingNodeId: null,
     executedNodeIds: new Set(),
     errorNodeIds: new Set(),
@@ -71,7 +71,7 @@ export function clearExecutionVisual(): void {
 /** Apply one channel event to the live visual snapshot (no React store). */
 export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEvent): void {
   if (!snapshot.active || snapshot.graphPath !== graphPath) {
-    if (event.event === 'executionStart') {
+    if (event.event === "executionStart") {
       resetExecutionVisual(graphPath);
       return;
     }
@@ -79,20 +79,20 @@ export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEve
   }
 
   switch (event.event) {
-    case 'executionStart':
+    case "executionStart":
       resetExecutionVisual(graphPath);
       break;
-    case 'executionComplete':
+    case "executionComplete":
       snapshot = {
         ...snapshot,
-        status: event.data.hasError ? 'error' : 'completed',
+        status: event.data.hasError ? "error" : "completed",
         executingNodeId: null,
       };
       break;
-    case 'nodeStart':
+    case "nodeStart":
       snapshot = { ...snapshot, executingNodeId: event.data.nodeId };
       break;
-    case 'nodeComplete': {
+    case "nodeComplete": {
       const executedNodeIds = new Set(snapshot.executedNodeIds);
       executedNodeIds.add(event.data.nodeId);
       const nodeDurations = new Map(snapshot.nodeDurations);
@@ -101,13 +101,14 @@ export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEve
       }
       snapshot = {
         ...snapshot,
-        executingNodeId: snapshot.executingNodeId === event.data.nodeId ? null : snapshot.executingNodeId,
+        executingNodeId:
+          snapshot.executingNodeId === event.data.nodeId ? null : snapshot.executingNodeId,
         executedNodeIds,
         nodeDurations,
       };
       break;
     }
-    case 'nodeError': {
+    case "nodeError": {
       const errorNodeIds = new Set(snapshot.errorNodeIds);
       errorNodeIds.add(event.data.nodeId);
       const nodeDurations = new Map(snapshot.nodeDurations);
@@ -117,19 +118,20 @@ export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEve
       snapshot = {
         ...snapshot,
         // 保持 running，直到 executionComplete；避免后续连线动画被提前关掉
-        executingNodeId: snapshot.executingNodeId === event.data.nodeId ? null : snapshot.executingNodeId,
+        executingNodeId:
+          snapshot.executingNodeId === event.data.nodeId ? null : snapshot.executingNodeId,
         errorNodeIds,
         nodeDurations,
       };
       break;
     }
-    case 'connectionActive': {
+    case "connectionActive": {
       const completedConnections = new Set(snapshot.completedConnections);
       completedConnections.add(connectionKey(event.data.fromPinId, event.data.toPinId));
       snapshot = { ...snapshot, completedConnections };
       break;
     }
-    case 'connectionFlow': {
+    case "connectionFlow": {
       const flowingConnections = new Set(snapshot.flowingConnections);
       flowingConnections.add(connectionKey(event.data.fromPinId, event.data.toPinId));
       snapshot = { ...snapshot, flowingConnections };
@@ -142,18 +144,18 @@ export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEve
 }
 
 export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
-  status: ExecutionVisualSnapshot['status'];
-  nodeStates: Map<string, import('@/shared/types/ui/execution').NodeExecutionState>;
+  status: ExecutionVisualSnapshot["status"];
+  nodeStates: Map<string, import("@/shared/types/ui/execution").NodeExecutionState>;
   completedConnections: Set<string>;
   flowingConnections: Set<string>;
 } {
-  const nodeStates = new Map<string, import('@/shared/types/ui/execution').NodeExecutionState>();
+  const nodeStates = new Map<string, import("@/shared/types/ui/execution").NodeExecutionState>();
   const now = Date.now();
 
   for (const nodeId of snap.executedNodeIds) {
     nodeStates.set(nodeId, {
       nodeId,
-      status: 'completed',
+      status: "completed",
       timestamp: now,
       durationMs: snap.nodeDurations.get(nodeId),
     });
@@ -161,14 +163,14 @@ export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
   for (const nodeId of snap.errorNodeIds) {
     nodeStates.set(nodeId, {
       nodeId,
-      status: 'error',
+      status: "error",
       timestamp: now,
       durationMs: snap.nodeDurations.get(nodeId),
     });
   }
 
   return {
-    status: snap.status === 'idle' ? 'completed' : snap.status,
+    status: snap.status === "idle" ? "completed" : snap.status,
     nodeStates,
     completedConnections: new Set(snap.completedConnections),
     flowingConnections: new Set(snap.flowingConnections),

@@ -7,19 +7,19 @@ import type {
   IDockviewGroupPanel,
   IDockviewPanel,
   SerializedDockview,
-} from 'dockview-react';
+} from "dockview-react";
 
 import {
   canMoveWorkbenchPanel,
   canRemoveWorkbenchPanel,
   canSplitWorkbenchPanel,
   vetoInvalidWorkbenchActivityDrop,
-} from './workbenchActivityGroup';
+} from "./workbenchActivityGroup";
 import {
   WORKBENCH_EDGE_GROUP_IDS,
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_HOME_EDGE,
-} from './workbenchDockviewDefaults';
+} from "./workbenchDockviewDefaults";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
@@ -27,7 +27,7 @@ import {
   type WorkbenchComponentId,
   type WorkbenchPanelMetadata,
   type WorkbenchPanelParams,
-} from './workbenchPanelModel';
+} from "./workbenchPanelModel";
 import type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,
@@ -41,8 +41,8 @@ import type {
   WorkbenchLayoutErrorCode,
   WorkbenchPanelCommitToken,
   WorkbenchPanelInfo,
-} from './workbenchTypes';
-import { WorkbenchLayoutError } from './workbenchTypes';
+} from "./workbenchTypes";
+import { WorkbenchLayoutError } from "./workbenchTypes";
 
 export interface WorkbenchDockviewTransaction {
   listPanels(): readonly WorkbenchPanelInfo[];
@@ -76,75 +76,69 @@ export interface WorkbenchDockviewInternal {
   commitRemove(
     expected: readonly WorkbenchPanelCommitToken[],
     authorize?: () => boolean,
-  ): Promise<'committed' | 'stale'>;
+  ): Promise<"committed" | "stale">;
   installHydrationLayout<T>(
     epoch: number,
     operation: (transaction: WorkbenchLayoutTransaction) => T,
   ): T;
-  runLayoutTransaction<T>(
-    operation: (transaction: WorkbenchLayoutTransaction) => T,
-  ): Promise<T>;
+  runLayoutTransaction<T>(operation: (transaction: WorkbenchLayoutTransaction) => T): Promise<T>;
   runPublicationTransaction<T>(
     operation: (transaction: WorkbenchDockviewTransaction) => T | Promise<T>,
   ): Promise<T>;
 }
 
-type WorkbenchLocation = WorkbenchPanelInfo['location'];
+type WorkbenchLocation = WorkbenchPanelInfo["location"];
 type Disposable = { dispose(): void };
 type UnknownRecord = Record<string, unknown>;
 
-const EDGE_POSITIONS: readonly WorkbenchEdgePosition[] = [
-  'top',
-  'bottom',
-  'left',
-  'right',
-];
-const DEFAULT_EDGE_IDS: Partial<Record<WorkbenchEdgePosition, string>> =
-  WORKBENCH_EDGE_GROUP_IDS;
-const DEFAULT_EDGE_SIZES: Partial<Record<WorkbenchEdgePosition, number>> =
-  WORKBENCH_EDGE_SIZES;
+const EDGE_POSITIONS: readonly WorkbenchEdgePosition[] = ["top", "bottom", "left", "right"];
+const DEFAULT_EDGE_IDS: Partial<Record<WorkbenchEdgePosition, string>> = WORKBENCH_EDGE_GROUP_IDS;
+const DEFAULT_EDGE_SIZES: Partial<Record<WorkbenchEdgePosition, number>> = WORKBENCH_EDGE_SIZES;
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function cloneMetadata(metadata: WorkbenchPanelMetadata): WorkbenchPanelMetadata {
-  if (metadata.role === 'editor') {
+  if (metadata.role === "editor") {
     return {
-      role: 'editor',
+      role: "editor",
       resourceRef: metadata.resourceRef,
       resourceKind: metadata.resourceKind,
       ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
       ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
     };
   }
-  if (metadata.role === 'view') {
-    return { role: 'view', viewId: metadata.viewId };
+  if (metadata.role === "view") {
+    return { role: "view", viewId: metadata.viewId };
   }
-  const presentation = metadata.presentation.kind === 'inspector'
-    ? { kind: 'inspector' as const }
-    : metadata.presentation.kind === 'plot'
-      ? { kind: 'plot' as const, chart: metadata.presentation.chart }
-      : { kind: 'report' as const, report: metadata.presentation.report };
-  const source = metadata.source === null
-    ? null
-    : {
-      graphPath: metadata.source.graphPath,
-      port: metadata.source.port.kind === 'declared'
-        ? {
-          kind: 'declared' as const,
-          nodeId: metadata.source.port.nodeId,
-          portKey: metadata.source.port.portKey,
-        }
-        : {
-          kind: 'instance' as const,
-          nodeId: metadata.source.port.nodeId,
-          templateKey: metadata.source.port.templateKey,
-          instanceId: metadata.source.port.instanceId,
-        },
-    };
+  const presentation =
+    metadata.presentation.kind === "inspector"
+      ? { kind: "inspector" as const }
+      : metadata.presentation.kind === "plot"
+        ? { kind: "plot" as const, chart: metadata.presentation.chart }
+        : { kind: "report" as const, report: metadata.presentation.report };
+  const source =
+    metadata.source === null
+      ? null
+      : {
+          graphPath: metadata.source.graphPath,
+          port:
+            metadata.source.port.kind === "declared"
+              ? {
+                  kind: "declared" as const,
+                  nodeId: metadata.source.port.nodeId,
+                  portKey: metadata.source.port.portKey,
+                }
+              : {
+                  kind: "instance" as const,
+                  nodeId: metadata.source.port.nodeId,
+                  templateKey: metadata.source.port.templateKey,
+                  instanceId: metadata.source.port.instanceId,
+                },
+        };
   return {
-    role: 'result',
+    role: "result",
     resultKey: metadata.resultKey,
     resultId: metadata.resultId,
     title: metadata.title,
@@ -163,25 +157,20 @@ function panelParams(panel: IDockviewPanel): UnknownRecord {
   return isRecord(panel.params) ? panel.params : {};
 }
 
-function metadataEqual(
-  left: WorkbenchPanelMetadata,
-  right: WorkbenchPanelMetadata,
-): boolean {
+function metadataEqual(left: WorkbenchPanelMetadata, right: WorkbenchPanelMetadata): boolean {
   return JSON.stringify(cloneMetadata(left)) === JSON.stringify(cloneMetadata(right));
 }
 
 function readLocation(group: IDockviewGroupPanel): WorkbenchLocation | undefined {
   const location = group.api.location;
-  if (location.type === 'grid') return { type: 'grid' };
-  if (location.type === 'edge') {
-    return { type: 'edge', position: location.position };
+  if (location.type === "grid") return { type: "grid" };
+  if (location.type === "edge") {
+    return { type: "edge", position: location.position };
   }
   return undefined;
 }
 
-function panelInfo(
-  panel: IDockviewPanel | undefined,
-): WorkbenchPanelInfo | undefined {
+function panelInfo(panel: IDockviewPanel | undefined): WorkbenchPanelInfo | undefined {
   if (!panel) return undefined;
   const metadata = readMetadata(panel);
   const location = readLocation(panel.group);
@@ -194,24 +183,21 @@ function panelInfo(
     title: panel.title,
     metadata,
     active: panel.api.isActive,
-    ...(typeof visible === 'boolean' ? { visible } : {}),
+    ...(typeof visible === "boolean" ? { visible } : {}),
     location,
   };
 }
 
-function groupInfo(
-  api: DockviewApi,
-  group: IDockviewGroupPanel,
-): WorkbenchGroupInfo | undefined {
+function groupInfo(api: DockviewApi, group: IDockviewGroupPanel): WorkbenchGroupInfo | undefined {
   const location = readLocation(group);
   if (!location) return undefined;
   const panelInstanceIds = group.panels
     .filter((panel) => readMetadata(panel) !== undefined)
     .map((panel) => panel.id);
-  const activePanelInstanceId = group.activePanel
-    && readMetadata(group.activePanel) !== undefined
-    ? group.activePanel.id
-    : undefined;
+  const activePanelInstanceId =
+    group.activePanel && readMetadata(group.activePanel) !== undefined
+      ? group.activePanel.id
+      : undefined;
   return {
     groupId: group.id,
     panelInstanceIds,
@@ -242,19 +228,16 @@ function edgeSize(
 ): number {
   try {
     const serializedSize = api.toJSON().edgeGroups?.[position]?.size;
-    if (typeof serializedSize === 'number' && Number.isFinite(serializedSize)) {
+    if (typeof serializedSize === "number" && Number.isFinite(serializedSize)) {
       return serializedSize;
     }
   } catch {
     // Fall back to live geometry while Dockview is between layout passes.
   }
-  return position === 'left' || position === 'right' ? group.width : group.height;
+  return position === "left" || position === "right" ? group.width : group.height;
 }
 
-function readEdgeState(
-  api: DockviewApi,
-  position: WorkbenchEdgePosition,
-): WorkbenchEdgeState {
+function readEdgeState(api: DockviewApi, position: WorkbenchEdgePosition): WorkbenchEdgeState {
   const group = api.getEdgeGroup(position);
   if (!group) {
     return {
@@ -280,7 +263,7 @@ function configuredEdgeState(
 ): ConfiguredWorkbenchEdgeState {
   const state = readEdgeState(api, position);
   if (!state.exists || !state.groupId) {
-    throw new WorkbenchLayoutError('layout_restore_failed', { position });
+    throw new WorkbenchLayoutError("layout_restore_failed", { position });
   }
   return { ...state, exists: true, groupId: state.groupId };
 }
@@ -300,15 +283,12 @@ function throwAsLayoutError<T>(
 
 function requireValidMetadata(metadata: WorkbenchPanelMetadata): WorkbenchPanelMetadata {
   if (!isWorkbenchPanelMetadata(metadata)) {
-    throw new WorkbenchLayoutError('invalid_panel_metadata');
+    throw new WorkbenchLayoutError("invalid_panel_metadata");
   }
   return cloneMetadata(metadata);
 }
 
-function updatePanelMetadata(
-  panel: IDockviewPanel,
-  metadata: WorkbenchPanelMetadata,
-): void {
+function updatePanelMetadata(panel: IDockviewPanel, metadata: WorkbenchPanelMetadata): void {
   panel.api.updateParameters({
     ...panelParams(panel),
     metadata: cloneMetadata(metadata),
@@ -317,11 +297,11 @@ function updatePanelMetadata(
 
 function defaultHeaderPositionForEdge(
   position: WorkbenchEdgePosition,
-): 'top' | 'bottom' | 'left' | 'right' {
-  if (position === 'bottom') return 'bottom';
-  if (position === 'left') return 'left';
-  if (position === 'right') return 'right';
-  return 'top';
+): "top" | "bottom" | "left" | "right" {
+  if (position === "bottom") return "bottom";
+  if (position === "left") return "left";
+  if (position === "right") return "right";
+  return "top";
 }
 
 function setGroupSize(
@@ -329,13 +309,13 @@ function setGroupSize(
   position: WorkbenchEdgePosition,
   size: number,
 ): void {
-  if (position === 'left' || position === 'right') group.setSize({ width: size });
+  if (position === "left" || position === "right") group.setSize({ width: size });
   else group.setSize({ height: size });
 }
 
 function validateEdgeSize(position: WorkbenchEdgePosition, size: number): void {
   if (!Number.isFinite(size) || size <= 0) {
-    throw new WorkbenchLayoutError('layout_restore_failed', { position });
+    throw new WorkbenchLayoutError("layout_restore_failed", { position });
   }
 }
 
@@ -350,24 +330,24 @@ function configuredEdgeId(position: WorkbenchEdgePosition): string {
 function revealPanel(api: DockviewApi, panel: IDockviewPanel): void {
   panel.api.setActive();
   const location = readLocation(panel.group);
-  if (location?.type !== 'edge') return;
+  if (location?.type !== "edge") return;
   api.setEdgeGroupVisible(location.position, true);
   api.getEdgeGroup(location.position)?.expand();
 }
 
 function ensureCentralGroupLive(api: DockviewApi): string {
-  if (api.activeGroup && readLocation(api.activeGroup)?.type === 'grid') {
+  if (api.activeGroup && readLocation(api.activeGroup)?.type === "grid") {
     return api.activeGroup.id;
   }
-  const existing = api.groups.find((group) => readLocation(group)?.type === 'grid');
+  const existing = api.groups.find((group) => readLocation(group)?.type === "grid");
   if (existing) return existing.id;
   return api.addGroup().id;
 }
 
 function requireGridGroup(api: DockviewApi, groupId: string): IDockviewGroupPanel {
   const group = api.getGroup(groupId);
-  if (!group || readLocation(group)?.type !== 'grid') {
-    throw new WorkbenchLayoutError('group_not_found', { groupId });
+  if (!group || readLocation(group)?.type !== "grid") {
+    throw new WorkbenchLayoutError("group_not_found", { groupId });
   }
   return group;
 }
@@ -375,7 +355,7 @@ function requireGridGroup(api: DockviewApi, groupId: string): IDockviewGroupPane
 function requireGroup(api: DockviewApi, groupId: string): IDockviewGroupPanel {
   const group = api.getGroup(groupId);
   if (!group || !readLocation(group)) {
-    throw new WorkbenchLayoutError('group_not_found', { groupId });
+    throw new WorkbenchLayoutError("group_not_found", { groupId });
   }
   return group;
 }
@@ -411,8 +391,7 @@ function configureEdgeLive(
   }
   api.setEdgeGroupVisible(request.position, true);
   setGroupSize(group, request.position, request.size);
-  const headerPosition = request.headerPosition
-    ?? defaultHeaderPositionForEdge(request.position);
+  const headerPosition = request.headerPosition ?? defaultHeaderPositionForEdge(request.position);
   if (headerPosition) group.setHeaderPosition(headerPosition);
   if (request.collapsed) group.collapse();
   else group.expand();
@@ -446,10 +425,10 @@ function remappedMetadata(
   to: string,
 ): WorkbenchPanelMetadata | undefined {
   if (from === to) return undefined;
-  if (metadata.role === 'editor' && metadata.resourceRef === from) {
+  if (metadata.role === "editor" && metadata.resourceRef === from) {
     return requireValidMetadata({ ...metadata, resourceRef: to });
   }
-  if (metadata.role === 'result' && metadata.source?.graphPath === from) {
+  if (metadata.role === "result" && metadata.source?.graphPath === from) {
     return requireValidMetadata({
       ...metadata,
       source: { ...metadata.source, graphPath: to },
@@ -486,7 +465,7 @@ interface ShadowGroup {
   readonly panelIds: string[];
   activePanelId: string | undefined;
   active: boolean;
-  headerPosition?: 'top' | 'bottom' | 'left' | 'right';
+  headerPosition?: "top" | "bottom" | "left" | "right";
 }
 
 interface ShadowEdge {
@@ -495,62 +474,62 @@ interface ShadowEdge {
   visible: boolean;
   collapsed: boolean;
   size: number;
-  headerPosition?: 'top' | 'bottom' | 'left' | 'right';
+  headerPosition?: "top" | "bottom" | "left" | "right";
 }
 
 type BufferedCommand =
-  | { readonly kind: 'add-grid'; readonly groupId: string }
+  | { readonly kind: "add-grid"; readonly groupId: string }
   | {
-    readonly kind: 'add-edge';
-    readonly position: WorkbenchEdgePosition;
-    readonly groupId: string;
-    readonly size: number;
-    readonly collapsed: boolean;
-  }
+      readonly kind: "add-edge";
+      readonly position: WorkbenchEdgePosition;
+      readonly groupId: string;
+      readonly size: number;
+      readonly collapsed: boolean;
+    }
   | {
-    readonly kind: 'add-panel';
-    readonly panelId: string;
-    readonly groupId: string;
-    readonly component: WorkbenchComponentId;
-    readonly title: string;
-    readonly metadata: WorkbenchPanelMetadata;
-    readonly index?: number;
-  }
+      readonly kind: "add-panel";
+      readonly panelId: string;
+      readonly groupId: string;
+      readonly component: WorkbenchComponentId;
+      readonly title: string;
+      readonly metadata: WorkbenchPanelMetadata;
+      readonly index?: number;
+    }
   | {
-    readonly kind: 'update-panel';
-    readonly panelId: string;
-    readonly metadata: WorkbenchPanelMetadata;
-    readonly title?: string;
-    readonly updateTitle: boolean;
-    readonly pinned?: boolean;
-  }
+      readonly kind: "update-panel";
+      readonly panelId: string;
+      readonly metadata: WorkbenchPanelMetadata;
+      readonly title?: string;
+      readonly updateTitle: boolean;
+      readonly pinned?: boolean;
+    }
   | {
-    readonly kind: 'move';
-    readonly panelId: string;
-    readonly groupId: string;
-    readonly index?: number;
-    readonly activate: boolean;
-  }
+      readonly kind: "move";
+      readonly panelId: string;
+      readonly groupId: string;
+      readonly index?: number;
+      readonly activate: boolean;
+    }
   | {
-    readonly kind: 'configure-edge';
-    readonly request: ConfigureWorkbenchEdgeRequest;
-  }
-  | { readonly kind: 'reveal'; readonly panelId: string }
-  | { readonly kind: 'activate'; readonly panelId: string }
+      readonly kind: "configure-edge";
+      readonly request: ConfigureWorkbenchEdgeRequest;
+    }
+  | { readonly kind: "reveal"; readonly panelId: string }
+  | { readonly kind: "activate"; readonly panelId: string }
   | {
-    readonly kind: 'remove';
-    readonly panelId: string;
-    readonly deferUntilFinal: boolean;
-  };
+      readonly kind: "remove";
+      readonly panelId: string;
+      readonly deferUntilFinal: boolean;
+    };
 
 interface MutableSerializedLeaf {
-  readonly type: 'leaf';
+  readonly type: "leaf";
   readonly size?: number;
   readonly data: UnknownRecord;
 }
 
 interface MutableSerializedBranch {
-  readonly type: 'branch';
+  readonly type: "branch";
   readonly size?: number;
   readonly data: MutableSerializedNode[];
 }
@@ -655,40 +634,40 @@ class ShadowWorkbenchModel {
 
   validate(api: DockviewApi): void {
     if (JSON.stringify(api.toJSON()) !== this.baseFingerprint) {
-      this.fail('stale_transaction');
+      this.fail("stale_transaction");
     }
-    if (this.violations.length > 0) this.fail(this.violations[0] ?? 'invalid_shadow');
+    if (this.violations.length > 0) this.fail(this.violations[0] ?? "invalid_shadow");
 
     const seenPanelIds = new Set<string>();
     for (const groupId of this.groupOrder) {
       const group = this.groups.get(groupId);
-      if (!group) this.fail('missing_group');
-      if ((group.panelIds.length === 0) !== (group.activePanelId === undefined)
-        || (group.activePanelId !== undefined
-          && !group.panelIds.includes(group.activePanelId))) {
-        this.fail('invalid_active_panel');
+      if (!group) this.fail("missing_group");
+      if (
+        (group.panelIds.length === 0) !== (group.activePanelId === undefined) ||
+        (group.activePanelId !== undefined && !group.panelIds.includes(group.activePanelId))
+      ) {
+        this.fail("invalid_active_panel");
       }
       for (const panelId of group.panelIds) {
-        if (seenPanelIds.has(panelId)) this.fail('duplicate_panel');
+        if (seenPanelIds.has(panelId)) this.fail("duplicate_panel");
         seenPanelIds.add(panelId);
-        if (this.panels.get(panelId)?.groupId !== groupId) this.fail('invalid_group_membership');
+        if (this.panels.get(panelId)?.groupId !== groupId) this.fail("invalid_group_membership");
       }
     }
-    if (seenPanelIds.size !== this.panels.size) this.fail('orphan_panel');
+    if (seenPanelIds.size !== this.panels.size) this.fail("orphan_panel");
 
     const activeGroups = [...this.groups.values()].filter((group) => group.active);
     const shouldHaveActiveGroup = [...this.groups.values()].some(
-      (group) => group.location.type === 'grid' || group.activePanelId !== undefined,
+      (group) => group.location.type === "grid" || group.activePanelId !== undefined,
     );
-    if (activeGroups.length > 1
-      || (shouldHaveActiveGroup && activeGroups.length !== 1)) {
-      this.fail('invalid_active_state');
+    if (activeGroups.length > 1 || (shouldHaveActiveGroup && activeGroups.length !== 1)) {
+      this.fail("invalid_active_state");
     }
     const activeGroup = activeGroups[0];
     const expectedActivePanelId = activeGroup?.activePanelId;
     for (const panel of this.panels.values()) {
       if (panel.active !== (panel.id === expectedActivePanelId)) {
-        this.fail('invalid_active_state');
+        this.fail("invalid_active_state");
       }
     }
 
@@ -696,21 +675,21 @@ class ShadowWorkbenchModel {
     const resultKeys = new Set<string>();
     for (const panel of this.panels.values()) {
       if (!panel.metadata) continue;
-      if (!isWorkbenchPanelMetadata(panel.metadata)) this.fail('invalid_panel_metadata');
-      if (panel.metadata.role === 'view') {
-        if (viewIds.has(panel.metadata.viewId)) this.fail('duplicate_view');
+      if (!isWorkbenchPanelMetadata(panel.metadata)) this.fail("invalid_panel_metadata");
+      if (panel.metadata.role === "view") {
+        if (viewIds.has(panel.metadata.viewId)) this.fail("duplicate_view");
         viewIds.add(panel.metadata.viewId);
       }
-      if (panel.metadata.role === 'result') {
-        if (resultKeys.has(panel.metadata.resultKey)) this.fail('duplicate_result');
+      if (panel.metadata.role === "result") {
+        if (resultKeys.has(panel.metadata.resultKey)) this.fail("duplicate_result");
         resultKeys.add(panel.metadata.resultKey);
       }
     }
 
     for (const [position, edge] of this.edges) {
       const group = this.groups.get(edge.groupId);
-      if (!group || group.location.type !== 'edge' || group.location.position !== position) {
-        this.fail('invalid_edge_group');
+      if (!group || group.location.type !== "edge" || group.location.position !== position) {
+        this.fail("invalid_edge_group");
       }
     }
   }
@@ -718,12 +697,12 @@ class ShadowWorkbenchModel {
   apply(api: DockviewApi): void {
     if (this.commands.length === 0) return;
     for (const command of this.commands) {
-      if (command.kind !== 'remove' || !command.deferUntilFinal) {
+      if (command.kind !== "remove" || !command.deferUntilFinal) {
         this.applyCommand(api, command);
       }
     }
     for (const command of this.commands) {
-      if (command.kind === 'remove' && command.deferUntilFinal) {
+      if (command.kind === "remove" && command.deferUntilFinal) {
         this.applyCommand(api, command);
       }
     }
@@ -767,37 +746,36 @@ class ShadowWorkbenchModel {
   private ensureCentralGroup(): string {
     const active = this.groupOrder
       .map((groupId) => this.groups.get(groupId))
-      .find((group) => group?.active && group.location.type === 'grid');
+      .find((group) => group?.active && group.location.type === "grid");
     if (active) return active.id;
     const existing = this.groupOrder
       .map((groupId) => this.groups.get(groupId))
-      .find((group) => group?.location.type === 'grid');
+      .find((group) => group?.location.type === "grid");
     if (existing) return existing.id;
 
     const groupId = this.uniqueId();
     this.groups.set(groupId, {
       id: groupId,
-      location: { type: 'grid' },
+      location: { type: "grid" },
       panelIds: [],
       activePanelId: undefined,
       active: false,
     });
     this.groupOrder.push(groupId);
     this.setActiveGroupState(groupId);
-    this.commands.push({ kind: 'add-grid', groupId });
+    this.commands.push({ kind: "add-grid", groupId });
     return groupId;
   }
 
   private ensureView(request: EnsureViewRequest): WorkbenchPanelInfo {
     const existing = [...this.panels.values()].find(
-      (panel) => panel.metadata?.role === 'view'
-        && panel.metadata.viewId === request.viewId,
+      (panel) => panel.metadata?.role === "view" && panel.metadata.viewId === request.viewId,
     );
     if (existing) {
       if (existing.title !== request.title) {
         existing.title = request.title;
         this.commands.push({
-          kind: 'update-panel',
+          kind: "update-panel",
           panelId: existing.id,
           metadata: cloneMetadata(existing.metadata as WorkbenchPanelMetadata),
           title: request.title,
@@ -807,10 +785,10 @@ class ShadowWorkbenchModel {
       this.reveal(existing.id);
       const info = this.toPanelInfo(existing);
       if (info) return info;
-      this.fail('invalid_panel_metadata');
+      this.fail("invalid_panel_metadata");
     }
 
-    const metadata = requireValidMetadata({ role: 'view', viewId: request.viewId });
+    const metadata = requireValidMetadata({ role: "view", viewId: request.viewId });
     const position = WORKBENCH_HOME_EDGE[request.viewId];
     const edge = this.ensureEdge(position);
     const panelId = this.uniqueId();
@@ -826,7 +804,7 @@ class ShadowWorkbenchModel {
     this.panels.set(panelId, panel);
     this.groups.get(edge.groupId)?.panelIds.push(panelId);
     this.commands.push({
-      kind: 'add-panel',
+      kind: "add-panel",
       panelId,
       groupId: edge.groupId,
       component: componentForWorkbenchMetadata(metadata),
@@ -836,7 +814,7 @@ class ShadowWorkbenchModel {
     this.reveal(panelId);
     const info = this.toPanelInfo(panel);
     if (info) return info;
-    this.fail('invalid_panel_metadata');
+    this.fail("invalid_panel_metadata");
   }
 
   private move(request: MoveWorkbenchPanelRequest): boolean {
@@ -845,26 +823,22 @@ class ShadowWorkbenchModel {
     if (!panel?.metadata || !target) return false;
     const source = this.groups.get(panel.groupId);
     if (!source) {
-      this.violations.push('missing_source_group');
+      this.violations.push("missing_source_group");
       return false;
     }
-    const targetPosition = target.location.type === 'edge'
-      ? target.location.position
-      : target.location.type;
+    const targetPosition =
+      target.location.type === "edge" ? target.location.position : target.location.type;
     if (!canMoveWorkbenchPanel(panel.metadata, target.id, targetPosition)) {
-      this.violations.push('activity_move_not_allowed');
+      this.violations.push("activity_move_not_allowed");
       return false;
     }
 
     const currentIndex = source.panelIds.indexOf(panel.id);
-    const maximumIndex = source === target
-      ? Math.max(0, target.panelIds.length - 1)
-      : target.panelIds.length;
+    const maximumIndex =
+      source === target ? Math.max(0, target.panelIds.length - 1) : target.panelIds.length;
     const requestedIndex = request.index ?? (source === target ? currentIndex : maximumIndex);
-    if (!Number.isInteger(requestedIndex)
-      || requestedIndex < 0
-      || requestedIndex > maximumIndex) {
-      this.violations.push('invalid_index');
+    if (!Number.isInteger(requestedIndex) || requestedIndex < 0 || requestedIndex > maximumIndex) {
+      this.violations.push("invalid_index");
       return false;
     }
     if (source === target && requestedIndex === currentIndex) {
@@ -875,14 +849,14 @@ class ShadowWorkbenchModel {
     const wasActive = panel.active;
     source.panelIds.splice(currentIndex, 1);
     if (source.activePanelId === panel.id) source.activePanelId = source.panelIds[0];
-    if (source.panelIds.length === 0 && source.location.type === 'grid') {
+    if (source.panelIds.length === 0 && source.location.type === "grid") {
       this.deleteGroup(source.id);
     }
     panel.groupId = target.id;
     target.panelIds.splice(requestedIndex, 0, panel.id);
     if (!target.activePanelId) target.activePanelId = panel.id;
     this.commands.push({
-      kind: 'move',
+      kind: "move",
       panelId: panel.id,
       groupId: target.id,
       index: requestedIndex,
@@ -893,19 +867,19 @@ class ShadowWorkbenchModel {
     return true;
   }
 
-  private configureEdge(
-    request: ConfigureWorkbenchEdgeRequest,
-  ): ConfiguredWorkbenchEdgeState {
+  private configureEdge(request: ConfigureWorkbenchEdgeRequest): ConfiguredWorkbenchEdgeState {
     if (!Number.isFinite(request.size) || request.size <= 0) {
-      this.violations.push('invalid_edge_size');
+      this.violations.push("invalid_edge_size");
     }
     const edge = this.ensureEdge(request.position, request.size, request.collapsed);
     edge.size = request.size;
     edge.visible = true;
     edge.collapsed = request.collapsed;
-    edge.headerPosition = request.headerPosition
-      ?? (edge.headerPosition ?? defaultHeaderPositionForEdge(request.position));
-    this.commands.push({ kind: 'configure-edge', request: { ...request } });
+    edge.headerPosition =
+      request.headerPosition ??
+      edge.headerPosition ??
+      defaultHeaderPositionForEdge(request.position);
+    this.commands.push({ kind: "configure-edge", request: { ...request } });
     return {
       position: edge.position,
       exists: true,
@@ -920,7 +894,7 @@ class ShadowWorkbenchModel {
     const panel = this.panels.get(panelInstanceId);
     if (!panel?.metadata) return false;
     this.setActiveState(panel.id);
-    this.commands.push({ kind: 'activate', panelId: panel.id });
+    this.commands.push({ kind: "activate", panelId: panel.id });
     return true;
   }
 
@@ -929,14 +903,14 @@ class ShadowWorkbenchModel {
     if (!panel?.metadata) return false;
     this.setActiveState(panel.id);
     const group = this.groups.get(panel.groupId);
-    if (group?.location.type === 'edge') {
+    if (group?.location.type === "edge") {
       const edge = this.edges.get(group.location.position);
       if (edge) {
         edge.visible = true;
         edge.collapsed = false;
       }
     }
-    this.commands.push({ kind: 'reveal', panelId: panel.id });
+    this.commands.push({ kind: "reveal", panelId: panel.id });
     return true;
   }
 
@@ -948,7 +922,7 @@ class ShadowWorkbenchModel {
       try {
         metadata = remappedMetadata(panel.metadata, from, to);
       } catch {
-        this.violations.push('invalid_panel_metadata');
+        this.violations.push("invalid_panel_metadata");
         continue;
       }
       if (!metadata) continue;
@@ -956,7 +930,7 @@ class ShadowWorkbenchModel {
       panel.params = { ...panel.params, metadata: cloneMetadata(metadata) };
       panel.component = componentForWorkbenchMetadata(metadata);
       this.commands.push({
-        kind: 'update-panel',
+        kind: "update-panel",
         panelId: panel.id,
         metadata,
         updateTitle: false,
@@ -977,12 +951,12 @@ class ShadowWorkbenchModel {
       const index = group.panelIds.indexOf(panelId);
       if (index < 0) this.rejectInvalidRemove(panelId);
       const wasActive = panel.active;
-      const deferUntilFinal = group.location.type === 'grid' && group.panelIds.length === 1;
+      const deferUntilFinal = group.location.type === "grid" && group.panelIds.length === 1;
       group.panelIds.splice(index, 1);
       if (group.activePanelId === panelId) group.activePanelId = group.panelIds[0];
       this.panels.delete(panelId);
-      this.commands.push({ kind: 'remove', panelId, deferUntilFinal });
-      if (group.panelIds.length === 0 && group.location.type === 'grid') {
+      this.commands.push({ kind: "remove", panelId, deferUntilFinal });
+      if (group.panelIds.length === 0 && group.location.type === "grid") {
         this.deleteGroup(group.id);
       }
       if (wasActive) this.setReplacementActiveState(group.id);
@@ -990,9 +964,9 @@ class ShadowWorkbenchModel {
   }
 
   private rejectInvalidRemove(panelInstanceId: string): never {
-    this.violations.push('invalid_remove_target');
-    throw new WorkbenchLayoutError('layout_restore_failed', {
-      reason: 'invalid_remove_target',
+    this.violations.push("invalid_remove_target");
+    throw new WorkbenchLayoutError("layout_restore_failed", {
+      reason: "invalid_remove_target",
       panelInstanceId,
     });
   }
@@ -1006,11 +980,11 @@ class ShadowWorkbenchModel {
     if (existing) return existing;
     const groupId = configuredEdgeId(position);
     if (this.groups.has(groupId)) {
-      this.violations.push('duplicate_group');
+      this.violations.push("duplicate_group");
     }
     const group: ShadowGroup = {
       id: groupId,
-      location: { type: 'edge', position },
+      location: { type: "edge", position },
       panelIds: [],
       activePanelId: undefined,
       active: false,
@@ -1027,7 +1001,7 @@ class ShadowWorkbenchModel {
     this.groups.set(groupId, group);
     this.groupOrder.push(groupId);
     this.edges.set(position, edge);
-    this.commands.push({ kind: 'add-edge', position, groupId, size, collapsed });
+    this.commands.push({ kind: "add-edge", position, groupId, size, collapsed });
     return edge;
   }
 
@@ -1079,7 +1053,7 @@ class ShadowWorkbenchModel {
 
   private deleteGroup(groupId: string): void {
     const group = this.groups.get(groupId);
-    if (group?.location.type === 'edge') this.edges.delete(group.location.position);
+    if (group?.location.type === "edge") this.edges.delete(group.location.position);
     this.groups.delete(groupId);
     const index = this.groupOrder.indexOf(groupId);
     if (index >= 0) this.groupOrder.splice(index, 1);
@@ -1104,10 +1078,10 @@ class ShadowWorkbenchModel {
     const panelInstanceIds = group.panelIds.filter(
       (panelId) => this.panels.get(panelId)?.metadata !== undefined,
     );
-    const activePanelInstanceId = group.activePanelId
-      && this.panels.get(group.activePanelId)?.metadata !== undefined
-      ? group.activePanelId
-      : undefined;
+    const activePanelInstanceId =
+      group.activePanelId && this.panels.get(group.activePanelId)?.metadata !== undefined
+        ? group.activePanelId
+        : undefined;
     return {
       groupId: group.id,
       panelInstanceIds,
@@ -1121,10 +1095,10 @@ class ShadowWorkbenchModel {
     const layout = structuredClone(this.baseLayout) as unknown as MutableSerializedLayout;
     const representedGroups = new Set<string>();
     const patchNode = (node: MutableSerializedNode): MutableSerializedNode | undefined => {
-      if (node.type === 'leaf') {
-        const groupId = typeof node.data.id === 'string' ? node.data.id : '';
+      if (node.type === "leaf") {
+        const groupId = typeof node.data.id === "string" ? node.data.id : "";
         const group = this.groups.get(groupId);
-        if (!group || group.location.type !== 'grid') return undefined;
+        if (!group || group.location.type !== "grid") return undefined;
         representedGroups.add(groupId);
         return {
           ...node,
@@ -1132,7 +1106,7 @@ class ShadowWorkbenchModel {
             ...node.data,
             id: group.id,
             views: [...group.panelIds],
-            activeView: group.activePanelId ?? '',
+            activeView: group.activePanelId ?? "",
           },
         };
       }
@@ -1148,20 +1122,20 @@ class ShadowWorkbenchModel {
     const patchedRoot = patchNode(layout.grid.root);
     const missingLeaves = this.groupOrder.flatMap((groupId) => {
       const group = this.groups.get(groupId);
-      if (!group || group.location.type !== 'grid' || representedGroups.has(groupId)) return [];
-      return [{
-        type: 'leaf' as const,
-        data: {
-          id: group.id,
-          views: [...group.panelIds],
-          activeView: group.activePanelId ?? '',
+      if (!group || group.location.type !== "grid" || representedGroups.has(groupId)) return [];
+      return [
+        {
+          type: "leaf" as const,
+          data: {
+            id: group.id,
+            views: [...group.panelIds],
+            activeView: group.activePanelId ?? "",
+          },
         },
-      }];
+      ];
     });
     const roots = [...(patchedRoot ? [patchedRoot] : []), ...missingLeaves];
-    layout.grid.root = roots.length === 1
-      ? roots[0]
-      : { type: 'branch', data: roots };
+    layout.grid.root = roots.length === 1 ? roots[0] : { type: "branch", data: roots };
 
     const nextPanels: Record<string, UnknownRecord> = {};
     for (const panel of this.panels.values()) {
@@ -1198,7 +1172,7 @@ class ShadowWorkbenchModel {
           ...existingGroup,
           id: group.id,
           views: [...group.panelIds],
-          activeView: group.activePanelId ?? '',
+          activeView: group.activePanelId ?? "",
           ...(edge.headerPosition ? { headerPosition: edge.headerPosition } : {}),
         },
       };
@@ -1215,7 +1189,7 @@ class ShadowWorkbenchModel {
   private reconcileSelection(api: DockviewApi): void {
     for (const groupId of this.groupOrder) {
       const desiredGroup = this.groups.get(groupId);
-      if (!desiredGroup) this.fail('missing_group');
+      if (!desiredGroup) this.fail("missing_group");
       const liveGroup = this.requireFinalGroup(api, groupId);
       if (desiredGroup.activePanelId) {
         this.setFinalPanelActive(api, liveGroup, desiredGroup.activePanelId);
@@ -1231,20 +1205,16 @@ class ShadowWorkbenchModel {
       this.setFinalPanelActive(api, liveActiveGroup, desiredActiveGroup.activePanelId);
       return;
     }
-    throwAsLayoutError(
-      'layout_restore_failed',
-      { groupId: desiredActiveGroup.id },
-      () => liveActiveGroup.api.setActive(),
+    throwAsLayoutError("layout_restore_failed", { groupId: desiredActiveGroup.id }, () =>
+      liveActiveGroup.api.setActive(),
     );
   }
 
   private requireFinalGroup(api: DockviewApi, groupId: string): IDockviewGroupPanel {
-    const group = throwAsLayoutError(
-      'layout_restore_failed',
-      { groupId },
-      () => api.getGroup(groupId),
+    const group = throwAsLayoutError("layout_restore_failed", { groupId }, () =>
+      api.getGroup(groupId),
     );
-    if (!group) throw new WorkbenchLayoutError('layout_restore_failed', { groupId });
+    if (!group) throw new WorkbenchLayoutError("layout_restore_failed", { groupId });
     return group;
   }
 
@@ -1254,26 +1224,22 @@ class ShadowWorkbenchModel {
     panelInstanceId: string,
   ): void {
     const details = { groupId: group.id, panelInstanceId };
-    const panel = throwAsLayoutError(
-      'layout_restore_failed',
-      details,
-      () => {
-        const target = api.getPanel(panelInstanceId);
-        if (!target || target.group.id !== group.id || !group.panels.includes(target)) {
-          throw new WorkbenchLayoutError('layout_restore_failed', details);
-        }
-        return target;
-      },
-    );
-    throwAsLayoutError('layout_restore_failed', details, () => panel.api.setActive());
+    const panel = throwAsLayoutError("layout_restore_failed", details, () => {
+      const target = api.getPanel(panelInstanceId);
+      if (!target || target.group.id !== group.id || !group.panels.includes(target)) {
+        throw new WorkbenchLayoutError("layout_restore_failed", details);
+      }
+      return target;
+    });
+    throwAsLayoutError("layout_restore_failed", details, () => panel.api.setActive());
   }
 
   private applyCommand(api: DockviewApi, command: BufferedCommand): void {
     switch (command.kind) {
-      case 'add-grid':
-        api.addGroup({ id: command.groupId, direction: 'right' } as AddGroupOptions);
+      case "add-grid":
+        api.addGroup({ id: command.groupId, direction: "right" } as AddGroupOptions);
         return;
-      case 'add-edge': {
+      case "add-edge": {
         const group = api.addEdgeGroup(command.position, {
           id: command.groupId,
           initialSize: command.size,
@@ -1282,7 +1248,7 @@ class ShadowWorkbenchModel {
         group.setHeaderPosition(defaultHeaderPositionForEdge(command.position));
         return;
       }
-      case 'add-panel': {
+      case "add-panel": {
         const panel = api.addPanel<WorkbenchPanelParams>({
           id: command.panelId,
           component: command.component,
@@ -1294,28 +1260,30 @@ class ShadowWorkbenchModel {
           },
           inactive: true,
         } as AddPanelOptions<WorkbenchPanelParams>);
-        if (command.metadata.role === 'editor') {
+        if (command.metadata.role === "editor") {
           panel.api.setPinned(command.metadata.pinned ?? false);
         }
         return;
       }
-      case 'update-panel': {
+      case "update-panel": {
         const panel = api.getPanel(command.panelId);
-        if (!panel) throw new WorkbenchLayoutError('layout_restore_failed', {
-          panelInstanceId: command.panelId,
-        });
+        if (!panel)
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            panelInstanceId: command.panelId,
+          });
         updatePanelMetadata(panel, command.metadata);
         if (command.updateTitle && command.title !== undefined) panel.api.setTitle(command.title);
         if (command.pinned !== undefined) panel.api.setPinned(command.pinned);
         return;
       }
-      case 'move': {
+      case "move": {
         const panel = api.getPanel(command.panelId);
         const group = api.getGroup(command.groupId);
-        if (!panel || !group) throw new WorkbenchLayoutError('layout_restore_failed', {
-          panelInstanceId: command.panelId,
-          groupId: command.groupId,
-        });
+        if (!panel || !group)
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            panelInstanceId: command.panelId,
+            groupId: command.groupId,
+          });
         panel.api.moveTo({
           group: group as DockviewGroupPanel,
           ...(command.index === undefined ? {} : { index: command.index }),
@@ -1323,34 +1291,35 @@ class ShadowWorkbenchModel {
         });
         return;
       }
-      case 'configure-edge':
+      case "configure-edge":
         configureEdgeLive(api, command.request);
         return;
-      case 'reveal': {
+      case "reveal": {
         const panel = api.getPanel(command.panelId);
-        if (!panel) throw new WorkbenchLayoutError('layout_restore_failed', {
-          panelInstanceId: command.panelId,
-        });
+        if (!panel)
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            panelInstanceId: command.panelId,
+          });
         revealPanel(api, panel);
         return;
       }
-      case 'activate': {
+      case "activate": {
         const panel = api.getPanel(command.panelId);
-        if (!panel) throw new WorkbenchLayoutError('layout_restore_failed', {
-          panelInstanceId: command.panelId,
-        });
+        if (!panel)
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            panelInstanceId: command.panelId,
+          });
         panel.api.setActive();
         return;
       }
-      case 'remove': {
+      case "remove": {
         const panel = api.getPanel(command.panelId);
-        if (!panel) throw new WorkbenchLayoutError('layout_restore_failed', {
-          panelInstanceId: command.panelId,
-        });
-        throwAsLayoutError(
-          'layout_restore_failed',
-          { panelInstanceId: command.panelId },
-          () => panel.api.close(),
+        if (!panel)
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            panelInstanceId: command.panelId,
+          });
+        throwAsLayoutError("layout_restore_failed", { panelInstanceId: command.panelId }, () =>
+          panel.api.close(),
         );
         return;
       }
@@ -1364,12 +1333,12 @@ class ShadowWorkbenchModel {
   }
 
   private fail(reason: string): never {
-    throw new WorkbenchLayoutError('layout_restore_failed', { reason });
+    throw new WorkbenchLayoutError("layout_restore_failed", { reason });
   }
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return isRecord(value) && typeof value.then === 'function';
+  return isRecord(value) && typeof value.then === "function";
 }
 
 export function createWorkbenchDockviewRuntime(): {
@@ -1383,15 +1352,16 @@ export function createWorkbenchDockviewRuntime(): {
   let hydrated = false;
   let hydrationEpoch = 0;
   let revision = 0;
-  let snapshot: Readonly<{ revision: number; ready: boolean; hydrated: boolean }> =
-    Object.freeze({ revision, ready: false, hydrated: false });
+  let snapshot: Readonly<{ revision: number; ready: boolean; hydrated: boolean }> = Object.freeze({
+    revision,
+    ready: false,
+    hydrated: false,
+  });
   let draining = false;
   let listenerDeferralDepth = 0;
   let deferredNotification = false;
   const listeners = new Set<() => void>();
-  const hydrationWaiters = new Set<(
-    result: { readonly status: 'hydrated' | 'unbound' },
-  ) => void>();
+  const hydrationWaiters = new Set<(result: { readonly status: "hydrated" | "unbound" }) => void>();
   const idleWaiters = new Set<() => void>();
   const rootDisposables: Disposable[] = [];
   const edgeDisposables = new Map<WorkbenchEdgePosition, Disposable>();
@@ -1424,10 +1394,7 @@ export function createWorkbenchDockviewRuntime(): {
     notifyListeners();
   };
 
-  const applyBufferedCommands = (
-    hasCommands: boolean,
-    operation: () => void,
-  ): void => {
+  const applyBufferedCommands = (hasCommands: boolean, operation: () => void): void => {
     const startingRevision = revision;
     let completed = false;
     listenerDeferralDepth += 1;
@@ -1457,11 +1424,9 @@ export function createWorkbenchDockviewRuntime(): {
   };
 
   const staleBindingError = (): WorkbenchLayoutError =>
-    new WorkbenchLayoutError('dockview_not_ready', { reason: 'stale_binding' });
+    new WorkbenchLayoutError("dockview_not_ready", { reason: "stale_binding" });
 
-  const rejectQueuedOperations = (
-    predicate: (operation: PendingOperation) => boolean,
-  ): void => {
+  const rejectQueuedOperations = (predicate: (operation: PendingOperation) => boolean): void => {
     const retained: PendingOperation[] = [];
     for (const pending of queue) {
       if (predicate(pending)) pending.reject(staleBindingError());
@@ -1478,7 +1443,10 @@ export function createWorkbenchDockviewRuntime(): {
     for (const position of EDGE_POSITIONS) {
       const edge = api.getEdgeGroup(position);
       if (!edge) continue;
-      edgeDisposables.set(position, edge.onDidCollapsedChange(() => publish()));
+      edgeDisposables.set(
+        position,
+        edge.onDidCollapsedChange(() => publish()),
+      );
     }
   };
 
@@ -1497,10 +1465,10 @@ export function createWorkbenchDockviewRuntime(): {
 
     for (const panel of api.panels) {
       const disposables: Disposable[] = [];
-      if (typeof panel.api.onDidVisibilityChange === 'function') {
+      if (typeof panel.api.onDidVisibilityChange === "function") {
         disposables.push(panel.api.onDidVisibilityChange(() => publish()));
       }
-      if (typeof panel.api.onDidGroupChange === 'function') {
+      if (typeof panel.api.onDidGroupChange === "function") {
         disposables.push(panel.api.onDidGroupChange(() => publish()));
       }
       if (disposables.length > 0) {
@@ -1538,24 +1506,20 @@ export function createWorkbenchDockviewRuntime(): {
     hydrationEpoch,
   });
 
-  const assertBindingContext = (
-    boundApi: DockviewApi,
-    expected: MutationContext,
-  ): void => {
-    if (api !== boundApi
-      || bindingGeneration !== expected.bindingGeneration
-      || operationGeneration !== expected.operationGeneration) {
+  const assertBindingContext = (boundApi: DockviewApi, expected: MutationContext): void => {
+    if (
+      api !== boundApi ||
+      bindingGeneration !== expected.bindingGeneration ||
+      operationGeneration !== expected.operationGeneration
+    ) {
       throw staleBindingError();
     }
   };
 
-  const assertMutationContext = (
-    boundApi: DockviewApi,
-    expected: MutationContext,
-  ): void => {
+  const assertMutationContext = (boundApi: DockviewApi, expected: MutationContext): void => {
     assertBindingContext(boundApi, expected);
     if (!hydrated || hydrationEpoch !== expected.hydrationEpoch) {
-      throw new WorkbenchLayoutError('dockview_not_ready', { reason: 'stale_hydration' });
+      throw new WorkbenchLayoutError("dockview_not_ready", { reason: "stale_hydration" });
     }
   };
 
@@ -1565,10 +1529,8 @@ export function createWorkbenchDockviewRuntime(): {
     epoch: number,
   ): void => {
     assertBindingContext(boundApi, expected);
-    if (hydrated
-      || hydrationEpoch !== epoch
-      || expected.hydrationEpoch !== epoch) {
-      throw new WorkbenchLayoutError('dockview_not_ready', { reason: 'stale_hydration' });
+    if (hydrated || hydrationEpoch !== epoch || expected.hydrationEpoch !== epoch) {
+      throw new WorkbenchLayoutError("dockview_not_ready", { reason: "stale_hydration" });
     }
   };
 
@@ -1591,9 +1553,11 @@ export function createWorkbenchDockviewRuntime(): {
         async run(boundApi) {
           if (settled) return;
           try {
-            if (operationGeneration !== queuedOperationGeneration
-              || (queuedBindingGeneration !== undefined
-                && (bindingGeneration !== queuedBindingGeneration || api !== boundApi))) {
+            if (
+              operationGeneration !== queuedOperationGeneration ||
+              (queuedBindingGeneration !== undefined &&
+                (bindingGeneration !== queuedBindingGeneration || api !== boundApi))
+            ) {
               throw staleBindingError();
             }
             const result = await operation(boundApi);
@@ -1610,11 +1574,16 @@ export function createWorkbenchDockviewRuntime(): {
   };
 
   const runtime: WorkbenchDockviewReadContract & WorkbenchDockviewControlContract = {
-    get isReady() { return api !== undefined; },
-    get isHydrated() { return hydrated; },
-    whenHydrated: () => hydrated
-      ? Promise.resolve({ status: 'hydrated' as const })
-      : new Promise((resolve) => hydrationWaiters.add(resolve)),
+    get isReady() {
+      return api !== undefined;
+    },
+    get isHydrated() {
+      return hydrated;
+    },
+    whenHydrated: () =>
+      hydrated
+        ? Promise.resolve({ status: "hydrated" as const })
+        : new Promise((resolve) => hydrationWaiters.add(resolve)),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -1624,10 +1593,10 @@ export function createWorkbenchDockviewRuntime(): {
     getActivePanel: () => panelInfo(api?.activePanel),
     getActiveEditorPanel: () => {
       const active = panelInfo(api?.activePanel);
-      return active?.metadata.role === 'editor' ? active : undefined;
+      return active?.metadata.role === "editor" ? active : undefined;
     },
-    listPanels: () => api ? listPanelInfo(api) : [],
-    listGroups: () => api ? listGroupInfo(api) : [],
+    listPanels: () => (api ? listPanelInfo(api) : []),
+    listGroups: () => (api ? listGroupInfo(api) : []),
     listGroupPanels: (groupId) => {
       const group = api?.getGroup(groupId);
       if (!group) return [];
@@ -1636,256 +1605,257 @@ export function createWorkbenchDockviewRuntime(): {
         return info ? [info] : [];
       });
     },
-    findEditorPanelsByResource: (resourceRef) => api
-      ? listPanelInfo(api).filter(
-        (panel) => panel.metadata.role === 'editor'
-          && panel.metadata.resourceRef === resourceRef,
-      )
-      : [],
-    getEdgeState: (position) => api
-      ? readEdgeState(api, position)
-      : { position, exists: false, visible: false, collapsed: false },
-    ensureCentralGroup: () => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      {},
-      () => ensureCentralGroupLive(boundApi),
-    )),
-    openEditor: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      request.targetGroupId ? { groupId: request.targetGroupId } : {},
-      () => {
-        const metadata = requireValidMetadata({
-          role: 'editor',
-          resourceRef: request.resourceRef,
-          resourceKind: request.resourceKind,
-          pinned: request.pinned,
-          ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
-        });
-        if (request.mode === 'reuse-resource') {
+    findEditorPanelsByResource: (resourceRef) =>
+      api
+        ? listPanelInfo(api).filter(
+            (panel) =>
+              panel.metadata.role === "editor" && panel.metadata.resourceRef === resourceRef,
+          )
+        : [],
+    getEdgeState: (position) =>
+      api
+        ? readEdgeState(api, position)
+        : { position, exists: false, visible: false, collapsed: false },
+    ensureCentralGroup: () =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", {}, () => ensureCentralGroupLive(boundApi)),
+      ),
+    openEditor: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError(
+          "panel_open_failed",
+          request.targetGroupId ? { groupId: request.targetGroupId } : {},
+          () => {
+            const metadata = requireValidMetadata({
+              role: "editor",
+              resourceRef: request.resourceRef,
+              resourceKind: request.resourceKind,
+              pinned: request.pinned,
+              ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
+            });
+            if (request.mode === "reuse-resource") {
+              const existing = boundApi.panels.find((candidate) => {
+                const candidateMetadata = readMetadata(candidate);
+                return (
+                  candidateMetadata?.role === "editor" &&
+                  candidateMetadata.resourceRef === request.resourceRef
+                );
+              });
+              if (existing) {
+                const existingMetadata = readMetadata(existing);
+                const requestedComponent = componentForWorkbenchMetadata(metadata);
+                if (
+                  existingMetadata?.role !== "editor" ||
+                  existingMetadata.resourceKind !== request.resourceKind ||
+                  existing.api.component !== requestedComponent
+                ) {
+                  throw new WorkbenchLayoutError("panel_open_failed", {
+                    panelInstanceId: existing.id,
+                  });
+                }
+                updatePanelMetadata(existing, metadata);
+                if (existing.title !== request.title) existing.api.setTitle(request.title);
+                existing.api.setPinned(request.pinned);
+                revealPanel(boundApi, existing);
+                const info = panelInfo(existing);
+                if (info) return info;
+              }
+            }
+            const groupId = request.targetGroupId
+              ? requireGridGroup(boundApi, request.targetGroupId).id
+              : ensureCentralGroupLive(boundApi);
+            const panel = createPanelLive(
+              boundApi,
+              metadata,
+              request.title,
+              groupId,
+              request.index,
+            );
+            panel.api.setPinned(request.pinned);
+            const info = panelInfo(panel);
+            if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
+            return info;
+          },
+        ),
+      ),
+    setEditorPinned: (panelInstanceId, pinned) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", { panelInstanceId }, () => {
+          const panel = boundApi.getPanel(panelInstanceId);
+          const metadata = panel ? readMetadata(panel) : undefined;
+          if (!panel || metadata?.role !== "editor") return false;
+          const next: EditorPanelMetadata = { ...metadata, pinned };
+          updatePanelMetadata(panel, next);
+          panel.api.setPinned(pinned);
+          return true;
+        }),
+      ),
+    ensureView: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", { viewId: request.viewId }, () => {
           const existing = boundApi.panels.find((candidate) => {
-            const candidateMetadata = readMetadata(candidate);
-            return candidateMetadata?.role === 'editor'
-              && candidateMetadata.resourceRef === request.resourceRef;
+            const metadata = readMetadata(candidate);
+            return metadata?.role === "view" && metadata.viewId === request.viewId;
           });
           if (existing) {
-            const existingMetadata = readMetadata(existing);
-            const requestedComponent = componentForWorkbenchMetadata(metadata);
-            if (existingMetadata?.role !== 'editor'
-              || existingMetadata.resourceKind !== request.resourceKind
-              || existing.api.component !== requestedComponent) {
-              throw new WorkbenchLayoutError('panel_open_failed', {
-                panelInstanceId: existing.id,
-              });
-            }
-            updatePanelMetadata(existing, metadata);
             if (existing.title !== request.title) existing.api.setTitle(request.title);
-            existing.api.setPinned(request.pinned);
             revealPanel(boundApi, existing);
             const info = panelInfo(existing);
             if (info) return info;
           }
-        }
-        const groupId = request.targetGroupId
-          ? requireGridGroup(boundApi, request.targetGroupId).id
-          : ensureCentralGroupLive(boundApi);
-        const panel = createPanelLive(
-          boundApi,
-          metadata,
-          request.title,
-          groupId,
-          request.index,
-        );
-        panel.api.setPinned(request.pinned);
-        const info = panelInfo(panel);
-        if (!info) throw new WorkbenchLayoutError('invalid_panel_metadata');
-        return info;
-      },
-    )),
-    setEditorPinned: (panelInstanceId, pinned) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      { panelInstanceId },
-      () => {
-        const panel = boundApi.getPanel(panelInstanceId);
-        const metadata = panel ? readMetadata(panel) : undefined;
-        if (!panel || metadata?.role !== 'editor') return false;
-        const next: EditorPanelMetadata = { ...metadata, pinned };
-        updatePanelMetadata(panel, next);
-        panel.api.setPinned(pinned);
-        return true;
-      },
-    )),
-    ensureView: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      { viewId: request.viewId },
-      () => {
-        const existing = boundApi.panels.find((candidate) => {
-          const metadata = readMetadata(candidate);
-          return metadata?.role === 'view' && metadata.viewId === request.viewId;
-        });
-        if (existing) {
-          if (existing.title !== request.title) existing.api.setTitle(request.title);
-          revealPanel(boundApi, existing);
-          const info = panelInfo(existing);
-          if (info) return info;
-        }
-        const position = WORKBENCH_HOME_EDGE[request.viewId];
-        const group = ensureHomeEdgeLive(boundApi, position);
-        const panel = createPanelLive(
-          boundApi,
-          { role: 'view', viewId: request.viewId },
-          request.title,
-          group.id,
-        );
-        revealPanel(boundApi, panel);
-        rebindEdgeListeners();
-        const info = panelInfo(panel);
-        if (!info) throw new WorkbenchLayoutError('invalid_panel_metadata');
-        return info;
-      },
-    )),
-    upsertResult: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      { resultKey: request.resultKey },
-      () => {
-        const metadata = requireValidMetadata({ role: 'result', ...request });
-        const existing = boundApi.panels.find((candidate) => {
-          const candidateMetadata = readMetadata(candidate);
-          return candidateMetadata?.role === 'result'
-            && candidateMetadata.resultKey === request.resultKey;
-        });
-        if (existing) {
-          updatePanelMetadata(existing, metadata);
-          if (existing.title !== request.title) existing.api.setTitle(request.title);
-          revealPanel(boundApi, existing);
-          const info = panelInfo(existing);
-          if (info) return info;
-        }
-        const position = WORKBENCH_HOME_EDGE.result;
-        const group = ensureHomeEdgeLive(boundApi, position);
-        const panel = createPanelLive(boundApi, metadata, request.title, group.id);
-        revealPanel(boundApi, panel);
-        rebindEdgeListeners();
-        const info = panelInfo(panel);
-        if (!info) throw new WorkbenchLayoutError('invalid_panel_metadata');
-        return info;
-      },
-    )),
-    activate: (panelInstanceId) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      { panelInstanceId },
-      () => {
-        const panel = boundApi.getPanel(panelInstanceId);
-        if (!panel || !readMetadata(panel)) return false;
-        panel.api.setActive();
-        return true;
-      },
-    )),
-    reveal: (panelInstanceId) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      { panelInstanceId },
-      () => {
-        const panel = boundApi.getPanel(panelInstanceId);
-        if (!panel || !readMetadata(panel)) return false;
-        revealPanel(boundApi, panel);
-        return true;
-      },
-    )),
-    move: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'group_not_found',
-      { groupId: request.groupId },
-      () => {
-        const panel = boundApi.getPanel(request.panelInstanceId);
-        const metadata = panel ? readMetadata(panel) : undefined;
-        if (!panel || !metadata) return false;
-        const target = requireGroup(boundApi, request.groupId);
-        const targetLocation = readLocation(target);
-        if (!targetLocation) return false;
-        const targetPosition = targetLocation.type === 'edge'
-          ? targetLocation.position
-          : targetLocation.type;
-        if (!canMoveWorkbenchPanel(metadata, target.id, targetPosition)) return false;
-        const source = panel.group;
-        const currentIndex = source.panels.indexOf(panel);
-        const maximumIndex = source.id === target.id
-          ? Math.max(0, target.panels.length - 1)
-          : target.panels.length;
-        const effectiveIndex = request.index === undefined
-          ? (source.id === target.id ? currentIndex : undefined)
-          : Math.min(Math.max(request.index, 0), maximumIndex);
-        if (source.id === target.id
-          && (effectiveIndex === undefined || effectiveIndex === currentIndex)) {
-          if (request.activate !== false) panel.api.setActive();
+          const position = WORKBENCH_HOME_EDGE[request.viewId];
+          const group = ensureHomeEdgeLive(boundApi, position);
+          const panel = createPanelLive(
+            boundApi,
+            { role: "view", viewId: request.viewId },
+            request.title,
+            group.id,
+          );
+          revealPanel(boundApi, panel);
+          rebindEdgeListeners();
+          const info = panelInfo(panel);
+          if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
+          return info;
+        }),
+      ),
+    upsertResult: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", { resultKey: request.resultKey }, () => {
+          const metadata = requireValidMetadata({ role: "result", ...request });
+          const existing = boundApi.panels.find((candidate) => {
+            const candidateMetadata = readMetadata(candidate);
+            return (
+              candidateMetadata?.role === "result" &&
+              candidateMetadata.resultKey === request.resultKey
+            );
+          });
+          if (existing) {
+            updatePanelMetadata(existing, metadata);
+            if (existing.title !== request.title) existing.api.setTitle(request.title);
+            revealPanel(boundApi, existing);
+            const info = panelInfo(existing);
+            if (info) return info;
+          }
+          const position = WORKBENCH_HOME_EDGE.result;
+          const group = ensureHomeEdgeLive(boundApi, position);
+          const panel = createPanelLive(boundApi, metadata, request.title, group.id);
+          revealPanel(boundApi, panel);
+          rebindEdgeListeners();
+          const info = panelInfo(panel);
+          if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
+          return info;
+        }),
+      ),
+    activate: (panelInstanceId) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", { panelInstanceId }, () => {
+          const panel = boundApi.getPanel(panelInstanceId);
+          if (!panel || !readMetadata(panel)) return false;
+          panel.api.setActive();
           return true;
-        }
-        panel.api.moveTo({
-          group: target as DockviewGroupPanel,
-          ...(effectiveIndex === undefined ? {} : { index: effectiveIndex }),
-          skipSetActive: request.activate === false,
-        });
-        return true;
-      },
-    )),
-    split: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'group_not_found',
-      { groupId: request.referenceGroupId },
-      () => {
-        const panel = boundApi.getPanel(request.panelInstanceId);
-        const metadata = panel ? readMetadata(panel) : undefined;
-        if (!panel || !metadata) return false;
-        const reference = requireGroup(boundApi, request.referenceGroupId);
-        if (!canSplitWorkbenchPanel(metadata, reference.id)) return false;
-        panel.api.moveTo({
-          group: reference as DockviewGroupPanel,
-          position: request.direction,
-          skipSetActive: request.activate === false,
-        });
-        return true;
-      },
-    )),
-    configureEdge: (request) => enqueue((boundApi) => throwAsLayoutError(
-      'layout_restore_failed',
-      { position: request.position },
-      () => {
-        const state = configureEdgeLive(boundApi, request);
-        rebindEdgeListeners();
-        return state;
-      },
-    )),
-    setEdgeCollapsed: (position, collapsed) => enqueue((boundApi) => throwAsLayoutError(
-      'layout_restore_failed',
-      { position },
-      () => {
-        const edge = boundApi.getEdgeGroup(position);
-        if (!edge) return false;
-        if (collapsed) edge.collapse();
-        else {
-          boundApi.setEdgeGroupVisible(position, true);
-          edge.expand();
-        }
-        return true;
-      },
-    )),
-    setEdgeSize: (position, size) => enqueue((boundApi) => throwAsLayoutError(
-      'layout_restore_failed',
-      { position },
-      () => {
-        validateEdgeSize(position, size);
-        const edge = boundApi.getEdgeGroup(position);
-        if (!edge) return false;
-        setGroupSize(edge, position, size);
-        return true;
-      },
-    )),
-    remapResource: (from, to) => enqueue((boundApi) => throwAsLayoutError(
-      'panel_open_failed',
-      {},
-      () => remapLiveResources(boundApi, from, to),
-    )),
-    serialize: () => enqueue((boundApi) => throwAsLayoutError(
-      'layout_restore_failed',
-      {},
-      () => structuredClone(boundApi.toJSON()),
-    )),
+        }),
+      ),
+    reveal: (panelInstanceId) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", { panelInstanceId }, () => {
+          const panel = boundApi.getPanel(panelInstanceId);
+          if (!panel || !readMetadata(panel)) return false;
+          revealPanel(boundApi, panel);
+          return true;
+        }),
+      ),
+    move: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("group_not_found", { groupId: request.groupId }, () => {
+          const panel = boundApi.getPanel(request.panelInstanceId);
+          const metadata = panel ? readMetadata(panel) : undefined;
+          if (!panel || !metadata) return false;
+          const target = requireGroup(boundApi, request.groupId);
+          const targetLocation = readLocation(target);
+          if (!targetLocation) return false;
+          const targetPosition =
+            targetLocation.type === "edge" ? targetLocation.position : targetLocation.type;
+          if (!canMoveWorkbenchPanel(metadata, target.id, targetPosition)) return false;
+          const source = panel.group;
+          const currentIndex = source.panels.indexOf(panel);
+          const maximumIndex =
+            source.id === target.id ? Math.max(0, target.panels.length - 1) : target.panels.length;
+          const effectiveIndex =
+            request.index === undefined
+              ? source.id === target.id
+                ? currentIndex
+                : undefined
+              : Math.min(Math.max(request.index, 0), maximumIndex);
+          if (
+            source.id === target.id &&
+            (effectiveIndex === undefined || effectiveIndex === currentIndex)
+          ) {
+            if (request.activate !== false) panel.api.setActive();
+            return true;
+          }
+          panel.api.moveTo({
+            group: target as DockviewGroupPanel,
+            ...(effectiveIndex === undefined ? {} : { index: effectiveIndex }),
+            skipSetActive: request.activate === false,
+          });
+          return true;
+        }),
+      ),
+    split: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("group_not_found", { groupId: request.referenceGroupId }, () => {
+          const panel = boundApi.getPanel(request.panelInstanceId);
+          const metadata = panel ? readMetadata(panel) : undefined;
+          if (!panel || !metadata) return false;
+          const reference = requireGroup(boundApi, request.referenceGroupId);
+          if (!canSplitWorkbenchPanel(metadata, reference.id)) return false;
+          panel.api.moveTo({
+            group: reference as DockviewGroupPanel,
+            position: request.direction,
+            skipSetActive: request.activate === false,
+          });
+          return true;
+        }),
+      ),
+    configureEdge: (request) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("layout_restore_failed", { position: request.position }, () => {
+          const state = configureEdgeLive(boundApi, request);
+          rebindEdgeListeners();
+          return state;
+        }),
+      ),
+    setEdgeCollapsed: (position, collapsed) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("layout_restore_failed", { position }, () => {
+          const edge = boundApi.getEdgeGroup(position);
+          if (!edge) return false;
+          if (collapsed) edge.collapse();
+          else {
+            boundApi.setEdgeGroupVisible(position, true);
+            edge.expand();
+          }
+          return true;
+        }),
+      ),
+    setEdgeSize: (position, size) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("layout_restore_failed", { position }, () => {
+          validateEdgeSize(position, size);
+          const edge = boundApi.getEdgeGroup(position);
+          if (!edge) return false;
+          setGroupSize(edge, position, size);
+          return true;
+        }),
+      ),
+    remapResource: (from, to) =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("panel_open_failed", {}, () => remapLiveResources(boundApi, from, to)),
+      ),
+    serialize: () =>
+      enqueue((boundApi) =>
+        throwAsLayoutError("layout_restore_failed", {}, () => structuredClone(boundApi.toJSON())),
+      ),
   };
 
   const internal: WorkbenchDockviewInternal = {
@@ -1929,7 +1899,7 @@ export function createWorkbenchDockviewRuntime(): {
       disposeSubscriptions();
       bindingGeneration += 1;
       api = undefined;
-      for (const resolve of hydrationWaiters) resolve({ status: 'unbound' });
+      for (const resolve of hydrationWaiters) resolve({ status: "unbound" });
       hydrationWaiters.clear();
       rejectQueuedOperations(
         (pending) => pending.bindingGeneration === invalidatedBindingGeneration,
@@ -1948,7 +1918,7 @@ export function createWorkbenchDockviewRuntime(): {
       if (epoch !== undefined && epoch !== hydrationEpoch) return;
       if (!hydrated) {
         hydrated = true;
-        for (const resolve of hydrationWaiters) resolve({ status: 'hydrated' });
+        for (const resolve of hydrationWaiters) resolve({ status: "hydrated" });
         hydrationWaiters.clear();
         publish();
       }
@@ -1965,121 +1935,124 @@ export function createWorkbenchDockviewRuntime(): {
       operationGeneration += 1;
       rejectQueuedOperations(() => true);
     },
-    whenIdle: () => !draining && queue.length === 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => idleWaiters.add(resolve)),
-    commitRemove: (expected, authorize) => enqueue((boundApi) => {
-      if (authorize) {
-        try {
-          if (!authorize()) return 'stale' as const;
-        } catch {
-          return 'stale' as const;
+    whenIdle: () =>
+      !draining && queue.length === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => idleWaiters.add(resolve)),
+    commitRemove: (expected, authorize) =>
+      enqueue((boundApi) => {
+        if (authorize) {
+          try {
+            if (!authorize()) return "stale" as const;
+          } catch {
+            return "stale" as const;
+          }
         }
-      }
-      const panels: IDockviewPanel[] = [];
-      const seen = new Set<string>();
-      for (const token of expected) {
-        const panel = throwAsLayoutError(
-          'layout_restore_failed',
-          { panelInstanceId: token.panelInstanceId },
-          () => boundApi.getPanel(token.panelInstanceId),
-        );
-        const metadata = panel
-          ? throwAsLayoutError(
-            'layout_restore_failed',
+        const panels: IDockviewPanel[] = [];
+        const seen = new Set<string>();
+        for (const token of expected) {
+          const panel = throwAsLayoutError(
+            "layout_restore_failed",
             { panelInstanceId: token.panelInstanceId },
-            () => readMetadata(panel),
-          )
-          : undefined;
-        if (!panel
-          || !metadata
-          || panel.group.id !== token.groupId
-          || !metadataEqual(metadata, token.metadata)
-          || !canRemoveWorkbenchPanel(metadata)) {
-          return 'stale' as const;
+            () => boundApi.getPanel(token.panelInstanceId),
+          );
+          const metadata = panel
+            ? throwAsLayoutError(
+                "layout_restore_failed",
+                { panelInstanceId: token.panelInstanceId },
+                () => readMetadata(panel),
+              )
+            : undefined;
+          if (
+            !panel ||
+            !metadata ||
+            panel.group.id !== token.groupId ||
+            !metadataEqual(metadata, token.metadata) ||
+            !canRemoveWorkbenchPanel(metadata)
+          ) {
+            return "stale" as const;
+          }
+          if (!seen.has(token.panelInstanceId)) {
+            seen.add(token.panelInstanceId);
+            panels.push(panel);
+          }
         }
-        if (!seen.has(token.panelInstanceId)) {
-          seen.add(token.panelInstanceId);
-          panels.push(panel);
-        }
-      }
-      panels.forEach((panel) => throwAsLayoutError(
-        'layout_restore_failed',
-        { panelInstanceId: panel.id },
-        () => panel.api.close(),
-      ));
-      return 'committed' as const;
-    }),
+        panels.forEach((panel) =>
+          throwAsLayoutError("layout_restore_failed", { panelInstanceId: panel.id }, () =>
+            panel.api.close(),
+          ),
+        );
+        return "committed" as const;
+      }),
     installHydrationLayout: (epoch, operation) => {
       const boundApi = api;
       if (!boundApi) throw staleBindingError();
       const context = captureMutationContext();
       assertHydrationLayoutContext(boundApi, context, epoch);
       const shadow = throwAsLayoutError(
-        'layout_restore_failed',
+        "layout_restore_failed",
         {},
         () => new ShadowWorkbenchModel(boundApi),
       );
       const result = operation(shadow.layout);
       if (isPromiseLike(result)) {
-        throw new WorkbenchLayoutError('layout_restore_failed', {
-          reason: 'async_layout_transaction',
+        throw new WorkbenchLayoutError("layout_restore_failed", {
+          reason: "async_layout_transaction",
         });
       }
       assertHydrationLayoutContext(boundApi, context, epoch);
-      throwAsLayoutError('layout_restore_failed', {}, () => shadow.validate(boundApi));
-      throwAsLayoutError('layout_restore_failed', {}, () => applyBufferedCommands(
-        shadow.hasBufferedCommands(),
-        () => {
+      throwAsLayoutError("layout_restore_failed", {}, () => shadow.validate(boundApi));
+      throwAsLayoutError("layout_restore_failed", {}, () =>
+        applyBufferedCommands(shadow.hasBufferedCommands(), () => {
           shadow.apply(boundApi);
           rebindEdgeListeners();
-        },
-      ));
+        }),
+      );
       return result;
     },
-    runLayoutTransaction: (operation) => enqueue((boundApi) => {
-      const context = captureMutationContext();
-      const shadow = throwAsLayoutError(
-        'layout_restore_failed',
-        {},
-        () => new ShadowWorkbenchModel(boundApi),
-      );
-      const result = operation(shadow.layout);
-      if (isPromiseLike(result)) {
-        throw new WorkbenchLayoutError('layout_restore_failed', {
-          reason: 'async_layout_transaction',
-        });
-      }
-      assertMutationContext(boundApi, context);
-      throwAsLayoutError('layout_restore_failed', {}, () => shadow.validate(boundApi));
-      throwAsLayoutError('layout_restore_failed', {}, () => applyBufferedCommands(
-        shadow.hasBufferedCommands(),
-        () => {
-          shadow.apply(boundApi);
-          rebindEdgeListeners();
-        },
-      ));
-      return result;
-    }),
-    runPublicationTransaction: (operation) => enqueue(async (boundApi) => {
-      const context = captureMutationContext();
-      const shadow = throwAsLayoutError(
-        'layout_restore_failed',
-        {},
-        () => new ShadowWorkbenchModel(boundApi),
-      );
-      const result = await operation(shadow.publication);
-      assertMutationContext(boundApi, context);
-      throwAsLayoutError('layout_restore_failed', {}, () => shadow.validate(boundApi));
-      throwAsLayoutError('layout_restore_failed', {}, () => applyBufferedCommands(
-        shadow.hasBufferedCommands(),
-        () => {
-          shadow.apply(boundApi);
-          rebindEdgeListeners();
-        },
-      ));
-      return result;
-    }),
+    runLayoutTransaction: (operation) =>
+      enqueue((boundApi) => {
+        const context = captureMutationContext();
+        const shadow = throwAsLayoutError(
+          "layout_restore_failed",
+          {},
+          () => new ShadowWorkbenchModel(boundApi),
+        );
+        const result = operation(shadow.layout);
+        if (isPromiseLike(result)) {
+          throw new WorkbenchLayoutError("layout_restore_failed", {
+            reason: "async_layout_transaction",
+          });
+        }
+        assertMutationContext(boundApi, context);
+        throwAsLayoutError("layout_restore_failed", {}, () => shadow.validate(boundApi));
+        throwAsLayoutError("layout_restore_failed", {}, () =>
+          applyBufferedCommands(shadow.hasBufferedCommands(), () => {
+            shadow.apply(boundApi);
+            rebindEdgeListeners();
+          }),
+        );
+        return result;
+      }),
+    runPublicationTransaction: (operation) =>
+      enqueue(async (boundApi) => {
+        const context = captureMutationContext();
+        const shadow = throwAsLayoutError(
+          "layout_restore_failed",
+          {},
+          () => new ShadowWorkbenchModel(boundApi),
+        );
+        const result = await operation(shadow.publication);
+        assertMutationContext(boundApi, context);
+        throwAsLayoutError("layout_restore_failed", {}, () => shadow.validate(boundApi));
+        throwAsLayoutError("layout_restore_failed", {}, () =>
+          applyBufferedCommands(shadow.hasBufferedCommands(), () => {
+            shadow.apply(boundApi);
+            rebindEdgeListeners();
+          }),
+        );
+        return result;
+      }),
   };
 
   return { read: runtime, control: runtime, internal };

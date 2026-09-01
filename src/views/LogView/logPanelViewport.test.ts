@@ -1,21 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 import {
   estimatedLogListHeight,
   LOG_ROW_STRIDE,
   snapLogViewportToBottom,
-} from './logPanelViewport';
+} from "./logPanelViewport";
 
-describe('logPanelViewport', () => {
-  it('estimates list height from fixed row stride', () => {
+describe("logPanelViewport", () => {
+  it("estimates list height from fixed row stride", () => {
     expect(estimatedLogListHeight(0)).toBe(0);
     expect(estimatedLogListHeight(3)).toBe(3 * LOG_ROW_STRIDE);
   });
 
-  it('snaps the native viewport to the tail', () => {
+  it("snaps the native viewport to the tail", () => {
     const viewport = {
       clientHeight: 100,
       scrollTop: 0,
-      style: { scrollBehavior: '' },
+      style: { scrollBehavior: "" },
     } as unknown as HTMLElement;
 
     snapLogViewportToBottom(viewport, 10);

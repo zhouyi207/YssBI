@@ -1,61 +1,57 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import type { ProjectLifecycleStateSnapshot } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import type { ProjectLifecycleStateSnapshot } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   registerPendingProjectLifecycleOperation,
   resetProjectLifecycleReceiptHandlerForTests,
-} from '@/features/application/projectLifecycleReceipt';
+} from "@/features/application/projectLifecycleReceipt";
 import {
   loadActivatedProject,
   useProjectIOStore,
-} from '@/features/application/project/projectIOStore';
-import { useEditorStore } from '@/features/core/editor';
-import { useResourceStore } from '@/features/core/resource';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { ProjectService } from '@/services/project/projectService';
-import { normalizeIpcError } from '@/services/ipc';
+} from "@/features/application/project/projectIOStore";
+import { useEditorStore } from "@/features/core/editor";
+import { useResourceStore } from "@/features/core/resource";
+import { uiStore } from "@/features/core/ui/UIStore";
+import { ProjectService } from "@/services/project/projectService";
+import { normalizeIpcError } from "@/services/ipc";
 import type {
   LifecycleMutationOutcome,
   LifecycleMutationResultDto,
   ProjectRecordRow,
-} from '@/shared/types/domain/project';
+} from "@/shared/types/domain/project";
 
-import { useProjectOperations } from '@/features/application/editor/useProjectOperations';
-import { useProjectPicker } from './useProjectPicker';
-import { saveAllDirtyGraphs } from '@/features/application/editor/saveAllDirtyGraphs';
-import { logger } from '@/features/application/observability/appLogger';
-import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
-import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
-import { removeProjectScopedWorkbenchPanels } from './projectWorkbenchLifecycle';
-import * as projectWorkbenchLifecycle from './projectWorkbenchLifecycle';
+import { useProjectOperations } from "@/features/application/editor/useProjectOperations";
+import { useProjectPicker } from "./useProjectPicker";
+import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
+import { logger } from "@/features/application/observability/appLogger";
+import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
+import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
+import { removeProjectScopedWorkbenchPanels } from "./projectWorkbenchLifecycle";
+import * as projectWorkbenchLifecycle from "./projectWorkbenchLifecycle";
 
 function deliverLifecycleEvent(result: LifecycleMutationResultDto): void {
-  void applyProjectLifecycleReceipt(
-    result,
-    'event',
-    createProjectLifecycleReceiptDependencies(),
-  );
+  void applyProjectLifecycleReceipt(result, "event", createProjectLifecycleReceiptDependencies());
 }
 
 const navigate = vi.fn();
 const openPathDialog = vi.hoisted(() => vi.fn());
 
-vi.mock('react-router', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('react-router')>()),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => navigate,
 }));
-vi.mock('react-i18next', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('react-i18next')>()),
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock('@/features/application/editor/saveAllDirtyGraphs', () => ({
+vi.mock("@/features/application/editor/saveAllDirtyGraphs", () => ({
   saveAllDirtyGraphs: vi.fn(async () => true),
 }));
-vi.mock('@/features/core/execution', () => ({
+vi.mock("@/features/core/execution", () => ({
   revokeAllPinPreviewLeases: vi.fn(),
   useExecutionStore: { getState: vi.fn(), setState: vi.fn() },
   getExecutionEventGraph: vi.fn(),
@@ -63,13 +59,13 @@ vi.mock('@/features/core/execution', () => ({
   graphHasClearableArtifacts: vi.fn(),
   enqueueLiveExecutionEvent: vi.fn(),
 }));
-vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
+vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
-vi.mock('@/services/platform/pathDialog', () => ({ openPathDialog }));
+vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog }));
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -81,38 +77,41 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function record(id = 'record-b', path = 'C:/project-b/metadata.yssbi'): ProjectRecordRow {
+function record(id = "record-b", path = "C:/project-b/metadata.yssbi"): ProjectRecordRow {
   return {
     id,
-    name: 'Project B',
+    name: "Project B",
     path,
-    createdAt: '2026-07-29T00:00:00Z',
+    createdAt: "2026-07-29T00:00:00Z",
     lastOpenedAt: null,
     isFavorite: false,
-    rootIdentity: 'native-id',
+    rootIdentity: "native-id",
   };
 }
 
 function saveAsReceipt(
   operationId: string,
-  outcome: LifecycleMutationOutcome = 'committed',
+  outcome: LifecycleMutationOutcome = "committed",
 ): LifecycleMutationResultDto {
   return {
     operationId,
-    kind: 'saveAs',
-    oldProjectInstanceId: 'project-a',
-    newProjectInstanceId: outcome === 'committed' ? 'project-b' : null,
-    phase: outcome === 'registryFailed' ? 'destinationCommitted' : 'authorityCommitted',
+    kind: "saveAs",
+    oldProjectInstanceId: "project-a",
+    newProjectInstanceId: outcome === "committed" ? "project-b" : null,
+    phase: outcome === "registryFailed" ? "destinationCommitted" : "authorityCommitted",
     outcome,
-    record: outcome === 'registryFailed' ? null : record(),
-    path: 'C:/project-b/metadata.yssbi',
-    recovery: outcome === 'committed' ? null : {
-      required: true,
-      action: outcome === 'activationFailed' ? 'activateDestination' : 'registerDestination',
-      path: 'C:/project-b/metadata.yssbi',
-      identity: null,
-    },
-    invalidation: { project: outcome !== 'registryFailed', registry: true },
+    record: outcome === "registryFailed" ? null : record(),
+    path: "C:/project-b/metadata.yssbi",
+    recovery:
+      outcome === "committed"
+        ? null
+        : {
+            required: true,
+            action: outcome === "activationFailed" ? "activateDestination" : "registerDestination",
+            path: "C:/project-b/metadata.yssbi",
+            identity: null,
+          },
+    invalidation: { project: outcome !== "registryFailed", registry: true },
   };
 }
 
@@ -122,16 +121,16 @@ function activeTerminalRowRejectionReceipt(
 ): LifecycleMutationResultDto {
   return {
     operationId,
-    kind: 'registryCleanup',
+    kind: "registryCleanup",
     oldProjectInstanceId: null,
     newProjectInstanceId: null,
-    phase: 'registryCommitted',
-    outcome: 'registryFailed',
+    phase: "registryCommitted",
+    outcome: "registryFailed",
     record: row,
     path: null,
     recovery: {
       required: true,
-      action: 'cleanupRegistry',
+      action: "cleanupRegistry",
       path: null,
       identity: null,
     },
@@ -140,53 +139,56 @@ function activeTerminalRowRejectionReceipt(
 }
 
 function mockProjectBHydration(): void {
-  vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
-  vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
+  vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
+  vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
     databases: {},
     variables: {},
   });
-  vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
-    projectInstanceId: 'project-b',
+  vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
+    projectInstanceId: "project-b",
     publicationRevision: 0,
     history: { canUndo: false, canRedo: false },
-    projectName: 'Project B',
+    projectName: "Project B",
     graphs: [],
     variables: [],
     worksheets: [],
     databases: [],
-    exportTime: '',
+    exportTime: "",
   });
 }
 
 function projectReceipt(
   operationId: string,
-  kind: 'create' | 'delete',
+  kind: "create" | "delete",
   options: { active?: boolean; outcome?: LifecycleMutationOutcome; row?: ProjectRecordRow } = {},
 ): LifecycleMutationResultDto {
-  const outcome = options.outcome ?? 'committed';
+  const outcome = options.outcome ?? "committed";
   return {
     operationId,
     kind,
-    oldProjectInstanceId: options.active ? 'project-a' : null,
+    oldProjectInstanceId: options.active ? "project-a" : null,
     newProjectInstanceId: null,
-    phase: kind === 'create' ? 'registryCommitted' : 'authorityCommitted',
+    phase: kind === "create" ? "registryCommitted" : "authorityCommitted",
     outcome,
     record: options.row ?? record(),
-    path: kind === 'create' ? record().path : 'C:/deleted-project',
-    recovery: outcome === 'committed' ? null : {
-      required: true,
-      action: 'removeRegistryRecord',
-      path: null,
-      identity: 'native-id',
-    },
+    path: kind === "create" ? record().path : "C:/deleted-project",
+    recovery:
+      outcome === "committed"
+        ? null
+        : {
+            required: true,
+            action: "removeRegistryRecord",
+            path: null,
+            identity: "native-id",
+          },
     invalidation: {
-      project: kind === 'delete' && Boolean(options.active),
+      project: kind === "delete" && Boolean(options.active),
       registry: true,
     },
   };
 }
 
-describe('project lifecycle initiating operations', () => {
+describe("project lifecycle initiating operations", () => {
   let host: HTMLDivElement;
   let root: Root;
   let operations!: ReturnType<typeof useProjectOperations>;
@@ -199,17 +201,19 @@ describe('project lifecycle initiating operations', () => {
     vi.mocked(saveAllDirtyGraphs).mockResolvedValue(true);
     openPathDialog.mockResolvedValue({
       ok: true,
-      value: 'C:/project-destination',
+      value: "C:/project-destination",
     });
-    vi.spyOn(logger.app, 'error').mockImplementation(() => undefined);
-    vi.spyOn(ProjectService, 'listRegisteredProjects').mockResolvedValue([]);
-    vi.spyOn(ProjectService, 'registerProject').mockResolvedValue(record('project-a', 'C:/project-a/metadata.yssbi'));
+    vi.spyOn(logger.app, "error").mockImplementation(() => undefined);
+    vi.spyOn(ProjectService, "listRegisteredProjects").mockResolvedValue([]);
+    vi.spyOn(ProjectService, "registerProject").mockResolvedValue(
+      record("project-a", "C:/project-a/metadata.yssbi"),
+    );
     useProjectIOStore.setState({
-      currentPath: 'C:/project-a/metadata.yssbi',
-      projectInstanceId: 'project-a',
+      currentPath: "C:/project-a/metadata.yssbi",
+      projectInstanceId: "project-a",
     });
-    projectPublicationCoordinator.startProject('project-a', 4);
-    host = document.createElement('div');
+    projectPublicationCoordinator.startProject("project-a", 4);
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     function Harness() {
@@ -230,29 +234,31 @@ describe('project lifecycle initiating operations', () => {
     uiStore.finishProgress();
   });
 
-
-  it('resets project-scoped editor context after authoritative replacement', async () => {
+  it("resets project-scoped editor context after authoritative replacement", async () => {
     const direct = deferred<LifecycleMutationResultDto>();
-    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
-    vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
-    vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({ databases: {}, variables: {} });
-    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
-      projectInstanceId: 'project-b',
+    const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
+    vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
+    vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
+      databases: {},
+      variables: {},
+    });
+    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
+      projectInstanceId: "project-b",
       publicationRevision: 0,
       history: { canUndo: false, canRedo: false },
-      projectName: 'Project B',
+      projectName: "Project B",
       graphs: [],
       variables: [],
       worksheets: [],
       databases: [],
-      exportTime: '',
+      exportTime: "",
     });
 
     useEditorStore.setState({
       detailFocus: {
-        kind: 'node',
-        id: 'stale-node',
-        graphPath: 'events/Stale.yssbi-event',
+        kind: "node",
+        id: "stale-node",
+        graphPath: "events/Stale.yssbi-event",
       },
     });
 
@@ -267,31 +273,30 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
-
     expect(useEditorStore.getState()).toMatchObject({
       detailFocus: null,
       variablesGraphScopePath: null,
     });
   });
 
-  it('publishes the new resource snapshot only after old workbench cleanup resolves', async () => {
+  it("publishes the new resource snapshot only after old workbench cleanup resolves", async () => {
     const cleanup = deferred<void>();
     const order: string[] = [];
-    const removeProjectScopedWorkbenchPanels = vi.fn(async (
-      _previousProjectInstanceId: string,
-      _owner: ProjectLifecycleStateSnapshot,
-    ) => {
-      order.push('cleanup:start');
-      await cleanup.promise;
-      order.push('cleanup:complete');
-    });
-    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
-      .mockImplementation(removeProjectScopedWorkbenchPanels);
+    const removeProjectScopedWorkbenchPanels = vi.fn(
+      async (_previousProjectInstanceId: string, _owner: ProjectLifecycleStateSnapshot) => {
+        order.push("cleanup:start");
+        await cleanup.promise;
+        order.push("cleanup:complete");
+      },
+    );
+    vi.spyOn(projectWorkbenchLifecycle, "removeProjectScopedWorkbenchPanels").mockImplementation(
+      removeProjectScopedWorkbenchPanels,
+    );
     const direct = deferred<LifecycleMutationResultDto>();
-    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
+    const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
     mockProjectBHydration();
     const unsubscribe = useResourceStore.subscribe(() => {
-      order.push('resources:published');
+      order.push("resources:published");
     });
 
     let completion!: Promise<void>;
@@ -306,7 +311,7 @@ describe('project lifecycle initiating operations', () => {
     });
     const cleanupAuthority = projectPublicationCoordinator.getSnapshotForTests();
     expect(removeProjectScopedWorkbenchPanels.mock.calls[0]).toEqual([
-      'project-a',
+      "project-a",
       {
         projectInstanceId: cleanupAuthority.projectInstanceId,
         epoch: cleanupAuthority.epoch,
@@ -314,8 +319,8 @@ describe('project lifecycle initiating operations', () => {
     ]);
     expect(Object.isFrozen(removeProjectScopedWorkbenchPanels.mock.calls[0][1])).toBe(true);
 
-    expect(order).toEqual(['cleanup:start']);
-    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-a');
+    expect(order).toEqual(["cleanup:start"]);
+    expect(useProjectIOStore.getState().projectInstanceId).toBe("project-a");
 
     await act(async () => {
       cleanup.resolve();
@@ -323,27 +328,25 @@ describe('project lifecycle initiating operations', () => {
     });
     unsubscribe();
 
-    expect(order.indexOf('cleanup:complete')).toBeLessThan(
-      order.indexOf('resources:published'),
-    );
-    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
+    expect(order.indexOf("cleanup:complete")).toBeLessThan(order.indexOf("resources:published"));
+    expect(useProjectIOStore.getState().projectInstanceId).toBe("project-b");
   });
 
-  it('performs no authoritative store writes when cleanup is superseded', async () => {
+  it("performs no authoritative store writes when cleanup is superseded", async () => {
     const cleanup = deferred<void>();
-    const removeProjectScopedWorkbenchPanels = vi.fn(async (
-      _previousProjectInstanceId: string,
-      _owner: ProjectLifecycleStateSnapshot,
-    ) => {
-      await cleanup.promise;
-    });
-    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
-      .mockImplementation(removeProjectScopedWorkbenchPanels);
+    const removeProjectScopedWorkbenchPanels = vi.fn(
+      async (_previousProjectInstanceId: string, _owner: ProjectLifecycleStateSnapshot) => {
+        await cleanup.promise;
+      },
+    );
+    vi.spyOn(projectWorkbenchLifecycle, "removeProjectScopedWorkbenchPanels").mockImplementation(
+      removeProjectScopedWorkbenchPanels,
+    );
     const direct = deferred<LifecycleMutationResultDto>();
-    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
+    const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
     mockProjectBHydration();
-    const projectWrites = vi.spyOn(useProjectIOStore, 'setState');
-    const resourceWrites = vi.spyOn(useResourceStore, 'setState');
+    const projectWrites = vi.spyOn(useProjectIOStore, "setState");
+    const resourceWrites = vi.spyOn(useResourceStore, "setState");
     const projectBefore = useProjectIOStore.getState();
     const resourcesBefore = useResourceStore.getState();
 
@@ -358,7 +361,7 @@ describe('project lifecycle initiating operations', () => {
       await vi.waitFor(() => expect(removeProjectScopedWorkbenchPanels).toHaveBeenCalledOnce());
     });
 
-    projectPublicationCoordinator.startProject('project-c', 0);
+    projectPublicationCoordinator.startProject("project-c", 0);
     await act(async () => {
       cleanup.resolve();
       await completion;
@@ -370,21 +373,24 @@ describe('project lifecycle initiating operations', () => {
     expect(useResourceStore.getState()).toBe(resourcesBefore);
   });
 
-  it('gives a mismatching direct save-as DTO zero initiating effects', async () => {
+  it("gives a mismatching direct save-as DTO zero initiating effects", async () => {
     const direct = deferred<LifecycleMutationResultDto>();
-    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
-    vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
-    vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({ databases: {}, variables: {} });
-    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
-      projectInstanceId: 'project-b',
+    const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
+    vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
+    vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
+      databases: {},
+      variables: {},
+    });
+    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
+      projectInstanceId: "project-b",
       publicationRevision: 0,
       history: { canUndo: false, canRedo: false },
-      projectName: 'Project B',
+      projectName: "Project B",
       graphs: [],
       variables: [],
       worksheets: [],
       databases: [],
-      exportTime: '',
+      exportTime: "",
     });
 
     let completion!: Promise<void>;
@@ -396,44 +402,45 @@ describe('project lifecycle initiating operations', () => {
     const result = saveAsReceipt(saveAs.mock.calls[0][1]);
     await act(async () => {
       deliverLifecycleEvent(result);
-      await vi.waitFor(() => expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() =>
+        expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2),
+      );
     });
     await act(async () => {
-      direct.resolve({ ...result, path: 'C:/conflicting/metadata.yssbi' });
+      direct.resolve({ ...result, path: "C:/conflicting/metadata.yssbi" });
       await completion;
     });
 
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2);
   });
 
-
-  it('blocks create when the lifecycle registry is at capacity', async () => {
+  it("blocks create when the lifecycle registry is at capacity", async () => {
     for (let index = 0; index < 128; index += 1) {
       registerPendingProjectLifecycleOperation({
-        kind: 'saveAs',
+        kind: "saveAs",
         operationId: `capacity-${index}`,
       });
     }
-    const create = vi.spyOn(ProjectService, 'createProject');
+    const create = vi.spyOn(ProjectService, "createProject");
 
     let outcome!: Awaited<ReturnType<typeof picker.createProject>>;
     await act(async () => {
-      outcome = await picker.createProject('Blocked', 'C:/blocked');
+      outcome = await picker.createProject("Blocked", "C:/blocked");
     });
 
     expect(create).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
-      status: 'failed',
-      error: { code: 'project_lifecycle_protocol_error' },
+      status: "failed",
+      error: { code: "project_lifecycle_protocol_error" },
     });
   });
 
-  it('exposes refresh IPC failures as typed page issues', async () => {
+  it("exposes refresh IPC failures as typed page issues", async () => {
     vi.mocked(ProjectService.listRegisteredProjects).mockRejectedValueOnce(
-      normalizeIpcError('list_registered_projects', {
-        code: 'internal_error',
+      normalizeIpcError("list_registered_projects", {
+        code: "internal_error",
         details: null,
-        incidentId: 'incident-refresh',
+        incidentId: "incident-refresh",
       }),
     );
 
@@ -443,21 +450,21 @@ describe('project lifecycle initiating operations', () => {
     });
 
     expect(outcome).toMatchObject({
-      status: 'issue',
+      status: "issue",
       issue: {
-        kind: 'failure',
-        operation: 'refresh',
+        kind: "failure",
+        operation: "refresh",
         error: {
-          code: 'internal_error',
-          incidentId: 'incident-refresh',
+          code: "internal_error",
+          incidentId: "incident-refresh",
         },
       },
     });
-    expect(picker.pageIssue).toEqual(outcome.status === 'issue' ? outcome.issue : null);
+    expect(picker.pageIssue).toEqual(outcome.status === "issue" ? outcome.issue : null);
   });
 
-  it('keeps lifecycle state unchanged after a current direct transport failure', async () => {
-    vi.spyOn(ProjectService, 'saveProjectAs').mockRejectedValue(new Error('transport down'));
+  it("keeps lifecycle state unchanged after a current direct transport failure", async () => {
+    vi.spyOn(ProjectService, "saveProjectAs").mockRejectedValue(new Error("transport down"));
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     await act(async () => {
@@ -467,24 +474,24 @@ describe('project lifecycle initiating operations', () => {
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
   });
 
-  it('recovers create list and progress from event when direct rejects', async () => {
+  it("recovers create list and progress from event when direct rejects", async () => {
     act(() => {
       projectPublicationCoordinator.cancelProject();
       useProjectIOStore.setState({ projectInstanceId: null, currentPath: null });
     });
     const request = deferred<LifecycleMutationResultDto>();
-    const create = vi.spyOn(ProjectService, 'createProject').mockReturnValue(request.promise);
-    const created = record('created', 'C:/created/metadata.yssbi');
+    const create = vi.spyOn(ProjectService, "createProject").mockReturnValue(request.promise);
+    const created = record("created", "C:/created/metadata.yssbi");
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([created]);
-    const progress = vi.spyOn(uiStore, 'updateProgress');
+    const progress = vi.spyOn(uiStore, "updateProgress");
 
     let completion!: ReturnType<typeof picker.createProject>;
     await act(async () => {
-      completion = picker.createProject('Created', 'C:/created');
+      completion = picker.createProject("Created", "C:/created");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
-    const result = projectReceipt(create.mock.calls[0][2], 'create', { row: created });
+    const result = projectReceipt(create.mock.calls[0][2], "create", { row: created });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
     await act(async () => {
       deliverLifecycleEvent(result);
@@ -493,29 +500,31 @@ describe('project lifecycle initiating operations', () => {
       });
     });
     await act(async () => {
-      request.reject(new Error('direct response lost'));
+      request.reject(new Error("direct response lost"));
       await completion;
     });
 
-    expect(await completion).toEqual({ status: 'committed' });
-    expect(picker.projects.map((project) => project.id)).toContain('created');
+    expect(await completion).toEqual({ status: "committed" });
+    expect(picker.projects.map((project) => project.id)).toContain("created");
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
-  it('recovers inactive committed delete from event when direct rejects', async () => {
+  it("recovers inactive committed delete from event when direct rejects", async () => {
     const request = deferred<LifecycleMutationResultDto>();
-    const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
+    const remove = vi
+      .spyOn(ProjectService, "deleteRegisteredProjectFiles")
+      .mockReturnValue(request.promise);
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([]);
 
     let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
-      completion = picker.deleteProjectFiles('inactive-record');
+      completion = picker.deleteProjectFiles("inactive-record");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
-    const result = projectReceipt(remove.mock.calls[0][2], 'delete', {
-      row: record('inactive-record'),
+    const result = projectReceipt(remove.mock.calls[0][2], "delete", {
+      row: record("inactive-record"),
     });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
     await act(async () => {
@@ -525,39 +534,41 @@ describe('project lifecycle initiating operations', () => {
       });
     });
     await act(async () => {
-      request.reject(new Error('direct response lost'));
+      request.reject(new Error("direct response lost"));
       await completion;
     });
 
-    expect(await completion).toEqual({ status: 'committed' });
+    expect(await completion).toEqual({ status: "committed" });
     expect(picker.projects).toEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
-  it.each(['event-first', 'direct-first'] as const)(
-    '%s settles an active terminal-row rejection without authority or list mutation',
+  it.each(["event-first", "direct-first"] as const)(
+    "%s settles an active terminal-row rejection without authority or list mutation",
     async (order) => {
-      const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
+      const activeRecord = record("active-record", "C:/project-a/metadata.yssbi");
       vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
       await act(async () => {
         await picker.refresh();
       });
-      await vi.waitFor(() => expect(picker.currentProjectId).toBe('active-record'));
+      await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
       const request = deferred<LifecycleMutationResultDto>();
-      const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
-      const hydrate = vi.spyOn(ProjectService, 'getProjectIndex');
+      const remove = vi
+        .spyOn(ProjectService, "deleteRegisteredProjectFiles")
+        .mockReturnValue(request.promise);
+      const hydrate = vi.spyOn(ProjectService, "getProjectIndex");
       const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
       let completion!: ReturnType<typeof picker.deleteProjectFiles>;
       await act(async () => {
-        completion = picker.deleteProjectFiles('active-record');
+        completion = picker.deleteProjectFiles("active-record");
         await Promise.resolve();
       });
       await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
       const operationId = remove.mock.calls[0][2];
       const result = activeTerminalRowRejectionReceipt(operationId, activeRecord);
 
-      if (order === 'event-first') {
+      if (order === "event-first") {
         await act(async () => {
           deliverLifecycleEvent(structuredClone(result));
           await vi.waitFor(() => {
@@ -574,15 +585,17 @@ describe('project lifecycle initiating operations', () => {
       }
 
       expect(useProjectIOStore.getState()).toMatchObject({
-        currentPath: 'C:/project-a/metadata.yssbi',
-        projectInstanceId: 'project-a',
+        currentPath: "C:/project-a/metadata.yssbi",
+        projectInstanceId: "project-a",
       });
-      expect(projectPublicationCoordinator.getSnapshotForTests().projectInstanceId).toBe('project-a');
+      expect(projectPublicationCoordinator.getSnapshotForTests().projectInstanceId).toBe(
+        "project-a",
+      );
       expect(await completion).toMatchObject({
-        status: 'recovery',
-        recovery: { action: 'cleanupRegistry' },
+        status: "recovery",
+        recovery: { action: "cleanupRegistry" },
       });
-      expect(picker.projects).toEqual([expect.objectContaining({ id: 'active-record' })]);
+      expect(picker.projects).toEqual([expect.objectContaining({ id: "active-record" })]);
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       expect(hydrate).not.toHaveBeenCalled();
 
@@ -594,73 +607,75 @@ describe('project lifecycle initiating operations', () => {
     },
   );
 
-  it('keeps project B authoritative when it supersedes a deferred active delete clear', async () => {
-    const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
+  it("keeps project B authoritative when it supersedes a deferred active delete clear", async () => {
+    const activeRecord = record("active-record", "C:/project-a/metadata.yssbi");
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
     await act(async () => {
       await picker.refresh();
     });
-    await vi.waitFor(() => expect(picker.currentProjectId).toBe('active-record'));
+    await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
 
     const cleanup = deferred<void>();
     const cleanupAuthorities: Array<{ projectInstanceId: string | null; epoch: number }> = [];
     let cleanupCall = 0;
-    const removeWorkbenchPanels = vi.fn(async (
-      ..._args: Parameters<typeof removeProjectScopedWorkbenchPanels>
-    ) => {
-      const authority = projectPublicationCoordinator.getSnapshotForTests();
-      cleanupAuthorities.push({
-        projectInstanceId: authority.projectInstanceId,
-        epoch: authority.epoch,
-      });
-      cleanupCall += 1;
-      if (cleanupCall === 1) await cleanup.promise;
-    });
-    vi.spyOn(projectWorkbenchLifecycle, 'removeProjectScopedWorkbenchPanels')
-      .mockImplementation(removeWorkbenchPanels);
+    const removeWorkbenchPanels = vi.fn(
+      async (..._args: Parameters<typeof removeProjectScopedWorkbenchPanels>) => {
+        const authority = projectPublicationCoordinator.getSnapshotForTests();
+        cleanupAuthorities.push({
+          projectInstanceId: authority.projectInstanceId,
+          epoch: authority.epoch,
+        });
+        cleanupCall += 1;
+        if (cleanupCall === 1) await cleanup.promise;
+      },
+    );
+    vi.spyOn(projectWorkbenchLifecycle, "removeProjectScopedWorkbenchPanels").mockImplementation(
+      removeWorkbenchPanels,
+    );
 
     const request = deferred<LifecycleMutationResultDto>();
-    const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles')
+    const remove = vi
+      .spyOn(ProjectService, "deleteRegisteredProjectFiles")
       .mockReturnValue(request.promise);
     let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
-      completion = picker.deleteProjectFiles('active-record');
+      completion = picker.deleteProjectFiles("active-record");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
     await act(async () => {
-      request.resolve(projectReceipt(remove.mock.calls[0][2], 'delete', { active: true }));
+      request.resolve(projectReceipt(remove.mock.calls[0][2], "delete", { active: true }));
       await vi.waitFor(() => expect(removeWorkbenchPanels).toHaveBeenCalledOnce());
     });
 
     mockProjectBHydration();
     vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
-      projectInstanceId: 'project-b',
+      projectInstanceId: "project-b",
       publicationRevision: 0,
       history: { canUndo: false, canRedo: false },
-      projectName: 'Project B',
-      graphs: [{
-        path: 'events/ProjectB.yssbi-event',
-        name: 'Project B graph',
-        type: 'event',
-        revision: 1,
-      }],
+      projectName: "Project B",
+      graphs: [
+        {
+          path: "events/ProjectB.yssbi-event",
+          name: "Project B graph",
+          type: "event",
+          revision: 1,
+        },
+      ],
       variables: [],
       worksheets: [],
       databases: [],
-      exportTime: '',
+      exportTime: "",
     });
     await act(async () => {
       await loadActivatedProject({
-        path: 'C:/project-b/metadata.yssbi',
-        projectInstanceId: 'project-b',
+        path: "C:/project-b/metadata.yssbi",
+        projectInstanceId: "project-b",
         activationRevision: 10_000,
       });
     });
-    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
-    expect(useResourceStore.getState().graphOrder).toEqual([
-      'events/ProjectB.yssbi-event',
-    ]);
+    expect(useProjectIOStore.getState().projectInstanceId).toBe("project-b");
+    expect(useResourceStore.getState().graphOrder).toEqual(["events/ProjectB.yssbi-event"]);
 
     const observedProjectIdentities: Array<string | null> = [];
     const observedResourceOrders: string[][] = [];
@@ -679,47 +694,41 @@ describe('project lifecycle initiating operations', () => {
     unsubscribeProject();
     unsubscribeResources();
 
-    expect(outcome).toEqual({ status: 'stale' });
-    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
-    expect(useResourceStore.getState().graphOrder).toEqual([
-      'events/ProjectB.yssbi-event',
-    ]);
+    expect(outcome).toEqual({ status: "stale" });
+    expect(useProjectIOStore.getState().projectInstanceId).toBe("project-b");
+    expect(useResourceStore.getState().graphOrder).toEqual(["events/ProjectB.yssbi-event"]);
     expect(observedProjectIdentities).not.toContain(null);
     expect(observedResourceOrders).not.toContainEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
     expect(removeWorkbenchPanels).toHaveBeenCalledTimes(2);
-    expect(removeWorkbenchPanels.mock.calls[0]).toEqual([
-      'project-a',
-      cleanupAuthorities[0],
-    ]);
-    expect(removeWorkbenchPanels.mock.calls[1]).toEqual([
-      'project-a',
-      cleanupAuthorities[1],
-    ]);
+    expect(removeWorkbenchPanels.mock.calls[0]).toEqual(["project-a", cleanupAuthorities[0]]);
+    expect(removeWorkbenchPanels.mock.calls[1]).toEqual(["project-a", cleanupAuthorities[1]]);
     expect(Object.isFrozen(removeWorkbenchPanels.mock.calls[0][1])).toBe(true);
     expect(Object.isFrozen(removeWorkbenchPanels.mock.calls[1][1])).toBe(true);
   });
 
-  it('recovers active delete cleared list from event when direct rejects', async () => {
-    const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
+  it("recovers active delete cleared list from event when direct rejects", async () => {
+    const activeRecord = record("active-record", "C:/project-a/metadata.yssbi");
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
     await act(async () => {
       await picker.refresh();
     });
-    await vi.waitFor(() => expect(picker.currentProjectId).toBe('active-record'));
+    await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
     const request = deferred<LifecycleMutationResultDto>();
-    const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
+    const remove = vi
+      .spyOn(ProjectService, "deleteRegisteredProjectFiles")
+      .mockReturnValue(request.promise);
 
     let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
-      completion = picker.deleteProjectFiles('active-record');
+      completion = picker.deleteProjectFiles("active-record");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([]);
-    const result = projectReceipt(remove.mock.calls[0][2], 'delete', {
+    const result = projectReceipt(remove.mock.calls[0][2], "delete", {
       active: true,
-      outcome: 'registryPending',
+      outcome: "registryPending",
       row: activeRecord,
     });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
@@ -730,32 +739,32 @@ describe('project lifecycle initiating operations', () => {
       });
     });
     await act(async () => {
-      request.reject(new Error('direct response lost'));
+      request.reject(new Error("direct response lost"));
       await completion;
     });
 
     expect(await completion).toMatchObject({
-      status: 'recovery',
-      recovery: { action: 'removeRegistryRecord' },
+      status: "recovery",
+      recovery: { action: "removeRegistryRecord" },
     });
     expect(useProjectIOStore.getState().projectInstanceId).toBeNull();
     expect(picker.projects).toEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
-  it('gives a no-project create completion zero effects after application generation replacement', async () => {
+  it("gives a no-project create completion zero effects after application generation replacement", async () => {
     act(() => {
       projectPublicationCoordinator.cancelProject();
       useProjectIOStore.setState({ projectInstanceId: null, currentPath: null });
     });
     const request = deferred<LifecycleMutationResultDto>();
-    const create = vi.spyOn(ProjectService, 'createProject').mockReturnValue(request.promise);
-    const progress = vi.spyOn(uiStore, 'updateProgress');
+    const create = vi.spyOn(ProjectService, "createProject").mockReturnValue(request.promise);
+    const progress = vi.spyOn(uiStore, "updateProgress");
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     let completion!: ReturnType<typeof picker.createProject>;
     await act(async () => {
-      completion = picker.createProject('Created', 'C:/created');
+      completion = picker.createProject("Created", "C:/created");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -763,54 +772,56 @@ describe('project lifecycle initiating operations', () => {
     await act(async () => {
       request.resolve({
         operationId: create.mock.calls[0][2],
-        kind: 'create',
+        kind: "create",
         oldProjectInstanceId: null,
         newProjectInstanceId: null,
-        phase: 'registryCommitted',
-        outcome: 'committed',
-        record: record('created', 'C:/created/metadata.yssbi'),
-        path: 'C:/created/metadata.yssbi',
+        phase: "registryCommitted",
+        outcome: "committed",
+        record: record("created", "C:/created/metadata.yssbi"),
+        path: "C:/created/metadata.yssbi",
         recovery: null,
         invalidation: { project: false, registry: true },
       });
       await completion;
     });
 
-    expect(await completion).toEqual({ status: 'stale' });
+    expect(await completion).toEqual({ status: "stale" });
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
     expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
   });
 
-  it('gives an inactive delete completion zero effects after application generation replacement', async () => {
+  it("gives an inactive delete completion zero effects after application generation replacement", async () => {
     const request = deferred<LifecycleMutationResultDto>();
-    const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
+    const remove = vi
+      .spyOn(ProjectService, "deleteRegisteredProjectFiles")
+      .mockReturnValue(request.promise);
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
-      completion = picker.deleteProjectFiles('inactive-record');
+      completion = picker.deleteProjectFiles("inactive-record");
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
-    projectPublicationCoordinator.startProject('project-replacement', 0);
-    useProjectIOStore.setState({ projectInstanceId: 'project-replacement' });
+    projectPublicationCoordinator.startProject("project-replacement", 0);
+    useProjectIOStore.setState({ projectInstanceId: "project-replacement" });
     await act(async () => {
       request.resolve({
         operationId: remove.mock.calls[0][2],
-        kind: 'delete',
+        kind: "delete",
         oldProjectInstanceId: null,
         newProjectInstanceId: null,
-        phase: 'authorityCommitted',
-        outcome: 'committed',
-        record: record('inactive-record'),
-        path: 'C:/project-b',
+        phase: "authorityCommitted",
+        outcome: "committed",
+        record: record("inactive-record"),
+        path: "C:/project-b",
         recovery: null,
         invalidation: { project: false, registry: true },
       });
       await completion;
     });
 
-    expect(await completion).toEqual({ status: 'stale' });
+    expect(await completion).toEqual({ status: "stale" });
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
   });
 });

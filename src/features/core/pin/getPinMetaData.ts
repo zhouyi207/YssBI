@@ -5,7 +5,9 @@
 
 import type { NodeDefinition, PinMetaDataDTO, PinSlot } from "@/shared/types/domain";
 
-function getPinDefFromSlot(slot: PinSlot): { name: string; namePrefix?: string; metaData: PinMetaDataDTO } | null {
+function getPinDefFromSlot(
+  slot: PinSlot,
+): { name: string; namePrefix?: string; metaData: PinMetaDataDTO } | null {
   if (slot.slotKind === "fixed") {
     return {
       name: slot.pin.name,
@@ -27,7 +29,7 @@ function getPinDefFromSlot(slot: PinSlot): { name: string; namePrefix?: string; 
  */
 export function getPinMetaData(
   definition: NodeDefinition | undefined,
-  pinName: string
+  pinName: string,
 ): PinMetaDataDTO | undefined {
   if (!definition?.pinSlots) return undefined;
 
@@ -38,7 +40,11 @@ export function getPinMetaData(
     if (slot.slotKind === "fixed" && pinDef.name === pinName) {
       return pinDef.metaData;
     }
-    if (slot.slotKind === "repeatable" && pinDef.namePrefix && pinName.startsWith(pinDef.namePrefix)) {
+    if (
+      slot.slotKind === "repeatable" &&
+      pinDef.namePrefix &&
+      pinName.startsWith(pinDef.namePrefix)
+    ) {
       return pinDef.metaData;
     }
   }

@@ -1,4 +1,4 @@
-import type { ErrorReference } from '@/features/application/errorReference';
+import type { ErrorReference } from "@/features/application/errorReference";
 
 type Awaitable<T> = T | PromiseLike<T>;
 
@@ -8,11 +8,11 @@ export interface ProjectHydrationIdentity {
 }
 
 export type ProjectHydrationOutcome =
-  | { readonly status: 'published' }
-  | { readonly status: 'stale' }
-  | { readonly status: 'notReady' }
-  | { readonly status: 'cancelled' }
-  | { readonly status: 'failed' };
+  | { readonly status: "published" }
+  | { readonly status: "stale" }
+  | { readonly status: "notReady" }
+  | { readonly status: "cancelled" }
+  | { readonly status: "failed" };
 
 export interface ProjectHydrationCoordinator {
   loadCurrentProject(): Promise<ProjectHydrationOutcome>;
@@ -52,7 +52,7 @@ export interface ProjectHydrationDependencies<
   ): Awaitable<void>;
   publishFailure?(
     error: ErrorReference,
-    operation: 'loadCurrentProject' | 'refreshResourceIndex' | 'loadGraph',
+    operation: "loadCurrentProject" | "refreshResourceIndex" | "loadGraph",
     identity: ProjectHydrationIdentity,
   ): Awaitable<void>;
   toErrorReference?(error: unknown, operation: string): ErrorReference;
@@ -66,11 +66,12 @@ interface RequestOwner {
 }
 
 function fallbackErrorReference(operation: string): ErrorReference {
-  const code = operation === 'loadCurrentProject'
-    ? 'project_load_failed'
-    : operation === 'refreshResourceIndex'
-      ? 'project_resource_index_failed'
-      : 'project_graph_load_failed';
+  const code =
+    operation === "loadCurrentProject"
+      ? "project_load_failed"
+      : operation === "refreshResourceIndex"
+        ? "project_resource_index_failed"
+        : "project_graph_load_failed";
   return {
     code,
     incidentId: null,
@@ -82,11 +83,7 @@ export function createProjectHydrationCoordinator<
   TResourceSnapshot = never,
   TGraphSnapshot = never,
 >(
-  dependencies: ProjectHydrationDependencies<
-    TProjectSnapshot,
-    TResourceSnapshot,
-    TGraphSnapshot
-  >,
+  dependencies: ProjectHydrationDependencies<TProjectSnapshot, TResourceSnapshot, TGraphSnapshot>,
 ): ProjectHydrationCoordinator {
   let coordinatorEpoch = 0;
   let nextGeneration = 0;
@@ -105,14 +102,15 @@ export function createProjectHydrationCoordinator<
     if (owner.coordinatorEpoch !== coordinatorEpoch) return false;
     if (latestGeneration.get(owner.operationKey) !== owner.generation) return false;
     const current = captureIdentity();
-    return current?.projectInstanceId === owner.identity.projectInstanceId
-      && current.epoch === owner.identity.epoch;
+    return (
+      current?.projectInstanceId === owner.identity.projectInstanceId &&
+      current.epoch === owner.identity.epoch
+    );
   };
 
   const safeErrorReference = (error: unknown, operation: string): ErrorReference => {
     try {
-      return dependencies.toErrorReference?.(error, operation)
-        ?? fallbackErrorReference(operation);
+      return dependencies.toErrorReference?.(error, operation) ?? fallbackErrorReference(operation);
     } catch {
       return fallbackErrorReference(operation);
     }
@@ -121,7 +119,7 @@ export function createProjectHydrationCoordinator<
   const startRequest = (
     operationKey: string,
     owner: RequestOwner,
-    operation: 'loadCurrentProject' | 'refreshResourceIndex' | 'loadGraph',
+    operation: "loadCurrentProject" | "refreshResourceIndex" | "loadGraph",
     work: () => Promise<unknown> | PromiseLike<unknown>,
     publish: (value: unknown, identity: ProjectHydrationIdentity) => Awaitable<void>,
   ): Promise<ProjectHydrationOutcome> => {
@@ -132,12 +130,12 @@ export function createProjectHydrationCoordinator<
     request = (async (): Promise<ProjectHydrationOutcome> => {
       try {
         const snapshot = await work();
-        if (!isCurrent(owner)) return { status: 'stale' };
+        if (!isCurrent(owner)) return { status: "stale" };
         await publish(snapshot, owner.identity);
-        if (!isCurrent(owner)) return { status: 'stale' };
-        return { status: 'published' };
+        if (!isCurrent(owner)) return { status: "stale" };
+        return { status: "published" };
       } catch (error) {
-        if (!isCurrent(owner)) return { status: 'stale' };
+        if (!isCurrent(owner)) return { status: "stale" };
         try {
           await dependencies.publishFailure?.(
             safeErrorReference(error, operation),
@@ -147,7 +145,7 @@ export function createProjectHydrationCoordinator<
         } catch {
           // Failure publication is advisory and must not leak an untyped rejection.
         }
-        return { status: 'failed' };
+        return { status: "failed" };
       } finally {
         if (pending.get(operationKey) === request) pending.delete(operationKey);
         if (latestGeneration.get(operationKey) === owner.generation) {
@@ -163,7 +161,7 @@ export function createProjectHydrationCoordinator<
   const createOwner = (
     operation: string,
     identity: ProjectHydrationIdentity,
-    suffix = '',
+    suffix = "",
   ): RequestOwner => {
     const operationKey = `${coordinatorEpoch}:${operation}:${identity.projectInstanceId}:${identity.epoch}:${suffix}`;
     const generation = ++nextGeneration;
@@ -179,73 +177,66 @@ export function createProjectHydrationCoordinator<
   const operationKeyFor = (
     operation: string,
     identity: ProjectHydrationIdentity,
-    suffix = '',
-  ): string => `${coordinatorEpoch}:${operation}:${identity.projectInstanceId}:${identity.epoch}:${suffix}`;
+    suffix = "",
+  ): string =>
+    `${coordinatorEpoch}:${operation}:${identity.projectInstanceId}:${identity.epoch}:${suffix}`;
 
   const pendingRequest = (
     operation: string,
     identity: ProjectHydrationIdentity,
-    suffix = '',
-  ): Promise<ProjectHydrationOutcome> | undefined => pending.get(
-    operationKeyFor(operation, identity, suffix),
-  );
+    suffix = "",
+  ): Promise<ProjectHydrationOutcome> | undefined =>
+    pending.get(operationKeyFor(operation, identity, suffix));
 
   const loadCurrentProject = (): Promise<ProjectHydrationOutcome> => {
     const identity = captureIdentity();
-    if (!identity) return Promise.resolve({ status: 'notReady' });
-    const existing = pendingRequest('load', identity);
+    if (!identity) return Promise.resolve({ status: "notReady" });
+    const existing = pendingRequest("load", identity);
     if (existing) return existing;
-    const owner = createOwner('load', identity);
+    const owner = createOwner("load", identity);
     return startRequest(
       owner.operationKey,
       owner,
-      'loadCurrentProject',
+      "loadCurrentProject",
       () => dependencies.loadProjectIndex(identity),
-      (snapshot, currentIdentity) => dependencies.publishProjectSnapshot(
-        snapshot as TProjectSnapshot,
-        currentIdentity,
-      ),
+      (snapshot, currentIdentity) =>
+        dependencies.publishProjectSnapshot(snapshot as TProjectSnapshot, currentIdentity),
     );
   };
 
   const refreshResourceIndex = (): Promise<ProjectHydrationOutcome> => {
     const identity = captureIdentity();
     if (!identity || !dependencies.loadResourceIndex || !dependencies.publishResourceIndex) {
-      return Promise.resolve({ status: 'notReady' });
+      return Promise.resolve({ status: "notReady" });
     }
-    const existing = pendingRequest('resource-index', identity);
+    const existing = pendingRequest("resource-index", identity);
     if (existing) return existing;
-    const owner = createOwner('resource-index', identity);
+    const owner = createOwner("resource-index", identity);
     return startRequest(
       owner.operationKey,
       owner,
-      'refreshResourceIndex',
+      "refreshResourceIndex",
       () => dependencies.loadResourceIndex!(identity),
-      (snapshot, currentIdentity) => dependencies.publishResourceIndex!(
-        snapshot as TResourceSnapshot,
-        currentIdentity,
-      ),
+      (snapshot, currentIdentity) =>
+        dependencies.publishResourceIndex!(snapshot as TResourceSnapshot, currentIdentity),
     );
   };
 
   const loadGraph = (graphPath: string): Promise<ProjectHydrationOutcome> => {
     const identity = captureIdentity();
     if (!identity || !dependencies.loadGraph || !dependencies.publishGraph) {
-      return Promise.resolve({ status: 'notReady' });
+      return Promise.resolve({ status: "notReady" });
     }
-    const existing = pendingRequest('graph', identity, graphPath);
+    const existing = pendingRequest("graph", identity, graphPath);
     if (existing) return existing;
-    const owner = createOwner('graph', identity, graphPath);
+    const owner = createOwner("graph", identity, graphPath);
     return startRequest(
       owner.operationKey,
       owner,
-      'loadGraph',
+      "loadGraph",
       () => dependencies.loadGraph!(graphPath, identity),
-      (snapshot, currentIdentity) => dependencies.publishGraph!(
-        graphPath,
-        snapshot as TGraphSnapshot,
-        currentIdentity,
-      ),
+      (snapshot, currentIdentity) =>
+        dependencies.publishGraph!(graphPath, snapshot as TGraphSnapshot, currentIdentity),
     );
   };
 

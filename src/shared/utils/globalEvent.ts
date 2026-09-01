@@ -1,6 +1,9 @@
 type GlobalEventTarget = Window | Document;
 
-function withAbortSignal(options: AddEventListenerOptions | boolean | undefined, signal: AbortSignal) {
+function withAbortSignal(
+  options: AddEventListenerOptions | boolean | undefined,
+  signal: AbortSignal,
+) {
   if (typeof options === "boolean") {
     return { capture: options, signal };
   }

@@ -1,7 +1,7 @@
-import { useTranslation } from 'react-i18next';
-import { VscFolderOpened, VscNewFile, VscRefresh } from 'react-icons/vsc';
-import { Button } from '@/components/ui/button';
-import { ProjectFlowGraphic } from './ProjectFlowGraphic';
+import { useTranslation } from "react-i18next";
+import { VscFolderOpened, VscNewFile, VscRefresh } from "react-icons/vsc";
+import { Button } from "@/components/ui/button";
+import { ProjectFlowGraphic } from "./ProjectFlowGraphic";
 
 interface ProjectPickerHeroProps {
   isBusy: boolean;
@@ -29,13 +29,13 @@ export function ProjectPickerHero({
       <div className="relative z-10 max-w-[640px]">
         <div className="mb-2 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--accent-color)]">
           <span className="h-px w-6 bg-current" />
-          {t('projectPicker.title')}
+          {t("projectPicker.title")}
         </div>
         <h1 className="font-heading text-[clamp(1.55rem,2.6vw,2.35rem)] font-semibold leading-tight tracking-[-0.04em] text-foreground">
-          {t('projectPicker.heading')}
+          {t("projectPicker.heading")}
         </h1>
         <p className="project-picker-hero-description mt-2 max-w-[560px] text-sm leading-6 text-muted-foreground max-[520px]:hidden">
-          {t('projectPicker.description')}
+          {t("projectPicker.description")}
         </p>
         <div className="project-picker-hero-actions mt-5 flex flex-wrap items-center gap-2">
           <Button
@@ -46,7 +46,7 @@ export function ProjectPickerHero({
             className="h-9 gap-2 bg-[var(--accent-color)] px-4 text-primary-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--accent-color)_22%,transparent)] hover:bg-[var(--accent-color-hover)]"
           >
             <VscNewFile size={15} />
-            {creating ? t('projectPicker.creating') : t('projectPicker.newProject')}
+            {creating ? t("projectPicker.creating") : t("projectPicker.newProject")}
           </Button>
           <Button
             type="button"
@@ -57,7 +57,7 @@ export function ProjectPickerHero({
             className="h-9 gap-2 bg-card/70 px-4"
           >
             <VscFolderOpened size={15} />
-            {importing ? t('projectPicker.importing') : t('projectPicker.importProject')}
+            {importing ? t("projectPicker.importing") : t("projectPicker.importProject")}
           </Button>
           <Button
             type="button"
@@ -68,7 +68,7 @@ export function ProjectPickerHero({
             className="h-9 gap-2 px-3 text-muted-foreground hover:text-foreground"
           >
             <VscRefresh size={15} />
-            {scanning ? t('projectPicker.scanning') : t('projectPicker.scanProjects')}
+            {scanning ? t("projectPicker.scanning") : t("projectPicker.scanProjects")}
           </Button>
         </div>
       </div>

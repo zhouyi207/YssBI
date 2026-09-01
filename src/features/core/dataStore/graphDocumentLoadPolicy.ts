@@ -1,6 +1,6 @@
-import { useGraphDataStore } from './graphDataStore';
-import { getDocumentState } from '@/features/core/resource';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
+import { useGraphDataStore } from "./graphDataStore";
+import { getDocumentState } from "@/features/core/resource";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
 /** True when graph body is in memory and does not need a backend reload. */
 export function isGraphCachedInMemory(graphPath: string): boolean {

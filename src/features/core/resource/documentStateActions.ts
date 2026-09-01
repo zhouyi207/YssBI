@@ -1,7 +1,7 @@
-import { useDocumentStateStore, type DocumentState } from './documentStateStore';
-import { useResourceStore } from './resourceStore';
-import type { ResourceRef } from './resourceTypes';
-import { resourceKey, type ResourceKey } from './resourceTypes';
+import { useDocumentStateStore, type DocumentState } from "./documentStateStore";
+import { useResourceStore } from "./resourceStore";
+import type { ResourceRef } from "./resourceTypes";
+import { resourceKey, type ResourceKey } from "./resourceTypes";
 
 function emptyDocumentState(key: ResourceKey): DocumentState {
   return {
@@ -15,7 +15,10 @@ function emptyDocumentState(key: ResourceKey): DocumentState {
   };
 }
 
-function updateDocumentState(ref: ResourceRef, updater: (previous: DocumentState) => DocumentState): DocumentState {
+function updateDocumentState(
+  ref: ResourceRef,
+  updater: (previous: DocumentState) => DocumentState,
+): DocumentState {
   const key = resourceKey(ref);
   const previous = useDocumentStateStore.getState().documents[key] ?? emptyDocumentState(key);
   const next = updater(previous);

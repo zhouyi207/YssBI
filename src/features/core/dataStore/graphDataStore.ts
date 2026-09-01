@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import type {
   ConnectionData,
   ConnectionId,
@@ -7,13 +7,13 @@ import type {
   NodeId,
   PinData,
   PinId,
-} from '@/shared/types';
+} from "@/shared/types";
 import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
-} from '@/shared/types/domain/editorProjection';
-import { portAddressKey, toProjectionEntities } from '@/features/domain/editorProjection';
-import type { EditorProjectionEntities } from '@/features/domain/editorProjection';
+} from "@/shared/types/domain/editorProjection";
+import { portAddressKey, toProjectionEntities } from "@/features/domain/editorProjection";
+import type { EditorProjectionEntities } from "@/features/domain/editorProjection";
 import {
   type GraphEntityBucket,
   getGraphConnection,
@@ -24,14 +24,14 @@ import {
   getGraphPin,
   getGraphPinConnections,
   hasGraphData,
-} from './graphEntityAccess';
+} from "./graphEntityAccess";
 
-export type { GraphEntityBucket } from './graphEntityAccess';
+export type { GraphEntityBucket } from "./graphEntityAccess";
 
 export type ProjectionApplyResult =
-  | { applied: true; reason: 'newer' }
-  | { applied: false; reason: 'invalid'; error: unknown }
-  | { applied: false; reason: 'stale-generation' | 'older-revision' };
+  | { applied: true; reason: "newer" }
+  | { applied: false; reason: "invalid"; error: unknown }
+  | { applied: false; reason: "stale-generation" | "older-revision" };
 
 export interface PreparedGraphProjectionReplacements {
   readonly graphPaths: readonly string[];
@@ -42,7 +42,7 @@ export type ProjectionPreparationResult =
   | { prepared: true; plan: PreparedGraphProjectionReplacements }
   | {
       prepared: false;
-      reason: 'duplicate-graph-path' | 'invalid' | 'non-monotonic-revision';
+      reason: "duplicate-graph-path" | "invalid" | "non-monotonic-revision";
       graphPath: string;
       error?: unknown;
     };
@@ -51,7 +51,7 @@ export type AtomicProjectionApplyResult =
   | { applied: true; graphPaths: string[] }
   | {
       applied: false;
-      reason: 'duplicate-graph-path' | 'invalid' | 'non-monotonic-revision';
+      reason: "duplicate-graph-path" | "invalid" | "non-monotonic-revision";
       graphPath: string;
       error?: unknown;
     };
@@ -85,8 +85,8 @@ function buildProjectionBucket(
 
   for (const node of Object.values(entities.nodes)) {
     const portKeys = entities.portKeysByNodeId[node.nodeId];
-    const inputs = portKeys.filter((key) => entities.ports[key]?.direction === 'input');
-    const outputs = portKeys.filter((key) => entities.ports[key]?.direction === 'output');
+    const inputs = portKeys.filter((key) => entities.ports[key]?.direction === "input");
+    const outputs = portKeys.filter((key) => entities.ports[key]?.direction === "output");
     bucket.nodes[node.nodeId] = {
       id: node.nodeId,
       graphPath: node.graphPath,
@@ -110,12 +110,13 @@ function buildProjectionBucket(
       id: key,
       nodeId: port.address.nodeId,
       name: port.display.instanceLabel ?? port.display.label,
-      type: port.kind === 'data' ? 'object' : 'exec',
+      type: port.kind === "data" ? "object" : "exec",
       direction: port.direction,
       defaultValue: port.input?.protocolDefault,
-      dataType: port.kind === 'data' && port.resolvedType?.resolved
-        ? port.resolvedType.dataType ?? undefined
-        : undefined,
+      dataType:
+        port.kind === "data" && port.resolvedType?.resolved
+          ? (port.resolvedType.dataType ?? undefined)
+          : undefined,
       userValue: port.input?.literalOverride,
       address: port.address,
       templateKey: port.templateKey,
@@ -163,15 +164,15 @@ function buildProjectionCandidate(
 
 export function prepareGraphProjectionReplacements(
   replacements: readonly GraphProjectionReplacementDto[],
-  baseGraphEntities: Readonly<Record<GraphPath, GraphEntityBucket>> =
-    useGraphDataStore.getState().graphEntities,
+  baseGraphEntities: Readonly<Record<GraphPath, GraphEntityBucket>> = useGraphDataStore.getState()
+    .graphEntities,
 ): ProjectionPreparationResult {
   const graphPaths = replacements.map(({ graphPath }) => graphPath);
   const seen = new Set<string>();
   const candidates: Array<[string, GraphEntityBucket]> = [];
   for (const replacement of replacements) {
     if (seen.has(replacement.graphPath)) {
-      return { prepared: false, reason: 'duplicate-graph-path', graphPath: replacement.graphPath };
+      return { prepared: false, reason: "duplicate-graph-path", graphPath: replacement.graphPath };
     }
     seen.add(replacement.graphPath);
     const current = baseGraphEntities[replacement.graphPath];
@@ -183,12 +184,12 @@ export function prepareGraphProjectionReplacements(
         (current?.requestGeneration ?? 0) + 1,
       );
     } catch (error) {
-      return { prepared: false, reason: 'invalid', graphPath: replacement.graphPath, error };
+      return { prepared: false, reason: "invalid", graphPath: replacement.graphPath, error };
     }
     if (current && candidate.sourceRevision < current.sourceRevision) {
       return {
         prepared: false,
-        reason: 'non-monotonic-revision',
+        reason: "non-monotonic-revision",
         graphPath: replacement.graphPath,
       };
     }
@@ -246,30 +247,31 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
   getGraphConnections: (graphPath) => getGraphConnections(get(), graphPath),
   hasGraph: (graphPath) => hasGraphData(get(), graphPath),
 
-  clearGraph: (graphPath) => set((state) => {
-    if (!state.graphEntities[graphPath]) return state;
-    const graphEntities = { ...state.graphEntities };
-    delete graphEntities[graphPath];
-    return { graphEntities };
-  }),
+  clearGraph: (graphPath) =>
+    set((state) => {
+      if (!state.graphEntities[graphPath]) return state;
+      const graphEntities = { ...state.graphEntities };
+      delete graphEntities[graphPath];
+      return { graphEntities };
+    }),
 
   replaceProjection: (graphPath, projection, requestGeneration) => {
     let candidate: GraphEntityBucket;
     try {
       candidate = buildProjectionCandidate(graphPath, projection, requestGeneration);
     } catch (error) {
-      return { applied: false, reason: 'invalid', error };
+      return { applied: false, reason: "invalid", error };
     }
 
-    let result: ProjectionApplyResult = { applied: false, reason: 'stale-generation' };
+    let result: ProjectionApplyResult = { applied: false, reason: "stale-generation" };
     set((state) => {
       const current = state.graphEntities[graphPath];
       if (current && requestGeneration <= current.requestGeneration) return state;
       if (current && candidate.sourceRevision < current.sourceRevision) {
-        result = { applied: false, reason: 'older-revision' };
+        result = { applied: false, reason: "older-revision" };
         return state;
       }
-      result = { applied: true, reason: 'newer' };
+      result = { applied: true, reason: "newer" };
       return commitGraphBucket(state, graphPath, candidate);
     });
     return result;

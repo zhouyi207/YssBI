@@ -1,6 +1,6 @@
-import { useSettingsRead } from '@/features/core/settings/read';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
-import { settingsUi } from '@/features/core/settings/ui';
+import { useSettingsRead } from "@/features/core/settings/read";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { settingsUi } from "@/features/core/settings/ui";
 
 const loadSettings = () => useSettingsStore.getState().load();
 

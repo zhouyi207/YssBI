@@ -1,4 +1,4 @@
-import type { ChartMargin } from './types';
+import type { ChartMargin } from "./types";
 
 export const DEFAULT_CARTESIAN_MARGIN: ChartMargin = {
   top: 20,

@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initializeProjectForCurrentWindow as initProjectSync } from '@/features/application/project';
-import { LoadStatus } from '@/shared/types/ui';
-import { useAppInitialization } from './appInitialization.hook';
-import type { InitializationState } from './appInitialization.type';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initializeProjectForCurrentWindow as initProjectSync } from "@/features/application/project";
+import { LoadStatus } from "@/shared/types/ui";
+import { useAppInitialization } from "./appInitialization.hook";
+import type { InitializationState } from "./appInitialization.type";
 
-vi.mock('@/features/application/project', () => ({
+vi.mock("@/features/application/project", () => ({
   initializeProjectForCurrentWindow: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ function Harness(): null {
   return null;
 }
 
-describe('useAppInitialization', () => {
+describe("useAppInitialization", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -28,7 +28,7 @@ describe('useAppInitialization', () => {
     vi.clearAllMocks();
     vi.mocked(initProjectSync).mockResolvedValue(undefined);
     initializationState = { status: LoadStatus.Idle, error: null };
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -38,7 +38,7 @@ describe('useAppInitialization', () => {
     host.remove();
   });
 
-  it('initializes project sync and reports ready', async () => {
+  it("initializes project sync and reports ready", async () => {
     await act(async () => {
       root.render(<Harness />);
     });

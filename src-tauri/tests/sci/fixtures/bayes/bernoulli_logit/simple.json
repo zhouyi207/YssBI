@@ -4,29 +4,11 @@
     "columns": [
       {
         "name": "x",
-        "values": [
-          -3.0,
-          -2.0,
-          -1.0,
-          -0.5,
-          0.5,
-          1.0,
-          2.0,
-          3.0
-        ]
+        "values": [-3.0, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0]
       },
       {
         "name": "y",
-        "values": [
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0
-        ]
+        "values": [0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0]
       }
     ]
   },
@@ -81,10 +63,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            0.0,
-            5.0
-          ]
+          "args": [0.0, 5.0]
         }
       },
       {
@@ -94,10 +73,7 @@
         },
         "prior": {
           "distribution": "normal",
-          "args": [
-            0.0,
-            5.0
-          ]
+          "args": [0.0, 5.0]
         }
       }
     ],
@@ -114,10 +90,7 @@
     "displayFormula": "y ~ BernoulliLogit(a * x + b)"
   },
   "golden": {
-    "parameters": [
-      "a",
-      "b"
-    ],
+    "parameters": ["a", "b"],
     "posteriorMean": {
       "a": {
         "expected": 1.0,

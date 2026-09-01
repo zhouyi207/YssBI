@@ -1,4 +1,4 @@
-import type { CanvasInteractionScope } from '@/features/core/graphInteraction/graphInteractionStore';
+import type { CanvasInteractionScope } from "@/features/core/graphInteraction/graphInteractionStore";
 
 let pointerScope: CanvasInteractionScope | null = null;
 

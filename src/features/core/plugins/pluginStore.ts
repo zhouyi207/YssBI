@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-export const PLUGIN_INSTALLATION_STORAGE_KEY = 'yssbi-installed-plugins-v1';
+export const PLUGIN_INSTALLATION_STORAGE_KEY = "yssbi-installed-plugins-v1";
 
 interface PluginStore {
   readonly installedPluginIds: readonly string[];
@@ -9,7 +9,7 @@ interface PluginStore {
 }
 
 function readInstalledPluginIds(): string[] {
-  if (typeof localStorage === 'undefined') {
+  if (typeof localStorage === "undefined") {
     return [];
   }
 
@@ -24,14 +24,18 @@ function readInstalledPluginIds(): string[] {
       return [];
     }
 
-    return [...new Set(parsed.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+    return [
+      ...new Set(
+        parsed.filter((value): value is string => typeof value === "string" && value.length > 0),
+      ),
+    ];
   } catch {
     return [];
   }
 }
 
 function persistInstalledPluginIds(pluginIds: readonly string[]): void {
-  if (typeof localStorage === 'undefined') {
+  if (typeof localStorage === "undefined") {
     return;
   }
 
