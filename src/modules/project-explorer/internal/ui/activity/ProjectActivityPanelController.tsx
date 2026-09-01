@@ -12,6 +12,7 @@ import {
   type ProjectTreeCategoryId,
 } from "@/features/core/sidebar/projectTreeState";
 import { ActionMenu } from "@/shared/ui/actionMenu";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { buildProjectSidebarContextMenuSections } from "./buildProjectSidebarContextMenuSections";
 import type { GraphResourceType, ProjectSidebarContextMenuTarget } from "./projectSidebarTypes";
 import type { SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
@@ -30,7 +31,7 @@ function ProjectActivityPanelController() {
     cancelInputDialog,
     updateInputDialogValue,
     cancelLabel,
-  } = useSidebarContextMenu<ProjectSidebarContextMenuTarget>();
+  } = useSidebarContextMenu<ProjectSidebarContextMenuTarget>(formatInlineUserError);
   const actions = useProjectActivityActions(openInputDialog);
 
   const contextMenuSections = useMemo(

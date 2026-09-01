@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { usePositionedActionMenu } from "@/shared/ui/actionMenu";
-import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import type { SidebarInputDialogState } from "./sidebarInputDialog";
 
-export function useSidebarContextMenu<TTarget>() {
+export function useSidebarContextMenu<TTarget>(
+  formatError: (error: unknown, translate: TFunction) => string,
+) {
   const { t } = useTranslation();
   const { contextMenu, openActionMenu, closeActionMenu } = usePositionedActionMenu<TTarget>();
   const [inputDialog, setInputDialog] = useState<SidebarInputDialogState | null>(null);
@@ -30,11 +32,11 @@ export function useSidebarContextMenu<TTarget>() {
       setInputDialog(null);
     } catch (error) {
       const message = t("notifications.sidebar.actionFailed", {
-        error: formatInlineUserError(error, t),
+        error: formatError(error, t),
       });
       setInputDialog((prev) => (prev ? { ...prev, error: message } : null));
     }
-  }, [inputDialog, t]);
+  }, [formatError, inputDialog, t]);
 
   const cancelInputDialog = useCallback(() => {
     setInputDialog(null);

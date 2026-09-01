@@ -1,5 +1,4 @@
-import type { SidebarDragPayload } from "@/features/core/dnd";
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, type Data } from "@dnd-kit/core";
 
 /**
  * Draggable sidebar row shell. PointerSensor activationConstraint (distance: 5)
@@ -18,7 +17,7 @@ export function SidebarDraggableItem({
   onDisabledDragAttempt,
 }: {
   id: string;
-  dragData: SidebarDragPayload | null;
+  dragData: Data | null;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;

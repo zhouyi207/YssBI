@@ -1,4 +1,4 @@
-import type { SidebarDragPayload } from "@/features/core/dnd";
+import type { Data } from "@dnd-kit/core";
 import { SidebarDraggableItem } from "./SidebarDraggableItem";
 import {
   sidebarItemIndent,
@@ -22,7 +22,7 @@ export function SidebarListItem({
   onDisabledDragAttempt,
 }: {
   id: string;
-  dragData?: SidebarDragPayload | null;
+  dragData?: Data | null;
   isSelected?: boolean;
   indentDepth?: number;
   icon: React.ReactNode;

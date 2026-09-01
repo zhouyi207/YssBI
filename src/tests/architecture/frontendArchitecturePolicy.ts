@@ -547,13 +547,6 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/dnd/snapTopLeftToCursorModifier.ts",
-      exportedSymbols: ["snapTopLeftToCursor"],
-      exactConsumers: null,
-      memberCapabilities: null,
-    },
-    {
-      sourceLayer: "views",
       canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
       exportedSymbols: ["workbenchDockviewRead"],
       exactConsumers: null,

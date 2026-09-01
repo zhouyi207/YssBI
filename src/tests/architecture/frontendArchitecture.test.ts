@@ -384,9 +384,8 @@ describe("frontend architecture model", () => {
 
   it("keeps Workbench chrome prop-driven and app-composed", () => {
     withProductionTypeScriptProject((context) => {
-      const sourceByPath = new Map(
-        productionTypeScriptSources(context).map(({ path, source }) => [path, source]),
-      );
+      const sources = productionTypeScriptSources(context);
+      const sourceByPath = new Map(sources.map(({ path, source }) => [path, source]));
       const pureChromeFiles = [
         "src/modules/workbench/internal/ui/WorkbenchWindow.tsx",
         "src/modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx",
@@ -396,6 +395,11 @@ describe("frontend architecture model", () => {
       ];
       for (const path of pureChromeFiles) {
         expect(sourceByPath.get(path) ?? "", path).not.toMatch(/from\s+["']@\/features\//u);
+      }
+      for (const { path, source } of sources.filter(({ path }) =>
+        path.startsWith("src/modules/workbench/internal/ui/"),
+      )) {
+        expect(source, path).not.toMatch(/from\s+["']@\/features\//u);
       }
 
       const composition =

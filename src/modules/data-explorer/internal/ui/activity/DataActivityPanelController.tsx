@@ -8,6 +8,7 @@ import {
   type RootDockviewPanelComponent,
 } from "@/modules/workbench/public";
 import { useDatabaseRead } from "@/features/core/database/read";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { ActionMenu } from "@/shared/ui/actionMenu";
 import { buildDataSidebarContextMenuSections } from "./buildDataSidebarContextMenuSections";
 import type { DataSidebarContextMenuTarget } from "./dataSidebarTypes";
@@ -27,7 +28,7 @@ function DataActivityPanelController() {
     cancelInputDialog,
     updateInputDialogValue,
     cancelLabel,
-  } = useSidebarContextMenu<DataSidebarContextMenuTarget>();
+  } = useSidebarContextMenu<DataSidebarContextMenuTarget>(formatInlineUserError);
   const actions = useDataActivityActions(openInputDialog);
 
   const contextMenuSections = useMemo(

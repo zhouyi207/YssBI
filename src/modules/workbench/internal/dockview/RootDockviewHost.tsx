@@ -25,7 +25,7 @@ import {
 
 import { useWorkbenchLayout } from "../application/useWorkbenchLayout";
 import { workbenchLayoutController } from "../application/workbenchLayoutController";
-import { snapTopLeftToCursor } from "@/features/core/dnd/snapTopLeftToCursorModifier";
+import { snapTopLeftToCursor } from "../ui/dnd/snapTopLeftToCursorModifier";
 import { WorkbenchActivityActions } from "../ui/activity/WorkbenchActivityActions";
 import { workbenchDockviewRead } from "./workbenchRead";
 import type {
