@@ -26,22 +26,35 @@ pub enum GraphInputSource {
     Parameter(GraphParameterHandle),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GraphInputKind {
+    Data,
+    Control,
+    Effect,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphInputBinding {
     port: Box<str>,
+    kind: GraphInputKind,
     source: GraphInputSource,
 }
 
 impl GraphInputBinding {
-    pub fn new(port: impl Into<Box<str>>, source: GraphInputSource) -> Self {
+    pub fn new(port: impl Into<Box<str>>, kind: GraphInputKind, source: GraphInputSource) -> Self {
         Self {
             port: port.into(),
+            kind,
             source,
         }
     }
 
     pub fn port(&self) -> &str {
         &self.port
+    }
+
+    pub const fn kind(&self) -> GraphInputKind {
+        self.kind
     }
 
     pub fn source(&self) -> &GraphInputSource {

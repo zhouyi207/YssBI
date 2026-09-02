@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Instant;
@@ -19,6 +19,7 @@ use crate::resource_preparation::{
 };
 use crate::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResult};
 use crate::result_store::ResultStore;
+use crate::run_output::{RunOutputEmitter, RunOutputMessage, RunOutputStream};
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
 use crate::value::RuntimeValue;
@@ -115,6 +116,7 @@ trait PreparedPlanExecutor: Send + Sync {
         resources: &PreparedRunResources,
         control: &RunExecutionControl,
         run_id: crate::run_registry::RunId,
+        on_output: &mut dyn FnMut(RunOutputMessage),
     ) -> Result<SchedulerOutput, KernelExecutionError>;
 }
 
@@ -146,19 +148,62 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
         resources: &PreparedRunResources,
         control: &RunExecutionControl,
         run_id: crate::run_registry::RunId,
+        on_output: &mut dyn FnMut(RunOutputMessage),
     ) -> Result<SchedulerOutput, KernelExecutionError> {
-        let mut values = Vec::new();
+        let operations = package.plan().operations();
+        let mut values: Vec<Option<RuntimeValue>> = vec![None; operations.len()];
+        let mut producers = vec![None; operations.len()];
+        for (operation_index, operation) in operations.iter().enumerate() {
+            let Some(output) = operation.output() else {
+                continue;
+            };
+            let Some(producer) = producers.get_mut(output.index() as usize) else {
+                return Err(KernelExecutionError::Failed);
+            };
+            if producer.replace(operation_index).is_some() {
+                return Err(KernelExecutionError::Failed);
+            }
+        }
+        let mut remaining_dependencies = vec![0usize; operations.len()];
+        let mut dependents = vec![Vec::new(); operations.len()];
+        for (operation_index, operation) in operations.iter().enumerate() {
+            for binding in operation.inputs() {
+                let crate::plan::PlanInputSource::Value(reference) = binding.source() else {
+                    continue;
+                };
+                let Some(producer) = producers
+                    .get(reference.index() as usize)
+                    .and_then(|producer| *producer)
+                else {
+                    return Err(KernelExecutionError::Failed);
+                };
+                remaining_dependencies[operation_index] = remaining_dependencies[operation_index]
+                    .checked_add(1)
+                    .ok_or(KernelExecutionError::Failed)?;
+                dependents[producer].push(operation_index);
+            }
+        }
+        let mut ready = remaining_dependencies
+            .iter()
+            .enumerate()
+            .filter_map(|(operation_index, remaining)| (*remaining == 0).then_some(operation_index))
+            .collect::<VecDeque<_>>();
+        let mut completed_count = 0usize;
         let mut inspected = None;
         let mut last_output = None;
+        let mut output = RunOutputEmitter::new(run_id, on_output);
 
-        for operation in package.plan().operations() {
+        while let Some(operation_index) = ready.pop_front() {
+            let operation = &operations[operation_index];
             check_kernel_control(control)?;
             let inputs = operation
                 .inputs()
                 .iter()
+                .filter(|binding| binding.kind() == crate::plan::PlanInputKind::Data)
                 .map(|binding| match binding.source() {
                     crate::plan::PlanInputSource::Value(reference) => values
                         .get(reference.index() as usize)
+                        .and_then(Option::as_ref)
                         .cloned()
                         .ok_or(KernelExecutionError::Failed),
                     crate::plan::PlanInputSource::Parameter(handle) => {
@@ -183,10 +228,49 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
             if operation.kind().as_str() == "yssbi.debug.view" {
                 inspected = Some(value.clone());
             }
-            if operation.output().is_some() {
-                last_output = Some(value.clone());
+            if operation.kind().as_str() == "yssbi.debug.print" {
+                let RuntimeValue::String(text) = &value else {
+                    return Err(KernelExecutionError::Failed);
+                };
+                let source_port = operation
+                    .inputs()
+                    .iter()
+                    .find(|binding| binding.kind() == crate::plan::PlanInputKind::Data)
+                    .map(|binding| binding.port().clone())
+                    .ok_or(KernelExecutionError::Failed)?;
+                let source = crate::plan::PlanSourceIdentity::new(
+                    operation.source().graph().clone(),
+                    operation.source().node().cloned(),
+                    Some(source_port),
+                );
+                if !output.emit(RunOutputStream::Stdout, text, &source) {
+                    return Err(KernelExecutionError::Failed);
+                }
             }
-            values.push(value);
+            if let Some(output) = operation.output() {
+                let Some(slot) = values.get_mut(output.index() as usize) else {
+                    return Err(KernelExecutionError::Failed);
+                };
+                if slot.replace(value.clone()).is_some() {
+                    return Err(KernelExecutionError::Failed);
+                }
+                last_output = Some(value);
+            }
+            completed_count = completed_count
+                .checked_add(1)
+                .ok_or(KernelExecutionError::Failed)?;
+            for dependent in &dependents[operation_index] {
+                let remaining = &mut remaining_dependencies[*dependent];
+                *remaining = remaining
+                    .checked_sub(1)
+                    .ok_or(KernelExecutionError::Failed)?;
+                if *remaining == 0 {
+                    ready.push_back(*dependent);
+                }
+            }
+        }
+        if completed_count != operations.len() {
+            return Err(KernelExecutionError::Failed);
         }
 
         let Some(value) = inspected.or(last_output) else {
@@ -444,6 +528,12 @@ pub struct ExecutedPreparedRun {
     handoff: ExecutionFinalizationHandoff,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PreparedExecutionEvent {
+    RunStarted(crate::run_registry::RunId),
+    RunOutput(RunOutputMessage),
+}
+
 impl ExecutedPreparedRun {
     pub const fn run_id(&self) -> crate::run_registry::RunId {
         self.run_id
@@ -669,7 +759,7 @@ impl ExecutionRuntimeState {
         bindings: RunResourceBindings,
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
-        mut on_run_started: impl FnMut(crate::run_registry::RunId),
+        mut on_event: impl FnMut(PreparedExecutionEvent),
     ) -> Result<ExecutedPreparedRun, ExecutePreparedError> {
         self.execute_prepared_inner(
             plan,
@@ -677,7 +767,7 @@ impl ExecutionRuntimeState {
             resources,
             control,
             Some(self.executor.as_ref()),
-            Some(&mut on_run_started),
+            Some(&mut on_event),
         )
         .map(ExecutedPreparedCandidate::into_executed_run)
     }
@@ -689,7 +779,7 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
         executor: Option<&dyn PreparedPlanExecutor>,
-        mut on_run_started: Option<&mut dyn FnMut(crate::run_registry::RunId)>,
+        mut on_event: Option<&mut dyn FnMut(PreparedExecutionEvent)>,
     ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
         let actual_generation = self.generation();
         let plan_generation = plan.generation();
@@ -719,8 +809,8 @@ impl ExecutionRuntimeState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(run_id, Arc::clone(&control.cancellation));
-        if let Some(on_run_started) = on_run_started.as_deref_mut() {
-            on_run_started(run_id);
+        if let Some(on_event) = on_event.as_mut() {
+            on_event(PreparedExecutionEvent::RunStarted(run_id));
         }
         if let Err(error) = control.check(RunPhase::Execution) {
             let result = terminate_run(&mut lifecycle, run_id, error);
@@ -737,12 +827,18 @@ impl ExecutionRuntimeState {
             self.remove_active_control(run_id);
             return result;
         };
+        let mut on_output = |message| {
+            if let Some(on_event) = on_event.as_mut() {
+                on_event(PreparedExecutionEvent::RunOutput(message));
+            }
+        };
         let output = match executor.execute(
             plan.package(),
             bindings.bindings(),
             &prepared_resources,
             control,
             run_id,
+            &mut on_output,
         ) {
             Ok(output) => output,
             Err(KernelExecutionError::Cancelled) => {
@@ -944,10 +1040,12 @@ mod tests {
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
-        ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanGraphRevision,
-        PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
-        PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-        PlanSourceIdentity, ResourceAccess, ResourceKind,
+        CompiledParameterHandle, ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId,
+        PlanGraphRevision, PlanInputBinding, PlanInputSource, PlanOperation, PlanOperationKind,
+        PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue,
+        PlanPortAddress, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
+        PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
+        PlanSourceIdentity, ResourceAccess, ResourceKind, ValueRef,
     };
     use crate::resource_preparation::{RunResourceBinding, RunResourceBindings};
     use crate::result_store::{ResultId, StoredResult};
@@ -1004,6 +1102,64 @@ mod tests {
         )
     }
 
+    fn empty_bindings() -> RunResourceBindings {
+        RunResourceBindings::new(
+            PlanProjectSessionId::from_existing("session".into()),
+            Vec::<PlanResourceRequirement>::new(),
+            Vec::<RunResourceBinding>::new(),
+        )
+    }
+
+    fn prepared_operation_plan(
+        state: &ExecutionRuntimeState,
+        operations: impl IntoIterator<Item = PlanOperation>,
+        parameter_entries: impl IntoIterator<Item = (CompiledParameterHandle, PlanParameterPayload)>,
+    ) -> PreparedExecutionPlan {
+        let basis = PlanCompilationBasis::new(
+            PlanProjectSessionId::from_existing("session".into()),
+            PlanGraphRevision::INITIAL,
+            PlanRegistryFingerprint::from_bytes([4; 32]),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        );
+        let mut parameters = CompiledParameterBundleBuilder::new(basis.clone());
+        for (handle, payload) in parameter_entries {
+            parameters
+                .insert(handle, payload)
+                .expect("test parameter handles are unique");
+        }
+        let package = CompiledExecutionPackage::new(
+            Arc::new(ExecutionPlan::new(
+                operations
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            )),
+            Arc::new(CompiledFunctionBundle::new(basis.clone(), Box::new([]), 0)),
+            Arc::new(parameters.freeze()),
+            PlanProvenance::new(
+                PlanSourceIdentity::new(
+                    PlanGraphId::from_existing("events/main".into()),
+                    None,
+                    None,
+                ),
+                basis,
+                PlanCompileId::from_existing(12),
+            ),
+        );
+        state
+            .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+            .expect("test package is valid")
+    }
+
+    fn operation_source(node: &str) -> PlanSourceIdentity {
+        PlanSourceIdentity::new(
+            PlanGraphId::from_existing("events/main".into()),
+            Some(crate::plan::PlanNodeId::from_existing(node.into())),
+            None,
+        )
+    }
+
     struct TestExecutor;
 
     impl PreparedPlanExecutor for TestExecutor {
@@ -1014,6 +1170,7 @@ mod tests {
             resources: &PreparedRunResources,
             _control: &RunExecutionControl,
             _run_id: RunId,
+            _on_output: &mut dyn FnMut(RunOutputMessage),
         ) -> Result<SchedulerOutput, KernelExecutionError> {
             assert_eq!(bindings.len(), 1);
             assert_eq!(
@@ -1080,10 +1237,151 @@ mod tests {
 
         assert!(candidate.results().is_empty());
         assert_eq!(
-            state.runs().state(RunId::from_existing(0)),
+            state.runs().state(RunId::from_existing(1)),
             Some(RunState::Succeeded)
         );
         assert_eq!(state.results().get(ResultId::from_existing(1)), None);
+    }
+
+    #[test]
+    fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
+        let state = state();
+        let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
+        let consumer = PlanOperation::new(
+            operation_source("consumer"),
+            PlanOperationKind::from_existing("yssbi.value.convert".into()),
+            crate::plan::ResultCategory::Value,
+            Box::new([]),
+            Box::new([PlanInputBinding::new(
+                PlanPortAddress::from_existing("consumer:value".into()),
+                crate::plan::PlanInputKind::Data,
+                PlanInputSource::Value(ValueRef::new(1)),
+            )]),
+            Box::new([]),
+            Some(ValueRef::new(0)),
+        );
+        let producer = PlanOperation::new(
+            operation_source("producer"),
+            PlanOperationKind::from_existing("yssbi.constant.int64".into()),
+            crate::plan::ResultCategory::Value,
+            Box::new([parameter_handle.clone()]),
+            Box::new([]),
+            Box::new([]),
+            Some(ValueRef::new(1)),
+        );
+        let plan = prepared_operation_plan(
+            &state,
+            [consumer, producer],
+            [(
+                parameter_handle,
+                PlanParameterPayload::new(
+                    PlanParameterSchemaId::from_existing("constant/int64".into()),
+                    PlanParameterValue::Scalar(PlanParameterScalar::Integer(7)),
+                ),
+            )],
+        );
+
+        let candidate = state
+            .execute_prepared(
+                &plan,
+                empty_bindings(),
+                &ResourceProviderFactory::new("session".into()),
+                &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
+            )
+            .expect("the executor must wait for the producer instead of reading by plan order");
+
+        assert_eq!(candidate.results().len(), 1);
+        assert_eq!(
+            candidate.results()[0].value().value(),
+            &StoredResult::Runtime(crate::value::RuntimeValue::Integer(7))
+        );
+    }
+
+    #[test]
+    fn neutral_executor_emits_print_data_without_passing_control_dependencies() {
+        let state = state();
+        let message_handle = CompiledParameterHandle::from_existing("input/print:message".into());
+        let print = PlanOperation::new(
+            operation_source("print"),
+            PlanOperationKind::from_existing("yssbi.debug.print".into()),
+            crate::plan::ResultCategory::Value,
+            Box::new([]),
+            Box::new([
+                PlanInputBinding::new(
+                    PlanPortAddress::from_existing("print:enter".into()),
+                    crate::plan::PlanInputKind::Control,
+                    PlanInputSource::Value(ValueRef::new(1)),
+                ),
+                PlanInputBinding::new(
+                    PlanPortAddress::from_existing("print:message".into()),
+                    crate::plan::PlanInputKind::Data,
+                    PlanInputSource::Parameter(message_handle.clone()),
+                ),
+            ]),
+            Box::new([]),
+            Some(ValueRef::new(0)),
+        );
+        let begin = PlanOperation::new(
+            operation_source("begin"),
+            PlanOperationKind::from_existing("yssbi.project.event.begin".into()),
+            crate::plan::ResultCategory::Value,
+            Box::new([]),
+            Box::new([]),
+            Box::new([]),
+            Some(ValueRef::new(1)),
+        );
+        let plan = prepared_operation_plan(
+            &state,
+            [print, begin],
+            [(
+                message_handle,
+                PlanParameterPayload::new(
+                    PlanParameterSchemaId::from_existing("input/print:message".into()),
+                    PlanParameterValue::Scalar(PlanParameterScalar::String("Hello, World!".into())),
+                ),
+            )],
+        );
+        let mut events = Vec::new();
+
+        let executed = state
+            .execute_prepared_handoff(
+                &plan,
+                empty_bindings(),
+                &ResourceProviderFactory::new("session".into()),
+                &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
+                |event| events.push(event),
+            )
+            .expect("Print executes after its control dependency is ready");
+        let run_id = executed.run_id();
+        let handoff = executed.into_handoff();
+        state
+            .finalize_run_success(run_id)
+            .expect("the test run reaches its terminal state");
+
+        assert_eq!(handoff.results().len(), 1);
+        assert!(matches!(
+            events.first(),
+            Some(PreparedExecutionEvent::RunStarted(started)) if *started == run_id
+        ));
+        let Some(PreparedExecutionEvent::RunOutput(RunOutputMessage::Output(output))) =
+            events.get(1)
+        else {
+            panic!("Print must emit one output event after runStarted");
+        };
+        assert_eq!(events.len(), 2);
+        assert_eq!(output.run_id(), run_id);
+        assert_eq!(output.sequence(), 1);
+        assert_eq!(output.stream(), RunOutputStream::Stdout);
+        assert_eq!(output.text(), "Hello, World!");
+        assert_eq!(output.source().graph().as_str(), "events/main");
+        assert_eq!(
+            output.source().node().map(|node| node.as_str()),
+            Some("print")
+        );
+        assert_eq!(
+            output.source().port().map(|port| port.as_str()),
+            Some("print:message")
+        );
     }
 
     #[test]
@@ -1112,7 +1410,7 @@ mod tests {
             crate::plan::ResultCategory::Value
         );
         assert_eq!(
-            state.runs().state(RunId::from_existing(0)),
+            state.runs().state(RunId::from_existing(1)),
             Some(RunState::Succeeded)
         );
     }
@@ -1138,6 +1436,6 @@ mod tests {
                 phase: RunPhase::Admission
             })
         ));
-        assert_eq!(state.runs().state(RunId::from_existing(0)), None);
+        assert_eq!(state.runs().state(RunId::from_existing(1)), None);
     }
 }

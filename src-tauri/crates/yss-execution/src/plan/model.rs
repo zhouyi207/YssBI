@@ -9,19 +9,31 @@ pub enum PlanInputSource {
     Parameter(CompiledParameterHandle),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanInputKind {
+    Data,
+    Control,
+    Effect,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanInputBinding {
     port: PlanPortAddress,
+    kind: PlanInputKind,
     source: PlanInputSource,
 }
 
 impl PlanInputBinding {
-    pub fn new(port: PlanPortAddress, source: PlanInputSource) -> Self {
-        Self { port, source }
+    pub fn new(port: PlanPortAddress, kind: PlanInputKind, source: PlanInputSource) -> Self {
+        Self { port, kind, source }
     }
 
     pub fn port(&self) -> &PlanPortAddress {
         &self.port
+    }
+
+    pub const fn kind(&self) -> PlanInputKind {
+        self.kind
     }
 
     pub fn source(&self) -> &PlanInputSource {

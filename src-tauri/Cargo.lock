@@ -9763,6 +9763,8 @@ dependencies = [
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-document",
+ "yss-graph-protocol",
+ "yss-graph-registry",
 ]
 
 [[package]]
@@ -9846,6 +9848,7 @@ dependencies = [
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-catalog",
+ "yss-graph-compiler",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-editor",

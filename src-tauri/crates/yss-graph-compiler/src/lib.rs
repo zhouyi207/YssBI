@@ -13,7 +13,7 @@ mod package;
 pub use compiler::{GraphCompilationInput, compile};
 pub use error::{GraphCompileError, GraphCompileErrorCode};
 pub use package::{
-    GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
-    GraphOperation, GraphParameterHandle, GraphParameterPayload, GraphParameterScalar,
-    GraphParameterValue, GraphSourceIdentity, GraphValueRef,
+    GraphCompiledPackage, GraphInputBinding, GraphInputKind, GraphInputSource,
+    GraphObservationIntent, GraphOperation, GraphParameterHandle, GraphParameterPayload,
+    GraphParameterScalar, GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };

@@ -9,9 +9,12 @@ use thiserror::Error;
 use yss_graph_analysis::{
     GraphAnalysis, GraphAnalysisInput, GraphProjectionFacts, analyze, projection_facts,
 };
-use yss_graph_analysis_contract::{CompilationBasis, DiagnosticArguments, LocalizationLookup};
+use yss_graph_analysis_contract::{
+    CompilationBasis, CompileId, DiagnosticArguments, LocalizationLookup,
+};
 use yss_graph_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
-use yss_graph_document::{GraphDocument, GraphResourcePath, NodeId, PortAddress};
+use yss_graph_compiler::{GraphCompilationInput, GraphCompileError, GraphCompiledPackage, compile};
+use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress};
 use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
@@ -171,6 +174,22 @@ impl GraphRuntimeState {
 
     fn registry(&self) -> &NodeRegistry {
         self.components.registry.as_ref()
+    }
+
+    pub fn compile_graph(
+        &self,
+        document: &GraphDocument,
+        expected_revision: GraphRevision,
+        graph: GraphResourcePath,
+        compile_id: CompileId,
+    ) -> Result<GraphCompiledPackage, GraphCompileError> {
+        compile(GraphCompilationInput::new(
+            document,
+            self.registry(),
+            expected_revision,
+            graph,
+            compile_id,
+        ))
     }
 
     pub fn plan_editor_mutation(
@@ -412,6 +431,57 @@ mod tests {
                 .is_err()
         );
         assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
+    }
+
+    #[test]
+    fn compilation_lowers_an_unbound_protocol_default_as_a_data_input() {
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let node_id = NodeId::new();
+        let node_type = runtime
+            .registry()
+            .iter()
+            .map(|(node_type, _)| node_type)
+            .find(|node_type| node_type.as_str() == "yssbi.debug.print")
+            .cloned()
+            .expect("the Print node is registered");
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        let graph = GraphResourcePath::new("events/Print.yssbi-event")
+            .expect("fixture graph path is valid");
+
+        let package = runtime
+            .compile_graph(&document, document.revision, graph, CompileId::new(1))
+            .expect("the protocol default makes Print executable");
+
+        let operation = package
+            .operations()
+            .first()
+            .expect("Print lowers to one operation");
+        let input = operation
+            .inputs()
+            .first()
+            .expect("Print has its default Message input");
+        assert_eq!(input.kind(), yss_graph_compiler::GraphInputKind::Data);
+        assert_eq!(input.port(), format!("{node_id}:message"));
+        let yss_graph_compiler::GraphInputSource::Parameter(handle) = input.source() else {
+            panic!("the unbound default must lower through the parameter bundle");
+        };
+        assert!(matches!(
+            package.parameters().get(handle).map(|payload| payload.value()),
+            Some(yss_graph_compiler::GraphParameterValue::Scalar(
+                yss_graph_compiler::GraphParameterScalar::String(value)
+            )) if value.as_ref() == "Hello, World!"
+        ));
     }
 
     #[test]

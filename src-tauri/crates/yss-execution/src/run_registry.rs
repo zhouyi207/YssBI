@@ -48,7 +48,7 @@ impl RunRegistry {
     pub fn new() -> Self {
         Self {
             states: Mutex::new(BTreeMap::new()),
-            next_id: AtomicU64::new(0),
+            next_id: AtomicU64::new(1),
         }
     }
 
@@ -112,5 +112,20 @@ impl RunRegistry {
 impl Default for RunRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_run_ids_start_at_one() {
+        let registry = RunRegistry::new();
+
+        let run_id = registry.admit_next().expect("the first run is admitted");
+
+        assert_eq!(run_id.get(), 1);
+        assert_eq!(registry.state(run_id), Some(RunState::Admitted));
     }
 }

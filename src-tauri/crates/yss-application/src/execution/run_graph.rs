@@ -22,9 +22,9 @@ use yss_execution::plan::{
 };
 use yss_execution::run_registry::{RunId, RunState};
 use yss_execution::state::{
-    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
+    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, PreparedExecutionEvent,
+    RunExecutionControl,
 };
-use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::GraphResourcePath;
 use yss_project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
@@ -158,6 +158,7 @@ pub enum RunApplicationEventKind {
         result_id: yss_execution::result::ResultId,
         source: yss_execution::plan::PlanSourceIdentity,
     },
+    RunOutput(yss_execution::run_output::RunOutputMessage),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -316,15 +317,19 @@ where
         prepared_project.authority().graph_revision(),
         prepared_project.resources().grants(),
     )?;
-    let graph_package = compile(GraphCompilationInput::new(
-        graph_document,
-        yss_graph_document::GraphRevision::new(prepared_project.authority().graph_revision().get()),
-        request.graph_path.clone(),
-        yss_graph_analysis_contract::CompileId::new(
-            prepared_project.authority().graph_revision().get(),
-        ),
-    ))
-    .map_err(ExecutionApplicationError::GraphCompilation)?;
+    let graph_package = captured
+        .graph()
+        .compile_graph(
+            graph_document,
+            yss_graph_document::GraphRevision::new(
+                prepared_project.authority().graph_revision().get(),
+            ),
+            request.graph_path.clone(),
+            yss_graph_analysis_contract::CompileId::new(
+                prepared_project.authority().graph_revision().get(),
+            ),
+        )
+        .map_err(ExecutionApplicationError::GraphCompilation)?;
     let package = execution_package_from_graph(graph_package, basis)
         .map_err(ExecutionApplicationError::GraphPackage)?;
     let prepared_plan = captured
@@ -350,17 +355,34 @@ where
         bindings,
         captured.resource_provider_factory(),
         &control,
-        |run_id| {
-            let identity = RunIdentity::new(
-                PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-                request.graph_path.clone(),
-                run_id,
-            );
-            started_identity = Some(identity.clone());
-            let _ = deliver(RunApplicationEvent::new(
-                identity,
-                RunApplicationEventKind::RunStarted,
-            ));
+        |event| match event {
+            PreparedExecutionEvent::RunStarted(run_id) => {
+                let identity = RunIdentity::new(
+                    PlanProjectSessionId::from_existing(
+                        captured.project_session_id().as_str().into(),
+                    ),
+                    request.graph_path.clone(),
+                    run_id,
+                );
+                started_identity = Some(identity.clone());
+                let _ = deliver(RunApplicationEvent::new(
+                    identity,
+                    RunApplicationEventKind::RunStarted,
+                ));
+            }
+            PreparedExecutionEvent::RunOutput(message) => {
+                let identity = RunIdentity::new(
+                    PlanProjectSessionId::from_existing(
+                        captured.project_session_id().as_str().into(),
+                    ),
+                    request.graph_path.clone(),
+                    message.run_id(),
+                );
+                let _ = deliver(RunApplicationEvent::new(
+                    identity,
+                    RunApplicationEventKind::RunOutput(message),
+                ));
+            }
         },
     ) {
         Ok(executed) => executed,

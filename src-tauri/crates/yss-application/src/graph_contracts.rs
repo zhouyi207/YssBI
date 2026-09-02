@@ -253,7 +253,18 @@ pub fn execution_package_from_graph(
                             .map_err(GraphPackageMappingError::ParameterIdentity)?,
                         ),
                     };
-                    Ok(PlanInputBinding::new(port, source))
+                    let kind = match binding.kind() {
+                        yss_graph_compiler::GraphInputKind::Data => {
+                            yss_execution::plan::PlanInputKind::Data
+                        }
+                        yss_graph_compiler::GraphInputKind::Control => {
+                            yss_execution::plan::PlanInputKind::Control
+                        }
+                        yss_graph_compiler::GraphInputKind::Effect => {
+                            yss_execution::plan::PlanInputKind::Effect
+                        }
+                    };
+                    Ok(PlanInputBinding::new(port, kind, source))
                 })
                 .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
                 .into_boxed_slice();

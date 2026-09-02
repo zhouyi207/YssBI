@@ -18,7 +18,9 @@ pub use identity::{
     PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
     PlanSourceIdentity,
 };
-pub use model::{ExecutionPlan, FunctionPlanAbi, PlanInputBinding, PlanInputSource, PlanOperation};
+pub use model::{
+    ExecutionPlan, FunctionPlanAbi, PlanInputBinding, PlanInputKind, PlanInputSource, PlanOperation,
+};
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::{CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan};
 pub use parameter::{

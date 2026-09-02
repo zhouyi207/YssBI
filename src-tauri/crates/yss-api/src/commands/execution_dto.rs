@@ -6,6 +6,7 @@ use yss_application::execution::run_graph::{
 };
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
+use yss_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_execution::value::RuntimeValue;
 use yss_graph_document::GraphResourcePath;
 
@@ -27,7 +28,14 @@ fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
 }
 
 fn output_dto(value: &PlanOutputRef) -> Result<GraphOutputRefDto, RunEventDtoError> {
-    let parts = value.port().as_str().split(':').collect::<Vec<_>>();
+    Ok(GraphOutputRefDto {
+        graph_path: value.graph().as_str().to_owned(),
+        port: port_address_dto(value.port())?,
+    })
+}
+
+fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEventDtoError> {
+    let parts = value.as_str().split(':').collect::<Vec<_>>();
     let port = match parts.as_slice() {
         [node_id, port_key] if uuid::Uuid::parse_str(node_id).is_ok() => PortAddressDto::Declared {
             node_id: (*node_id).into(),
@@ -45,10 +53,7 @@ fn output_dto(value: &PlanOutputRef) -> Result<GraphOutputRefDto, RunEventDtoErr
         }
         _ => return Err(RunEventDtoError::InvalidOutput),
     };
-    Ok(GraphOutputRefDto {
-        graph_path: value.graph().as_str().to_owned(),
-        port,
-    })
+    Ok(port)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,6 +160,7 @@ pub(crate) struct ResultInspectionSourceDto {
 pub enum RunEventDtoError {
     UnsafePreviewGeneration,
     InvalidOutput,
+    UnexpectedRunOutput,
 }
 
 #[derive(Debug, Serialize)]
@@ -212,22 +218,138 @@ impl TryFrom<RunApplicationEvent> for RunEventDto {
                     },
                 }
             }
+            RunApplicationEventKind::RunOutput(_) => {
+                return Err(RunEventDtoError::UnexpectedRunOutput);
+            }
         };
         Ok(Self { run, kind })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunOutputStreamDto {
+    Stdout,
+    Stderr,
+}
+
+impl From<RunOutputStream> for RunOutputStreamDto {
+    fn from(value: RunOutputStream) -> Self {
+        match value {
+            RunOutputStream::Stdout => Self::Stdout,
+            RunOutputStream::Stderr => Self::Stderr,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunOutputStatusDto {
+    Truncated,
+    Dropped,
+}
+
+impl From<RunOutputStatus> for RunOutputStatusDto {
+    fn from(value: RunOutputStatus) -> Self {
+        match value {
+            RunOutputStatus::Truncated => Self::Truncated,
+            RunOutputStatus::Dropped => Self::Dropped,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOutputEventDto {
+    run_id: String,
+    sequence: u64,
+    stream: RunOutputStreamDto,
+    text: Box<str>,
+    source_graph_path: String,
+    source_node_id: String,
+    source_port: PortAddressDto,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOutputStatusEventDto {
+    run_id: String,
+    sequence: u64,
+    stream: RunOutputStreamDto,
+    status: RunOutputStatusDto,
+    source_graph_path: String,
+    source_node_id: String,
+    source_port: PortAddressDto,
+}
+
+fn run_output_source(
+    source: &yss_execution::plan::PlanSourceIdentity,
+) -> Result<(String, String, PortAddressDto), RunEventDtoError> {
+    GraphResourcePath::new(source.graph().as_str()).map_err(|_| RunEventDtoError::InvalidOutput)?;
+    let node = source.node().ok_or(RunEventDtoError::InvalidOutput)?;
+    uuid::Uuid::parse_str(node.as_str()).map_err(|_| RunEventDtoError::InvalidOutput)?;
+    let port = source.port().ok_or(RunEventDtoError::InvalidOutput)?;
+    if port.as_str().split(':').next() != Some(node.as_str()) {
+        return Err(RunEventDtoError::InvalidOutput);
+    }
+    Ok((
+        source.graph().as_str().to_owned(),
+        node.as_str().to_owned(),
+        port_address_dto(port)?,
+    ))
+}
+
+fn run_output_dto(
+    message: &RunOutputMessage,
+) -> Result<ExecutionChannelEventDto, RunEventDtoError> {
+    match message {
+        RunOutputMessage::Output(event) => {
+            let (source_graph_path, source_node_id, source_port) =
+                run_output_source(event.source())?;
+            Ok(ExecutionChannelEventDto::Output(RunOutputEventDto {
+                run_id: event.run_id().get().to_string(),
+                sequence: event.sequence(),
+                stream: event.stream().into(),
+                text: event.text().into(),
+                source_graph_path,
+                source_node_id,
+                source_port,
+            }))
+        }
+        RunOutputMessage::Status(event) => {
+            let (source_graph_path, source_node_id, source_port) =
+                run_output_source(event.source())?;
+            Ok(ExecutionChannelEventDto::OutputStatus(
+                RunOutputStatusEventDto {
+                    run_id: event.run_id().get().to_string(),
+                    sequence: event.sequence(),
+                    stream: event.stream().into(),
+                    status: event.status().into(),
+                    source_graph_path,
+                    source_node_id,
+                    source_port,
+                },
+            ))
+        }
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum ExecutionChannelEventDto {
-    RunEvent(RunEventDto),
+    Event(RunEventDto),
+    Output(RunOutputEventDto),
+    OutputStatus(RunOutputStatusEventDto),
 }
 
 impl TryFrom<RunApplicationEvent> for ExecutionChannelEventDto {
     type Error = RunEventDtoError;
 
     fn try_from(event: RunApplicationEvent) -> Result<Self, Self::Error> {
-        Ok(Self::RunEvent(event.try_into()?))
+        if let RunApplicationEventKind::RunOutput(message) = event.kind() {
+            return run_output_dto(message);
+        }
+        Ok(Self::Event(event.try_into()?))
     }
 }
 
@@ -491,5 +613,50 @@ impl PinResultEntryDto {
             },
             state: ResultStateDto::Ready,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
+    use yss_execution::run_output::test_support;
+    use yss_execution::run_registry::RunId;
+
+    #[test]
+    fn run_output_uses_the_existing_flat_channel_wire_with_source_port() {
+        let node_id = "00000000-0000-0000-0000-000000000002";
+        let message = test_support::output(
+            RunId::from_existing(1),
+            1,
+            RunOutputStream::Stdout,
+            "Hello, World!",
+            PlanSourceIdentity::new(
+                PlanGraphId::from_existing("events/Output.yssbi-event".into()),
+                Some(PlanNodeId::from_existing(node_id.into())),
+                Some(PlanPortAddress::from_existing(
+                    format!("{node_id}:message").into_boxed_str(),
+                )),
+            ),
+        );
+
+        let dto = run_output_dto(&message).expect("the runtime output source is valid");
+
+        assert_eq!(
+            serde_json::to_value(dto).expect("run output serializes"),
+            serde_json::json!({
+                "runId": "1",
+                "sequence": 1,
+                "stream": "stdout",
+                "text": "Hello, World!",
+                "sourceGraphPath": "events/Output.yssbi-event",
+                "sourceNodeId": node_id,
+                "sourcePort": {
+                    "kind": "declared",
+                    "nodeId": node_id,
+                    "portKey": "message"
+                }
+            })
+        );
     }
 }

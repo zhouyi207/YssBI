@@ -270,6 +270,7 @@ interface RunOutputEvent {
   text: string;
   sourceGraphPath: string;
   sourceNodeId: string;
+  sourcePort: PortAddressDto;
 }
 ```
 
@@ -285,8 +286,8 @@ Frontend `runOutputProjection` 最多保留 258 条（256 text + 2 status），�
 
 Output 面板位于 `src/modules/logs/internal/ui/OutputPanel.tsx`，并通过 `modules/logs/public.ts`
 贡献给 app-owned root panel registry；它只复用 Workbench panel 位置，不读取 diagnostic store。
-来源路径是 opaque resource path；nested function 输出必须携带实际 `sourceGraphPath`，不能按
-root graph 或 node UUID 猜测。
+来源路径是 opaque resource path；输出同时携带实际 `sourceGraphPath`、`sourceNodeId` 和
+`sourcePort`，nested function 输出不能按 root graph 或 node UUID 猜测来源。
 
 ## 7. Review checklist
 

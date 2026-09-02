@@ -10,3 +10,5 @@ thiserror.workspace = true
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }

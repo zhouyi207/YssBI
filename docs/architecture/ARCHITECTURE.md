@@ -509,13 +509,13 @@ yss-resource-naming + yss-project-identity
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
 - `yss-graph-type-mapping`：持久化 `DataType` 到 Graph `TypeExpr` 的唯一 Pure Leaf 映射；editor 与 runtime 不再各自维护分支表。
 - `yss-graph-analysis`：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner；analysis input 只接收实际参与结果的 document 与 compilation basis，不保留无效 settings/catalog 参数。
-- `yss-graph-compiler`：revision 校验、neutral document lowering、Graph-owned immutable package 与 compile error 的唯一 owner；成功直接返回 package，不保留恒为 `Some` 的 report、空 diagnostics 或重复 basis。
+- `yss-graph-compiler`：revision 校验、registry 协议驱动的 input kind/default 解析、neutral document lowering、Graph-owned immutable package 与 compile error 的唯一 owner；成功直接返回 package，不保留恒为 `Some` 的 report、空 diagnostics 或重复 basis。
 - `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
 - `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
 - `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
-- `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
+- `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 compilation、analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
 - `yss-project-identity`：统一拥有 `ProjectInstanceId`、`ProjectRegistrationId`、`ProjectSessionId`、`ProjectRootIdentity`、`OperationId`、`HistoryEntryId` 与 monotonic revision 值对象。registry registration、runtime instance 与 replaceable runtime session 保持不同强类型；Graph/Project revision 只允许显式命名转换，测试便利的 `next()` 仅通过 `test-support` feature 暴露。根 `project` 不做兼容 re-export。
 - `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件、`ProjectProgressSink` 输出 port 与封装过的任务取消 capability/registry。新任务会取消并替换旧 active task，避免产生不可再取消的孤儿扫描；Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection。Project 不再暴露原子标志或字符串取消 sentinel，扫描中途取消会保持 typed `Cancelled` 语义而不会误报为 `ScanFailed`。
 - `yss-project-registry-contract`：统一拥有 `ProjectRecord`、`ProjectRootIdentityState` 与 `ProjectRegistryStore` persistence port；SQLite adapter 与 Project workflow 直接消费同一记录，不再通过字段完全相同的 `ProjectRegistryRecord` 镜像转换。注册表 ID 使用 `ProjectRegistrationId`，不再错误复用每次激活都会变化的 `ProjectInstanceId`；JSON 字符串 wire 保持兼容。Application lifecycle 直接断言强类型 domain event，registry 写入失败的恢复动作保持 `RegisterDestination`，只在 transport boundary 映射为既有 `registerDestination` wire 值。
@@ -573,7 +573,7 @@ Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段�
 
 - `runId` 与严格递增 `sequence`；
 - stdout/stderr stream；
-- opaque `sourceGraphPath` 与 `sourceNodeId`。
+- opaque `sourceGraphPath`、`sourceNodeId` 与 `sourcePort`。
 
 Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend Output panel 维护有界投影并检测 sequence gap。Run Output 不进入 diagnostics。
 
