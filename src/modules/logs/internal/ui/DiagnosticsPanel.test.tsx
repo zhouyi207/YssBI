@@ -37,12 +37,12 @@ const bucket = {
   nodes: {
     "node-a": {
       id: "node-a",
-      title: "Node A",
+      display: { title: "Node A" },
       diagnostics: [diagnostic("node-a", "node.error", "A is invalid")],
     },
     "node-b": {
       id: "node-b",
-      title: "Node B",
+      display: { title: "Node B" },
       diagnostics: [diagnostic("node-b", "node.warning", "B needs review")],
     },
   },

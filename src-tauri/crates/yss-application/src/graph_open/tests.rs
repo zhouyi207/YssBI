@@ -246,7 +246,6 @@ fn graph_open_replacement_respects_final_materialization_commit_boundary() {
         .publish_for_test(Arc::clone(&replacement.session));
 
     assert_eq!(receipt.graph_path(), &path);
-    assert_eq!(receipt.graph_revision(), GraphRevision::INITIAL);
     assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
 }
 

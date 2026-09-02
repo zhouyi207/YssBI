@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import {
   CONNECTION_SNAP_RADIUS_PX,
   resolveConnectionFeedback,
@@ -16,15 +17,7 @@ const capability = {
 };
 
 function pin(partial: Partial<PinData> & Pick<PinData, "id" | "nodeId" | "direction">): PinData {
-  return {
-    name: partial.id,
-    type: "object",
-    kind: "data",
-    dataType: { kind: "Float64" },
-    address: { kind: "declared", nodeId: partial.nodeId, portKey: partial.id },
-    connections: capability,
-    ...partial,
-  };
+  return makeProjectedPinData({ ...partial, connections: partial.connections ?? capability });
 }
 
 const source = pin({ id: "source", nodeId: "a", direction: "output" });
@@ -78,7 +71,11 @@ describe("connectionInteraction", () => {
     [
       "type",
       source,
-      pin({ ...target, dataType: { kind: "String" } }),
+      pin({
+        ...target,
+        dataType: { kind: "String" },
+        resolvedType: { display: "String", resolved: true, dataType: { kind: "String" } },
+      }),
       { kind: "invalid", reason: "type-mismatch" },
     ],
     [

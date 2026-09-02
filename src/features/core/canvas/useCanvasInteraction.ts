@@ -12,8 +12,8 @@ import {
   getCanvasInteraction,
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
-import type { Pin } from "@/shared/types/domain";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
 import type { EditorViewport } from "@/features/core/viewport";
 
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
@@ -108,7 +108,7 @@ export function useCanvasInteraction({
   const pendingConnection = useGraphInteractionStore((state) => {
     if (!activeGraphPath) return null;
     const interaction = getCanvasInteraction(state, activeGraphPath, activeGroupIdRef.current);
-    return interaction.type === "pendingNodeCreation" ? (interaction.session.source as Pin) : null;
+    return interaction.type === "pendingNodeCreation" ? interaction.session.source : null;
   });
   const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
   setSelectedNodeIdsRef.current = setSelectedNodeIds;
@@ -123,7 +123,7 @@ export function useCanvasInteraction({
   );
 
   const setPendingConnection = useCallback(
-    (pin: Pin | null) => {
+    (pin: PinData | null) => {
       const groupId = activeGroupIdRef.current;
       const graphPath = resolveTabId(activeResourceRefRef);
       if (!graphPath) return;
@@ -137,7 +137,7 @@ export function useCanvasInteraction({
         session: {
           groupId,
           graphPath,
-          source: pin as PinData,
+          source: toInteractionPinData(pin),
           screenX: menu?.x ?? 0,
           screenY: menu?.y ?? 0,
         },
@@ -267,13 +267,13 @@ export function useCanvasInteraction({
   );
 
   const onPinPointerDown = useCallback(
-    async (pin: Pin, event: React.PointerEvent, groupId?: string) => {
+    async (pin: PinData, event: React.PointerEvent, groupId?: string) => {
       event.stopPropagation();
       if (event.button !== 0) return;
       const gid = groupId ?? activeGroupIdRef.current;
       const graphPath = resolveTabId(activeResourceRefRef);
-      const projected = pin as PinData;
-      if (!graphPath || !projected.connections || !projected.address) return;
+      const projected = toInteractionPinData(pin);
+      if (!graphPath) return;
       const action = resolvePinPointerAction(event, projected.connections);
       if (action === "disconnect") {
         await handlers.disconnectPort(graphPath, projected.id);

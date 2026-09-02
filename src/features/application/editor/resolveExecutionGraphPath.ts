@@ -1,4 +1,5 @@
-import { getGraphByPath } from "@/features/application/project/projectHelpers";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { lookupGraphResourceByKind } from "@/features/domain/resource/resourceQueries";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
@@ -8,10 +9,14 @@ export function resolveExecutionGraphPath(targetGraphPath?: string): string | un
   return panel?.metadata.role === "editor" ? panel.metadata.resourceRef : undefined;
 }
 
-export function getExecutionEventGraph(targetGraphPath?: string) {
+export function getExecutionEventTarget(targetGraphPath?: string) {
   const graphPath = resolveExecutionGraphPath(targetGraphPath);
   if (!graphPath) return null;
-  const graph = getGraphByPath(graphPath);
-  if (!graph || graph.type !== "event") return null;
-  return { graphPath, graph };
+  const resource = lookupGraphResourceByKind(
+    useResourceStore.getState().resources,
+    graphPath,
+    "event",
+  );
+  if (!resource?.exists) return null;
+  return { graphPath, name: resource.name };
 }

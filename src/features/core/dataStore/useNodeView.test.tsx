@@ -20,7 +20,7 @@ function NodeTitleProbe() {
   return <span data-testid="node-title">{node?.title ?? "(no node)"}</span>;
 }
 
-function installCallProjection(nodeTypeId: string, targetPath: string): void {
+function installCallProjection(nodeTypeId: string): void {
   const fixture = makeEditorProjectionFixture({
     graphPath,
     nodeId,
@@ -28,21 +28,6 @@ function installCallProjection(nodeTypeId: string, targetPath: string): void {
     title: "Calculate Sales",
   });
   useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
-  useGraphProjectionStore.setState((state) => ({
-    graphEntities: {
-      ...state.graphEntities,
-      [graphPath]: {
-        ...state.graphEntities[graphPath],
-        nodes: {
-          ...state.graphEntities[graphPath].nodes,
-          [nodeId]: {
-            ...state.graphEntities[graphPath].nodes[nodeId],
-            subGraphPath: targetPath,
-          },
-        },
-      },
-    },
-  }));
 }
 
 describe("useNodeView Call Function title projection", () => {
@@ -68,7 +53,7 @@ describe("useNodeView Call Function title projection", () => {
     useResourceStore.getState().setSnapshot({
       resources: [buildGraphResourceMeta("function", functionPath, "Stale resource title")],
     });
-    installCallProjection("yssbi.project.function.call", functionPath);
+    installCallProjection("yssbi.project.function.call");
 
     act(() => root.render(<NodeTitleProbe />));
 
@@ -78,7 +63,7 @@ describe("useNodeView Call Function title projection", () => {
   });
 
   it("keeps the projected call title when the resource store is empty", () => {
-    installCallProjection("yssbi.project.function.call", "functions/Missing.yssbi-function");
+    installCallProjection("yssbi.project.function.call");
 
     act(() => root.render(<NodeTitleProbe />));
 

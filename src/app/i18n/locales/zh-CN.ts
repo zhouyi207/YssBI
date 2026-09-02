@@ -863,10 +863,7 @@ export const zhCN = {
     },
   },
   graphDiagnostics: {
-    callFunctionNodeBadge: "Call Function 引用断裂",
-    callFunctionEmptyTarget: "Call Function 未选择目标函数",
-    callFunctionMissingTarget: "目标函数缺失：{{path}}",
-    callFunctionSidebarTooltip: "该图有 {{count}} 处 Call Function 引用断裂",
+    sidebarTooltip: "该图有 {{count}} 条诊断",
   },
   canvas: {
     connection: {
@@ -880,7 +877,6 @@ export const zhCN = {
         "type-mismatch": "这些端口的数据类型不兼容",
         orphan: "孤立端口无法连接",
         capacity: "该端口已达到连接数量上限",
-        "missing-address": "该端口当前无法连接",
       },
       errors: {
         graph_port_not_found: "端口已不存在",

@@ -1,4 +1,8 @@
-import type { DiagnosticDto, DiagnosticLocationDto } from "@/shared/types/domain/editorProjection";
+import type {
+  DiagnosticDto,
+  DiagnosticLocationDto,
+  PortAddressDto,
+} from "@/shared/types/domain/editorProjection";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type {
   ConnectionData,
@@ -8,16 +12,14 @@ import type {
 import {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,
+  portAddressKey,
   resolveNodePinDisplayLabel,
 } from "@/features/domain/editorProjection";
 
 export interface GraphNodeDiagnosticsBucket {
   readonly graphNodes: readonly string[];
   readonly nodes: Readonly<
-    Record<
-      string,
-      Pick<DeepReadonly<NodeData>, "title" | "display" | "diagnostics" | "parameterEditors">
-    >
+    Record<string, Pick<DeepReadonly<NodeData>, "display" | "diagnostics" | "parameterEditors">>
   >;
   readonly pins?: Readonly<Record<string, Pick<PinData, "name" | "display">>>;
   readonly connections?: Readonly<Record<string, Pick<ConnectionData, "output" | "input">>>;
@@ -29,6 +31,27 @@ export interface GraphNodeDiagnostic {
   readonly nodeTitle: string;
   readonly locationLabel: string;
   readonly diagnostic: DeepReadonly<DiagnosticDto>;
+}
+
+export function findPrimaryPortDiagnostic(
+  diagnostics: readonly DeepReadonly<DiagnosticDto>[],
+  address: PortAddressDto,
+): DeepReadonly<DiagnosticDto> | undefined {
+  const addressKey = portAddressKey(address);
+  const matches = diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.location.kind === "port" &&
+      portAddressKey(diagnostic.location.address) === addressKey,
+  );
+  return matches.find((diagnostic) => diagnostic.blocking) ?? matches[0];
+}
+
+export function isUnboundInputDiagnostic(
+  diagnostic: { readonly code: string } | undefined,
+): boolean {
+  return (
+    diagnostic?.code === "compiler.input.unbound" || diagnostic?.code === "node.input.not_connected"
+  );
 }
 
 export function formatDiagnosticLocationLabel(
@@ -76,7 +99,7 @@ export function collectNodeDiagnostics(
     const node = bucket.nodes[nodeId];
     if (!node) return [];
 
-    return (node.diagnostics ?? []).map((diagnostic) => ({
+    return node.diagnostics.map((diagnostic) => ({
       graphPath,
       nodeId,
       nodeTitle: nodeDisplayTitle(node) ?? "",

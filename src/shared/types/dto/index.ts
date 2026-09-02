@@ -7,7 +7,6 @@
 export * from "./database";
 export * from "./project";
 export * from "./applicationSettings";
-export * from "./graph";
 export type * from "./editorProjection";
 export * from "./editorMutation";
 export type * from "./clipboardSubgraph";

@@ -911,10 +911,7 @@ export const enUS = {
     },
   },
   graphDiagnostics: {
-    callFunctionNodeBadge: "Broken Call Function reference",
-    callFunctionEmptyTarget: "Call Function has no target function selected",
-    callFunctionMissingTarget: "Target function missing: {{path}}",
-    callFunctionSidebarTooltip: "{{count}} broken Call reference(s) in this graph",
+    sidebarTooltip: "{{count}} diagnostic(s) in this graph",
   },
   canvas: {
     connection: {
@@ -928,7 +925,6 @@ export const enUS = {
         "type-mismatch": "These port types are incompatible",
         orphan: "Orphaned ports cannot be connected",
         capacity: "This port has reached its connection limit",
-        "missing-address": "This port is not available for connection",
       },
       errors: {
         graph_port_not_found: "The port no longer exists",

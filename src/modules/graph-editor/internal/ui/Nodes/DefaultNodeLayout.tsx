@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { GraphPinController } from "../Pins/GraphPinController";
-import { Pin as PinModel } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
@@ -10,15 +10,13 @@ import { Button } from "@/components/ui/button";
 interface DefaultNodeLayoutProps {
   node: UINode;
   activePinId?: string | null;
-  activePin?: PinModel | null;
+  activePin?: PinData | null;
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
-  onPinClick?: (pinId: string, direction: "input" | "output") => void;
-  onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
-  onPinValueChange?: (pinId: string, value: unknown) => void;
+  onPinPointerDown?: (e: React.PointerEvent, pin: PinData) => void;
 }
 
 const formatInlineSummary = (value: unknown): string => {
@@ -43,11 +41,9 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   contextMenuActions,
   onAddInput,
   onRemovePin,
-  onPinClick,
   onPinPointerDown,
-  onPinValueChange,
 }) => {
-  const inlineParameters = (node.parameterEditors ?? []).filter(
+  const inlineParameters = node.parameterEditors.filter(
     (parameter) => parameter.presentation === "inlineAndDetail",
   );
   const inputsExec = node.inputs.filter(isExecPin);
@@ -67,7 +63,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
     : undefined;
 
   const getPinDragState = useCallback(
-    (pin: PinModel): "normal" | "highlighted" | "dimmed" => {
+    (pin: PinData): "normal" | "highlighted" | "dimmed" => {
       if (!activePin) return "normal";
       if (pin.id === activePin.id) return "highlighted";
       if (isPinCompatible(pin, activePin)) return "highlighted";
@@ -79,15 +75,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]">
+      <div className="flex items-center gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate tracking-[-0.015em]">{node.title}</span>
-          {node.display?.userLabel ? (
+          {node.display.userLabel ? (
             <span className="text-[10px] font-normal opacity-70">{node.display.userLabel}</span>
           ) : null}
-        </div>
-        <div className="shrink-0 font-mono text-[8px] font-medium uppercase tracking-[0.08em] opacity-45">
-          {node.category}
         </div>
       </div>
 
@@ -115,15 +108,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                 return (
                   <GraphPinController
                     key={pin.id}
-                    {...pin}
+                    pin={pin}
                     graphPath={graphPath}
                     groupId={groupId}
                     contextMenuActions={contextMenuActions}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
-                    onPinClick={onPinClick}
                     onPinPointerDown={onPinPointerDown}
-                    onValueChange={onPinValueChange}
                     onRemovePin={removePinHandler}
                   />
                 );
@@ -136,15 +127,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                 return (
                   <GraphPinController
                     key={pin.id}
-                    {...pin}
+                    pin={pin}
                     graphPath={graphPath}
                     groupId={groupId}
                     contextMenuActions={contextMenuActions}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
-                    onPinClick={onPinClick}
                     onPinPointerDown={onPinPointerDown}
-                    onValueChange={onPinValueChange}
                     onRemovePin={removePinHandler}
                   />
                 );
@@ -161,15 +150,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
               return (
                 <GraphPinController
                   key={pin.id}
-                  {...pin}
+                  pin={pin}
                   graphPath={graphPath}
                   groupId={groupId}
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
-                  onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
-                  onValueChange={onPinValueChange}
                   onRemovePin={removePinHandler}
                 />
               );
@@ -182,15 +169,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
               return (
                 <GraphPinController
                   key={pin.id}
-                  {...pin}
+                  pin={pin}
                   graphPath={graphPath}
                   groupId={groupId}
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
-                  onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
-                  onValueChange={onPinValueChange}
                   onRemovePin={removePinHandler}
                 />
               );

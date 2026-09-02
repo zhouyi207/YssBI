@@ -12,9 +12,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphDraftComma
     const store = useGraphProjectionStore.getState();
     const pinA = store.getGraphPin(graphPath, args.pinA);
     const pinB = store.getGraphPin(graphPath, args.pinB);
-    if (!pinA?.address || !pinB?.address) {
-      throw new Error("Cannot connect ports without structured projection addresses");
-    }
+    if (!pinA || !pinB) throw new Error("Cannot connect ports missing from the projection");
     const output = pinA.direction === "output" ? pinA : pinB;
     const input = pinA.direction === "input" ? pinA : pinB;
     if (output.direction !== "output" || input.direction !== "input") {
@@ -22,7 +20,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphDraftComma
     }
     return executeGraphDraftIntent(graphPath, {
       type: "connect",
-      payload: { output: output.address!, input: input.address!, order: null },
+      payload: { output: output.address, input: input.address, order: null },
     });
   },
 };

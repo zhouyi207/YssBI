@@ -17,7 +17,7 @@ import {
 import { setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
 import { editorViewportScope, getViewport, subscribeToViewport } from "@/features/core/viewport";
-import type { Pin } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { captureActiveEditorCommandTarget, type EditorCommandTarget } from "./editorCommandFocus";
 import { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
 import type {
@@ -150,7 +150,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   );
 
   const onPinPointerDown = useCallback(
-    (pin: Pin, event: ReactPointerEvent) => {
+    (pin: PinData, event: ReactPointerEvent) => {
       if (!prepareForInteraction()) return;
       canvasInteraction.onPinPointerDown(pin, event, scope.groupId);
     },

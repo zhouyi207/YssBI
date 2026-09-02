@@ -7,7 +7,6 @@ import type {
   PinData,
   PinView,
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { Node as DomainNode } from "@/shared/types/domain/node";
 import type {
   DiagnosticDto,
   NodeDisplayDto,
@@ -15,20 +14,15 @@ import type {
 } from "@/shared/types/domain/editorProjection";
 import { derivePinConnectionView } from "./pinLinks";
 
-export interface UINode extends Omit<DomainNode, "inputs" | "outputs"> {
-  uiStyle: string;
+export interface UINode {
+  id: string;
+  nodeType: string;
+  title: string;
+  styleId: string;
   position: { x: number; y: number };
-  isInternal?: boolean;
-  paramsKind?: "none" | "variable" | "subGraph" | "dataFrame";
-  variableId?: string;
-  variableName?: string;
-  variableType?: string;
-  subGraphPath?: string;
-  dataframeId?: string;
-  display?: NodeDisplayDto;
-  parameterEditors?: ParameterEditorDto[];
-  diagnostics?: DiagnosticDto[];
-  centerSymbol?: string;
+  display: NodeDisplayDto;
+  parameterEditors: ParameterEditorDto[];
+  diagnostics: DiagnosticDto[];
   inputs: PinView[];
   outputs: PinView[];
 }
@@ -44,18 +38,12 @@ export interface ToUiNodeOptions {
   pins: UiNodePinSlice[];
 }
 
-export function uiNodeIsReroute(node: Pick<UINode, "uiStyle">): boolean {
-  return node.uiStyle === REROUTE_NODE_STYLE_ID;
-}
-
-/** math and compact reroute layouts have no independent header area. */
-export function uiNodeHasNoHeader(node: Pick<UINode, "uiStyle">): boolean {
-  return node.uiStyle === "math" || uiNodeIsReroute(node);
+export function isRerouteNodeView(node: Pick<UINode, "styleId">): boolean {
+  return node.styleId === REROUTE_NODE_STYLE_ID;
 }
 
 /** 由 store 节点数据与 graph-scoped pin 切片构建画布节点视图 */
 export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
-  const title = nodeData.display?.title ?? nodeData.title;
   const inputs: PinView[] = [];
   const outputs: PinView[] = [];
 
@@ -69,20 +57,12 @@ export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
   return {
     id: nodeData.id,
     nodeType: nodeData.nodeType,
-    category: nodeData.category,
-    title,
-    uiStyle: nodeData.display?.styleId ?? "default",
+    title: nodeData.display.title,
+    styleId: nodeData.display.styleId ?? "builtin.default",
     display: nodeData.display,
-    parameterEditors: nodeData.parameterEditors ?? [],
-    diagnostics: nodeData.diagnostics ?? [],
-    position: nodeData.position ?? { x: 0, y: 0 },
-    isInternal: nodeData.isInternal,
-    paramsKind: nodeData.paramsKind,
-    variableId: nodeData.variableId,
-    variableName: nodeData.variableName,
-    variableType: nodeData.variableType,
-    subGraphPath: nodeData.subGraphPath,
-    dataframeId: nodeData.dataframeId,
+    parameterEditors: nodeData.parameterEditors,
+    diagnostics: nodeData.diagnostics,
+    position: nodeData.position,
     inputs,
     outputs,
   };

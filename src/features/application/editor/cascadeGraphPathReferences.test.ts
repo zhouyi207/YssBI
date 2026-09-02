@@ -40,21 +40,6 @@ describe("remapGraphNonViewportUiState", () => {
     useGraphProjectionStore
       .getState()
       .replaceProjection("events/Caller.yssbi-event", fixture.projection, 1);
-    useGraphProjectionStore.setState((state) => ({
-      graphEntities: {
-        ...state.graphEntities,
-        "events/Caller.yssbi-event": {
-          ...state.graphEntities["events/Caller.yssbi-event"],
-          nodes: {
-            ...state.graphEntities["events/Caller.yssbi-event"].nodes,
-            "call-1": {
-              ...state.graphEntities["events/Caller.yssbi-event"].nodes["call-1"],
-              subGraphPath: from,
-            },
-          },
-        },
-      },
-    }));
   });
 
   it("remaps editor focus and selection without mutating domain projections", () => {

@@ -156,11 +156,11 @@ describe("useProjectionLocaleSync", () => {
     );
     expect(useGraphProjectionStore.getState().graphEntities[eventPath]).toMatchObject({
       sourceRevision: 4,
-      nodes: { "local-node": { title: "Localized event" } },
+      nodes: { "local-node": { display: { title: "Localized event" } } },
     });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
       sourceRevision: 7,
-      nodes: { "local-node": { title: "Localized function" } },
+      nodes: { "local-node": { display: { title: "Localized function" } } },
     });
     expect(useViewportStore.getState().viewports[viewportScopeKey(viewportScope)]).toEqual({
       x: 120,
@@ -222,7 +222,7 @@ describe("useProjectionLocaleSync", () => {
       "zh-CN",
     );
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
-      nodes: { "local-node": { title: "中文" } },
+      nodes: { "local-node": { display: { title: "中文" } } },
       requestGeneration: 3,
     });
   });

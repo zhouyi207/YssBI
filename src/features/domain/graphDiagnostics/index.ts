@@ -1,9 +1,8 @@
 export {
-  collectCallFunctionIssuesForBucket,
-  countCallFunctionIssuesByGraph,
-  getCallFunctionIssueForNode,
-  getFunctionResourceName,
-  isFunctionResourceAvailable,
-  type CallFunctionIssue,
-  type CallFunctionIssueKind,
-} from "./callFunctionDiagnostics";
+  collectNodeDiagnostics,
+  findPrimaryPortDiagnostic,
+  formatDiagnosticLocationLabel,
+  isUnboundInputDiagnostic,
+  type GraphNodeDiagnostic,
+  type GraphNodeDiagnosticsBucket,
+} from "./nodeDiagnostics";

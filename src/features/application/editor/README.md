@@ -29,12 +29,12 @@ const commands = useWorkbenchCommandCoordinator();
 <WorkbenchWindow commands={commands} />;
 ```
 
-Only `app/integrations/workbenchCommandCoordinator.ts` combines menu, keyboard,
+Only `app/windows/workbench/integrations/workbenchCommandCoordinator.ts` combines menu, keyboard,
 project, graph, and chart commands. Views receive the typed capability through props.
 
 ### Canvas
 
-`Canvas.tsx` is the sole caller of the panel-scoped hook:
+`GraphCanvasController.tsx` is the sole caller of the panel-scoped hook:
 
 ```tsx
 const canvas = useEditorCanvas({
@@ -46,8 +46,8 @@ const canvas = useEditorCanvas({
 Use `mode: 'preview'` for an inactive Dockview panel. Preview does not mount
 the panel's context-menu actions, global pointer loop, or drop handling.
 
-`CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` /
-`execution` model from Canvas and must not assemble application commands.
+`CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` / `execution` model from
+the controller and must not assemble application commands.
 
 ### Other consumers
 
@@ -55,24 +55,24 @@ Use the narrow capability matching the caller:
 
 ```tsx
 const { updateVariable } = useDetailsCommands();
-const activeGraph = useActiveProjectGraph();
 ```
+
+Project Explorer obtains its active resource through
+`features/application/sidebar/useActiveProjectGraph.ts`.
 
 ## Interface rules
 
-| Capability / Hook                  | Interface                                                                  | Mount/caller                |
-| ---------------------------------- | -------------------------------------------------------------------------- | --------------------------- |
-| `WorkbenchCommandCapability`       | Menu, keyboard, and welcome actions composed by the app                    | `WorkbenchWindow` props     |
-| `useDetailsCommands()`             | Variable mutation required by Details                                      | `DetailsPane`               |
-| `useActiveProjectGraph()`          | Active event/function resource required by Project Explorer                | Project Activity controller |
-| `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx`       |
+| Capability / Hook                  | Interface                                                                  | Mount/caller            |
+| ---------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
+| `WorkbenchCommandCapability`       | Menu, keyboard, and welcome actions composed by the app                    | `WorkbenchWindow` props |
+| `useDetailsCommands()`             | Variable mutation required by Details                                      | `DetailsPane`           |
+| `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | `GraphCanvasController` |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through
 a subtree, or mirror Dockview topology in a store. Add or reuse a named slice
 at the caller seam instead.
 
-Repository-wide dependency direction and Dockview authority rules are defined in
-[`AGENTS.md`](../../../../AGENTS.md).
+Repository-wide dependency direction and Dockview authority rules are defined in [`.rules`](../../../../.rules).
 
 ## Related modules
 

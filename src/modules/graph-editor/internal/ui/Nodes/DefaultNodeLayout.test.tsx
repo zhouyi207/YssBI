@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UINode } from "@/features/core/dataStore/nodeView";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 
 vi.mock("react-i18next", () => ({
@@ -11,7 +12,9 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../Pins/GraphPinController", () => ({
-  GraphPinController: ({ name }: { name: string }) => <span data-testid="pin-name">{name}</span>,
+  GraphPinController: ({ pin }: { pin: { name: string } }) => (
+    <span data-testid="pin-name">{pin.name}</span>
+  ),
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -20,11 +23,9 @@ vi.mock("../Pins/GraphPinController", () => ({
 function projectedNode(): UINode {
   return {
     id: "database-node",
-    graphPath: "events/Main.yssbi-event",
     nodeType: "yssbi.dataframe.source.get",
-    category: [],
     title: "Sales Database",
-    uiStyle: "default",
+    styleId: "builtin.default",
     position: { x: 0, y: 0 },
     display: {
       title: "Sales Database",
@@ -32,22 +33,23 @@ function projectedNode(): UINode {
       iconId: null,
       styleId: null,
     },
+    parameterEditors: [],
+    diagnostics: [],
     inputs: [],
     outputs: [
       {
-        id: "resource-output",
-        nodeId: "database-node",
-        name: "amount",
-        type: "object",
-        direction: "output",
-        kind: "data",
-        dataType: { kind: "Float64" },
+        ...makeProjectedPinData({
+          id: "resource-output",
+          nodeId: "database-node",
+          name: "amount",
+          direction: "output",
+        }),
         connected: false,
         linkCount: 0,
         connectionIds: [],
       },
     ],
-  } as UINode;
+  };
 }
 
 describe("DefaultNodeLayout projection authority", () => {

@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   resolveActiveProjectPath: vi.fn(async () => "D:/projects/demo"),
   saveGraphDraft: vi.fn(async () => true),
   saveChart: vi.fn(async () => true),
-  warnCallFunctionIssuesBeforeSave: vi.fn(),
   showBlockingMessage: vi.fn(),
   showBlockingIpcError: vi.fn(),
 }));
@@ -55,10 +54,6 @@ vi.mock("@/features/application/graphDraft/saveGraphDraft", () => ({
   saveGraphDraft: mocks.saveGraphDraft,
 }));
 
-vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
-  warnCallFunctionIssuesBeforeSave: mocks.warnCallFunctionIssuesBeforeSave,
-}));
-
 vi.mock("@/features/application/execution/openInspectableResult", () => ({
   openInspectableResult: vi.fn(async () => true),
 }));
@@ -75,8 +70,6 @@ vi.mock("./blockingErrorDialog", () => ({
 
 vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => ({}) },
-  getExecutionEventGraph: vi.fn(),
-  resolveExecutionGraphPath: vi.fn(),
   graphHasClearableArtifacts: vi.fn(),
 }));
 
@@ -125,7 +118,6 @@ describe("useProjectOperations saveGraph target authority", () => {
       await operations.saveGraph(target);
     });
 
-    expect(mocks.warnCallFunctionIssuesBeforeSave).toHaveBeenCalledWith(target.resourceRef);
     expect(mocks.saveGraphDraft).toHaveBeenCalledWith(target.resourceRef, target.resourceKind);
   });
 

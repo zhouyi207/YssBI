@@ -1,13 +1,21 @@
 import type { DataType } from "@/shared/types/domain/dataType";
-import type { Pin, PinDirection } from "@/shared/types/domain/pin";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
-import type { PinDataTypeDefinition, PinSlot, PinDefinitionDTO } from "@/shared/types/domain/node";
 import { structCanAccept } from "@/shared/types/domain/typeSystem";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
-export type ConnectionCandidatePin = Pin &
-  Partial<Pick<PinData, "connections" | "kind" | "orphan" | "resolvedType">>;
+export type ConnectionCandidatePin = Pick<
+  PinData,
+  | "id"
+  | "nodeId"
+  | "type"
+  | "direction"
+  | "dataType"
+  | "connections"
+  | "kind"
+  | "orphan"
+  | "resolvedType"
+>;
 
 export type TypeCompatibility = "compatible" | "incompatible" | "indeterminate";
 
@@ -50,41 +58,6 @@ export function getDataTypeCompatibility(
     return structCanAccept(target.inner, source.inner, typeSystem) ? "compatible" : "incompatible";
   }
   return "compatible";
-}
-
-function canAcceptDataType(
-  target: DataType,
-  source: DataType,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  return getDataTypeCompatibility(source, target, typeSystem) === "compatible";
-}
-
-/**
- * 取得 pin 的结构化 DataType（类型判断的唯一来源）。
- * Exec pin 不进入数据类型系统；Data pin 缺少 `dataType` 是 schema/乐观创建错误。
- */
-export function buildPinDataType(pin: Pin): DataType {
-  if (isExecPin(pin)) return { kind: "Any" };
-  if (pin.dataType) return pin.dataType;
-  throw new Error(`Pin ${pin.id} (${pin.name}) is missing structured dataType`);
-}
-
-/**
- * 被拖拽 pin 与一个候选类型是否可连接（方向感知）。
- * - dragged 为 input:候选方为 output 产出 candidateType,需 dragged 的输入能接受它
- * - dragged 为 output:候选方为 input,需其能接受 dragged 的输出类型
- */
-export function pinAcceptsType(
-  draggedPin: Pin,
-  candidateType: DataType,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  const draggedType = buildPinDataType(draggedPin);
-  if (draggedPin.direction === "input") {
-    return canAcceptDataType(draggedType, candidateType, typeSystem);
-  }
-  return canAcceptDataType(candidateType, draggedType, typeSystem);
 }
 
 export function isPinCompatible(
@@ -143,11 +116,11 @@ export type ConnectionCompatibility =
   | { kind: "invalid"; reason: ConnectionInvalidReason };
 
 function connectionKind(pin: ConnectionCandidatePin): "data" | "control" | "effect" {
-  return pin.kind ?? (isExecPin(pin) ? "control" : "data");
+  return pin.kind;
 }
 
 function canAppendOrReplace(pin: ConnectionCandidatePin): boolean {
-  return pin.connections ? pin.connections.canAppend || pin.connections.canReplace : true;
+  return pin.connections.canAppend || pin.connections.canReplace;
 }
 
 export function resolveConnectionCompatibility(
@@ -174,78 +147,7 @@ export function resolveConnectionCompatibility(
     return { kind: "invalid", reason: "typeMismatch" };
   }
 
-  return source.connections?.canReplace || target.connections?.canReplace
+  return source.connections.canReplace || target.connections.canReplace
     ? { kind: "replace" }
     : { kind: "append" };
-}
-
-function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
-  if (pdt === "Unknown") return null;
-  if ("Concrete" in pdt) return pdt.Concrete;
-  if ("TypeVar" in pdt) return null;
-  return null;
-}
-
-// ─── Utilities for auto-connect pin matching ────
-
-function generateSlotName(prefix: string, index: number): string {
-  if (!prefix) {
-    return index < 26 ? String.fromCharCode(65 + index) : `Pin ${index}`;
-  }
-  return `${prefix} ${index + 1}`;
-}
-
-/**
- * Generate the ordered list of initial PinDefinitionDTOs from pin slots.
- * Matches the backend's generate_initial_pins() ordering.
- */
-function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
-  const pins: PinDefinitionDTO[] = [];
-  for (const slot of slots) {
-    if (slot.slotKind === "fixed") {
-      pins.push(slot.pin);
-    } else if (slot.slotKind === "repeatable") {
-      for (let i = 0; i < slot.minCount; i++) {
-        pins.push({ ...slot.template, name: generateSlotName(slot.namePrefix, i) });
-      }
-    }
-    // derivedFromInput produces no initial pins
-  }
-  return pins;
-}
-
-/**
- * Find the index (within pinIds) of the first pin that should be
- * auto-connected to the dragged pin.
- */
-export function findAutoConnectPinIndex(
-  slots: PinSlot[],
-  draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): number {
-  const targetDir: PinDirection = draggedPin.direction === "input" ? "output" : "input";
-  const draggedIsExec = isExecPin(draggedPin);
-  const draggedDataType = draggedIsExec ? null : buildPinDataType(draggedPin);
-
-  const initialPins = generateInitialPinsFromSlots(slots);
-  for (let i = 0; i < initialPins.length; i++) {
-    const p = initialPins[i];
-    if (p.direction !== targetDir) continue;
-
-    if (draggedIsExec) {
-      if (p.kind === "Exec") return i;
-      continue;
-    }
-    if (p.kind === "Exec") continue;
-
-    if (!p.dataType) return i;
-    const concrete = extractConcreteType(p.dataType);
-    if (!concrete) return i; // TypeVar/Unknown -> compatible
-    if (draggedPin.direction === "input") {
-      if (canAcceptDataType(draggedDataType!, concrete, typeSystem)) return i;
-    } else {
-      if (canAcceptDataType(concrete, draggedDataType!, typeSystem)) return i;
-    }
-  }
-  return -1;
 }

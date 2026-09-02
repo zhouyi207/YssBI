@@ -20,9 +20,8 @@ import {
 } from "./observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
-import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
-import { getExecutionEventGraph, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
+import { getExecutionEventTarget, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
 import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 import { ensureGraphExecutionTerminal } from "@/features/core/execution/executionRecording";
@@ -175,7 +174,6 @@ export function useProjectOperations() {
           return;
         }
 
-        warnCallFunctionIssuesBeforeSave(target.resourceRef);
         const saved = await saveGraphDraft(target.resourceRef, target.resourceKind);
         if (!isEditorCommandTargetCurrent(target)) return;
         if (!saved) {
@@ -250,10 +248,9 @@ export function useProjectOperations() {
       const graphPath = resolveExecutionGraphPath(targetGraphPath);
       if (!graphPath) return;
 
-      const target = getExecutionEventGraph(graphPath);
+      const target = getExecutionEventTarget(graphPath);
       if (!target) return;
 
-      const { graph: currentGraph } = target;
       let project: ProjectIdentitySnapshot;
       try {
         project = captureProjectIdentity();
@@ -266,7 +263,7 @@ export function useProjectOperations() {
           const saved = await saveGraphDraft(graphPath, "event");
           if (!saved || !isCurrentProjectIdentity(project)) return;
         }
-        logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
+        logger.exec.info(`执行当前 Event: ${target.name} (${graphPath})`);
 
         const recording: RecordedEvent[] = [];
         const runState: GraphRunOutcomeState = { outcome: "success" };
@@ -294,7 +291,7 @@ export function useProjectOperations() {
       } catch (e) {
         if (!isCurrentProjectIdentity(project)) return;
         if (isExecutionCancelledError(e)) {
-          logger.exec.info(`执行已中断: ${currentGraph.name} (${graphPath})`);
+          logger.exec.info(`执行已中断: ${target.name} (${graphPath})`);
           finalizeExecutionRun(graphPath, [], "cancelled");
           return;
         }

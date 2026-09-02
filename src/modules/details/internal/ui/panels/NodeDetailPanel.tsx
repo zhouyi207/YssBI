@@ -11,7 +11,7 @@ import type { PinData, PinView } from "@/features/domain/editorProjection/graphR
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
 import { NodePinInterfacePanel } from "../node/NodePinInterfacePanel";
-import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import type { NodePinViewModel } from "../node/NodePinViewModel";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 import { DetailBadge, DetailText } from "../shared/DetailText";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
@@ -63,26 +63,14 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   );
 
   const pinSpecs = useMemo(() => {
-    const toSpec = (pin: PinView): ResolvedPinSpec => ({
+    const toViewModel = (pin: PinView): NodePinViewModel => ({
       id: pin.id,
-      name: pin.display?.instanceLabel ?? pin.display?.label ?? pin.name,
+      name: pin.display.instanceLabel ?? pin.display.label,
       direction: pin.direction,
-      kind: pin.type === "exec" ? "Exec" : "Data",
-      typeLabel: pin.resolvedType?.display ?? pin.type,
-      optional: false,
-      slotKind:
-        pin.instanceKind === "userCreated"
-          ? "repeatable"
-          : pin.instanceKind === "derived"
-            ? "derivedFromInput"
-            : "fixed",
-      connected: pin.connected,
-      connectionIds: pin.connectionIds,
-      address: pin.address,
     });
     return {
-      inputs: pins.filter((pin) => pin.direction === "input").map(toSpec),
-      outputs: pins.filter((pin) => pin.direction === "output").map(toSpec),
+      inputs: pins.filter((pin) => pin.direction === "input").map(toViewModel),
+      outputs: pins.filter((pin) => pin.direction === "output").map(toViewModel),
     };
   }, [pins]);
 
@@ -108,22 +96,20 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
           valueClassName="min-w-0"
           className="min-w-0 truncate font-medium"
         >
-          {node.display?.title ?? node.title}
+          {node.display.title}
         </DetailReadonlyField>
       </DetailForm>
 
-      {node.capabilities && (
-        <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
-          <div className="flex flex-wrap gap-1.5 px-1 py-2">
-            {Object.entries(node.capabilities)
-              .filter(([, enabled]) => enabled)
-              .map(([capability]) => (
-                <DetailBadge key={capability}>{capability}</DetailBadge>
-              ))}
-          </div>
-        </DetailCollapsibleSection>
-      )}
-      {node.diagnostics && node.diagnostics.length > 0 && (
+      <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
+        <div className="flex flex-wrap gap-1.5 px-1 py-2">
+          {Object.entries(node.capabilities)
+            .filter(([, enabled]) => enabled)
+            .map(([capability]) => (
+              <DetailBadge key={capability}>{capability}</DetailBadge>
+            ))}
+        </div>
+      </DetailCollapsibleSection>
+      {node.diagnostics.length > 0 && (
         <DetailCollapsibleSection title={t("detail.sections.diagnostics")} defaultOpen>
           <div className="space-y-2 px-1 py-2">
             {node.diagnostics.map((diagnostic, index) => {
@@ -132,7 +118,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
                 graphBucket,
                 nodeId,
               );
-              const nodeTitle = node.display?.title ?? node.title;
+              const nodeTitle = node.display.title;
               return (
                 <div key={`${diagnostic.code}-${index}`} className="flex items-start gap-2">
                   <DetailBadge>{diagnostic.severity}</DetailBadge>

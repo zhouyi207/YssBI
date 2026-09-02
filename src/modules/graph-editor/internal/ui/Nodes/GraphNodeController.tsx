@@ -1,9 +1,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
-import { useCallFunctionIssue } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
 import { useNodeView } from "@/features/core/dataStore/useNodeView";
-import { uiNodeHasNoHeader, uiNodeIsReroute } from "@/features/core/dataStore/nodeView";
+import { isRerouteNodeView } from "@/features/core/dataStore/nodeView";
 import { useExecutionRead } from "@/features/core/execution/read";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useNodeExecution } from "@/features/core/node";
@@ -12,13 +10,12 @@ import {
   getNodeClassName,
   getNodeMinSize,
 } from "@/features/domain/node/utils";
-import type { Pin as PinModel } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NodeContextMenu } from "../ContextMenu";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 import { GraphNodeView } from "./GraphNodeView";
-import { MathNodeLayout } from "./MathNodeLayout";
 import { RerouteNodeLayout } from "./RerouteNodeLayout";
 
 export interface GraphNodeControllerProps {
@@ -26,14 +23,12 @@ export interface GraphNodeControllerProps {
   graphPath?: string;
   groupId?: string;
   selected?: boolean;
-  activePin?: PinModel | null;
+  activePin?: PinData | null;
   contextMenuActions?: GraphContextMenuActions | null;
   onPointerDown?: (nodeId: string, event: React.PointerEvent) => void;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
-  onPinClick?: (pinId: string, direction: "input" | "output") => void;
-  onPinPointerDown?: (pin: PinModel, event: React.PointerEvent) => void;
-  onPinValueChange?: (pinId: string, value: unknown) => void;
+  onPinPointerDown?: (pin: PinData, event: React.PointerEvent) => void;
 }
 
 export const GraphNodeController = memo(function GraphNodeController({
@@ -46,11 +41,8 @@ export const GraphNodeController = memo(function GraphNodeController({
   onPointerDown,
   onAddInput,
   onRemovePin,
-  onPinClick,
   onPinPointerDown,
-  onPinValueChange,
 }: GraphNodeControllerProps) {
-  const { t } = useTranslation();
   const node = useNodeView(id, graphPath);
   const graphStatus = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.status ?? "idle") : "idle",
@@ -60,7 +52,6 @@ export const GraphNodeController = memo(function GraphNodeController({
   );
   const useStoreExecVisual = graphStatus !== "running" && !isReplay;
   const { isCompleted, hasError } = useNodeExecution(id, graphPath, useStoreExecVisual);
-  const callIssue = useCallFunctionIssue(graphPath, id);
   const graphBucket = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath] : undefined,
   );
@@ -76,7 +67,7 @@ export const GraphNodeController = memo(function GraphNodeController({
     return ![...node.inputs, ...node.outputs].some((pin) => isPinCompatible(pin, activePin));
   }, [activePin, node]);
   const handlePinPointerDown = useCallback(
-    (event: React.PointerEvent, pin: PinModel) => {
+    (event: React.PointerEvent, pin: PinData) => {
       onPinPointerDown?.(pin, event);
     },
     [onPinPointerDown],
@@ -93,22 +84,18 @@ export const GraphNodeController = memo(function GraphNodeController({
     contextMenuActions,
     onAddInput,
     onRemovePin,
-    onPinClick,
     onPinPointerDown: handlePinPointerDown,
-    onPinValueChange,
   };
-  const contentSlot = uiNodeIsReroute(node) ? (
+  const isReroute = isRerouteNodeView(node);
+  const contentSlot = isReroute ? (
     <RerouteNodeLayout
       node={node}
       activePinId={activePin?.id}
       graphPath={graphPath}
       groupId={groupId}
       contextMenuActions={contextMenuActions}
-      onPinClick={onPinClick}
       onPinPointerDown={handlePinPointerDown}
     />
-  ) : node.uiStyle === "math" ? (
-    <MathNodeLayout {...layoutProps} />
   ) : (
     <DefaultNodeLayout {...layoutProps} />
   );
@@ -117,22 +104,24 @@ export const GraphNodeController = memo(function GraphNodeController({
   ) : isCompleted ? (
     <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-green-500 shadow-lg shadow-green-500/40" />
   ) : null;
+  const primaryDiagnostic =
+    node.diagnostics.find((diagnostic) => diagnostic.blocking) ?? node.diagnostics[0];
   const diagnosticBadgeSlot =
-    !hasError && callIssue ? (
+    !hasError && primaryDiagnostic ? (
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className="absolute -top-1 -left-1 h-3 w-3 rounded-full bg-amber-400 shadow-sm"
-            aria-label={t("graphDiagnostics.callFunctionNodeBadge")}
+            className={`absolute -top-1 -left-1 h-3 w-3 rounded-full shadow-sm ${
+              primaryDiagnostic.severity === "error"
+                ? "bg-red-500"
+                : primaryDiagnostic.severity === "warning"
+                  ? "bg-amber-400"
+                  : "bg-blue-400"
+            }`}
+            aria-label={primaryDiagnostic.message}
           />
         </TooltipTrigger>
-        <TooltipContent side="top">
-          {callIssue.kind === "empty_target"
-            ? t("graphDiagnostics.callFunctionEmptyTarget")
-            : t("graphDiagnostics.callFunctionMissingTarget", {
-                path: callIssue.subGraphPath ?? "",
-              })}
-        </TooltipContent>
+        <TooltipContent side="top">{primaryDiagnostic.message}</TooltipContent>
       </Tooltip>
     ) : null;
   const contextMenuSlot =
@@ -155,7 +144,7 @@ export const GraphNodeController = memo(function GraphNodeController({
     hasError,
     isCompleted,
   });
-  const minSize = getNodeMinSize(uiNodeHasNoHeader(node), uiNodeIsReroute(node));
+  const minSize = getNodeMinSize(isReroute);
 
   return (
     <GraphNodeView

@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction/graphInteractionStore";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { getConnectPreview } from "./connectPreview";
 
-const sourcePin = {
+const sourcePin = makeProjectedPinData({
   id: "source",
   nodeId: "node-a",
   name: "Source",
-  type: "object",
   direction: "output",
   dataType: { kind: "Float64" },
-} as PinData;
+});
 
 function start(graphPath: string, groupId: string, worldX: number, connectionId: string) {
   useGraphInteractionStore.getState().startInteraction(graphPath, {

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PortKindDto } from "@/shared/types/dto/editorProjection";
 import type { PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { UINode } from "@/features/core/dataStore/nodeView";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { GraphNodeView } from "./GraphNodeView";
 import { RerouteNodeLayout } from "./RerouteNodeLayout";
 
@@ -36,11 +37,14 @@ afterEach(() => {
 function projectedPin(nodeId: string, kind: PortKindDto, direction: "input" | "output"): PinView {
   const id = `${nodeId}:${direction}`;
   return {
-    id,
-    nodeId,
-    name: direction === "input" ? "Input" : "Output",
-    type: kind === "data" ? "object" : "exec",
-    direction,
+    ...makeProjectedPinData({
+      id,
+      nodeId,
+      name: direction === "input" ? "Input" : "Output",
+      direction,
+      dataType: kind === "data" ? { kind: "Float64" } : undefined,
+      kind,
+    }),
     kind,
     address: { kind: "declared", nodeId, portKey: direction },
     resolvedType:
@@ -58,10 +62,17 @@ function projectedReroute(kind: PortKindDto): UINode {
   return {
     id,
     nodeType: `opaque.test.${kind}`,
-    category: ["Hidden"],
     title: `Forbidden ${kind} title`,
-    uiStyle: "builtin.reroute",
+    styleId: "builtin.reroute",
     position: { x: 135, y: 246 },
+    display: {
+      title: `Forbidden ${kind} title`,
+      userLabel: null,
+      iconId: null,
+      styleId: "builtin.reroute",
+    },
+    parameterEditors: [],
+    diagnostics: [],
     inputs: [projectedPin(id, kind, "input")],
     outputs: [projectedPin(id, kind, "output")],
   };

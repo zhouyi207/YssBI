@@ -48,7 +48,7 @@ export function NodeInspectPanel({ graphPath, nodeId }: { graphPath: string; nod
             nodeId={nodeId}
             locale={i18n.language}
             parameter={parameter}
-            diagnostics={node.diagnostics ?? []}
+            diagnostics={node.diagnostics}
             formatFallback={formatProjectedValue}
           />
         ))}

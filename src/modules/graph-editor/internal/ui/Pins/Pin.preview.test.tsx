@@ -18,6 +18,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { resetResultQueryProject } from "@/features/application/results";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import type { GraphContextMenuActions } from "@/features/application/editor";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphPinController } from "./GraphPinController";
 import { pinConnectionFeedbackAttributes } from "./GraphPinView";
 
@@ -96,6 +98,55 @@ describe("Pin preview production path", () => {
     vi.restoreAllMocks();
   });
 
+  it("emits cloneable Pin data without component callbacks on pointer down", () => {
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    expect(
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
+        .applied,
+    ).toBe(true);
+    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    if (!pin) throw new Error("expected projected output pin");
+    const onPinPointerDown = vi.fn<(event: React.PointerEvent, pin: PinData) => void>();
+    const asyncAction = vi.fn(async () => true);
+    const contextMenuActions: GraphContextMenuActions = {
+      selectNode: vi.fn(),
+      copyNode: vi.fn(),
+      cutNode: asyncAction,
+      duplicateNode: asyncAction,
+      deleteNode: asyncAction,
+      breakAllNodeLinks: asyncAction,
+      selectLinkedNodes: vi.fn(),
+      disconnectPin: asyncAction,
+      resetPinValue: asyncAction,
+      removeRepeatablePin: vi.fn(async () => undefined),
+    };
+
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <GraphPinController
+            pin={pin}
+            graphPath={graphPath}
+            contextMenuActions={contextMenuActions}
+            onPinPointerDown={onPinPointerDown}
+          />
+        </TooltipProvider>,
+      ),
+    );
+    const pinElement = container.querySelector(
+      `[data-pin-connection-anchor="${fixture.outputKey}"]`,
+    );
+    if (!pinElement) throw new Error("expected rendered pin");
+    act(() => {
+      pinElement.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+
+    expect(onPinPointerDown).toHaveBeenCalledOnce();
+    const emittedPin = onPinPointerDown.mock.calls[0][1];
+    expect(emittedPin).not.toHaveProperty("contextMenuActions");
+    expect(() => structuredClone(emittedPin)).not.toThrow();
+  });
+
   it("routes output View through authoritative structured Pin history", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
@@ -111,7 +162,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <GraphPinController {...pin} graphPath={graphPath} />
+          <GraphPinController pin={pin} graphPath={graphPath} />
         </TooltipProvider>,
       ),
     );
@@ -175,7 +226,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <GraphPinController {...pin} graphPath={graphPath} />
+          <GraphPinController pin={pin} graphPath={graphPath} />
         </TooltipProvider>,
       ),
     );
@@ -236,7 +287,7 @@ describe("Pin preview production path", () => {
     act(() =>
       root.render(
         <TooltipProvider>
-          <GraphPinController {...pin} graphPath={functionPath} />
+          <GraphPinController pin={pin} graphPath={functionPath} />
         </TooltipProvider>,
       ),
     );

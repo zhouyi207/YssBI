@@ -2,7 +2,7 @@ import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import type { NodeData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "./portAddressKey";
 
-type NodeLabelSource = Pick<NodeData, "title" | "display">;
+type NodeLabelSource = Pick<NodeData, "display">;
 type PinLabelSource = Pick<PinData, "name" | "display">;
 
 export interface NodePinDisplayBucket {
@@ -16,12 +16,12 @@ function nonEmpty(value: string | null | undefined): string | null {
 }
 
 export function nodeDisplayTitle(node: NodeLabelSource | undefined): string | null {
-  return nonEmpty(node?.display?.title) ?? nonEmpty(node?.title);
+  return nonEmpty(node?.display.title);
 }
 
 export function pinDisplayTitle(pin: PinLabelSource | undefined): string | null {
   return (
-    nonEmpty(pin?.display?.instanceLabel) ?? nonEmpty(pin?.display?.label) ?? nonEmpty(pin?.name)
+    nonEmpty(pin?.display.instanceLabel) ?? nonEmpty(pin?.display.label) ?? nonEmpty(pin?.name)
   );
 }
 

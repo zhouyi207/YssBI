@@ -25,7 +25,6 @@ impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
         Ok(Self {
             basis: ProjectionBasis {
                 graph_path: model.basis.graph_path.as_str().into(),
-                graph_revision: model.basis.graph_revision.get(),
                 registry_fingerprint: RegistryFingerprint::from_bytes(
                     model.basis.registry_fingerprint,
                 ),
@@ -72,7 +71,6 @@ fn map_node(
 ) -> Result<EditorNodeProjectionDto, TransportMappingError> {
     Ok(EditorNodeProjectionDto {
         graph_path: model.graph_path.as_str().into(),
-        source_revision: model.source_revision.get(),
         node_id: node.node_id.to_string().into(),
         node_type_id: node.node_type.as_str().into(),
         position: NodePositionDto {
@@ -312,7 +310,6 @@ mod tests {
         let model = EditorProjectionModel {
             basis: EditorProjectionBasis {
                 graph_path: graph_path.clone(),
-                graph_revision: GraphRevision::new(7),
                 registry_fingerprint: [0x6f; 32],
                 resource_versions: BTreeMap::from([(
                     ResourceKey::new("database/source"),
@@ -390,12 +387,13 @@ mod tests {
         )
         .expect("editor wire should serialize");
         assert_eq!(wire["basis"]["graphPath"], "events/contract.yssbi-event");
-        assert_eq!(wire["basis"]["graphRevision"], 7);
+        assert!(wire["basis"].get("graphRevision").is_none());
         assert_eq!(
             wire["basis"]["resourceVersions"],
             json!({"database/source": "12"})
         );
         assert_eq!(wire["nodes"][0]["nodeId"], node_id.to_string());
+        assert!(wire["nodes"][0].get("sourceRevision").is_none());
         assert_eq!(wire["nodes"][0]["display"]["iconId"], "builtin.constants");
         assert_eq!(wire["nodes"][0]["ports"][0]["templateKey"], "value");
         assert_eq!(wire["connections"][0]["output"]["portKey"], "value");

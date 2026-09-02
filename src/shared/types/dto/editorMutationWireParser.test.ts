@@ -24,7 +24,6 @@ function projection(path: string, revision: number) {
   return {
     basis: {
       graphPath: path,
-      graphRevision: revision,
       registryFingerprint: "0".repeat(64),
       resourceVersions: {},
     },
@@ -64,7 +63,6 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
   value.nodes = [
     {
       graphPath,
-      sourceRevision: 5,
       nodeId,
       nodeTypeId: "core.constant",
       position: { x: 1, y: 2 },

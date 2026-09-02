@@ -1,7 +1,7 @@
 /**
  * Pin runtime semantics — single source for exec/data discrimination,
- * display labels, and theme keys. Type compatibility uses `dataType` via
- * `buildPinDataType` in pinCompatibility; never infer from bare `type` strings.
+ * display labels, and theme keys. Editor connection compatibility uses the
+ * Rust-projected resolved type and never infers data semantics from bare strings.
  */
 
 import type { DataType } from "./dataType";

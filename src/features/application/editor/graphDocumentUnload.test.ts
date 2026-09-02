@@ -98,7 +98,8 @@ describe("graph document lifecycle ownership", () => {
     await expect(reopened).resolves.toBe(true);
 
     expect(
-      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].title,
+      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].display
+        .title,
     ).toBe("Reopened load");
   });
 
@@ -123,7 +124,8 @@ describe("graph document lifecycle ownership", () => {
 
     expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);
     expect(
-      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].title,
+      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].display
+        .title,
     ).toBe("Reopened");
     expect(vi.mocked(GraphService.unloadProjectGraph).mock.calls[0]?.[2]).toBe(
       "project-instance-1",

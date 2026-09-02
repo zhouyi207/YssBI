@@ -47,7 +47,6 @@ const mocks = vi.hoisted(() => {
   const clearResourceDocumentState = vi.fn();
   const showBlockingIpcError = vi.fn();
   const showBlockingMessage = vi.fn();
-  const warnBeforeSave = vi.fn();
   const releasePane = vi.fn();
   const releaseEditorViewport = vi.fn();
   const clearDetailFocusForClosedPanel = vi.fn();
@@ -115,7 +114,6 @@ const mocks = vi.hoisted(() => {
       clearResourceDocumentState,
       showBlockingIpcError,
       showBlockingMessage,
-      warnBeforeSave,
       releasePane,
       releaseEditorViewport,
       clearDetailFocusForClosedPanel,
@@ -177,7 +175,6 @@ const mocks = vi.hoisted(() => {
     clearResourceDocumentState,
     showBlockingIpcError,
     showBlockingMessage,
-    warnBeforeSave,
     releasePane,
     releaseEditorViewport,
     clearDetailFocusForClosedPanel,
@@ -259,10 +256,6 @@ vi.mock("@/features/core/projectLifecycle/projectLifecycleAuthority", () => ({
     mocks.project.available &&
     identity.projectInstanceId === mocks.project.projectInstanceId &&
     identity.epoch === mocks.project.epoch,
-}));
-
-vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
-  warnCallFunctionIssuesBeforeSave: mocks.warnBeforeSave,
 }));
 
 vi.mock("./blockingErrorDialog", () => ({

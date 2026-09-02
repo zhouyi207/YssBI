@@ -164,7 +164,6 @@ pub enum OpenGraphApplicationError {
 pub struct OpenGraphApplicationReceipt {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
-    graph_revision: GraphRevision,
     document: Arc<GraphDocument>,
     analysis: GraphAnalysis,
     projection: EditorProjectionModel,
@@ -181,7 +180,6 @@ impl OpenGraphApplicationReceipt {
         Self {
             project_instance_id,
             graph_path,
-            graph_revision: document.revision,
             document,
             analysis,
             projection,
@@ -194,10 +192,6 @@ impl OpenGraphApplicationReceipt {
 
     pub fn graph_path(&self) -> &GraphResourcePath {
         &self.graph_path
-    }
-
-    pub const fn graph_revision(&self) -> GraphRevision {
-        self.graph_revision
     }
 
     pub fn document(&self) -> &GraphDocument {

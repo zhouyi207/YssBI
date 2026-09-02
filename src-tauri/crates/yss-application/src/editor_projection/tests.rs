@@ -200,7 +200,6 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
     })
     .expect("complete neutral facts should produce an application model");
 
-    assert_eq!(model.basis.graph_revision, GraphRevision::new(7));
     assert_eq!(
         model
             .basis

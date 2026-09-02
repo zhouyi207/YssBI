@@ -12,7 +12,6 @@ use yss_graph_protocol::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorProjectionBasis {
     pub graph_path: GraphResourcePath,
-    pub graph_revision: GraphRevision,
     pub registry_fingerprint: [u8; 32],
     pub resource_versions: ResourceVersionSet,
 }

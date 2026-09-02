@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { usePinInput } from "@/features/core/pin";
-import { Select } from "@/shared/ui";
-import type { DataType, PinMetaDataDTO } from "@/shared/types/domain";
+import type { DataType } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
@@ -10,9 +9,7 @@ export interface PinInputProps {
   nodeId: string;
   graphPath: string;
   dataType?: DataType;
-  metaData?: PinMetaDataDTO;
   value?: unknown;
-  onValueChange?: (value: unknown) => void;
 }
 
 const INPUT_CLASS =
@@ -69,9 +66,7 @@ export const PinInput: React.FC<PinInputProps> = ({
   nodeId,
   graphPath,
   dataType,
-  metaData,
   value: initialValue,
-  onValueChange,
 }) => {
   const {
     value,
@@ -89,7 +84,6 @@ export const PinInput: React.FC<PinInputProps> = ({
     graphPath,
     dataType,
     initialValue,
-    onValueChange,
   });
 
   const isNumeric = inputKey === "Int64" || inputKey === "Float64";
@@ -108,33 +102,6 @@ export const PinInput: React.FC<PinInputProps> = ({
   const measureKey = isNumeric ? inputText : strText;
   const placeholder = inputKey === "string" ? "text" : undefined;
   const { ref, width } = useAutoWidth(measureKey, placeholder);
-
-  const isDropdown =
-    metaData?.showWidget &&
-    metaData?.widgetType === "dropdown" &&
-    (metaData?.widgetOptions?.length ?? 0) > 0;
-
-  if (isDropdown && metaData?.widgetOptions) {
-    const strValue =
-      inputKey === "string"
-        ? value != null
-          ? String(value)
-          : (metaData.widgetOptions[0] ?? "")
-        : String(value ?? "");
-    return (
-      <div className="min-w-[60px] max-w-[120px]" onClick={stop} onPointerDown={stop}>
-        <Select
-          value={strValue}
-          onChange={(v) => {
-            handleChange(v);
-            savePinValue(v);
-          }}
-          options={metaData.widgetOptions}
-          className="text-[10px] h-[18px] !w-full"
-        />
-      </div>
-    );
-  }
 
   switch (inputKey) {
     case "Int64":

@@ -13,7 +13,7 @@ export const moveConnectionsCommand: CommandHandler<MoveConnectionsArgs, GraphDr
       const store = useGraphProjectionStore.getState();
       const source = store.getGraphPin(graphPath, args.sourcePinId);
       const target = store.getGraphPin(graphPath, args.targetPinId);
-      if (!source?.address || !target?.address) return false;
+      if (!source || !target) return false;
       return executeGraphDraftIntent(graphPath, {
         type: "moveConnections",
         payload: { source: source.address, target: target.address },

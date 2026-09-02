@@ -9,7 +9,6 @@ export interface FunctionEditorProjectionDto {
 
 export interface ProjectionBasisDto {
   graphPath: string;
-  graphRevision: number;
   registryFingerprint: string;
   resourceVersions: Record<string, string>;
 }
@@ -55,7 +54,6 @@ export type GraphProjectionReplacementDto =
 
 export interface EditorNodeProjectionDto {
   graphPath: string;
-  sourceRevision: number;
   nodeId: string;
   nodeTypeId: string;
   position: NodePositionDto;

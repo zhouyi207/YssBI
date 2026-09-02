@@ -33,7 +33,7 @@ export interface GraphPinViewProps {
   direction: "input" | "output";
   isConnected: boolean;
   contextMenuOpen: boolean;
-  validationWarning?: string;
+  diagnosticMessage?: string;
   dragStyle?: CSSProperties;
   connectionFeedback: GraphPinConnectionFeedbackViewModel | null;
   visualSpec: PinVisualSpec;
@@ -187,7 +187,7 @@ export function GraphPinView({
   direction,
   isConnected,
   contextMenuOpen,
-  validationWarning,
+  diagnosticMessage,
   dragStyle,
   connectionFeedback,
   visualSpec,
@@ -211,7 +211,7 @@ export function GraphPinView({
           style={dragStyle}
           data-pin-id={id}
           {...pinConnectionFeedbackAttributes(connectionFeedback)}
-          data-validation-warning={validationWarning ? "true" : undefined}
+          data-diagnostic={diagnosticMessage ? "true" : undefined}
           onContextMenu={onContextMenu}
         >
           <div
@@ -219,7 +219,7 @@ export function GraphPinView({
             className={`relative z-20 flex h-6 w-6 shrink-0 cursor-crosshair items-center justify-center rounded-full pin-circle ${
               direction === "input" ? "mr-1" : "ml-1"
             } ${contextMenuOpen ? "ring-2 ring-[var(--accent-color)]/60" : ""} ${
-              validationWarning ? "ring-2 ring-amber-500/80" : ""
+              diagnosticMessage ? "ring-2 ring-amber-500/80" : ""
             } ${pinConnectionFeedbackClass(connectionFeedback)}`}
             onPointerDown={onPointerDown}
             onClick={onClick}

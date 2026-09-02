@@ -20,12 +20,6 @@ export function validateEditorGraphProjection(
       `projection basis graph path '${projection.basis.graphPath}' does not match projection graph path '${projection.graphPath}'`,
     );
   }
-  if (projection.basis.graphRevision !== projection.sourceRevision) {
-    throw new Error(
-      `projection basis revision ${projection.basis.graphRevision} does not match source revision ${projection.sourceRevision}`,
-    );
-  }
-
   const nodeIds = new Set<string>();
   const portDirections = new Map<string, "input" | "output">();
   for (const node of projection.nodes) {
@@ -72,12 +66,6 @@ function validateNode(
       `projection node '${node.nodeId}' graph path '${node.graphPath}' does not match projection graph path '${projection.graphPath}'`,
     );
   }
-  if (node.sourceRevision !== projection.sourceRevision) {
-    throw new Error(
-      `projection node '${node.nodeId}' revision ${node.sourceRevision} does not match source revision ${projection.sourceRevision}`,
-    );
-  }
-
   for (const parameter of node.parameterEditors) {
     if (
       parameter.configuration !== null &&

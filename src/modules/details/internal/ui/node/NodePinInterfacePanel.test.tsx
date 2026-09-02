@@ -5,7 +5,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
+import type { NodePinViewModel } from "./NodePinViewModel";
 import { NodePinInterfacePanel } from "./NodePinInterfacePanel";
 
 const connectPinsById = vi.hoisted(() => vi.fn());
@@ -38,26 +40,16 @@ vi.mock("react-i18next", async (importOriginal) => ({
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-const input: ResolvedPinSpec = {
+const input: NodePinViewModel = {
   id: "input-value",
   name: "Value",
   direction: "input",
-  kind: "Data",
-  typeLabel: "Float64",
-  optional: false,
-  connected: false,
-  connectionIds: [],
 };
 
-const output: ResolvedPinSpec = {
+const output: NodePinViewModel = {
   id: "output-result",
   name: "Result",
   direction: "output",
-  kind: "Data",
-  typeLabel: "Float64",
-  optional: false,
-  connected: false,
-  connectionIds: [],
 };
 
 const graphPath = "events/Main.yssbi-event";
@@ -69,11 +61,10 @@ function makePin(
   direction: "input" | "output",
   kind: "data" | "control" = "data",
 ) {
-  return {
+  return makeProjectedPinData({
     id,
     nodeId,
     name,
-    type: kind === "control" ? ("exec" as const) : ("object" as const),
     direction,
     dataType: kind === "control" ? undefined : { kind: "Float64" as const },
     kind,
@@ -85,6 +76,35 @@ function makePin(
       canReplace: true,
       canMove: true,
     },
+  });
+}
+
+function makeNode(
+  id: string,
+  nodeType: string,
+  title: string,
+  inputs: string[],
+  outputs: string[],
+): NodeData {
+  return {
+    id,
+    graphPath,
+    nodeType,
+    inputs,
+    outputs,
+    position: { x: 0, y: 0 },
+    display: { title, userLabel: null, iconId: null, styleId: "builtin.default" },
+    parameterEditors: [],
+    capabilities: {
+      managed: false,
+      canCopy: true,
+      canDelete: true,
+      canEditLabel: true,
+      canEditParameters: false,
+      hasDynamicPorts: false,
+      supportsInlineLiterals: true,
+    },
+    diagnostics: [],
   };
 }
 
@@ -92,7 +112,6 @@ function graphBucket(): GraphEntityBucket {
   return {
     basis: {
       graphPath,
-      graphRevision: 1,
       registryFingerprint: "fingerprint",
       resourceVersions: {},
     },
@@ -102,36 +121,9 @@ function graphBucket(): GraphEntityBucket {
     outcome: { type: "success" },
     hasBlockingDiagnostics: false,
     nodes: {
-      current: {
-        id: "current",
-        graphPath,
-        nodeType: "test.current",
-        category: [],
-        title: "Current node",
-        inputs: [input.id],
-        outputs: [output.id],
-        position: { x: 0, y: 0 },
-      },
-      source: {
-        id: "source",
-        graphPath,
-        nodeType: "test.source",
-        category: [],
-        title: "Source node",
-        inputs: [],
-        outputs: ["source-output"],
-        position: { x: 0, y: 0 },
-      },
-      target: {
-        id: "target",
-        graphPath,
-        nodeType: "test.target",
-        category: [],
-        title: "Target node",
-        inputs: ["target-input"],
-        outputs: [],
-        position: { x: 0, y: 0 },
-      },
+      current: makeNode("current", "test.current", "Current node", [input.id], [output.id]),
+      source: makeNode("source", "test.source", "Source node", [], ["source-output"]),
+      target: makeNode("target", "test.target", "Target node", ["target-input"], []),
     },
     pins: {
       [input.id]: makePin(input.id, "current", input.name, "input"),

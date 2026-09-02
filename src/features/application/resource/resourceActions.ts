@@ -1,6 +1,6 @@
 import { useResourceStore, type ResourceRef } from "@/features/core/resource";
 import { commitAfterCommand } from "./resourceIndexCoordinator";
-import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAccess";
+import { getGraphSourceRevision } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
@@ -24,9 +24,9 @@ import { executeDatabaseMutation } from "@/features/application/dataManagement/d
 
 export type { GraphResourceKind };
 
-function graphRevision(graphPath: string): number {
-  const basis = getGraphProjectionBasis(useGraphProjectionStore.getState(), graphPath);
-  if (basis) return basis.graphRevision;
+function graphAuthorityRevision(graphPath: string): number {
+  const projected = getGraphSourceRevision(useGraphProjectionStore.getState(), graphPath);
+  if (projected !== undefined) return projected;
 
   const resource = Object.values(useResourceStore.getState().resources).find(
     (candidate) =>
@@ -82,7 +82,7 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
 
   if (ref.kind === "event" || ref.kind === "function") {
     const context = captureProjectCommandContext();
-    const expectedRevision = graphRevision(ref.id);
+    const expectedRevision = graphAuthorityRevision(ref.id);
     const lifecycleToken = beginGraphRenameLifecycle(ref.id);
     const result = await GraphService.renameGraphResource(
       context.projectInstanceId,
@@ -161,7 +161,7 @@ export async function duplicateGraphResource(graphPath: string): Promise<string>
   const result = await GraphService.duplicateGraph(
     context.projectInstanceId,
     graphPath,
-    graphRevision(graphPath),
+    graphAuthorityRevision(graphPath),
     context.operationId,
   );
   await submitCurrentResult(context, result);
@@ -173,7 +173,7 @@ export async function duplicateGraphResource(graphPath: string): Promise<string>
 export async function deleteResource(ref: ResourceRef): Promise<void> {
   if (ref.kind === "event" || ref.kind === "function") {
     const context = captureProjectCommandContext();
-    const expectedRevision = graphRevision(ref.id);
+    const expectedRevision = graphAuthorityRevision(ref.id);
     const result = await GraphService.removeGraph(
       context.projectInstanceId,
       ref.id,

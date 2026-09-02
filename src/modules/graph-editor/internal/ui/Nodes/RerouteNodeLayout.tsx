@@ -1,5 +1,5 @@
 import type React from "react";
-import type { Pin as PinModel } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { PortKindDto } from "@/shared/types/domain/editorProjection";
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
@@ -18,8 +18,7 @@ interface RerouteNodeLayoutProps {
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  onPinClick?: (pinId: string, direction: "input" | "output") => void;
-  onPinPointerDown?: (event: React.PointerEvent, pin: PinModel) => void;
+  onPinPointerDown?: (event: React.PointerEvent, pin: PinData) => void;
 }
 
 function projectedRerouteKind(node: UINode): PortKindDto | undefined {
@@ -42,7 +41,6 @@ export function RerouteNodeLayout({
   graphPath,
   groupId,
   contextMenuActions,
-  onPinClick,
   onPinPointerDown,
 }: RerouteNodeLayoutProps) {
   const input = node.inputs[0];
@@ -58,12 +56,11 @@ export function RerouteNodeLayout({
       {input ? (
         <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 [&_.pin-container]:h-5 [&_.pin-container>span]:hidden [&_.pin-circle]:m-0 [&_.pin-circle]:h-5 [&_.pin-circle]:w-5">
           <GraphPinController
-            {...input}
+            pin={input}
             graphPath={graphPath}
             groupId={groupId}
             contextMenuActions={contextMenuActions}
             isActive={activePinId === input.id}
-            onPinClick={onPinClick}
             onPinPointerDown={onPinPointerDown}
           />
         </div>
@@ -77,12 +74,11 @@ export function RerouteNodeLayout({
       {output ? (
         <div className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 [&_.pin-container]:h-5 [&_.pin-container>span]:hidden [&_.pin-circle]:m-0 [&_.pin-circle]:h-5 [&_.pin-circle]:w-5">
           <GraphPinController
-            {...output}
+            pin={output}
             graphPath={graphPath}
             groupId={groupId}
             contextMenuActions={contextMenuActions}
             isActive={activePinId === output.id}
-            onPinClick={onPinClick}
             onPinPointerDown={onPinPointerDown}
           />
         </div>

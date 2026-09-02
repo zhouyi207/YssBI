@@ -19,7 +19,7 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
   graphType,
   indentDepth = 0,
   isSelected = false,
-  issueCount = 0,
+  diagnosticCount = 0,
   onContextMenu,
 }: {
   id: string;
@@ -27,7 +27,7 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
   graphType: GraphResourceType;
   indentDepth?: number;
   isSelected?: boolean;
-  issueCount?: number;
+  diagnosticCount?: number;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
@@ -60,13 +60,13 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
       onContextMenu={onContextMenu}
       trailing={
         <>
-          {issueCount > 0 && (
+          {diagnosticCount > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
               </TooltipTrigger>
               <TooltipContent side="top">
-                {t("graphDiagnostics.callFunctionSidebarTooltip", { count: issueCount })}
+                {t("graphDiagnostics.sidebarTooltip", { count: diagnosticCount })}
               </TooltipContent>
             </Tooltip>
           )}

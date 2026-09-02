@@ -14,8 +14,7 @@ import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
 import { editorViewportScope } from "@/features/core/viewport/viewportScope";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import type { Pin } from "@/shared/types/domain";
-import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphNodeController } from "../../Nodes/GraphNodeController";
 import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
 import CanvasOverlays, { type CanvasOverlaysModel } from "../overlays/CanvasOverlays";
@@ -159,17 +158,13 @@ export function GraphCanvasController({
     setContextMenu,
     setPendingConnection,
   });
-  const activePin = useMemo<Pin | null>(() => {
+  const activePin = useMemo<PinData | null>(() => {
     if (!interactive) return null;
-    if (gesturePinData) return structuredClone(gesturePinData) as unknown as Pin;
+    if (gesturePinData) return structuredClone(gesturePinData) as PinData;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
     return null;
   }, [contextMenu, gesturePinData, interactive, pendingConnection]);
-  const sourcePort =
-    pendingConnection && "address" in pendingConnection
-      ? ((pendingConnection as typeof pendingConnection & { address?: PortAddressDto }).address ??
-        null)
-      : null;
+  const sourcePort = pendingConnection?.address ?? null;
   const handlePaletteSelect = useCallback(
     (descriptor: NodeCreationDescriptor, locale: string) => {
       if (contextMenu?.visible) {

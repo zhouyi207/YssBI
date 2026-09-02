@@ -6,15 +6,15 @@ import type {
   NodeData,
   PinData,
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import type { NodePinViewModel } from "./NodePinViewModel";
 import { detailEmptyHintClass } from "../shared/detailStyles";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { NodePinConnectionField } from "./NodePinConnectionField";
 
 interface NodePinInterfacePanelProps {
   graphPath: string;
-  inputs: ResolvedPinSpec[];
-  outputs: ResolvedPinSpec[];
+  inputs: NodePinViewModel[];
+  outputs: NodePinViewModel[];
 }
 
 function PinList({
@@ -27,7 +27,7 @@ function PinList({
 }: {
   graphPath: string;
   emptyLabel: string;
-  pins: ResolvedPinSpec[];
+  pins: NodePinViewModel[];
   graphPins: readonly PinData[];
   nodes: Readonly<Record<string, NodeData>>;
   connections: readonly ConnectionData[];

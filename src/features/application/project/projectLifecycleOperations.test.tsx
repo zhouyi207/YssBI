@@ -54,13 +54,8 @@ vi.mock("@/features/application/editor/saveAllDirtyGraphs", () => ({
 vi.mock("@/features/core/execution", () => ({
   revokeAllPinPreviewLeases: vi.fn(),
   useExecutionStore: { getState: vi.fn(), setState: vi.fn() },
-  getExecutionEventGraph: vi.fn(),
-  resolveExecutionGraphPath: vi.fn(),
   graphHasClearableArtifacts: vi.fn(),
   enqueueLiveExecutionEvent: vi.fn(),
-}));
-vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
-  warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
 vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog }));
 

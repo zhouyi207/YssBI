@@ -1,7 +1,6 @@
 {
   "basis": {
     "graphPath": "events/contract.yssbi-event",
-    "graphRevision": 7,
     "registryFingerprint": "6f6f86529229414b43869164a8e162d83b33b8503755b00938dc40a62a03c86c",
     "resourceVersions": {}
   },
@@ -90,8 +89,7 @@
       "position": {
         "x": 120.5,
         "y": -32.0
-      },
-      "sourceRevision": 7
+      }
     }
   ],
   "outcome": {

@@ -10,8 +10,7 @@ export type ConnectionInvalidReason =
   | "kind-mismatch"
   | "type-mismatch"
   | "orphan"
-  | "capacity"
-  | "missing-address";
+  | "capacity";
 
 export type ConnectionFeedback =
   | { kind: "append" }
@@ -46,7 +45,6 @@ export function resolveConnectionFeedback(
   target: PinData,
   connectionIds: Record<string, string[]> = {},
 ): ConnectionFeedback {
-  if (!source.address || !target.address) return { kind: "invalid", reason: "missing-address" };
   const compatibility = resolveConnectionCompatibility(source, target);
   if (compatibility.kind === "invalid") {
     return { kind: "invalid", reason: REASONS[compatibility.reason] };

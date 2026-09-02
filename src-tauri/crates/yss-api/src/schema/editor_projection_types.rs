@@ -9,7 +9,6 @@ use yss_graph_registry::RegistryFingerprint;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectionBasis {
     pub graph_path: Box<str>,
-    pub graph_revision: u64,
     #[serde(
         serialize_with = "serialize_registry_fingerprint",
         deserialize_with = "deserialize_registry_fingerprint"
@@ -94,7 +93,6 @@ pub enum CompilationStageDto {
 #[serde(rename_all = "camelCase")]
 pub struct EditorNodeProjectionDto {
     pub graph_path: Box<str>,
-    pub source_revision: u64,
     pub node_id: Box<str>,
     pub node_type_id: Box<str>,
     pub position: NodePositionDto,

@@ -462,7 +462,7 @@ function applyResourceLifecycleDeltasToAggregate(
       graphMeta[state.path] = { path: state.path, name: state.name, type: state.kind };
       continue;
     }
-    const projectionRevision = graphEntities[before.path]?.basis.graphRevision;
+    const projectionRevision = graphEntities[before.path]?.sourceRevision;
     const authoritativeRevision = projectionRevision ?? current?.revision;
     if (!current || authoritativeRevision !== before.revision || current.kind !== before.kind) {
       throw new Error(`graph lifecycle remove source '${before.path}' is inconsistent`);
@@ -760,7 +760,7 @@ export function prepareSynchronousPublicationCommit(
     if (resource) {
       aggregate.resources[key] = {
         ...resource,
-        revision: replacement.projection.basis.graphRevision,
+        revision: replacement.projection.sourceRevision,
       };
     }
   }

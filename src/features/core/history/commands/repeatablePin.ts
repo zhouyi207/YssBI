@@ -30,7 +30,7 @@ export const removeRepeatablePinCommand: CommandHandler<
 > = {
   execute(graphPath, args) {
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
-    if (!pin?.address || pin.address.kind !== "instance") {
+    if (!pin || pin.address.kind !== "instance") {
       throw new Error(`Port '${args.pinId}' is not a removable port instance`);
     }
     if (pin.address.nodeId !== args.nodeId) {

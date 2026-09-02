@@ -2,7 +2,7 @@ import type { useNodeManagement } from "@/features/application/dataManagement/us
 import type { CanvasMutationOutcome } from "@/features/core/canvas";
 import type { EditorContextMenuState, EditorVariables } from "@/features/core/editor";
 import type { GraphSelection } from "@/modules/workbench/public";
-import type { Pin } from "@/shared/types/domain/pin";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { EditorCommandTarget } from "./editorCommandFocus";
 import type { useEditorOperations } from "./useEditorOperations";
 import type { useProjectOperations } from "./useProjectOperations";
@@ -59,11 +59,11 @@ export interface EditorCanvasResourcesSlice {
 export interface EditorCanvasInteractionSlice {
   contextMenu: EditorContextMenuState | null;
   setContextMenu: (menu: EditorContextMenuState | null) => void;
-  pendingConnection: Pin | null;
-  setPendingConnection: (pin: Pin | null) => void;
+  pendingConnection: PinData | null;
+  setPendingConnection: (pin: PinData | null) => void;
   onCanvasPointerDown: (event: React.PointerEvent) => void;
   onNodePointerDown: (nodeId: string, event: React.PointerEvent) => void;
-  onPinPointerDown: (pin: Pin, event: React.PointerEvent) => void;
+  onPinPointerDown: (pin: PinData, event: React.PointerEvent) => void;
   insertRerouteAtConnection: (
     connectionId: string,
     position: Readonly<{ x: number; y: number }>,

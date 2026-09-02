@@ -65,7 +65,7 @@ export function getNodeBackgroundStyle({
 /**
  * 获取节点最小尺寸
  */
-export function getNodeMinSize(noHeader?: boolean, compactReroute = false) {
+export function getNodeMinSize(compactReroute = false) {
   if (compactReroute) {
     return {
       width: REROUTE_NODE_WIDTH_PX,
@@ -75,7 +75,6 @@ export function getNodeMinSize(noHeader?: boolean, compactReroute = false) {
     };
   }
   return {
-    minWidth: noHeader ? 120 : 160,
-    minHeight: noHeader ? 60 : undefined,
+    minWidth: 160,
   };
 }

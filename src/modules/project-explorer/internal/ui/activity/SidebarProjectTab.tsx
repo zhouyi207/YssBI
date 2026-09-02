@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useCallFunctionIssueCountsByGraph } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
+import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
 import { useProjectResourceBrowser } from "@/features/application/sidebar/useProjectResourceBrowser";
 import { useDetailTarget } from "@/features/application/editor";
 import {
@@ -15,7 +15,7 @@ const PROJECT_TREE_ROW_HEIGHT = 28;
 export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
   const { t } = useTranslation();
   const detailTarget = useDetailTarget();
-  const graphIssueCounts = useCallFunctionIssueCountsByGraph();
+  const graphDiagnosticCounts = useGraphDiagnosticCounts();
   const {
     rows,
     query,
@@ -53,7 +53,7 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
             row={row}
             actions={actions}
             detailTarget={detailTarget}
-            graphIssueCounts={graphIssueCounts}
+            graphDiagnosticCounts={graphDiagnosticCounts}
             categoryInteractionDisabled={queryIsActive}
             onCategoryExpandedChange={setCategoryExpanded}
           />

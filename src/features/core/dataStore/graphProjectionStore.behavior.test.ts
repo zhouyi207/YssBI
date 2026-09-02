@@ -98,7 +98,7 @@ describe("graphProjectionStore projected entity truth", () => {
       useGraphProjectionStore.getState().graphEntities["functions/Compute.yssbi-function"],
     ).toMatchObject({
       sourceRevision: 7,
-      nodes: { "local-node": { title: "After signature" } },
+      nodes: { "local-node": { display: { title: "After signature" } } },
     });
   });
 
@@ -132,13 +132,13 @@ describe("graphProjectionStore projected entity truth", () => {
     ]);
     if (!prepared.prepared) throw new Error("expected projection preparation to succeed");
     expect(
-      useGraphProjectionStore.getState().graphEntities["graph-1"].nodes["local-node"].title,
+      useGraphProjectionStore.getState().graphEntities["graph-1"].nodes["local-node"].display.title,
     ).toBe("Current");
 
     expect(() => commitPreparedGraphProjectionReplacements(prepared.plan)).not.toThrow();
 
     expect(
-      useGraphProjectionStore.getState().graphEntities["graph-1"].nodes["local-node"].title,
+      useGraphProjectionStore.getState().graphEntities["graph-1"].nodes["local-node"].display.title,
     ).toBe("Prepared");
   });
 
@@ -149,7 +149,7 @@ describe("graphProjectionStore projected entity truth", () => {
     store.replaceProjection("graph-1", first.projection, 1);
     store.replaceProjection("graph-2", second.projection, 1);
 
-    expect(store.getGraphNode("graph-1", "local-node")?.title).toBe("First");
-    expect(store.getGraphNode("graph-2", "local-node")?.title).toBe("Second");
+    expect(store.getGraphNode("graph-1", "local-node")?.display.title).toBe("First");
+    expect(store.getGraphNode("graph-2", "local-node")?.display.title).toBe("Second");
   });
 });

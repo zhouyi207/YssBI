@@ -6,7 +6,7 @@ import { executeCommand } from "@/features/core/history";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { BUILTIN_NODE_TYPE_IDS, type VariableNodeTypeId } from "@/features/domain/nodeCatalog";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import type { Pin } from "@/shared/types/domain/pin";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
   isGraphResourceDragState,
   isNodeTemplateDragState,
@@ -31,7 +31,7 @@ interface UseCanvasDropParams {
   graphPath: string | null;
   variables: EditorVariables;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: Pin | null) => void;
+  setPendingConnection: (pin: PinData | null) => void;
   createNode: CreateNodeFn;
   /** Preview canvases skip pointer-only listeners but keep their activatable drop route. */
   enabled?: boolean;

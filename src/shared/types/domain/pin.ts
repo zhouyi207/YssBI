@@ -19,16 +19,6 @@ export type PinDirection = "input" | "output";
 export type RuntimePinKind = "exec" | "object";
 
 /**
- * Pin UI 配置
- * 用于渲染 Pin 的视觉样式
- */
-export interface PinUI {
-  x?: number; // 在节点内部的 X 位置
-  y?: number; // 在节点内部的 Y 位置
-  color?: string; // 可选颜色（优先使用 schema 颜色）
-}
-
-/**
  * Pin 实例
  * 代表节点上的一个输入或输出接口
  */
@@ -38,11 +28,5 @@ export interface Pin {
   name: string;
   type: RuntimePinKind;
   direction: PinDirection;
-  defaultValue?: unknown;
-  userValue?: unknown;
   dataType?: DataType;
-  optional?: boolean;
-  ui?: PinUI;
-  /** Runtime-only graph validation diagnostic; never persisted in graph snapshots. */
-  validationWarning?: string;
 }

@@ -1,6 +1,5 @@
 import i18n from "i18next";
 
-import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { isResourceDocumentDirty, resourceKey } from "@/features/core/resource";
@@ -60,7 +59,6 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         continue;
       }
 
-      warnCallFunctionIssuesBeforeSave(document.resourceRef);
       const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
       if (!saved) return false;
     } catch (error) {

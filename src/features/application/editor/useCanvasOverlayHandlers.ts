@@ -1,7 +1,7 @@
 import { useCallback, type RefObject } from "react";
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import type { Pin } from "@/shared/types/domain/pin";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { useEditorStore } from "@/features/core/editor";
 import {
@@ -14,12 +14,11 @@ import { logger } from "@/features/application/observability/appLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
 import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 
-function readPendingConnectionAddress(pendingConnection: Pin | null): PortAddressDto | null {
-  if (!pendingConnection) return null;
-  return (pendingConnection as Pin & { address?: PortAddressDto }).address ?? null;
+function readPendingConnectionAddress(pendingConnection: PinData | null): PortAddressDto | null {
+  return pendingConnection?.address ?? null;
 }
 
-function getPendingConnectionAddress(pendingConnection: Pin | null): PortAddressDto | null {
+function getPendingConnectionAddress(pendingConnection: PinData | null): PortAddressDto | null {
   const address = readPendingConnectionAddress(pendingConnection);
   if (pendingConnection && !address) {
     throw new Error("Pending connection is missing its structured port address");
@@ -63,7 +62,7 @@ function interactionStillMatches(
     return false;
   const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
   if (interaction?.type !== "pendingNodeCreation") return sourceAddress === null;
-  const currentSource = readPendingConnectionAddress(interaction.session.source as Pin | null);
+  const currentSource = readPendingConnectionAddress(interaction.session.source);
   return sourceAddress === null
     ? interaction.session.source === null
     : currentSource !== null && samePortAddress(currentSource, sourceAddress);
@@ -82,9 +81,9 @@ export function useCanvasOverlayHandlers({
   panelInstanceId: string;
   groupId: string;
   activeResourceRef: string | null;
-  pendingConnection: Pin | null;
+  pendingConnection: PinData | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: Pin | null) => void;
+  setPendingConnection: (pin: PinData | null) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
     async (

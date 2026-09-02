@@ -253,7 +253,8 @@ describe("executeFunctionSignatureMutation", () => {
     const mutateSignature = vi.fn(async (_project, _path, _locale, request) => {
       pendingDuringInvoke = getPendingBackendMutation(request.operationId) != null;
       graphTitleDuringInvoke =
-        useGraphProjectionStore.getState().graphEntities[functionPath].nodes["local-node"]?.title;
+        useGraphProjectionStore.getState().graphEntities[functionPath].nodes["local-node"]?.display
+          .title;
       signatureRevisionDuringInvoke =
         useGraphMetaStore.getState().graphs[functionPath].functionRevision;
       eventHandler.handle({ result: committed });
@@ -284,7 +285,7 @@ describe("executeFunctionSignatureMutation", () => {
     expect(outcome).toEqual({ status: "applied", result: committed });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
       sourceRevision: 7,
-      nodes: { "local-node": { title: "Committed signature projection" } },
+      nodes: { "local-node": { display: { title: "Committed signature projection" } } },
     });
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
       functionRevision: 3,
@@ -364,7 +365,7 @@ describe("executeFunctionSignatureMutation", () => {
     expect(outcome).toEqual({ status: "applied", result: committed });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
       sourceRevision: 7,
-      nodes: { "local-node": { title: "Projected node" } },
+      nodes: { "local-node": { display: { title: "Projected node" } } },
     });
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
       functionRevision: 3,

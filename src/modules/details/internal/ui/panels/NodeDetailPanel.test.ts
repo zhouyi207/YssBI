@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { NodeDetailPanel, selectNodeDetailNode } from "./NodeDetailPanel";
 import { NodeInspectPanel } from "./NodeInspectPanel";
 
@@ -38,7 +39,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
   return {
     basis: {
       graphPath,
-      graphRevision: 1,
       registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
       resourceVersions: {},
     },
@@ -52,8 +52,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
         id: "shared",
         graphPath,
         nodeType: "projected.call-function",
-        category: [],
-        title,
         inputs: [],
         outputs: [],
         position: { x: 0, y: 0 },
@@ -74,7 +72,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
           supportsInlineLiterals: false,
         },
         diagnostics: [],
-        subGraphPath: "unexpected/must-not-be-read",
       },
     },
     pins: {},
@@ -96,7 +93,7 @@ describe("NodeDetailPanel projection selection", () => {
       },
     };
 
-    expect(selectNodeDetailNode(state, "second", "shared")?.title).toBe("Second");
+    expect(selectNodeDetailNode(state, "second", "shared")?.display.title).toBe("Second");
   });
 
   it("renders editable parameters only in NodeInspectPanel", () => {
@@ -172,15 +169,14 @@ describe("NodeDetailPanel projection selection", () => {
         related: [],
       },
     ];
-    graphBucket.pins[pinId] = {
+    graphBucket.pins[pinId] = makeProjectedPinData({
       id: pinId,
       nodeId: "shared",
       name: "raw-value",
-      type: "object",
       direction: "input",
       display: { label: "Value", instanceLabel: null },
       address,
-    };
+    });
     graphBucket.nodePins.shared = [pinId];
     graphBucket.pinConnections[pinId] = [];
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });

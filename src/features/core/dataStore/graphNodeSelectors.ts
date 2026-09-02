@@ -1,5 +1,3 @@
-import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-
 import { useGraphProjectionStore } from "./graphProjectionStore";
 
 function projectedNodeCapabilities(graphPath: string, nodeId: string) {
@@ -18,17 +16,4 @@ export function canDeleteNode(graphPath: string, nodeId: string): boolean {
 
 export function canCutNode(graphPath: string, nodeId: string): boolean {
   return canCopyNode(graphPath, nodeId) && canDeleteNode(graphPath, nodeId);
-}
-
-/** Find an internal node in a graph by nodeType (store-native, no links rebuild). */
-export function findInternalNodeInGraph(graphPath: string, nodeType: string): NodeData | undefined {
-  const state = useGraphProjectionStore.getState();
-  const nodeIds = state.getGraphNodeIds(graphPath);
-  for (const nodeId of nodeIds) {
-    const node = state.getGraphNode(graphPath, nodeId);
-    if (node?.nodeType === nodeType && node.isInternal) {
-      return node;
-    }
-  }
-  return undefined;
 }

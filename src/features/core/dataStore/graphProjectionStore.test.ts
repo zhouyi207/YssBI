@@ -33,7 +33,6 @@ function projection(
   return {
     basis: {
       graphPath,
-      graphRevision: sourceRevision,
       registryFingerprint: "0102030000000000000000000000000000000000000000000000000000000000",
       resourceVersions: {},
     },
@@ -42,7 +41,6 @@ function projection(
     nodes: [
       {
         graphPath,
-        sourceRevision,
         nodeId: "shared-node",
         nodeTypeId: "unknown.projected-node",
         position: { x: 10, y: 20 },
@@ -214,8 +212,8 @@ describe("graphProjectionStore projection replacement", () => {
     expect(bucket.requestGeneration).toBe(1);
     expect(bucket.nodes["shared-node"]).toMatchObject({
       nodeType: "unknown.projected-node",
-      title: "Localized title",
       display: {
+        title: "Localized title",
         styleId: "projected-style",
         iconId: "projected-icon",
       },
@@ -244,7 +242,7 @@ describe("graphProjectionStore projection replacement", () => {
     expect(canvasNode).toMatchObject({
       nodeType: "unknown.projected-node",
       title: "Localized title",
-      uiStyle: "projected-style",
+      styleId: "projected-style",
     });
   });
 
@@ -282,7 +280,8 @@ describe("graphProjectionStore projection replacement", () => {
 
     expect(result).toEqual({ applied: true, reason: "newer" });
     expect(
-      useGraphProjectionStore.getState().graphEntities["functions/main"].nodes["shared-node"].title,
+      useGraphProjectionStore.getState().graphEntities["functions/main"].nodes["shared-node"]
+        .display.title,
     ).toBe("本地化标题");
   });
 
@@ -310,8 +309,8 @@ describe("graphProjectionStore projection replacement", () => {
     store.replaceProjection("functions/first", projection("functions/first", 1, "First"), 1);
     store.replaceProjection("functions/second", projection("functions/second", 1, "Second"), 1);
 
-    expect(store.getGraphNode("functions/first", "shared-node")?.title).toBe("First");
-    expect(store.getGraphNode("functions/second", "shared-node")?.title).toBe("Second");
+    expect(store.getGraphNode("functions/first", "shared-node")?.display.title).toBe("First");
+    expect(store.getGraphNode("functions/second", "shared-node")?.display.title).toBe("Second");
   });
 
   it("installs two valid projection replacements in one store update", () => {
@@ -329,10 +328,12 @@ describe("graphProjectionStore projection replacement", () => {
     expect(result).toEqual({ applied: true, graphPaths: [firstPath, secondPath] });
     expect(updates).toHaveBeenCalledTimes(1);
     expect(
-      useGraphProjectionStore.getState().graphEntities[firstPath].nodes["shared-node"].title,
+      useGraphProjectionStore.getState().graphEntities[firstPath].nodes["shared-node"].display
+        .title,
     ).toBe("First");
     expect(
-      useGraphProjectionStore.getState().graphEntities[secondPath].nodes["shared-node"].title,
+      useGraphProjectionStore.getState().graphEntities[secondPath].nodes["shared-node"].display
+        .title,
     ).toBe("Second");
   });
 

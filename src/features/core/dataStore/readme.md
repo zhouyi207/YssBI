@@ -1,13 +1,8 @@
-┌──────────────────────────┐
-│ ProjectIOStore │ ← load / refresh index / load graph 编排
-└───────────┬──────────────┘
-│ hydrate / reset
-┌───────────▼──────────────┐
-│ Application project │ ← 图快照组装与项目切换协调
-│ projectClientReset │ ← 切换项目时清缓存（显式 import）
-├──────────────────────────┤
-│ VariableStore │ ← 低频
-│ DatabaseStore │
-│ GraphMetaStore │
-│ GraphDataStore │ ← ★编辑器核心数据（可 undo）
-└──────────────────────────┘
+# Data Store
+
+`graphProjectionStore` holds normalized, read-only Rust editor projections. Its graph buckets are
+replaced as complete projections and are not a second authoritative graph document.
+
+Unsaved Graph documents and history belong to `features/core/graphDraft`. Project/resource,
+database, variable, and graph metadata stores keep their own scoped projections. Cross-store load,
+save, and reset workflows belong to the Application layer.

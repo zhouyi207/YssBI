@@ -64,14 +64,14 @@ export function SidebarProjectTreeRow({
   row,
   actions,
   detailTarget,
-  graphIssueCounts,
+  graphDiagnosticCounts,
   categoryInteractionDisabled,
   onCategoryExpandedChange,
 }: {
   row: ProjectResourceBrowserRow;
   actions: SidebarProjectTreeActions;
   detailTarget: DetailTarget | null;
-  graphIssueCounts: Record<string, number>;
+  graphDiagnosticCounts: Record<string, number>;
   categoryInteractionDisabled: boolean;
   onCategoryExpandedChange: (categoryId: ProjectTreeCategoryId, expanded: boolean) => void;
 }) {
@@ -126,7 +126,7 @@ export function SidebarProjectTreeRow({
           graphType={row.graphType}
           indentDepth={row.level}
           isSelected={detailTarget?.kind === row.graphType && detailTarget.path === row.id}
-          issueCount={graphIssueCounts[row.id] ?? 0}
+          diagnosticCount={graphDiagnosticCounts[row.id] ?? 0}
           onContextMenu={(event) =>
             actions.onGraphContextMenu(event, {
               type: "graph",

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
-import { collectNodeDiagnostics, type GraphNodeDiagnosticsBucket } from "./nodeDiagnostics";
+import {
+  collectNodeDiagnostics,
+  findPrimaryPortDiagnostic,
+  isUnboundInputDiagnostic,
+  type GraphNodeDiagnosticsBucket,
+} from "./nodeDiagnostics";
 
 const diagnostic = (
   code: string,
@@ -21,7 +26,6 @@ const bucket = {
   nodes: {
     "node-a": {
       id: "node-a",
-      title: "Raw A",
       display: { title: "Node A" },
       diagnostics: [
         diagnostic("error", "A failed", "node-a"),
@@ -30,7 +34,7 @@ const bucket = {
     },
     "node-b": {
       id: "node-b",
-      title: "Raw B",
+      display: { title: "Node B" },
       diagnostics: [diagnostic("warning", "B needs review", "node-b")],
     },
   },
@@ -56,8 +60,8 @@ describe("collectNodeDiagnostics", () => {
       {
         graphPath: "events/Main.yssbi-event",
         nodeId: "node-b",
-        nodeTitle: "Raw B",
-        locationLabel: "Raw B",
+        nodeTitle: "Node B",
+        locationLabel: "Node B",
         diagnostic: diagnostic("warning", "B needs review", "node-b"),
       },
     ]);
@@ -79,7 +83,6 @@ describe("collectNodeDiagnostics", () => {
       nodes: {
         "node-a": {
           id: "node-a",
-          title: "Raw A",
           display: { title: "Node A" },
           diagnostics: [portDiagnostic],
         },
@@ -104,5 +107,19 @@ describe("collectNodeDiagnostics", () => {
         diagnostic: portDiagnostic,
       },
     ]);
+  });
+
+  it("uses the projected port diagnostic to identify an unbound input", () => {
+    const address = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
+    const unrelated = diagnostic("warning", "Other node", "node-b");
+    const unbound: DiagnosticDto = {
+      ...diagnostic("error", "Required input is unbound", "node-a"),
+      code: "compiler.input.unbound",
+      location: { kind: "port", address },
+    };
+
+    const selected = findPrimaryPortDiagnostic([unrelated, unbound], address);
+    expect(selected).toBe(unbound);
+    expect(isUnboundInputDiagnostic(selected)).toBe(true);
   });
 });

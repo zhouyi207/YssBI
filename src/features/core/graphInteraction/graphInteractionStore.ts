@@ -75,6 +75,10 @@ export interface CanvasInteractionScope {
 
 export const IDLE_CANVAS_INTERACTION: CanvasInteraction = { type: "idle" };
 
+function cloneInteraction<T extends CanvasInteraction>(interaction: T): T {
+  return structuredClone(interaction);
+}
+
 export function getCanvasInteraction(
   state: Pick<GraphInteractionState, "interactions">,
   graphPath: GraphPath,
@@ -116,13 +120,14 @@ export const useGraphInteractionStore = create<GraphInteractionState>((set, get)
   interactions: {},
   startInteraction: (graphPath, interaction) =>
     set((state) => ({
-      interactions: { ...state.interactions, [graphPath]: interaction },
+      interactions: { ...state.interactions, [graphPath]: cloneInteraction(interaction) },
     })),
   updateInteraction: (graphPath, groupId, updater) =>
     set((state) => {
       const current = state.interactions[graphPath] ?? { type: "idle" };
       if (current.type !== "idle" && current.session.groupId !== groupId) return state;
-      return { interactions: { ...state.interactions, [graphPath]: updater(current) } };
+      const next = cloneInteraction(updater(current));
+      return { interactions: { ...state.interactions, [graphPath]: next } };
     }),
   updateNodeDragFrame: (graphPath, groupId, positions, session) =>
     set((state) => {
@@ -131,13 +136,13 @@ export const useGraphInteractionStore = create<GraphInteractionState>((set, get)
       return {
         interactions: {
           ...state.interactions,
-          [graphPath]: { type: "draggingNodes", session },
+          [graphPath]: cloneInteraction({ type: "draggingNodes", session }),
         },
         positionOverrides: {
           ...state.positionOverrides,
           [graphPath]: {
             ...state.positionOverrides[graphPath],
-            ...positions,
+            ...structuredClone(positions),
           },
         },
       };
@@ -163,7 +168,10 @@ export const useGraphInteractionStore = create<GraphInteractionState>((set, get)
     set((state) => ({
       positionOverrides: {
         ...state.positionOverrides,
-        [graphPath]: { ...state.positionOverrides[graphPath], [nodeId]: position },
+        [graphPath]: {
+          ...state.positionOverrides[graphPath],
+          [nodeId]: structuredClone(position),
+        },
       },
     })),
   clearPositionOverrides: (graphPath, nodeIds) =>

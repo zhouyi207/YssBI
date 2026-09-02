@@ -9,7 +9,7 @@ export interface DisconnectPortArgs {
 export const disconnectPortCommand: CommandHandler<DisconnectPortArgs, GraphDraftCommandResult> = {
   execute(graphPath, args) {
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
-    if (!pin?.address) return false;
+    if (!pin) return false;
     return executeGraphDraftIntent(graphPath, {
       type: "disconnectPort",
       payload: { address: pin.address },

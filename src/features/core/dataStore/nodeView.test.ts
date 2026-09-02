@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { NodeData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { REROUTE_NODE_STYLE_ID, toUiNode, uiNodeIsReroute } from "./nodeView";
+import { isRerouteNodeView, REROUTE_NODE_STYLE_ID, toUiNode } from "./nodeView";
 
 const baseNode: NodeData = {
   id: "node-1",
   graphPath: "graph-1",
   nodeType: "math.add",
-  category: [],
-  title: "Projected Add",
   inputs: ["pin-in"],
   outputs: ["pin-out"],
   position: { x: 10, y: 20 },
@@ -15,25 +13,56 @@ const baseNode: NodeData = {
     title: "Projected Add",
     userLabel: null,
     iconId: null,
-    styleId: "math",
+    styleId: "builtin.default",
   },
+  parameterEditors: [],
+  capabilities: {
+    managed: false,
+    canCopy: true,
+    canDelete: true,
+    canEditLabel: true,
+    canEditParameters: false,
+    hasDynamicPorts: false,
+    supportsInlineLiterals: true,
+  },
+  diagnostics: [],
 };
 
-const inputPin: PinData = {
-  id: "pin-in",
-  nodeId: "node-1",
-  name: "A",
-  type: "object",
-  direction: "input",
-};
+function pin(id: string, direction: "input" | "output", label: string): PinData {
+  return {
+    id,
+    nodeId: "node-1",
+    name: label,
+    type: "object",
+    direction,
+    dataType: { kind: "Float64" },
+    address: { kind: "declared", nodeId: "node-1", portKey: id },
+    templateKey: id,
+    display: { label, instanceLabel: null },
+    kind: "data",
+    instanceKind: "declared",
+    orphan: false,
+    canRemove: false,
+    connections: {
+      current: 0,
+      maximum: direction === "input" ? 1 : null,
+      ordered: false,
+      canAppend: true,
+      canReplace: false,
+      canMove: true,
+    },
+    input:
+      direction === "input"
+        ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
+        : null,
+    resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+    resolvedSchema: null,
+    status: "resolved",
+  };
+}
 
-const outputPin: PinData = {
-  id: "pin-out",
-  nodeId: "node-1",
-  name: "Result",
-  type: "object",
-  direction: "output",
-};
+const inputPin = pin("pin-in", "input", "A");
+const outputPin = pin("pin-out", "output", "Result");
 
 describe("toUiNode", () => {
   it("maps projected display and pin slices to a canvas node", () => {
@@ -51,19 +80,19 @@ describe("toUiNode", () => {
       display: baseNode.display,
       parameterEditors: [],
       diagnostics: [],
-      uiStyle: "math",
+      styleId: "builtin.default",
     });
     expect(view.inputs[0].connected).toBe(true);
     expect(view.outputs[0].connectionIds).toEqual(["connection-1"]);
   });
 });
 
-describe("uiNodeIsReroute", () => {
+describe("isRerouteNodeView", () => {
   it("classifies only the Rust-authored builtin.reroute style", () => {
     expect(REROUTE_NODE_STYLE_ID).toBe("builtin.reroute");
-    expect(uiNodeIsReroute({ uiStyle: "builtin.reroute" })).toBe(true);
-    expect(uiNodeIsReroute({ uiStyle: "reroute" })).toBe(false);
-    expect(uiNodeIsReroute({ uiStyle: "default" })).toBe(false);
+    expect(isRerouteNodeView({ styleId: "builtin.reroute" })).toBe(true);
+    expect(isRerouteNodeView({ styleId: "reroute" })).toBe(false);
+    expect(isRerouteNodeView({ styleId: "builtin.default" })).toBe(false);
   });
 
   it("preserves projected reroute position and port descriptors without synthesizing identity", () => {
@@ -92,7 +121,7 @@ describe("uiNodeIsReroute", () => {
       },
     );
 
-    expect(uiNodeIsReroute(view)).toBe(true);
+    expect(isRerouteNodeView(view)).toBe(true);
     expect(view.position).toEqual({ x: 135, y: 246 });
     expect(view.nodeType).toBe("opaque.backend.identity");
     expect(view.inputs[0]).toMatchObject({

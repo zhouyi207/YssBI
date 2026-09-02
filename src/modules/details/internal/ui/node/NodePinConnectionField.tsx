@@ -17,7 +17,7 @@ import {
   disconnectPinById,
 } from "@/features/application/editor/edgeOperations";
 
-import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
+import type { NodePinViewModel } from "./NodePinViewModel";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
 import {
   connectedPeerId,
@@ -27,7 +27,7 @@ import {
 
 interface NodePinConnectionFieldProps {
   graphPath: string;
-  pin: ResolvedPinSpec;
+  pin: NodePinViewModel;
   pinData: PinData | undefined;
   pins: readonly PinData[];
   nodes: Readonly<Record<string, NodeData>>;

@@ -64,7 +64,6 @@ pub fn build_editor_projection(
     Ok(EditorProjectionModel {
         basis: EditorProjectionBasis {
             graph_path: input.graph_path.clone(),
-            graph_revision: input.document.revision,
             registry_fingerprint: input.registry_fingerprint,
             resource_versions: input.analysis.resource_versions().clone(),
         },

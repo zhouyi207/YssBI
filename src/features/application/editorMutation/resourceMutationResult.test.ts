@@ -72,7 +72,6 @@ vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
 }));
 
 const caller = "events/Caller.yssbi-event";
-const oldTarget = "functions/Old.yssbi-function";
 
 function callerSnapshot() {
   return structuredClone(useGraphProjectionStore.getState().graphEntities[caller]);
@@ -92,21 +91,6 @@ describe("resource mutation projection replacement protocol", () => {
       title: "Loaded caller",
     }).projection;
     useGraphProjectionStore.getState().replaceProjection(caller, projection, 1);
-    useGraphProjectionStore.setState((state) => ({
-      graphEntities: {
-        ...state.graphEntities,
-        [caller]: {
-          ...state.graphEntities[caller],
-          nodes: {
-            ...state.graphEntities[caller].nodes,
-            "call-1": {
-              ...state.graphEntities[caller].nodes["call-1"],
-              subGraphPath: oldTarget,
-            },
-          },
-        },
-      },
-    }));
   });
 
   it("rejects complete status missing a caller replacement without locally patching the caller", () => {
@@ -132,9 +116,6 @@ describe("resource mutation projection replacement protocol", () => {
       }),
     ).toThrow("complete replacement paths do not equal the declared expected graph paths");
     expect(callerSnapshot()).toEqual(before);
-    expect(
-      useGraphProjectionStore.getState().graphEntities[caller]?.nodes["call-1"]?.subGraphPath,
-    ).toBe(oldTarget);
   });
 
   it("does not replace a dirty Graph draft with a Rust projection publication", () => {

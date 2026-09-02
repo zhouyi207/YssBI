@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { getCanvasInteraction, useGraphInteractionStore } from "./graphInteractionStore";
 
 describe("graphInteractionStore position overrides", () => {
@@ -63,6 +65,51 @@ describe("graphInteractionStore position overrides", () => {
     expect(getCanvasInteraction(state, "events/one", "group-1")).toEqual({ type: "idle" });
     expect(getCanvasInteraction(state, "events/one", "group-2").type).toBe("panning");
     expect(getCanvasInteraction(state, "events/two", "group-3").type).toBe("pendingNodeCreation");
+  });
+
+  it("stores a detached and cloneable connection session", () => {
+    const source: PinData = makeProjectedPinData({
+      id: "pin-a",
+      nodeId: "node-a",
+      name: "Output",
+      direction: "output",
+      connections: {
+        current: 0,
+        maximum: null,
+        ordered: false,
+        canAppend: true,
+        canReplace: false,
+        canMove: false,
+      },
+    });
+    useGraphInteractionStore.getState().startInteraction("events/one", {
+      type: "drawingConnection",
+      session: {
+        groupId: "group-1",
+        pointerId: 1,
+        graphPath: "events/one",
+        source,
+        screenX: 0,
+        screenY: 0,
+        worldX: 0,
+        worldY: 0,
+        hoveredTarget: null,
+        snappedTarget: null,
+        snappedWorld: null,
+        feedback: null,
+      },
+    });
+    source.name = "Mutated outside the store";
+
+    const interaction = getCanvasInteraction(
+      useGraphInteractionStore.getState(),
+      "events/one",
+      "group-1",
+    );
+    expect(interaction.type).toBe("drawingConnection");
+    if (interaction.type !== "drawingConnection") throw new Error("expected connection session");
+    expect(interaction.session.source.name).toBe("Output");
+    expect(() => structuredClone(interaction)).not.toThrow();
   });
 
   it("cancels one graph interaction without changing installed projection", () => {

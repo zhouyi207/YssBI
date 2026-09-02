@@ -383,14 +383,8 @@ function isDiagnostic(value: unknown): boolean {
 function isProjectionBasis(value: unknown): boolean {
   return (
     isRecord(value) &&
-    hasExactKeys(value, [
-      "graphPath",
-      "graphRevision",
-      "registryFingerprint",
-      "resourceVersions",
-    ]) &&
+    hasExactKeys(value, ["graphPath", "registryFingerprint", "resourceVersions"]) &&
     isGraphResourcePath(value.graphPath) &&
-    isSafeRevision(value.graphRevision) &&
     typeof value.registryFingerprint === "string" &&
     FINGERPRINT_PATTERN.test(value.registryFingerprint) &&
     isRecord(value.resourceVersions) &&
@@ -550,7 +544,6 @@ function isEditorNode(value: unknown): boolean {
     isRecord(value) &&
     hasExactKeys(value, [
       "graphPath",
-      "sourceRevision",
       "nodeId",
       "nodeTypeId",
       "position",
@@ -561,7 +554,6 @@ function isEditorNode(value: unknown): boolean {
       "diagnostics",
     ]) &&
     isGraphResourcePath(value.graphPath) &&
-    isSafeRevision(value.sourceRevision) &&
     typeof value.nodeId === "string" &&
     typeof value.nodeTypeId === "string" &&
     isPosition(value.position) &&
@@ -653,8 +645,7 @@ export function parseGraphProjectionReplacementDto(value: unknown): GraphProject
     !isGraphResourcePath(value.graphPath) ||
     !isEditorProjection(value.projection) ||
     value.projection.graphPath !== value.graphPath ||
-    value.projection.basis.graphPath !== value.graphPath ||
-    value.projection.sourceRevision !== value.projection.basis.graphRevision
+    value.projection.basis.graphPath !== value.graphPath
   ) {
     throw new Error("Graph mutation projection replacement is malformed");
   }

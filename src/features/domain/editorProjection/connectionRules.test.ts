@@ -1,23 +1,17 @@
 import { describe, it, expect } from "vitest";
 import type { PinDirection } from "@/shared/types/domain/pin";
-import type { PinSlot } from "@/shared/types/domain/node";
 import { dataTypeDisplay, type DataType } from "@/shared/types/domain/dataType";
 import type { TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import {
-  buildPinDataType,
-  pinAcceptsType,
   isPinCompatible,
   resolveConnectionCompatibility,
-  findAutoConnectPinIndex,
   getDataTypeCompatibility,
   getPinCompatibility,
   type ConnectionCandidatePin,
 } from "./connectionRules";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 const FLOAT64: DataType = { kind: "Float64" };
 const STRING: DataType = { kind: "String" };
-const INT64: DataType = { kind: "Int64" };
 const SERIES_FLOAT64: DataType = { kind: "DataSeries", inner: { kind: "Float64" } };
 const MODEL: DataType = { kind: "Struct", inner: "Model" };
 const OLS_MODEL: DataType = { kind: "Struct", inner: "OLSModel" };
@@ -34,13 +28,33 @@ const TYPE_SYSTEM: TypeSystemSnapshot = {
 function pin(
   partial: Partial<ConnectionCandidatePin> & { direction: PinDirection },
 ): ConnectionCandidatePin {
+  const type = partial.type ?? "object";
+  const kind = partial.kind ?? (type === "exec" ? "control" : "data");
+  const dataType = kind === "data" ? partial.dataType : undefined;
+  const resolvedType =
+    kind !== "data"
+      ? null
+      : (partial.resolvedType ??
+        (dataType ? { display: dataType.kind, resolved: true, dataType } : null));
   return {
+    ...partial,
     id: partial.id ?? "p1",
     nodeId: partial.nodeId ?? "n1",
-    name: partial.name ?? "pin",
-    type: partial.type ?? "object",
-    ...partial,
-  } as ConnectionCandidatePin;
+    type,
+    direction: partial.direction,
+    dataType,
+    kind,
+    orphan: partial.orphan ?? false,
+    connections: partial.connections ?? {
+      current: 0,
+      maximum: null,
+      ordered: false,
+      canAppend: true,
+      canReplace: false,
+      canMove: true,
+    },
+    resolvedType,
+  };
 }
 
 describe("dataTypeDisplay Number alias", () => {
@@ -142,121 +156,6 @@ describe("getPinCompatibility", () => {
   });
 });
 
-describe("buildPinDataType", () => {
-  it("requires structured dataType for data pins", () => {
-    const p = pin({
-      direction: "output",
-      type: "object",
-      dataType: SERIES_FLOAT64,
-    });
-    expect(buildPinDataType(p)).toEqual(SERIES_FLOAT64);
-  });
-
-  it("throws for data pins without structured dataType", () => {
-    const p = pin({ direction: "output", type: "object" });
-    expect(() => buildPinDataType(p)).toThrow("missing structured dataType");
-  });
-
-  it("keeps exec pins outside the data type system", () => {
-    const p = pin({ direction: "output", type: "exec" });
-    expect(buildPinDataType(p)).toEqual({ kind: "Any" });
-  });
-});
-
-describe("pinAcceptsType - variable Set recommendations (dragging an output)", () => {
-  const draggedSeriesOutput = pin({ direction: "output", dataType: SERIES_FLOAT64 });
-
-  it("recommends a DataSeries<Float64> variable", () => {
-    expect(pinAcceptsType(draggedSeriesOutput, SERIES_FLOAT64)).toBe(true);
-  });
-
-  it("does not recommend a scalar Float64 variable for a DataSeries output", () => {
-    expect(pinAcceptsType(draggedSeriesOutput, FLOAT64)).toBe(false);
-  });
-});
-
-describe("pinAcceptsType - variable Get recommendations (dragging an input)", () => {
-  const draggedFloatInput = pin({ direction: "input", dataType: FLOAT64 });
-
-  it("recommends a Float64 variable", () => {
-    expect(pinAcceptsType(draggedFloatInput, FLOAT64)).toBe(true);
-  });
-
-  it("does not recommend a String variable", () => {
-    expect(pinAcceptsType(draggedFloatInput, STRING)).toBe(false);
-  });
-});
-
-describe("pinAcceptsType - OneOf pin converges to compatible members only", () => {
-  const oneOf: DataType = { kind: "OneOf", inner: [FLOAT64, SERIES_FLOAT64] };
-  const draggedOneOfInput = pin({ direction: "input", dataType: oneOf });
-
-  it("matches members of the OneOf set", () => {
-    expect(pinAcceptsType(draggedOneOfInput, FLOAT64)).toBe(true);
-    expect(pinAcceptsType(draggedOneOfInput, SERIES_FLOAT64)).toBe(true);
-  });
-
-  it("rejects types outside the OneOf set", () => {
-    expect(pinAcceptsType(draggedOneOfInput, STRING)).toBe(false);
-    expect(pinAcceptsType(draggedOneOfInput, INT64)).toBe(false);
-  });
-});
-
-describe("pinAcceptsType - function IO filtered by precise type", () => {
-  it("a DataSeries<Float64> function input accepts only a matching output", () => {
-    const draggedSeriesOutput = pin({ direction: "output", dataType: SERIES_FLOAT64 });
-    const funcInput = pin({ direction: "input", nodeId: "fn", dataType: SERIES_FLOAT64 });
-    const funcScalarInput = pin({ direction: "input", nodeId: "fn", dataType: FLOAT64 });
-    expect(pinAcceptsType(draggedSeriesOutput, buildPinDataType(funcInput))).toBe(true);
-    expect(pinAcceptsType(draggedSeriesOutput, buildPinDataType(funcScalarInput))).toBe(false);
-  });
-});
-
-describe("pinAcceptsType - Struct family matching", () => {
-  const draggedModelOutput = pin({ direction: "output", dataType: OLS_MODEL });
-
-  it("allows a concrete model output to connect to a Model family input", () => {
-    expect(pinAcceptsType(draggedModelOutput, MODEL, TYPE_SYSTEM)).toBe(true);
-  });
-
-  it("does not allow unrelated Struct outputs into a Model family input", () => {
-    const draggedResultOutput = pin({ direction: "output", dataType: OLS_RESULT });
-    expect(pinAcceptsType(draggedResultOutput, MODEL, TYPE_SYSTEM)).toBe(false);
-  });
-});
-
-describe("findAutoConnectPinIndex via Rust-shaped editor projection", () => {
-  it("connects a data output to projected input pin slots without rebuilding a function signature", () => {
-    const fixture = makeEditorProjectionFixture({
-      graphPath: "events/Main.yssbi-event",
-      nodeId: "projected-target",
-      nodeTypeId: "tests.projected-target",
-      title: "Projected target",
-    });
-    const projectedInput = fixture.projection.nodes[0].ports.find(
-      (port) => port.direction === "input",
-    );
-    if (!projectedInput) throw new Error("expected projected input");
-    const pinSlots: PinSlot[] = [
-      {
-        slotKind: "fixed",
-        pin: {
-          name: projectedInput.display.label,
-          direction: projectedInput.direction,
-          kind: "Data",
-          role: { Data: { Custom: projectedInput.templateKey } },
-          dataType: { Concrete: FLOAT64 },
-          optional: false,
-          metaData: { showWidget: false, widgetType: null, isDynamic: false },
-        },
-      },
-    ];
-    const draggedOutput = pin({ direction: "output", dataType: FLOAT64 });
-
-    expect(findAutoConnectPinIndex(pinSlots, draggedOutput)).toBe(0);
-  });
-});
-
 describe("isPinCompatible", () => {
   it("matches output -> input of the same structured type", () => {
     const out = pin({ id: "o", nodeId: "a", direction: "output", dataType: SERIES_FLOAT64 });
@@ -317,7 +216,15 @@ describe("resolveConnectionCompatibility", () => {
     ["sameNode", output, pin({ ...input, nodeId: output.nodeId })],
     ["directionMismatch", output, pin({ ...input, direction: "output" })],
     ["kindMismatch", output, pin({ ...input, type: "exec", kind: "control", dataType: undefined })],
-    ["typeMismatch", output, pin({ ...input, dataType: STRING })],
+    [
+      "typeMismatch",
+      output,
+      pin({
+        ...input,
+        dataType: STRING,
+        resolvedType: { display: "String", resolved: true, dataType: STRING },
+      }),
+    ],
     ["orphan", output, pin({ ...input, orphan: true })],
     [
       "capacityReached",

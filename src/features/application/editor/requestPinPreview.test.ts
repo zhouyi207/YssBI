@@ -293,20 +293,6 @@ describe("requestPinPreview", () => {
       },
     },
     {
-      name: "missing projected address",
-      prepare: () => {
-        const graph = installGraph();
-        delete useGraphProjectionStore.getState().graphEntities[eventGraphPath].pins[
-          graph.outputKey
-        ].address;
-        return {
-          graphPath: eventGraphPath,
-          pinId: graph.outputKey,
-          reason: "missing-address",
-        } as const;
-      },
-    },
-    {
       name: "missing focused graph session",
       prepare: () => {
         const graph = installGraph();
@@ -350,34 +336,7 @@ describe("requestPinPreview", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {
-      name: "projection object replacement",
-      replace: () => {
-        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
-        useGraphProjectionStore.setState({
-          graphEntities: {
-            ...useGraphProjectionStore.getState().graphEntities,
-            [eventGraphPath]: { ...current, pins: { ...current.pins } },
-          },
-        });
-      },
-    },
-    {
-      name: "request generation change",
-      replace: () => {
-        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
-        current.requestGeneration += 1;
-      },
-    },
-    {
-      name: "source revision change",
-      replace: () => {
-        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
-        current.sourceRevision += 1;
-      },
-    },
-  ])("settles stale completion after $name as a pure no-op", async ({ replace }) => {
+  it("settles stale completion after projection replacement as a pure no-op", async () => {
     const { outputKey } = installGraph();
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, "ordinary-run");
@@ -389,7 +348,13 @@ describe("requestPinPreview", () => {
       async (_projectInstanceId, _graphPath, demand, onEvent) => {
         if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
         onEvent?.(runEvent({ type: "runStarted" }));
-        replace();
+        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
+        useGraphProjectionStore.setState({
+          graphEntities: {
+            ...useGraphProjectionStore.getState().graphEntities,
+            [eventGraphPath]: { ...current, pins: { ...current.pins } },
+          },
+        });
         onEvent?.(
           runEvent({
             type: "pinPreviewResultReady",

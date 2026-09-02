@@ -104,14 +104,8 @@ export function isGraphResourcePath(value: unknown): value is string {
 
 function isProjectionBasis(value: unknown): boolean {
   return (
-    hasExactKeys(value, [
-      "graphPath",
-      "graphRevision",
-      "registryFingerprint",
-      "resourceVersions",
-    ]) &&
+    hasExactKeys(value, ["graphPath", "registryFingerprint", "resourceVersions"]) &&
     isGraphResourcePath(value.graphPath) &&
-    isNonNegativeSafeInteger(value.graphRevision) &&
     typeof value.registryFingerprint === "string" &&
     fingerprintPattern.test(value.registryFingerprint) &&
     isStringRecord(value.resourceVersions)
@@ -336,7 +330,6 @@ function isNode(value: unknown): boolean {
   return (
     hasExactKeys(value, [
       "graphPath",
-      "sourceRevision",
       "nodeId",
       "nodeTypeId",
       "position",
@@ -347,7 +340,6 @@ function isNode(value: unknown): boolean {
       "diagnostics",
     ]) &&
     isGraphResourcePath(value.graphPath) &&
-    isNonNegativeSafeInteger(value.sourceRevision) &&
     typeof value.nodeId === "string" &&
     typeof value.nodeTypeId === "string" &&
     isPosition(value.position) &&

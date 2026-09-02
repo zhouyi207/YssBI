@@ -7,7 +7,6 @@ import {
 } from "@/features/application/editor/requestPinPreview";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
 import { executionResultUi } from "@/features/core/execution";
-import { useExecutionRead } from "@/features/core/execution/read";
 import {
   buildPinViewParams,
   evaluatePinViewState,
@@ -18,14 +17,12 @@ import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
 import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useTheme } from "@/features/core/theme/useTheme";
-import type { PinMetaDataDTO } from "@/shared/types/domain";
-import type { Pin as PinModel } from "@/shared/types/domain";
+import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import {
+  findPrimaryPortDiagnostic,
+  isUnboundInputDiagnostic,
+} from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { dataValueFromBackend, dataValueToRaw } from "@/shared/types/domain/dataValue";
-import type {
-  PortAddressDto,
-  PortKindDto,
-  ResolvedPortStatusDto,
-} from "@/shared/types/domain/editorProjection";
 import {
   isExecPin,
   PRIMITIVE_SCALAR_INPUT_KEYS,
@@ -59,28 +56,28 @@ export type GraphPinDragState = "normal" | "highlighted" | "dimmed";
 
 const EMPTY_CONNECTION_IDS: string[] = [];
 
-export interface GraphPinControllerProps extends PinModel {
-  connected?: boolean;
-  linkCount?: number;
-  connectionIds?: string[];
-  metaData?: PinMetaDataDTO;
+export interface GraphPinControllerProps {
+  pin: PinData & Partial<Pick<PinView, "connected" | "linkCount">>;
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  onPinClick?: (id: string, direction: "input" | "output") => void;
-  onPinPointerDown?: (event: React.PointerEvent, pin: PinModel) => void;
+  onPinPointerDown?: (event: React.PointerEvent, pin: PinData) => void;
   isActive?: boolean;
   pinDragState?: GraphPinDragState;
-  onValueChange?: (pinId: string, value: unknown) => void;
   onRemovePin?: (pinId: string) => void;
-  forceShowInput?: boolean;
-  address?: PortAddressDto;
-  kind?: PortKindDto;
-  orphan?: boolean;
-  status?: ResolvedPortStatusDto;
 }
 
 export function GraphPinController(props: GraphPinControllerProps) {
+  const {
+    pin,
+    graphPath,
+    groupId,
+    contextMenuActions,
+    onPinPointerDown,
+    isActive,
+    pinDragState = "normal",
+    onRemovePin,
+  } = props;
   const {
     id,
     nodeId,
@@ -89,31 +86,20 @@ export function GraphPinController(props: GraphPinControllerProps) {
     direction,
     connected = false,
     linkCount = 0,
-    metaData,
-    graphPath,
-    groupId,
-    contextMenuActions,
-    onPinClick,
-    onPinPointerDown,
-    isActive,
-    pinDragState = "normal",
-    dataType,
-    optional,
-    defaultValue,
-    userValue,
-    onValueChange,
-    onRemovePin,
-    forceShowInput,
-    validationWarning,
     address,
     kind,
     orphan,
     status,
-  } = props;
+    input,
+    resolvedType,
+  } = pin;
+  const dataType = resolvedType?.resolved ? (resolvedType.dataType ?? undefined) : undefined;
+  const defaultValue = input?.protocolDefault;
+  const userValue = input?.literalOverride;
   const { t } = useTranslation();
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const pinSemantics = useMemo(() => ({ type: type ?? "object", dataType }), [dataType, type]);
+  const pinSemantics = useMemo(() => ({ type, dataType }), [dataType, type]);
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
   const renderStyle = useMemo(
@@ -154,9 +140,12 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const graphConnections = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath]?.connections : undefined,
   );
-  const pinHistories = useExecutionRead((snapshot) =>
-    graphPath ? snapshot.graphs[graphPath]?.pinHistories : undefined,
-  );
+  const pinDiagnostic = useGraphRead((snapshot) => {
+    const diagnostics = graphPath
+      ? snapshot.graphEntities[graphPath]?.nodes[nodeId]?.diagnostics
+      : undefined;
+    return diagnostics ? findPrimaryPortDiagnostic(diagnostics, address) : undefined;
+  });
   const connections = useMemo(
     () =>
       connectionIds.flatMap((connectionId) => {
@@ -234,7 +223,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
     firstHistoryOutput,
     graphPath,
     id,
-    pinHistories,
     previewActionAvailable,
     t,
     viewParams,
@@ -250,18 +238,13 @@ export function GraphPinController(props: GraphPinControllerProps) {
     !visualSpec.container &&
     userValue != null;
   const shouldPulse =
-    !optional && !isConnected && direction === "input" && !isExecPin(pinSemantics);
-  const isDropdownPin =
-    metaData?.showWidget &&
-    metaData.widgetType === "dropdown" &&
-    (metaData.widgetOptions?.length ?? 0) > 0;
+    !isConnected && direction === "input" && isUnboundInputDiagnostic(pinDiagnostic);
   const showInput = Boolean(
-    (!isConnected || forceShowInput === true) &&
+    !isConnected &&
     scalarInputKey != null &&
-    (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) ||
-      (scalarInputKey === "string" && isDropdownPin)) &&
+    PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
     !visualSpec.container &&
-    (direction === "input" || forceShowInput === true) &&
+    direction === "input" &&
     graphPath &&
     nodeId,
   );
@@ -278,8 +261,8 @@ export function GraphPinController(props: GraphPinControllerProps) {
       : null;
   const tooltip =
     feedbackTooltip ??
-    (validationWarning
-      ? `${name} (${visualSpec.label}) — ${validationWarning}`
+    (pinDiagnostic
+      ? `${name} (${visualSpec.label}) — ${pinDiagnostic.message}`
       : `${name} (${visualSpec.label})`);
 
   const inputSlot = showInput ? (
@@ -288,9 +271,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
       nodeId={nodeId}
       graphPath={graphPath!}
       dataType={dataType}
-      metaData={metaData}
       value={toDisplayValue(userValue ?? defaultValue)}
-      onValueChange={(value) => onValueChange?.(id, value)}
     />
   ) : null;
   const contextMenuSlot = contextMenu ? (
@@ -330,7 +311,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
       direction={direction}
       isConnected={isConnected}
       contextMenuOpen={contextMenu != null}
-      validationWarning={validationWarning}
+      diagnosticMessage={pinDiagnostic?.message}
       dragStyle={dragStyle}
       connectionFeedback={connectionFeedbackModel}
       visualSpec={visualSpec}
@@ -349,11 +330,10 @@ export function GraphPinController(props: GraphPinControllerProps) {
         if (!onPinPointerDown) return;
         event.stopPropagation();
         event.preventDefault();
-        onPinPointerDown(event, props);
+        onPinPointerDown(event, pin);
       }}
       onClick={(event) => {
         event.stopPropagation();
-        onPinClick?.(id, direction);
       }}
     />
   );

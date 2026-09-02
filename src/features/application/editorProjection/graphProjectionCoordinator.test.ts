@@ -123,7 +123,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     );
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
-      nodes: { "local-node": { title: "Refreshed" } },
+      nodes: { "local-node": { display: { title: "Refreshed" } } },
     });
     expect(
       useResourceStore.getState().resources[resourceKey({ id: graphPath, kind: "event" })]
@@ -172,7 +172,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
-      nodes: { "local-node": { title: "Trailing refresh" } },
+      nodes: { "local-node": { display: { title: "Trailing refresh" } } },
     });
   });
 
@@ -266,7 +266,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
       requestGeneration: 1,
-      nodes: { "local-node": { title: "Current" } },
+      nodes: { "local-node": { display: { title: "Current" } } },
     });
     expect(getDocumentState({ id: graphPath, kind: "event" })?.stale).toBe(true);
   });
@@ -310,7 +310,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(replacementGraph);
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 1,
-      nodes: { "local-node": { title: "Replacement project" } },
+      nodes: { "local-node": { display: { title: "Replacement project" } } },
     });
   });
 
@@ -349,7 +349,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
       requestGeneration: 2,
-      nodes: { "local-node": { title: "Installed" } },
+      nodes: { "local-node": { display: { title: "Installed" } } },
     });
     expect(getDocumentState({ id: graphPath, kind: "event" })?.stale).toBe(false);
   });
@@ -388,7 +388,7 @@ describe("graphProjectionCoordinator invalidation", () => {
 
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
-      nodes: { "local-node": { title: "Newer response" } },
+      nodes: { "local-node": { display: { title: "Newer response" } } },
     });
     expect(getDocumentState({ id: graphPath, kind: "event" })?.stale).toBe(false);
   });
@@ -422,7 +422,7 @@ describe("graphProjectionCoordinator invalidation", () => {
 
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
-      nodes: { "local-node": { title: "First response" } },
+      nodes: { "local-node": { display: { title: "First response" } } },
     });
     expect(getDocumentState({ id: graphPath, kind: "event" })?.stale).toBe(true);
   });

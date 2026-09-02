@@ -22,7 +22,6 @@ function validProjection(): EditorGraphProjectionDto {
   return {
     basis: {
       graphPath: "functions/main",
-      graphRevision: 7,
       registryFingerprint: "0101010101010101010101010101010101010101010101010101010101010101",
       resourceVersions: { "functions/helper": "3" },
     },
@@ -31,7 +30,6 @@ function validProjection(): EditorGraphProjectionDto {
     nodes: [
       {
         graphPath: "functions/main",
-        sourceRevision: 7,
         nodeId: "node-1",
         nodeTypeId: "statistics.linear-regression",
         position: { x: 120.5, y: -32 },
@@ -277,18 +275,6 @@ describe("validateEditorGraphProjection", () => {
       "node graph path",
       (projection: EditorGraphProjectionDto) => {
         projection.nodes[0].graphPath = "functions/other";
-      },
-    ],
-    [
-      "basis revision",
-      (projection: EditorGraphProjectionDto) => {
-        projection.basis.graphRevision = 8;
-      },
-    ],
-    [
-      "node revision",
-      (projection: EditorGraphProjectionDto) => {
-        projection.nodes[0].sourceRevision = 8;
       },
     ],
   ])("rejects mismatched %s", (_, mutate) => {

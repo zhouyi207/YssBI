@@ -25,7 +25,6 @@ import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore"
 import { editorViewportScope, releaseEditorViewport } from "@/features/core/viewport";
 import { logger } from "@/features/application/observability/appLogger";
 
-import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { saveChartDocument as saveChartDraft } from "@/features/application/chart/saveChartDocument";
 import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
@@ -199,7 +198,6 @@ async function saveGraphDocument(
 ): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return false;
   try {
-    warnCallFunctionIssuesBeforeSave(document.resourceRef);
     const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
     return saved && isCurrentProjectIdentity(identity);
   } catch (error) {

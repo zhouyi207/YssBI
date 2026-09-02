@@ -44,10 +44,6 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => executionState },
-  resolveExecutionGraphPath: () => "events/Main.yssbi-event",
-  getExecutionEventGraph: () => ({
-    graph: { name: "Main", path: "events/Main.yssbi-event", type: "event" },
-  }),
   graphHasClearableArtifacts: () => true,
 }));
 vi.mock("@/features/core/execution/executionRecording", () => ({
@@ -56,9 +52,9 @@ vi.mock("@/features/core/execution/executionRecording", () => ({
 vi.mock("./resolveExecutionGraphPath", () => ({
   resolveExecutionGraphPath: (targetGraphPath?: string) =>
     targetGraphPath ?? "events/Main.yssbi-event",
-  getExecutionEventGraph: () => ({
+  getExecutionEventTarget: () => ({
     graphPath: "events/Main.yssbi-event",
-    graph: { name: "Main", path: "events/Main.yssbi-event", type: "event" },
+    name: "Main",
   }),
 }));
 vi.mock("@/features/application/execution/openInspectableResult", () => ({
@@ -80,10 +76,6 @@ vi.mock("@/features/core/dataStore", () => ({
     }),
   },
 }));
-vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
-  warnCallFunctionIssuesBeforeSave: vi.fn(),
-}));
-
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 

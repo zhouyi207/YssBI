@@ -1,5 +1,7 @@
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
 import type { GraphEditorSessionDto } from "@/shared/types/dto/editorMutation";
+import type { DataType } from "@/shared/types/domain/dataType";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface EditorProjectionFixtureOptions {
@@ -9,6 +11,50 @@ export interface EditorProjectionFixtureOptions {
   nodeTypeId?: string;
   title?: string;
   connectionId?: string;
+}
+
+export function makeProjectedPinData(
+  overrides: Partial<PinData> & Pick<PinData, "id" | "nodeId" | "direction">,
+): PinData {
+  const kind = overrides.kind ?? "data";
+  const dataType: DataType | undefined =
+    kind === "data" ? (overrides.dataType ?? { kind: "Float64" }) : undefined;
+  const label = overrides.name ?? overrides.id;
+  const base: PinData = {
+    id: overrides.id,
+    nodeId: overrides.nodeId,
+    name: label,
+    type: kind === "data" ? "object" : "exec",
+    direction: overrides.direction,
+    dataType,
+    address: {
+      kind: "declared",
+      nodeId: overrides.nodeId,
+      portKey: overrides.id,
+    },
+    templateKey: overrides.id,
+    display: { label, instanceLabel: null },
+    kind,
+    instanceKind: "declared",
+    orphan: false,
+    canRemove: false,
+    connections: {
+      current: 0,
+      maximum: overrides.direction === "input" ? 1 : null,
+      ordered: false,
+      canAppend: true,
+      canReplace: false,
+      canMove: true,
+    },
+    input:
+      overrides.direction === "input"
+        ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
+        : null,
+    resolvedType: dataType ? { display: dataType.kind, resolved: true, dataType } : null,
+    resolvedSchema: null,
+    status: "resolved",
+  };
+  return { ...base, ...overrides };
 }
 
 export function makeGraphEditorSession(
@@ -61,7 +107,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
     projection: {
       basis: {
         graphPath,
-        graphRevision: sourceRevision,
         registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
         resourceVersions: {},
       },
@@ -70,7 +115,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
       nodes: [
         {
           graphPath,
-          sourceRevision,
           nodeId,
           nodeTypeId,
           position: { x: 0, y: 0 },

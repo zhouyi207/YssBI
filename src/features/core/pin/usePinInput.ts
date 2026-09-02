@@ -7,7 +7,7 @@ import { scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 /**
  * Get default value for a scalar pin dataType.
  */
-export function getDefaultValue(dataType: DataType | undefined): unknown {
+function getDefaultValue(dataType: DataType | undefined): unknown {
   const key = scalarPinInputKey(dataType);
   switch (key) {
     case "Int64":
@@ -32,14 +32,12 @@ export function usePinInput({
   graphPath,
   dataType,
   initialValue,
-  onValueChange,
 }: {
   pinId: string;
   nodeId: string;
   graphPath: string;
   dataType?: DataType;
   initialValue?: unknown;
-  onValueChange?: (value: unknown) => void;
 }) {
   const inputKey = scalarPinInputKey(dataType);
   const [value, setValue] = useState<unknown>(initialValue ?? getDefaultValue(dataType));
@@ -52,13 +50,7 @@ export function usePinInput({
     }
   }, [initialValue]);
 
-  const handleChange = useCallback(
-    (newValue: unknown) => {
-      setValue(newValue);
-      onValueChange?.(newValue);
-    },
-    [onValueChange],
-  );
+  const handleChange = useCallback((newValue: unknown) => setValue(newValue), []);
 
   const savePinValue = useCallback(
     async (val?: unknown) => {
@@ -94,11 +86,10 @@ export function usePinInput({
         const restored = initialValue ?? getDefaultValue(dataType);
         skipNextBlurSaveRef.current = true;
         setValue(restored);
-        onValueChange?.(restored);
         (e.currentTarget as HTMLElement).blur();
       }
     },
-    [initialValue, onValueChange, dataType],
+    [initialValue, dataType],
   );
 
   return {

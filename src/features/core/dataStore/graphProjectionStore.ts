@@ -91,8 +91,6 @@ function buildProjectionBucket(
       id: node.nodeId,
       graphPath: node.graphPath,
       nodeType: node.nodeTypeId,
-      category: [],
-      title: node.display.title,
       position: node.position,
       inputs,
       outputs,
@@ -112,12 +110,10 @@ function buildProjectionBucket(
       name: port.display.instanceLabel ?? port.display.label,
       type: port.kind === "data" ? "object" : "exec",
       direction: port.direction,
-      defaultValue: port.input?.protocolDefault,
       dataType:
         port.kind === "data" && port.resolvedType?.resolved
           ? (port.resolvedType.dataType ?? undefined)
           : undefined,
-      userValue: port.input?.literalOverride,
       address: port.address,
       templateKey: port.templateKey,
       display: port.display,

@@ -15,7 +15,6 @@ import { PinPreviewGenerationService } from "@/services/nodeSystem/pinPreviewGen
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
-import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
@@ -31,7 +30,6 @@ export type PinPreviewRejectionReason =
   | "missing-session"
   | "missing-resource"
   | "missing-pin"
-  | "missing-address"
   | "input-pin"
   | "non-data-output"
   | "orphan-pin"
@@ -51,8 +49,6 @@ export type PinPreviewRequestResult =
 type PreviewAuthority = {
   project: ProjectIdentitySnapshot;
   projection: GraphEntityBucket;
-  requestGeneration: number;
-  sourceRevision: number;
 };
 
 export function isPinPreviewActionAvailable(
@@ -64,7 +60,6 @@ export function isPinPreviewActionAvailable(
     inferGraphResourceKind(graphPath) === "event" &&
     pin.direction === "output" &&
     pin.kind === "data" &&
-    pin.address &&
     !pin.orphan &&
     pin.status !== "orphan",
   );
@@ -85,7 +80,6 @@ function staleSettlement(): PinPreviewRequestResult {
 
 function validatePin(pin: PinData | undefined): PinPreviewRejectionReason | null {
   if (!pin) return "missing-pin";
-  if (!pin.address) return "missing-address";
   if (pin.direction !== "output") return "input-pin";
   if (pin.kind !== "data") return "non-data-output";
   if (pin.orphan || pin.status === "orphan") return "orphan-pin";
@@ -116,12 +110,10 @@ function capturePreviewRequest(
   if (invalid) return invalid;
 
   return {
-    output: { graphPath, port: pin.address as PortAddressDto },
+    output: { graphPath, port: pin.address },
     authority: {
       project,
       projection: bucket,
-      requestGeneration: bucket.requestGeneration,
-      sourceRevision: bucket.sourceRevision,
     },
   };
 }
@@ -131,11 +123,7 @@ function isPreviewAuthorityCurrent(graphPath: string, authority: PreviewAuthorit
     return false;
   }
   const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
-  return Boolean(
-    bucket === authority.projection &&
-    bucket.requestGeneration === authority.requestGeneration &&
-    bucket.sourceRevision === authority.sourceRevision,
-  );
+  return bucket === authority.projection;
 }
 
 export async function requestPinPreview(
