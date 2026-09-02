@@ -22,6 +22,36 @@ https://rig.rs/ 这个页面可以作为我的 yss 页面的参考
 
 测试应该保护未来仍然成立的行为或架构约束，而不是永久证明某次历史重构确实做过。
 
+
+目前项目中还有很多的 revision ，似乎按照目前的这种不需要 reconcile 的模式可以处理掉；
+
+registryFingerprint 是什么，是不是可以处理掉
+
+在添加 print 的 output panel 信息的时候：
+
+。现在 Event Begin → Print 在 Message 未绑定时会使用协议默认值 Hello, World!，并通过同一执行 Channel 显示到 Output 面板。
+
+  主要改动：
+
+  - D:/Desktop/YssBI/src-tauri/crates/yss-graph-compiler/src/compiler.rs:20：解析 Data/Control/Effect 输入，应用 protocol default。
+  - D:/Desktop/YssBI/src-tauri/crates/yss-execution/src/run_output.rs:1：恢复 8 KiB/256 条限制及 truncated/dropped 状态。
+  - D:/Desktop/YssBI/src-tauri/crates/yss-application/src/execution/run_graph.rs:353：保证 runStarted → output → runCompleted 顺
+    序。
+
+  - D:/Desktop/YssBI/src-tauri/crates/yss-api/src/commands/execution_dto.rs:263：恢复包含 sourceGraphPath/sourceNodeId/sourcePort
+    的 flat wire。
+
+  验证结果：
+
+  - 后端及前端聚焦测试共 156 个通过。
+  - Rust workspace 编译、格式、目标 Clippy、git diff --check 通过。
+  - 完整架构/Clippy 门禁仍受仓库既有 Graph Draft、Function Projection、SCI 告警阻断，与本次修改无关。
+  - 未修改项目事件文件。
+
+修改的内容是不是太多了，说明后端的 crates 组织很差
+
+plot 需要进行处理，其计算逻辑不要放置在前端，而是要放置在后端
+
 ```
 同步改四处版本（例如 0.1.1）：
 
@@ -982,6 +1012,16 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 
 ## 2026.09.02
 
+- [x] 收敛 Graph editor projection 版本契约：删除重复的 `basis.graphRevision`、逐节点
+      `sourceRevision`、OpenGraph receipt revision 与 Pin Preview 重复版本快照，仅保留根投影版本。
+- [x] 修复未保存 Graph 新节点拖拽 Pin 时 compatible node catalog 错用 committed revision 导致的
+      `graph_revision_conflict`；查询改为由 Rust 针对当前前端 Draft document 无状态计算。
+- [x] 删除 Graph 前端无法由 Rust 投影到达的 Math layout、旧 NodeDefinition/PinSlot 推导、
+      完整 Graph 快照兼容模型及失联 Controller props；统一 canonical styleId 与精确投影字段。
+- [x] 将节点、端口和 Project Explorer 诊断统一改为消费 Rust editor projection，移除前端
+      Call Function 引用副本及无生产者的 optional、validationWarning、subGraphPath 等状态。
+- [x] 修复 Graph Pin pointer 将 Controller props/callbacks 泄漏进 interaction store 导致的
+      `structuredClone` 异常；统一使用显式 `PinData` 边界并保证 Canvas session 可克隆、与外部对象解绑。
 - [x] 将 Graph Editor 切换为前端 draft / Rust committed authority：Canvas 编辑只更新 draft，Save
       期间锁定全部 Graph 写入口，并以无 frontend revision 前置条件的完整 document 原子覆盖 Rust 与磁盘。
 - [x] 删除 Canvas `GraphDelta` 回声、receipt/event 去重与旧 mutation coordinator；统一 Draft、Projection、
@@ -992,3 +1032,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       command 中的 computation settings authority；Settings modal 继续仅提供全局编辑入口。
 - [ ] 修复 Dockview 首次挂载时侧栏虚拟树缓存零高度造成节点目录前几行空白；未连接或隐藏阶段保留
       预估行高，并补充聚焦回归测试。
+- [ ] 修复中性执行器按计划位置读取尚未就绪上游值导致合法 DAG 随节点 UUID 顺序随机失败；改为按依赖
+      就绪推进并增加消费者先于生产者的聚焦回归测试。
+- [ ] 将 Execution 生成的首个 RunId 从 `0` 对齐为前端 wire 要求的正整数 `1`，避免合法终止事件被
+      channel parser 判为无效，并增加注册表契约回归测试。
+- [ ] 让 GraphRuntime 以 session NodeRegistry 驱动编译，按输入端口协议顺序降低 Data/Control/Effect，
+      并在无用户覆盖时将 protocol default 写入不可变执行参数包。
+- [ ] 恢复 Print 的有序有界 Run Output：只消费 Message 数据输入，经同一运行 Channel 发送文本与
+      truncation/drop 状态，保留 graph/node/port 来源身份及既有 flat wire。
