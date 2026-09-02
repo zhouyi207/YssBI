@@ -1,8 +1,8 @@
 use super::common::parse_graph_path;
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::schema::ProjectSaveResultDto;
 use crate::schema::application_event::ResourceMutationResultDto;
+use crate::schema::graph_draft::GraphDraftSaveDto;
 use tauri::{AppHandle, State};
 use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
@@ -71,30 +71,24 @@ pub fn unload_project_graph(
 
 #[tauri::command]
 pub fn save_project_graph(
-    app: AppHandle,
     application: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    expected_revision: ResourceRevision,
+    locale: String,
+    document: yss_graph_document::GraphDocument,
     operation_id: OperationId,
-) -> Result<ProjectSaveResultDto, CommandError> {
+) -> Result<GraphDraftSaveDto, CommandError> {
     let result = application
-        .save_graph_resource(
+        .save_graph_draft(
             project_instance_id,
             parse_graph_path(graph_path)?,
-            expected_revision,
+            locale,
             operation_id,
+            document,
         )
-        .map_err(map_resource_mutation_error)?;
-    let result = ProjectSaveResultDto::from(result);
-    emit_project_event_result(
-        &app,
-        &Event::Project(EventProject::ProjectSaved {
-            result: result.clone(),
-        }),
-    )
-    .map_err(|error| CommandError::diagnosed("project_event_emit_failed", error))?;
-    Ok(result)
+        .map_err(map_graph_draft_save_error)?;
+    crate::schema::graph_draft::graph_draft_save_to_transport(&result)
+        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 #[tauri::command]
@@ -206,4 +200,10 @@ fn map_resource_mutation_error(
     error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
+}
+
+fn map_graph_draft_save_error(
+    error: yss_application::resource_mutation::ResourceMutationApplicationError,
+) -> CommandError {
+    super::common::resource_mutation_to_command_error(error, "graph_save_rejected")
 }

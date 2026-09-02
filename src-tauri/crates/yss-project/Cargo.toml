@@ -16,7 +16,6 @@ thiserror.workspace = true
 tracing.workspace = true
 trash = "5.2"
 uuid.workspace = true
-yss-computation-settings = { path = "../yss-computation-settings" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-display-naming = { path = "../yss-display-naming" }

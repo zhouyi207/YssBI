@@ -5,6 +5,8 @@ mod error;
 mod event;
 mod schema;
 
+pub use commands::{HarnessChannelHub, HarnessRuntimeState};
+
 /// Builds the single invoke handler consumed by the root composition crate.
 pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     use commands::*;
@@ -22,7 +24,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         update_function_signature,
         hydrate_editor_graph,
         export_graph_subgraph,
-        mutate_graph_document,
+        transform_graph_draft,
         get_project_history_status,
         undo_graph_document,
         redo_graph_document,
@@ -38,8 +40,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_project_path,
         get_project_resource_path,
         get_project_index,
-        get_project_computation_settings,
-        update_project_computation_settings,
         load_project_graph,
         default_project_parent_directory,
         validate_new_project_path,
@@ -99,6 +99,21 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         compute_acf_pacf,
         compute_serial_tests,
         compute_panel_did_fake_group_ri,
+        get_harness_runtime_status,
+        configure_harness_provider,
+        create_harness_session,
+        subscribe_harness_events,
+        unsubscribe_harness_events,
+        submit_harness_turn,
+        cancel_harness_turn,
+        close_harness_session,
+        list_harness_memory,
+        delete_harness_memory,
+        plan_dataset_quality_review,
+        advance_harness_workflow,
+        pause_harness_workflow,
+        resume_harness_workflow,
+        cancel_harness_workflow,
         parse_bayes_expression,
         validate_bayes_model,
         submit_bayes_inference,
@@ -118,5 +133,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         submit_frontend_diagnostics,
         subscribe_diagnostics,
         unsubscribe_diagnostics,
+        get_application_settings,
+        update_application_settings,
     ]
 }

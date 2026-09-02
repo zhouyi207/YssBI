@@ -7,14 +7,13 @@ use super::editor_projection::{
     EditorProjectionError, EditorProjectionInput, build_editor_projection,
 };
 use super::events::{
-    CommittedResourceMutation, GraphMutationResult, GraphProjectionReplacement, HistoryStatus,
+    CommittedResourceMutation, GraphProjectionReplacement, HistoryStatus,
     committed_resource_mutation_from_project,
 };
 use super::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
-use super::graph_commit::{GraphCommitApplicationError, commit_captured_graph_candidate};
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
 };
@@ -26,13 +25,14 @@ use yss_execution::plan::{
 };
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_catalog::CatalogResourcePath;
-use yss_graph_document::{GraphResourceKind, GraphResourcePath};
-use yss_graph_document_edit::apply_graph_document_patch;
+use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
+use yss_graph_document_edit::{
+    GraphDocumentPatch, apply_graph_document_patch, validate_graph_document,
+};
 use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
-use yss_project::project_writers::ProjectSaveResult;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -68,23 +68,36 @@ pub enum ResourceMutationApplicationError {
     SessionRefresh(#[source] ApplicationSessionRefreshError),
 }
 
-fn map_graph_commit_application_error(
-    error: GraphCommitApplicationError,
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphDraftUpdate {
+    pub document: GraphDocument,
+    pub patch: GraphDocumentPatch,
+    pub projection_replacement: GraphProjectionReplacement,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphDraftSave {
+    pub project_instance_id: ProjectInstanceId,
+    pub operation_id: OperationId,
+    pub document: GraphDocument,
+    pub projection_replacement: GraphProjectionReplacement,
+    pub history: HistoryStatus,
+}
+
+fn map_graph_save_error(
+    error: yss_project::ProjectGraphSaveError,
 ) -> ResourceMutationApplicationError {
     match error {
-        GraphCommitApplicationError::SessionCapture(error) => {
-            ResourceMutationApplicationError::SessionCapture(error)
+        yss_project::ProjectGraphSaveError::Filesystem(error) => {
+            ResourceMutationApplicationError::Project(error)
         }
-        GraphCommitApplicationError::SessionChanged => {
-            ResourceMutationApplicationError::SessionChanged(SessionRevalidationError::Changed)
-        }
-        GraphCommitApplicationError::Commit(error) => {
+        yss_project::ProjectGraphSaveError::Commit(error) => {
             ResourceMutationApplicationError::GraphCommit(error)
         }
     }
 }
 
-fn build_catalog_mutation_validation_snapshot(
+pub(crate) fn build_catalog_mutation_validation_snapshot(
     captured: &ApplicationSession,
 ) -> Result<CatalogMutationValidationSnapshot, ResourceMutationApplicationError> {
     let index = captured
@@ -281,10 +294,11 @@ fn build_graph_projection_replacement(
 }
 
 impl ApplicationState {
-    pub fn export_graph_subgraph(
+    pub fn export_graph_draft_subgraph(
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
+        mut document: GraphDocument,
         node_ids: Vec<yss_graph_document::NodeId>,
     ) -> Result<ClipboardSubgraph, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
@@ -293,13 +307,16 @@ impl ApplicationState {
             .project()
             .get_data()
             .map_err(ResourceMutationApplicationError::Project)?;
-        let document = data
+        document.revision = data
             .graphs
             .get(&graph_path)
-            .map(|resource| resource.document.clone())
+            .map(|resource| resource.document.revision)
             .ok_or_else(|| ResourceMutationApplicationError::GraphUnavailable {
                 graph: graph_path.clone(),
             })?;
+        validate_graph_document(&document).map_err(|error| {
+            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+        })?;
         let result = captured
             .graph()
             .export_subgraph(&graph_path, &document, &catalog, node_ids)
@@ -309,59 +326,103 @@ impl ApplicationState {
         Ok(result)
     }
 
-    pub fn mutate_graph_document(
+    pub fn transform_graph_draft(
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
         locale: String,
-        request: MutationRequest<EditorGraphMutation>,
-    ) -> Result<GraphMutationResult, ResourceMutationApplicationError> {
+        mut document: GraphDocument,
+        mutation: EditorGraphMutation,
+    ) -> Result<GraphDraftUpdate, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let request_operation_id = request.operation_id;
-        let expected_revision = request.base_revision.to_graph_revision();
-        let capture = captured
+        document.revision = captured
             .project()
-            .capture_graph_operation(
-                &project_instance_id,
-                &graph_path,
-                expected_revision,
-                request_operation_id,
-            )
-            .map_err(ResourceMutationApplicationError::GraphOperation)?;
+            .get_data()
+            .map_err(ResourceMutationApplicationError::Project)?
+            .graphs
+            .get(&graph_path)
+            .map(|resource| resource.document.revision)
+            .ok_or_else(|| ResourceMutationApplicationError::GraphUnavailable {
+                graph: graph_path.clone(),
+            })?;
+        validate_graph_document(&document).map_err(|error| {
+            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+        })?;
         let catalog = build_catalog_mutation_validation_snapshot(&captured)?;
         let patch = captured
             .graph()
-            .plan_editor_mutation(
-                &graph_path,
-                capture.document.as_ref(),
-                request.payload,
-                &catalog,
-            )
+            .plan_editor_mutation(&graph_path, &document, mutation, &catalog)
             .map_err(ResourceMutationApplicationError::Mutation)?;
-        let mut candidate = capture.document.as_ref().clone();
+        let mut candidate = document;
         apply_graph_document_patch(&mut candidate, &patch).map_err(|error| {
             ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
         })?;
-        let receipt = commit_captured_graph_candidate(
-            self,
-            &captured,
-            capture,
-            std::sync::Arc::new(candidate.clone()),
-        )
-        .map_err(map_graph_commit_application_error)?;
         let projection =
             build_graph_projection_replacement(&captured, &graph_path, &candidate, &locale)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(GraphMutationResult {
+        Ok(GraphDraftUpdate {
+            document: candidate,
+            patch,
+            projection_replacement: projection,
+        })
+    }
+
+    pub fn save_graph_draft(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        locale: String,
+        operation_id: OperationId,
+        document: GraphDocument,
+    ) -> Result<GraphDraftSave, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let submitted_document = document;
+        let (mut document, receipt) = {
+            let mut saved = None;
+            for attempt in 0..3 {
+                let operation = captured
+                    .project()
+                    .capture_graph_overwrite_operation(
+                        &project_instance_id,
+                        &graph_path,
+                        operation_id,
+                    )
+                    .map_err(ResourceMutationApplicationError::GraphOperation)?;
+                let mut candidate = submitted_document.clone();
+                candidate.revision = operation.revision;
+                validate_graph_document(&candidate).map_err(|error| {
+                    ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+                })?;
+                build_graph_projection_replacement(&captured, &graph_path, &candidate, &locale)?;
+                match captured.project().save_graph_candidate(
+                    operation,
+                    operation_id,
+                    Arc::new(candidate.clone()),
+                ) {
+                    Ok(receipt) => {
+                        saved = Some((candidate, receipt));
+                        break;
+                    }
+                    Err(yss_project::ProjectGraphSaveError::Commit(
+                        yss_project::ProjectGraphCommitError::StaleAuthority { .. },
+                    )) if attempt < 2 => {}
+                    Err(error) => return Err(map_graph_save_error(error)),
+                }
+            }
+            saved.ok_or_else(|| {
+                ResourceMutationApplicationError::SessionChanged(SessionRevalidationError::Changed)
+            })?
+        };
+        document.revision = receipt.to_revision;
+        let projection =
+            build_graph_projection_replacement(&captured, &graph_path, &document, &locale)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(GraphDraftSave {
             project_instance_id,
-            delta: crate::events::GraphDeltaEvent {
-                graph_path,
-                from_revision: ResourceRevision::from_graph_revision(receipt.from_revision),
-                to_revision: ResourceRevision::from_graph_revision(receipt.to_revision),
-                caused_by: Some(request_operation_id),
-                payload: patch,
-            },
+            operation_id,
+            document,
             projection_replacement: projection,
             history: HistoryStatus {
                 can_undo: receipt.history.can_undo,
@@ -502,25 +563,6 @@ impl ApplicationState {
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
-    }
-
-    pub fn save_graph_resource(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        graph_path: GraphResourcePath,
-        expected_revision: ResourceRevision,
-        operation_id: OperationId,
-    ) -> Result<ProjectSaveResult, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured.project().save_graph_resource(
-            &project_instance_id,
-            &graph_path,
-            expected_revision,
-            operation_id,
-        )?;
-        self.revalidate_captured_session(&captured)
-            .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(result)
     }
 
     pub fn unload_graph_resource(

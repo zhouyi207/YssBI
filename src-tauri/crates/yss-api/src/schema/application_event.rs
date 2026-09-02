@@ -93,25 +93,6 @@ pub struct GraphProjectionReplacementDto {
         Option<yss_function_editor_projection::FunctionEditorProjection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphDeltaEventDto<T> {
-    pub graph_path: String,
-    pub from_revision: yss_project_identity::ResourceRevision,
-    pub to_revision: yss_project_identity::ResourceRevision,
-    pub caused_by: Option<yss_project_identity::OperationId>,
-    pub payload: T,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphMutationResultDto {
-    pub project_instance_id: String,
-    pub delta: GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch>,
-    pub projection_replacement: GraphProjectionReplacementDto,
-    pub history: yss_project_history::HistoryStatusDto,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "status",
@@ -163,45 +144,22 @@ pub type ApplicationEventDto = EventProject;
 pub struct TransportMappingError;
 
 #[derive(Debug, thiserror::Error)]
-pub enum GraphMutationTransportError {
+pub enum GraphProjectionTransportError {
     #[error("editor projection transport mapping failed")]
     Projection(#[source] crate::schema::editor_projection::TransportMappingError),
 }
 
-pub fn graph_mutation_to_transport(
-    result: &yss_application::events::GraphMutationResult,
-) -> Result<GraphMutationResultDto, GraphMutationTransportError> {
-    Ok(GraphMutationResultDto {
-        project_instance_id: result.project_instance_id.to_string(),
-        delta: graph_delta_to_transport(&result.delta),
-        projection_replacement: GraphProjectionReplacementDto {
-            graph_path: result.projection_replacement.graph_path.to_string(),
-            projection: crate::schema::editor_projection::map_editor_projection(
-                &result.projection_replacement.projection,
-            )
-            .map_err(GraphMutationTransportError::Projection)?,
-            function_editor_projection: result
-                .projection_replacement
-                .function_editor_projection
-                .clone(),
-        },
-        history: yss_project_history::HistoryStatusDto {
-            can_undo: result.history.can_undo,
-            can_redo: result.history.can_redo,
-        },
+pub(crate) fn graph_projection_replacement_to_transport(
+    replacement: &yss_application::events::GraphProjectionReplacement,
+) -> Result<GraphProjectionReplacementDto, GraphProjectionTransportError> {
+    Ok(GraphProjectionReplacementDto {
+        graph_path: replacement.graph_path.to_string(),
+        projection: crate::schema::editor_projection::map_editor_projection(
+            &replacement.projection,
+        )
+        .map_err(GraphProjectionTransportError::Projection)?,
+        function_editor_projection: replacement.function_editor_projection.clone(),
     })
-}
-
-pub(crate) fn graph_delta_to_transport(
-    delta: &yss_application::events::GraphDeltaEvent<yss_graph_document_edit::GraphDocumentPatch>,
-) -> GraphDeltaEventDto<yss_graph_document_edit::GraphDocumentPatch> {
-    GraphDeltaEventDto {
-        graph_path: delta.graph_path.as_str().to_owned(),
-        from_revision: delta.from_revision,
-        to_revision: delta.to_revision,
-        caused_by: delta.caused_by,
-        payload: delta.payload.clone(),
-    }
 }
 
 pub fn application_event_to_transport(

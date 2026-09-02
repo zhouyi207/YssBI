@@ -1,16 +1,13 @@
 use super::common::parse_graph_path;
 use crate::error::CommandError;
-use crate::event::{Event, EventProject, emit_project_event_result};
-use crate::schema::application_event::GraphMutationResultDto;
-use crate::schema::editor_projection_types::EditorGraphProjectionDto;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
+use crate::schema::graph_draft::{GraphDraftUpdateDto, GraphEditorSessionDto};
 use crate::schema::graph_mutation::EditorGraphMutationDto;
-use tauri::{AppHandle, State};
+use tauri::State;
 use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use yss_graph_document::NodeId;
 use yss_graph_editor::EditorGraphMutation;
-use yss_project_history::MutationRequest;
 use yss_project_identity::ProjectInstanceId;
 
 #[tauri::command]
@@ -19,7 +16,7 @@ pub fn hydrate_editor_graph(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
-) -> Result<EditorGraphProjectionDto, CommandError> {
+) -> Result<GraphEditorSessionDto, CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let receipt = state
         .open_graph(OpenGraphRequest::new(
@@ -29,8 +26,12 @@ pub fn hydrate_editor_graph(
             locale,
         ))
         .map_err(open_graph_command_error)?;
-    crate::schema::editor_projection::map_editor_projection(receipt.projection())
-        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+    crate::schema::graph_draft::graph_editor_session_to_transport(
+        receipt.graph_path(),
+        receipt.document(),
+        receipt.projection(),
+    )
+    .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
@@ -75,44 +76,39 @@ pub fn export_graph_subgraph(
     application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
+    document: yss_graph_document::GraphDocument,
     node_ids: Vec<NodeId>,
 ) -> Result<ClipboardSubgraphDto, CommandError> {
     application
-        .export_graph_subgraph(project_instance_id, parse_graph_path(graph_path)?, node_ids)
+        .export_graph_draft_subgraph(
+            project_instance_id,
+            parse_graph_path(graph_path)?,
+            document,
+            node_ids,
+        )
         .map(ClipboardSubgraphDto::from)
         .map_err(map_editor_resource_error)
 }
 
-pub(super) fn parse_editor_mutation_request(
-    request: serde_json::Value,
-) -> Result<MutationRequest<EditorGraphMutation>, CommandError> {
-    let request =
-        serde_json::from_value::<MutationRequest<EditorGraphMutationDto>>(request.clone())
-            .map_err(|_| {
-                let code = if is_create_node_descriptor_shape_error(&request) {
-                    "catalog_descriptor_invalid"
-                } else {
-                    "invalid_editor_mutation"
-                };
-                CommandError::expected(code)
-            })?;
-    let payload = request
-        .payload
+pub(super) fn parse_editor_mutation(
+    mutation: serde_json::Value,
+) -> Result<EditorGraphMutation, CommandError> {
+    let mutation =
+        serde_json::from_value::<EditorGraphMutationDto>(mutation.clone()).map_err(|_| {
+            let code = if is_create_node_descriptor_shape_error(&mutation) {
+                "catalog_descriptor_invalid"
+            } else {
+                "invalid_editor_mutation"
+            };
+            CommandError::expected(code)
+        })?;
+    mutation
         .try_into()
-        .map_err(|_| CommandError::expected("invalid_editor_mutation"))?;
-    Ok(MutationRequest::new(
-        request.resource,
-        request.base_revision,
-        request.operation_id,
-        payload,
-    ))
+        .map_err(|_| CommandError::expected("invalid_editor_mutation"))
 }
 
 fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
-    let Some(mutation) = request
-        .get("payload")
-        .and_then(serde_json::Value::as_object)
-    else {
+    let Some(mutation) = request.as_object() else {
         return false;
     };
     if mutation.get("type").and_then(serde_json::Value::as_str) != Some("createNode") {
@@ -136,39 +132,30 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
 }
 
 #[tauri::command]
-pub fn mutate_graph_document(
-    app: AppHandle,
+pub fn transform_graph_draft(
     application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
-    request: serde_json::Value,
-) -> Result<GraphMutationResultDto, CommandError> {
-    let parsed_request = parse_editor_mutation_request(request)?;
+    document: yss_graph_document::GraphDocument,
+    mutation: serde_json::Value,
+) -> Result<GraphDraftUpdateDto, CommandError> {
+    let mutation = parse_editor_mutation(mutation)?;
     let result = application
-        .mutate_graph_document(
+        .transform_graph_draft(
             project_instance_id,
             parse_graph_path(graph_path)?,
             locale,
-            parsed_request,
+            document,
+            mutation,
         )
         .map_err(map_editor_resource_error)?;
-    if !result.delta.payload.operations.is_empty() {
-        emit_project_event_result(
-            &app,
-            &Event::Project(EventProject::GraphDelta {
-                project_instance_id: result.project_instance_id.to_string(),
-                delta: crate::schema::application_event::graph_delta_to_transport(&result.delta),
-            }),
-        )
-        .map_err(|error| CommandError::diagnosed("graph_event_emit_failed", error))?;
-    }
-    crate::schema::application_event::graph_mutation_to_transport(&result)
+    crate::schema::graph_draft::graph_draft_update_to_transport(&result)
         .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 fn map_editor_resource_error(
     error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
-    super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
+    super::common::resource_mutation_to_command_error(error, "graph_draft_rejected")
 }

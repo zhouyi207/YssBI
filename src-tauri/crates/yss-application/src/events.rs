@@ -16,15 +16,6 @@ pub enum ApplicationEvent {
     ResourceCommitted(CommittedResourceMutation),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct GraphDeltaEvent<T> {
-    pub graph_path: GraphResourcePath,
-    pub from_revision: yss_project_identity::ResourceRevision,
-    pub to_revision: yss_project_identity::ResourceRevision,
-    pub caused_by: Option<OperationId>,
-    pub payload: T,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectLifecycleApplicationEvent {
     pub operation_id: OperationId,
@@ -132,14 +123,6 @@ pub struct GraphProjectionReplacement {
     pub graph_path: Box<str>,
     pub projection: EditorProjectionModel,
     pub function_editor_projection: Option<FunctionEditorProjection>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GraphMutationResult {
-    pub project_instance_id: ProjectInstanceId,
-    pub delta: GraphDeltaEvent<yss_graph_document_edit::GraphDocumentPatch>,
-    pub projection_replacement: GraphProjectionReplacement,
-    pub history: HistoryStatus,
 }
 
 pub(crate) fn committed_resource_mutation_from_project(

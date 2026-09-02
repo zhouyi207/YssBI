@@ -10,7 +10,6 @@ use thiserror::Error;
 use crate::{MutationPublication, ProjectSession, ProjectState};
 use yss_project_filesystem::NormalizedProjectRoot;
 
-use yss_computation_settings::ProjectComputationSettings;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::ProjectData;
@@ -301,7 +300,6 @@ pub struct PreparedProjectExecution {
     authority: ProjectExecutionAuthority,
     graph: Arc<GraphDocument>,
     resources: ProjectExecutionResourceSnapshot,
-    settings: ProjectComputationSettings,
 }
 
 impl PreparedProjectExecution {
@@ -315,10 +313,6 @@ impl PreparedProjectExecution {
 
     pub fn resources(&self) -> &ProjectExecutionResourceSnapshot {
         &self.resources
-    }
-
-    pub fn settings(&self) -> &ProjectComputationSettings {
-        &self.settings
     }
 }
 
@@ -1086,7 +1080,6 @@ impl ProjectState {
             resources: ProjectExecutionResourceSnapshot {
                 grants: resource_grants,
             },
-            settings: data.computation_settings.clone(),
         })
     }
 

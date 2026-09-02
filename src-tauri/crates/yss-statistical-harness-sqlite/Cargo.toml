@@ -1,0 +1,19 @@
+[package]
+name = "yss-statistical-harness-sqlite"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+test-support = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+yss-automation-contract = { path = "../yss-automation-contract" }
+
+[dev-dependencies]
+tokio.workspace = true
+yss-project-identity = { path = "../yss-project-identity" }

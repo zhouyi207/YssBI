@@ -1,7 +1,9 @@
 //! Schema 模块
 
 pub mod database;
+pub mod graph_draft;
 pub mod graph_mutation;
+pub mod harness;
 pub mod project;
 pub mod variables;
 
@@ -13,5 +15,6 @@ pub mod graph_clipboard;
 pub mod statistics;
 
 pub use database::*;
+pub use harness::*;
 pub use project::*;
 pub use variables::*;

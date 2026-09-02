@@ -7,10 +7,6 @@ use crate::{
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
-use yss_computation_settings::{
-    ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
-    ComputationSettingsSnapshot,
-};
 use yss_graph_document::GraphResourcePath;
 use yss_project_filesystem::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemError,
@@ -22,7 +18,6 @@ use yss_project_history::{
 };
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
-use yss_project_manifest::ProjectManifest;
 use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_resource_lifecycle::ResourceLifecycleRegistry;
 
@@ -46,7 +41,7 @@ pub(crate) use authority::{VariablePresence, VariableRevisionEntry};
 pub use graph_operation::{
     GraphCommitReceipt, GraphInvalidationSet, GraphOperationAuthority, GraphOperationCapture,
     ProjectGraphCommitError, ProjectGraphOperationError, ProjectGraphOperationSource,
-    ProjectHistoryStatus,
+    ProjectGraphSaveError, ProjectHistoryStatus,
 };
 use history::GraphMoveHistoryPayload;
 pub(super) use history::{project_documents, replace_project_documents};
@@ -90,137 +85,6 @@ impl ProjectState {
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
-    }
-
-    pub fn get_computation_settings(
-        &self,
-    ) -> Result<ComputationSettingsSnapshot, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let publication = self.mutation_publication.lock().unwrap();
-        let data = self.project_data.read().unwrap();
-        Ok(ComputationSettingsSnapshot {
-            project_instance_id: ProjectInstanceId::from_existing(
-                publication.project_instance_id.clone(),
-            ),
-            settings_revision: publication.computation_settings_revision,
-            publication_revision: publication.resource_revision,
-            settings: data.computation_settings.clone(),
-        })
-    }
-
-    pub fn update_computation_settings_transaction(
-        &self,
-        request: ComputationSettingsMutationRequest,
-    ) -> Result<ComputationSettingsMutationReceipt, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        request.settings.validate().map_err(|error| {
-            ProjectFilesystemError::TransactionPrepareFailed {
-                message: error.to_string(),
-            }
-        })?;
-        let session = self.capture_project_session()?;
-        if session.instance_id != request.project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "computation settings request belongs to another project".into(),
-            });
-        }
-        let (authority_generation, current_revision, mut next_data) = {
-            let publication = self.mutation_publication.lock().unwrap();
-            let data = self.project_data.read().unwrap();
-            if publication.computation_settings_revision != request.expected_revision {
-                return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                    message: format!(
-                        "expected computation settings revision {}, current revision is {}",
-                        request.expected_revision, publication.computation_settings_revision
-                    ),
-                });
-            }
-            (
-                publication.authority_generation(),
-                publication.computation_settings_revision,
-                data.clone(),
-            )
-        };
-        next_data.computation_settings = request.settings.clone();
-        let contents =
-            crate::project_io::serialize_project_manifest(&next_data).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                }
-            })?;
-        let lease = self.filesystem.acquire(session.root.clone())?;
-        let context = ProjectTransactionContext {
-            session: session.clone(),
-            operation_id: request.operation_id,
-            affected_resources: Vec::new(),
-            expected_revisions: Default::default(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.filesystem_context(),
-            lease,
-            vec![StagedFilesystemMutation::Write {
-                relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),
-                contents,
-            }],
-            |_, staged| {
-                serde_json::from_slice::<ProjectManifest>(staged)
-                    .map(|_| ())
-                    .map_err(|error| error.to_string())
-            },
-        )?;
-        self.validate_project_session(&session)?;
-        let committed = prepared.commit()?;
-
-        let publication_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut publication = self.mutation_publication.lock().unwrap();
-            let mut data = self.project_data.write().unwrap();
-            self.ensure_project_operational()?;
-            if publication.project_instance_id != request.project_instance_id.as_str()
-                || publication.authority_generation() != authority_generation
-            {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                    message: "project authority changed during computation settings commit".into(),
-                });
-            }
-            if publication.computation_settings_revision != current_revision {
-                return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                    message: "computation settings changed during commit".into(),
-                });
-            }
-            let next_settings_revision = current_revision
-                .checked_add(1)
-                .ok_or(ProjectFilesystemError::ComputationSettingsRevisionExhausted)?;
-            let publication_advance = publication.prepare_resource_revision()?;
-            data.computation_settings = request.settings.clone();
-            publication.computation_settings_revision = next_settings_revision;
-            let publication_revision = publication.commit_prepared(publication_advance);
-            Ok(ComputationSettingsMutationReceipt {
-                project_instance_id: request.project_instance_id.clone(),
-                operation_id: request.operation_id,
-                settings_revision: publication.computation_settings_revision,
-                publication_revision,
-                settings: request.settings.clone(),
-            })
-        }));
-
-        match publication_result {
-            Ok(Ok(receipt)) => {
-                committed.finalize();
-                Ok(receipt)
-            }
-            Ok(Err(error)) => {
-                committed.rollback()?;
-                Err(error)
-            }
-            Err(_) => {
-                committed.rollback()?;
-                Err(ProjectFilesystemError::TransactionCommitFailed {
-                    message: "computation settings authority publication failed".into(),
-                })
-            }
-        }
     }
 
     pub(super) fn capture_variable_staging_basis(

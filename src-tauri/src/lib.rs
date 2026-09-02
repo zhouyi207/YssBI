@@ -11,6 +11,9 @@ mod architecture_tests;
 
 use std::sync::Arc;
 use tauri::Manager;
+use yss_automation_contract::{
+    AutomationIdKind, ClockPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
+};
 
 // ==================== 应用入口 ====================
 
@@ -26,6 +29,92 @@ enum ApplicationInitializationError {
     SessionComposition(
         #[source] yss_application::execution::session_factory::ProjectSessionCandidateError,
     ),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum HarnessInitializationError {
+    #[error("initial Harness project session could not be captured")]
+    SessionCapture(#[from] yss_application::execution::SessionCaptureError),
+    #[error("Harness SQLite persistence could not be initialized")]
+    Persistence(#[from] yss_automation_contract::PersistenceFailure),
+    #[error("Harness host could not be initialized")]
+    Host(#[from] yss_statistical_harness::HarnessError),
+    #[error("Harness builtin knowledge could not be initialized")]
+    Knowledge(#[from] yss_statistical_harness::KnowledgeError),
+}
+
+struct SystemHarnessClock;
+
+impl ClockPort for SystemHarnessClock {
+    fn now(&self) -> UnixMillis {
+        let milliseconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_millis());
+        UnixMillis::from_existing(u64::try_from(milliseconds).unwrap_or(u64::MAX))
+    }
+}
+
+struct HarnessIdGenerator;
+
+impl IdGeneratorPort for HarnessIdGenerator {
+    fn next_id(&self, kind: AutomationIdKind) -> Result<String, IdGenerationFailure> {
+        let prefix = match kind {
+            AutomationIdKind::HarnessSession => "session",
+            AutomationIdKind::HarnessTurn => "turn",
+            AutomationIdKind::WorkflowRun => "workflow",
+            AutomationIdKind::ToolInvocation => "tool",
+            AutomationIdKind::CapabilityInvocation => "capability",
+            AutomationIdKind::MemoryRecord => "memory",
+            AutomationIdKind::ApprovalGrant => "approval",
+        };
+        Ok(format!(
+            "{prefix}-{}",
+            yss_project_identity::OperationId::new()
+        ))
+    }
+}
+
+fn initialize_harness_state(
+    app_dir: std::path::PathBuf,
+    application: yss_application::execution::ApplicationState,
+) -> Result<yss_api::HarnessRuntimeState, HarnessInitializationError> {
+    let captured = application.capture_session()?;
+    let current_project = yss_automation_contract::ProjectSessionBinding::new(
+        captured.project_instance_id().clone(),
+        captured.project_session_id().clone(),
+    );
+    let store = Arc::new(tauri::async_runtime::block_on(
+        yss_statistical_harness_sqlite::SqliteHarnessStore::connect(app_dir),
+    )?);
+    let channels = Arc::new(yss_api::HarnessChannelHub::new());
+    let agent_driver = Arc::new(yss_agent_rig::ConfigurableAgentDriver::new());
+    let clock = Arc::new(SystemHarnessClock);
+    tauri::async_runtime::block_on(
+        yss_statistical_harness::install_builtin_statistical_knowledge(store.clone(), clock.now()),
+    )?;
+    let host = Arc::new(yss_statistical_harness::HarnessHost::new(
+        yss_statistical_harness::HarnessPorts {
+            agent_driver: agent_driver.clone(),
+            capability_gateway: Arc::new(application),
+            sessions: store.clone(),
+            events: store.clone(),
+            event_sink: channels.clone(),
+            workflows: store.clone(),
+            tool_ledger: store.clone(),
+            knowledge: store.clone(),
+            memory: store.clone(),
+            approvals: store,
+            clock,
+            ids: Arc::new(HarnessIdGenerator),
+        },
+    )?);
+    tauri::async_runtime::block_on(host.reconcile_project_session(&current_project))?;
+    tauri::async_runtime::block_on(host.recover_workflows())?;
+    Ok(yss_api::HarnessRuntimeState::new(
+        host,
+        channels,
+        agent_driver,
+    ))
 }
 
 fn initialize_application_state(
@@ -90,9 +179,16 @@ pub fn run() {
             let project_state = Arc::new(initialize_project_state());
             let application_state = initialize_application_state(Arc::clone(&project_state))
                 .map_err(Box::<dyn std::error::Error>::from)?;
-            app.manage(application_state);
+            app.manage(application_state.clone());
 
             let app_dir = app.path().app_data_dir()?;
+            let settings_path = app.path().app_config_dir()?.join("settings.json");
+            let settings = yss_settings::SettingsStore::open(settings_path)
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            app.manage(settings);
+            let harness_state = initialize_harness_state(app_dir.clone(), application_state)
+                .map_err(Box::<dyn std::error::Error>::from)?;
+            app.manage(harness_state);
             let registry_store = tauri::async_runtime::block_on(
                 yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(app_dir.clone()),
             )?;

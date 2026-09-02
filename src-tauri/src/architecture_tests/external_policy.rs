@@ -29,6 +29,84 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-automation-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "schemars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-automation-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-automation-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-statistical-harness",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-statistical-harness-sqlite",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-statistical-harness-sqlite",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-statistical-harness-sqlite",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-agent-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "rig-agent",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-agent-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-agent-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-agent-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-mcp-server",
+        mode: RustDependencyMode::Runtime,
+        package_name: "rmcp",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-mcp-server",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-api",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -209,9 +287,21 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-computation-settings",
+        owning_package: "yss-settings",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-settings",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-settings",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1112,6 +1202,21 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "rmcp",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "rig-agent",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "schemars",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::BuildScript,
         mode: RustDependencyMode::Build,
         package_name: "tauri-build",
@@ -1487,6 +1592,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "serde",
     },
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::Graph,
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1635,6 +1745,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::DatabaseCore,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::DatabaseCore,

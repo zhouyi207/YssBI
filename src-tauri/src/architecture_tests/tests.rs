@@ -4783,61 +4783,64 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
 }
 
 #[test]
-fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors() {
+fn application_settings_has_one_strict_global_owner_without_project_mirrors() {
     let root = repository_root();
     for relative in [
+        "src-tauri/crates/yss-settings/Cargo.toml",
+        "src-tauri/crates/yss-settings/src/lib.rs",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "application settings owner must exist at {relative}"
+        );
+    }
+    for retired in [
         "src-tauri/crates/yss-computation-settings/Cargo.toml",
         "src-tauri/crates/yss-computation-settings/src/lib.rs",
     ] {
         assert!(
-            root.join(relative).is_file(),
-            "computation settings owner must exist at {relative}"
+            !root.join(retired).is_file(),
+            "the retired computation-settings crate must not retain {retired}"
         );
     }
-    assert!(
-        !root
-            .join("src-tauri/crates/yss-project/src/computation_settings.rs")
-            .exists(),
-        "the root project crate must not retain a computation-settings owner"
-    );
 
     let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("the Rust workspace manifest must be readable");
     for declaration in [
-        "\"crates/yss-computation-settings\"",
-        "yss-computation-settings = { path = \"./crates/yss-computation-settings\" }",
+        "\"crates/yss-settings\"",
+        "yss-settings = { path = \"./crates/yss-settings\" }",
     ] {
         assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
     }
+    assert!(
+        !workspace_manifest.contains("yss-computation-settings"),
+        "the workspace must not retain the retired computation-settings crate"
+    );
 
     let project_module =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
             .expect("the root project module must be readable");
-    for facade in [
-        "mod computation_settings",
-        "pub use computation_settings",
-        "pub use yss_computation_settings",
-    ] {
+    for facade in ["computation_settings", "yss_computation_settings"] {
         assert!(
             !project_module.contains(facade),
             "the root project module must not restore settings facade '{facade}'"
         );
     }
 
-    let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-computation-settings/src/lib.rs"))
-            .expect("computation settings owner must be readable");
+    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-settings/src/lib.rs"))
+        .expect("application settings owner must be readable");
     for contract in [
-        "pub struct ProjectComputationSettings",
+        "pub struct ApplicationSettings",
+        "pub struct ComputationSettings",
         "pub enum ComputationSettingsValidationError",
-        "pub struct ComputationSettingsSnapshot",
-        "pub struct ComputationSettingsMutationRequest",
-        "pub struct ComputationSettingsMutationReceipt",
+        "pub struct SettingsSnapshot",
+        "pub struct SettingsMutationRequest",
+        "pub struct SettingsMutationReceipt",
         "deny_unknown_fields",
     ] {
         assert!(
             owner.contains(contract),
-            "computation settings crate must own strict contract '{contract}'"
+            "application settings crate must own strict contract '{contract}'"
         );
     }
     assert!(
@@ -4845,31 +4848,14 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
         "computation settings contract must remain platform-neutral"
     );
 
-    for relative in [
-        "src-tauri/crates/yss-application/src/computation_settings.rs",
-        "src-tauri/crates/yss-api/src/commands/command_project/settings.rs",
-        "src-tauri/crates/yss-api/src/event/event_project.rs",
-        "src-tauri/crates/yss-project/src/execution_authority.rs",
-        "src-tauri/crates/yss-project-model/src/lib.rs",
-        "src-tauri/crates/yss-project-manifest/src/lib.rs",
-        "src-tauri/crates/yss-project/src/project_state.rs",
-    ] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_computation_settings"),
-            "{relative} must consume the computation settings owner directly"
-        );
-        assert!(
-            !consumer.contains("project::computation_settings"),
-            "{relative} must not restore the removed root settings path"
-        );
-    }
-
     let application = std::fs::read_to_string(
         root.join("src-tauri/crates/yss-application/src/computation_settings.rs"),
     )
-    .expect("computation settings application adapter must be readable");
+    .expect("application computation adapter must be readable");
+    assert!(
+        application.contains("use yss_settings::") && application.contains("ComputationSettings"),
+        "application adapters must consume global settings directly"
+    );
     for duplicate in ["ComputationSettingsMappingError", "fn validate("] {
         assert!(
             !application.contains(duplicate),
@@ -4880,13 +4866,10 @@ fn computation_settings_has_one_strict_crate_owner_without_root_or_error_mirrors
     let manifest_owner =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-manifest/src/lib.rs"))
             .expect("project manifest owner must be readable");
-    for validation_boundary in [
-        "deserialize_valid_computation_settings",
-        "settings.validate().map_err",
-    ] {
+    for validation_boundary in ["computation_settings", "yss_computation_settings"] {
         assert!(
-            manifest_owner.contains(validation_boundary),
-            "project manifest reads must enforce '{validation_boundary}'"
+            !manifest_owner.contains(validation_boundary),
+            "project manifest must not retain global settings '{validation_boundary}'"
         );
     }
 }
@@ -5564,7 +5547,6 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
             .expect("project model manifest must be readable");
     for dependency in [
         "serde.workspace = true",
-        "yss-computation-settings = { path = \"../yss-computation-settings\" }",
         "yss-database-contract = { path = \"../yss-database-contract\" }",
         "yss-graph-document = { path = \"../yss-graph-document\" }",
         "yss-project-history = { path = \"../yss-project-history\" }",
@@ -5594,7 +5576,6 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "function: matches!(kind, GraphResourceKind::Function)",
         "project_name: \"未命名项目\".to_owned()",
         "export_time: String::new()",
-        "pub computation_settings: ProjectComputationSettings",
         "pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>",
         "pub charts: HashMap<ChartResourcePath, ChartDocument>",
     ] {
@@ -6515,10 +6496,6 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
     let manifest =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-manifest/Cargo.toml"))
             .expect("project manifest crate manifest must be readable");
-    assert!(
-        manifest.contains("yss-computation-settings = { path = \"../yss-computation-settings\" }"),
-        "project manifest must consume the canonical computation-settings contract"
-    );
     for forbidden in ["chrono", "tauri", "sqlx"] {
         assert!(
             !manifest.contains(forbidden),
@@ -6535,8 +6512,6 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
         "pub fn deserialize_current_project_schema_version",
         "pub fn try_new",
         "pub fn into_parts",
-        "computation_settings.validate()?",
-        "settings.validate().map_err",
     ] {
         assert!(
             owner.contains(contract),
@@ -6547,7 +6522,6 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
         "pub schema_version:",
         "pub project_name:",
         "pub export_time:",
-        "pub computation_settings:",
     ] {
         assert!(
             !owner.contains(mutation_seam),
@@ -6584,7 +6558,6 @@ fn project_manifest_has_one_strict_pure_owner_without_root_wire_or_mutation_seam
     for relative in [
         "src-tauri/crates/yss-project/src/project_io.rs",
         "src-tauri/crates/yss-project/src/project_lifecycle.rs",
-        "src-tauri/crates/yss-project/src/project_state.rs",
         "src-tauri/crates/yss-project/src/project_writers.rs",
         "src-tauri/crates/yss-project/src/project_state/variable_effects.rs",
     ] {

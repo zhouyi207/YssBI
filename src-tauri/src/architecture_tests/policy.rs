@@ -227,6 +227,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationSessionSlot::new",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::ApplicationState::from_composition",
+            "yss_application::execution::session_slot::SessionCaptureError",
             "yss_bayes_artifact_polars::PolarsBayesArtifactReader::new",
             "yss_execution::ports::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
@@ -234,6 +235,60 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::invoke_handler",
             "yss_window_state::WindowStateStore::load",
             "yss_window_state::apply_main_window_state",
+            "yss_agent_rig::ConfigurableAgentDriver::new",
+            "yss_statistical_harness::host::HarnessError",
+            "yss_statistical_harness::host::HarnessHost::new",
+            "yss_statistical_harness::host::HarnessHost::reconcile_project_session",
+            "yss_statistical_harness::host::HarnessPorts",
+            "yss_statistical_harness::knowledge::KnowledgeError",
+            "yss_statistical_harness::knowledge::install_builtin_statistical_knowledge",
+            "yss_statistical_harness_sqlite::SqliteHarnessStore::connect",
+            "yss_settings::SettingsStore::open",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Application,
+        repository_relative_source_file: "src-tauri/crates/yss-settings/src/lib.rs",
+        fully_qualified_owner: "yss_settings",
+        canonical_origin_targets: &["yss_project_identity::OperationId"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Commands,
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_settings.rs",
+        fully_qualified_owner: "yss_api::commands::command_settings",
+        canonical_origin_targets: &[
+            "yss_api::error::CommandError",
+            "yss_settings::SettingsMutationReceipt",
+            "yss_settings::SettingsMutationRequest",
+            "yss_settings::SettingsSnapshot",
+            "yss_settings::SettingsStore",
+            "yss_settings::SettingsStoreError",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Commands,
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_harness.rs",
+        fully_qualified_owner: "yss_api::commands::command_harness",
+        canonical_origin_targets: &[
+            "yss_api::error::CommandError",
+            "yss_api::schema::harness::HarnessEventDto",
+            "yss_api::schema::harness::HarnessMemoryRecordDto",
+            "yss_api::schema::harness::HarnessRuntimeStatusDto",
+            "yss_api::schema::harness::ConfigureHarnessProviderRequestDto",
+            "yss_api::schema::harness::HarnessSessionDto",
+            "yss_api::schema::harness::HarnessSubscriptionDto",
+            "yss_api::schema::harness::HarnessTurnResultDto",
+            "yss_api::schema::harness::WorkflowRunDto",
+            "yss_application::execution::session_slot::ApplicationState",
+            "yss_statistical_harness::host::HarnessError",
+            "yss_statistical_harness::host::HarnessHost",
+            "yss_statistical_harness::host::HarnessHost::delete_session_memory",
+            "yss_statistical_harness::host::HarnessHost::cancel_workflow",
+            "yss_statistical_harness::host::HarnessHost::pause_workflow",
+            "yss_statistical_harness::host::HarnessHost::reconcile_project_session",
+            "yss_statistical_harness::host::HarnessHost::resume_workflow",
+            "yss_statistical_harness::host::HarnessHost::session_memory",
+            "yss_statistical_harness::workflow::dataset_quality_review_workflow",
         ],
     },
     InternalDependencyCapability {
@@ -802,31 +857,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_project/settings.rs",
-        fully_qualified_owner: "yss_api::commands::command_project::settings",
-        canonical_origin_targets: &[
-            "yss_application::computation_settings::ComputationSettingsApplicationError",
-            "yss_application::computation_settings::ComputationSettingsApplicationError::SessionCapture",
-            "yss_application::computation_settings::ComputationSettingsApplicationError::SessionChanged",
-            "yss_application::computation_settings::ComputationSettingsApplicationError::SessionRefresh",
-            "yss_application::computation_settings::ComputationSettingsApplicationError::Project",
-            "yss_application::execution::session_slot::SessionCaptureError",
-            "yss_application::execution::session_slot::SessionCaptureError::Inactive",
-            "yss_application::execution::session_slot::SessionCaptureError::Recovering",
-            "yss_application::execution::session_slot::SessionCaptureError::Replacing",
-            "yss_api::error::CommandError",
-            "yss_api::event::Event",
-            "yss_api::event::emit_project_event_result",
-            "yss_api::event::emit_project_event",
-            "yss_api::event::event_project::EventProject",
-            "yss_application::execution::session_slot::ApplicationState",
-            "yss_computation_settings::ComputationSettingsMutationReceipt",
-            "yss_computation_settings::ComputationSettingsMutationRequest",
-            "yss_computation_settings::ComputationSettingsSnapshot",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_project/progress.rs",
         fully_qualified_owner: "yss_api::commands::command_project::progress",
         canonical_origin_targets: &[
@@ -1009,7 +1039,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_graph_document_edit::GraphDocumentPatch",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yss_computation_settings::ComputationSettingsMutationReceipt",
             "yss_api::schema::project::ProjectSaveResultDto",
         ],
     },
@@ -1020,8 +1049,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::events::ApplicationEvent",
             "yss_application::events::CommittedResourceMutation",
-            "yss_application::events::GraphDeltaEvent",
-            "yss_application::events::GraphMutationResult",
             "yss_application::events::GraphProjectionReplacement",
             "yss_application::events::HistoryStatus",
             "yss_application::events::LifecycleInvalidation",
@@ -1463,11 +1490,11 @@ fn non_build_memberships(
     if matches!(
         package,
         "yss-bayes-artifact-contract"
+            | "yss-automation-contract"
             | "yss-bayes-model"
             | "yss-bayes-result"
             | "yss-bayes-worker"
             | "yss-canonical-hash"
-            | "yss-computation-settings"
             | "yss-data-contract"
             | "yss-database-contract"
             | "yss-display-naming"
@@ -1491,7 +1518,10 @@ fn non_build_memberships(
             | "yss-chart-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
-    } else if matches!(package, "yss-application" | "yss-project-watcher") {
+    } else if matches!(
+        package,
+        "yss-application" | "yss-project-watcher" | "yss-statistical-harness" | "yss-settings"
+    ) {
         layers.insert(RustLayer::Application);
     } else if matches!(
         package,
@@ -1541,11 +1571,14 @@ fn non_build_memberships(
     } else if matches!(
         package,
         "yss-bayes-artifact-polars"
+            | "yss-agent-rig"
             | "yss-bayes-worker-julia"
             | "yss-execution-sci-adapter"
             | "yss-julia-runtime"
             | "yss-julia-worker"
+            | "yss-mcp-server"
             | "yss-project-registry-sqlite"
+            | "yss-statistical-harness-sqlite"
             | "yss-tabular-polars"
     ) {
         layers.insert(RustLayer::BackendAdapter);

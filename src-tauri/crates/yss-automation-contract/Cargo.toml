@@ -1,13 +1,12 @@
 [package]
-name = "yss-computation-settings"
+name = "yss-automation-contract"
 version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true
 publish = false
 
 [dependencies]
+schemars.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 yss-project-identity = { path = "../yss-project-identity" }
-
-[dev-dependencies]
-serde_json.workspace = true

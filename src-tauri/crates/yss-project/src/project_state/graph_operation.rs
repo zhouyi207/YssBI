@@ -1,8 +1,12 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ProjectSession;
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project_filesystem::{
+    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
+    StagedFilesystemMutation,
+};
 use yss_project_history::{
     ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency,
     ProjectHistoryTransaction,
@@ -123,7 +127,48 @@ pub enum ProjectGraphCommitError {
     },
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ProjectGraphSaveError {
+    #[error(transparent)]
+    Filesystem(#[from] ProjectFilesystemError),
+    #[error(transparent)]
+    Commit(#[from] ProjectGraphCommitError),
+}
+
 impl ProjectState {
+    /// Capture the current graph without accepting a caller-authored revision.
+    /// The revision remains an internal token for the atomic overwrite commit.
+    pub fn capture_graph_overwrite_operation(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        operation_id: yss_project_identity::OperationId,
+    ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
+        for attempt in 0..3 {
+            let revision = self
+                .get_data()
+                .map_err(|source| {
+                    ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source))
+                })?
+                .graphs
+                .get(graph_path)
+                .map(|resource| resource.document.revision)
+                .ok_or_else(|| ProjectGraphOperationError::GraphUnavailable {
+                    graph: graph_path.clone(),
+                })?;
+            match self.capture_graph_operation(
+                project_instance_id,
+                graph_path,
+                revision,
+                operation_id,
+            ) {
+                Err(ProjectGraphOperationError::RevisionConflict { .. }) if attempt < 2 => {}
+                result => return result,
+            }
+        }
+        unreachable!("overwrite capture loop returns on its final attempt")
+    }
+
     pub fn capture_graph_operation(
         &self,
         project_instance_id: &ProjectInstanceId,
@@ -426,6 +471,86 @@ impl ProjectState {
             Err(error) => Err(error),
         }
     }
+
+    /// Persist and install a complete graph candidate as one overwrite
+    /// transaction. A stale Rust authority rolls the filesystem write back.
+    pub fn save_graph_candidate(
+        &self,
+        capture: GraphOperationCapture,
+        operation_id: yss_project_identity::OperationId,
+        candidate_document: Arc<GraphDocument>,
+    ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
+        let graph_path = capture.graph_path.clone();
+        let session = capture.authority.session.clone();
+        let changed = candidate_document.as_ref() != capture.document.as_ref();
+        let persisted_revision = if changed {
+            capture.revision.checked_next().map_err(|_| {
+                ProjectGraphSaveError::Commit(ProjectGraphCommitError::RevisionExhausted {
+                    graph_path: graph_path.clone(),
+                    revision: capture.revision,
+                })
+            })?
+        } else {
+            capture.revision
+        };
+
+        let data = self.get_data()?;
+        let mut resource = data.graphs.get(&graph_path).cloned().ok_or_else(|| {
+            ProjectFilesystemError::StaleResourceLifecycle {
+                message: format!("graph '{graph_path}' is not resident"),
+            }
+        })?;
+        let mut persisted_document = candidate_document.as_ref().clone();
+        persisted_document.revision = persisted_revision;
+        resource.document = persisted_document;
+        let local_variables = data
+            .variables
+            .iter()
+            .filter(|(_, variable)| match &variable.scope {
+                yss_variable_contract::VariableScope::Global => false,
+                yss_variable_contract::VariableScope::Event { event_path }
+                | yss_variable_contract::VariableScope::Function {
+                    function_path: event_path,
+                } => event_path == graph_path.as_str(),
+            })
+            .map(|(id, variable)| (*id, variable.clone()))
+            .collect::<HashMap<_, _>>();
+        let contents =
+            crate::project_io::serialize_graph_resource_document(&resource, local_variables)
+                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                })?;
+        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
+        self.validate_project_session(&session)?;
+        let prepared = ProjectFilesystemTransaction::prepare(
+            ProjectFilesystemTransactionContext {
+                root: session.root,
+                operation_id,
+                recovery_marker: Some(self.project_recovery_marker()),
+            },
+            filesystem_lease,
+            vec![StagedFilesystemMutation::Write {
+                relative_path: graph_path.as_str().into(),
+                contents,
+            }],
+        )?;
+        let committed = prepared.commit()?;
+
+        match self.commit_graph_candidate(
+            capture.into_authority(),
+            operation_id,
+            candidate_document,
+        ) {
+            Ok(receipt) => {
+                committed.finalize();
+                Ok(receipt)
+            }
+            Err(error) => {
+                committed.rollback()?;
+                Err(ProjectGraphSaveError::Commit(error))
+            }
+        }
+    }
 }
 
 fn capture_lifecycle_error(error: ProjectFilesystemError) -> ProjectGraphOperationError {
@@ -443,4 +568,56 @@ fn capture_lifecycle_error(error: ProjectFilesystemError) -> ProjectGraphOperati
 
 fn capture_session_error(error: ProjectFilesystemError) -> ProjectGraphOperationError {
     capture_lifecycle_error(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_graph_document::{DocumentNode, NodeId, NodePosition};
+    use yss_graph_protocol::NodeTypeId;
+    use yss_project_model::{GraphResourceDocument, ProjectData};
+
+    #[test]
+    fn overwrite_save_captures_revision_internally_and_installs_complete_candidate() {
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let node_id = NodeId::new();
+        let mut resource =
+            GraphResourceDocument::new("Main", yss_graph_document::GraphResourceKind::Event);
+        resource.document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: NodeTypeId::new("yssbi.tests.node").unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: Default::default(),
+                user_label: None,
+            },
+        );
+        let mut project = ProjectData::new();
+        project.graphs.insert(graph_path.clone(), resource);
+        let fixture = crate::fixtures::TempProject::activate("graph-overwrite-save", project);
+        let session = fixture.state().capture_project_session().unwrap();
+        let operation_id = yss_project_identity::OperationId::new();
+        let capture = fixture
+            .state()
+            .capture_graph_overwrite_operation(&session.instance_id, &graph_path, operation_id)
+            .unwrap();
+        let mut candidate = capture.document.as_ref().clone();
+        candidate.nodes.get_mut(&node_id).unwrap().position = NodePosition { x: 24.0, y: 36.0 };
+
+        let receipt = fixture
+            .state()
+            .save_graph_candidate(capture, operation_id, Arc::new(candidate))
+            .unwrap();
+
+        assert_eq!(receipt.from_revision, GraphRevision::INITIAL);
+        assert_eq!(receipt.to_revision, GraphRevision::new(1));
+        assert_eq!(
+            fixture.state().get_data().unwrap().graphs[&graph_path]
+                .document
+                .nodes[&node_id]
+                .position,
+            NodePosition { x: 24.0, y: 36.0 }
+        );
+    }
 }

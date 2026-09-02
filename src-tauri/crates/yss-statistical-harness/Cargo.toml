@@ -1,0 +1,18 @@
+[package]
+name = "yss-statistical-harness"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+test-support = []
+
+[dependencies]
+thiserror.workspace = true
+yss-automation-contract = { path = "../yss-automation-contract" }
+yss-canonical-hash = { path = "../yss-canonical-hash" }
+
+[dev-dependencies]
+tokio.workspace = true
+yss-project-identity = { path = "../yss-project-identity" }

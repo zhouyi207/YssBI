@@ -46,8 +46,6 @@ pub enum ProjectFilesystemError {
     AuthorityGenerationExhausted,
     #[error("resource publication revision is exhausted")]
     PublicationRevisionExhausted,
-    #[error("computation settings revision is exhausted")]
-    ComputationSettingsRevisionExhausted,
     #[error("project requires recovery before mutations can continue: {message}")]
     ProjectRecoveryRequired { message: String },
     #[error("failed to prepare project filesystem transaction: {message}")]
@@ -85,7 +83,6 @@ impl ProjectFilesystemError {
             Self::ActivationGenerationExhausted => "project_activation_generation_exhausted",
             Self::AuthorityGenerationExhausted => "project_authority_generation_exhausted",
             Self::PublicationRevisionExhausted => "publication_revision_exhausted",
-            Self::ComputationSettingsRevisionExhausted => "computation_settings_revision_exhausted",
             Self::ProjectRecoveryRequired { .. } => "project_recovery_required",
             Self::TransactionPrepareFailed { .. } => "transaction_prepare_failed",
             Self::TransactionCommitFailed { .. } => "transaction_commit_failed",

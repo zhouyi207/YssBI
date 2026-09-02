@@ -1,6 +1,6 @@
 use crate::error::CommandError;
 use crate::schema::application_event::ProjectActivationResultDto;
-use crate::schema::editor_projection_types::EditorGraphProjectionDto;
+use crate::schema::graph_draft::GraphEditorSessionDto;
 use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 use serde::Serialize;
 use tauri::State;
@@ -122,7 +122,7 @@ pub fn load_project_graph(
     graph_path: String,
     locale: Option<String>,
     lifecycle_token: u64,
-) -> Result<EditorGraphProjectionDto, CommandError> {
+) -> Result<GraphEditorSessionDto, CommandError> {
     let project_instance_id =
         yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
@@ -135,8 +135,12 @@ pub fn load_project_graph(
             locale.as_deref().unwrap_or("en-US"),
         ))
         .map_err(open_graph_command_error)?;
-    crate::schema::editor_projection::map_editor_projection(receipt.projection())
-        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+    crate::schema::graph_draft::graph_editor_session_to_transport(
+        receipt.graph_path(),
+        receipt.document(),
+        receipt.projection(),
+    )
+    .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {

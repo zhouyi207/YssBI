@@ -1,0 +1,15 @@
+[package]
+name = "yss-settings"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+yss-project-identity = { path = "../yss-project-identity" }
+
+[dev-dependencies]
+uuid.workspace = true

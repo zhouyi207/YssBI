@@ -13,7 +13,11 @@ resolver = "3"
 members = [
   ".",
   "crates/yss-api",
+  "crates/yss-agent-rig",
   "crates/yss-application",
+  "crates/yss-automation-contract",
+  "crates/yss-statistical-harness",
+  "crates/yss-statistical-harness-sqlite",
   "crates/yss-bayes-artifact-contract",
   "crates/yss-bayes-artifact-polars",
   "crates/yss-bayes-model",
@@ -21,7 +25,6 @@ members = [
   "crates/yss-bayes-worker",
   "crates/yss-bayes-worker-julia",
   "crates/yss-canonical-hash",
-  "crates/yss-computation-settings",
   "crates/yss-data-contract",
   "crates/yss-database-contract",
   "crates/yss-database-edit",
@@ -50,6 +53,7 @@ members = [
   "crates/yss-julia-runtime",
   "crates/yss-julia-worker",
   "crates/yss-math",
+  "crates/yss-mcp-server",
   "crates/yss-path-display",
   "crates/yss-project",
   "crates/yss-project-change",
@@ -72,6 +76,7 @@ members = [
   "crates/yss-sci",
   "crates/yss-sci-contract",
   "crates/yss-sci-runtime",
+  "crates/yss-settings",
   "crates/yss-sql-source",
   "crates/yss-tabular-contract",
   "crates/yss-tabular-io",
@@ -117,8 +122,11 @@ polars = { version = "0.53.0", default-features = false, features = [
 polars-arrow = { version = "0.53.0", default-features = false }
 polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 rand = "0.10"
+rig-agent = { version = "=0.42.0", default-features = false }
+rmcp = { version = "=3.2.0", default-features = false, features = ["server", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+schemars = "=1.2.2"
 sha2 = "0.10.9"
 statrs = { version = "0.19", default-features = false, features = ["std", "rand"] }
 tauri = { version = "2.11", features = [] }
@@ -156,7 +164,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 yss-api = { path = "./crates/yss-api" }
+yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
+yss-automation-contract = { path = "./crates/yss-automation-contract" }
 yss-bayes-artifact-polars = { path = "./crates/yss-bayes-artifact-polars" }
 yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
@@ -164,11 +174,15 @@ yss-execution = { path = "./crates/yss-execution" }
 yss-execution-sci-adapter = { path = "./crates/yss-execution-sci-adapter" }
 yss-julia-worker = { path = "./crates/yss-julia-worker" }
 yss-project = { path = "./crates/yss-project" }
+yss-project-identity = { path = "./crates/yss-project-identity" }
 yss-project-progress = { path = "./crates/yss-project-progress" }
 yss-project-registry = { path = "./crates/yss-project-registry" }
 yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
+yss-statistical-harness = { path = "./crates/yss-statistical-harness" }
+yss-statistical-harness-sqlite = { path = "./crates/yss-statistical-harness-sqlite" }
+yss-settings = { path = "./crates/yss-settings" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-window-state = { path = "./crates/yss-window-state" }
 tauri.workspace = true
@@ -192,4 +206,3 @@ yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
 yss-database-runtime = { path = "./crates/yss-database-runtime" }
 yss-duckdb = { path = "./crates/yss-duckdb" }
-yss-project-identity = { path = "./crates/yss-project-identity" }

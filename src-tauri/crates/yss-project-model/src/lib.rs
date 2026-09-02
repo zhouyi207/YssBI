@@ -11,7 +11,6 @@ pub use patch::ProjectDataPatch;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
-use yss_computation_settings::ProjectComputationSettings;
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_project_history::{FunctionDocument, FunctionSignature};
@@ -56,7 +55,6 @@ impl Default for ProjectMetadata {
 
 #[derive(Debug, Default, Clone)]
 pub struct ProjectData {
-    pub computation_settings: ProjectComputationSettings,
     pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     pub charts: HashMap<ChartResourcePath, ChartDocument>,

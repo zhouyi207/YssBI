@@ -143,16 +143,10 @@ pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, Project
 }
 
 fn project_manifest_from_data(data: &ProjectData) -> Result<ProjectManifest, ProjectError> {
-    ProjectManifest::try_new(
+    Ok(ProjectManifest::try_new(
         data.metadata.project_name.clone(),
         data.metadata.export_time.clone(),
-        data.computation_settings.clone(),
-    )
-    .map_err(|error| {
-        ProjectError::InvalidProjectFormat(format!(
-            "project computation settings are invalid: {error}"
-        ))
-    })
+    ))
 }
 
 pub fn serialize_global_variables(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
@@ -310,11 +304,10 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
 pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     let root = project_root_from_path(path);
     let manifest = read_project_manifest_from_root(root.as_path())?;
-    let (project_name, export_time, computation_settings) = manifest.into_parts();
+    let (project_name, export_time) = manifest.into_parts();
     let mut project_data = ProjectData::new();
     project_data.metadata.project_name = project_name;
     project_data.metadata.export_time = export_time;
-    project_data.computation_settings = computation_settings;
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.charts = load_charts_from_root(root.as_path())?;
 
@@ -354,7 +347,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
     let charts = read_chart_index_entries(root)?;
     let variables = read_variable_index_entries(root)?;
 
-    let (project_name, export_time, _) = manifest.into_parts();
+    let (project_name, export_time) = manifest.into_parts();
     Ok(ProjectIndex {
         project_instance_id: String::new(),
         publication_revision: 0,
@@ -895,9 +888,7 @@ pub fn discover_databases_from_root(
 
 #[cfg(test)]
 mod project_manifest_adapter_tests {
-    use super::{ProjectError, ProjectManifest, serialize_project_manifest};
-    use serde_json::json;
-    use yss_computation_settings::ProjectComputationSettings;
+    use super::{ProjectManifest, serialize_project_manifest};
     use yss_project_model::ProjectData;
 
     #[test]
@@ -911,19 +902,5 @@ mod project_manifest_adapter_tests {
 
         assert_eq!(manifest.project_name(), "Canonical Manifest");
         assert_eq!(manifest.export_time(), "2026-08-30T00:00:00Z");
-        assert_eq!(manifest.computation_settings(), &data.computation_settings);
-    }
-
-    #[test]
-    fn project_manifest_serialization_rejects_invalid_internal_settings() {
-        let mut data = ProjectData::new();
-        data.computation_settings = serde_json::from_value::<ProjectComputationSettings>(json!({
-            "numeric": { "tolerance": { "absolute": 0.0, "relative": 0.0 } },
-            "missingValues": { "statistics": "listwise" }
-        }))
-        .unwrap();
-
-        let error = serialize_project_manifest(&data).unwrap_err();
-        assert!(matches!(error, ProjectError::InvalidProjectFormat(_)));
     }
 }

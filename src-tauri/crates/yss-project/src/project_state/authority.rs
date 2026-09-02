@@ -55,7 +55,6 @@ pub(crate) struct MutationPublication {
     pub(crate) project_instance_id: String,
     pub(crate) resource_revision: u64,
     pub(crate) authority_generation: u64,
-    pub(crate) computation_settings_revision: u64,
 }
 
 pub(crate) struct VariableStagingBasis {
@@ -77,7 +76,6 @@ impl Default for MutationPublication {
             project_instance_id: uuid::Uuid::new_v4().to_string(),
             resource_revision: 0,
             authority_generation: 0,
-            computation_settings_revision: 0,
         }
     }
 }
@@ -144,7 +142,6 @@ impl MutationPublication {
         let previous = std::mem::replace(&mut self.project_instance_id, project_instance_id);
         self.resource_revision = 0;
         self.authority_generation = 0;
-        self.computation_settings_revision = 0;
         previous
     }
 }

@@ -21,11 +21,12 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+yss-automation-contract = { path = "../yss-automation-contract" }
 yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
 yss-bayes-worker = { path = "../yss-bayes-worker" }
-yss-computation-settings = { path = "../yss-computation-settings" }
+yss-settings = { path = "../yss-settings" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-edit = { path = "../yss-database-edit" }
