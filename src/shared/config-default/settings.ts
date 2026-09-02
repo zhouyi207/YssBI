@@ -4,7 +4,14 @@ import {
   AppearanceSettings,
   ProjectSettings,
   AppSettings,
+  AiSettings,
 } from "@/shared/types/settings";
+
+export const DEFAULT_AI: AiSettings = {
+  openAiApiKey: "",
+  openAiBaseUrl: "https://api.openai.com/v1",
+  openAiModel: "",
+};
 
 export const DEFAULT_DARK_THEME: ThemeSettings = {
   mode: "dark",
@@ -64,6 +71,7 @@ export const DEFAULT_PROJECT: ProjectSettings = {
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  ai: DEFAULT_AI,
   theme: DEFAULT_THEME,
   editor: DEFAULT_EDITOR,
   appearance: DEFAULT_APPEARANCE,

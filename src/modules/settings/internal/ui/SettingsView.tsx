@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
-import { useProjectComputationSettings } from "@/features/application/projectSettings/useProjectComputationSettings";
+import { useApplicationComputationSettings } from "@/features/application/settings/useApplicationComputationSettings";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 
 interface SettingsViewProps {
@@ -21,21 +21,24 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDirtyChange }) => {
   const { t } = useTranslation();
+  const ai = useSettingsRead((s) => s.ai);
   const theme = useSettingsRead((s) => s.theme);
   const editor = useSettingsRead((s) => s.editor);
   const appearance = useSettingsRead((s) => s.appearance);
   const project = useSettingsRead((s) => s.project);
   const isLoading = useSettingsRead((s) => s.isLoading);
   const updateTheme = settingsUi.updateTheme;
+  const updateAi = settingsUi.updateAi;
   const updateEditor = settingsUi.updateEditor;
   const updateAppearance = settingsUi.updateAppearance;
   const updateProject = settingsUi.updateProject;
   const resetAllToDefaults = settingsUi.resetAllToDefaults;
   const resetThemeToDefaults = settingsUi.resetThemeToDefaults;
+  const resetAiToDefaults = settingsUi.resetAiToDefaults;
   const resetEditorToDefaults = settingsUi.resetEditorToDefaults;
   const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
 
-  const computation = useProjectComputationSettings();
+  const computation = useApplicationComputationSettings();
   const [activeSection, setActiveSection] = useState("editor");
   const [isResetting, setIsResetting] = useState(false);
   const [resetAllError, setResetAllError] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
   const sections = [
     { id: "editor", label: t("settings.sections.editor") },
     { id: "project", label: t("settings.sections.project") },
+    { id: "ai", label: t("settings.sections.ai") },
     { id: "computation", label: t("settings.sections.computation") },
     { id: "appearance", label: t("settings.sections.appearance") },
     { id: "color", label: t("settings.sections.color") },
@@ -77,7 +81,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     if (!computation.isDirty) return true;
     return ui.confirm({
       title: "Discard computation changes?",
-      message: "Your unapplied project computation settings will be lost.",
+      message: "Your unapplied global computation settings will be lost.",
       confirmText: "Discard",
       cancelText: "Keep Editing",
       type: "danger",
@@ -150,6 +154,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
   const handleResetSection = async (section: string) => {
     const sectionNames: Record<string, string> = {
       editor: t("settings.sections.editor"),
+      ai: t("settings.sections.ai"),
       appearance: t("settings.sections.appearance"),
       color: t("settings.sections.color"),
     };
@@ -169,6 +174,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
       switch (section) {
         case "editor":
           await resetEditorToDefaults();
+          break;
+        case "ai":
+          await resetAiToDefaults();
           break;
         case "appearance":
           await resetAppearanceToDefaults();
@@ -200,6 +208,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
 
   const renderContent = () => {
     switch (activeSection) {
+      case "ai":
+        return (
+          <div className="space-y-8">
+            <div>
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-xl text-foreground">{t("settings.sections.ai")}</h2>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleResetSection("ai")}
+                  disabled={isResetting}
+                >
+                  {t("common.restoreDefaults")}
+                </Button>
+              </div>
+              <div className="space-y-6">
+                <SettingItem
+                  label={t("settings.labels.openAiModel")}
+                  description={t("settings.descriptions.openAiModel")}
+                  type="text"
+                  value={ai.openAiModel}
+                  onChange={(value) => updateAi({ openAiModel: value })}
+                  placeholder="gpt-4o-mini"
+                />
+                <SettingItem
+                  label={t("settings.labels.openAiBaseUrl")}
+                  description={t("settings.descriptions.openAiBaseUrl")}
+                  type="text"
+                  value={ai.openAiBaseUrl}
+                  onChange={(value) => updateAi({ openAiBaseUrl: value })}
+                  placeholder="https://api.openai.com/v1"
+                />
+                <SettingItem
+                  label={t("settings.labels.openAiApiKey")}
+                  description={t("settings.descriptions.openAiApiKey")}
+                  type="password"
+                  value={ai.openAiApiKey}
+                  onChange={(value) => updateAi({ openAiApiKey: value })}
+                  placeholder="sk-..."
+                />
+              </div>
+            </div>
+          </div>
+        );
       case "editor":
         return (
           <div className="space-y-8">
@@ -341,7 +394,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             <div>
               <h2 className="mb-2 text-xl text-foreground">{t("settings.sections.computation")}</h2>
               <p className="text-sm text-muted-foreground">
-                Project-authoritative numeric comparison and statistical missing-value behavior.
+                Application-wide numeric comparison and statistical missing-value behavior.
               </p>
             </div>
             <SettingItem
@@ -674,6 +727,12 @@ type SettingItemProps =
       onChange?: (val: string) => void;
     })
   | (SettingItemBase & {
+      type: "password";
+      value?: string;
+      defaultValue?: string;
+      onChange?: (val: string) => void;
+    })
+  | (SettingItemBase & {
       type: "number";
       value?: string;
       defaultValue?: string;
@@ -735,6 +794,18 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
             onChange={(e) => props.onChange?.(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
+            className="max-w-md"
+          />
+        )}
+        {type === "password" && (
+          <Input
+            id={controlId}
+            type="password"
+            value={props.value ?? props.defaultValue ?? ""}
+            onChange={(e) => props.onChange?.(e.target.value)}
+            placeholder={placeholder}
+            disabled={disabled}
+            autoComplete="off"
             className="max-w-md"
           />
         )}

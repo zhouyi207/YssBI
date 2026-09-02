@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_AI,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR,
   DEFAULT_PROJECT,
@@ -76,11 +77,14 @@ const APPEARANCE_KEYS = [
   "titleBarStyle",
 ];
 
+const AI_KEYS = ["openAiApiKey", "openAiBaseUrl", "openAiModel"];
+
 describe("settingsStore appearance persistence", () => {
   beforeEach(() => {
     localStorage.clear();
     setClientSettingsPublisher(null);
     useSettingsStore.setState({
+      ai: DEFAULT_AI,
       theme: DEFAULT_THEME,
       editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,
@@ -111,6 +115,33 @@ describe("settingsStore appearance persistence", () => {
       theme?: Record<string, unknown>;
     };
     expect(Object.keys(saved.theme ?? {}).sort()).toEqual([...THEME_KEYS].sort());
+  });
+
+  it("persists the OpenAI model and API key settings", async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        ai: {
+          openAiModel: "gpt-test",
+          openAiBaseUrl: "https://example.test/v1",
+          openAiApiKey: "sk-test",
+        },
+      }),
+    );
+
+    await useSettingsStore.getState().load();
+
+    expect(useSettingsStore.getState().ai).toEqual({
+      openAiApiKey: "sk-test",
+      openAiBaseUrl: "https://example.test/v1",
+      openAiModel: "gpt-test",
+    });
+    await useSettingsStore.getState().save();
+
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}") as {
+      ai?: Record<string, unknown>;
+    };
+    expect(Object.keys(saved.ai ?? {}).sort()).toEqual([...AI_KEYS].sort());
   });
 
   it("keeps built-in presets free of removed per-pin fields", () => {

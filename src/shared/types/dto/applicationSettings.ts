@@ -1,4 +1,6 @@
-export const RECOMMENDED_PROJECT_COMPUTATION_SETTINGS = Object.freeze({
+/** Stable IPC contract for application-scoped backend settings. */
+
+export const RECOMMENDED_COMPUTATION_SETTINGS = Object.freeze({
   numeric: Object.freeze({
     tolerance: Object.freeze({ absolute: 1e-12, relative: 1e-9 }),
   }),
@@ -7,7 +9,7 @@ export const RECOMMENDED_PROJECT_COMPUTATION_SETTINGS = Object.freeze({
 
 export type StatisticalMissingValuePolicy = "listwise" | "reject";
 
-export interface ProjectComputationSettingsDto {
+export interface ComputationSettingsDto {
   numeric: {
     tolerance: {
       absolute: number;
@@ -19,21 +21,22 @@ export interface ProjectComputationSettingsDto {
   };
 }
 
-export interface ComputationSettingsSnapshotDto {
-  projectInstanceId: string;
-  settingsRevision: number;
-  publicationRevision: number;
-  settings: ProjectComputationSettingsDto;
+export interface ApplicationSettingsDto {
+  computation: ComputationSettingsDto;
 }
 
-export interface ComputationSettingsMutationRequestDto {
-  projectInstanceId: string;
+export interface ApplicationSettingsSnapshotDto {
+  settingsRevision: number;
+  settings: ApplicationSettingsDto;
+}
+
+export interface ApplicationSettingsMutationRequestDto {
   operationId: string;
   expectedRevision: number;
-  settings: ProjectComputationSettingsDto;
+  settings: ApplicationSettingsDto;
 }
 
-export interface ComputationSettingsMutationReceiptDto extends ComputationSettingsSnapshotDto {
+export interface ApplicationSettingsMutationReceiptDto extends ApplicationSettingsSnapshotDto {
   operationId: string;
 }
 
@@ -52,9 +55,9 @@ function isRevision(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-export function parseProjectComputationSettings(value: unknown): ProjectComputationSettingsDto {
+export function parseComputationSettings(value: unknown): ComputationSettingsDto {
   if (!isRecord(value) || !hasExactKeys(value, ["numeric", "missingValues"])) {
-    throw new Error("Invalid project computation settings");
+    throw new Error("Invalid application computation settings");
   }
   const numeric = value.numeric;
   const missingValues = value.missingValues;
@@ -74,52 +77,53 @@ export function parseProjectComputationSettings(value: unknown): ProjectComputat
     !hasExactKeys(missingValues, ["statistics"]) ||
     (missingValues.statistics !== "listwise" && missingValues.statistics !== "reject")
   ) {
-    throw new Error("Invalid project computation settings");
+    throw new Error("Invalid application computation settings");
   }
-  return value as unknown as ProjectComputationSettingsDto;
+  return value as unknown as ComputationSettingsDto;
+}
+
+function parseApplicationSettings(value: unknown): ApplicationSettingsDto {
+  if (!isRecord(value) || !hasExactKeys(value, ["computation"])) {
+    throw new Error("Invalid application settings");
+  }
+  parseComputationSettings(value.computation);
+  return value as unknown as ApplicationSettingsDto;
 }
 
 function parseSnapshotBase(
   value: unknown,
   keys: readonly string[],
   errorMessage: string,
-): ComputationSettingsSnapshotDto & Record<string, unknown> {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, keys) ||
-    typeof value.projectInstanceId !== "string" ||
-    value.projectInstanceId.length === 0 ||
-    !isRevision(value.settingsRevision) ||
-    !isRevision(value.publicationRevision)
-  ) {
+): ApplicationSettingsSnapshotDto & Record<string, unknown> {
+  if (!isRecord(value) || !hasExactKeys(value, keys) || !isRevision(value.settingsRevision)) {
     throw new Error(errorMessage);
   }
   try {
-    parseProjectComputationSettings(value.settings);
+    parseApplicationSettings(value.settings);
   } catch {
     throw new Error(errorMessage);
   }
-  return value as ComputationSettingsSnapshotDto & Record<string, unknown>;
+  return value as ApplicationSettingsSnapshotDto & Record<string, unknown>;
 }
 
-export function parseComputationSettingsSnapshot(value: unknown): ComputationSettingsSnapshotDto {
+export function parseApplicationSettingsSnapshot(value: unknown): ApplicationSettingsSnapshotDto {
   return parseSnapshotBase(
     value,
-    ["projectInstanceId", "settingsRevision", "publicationRevision", "settings"],
-    "Invalid project computation settings response",
+    ["settingsRevision", "settings"],
+    "Invalid application settings response",
   );
 }
 
-export function parseComputationSettingsMutationReceipt(
+export function parseApplicationSettingsMutationReceipt(
   value: unknown,
-): ComputationSettingsMutationReceiptDto {
+): ApplicationSettingsMutationReceiptDto {
   const parsed = parseSnapshotBase(
     value,
-    ["projectInstanceId", "operationId", "settingsRevision", "publicationRevision", "settings"],
-    "Invalid project computation settings receipt",
+    ["operationId", "settingsRevision", "settings"],
+    "Invalid application settings receipt",
   );
   if (typeof parsed.operationId !== "string" || parsed.operationId.length === 0) {
-    throw new Error("Invalid project computation settings receipt");
+    throw new Error("Invalid application settings receipt");
   }
-  return parsed as unknown as ComputationSettingsMutationReceiptDto;
+  return parsed as unknown as ApplicationSettingsMutationReceiptDto;
 }

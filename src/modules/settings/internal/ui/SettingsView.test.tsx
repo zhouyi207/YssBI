@@ -10,6 +10,7 @@ import { SettingsView } from "./SettingsView";
 
 const settings = vi.hoisted(() => ({
   resetAllToDefaults: vi.fn(),
+  resetAiToDefaults: vi.fn(),
   resetThemeToDefaults: vi.fn(),
   resetEditorToDefaults: vi.fn(),
   resetAppearanceToDefaults: vi.fn(),
@@ -29,8 +30,8 @@ const computation = vi.hoisted(() => ({
   restoreRecommended: vi.fn(),
 }));
 
-vi.mock("@/features/application/projectSettings/useProjectComputationSettings", () => ({
-  useProjectComputationSettings: () => computation,
+vi.mock("@/features/application/settings/useApplicationComputationSettings", () => ({
+  useApplicationComputationSettings: () => computation,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -85,6 +86,11 @@ vi.mock("@/shared/ui", () => ({
 
 vi.mock("@/features/core/settings/settingsStore", () => {
   const state = {
+    ai: {
+      openAiModel: "",
+      openAiBaseUrl: "https://api.openai.com/v1",
+      openAiApiKey: "",
+    },
     theme: {
       mode: "dark",
       workbenchBackground: "#000000",
@@ -106,11 +112,13 @@ vi.mock("@/features/core/settings/settingsStore", () => {
     },
     project: { projectName: "", exportPath: "" },
     isLoading: false,
+    updateAi: vi.fn(),
     updateTheme: vi.fn(),
     updateEditor: vi.fn(),
     updateAppearance: vi.fn(),
     updateProject: vi.fn(),
     resetAllToDefaults: settings.resetAllToDefaults,
+    resetAiToDefaults: settings.resetAiToDefaults,
     resetThemeToDefaults: settings.resetThemeToDefaults,
     resetEditorToDefaults: settings.resetEditorToDefaults,
     resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
@@ -137,6 +145,7 @@ describe("SettingsView computation settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settings.resetAllToDefaults.mockResolvedValue(undefined);
+    settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetThemeToDefaults.mockResolvedValue(undefined);
     settings.resetEditorToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
@@ -181,16 +190,15 @@ describe("SettingsView computation settings", () => {
     await openSection("computation");
   }
 
-  it("disables the computation group when no project is open", async () => {
-    computation.enabled = false;
+  it("keeps the computation group available without an active project", async () => {
     render();
     await openComputation();
     const group = host.querySelector(
       '[role="group"][aria-label="settings.computation.groupLabel"]',
     );
-    expect(group?.getAttribute("aria-disabled")).toBe("true");
+    expect(group?.getAttribute("aria-disabled")).toBe("false");
     expect(
-      group?.querySelectorAll("input:disabled, select:disabled, button:disabled").length,
+      group?.querySelectorAll("input:not(:disabled), select:not(:disabled)").length,
     ).toBeGreaterThan(0);
   });
 
@@ -200,6 +208,16 @@ describe("SettingsView computation settings", () => {
 
     expect(host.textContent).not.toContain("settings.labels.panelPosition");
     expect(host.textContent).not.toContain("settings.descriptions.panelPosition");
+  });
+
+  it("exposes OpenAI model and API key controls in the AI section", async () => {
+    render();
+    await openSection("ai");
+
+    expect(host.textContent).toContain("settings.labels.openAiModel");
+    expect(host.textContent).toContain("settings.labels.openAiBaseUrl");
+    expect(host.textContent).toContain("settings.labels.openAiApiKey");
+    expect(host.querySelector('input[type="password"]')).not.toBeNull();
   });
 
   it("exposes only semantic color controls and keeps pin colors fixed", async () => {

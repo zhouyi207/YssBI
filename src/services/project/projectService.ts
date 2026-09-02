@@ -26,13 +26,6 @@ import type {
   ProjectRecordRow,
   ScanProjectsResult,
 } from "@/shared/types/dto/project";
-import {
-  parseComputationSettingsMutationReceipt,
-  parseComputationSettingsSnapshot,
-  type ComputationSettingsMutationReceiptDto,
-  type ComputationSettingsMutationRequestDto,
-  type ComputationSettingsSnapshotDto,
-} from "@/shared/types/dto/projectComputationSettings";
 
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 import { IpcError, invokeCommand, isIpcErrorCode } from "@/services/ipc";
@@ -346,22 +339,6 @@ export class ProjectService {
   static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
     const value = await invokeCommand<unknown>("get_project_index", { projectInstanceId });
     return parseProjectIndexRow(value);
-  }
-
-  static async getProjectComputationSettings(
-    projectInstanceId: string,
-  ): Promise<ComputationSettingsSnapshotDto> {
-    const value = await invokeCommand<unknown>("get_project_computation_settings", {
-      projectInstanceId,
-    });
-    return parseComputationSettingsSnapshot(value);
-  }
-
-  static async updateProjectComputationSettings(
-    request: ComputationSettingsMutationRequestDto,
-  ): Promise<ComputationSettingsMutationReceiptDto> {
-    const value = await invokeCommand<unknown>("update_project_computation_settings", { request });
-    return parseComputationSettingsMutationReceipt(value);
   }
 
   /**

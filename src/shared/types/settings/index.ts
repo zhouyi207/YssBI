@@ -1,4 +1,5 @@
 export * from "./AppSettings";
+export * from "./AiSettings";
 export * from "./AppearanceSettings";
 export * from "./EditorSettings";
 export * from "./LanguageSettings";

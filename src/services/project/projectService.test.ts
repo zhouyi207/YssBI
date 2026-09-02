@@ -12,21 +12,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { ProjectService } from "./projectService";
 
-function computationSettingsResult(
-  overrides: Record<string, unknown> = {},
-): Record<string, unknown> {
-  return {
-    projectInstanceId: "project-a",
-    settingsRevision: 3,
-    publicationRevision: 9,
-    settings: {
-      numeric: { tolerance: { absolute: 1e-12, relative: 1e-9 } },
-      missingValues: { statistics: "listwise" },
-    },
-    ...overrides,
-  };
-}
-
 function projectIndex(): Record<string, unknown> {
   return {
     projectInstanceId: "00000000-0000-0000-0000-000000000601",
@@ -83,114 +68,6 @@ function chartRow(): Record<string, unknown> {
     revision: 7,
   };
 }
-
-describe("ProjectService computation settings", () => {
-  beforeEach(() => {
-    ipc.invoke.mockClear();
-    ipc.response = computationSettingsResult();
-  });
-
-  it("strictly parses the backend snapshot and sends the current project identity", async () => {
-    await expect(ProjectService.getProjectComputationSettings("project-a")).resolves.toEqual(
-      computationSettingsResult(),
-    );
-    expect(ipc.invoke).toHaveBeenCalledWith("get_project_computation_settings", {
-      projectInstanceId: "project-a",
-    });
-  });
-
-  it.each([
-    ["unknown top-level key", () => computationSettingsResult({ unexpected: true })],
-    [
-      "unsafe revision",
-      () => computationSettingsResult({ settingsRevision: Number.MAX_SAFE_INTEGER + 1 }),
-    ],
-    [
-      "unknown settings key",
-      () => {
-        const value = computationSettingsResult();
-        (value.settings as Record<string, unknown>).unexpected = true;
-        return value;
-      },
-    ],
-    [
-      "non-finite tolerance",
-      () => {
-        const value = computationSettingsResult();
-        const numeric = (value.settings as Record<string, unknown>).numeric as Record<
-          string,
-          unknown
-        >;
-        (numeric.tolerance as Record<string, unknown>).absolute = Number.POSITIVE_INFINITY;
-        return value;
-      },
-    ],
-    [
-      "both tolerances zero",
-      () => {
-        const value = computationSettingsResult();
-        const numeric = (value.settings as Record<string, unknown>).numeric as Record<
-          string,
-          unknown
-        >;
-        numeric.tolerance = { absolute: 0, relative: 0 };
-        return value;
-      },
-    ],
-    [
-      "unknown missing-value policy",
-      () => {
-        const value = computationSettingsResult();
-        const missing = (value.settings as Record<string, unknown>).missingValues as Record<
-          string,
-          unknown
-        >;
-        missing.statistics = "pairwise";
-        return value;
-      },
-    ],
-  ])("rejects %s", async (_case, build) => {
-    ipc.response = build();
-    await expect(ProjectService.getProjectComputationSettings("project-a")).rejects.toThrow(
-      "Invalid project computation settings response",
-    );
-  });
-
-  it("strictly parses a correlated update receipt and sends one revisioned request", async () => {
-    const settings = computationSettingsResult().settings as never;
-    const receipt = computationSettingsResult({ operationId: "operation-a", settings });
-    ipc.response = receipt;
-
-    await expect(
-      ProjectService.updateProjectComputationSettings({
-        projectInstanceId: "project-a",
-        operationId: "operation-a",
-        expectedRevision: 3,
-        settings,
-      }),
-    ).resolves.toEqual(receipt);
-    expect(ipc.invoke).toHaveBeenCalledWith("update_project_computation_settings", {
-      request: {
-        projectInstanceId: "project-a",
-        operationId: "operation-a",
-        expectedRevision: 3,
-        settings,
-      },
-    });
-  });
-
-  it("rejects an update receipt without the exact operation ID field", async () => {
-    ipc.response = computationSettingsResult();
-    await expect(
-      ProjectService.updateProjectComputationSettings({
-        projectInstanceId: "project-a",
-        operationId: "operation-a",
-        expectedRevision: 3,
-        settings: computationSettingsResult().settings as never,
-      }),
-    ).rejects.toThrow("Invalid project computation settings receipt");
-  });
-});
 
 describe("ProjectService save-as path contract", () => {
   beforeEach(() => {

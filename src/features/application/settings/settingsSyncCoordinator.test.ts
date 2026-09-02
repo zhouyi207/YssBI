@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_AI,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR,
   DEFAULT_PROJECT,
@@ -27,6 +28,7 @@ describe("SettingsSyncCoordinator", () => {
     vi.clearAllMocks();
     receiveSettings = undefined;
     useSettingsStore.setState({
+      ai: DEFAULT_AI,
       theme: DEFAULT_THEME,
       editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,
@@ -49,6 +51,7 @@ describe("SettingsSyncCoordinator", () => {
     await useSettingsStore.getState().save();
     expect(mocks.publishSettingsChanged).toHaveBeenCalledWith(
       expect.objectContaining({
+        ai: DEFAULT_AI,
         theme: DEFAULT_THEME,
         editor: DEFAULT_EDITOR,
         appearance: DEFAULT_APPEARANCE,
@@ -57,6 +60,7 @@ describe("SettingsSyncCoordinator", () => {
     );
 
     const remote: AppSettings = {
+      ai: DEFAULT_AI,
       theme: { ...DEFAULT_THEME, accentColor: "#123456" },
       editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,

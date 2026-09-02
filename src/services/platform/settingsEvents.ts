@@ -25,8 +25,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isSettingsPayload(value: unknown): value is AppSettings {
   return (
     isRecord(value) &&
-    Object.keys(value).length === 4 &&
-    ["theme", "editor", "appearance", "project"].every((key) => key in value) &&
+    Object.keys(value).length === 5 &&
+    ["ai", "theme", "editor", "appearance", "project"].every((key) => key in value) &&
     Object.values(value).every(isRecord)
   );
 }

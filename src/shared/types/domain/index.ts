@@ -30,7 +30,6 @@ export * from "./typeSystem";
 export * from "./dataValue";
 export * from "./variable";
 export * from "./project";
-export * from "./projectComputationSettings";
 export * from "./database";
 export * from "./dataframe";
 

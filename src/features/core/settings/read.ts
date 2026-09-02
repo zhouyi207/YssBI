@@ -4,6 +4,7 @@ import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
 import { useSettingsStore } from "./settingsStore";
 import type {
+  AiSettings,
   AppSettings,
   AppearanceSettings,
   EditorSettings,
@@ -12,6 +13,7 @@ import type {
 } from "@/shared/types/settings";
 
 export interface SettingsReadSnapshot {
+  readonly ai: DeepReadonly<AiSettings>;
   readonly theme: DeepReadonly<ThemeSettings>;
   readonly editor: DeepReadonly<EditorSettings>;
   readonly appearance: DeepReadonly<AppearanceSettings>;
@@ -27,6 +29,7 @@ export interface SettingsReadCapability {
 function buildSnapshot(): DeepReadonly<SettingsReadSnapshot> {
   const state = useSettingsStore.getState();
   const snapshot: SettingsReadSnapshot = {
+    ai: state.ai,
     theme: state.theme,
     editor: state.editor,
     appearance: state.appearance,

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  AiSettings,
   ThemeSettings,
   EditorSettings,
   AppearanceSettings,
@@ -11,6 +12,7 @@ import {
   DEFAULT_EDITOR,
   DEFAULT_APPEARANCE,
   DEFAULT_PROJECT,
+  DEFAULT_AI,
 } from "@/shared/config-default";
 import { logger } from "@/features/core/observability/logger";
 
@@ -28,6 +30,7 @@ export function setClientSettingsPublisher(
 
 function clientSettingsFingerprint(s: AppSettings): string {
   return JSON.stringify({
+    ai: s.ai,
     theme: s.theme,
     editor: s.editor,
     appearance: s.appearance,
@@ -54,6 +57,11 @@ function mergeThemeSettings(theme: Partial<ThemeSettings> | undefined): ThemeSet
 
 function mergeSettings(settings: Partial<AppSettings>): AppSettings {
   return {
+    ai: {
+      openAiApiKey: settings.ai?.openAiApiKey ?? DEFAULT_AI.openAiApiKey,
+      openAiBaseUrl: settings.ai?.openAiBaseUrl ?? DEFAULT_AI.openAiBaseUrl,
+      openAiModel: settings.ai?.openAiModel ?? DEFAULT_AI.openAiModel,
+    },
     theme: mergeThemeSettings(settings.theme),
     editor: {
       showGrid: settings.editor?.showGrid ?? DEFAULT_EDITOR.showGrid,
@@ -127,6 +135,7 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
   const merged = mergeSettings(incoming);
   const cur = useSettingsStore.getState();
   const currentPayload: AppSettings = {
+    ai: cur.ai,
     theme: cur.theme,
     editor: cur.editor,
     appearance: cur.appearance,
@@ -140,6 +149,7 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
   try {
     saveLocalSettings(merged);
     useSettingsStore.setState({
+      ai: merged.ai,
       theme: merged.theme,
       editor: merged.editor,
       appearance: merged.appearance,
@@ -152,6 +162,7 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
 }
 
 interface SettingsStore {
+  ai: AiSettings;
   theme: ThemeSettings;
   editor: EditorSettings;
   appearance: AppearanceSettings;
@@ -162,6 +173,7 @@ interface SettingsStore {
 
   // 更新方法（仅更新状态，不保存）
   updateTheme: (updates: Partial<ThemeSettings>) => void;
+  updateAi: (updates: Partial<AiSettings>) => void;
   updateEditor: (updates: Partial<EditorSettings>) => void;
   updateAppearance: (updates: Partial<AppearanceSettings>) => void;
   updateProject: (updates: Partial<ProjectSettings>) => void;
@@ -171,6 +183,7 @@ interface SettingsStore {
 
   // 恢复默认方法
   resetThemeToDefaults: () => Promise<void>;
+  resetAiToDefaults: () => Promise<void>;
   resetEditorToDefaults: () => Promise<void>;
   resetAppearanceToDefaults: () => Promise<void>;
   resetProjectToDefaults: () => Promise<void>;
@@ -190,6 +203,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     }
     const state = get();
     const settings: AppSettings = {
+      ai: state.ai,
       theme: state.theme,
       editor: state.editor,
       appearance: state.appearance,
@@ -206,6 +220,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   };
 
   return {
+    ai: DEFAULT_AI,
     theme: DEFAULT_THEME,
     editor: DEFAULT_EDITOR,
     appearance: DEFAULT_APPEARANCE,
@@ -223,6 +238,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     updateTheme: (updates) =>
       set((state) => {
         const next = { theme: { ...state.theme, ...updates } };
+        queueMicrotask(scheduleSave);
+        return next;
+      }),
+
+    updateAi: (updates) =>
+      set((state) => {
+        const next = { ai: { ...state.ai, ...updates } };
         queueMicrotask(scheduleSave);
         return next;
       }),
@@ -255,6 +277,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
     resetThemeToDefaults: async () => {
       set({ theme: DEFAULT_THEME });
+      await saveImmediately();
+    },
+
+    resetAiToDefaults: async () => {
+      set({ ai: DEFAULT_AI });
       await saveImmediately();
     },
 
