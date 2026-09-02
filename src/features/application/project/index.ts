@@ -32,23 +32,19 @@ export type {
   ProjectEventIngressRecoveryReason,
   ProjectEventStreamItem,
 } from "./projectEventIngress";
-export { createProjectEventReconciler } from "./projectEventReconciler";
+export { createProjectEventConsumer } from "./projectEventConsumer";
 export { initializeProjectForCurrentWindow } from "./projectRuntime";
 export { getDefaultProjectParentDirectory, openProjectPathDialog } from "./projectPlatformActions";
 export { getProjectProjection, useProjectProjection } from "./projectProjection";
 export type { ProjectProjection } from "./projectProjection";
 export type {
-  ComputationSettingsChangedPayload,
-  GraphDeltaEventPayload,
-  OptimisticOperationKey,
   ProjectEvent,
-  ProjectEventReconciler,
-  ProjectEventReconcilerDependencies,
-  ProjectRecoveryReason,
+  ProjectEventConsumer,
+  ProjectEventConsumerDependencies,
   ProjectIndexInvalidatedPayload,
   ProjectLifecycleCommittedPayload,
   ProjectLoadedPayload,
-  ProjectReconciliationOutcome,
+  ProjectEventConsumptionOutcome,
   ProjectSavedPayload,
   ResourceMutationCommittedPayload,
-} from "./projectEventReconciler";
+} from "./projectEventConsumer";

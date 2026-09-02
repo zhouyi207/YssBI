@@ -4,7 +4,7 @@ import {
   pinDisplayTitle,
   portAddressKey,
 } from "@/features/domain/editorProjection";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
@@ -16,14 +16,14 @@ export function usePinResultSearch(graphPath: string, query: string) {
   const historyCount = useExecutionStore(
     (state) => state.graphs[graphPath]?.pinHistories.size ?? 0,
   );
-  const graphBucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
+  const graphBucket = useGraphProjectionStore((state) => state.graphEntities[graphPath]);
 
   const entries = useMemo(() => {
     const histories = useExecutionStore.getState().graphs[graphPath]?.pinHistories;
     if (!histories || histories.size === 0) return [];
 
     return collectPinResultSearchEntries(histories, (history) => {
-      const graphStore = useGraphDataStore.getState();
+      const graphStore = useGraphProjectionStore.getState();
       const node = graphStore.getGraphNode(history.graphPath, history.output.nodeId);
       const pin = graphStore.getGraphPin(history.graphPath, portAddressKey(history.output));
       return {

@@ -27,7 +27,7 @@ vi.mock("@/features/core/dataStore", () => {
     getGraphNodePins: () => ["pin-1"],
   };
   return {
-    useGraphDataStore: (selector: (value: typeof state) => unknown) => selector(state),
+    useGraphProjectionStore: (selector: (value: typeof state) => unknown) => selector(state),
   };
 });
 

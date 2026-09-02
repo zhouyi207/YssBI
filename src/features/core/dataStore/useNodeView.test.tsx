@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { useNodeView } from "./useNodeView";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -27,8 +27,8 @@ function installCallProjection(nodeTypeId: string, targetPath: string): void {
     nodeTypeId,
     title: "Calculate Sales",
   });
-  useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
-  useGraphDataStore.setState((state) => ({
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.setState((state) => ({
     graphEntities: {
       ...state.graphEntities,
       [graphPath]: {
@@ -50,7 +50,7 @@ describe("useNodeView Call Function title projection", () => {
   let root: Root;
 
   beforeEach(() => {
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -60,7 +60,7 @@ describe("useNodeView Call Function title projection", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
   });
 

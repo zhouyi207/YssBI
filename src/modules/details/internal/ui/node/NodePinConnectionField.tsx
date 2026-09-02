@@ -8,9 +8,9 @@ import type {
   PinData,
   ConnectionData,
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { GraphMutationCommandResult } from "@/features/core/history/types";
+import type { GraphDraftCommandResult } from "@/features/core/history/types";
 import { Select } from "@/shared/ui/Select";
-import { graphMutationErrorMessageKey } from "@/features/application/editorMutation/graphMutationError";
+import { graphDraftErrorMessageKey } from "@/features/application/graphDraft/graphDraftError";
 import {
   connectPinsById,
   disconnectConnectionById,
@@ -68,20 +68,15 @@ function ConnectionRow({
   );
 }
 
-function mutationSucceeded(result: GraphMutationCommandResult): boolean {
+function mutationSucceeded(result: GraphDraftCommandResult): boolean {
   return result !== false && (result.status === "applied" || result.status === "noop");
 }
 
-function mutationMessageKey(result: GraphMutationCommandResult): string | null {
+function mutationMessageKey(result: GraphDraftCommandResult): string | null {
   if (mutationSucceeded(result)) return null;
-  const code =
-    result !== false && result.status === "rejected"
-      ? result.code
-      : result !== false && result.status === "conflict"
-        ? "graph_revision_conflict"
-        : null;
+  const code = result !== false && result.status === "rejected" ? result.code : null;
   return code
-    ? (graphMutationErrorMessageKey(code) ?? "detail.nodeDoc.connectionFailed")
+    ? (graphDraftErrorMessageKey(code) ?? "detail.nodeDoc.connectionFailed")
     : "detail.nodeDoc.connectionFailed";
 }
 

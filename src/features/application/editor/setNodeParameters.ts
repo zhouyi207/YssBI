@@ -1,8 +1,8 @@
 import {
-  executeEditorMutation,
-  type ExecuteEditorMutationOutcome,
-} from "@/features/application/editorMutation/editorMutationCoordinator";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+  applyGraphDraftMutation,
+  type ApplyGraphDraftMutationOutcome,
+} from "@/features/application/graphDraft/graphDraftCoordinator";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 export interface SetNodeParametersInput {
   graphPath: string;
@@ -13,8 +13,8 @@ export interface SetNodeParametersInput {
 
 export function setNodeParameters(
   input: SetNodeParametersInput,
-): Promise<ExecuteEditorMutationOutcome> {
-  const projected = useGraphDataStore.getState().getGraphNode(input.graphPath, input.nodeId);
+): Promise<ApplyGraphDraftMutationOutcome> {
+  const projected = useGraphProjectionStore.getState().getGraphNode(input.graphPath, input.nodeId);
   const merged = Object.fromEntries([
     ...(projected?.parameterEditors ?? []).map(
       (parameter) => [parameter.key, parameter.value] as const,
@@ -24,7 +24,7 @@ export function setNodeParameters(
   const parameters = Object.fromEntries(
     Object.entries(merged).filter(([, value]) => value !== null && value !== undefined),
   );
-  return executeEditorMutation({
+  return applyGraphDraftMutation({
     graphPath: input.graphPath,
     locale: input.locale,
     mutation: {

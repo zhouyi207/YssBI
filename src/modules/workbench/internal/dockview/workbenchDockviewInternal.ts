@@ -711,7 +711,7 @@ class ShadowWorkbenchModel {
         this.applyCommand(api, command);
       }
     }
-    this.reconcileSelection(api);
+    this.ensureSelectionConsistency(api);
   }
 
   private getPanel(panelInstanceId: string): WorkbenchPanelInfo | undefined {
@@ -1191,7 +1191,7 @@ class ShadowWorkbenchModel {
     return layout as unknown as SerializedDockview;
   }
 
-  private reconcileSelection(api: DockviewApi): void {
+  private ensureSelectionConsistency(api: DockviewApi): void {
     for (const groupId of this.groupOrder) {
       const desiredGroup = this.groups.get(groupId);
       if (!desiredGroup) this.fail("missing_group");

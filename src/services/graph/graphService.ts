@@ -1,5 +1,5 @@
 import { invokeCommand } from "@/services/ipc";
-import type { ProjectSaveResultDto, ResourceMutationResultDto } from "@/shared/types/dto";
+import type { ResourceMutationResultDto } from "@/shared/types/dto";
 
 /**
  * Graph Service - 管理 Event、Function 资源生命周期与函数引用查询
@@ -65,20 +65,6 @@ export class GraphService {
     projectInstanceId: string,
   ): Promise<void> {
     await invokeCommand("unload_project_graph", { graphPath, lifecycleToken, projectInstanceId });
-  }
-
-  static async saveProjectGraph(
-    projectInstanceId: string,
-    graphPath: string,
-    expectedRevision: number,
-    operationId: string,
-  ): Promise<ProjectSaveResultDto> {
-    return await invokeCommand<ProjectSaveResultDto>("save_project_graph", {
-      projectInstanceId,
-      graphPath,
-      expectedRevision,
-      operationId,
-    });
   }
 
   static async duplicateGraph(

@@ -10,7 +10,7 @@ export type BoundApplicationStore<T> = StoreApi<T> & {
 /**
  * Binds a vanilla store to React without exposing a second application-level
  * state library entry point. The imperative StoreApi is retained for event
- * and IPC reconciliation; views consume the hook only through Application.
+ * and IPC projection updates; views consume the hook only through Application.
  */
 export function createBoundApplicationStore<T>(
   initializer: (set: (update: StoreUpdate<T>, replace?: boolean) => void, get: () => T) => T,

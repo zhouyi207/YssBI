@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectionLocaleSync } from "./useProjectionLocaleSync";
 import { resetGraphProjectionCoordinator } from "@/features/application/editorProjection/graphProjectionCoordinator";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -18,7 +18,10 @@ import {
 import { editorViewportScope, useViewportStore } from "@/features/core/viewport";
 import { viewportScopeKey } from "@/features/core/viewport/viewportScope";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -63,7 +66,7 @@ describe("useProjectionLocaleSync", () => {
     resetGraphProjectionCoordinator();
     clearProjectLifecycle();
     startProjectLifecycle("project-instance-1");
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
     useViewportStore.getState().clear();
@@ -102,8 +105,10 @@ describe("useProjectionLocaleSync", () => {
       sourceRevision: 7,
       title: "Localized function",
     });
-    useGraphDataStore.getState().replaceProjection(eventPath, currentEvent.projection, 1);
-    useGraphDataStore.getState().replaceProjection(functionPath, currentFunction.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(eventPath, currentEvent.projection, 1);
+    useGraphProjectionStore
+      .getState()
+      .replaceProjection(functionPath, currentFunction.projection, 1);
     useResourceStore.getState().setSnapshot({
       resources: [
         buildGraphResourceMeta("event", eventPath, "Main"),
@@ -119,7 +124,9 @@ describe("useProjectionLocaleSync", () => {
       async (projectInstanceId, graphPath, locale) => {
         expect(projectInstanceId).toBe("project-instance-1");
         expect(locale).toBe("en-US");
-        return graphPath === eventPath ? localizedEvent.projection : localizedFunction.projection;
+        return makeGraphEditorSession(
+          graphPath === eventPath ? localizedEvent.projection : localizedFunction.projection,
+        );
       },
     );
 
@@ -147,11 +154,11 @@ describe("useProjectionLocaleSync", () => {
       unloadedPath,
       "en-US",
     );
-    expect(useGraphDataStore.getState().graphEntities[eventPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[eventPath]).toMatchObject({
       sourceRevision: 4,
       nodes: { "local-node": { title: "Localized event" } },
     });
-    expect(useGraphDataStore.getState().graphEntities[functionPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
       sourceRevision: 7,
       nodes: { "local-node": { title: "Localized function" } },
     });
@@ -175,15 +182,15 @@ describe("useProjectionLocaleSync", () => {
       sourceRevision: 5,
       title: "中文",
     });
-    const pendingEnglish = deferred<typeof olderLocale.projection>();
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    const pendingEnglish = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     useResourceStore.getState().setSnapshot({
       resources: [buildGraphResourceMeta("event", graphPath, "Main")],
     });
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph)
       .mockReturnValueOnce(pendingEnglish.promise)
-      .mockResolvedValueOnce(latestLocale.projection);
+      .mockResolvedValueOnce(makeGraphEditorSession(latestLocale.projection));
 
     await act(async () => root.render(createElement(Harness)));
     localeState.language = "en-US";
@@ -196,7 +203,7 @@ describe("useProjectionLocaleSync", () => {
     await vi.waitFor(() => {
       expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     });
-    pendingEnglish.resolve(olderLocale.projection);
+    pendingEnglish.resolve(makeGraphEditorSession(olderLocale.projection));
     await act(async () => {
       await pendingEnglish.promise;
       await Promise.resolve();
@@ -214,7 +221,7 @@ describe("useProjectionLocaleSync", () => {
       graphPath,
       "zh-CN",
     );
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       nodes: { "local-node": { title: "中文" } },
       requestGeneration: 3,
     });

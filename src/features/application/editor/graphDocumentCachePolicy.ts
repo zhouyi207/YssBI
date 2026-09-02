@@ -1,4 +1,4 @@
-import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { shouldRetainGraphDocument } from "./graphDocumentRetention";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 
@@ -13,7 +13,7 @@ export function touchGraphDocument(graphPath: string): void {
 
 /** Evict LRU hydrated graphs until within cap; skips paths covered by retention guards. */
 export async function enforceGraphDocumentCacheLimit(): Promise<void> {
-  const hydrated = Object.keys(useGraphDataStore.getState().graphEntities);
+  const hydrated = Object.keys(useGraphProjectionStore.getState().graphEntities);
   if (hydrated.length <= MAX_HYDRATED_GRAPH_DOCUMENTS) return;
 
   const evictionOrder = hydrated
@@ -22,7 +22,8 @@ export async function enforceGraphDocumentCacheLimit(): Promise<void> {
 
   for (const path of evictionOrder) {
     if (
-      Object.keys(useGraphDataStore.getState().graphEntities).length <= MAX_HYDRATED_GRAPH_DOCUMENTS
+      Object.keys(useGraphProjectionStore.getState().graphEntities).length <=
+      MAX_HYDRATED_GRAPH_DOCUMENTS
     ) {
       break;
     }

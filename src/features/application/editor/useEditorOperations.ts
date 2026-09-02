@@ -5,7 +5,7 @@ import {
   canCutNode,
   canDeleteNode,
 } from "@/features/core/dataStore/graphNodeSelectors";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
@@ -13,14 +13,14 @@ import {
   workbenchDockviewRead,
 } from "@/modules/workbench/public";
 import { executeCommand, executeCommandWithResult } from "@/features/core/history";
-import type { GraphMutationCommandResult } from "@/features/core/history/types";
+import type { GraphDraftCommandResult } from "@/features/core/history/types";
 import {
   redoEditorHistory,
   undoEditorHistory,
-} from "@/features/application/editorMutation/historyCoordinator";
-import { executeSafeGraphMutation } from "@/features/application/editorMutation/safeGraphMutation";
-import { exportEditorSubgraph } from "@/features/application/editorMutation/subgraphExportCoordinator";
-import { insertedNodeIdsFromDelta } from "@/features/application/editorMutation/insertedNodeIdsFromDelta";
+} from "@/features/application/graphDraft/historyCoordinator";
+import { executeSafeGraphDraftEdit } from "@/features/application/graphDraft/safeGraphDraftEdit";
+import { exportEditorSubgraph } from "@/features/application/graphDraft/subgraphExportCoordinator";
+import { insertedNodeIdsFromPatch } from "@/features/application/graphDraft/insertedNodeIdsFromPatch";
 import { readGraphClipboard, writeGraphClipboard } from "@/services/clipboard";
 import { disconnectConnectionsById } from "./edgeOperations";
 import {
@@ -97,12 +97,12 @@ function logEditorOperationError(operation: string, error: unknown): void {
 }
 
 function isAppliedMutation(
-  outcome: GraphMutationCommandResult | null,
-): outcome is Extract<GraphMutationCommandResult, { status: "applied" }> {
+  outcome: GraphDraftCommandResult | null,
+): outcome is Extract<GraphDraftCommandResult, { status: "applied" }> {
   return outcome !== null && outcome !== false && outcome.status === "applied";
 }
 
-function mutationOutcomeStatus(outcome: GraphMutationCommandResult | null): string {
+function mutationOutcomeStatus(outcome: GraphDraftCommandResult | null): string {
   return outcome !== null && outcome !== false ? outcome.status : "command unavailable";
 }
 
@@ -196,7 +196,7 @@ export function useEditorOperations() {
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
-        const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+        const insertedNodeIds = insertedNodeIdsFromPatch(outcome.result.patch);
         if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
           setSelectedNodeIds(insertedNodeIds, context.groupId);
         }
@@ -216,7 +216,7 @@ export function useEditorOperations() {
     const idsToDelete = nodeIds.filter((id) => canDeleteNode(context.graphPath, id));
     if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
-    return executeSafeGraphMutation(context.graphPath, "Delete nodes", "DeleteNodes", {
+    return executeSafeGraphDraftEdit(context.graphPath, "Delete nodes", "DeleteNodes", {
       nodeIds: idsToDelete,
     });
   }, []);
@@ -224,7 +224,7 @@ export function useEditorOperations() {
   const breakAllNodeLinks = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphMutation(context.graphPath, "Break all links", "DisconnectNode", {
+    return executeSafeGraphDraftEdit(context.graphPath, "Break all links", "DisconnectNode", {
       nodeId,
     });
   }, []);
@@ -232,7 +232,7 @@ export function useEditorOperations() {
   const selectLinkedNodes = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context) return false;
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     const pinIds = store.getGraphNodePins(context.graphPath, nodeId);
     const linked = new Set<string>();
 
@@ -257,7 +257,7 @@ export function useEditorOperations() {
   const disconnectPinById = useCallback(async (pinId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphMutation(context.graphPath, "Disconnect port", "DisconnectPort", {
+    return executeSafeGraphDraftEdit(context.graphPath, "Disconnect port", "DisconnectPort", {
       pinId,
     });
   }, []);
@@ -287,7 +287,7 @@ export function useEditorOperations() {
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
-        const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+        const insertedNodeIds = insertedNodeIdsFromPatch(outcome.result.patch);
         if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
           setSelectedNodeIds(insertedNodeIds, context.groupId);
         }
@@ -348,13 +348,13 @@ export function useEditorOperations() {
       const selectedSnapshot = [...capturedSelection.nodeIds];
       const selectedIds = new Set(selectedSnapshot);
       if (selectedIds.size === 0) return false;
-      const dataStore = useGraphDataStore.getState();
+      const dataStore = useGraphProjectionStore.getState();
       const idsToDelete = dataStore
         .getGraphNodeIds(context.graphPath)
         .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(context.graphPath, nodeId));
       if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
-      const applied = await executeSafeGraphMutation(
+      const applied = await executeSafeGraphDraftEdit(
         context.graphPath,
         "Delete selected nodes",
         "DeleteNodes",

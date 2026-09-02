@@ -7,7 +7,7 @@ import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import { useHistoryStore } from "@/features/core/history";
+import { isGraphDraftSaving, useGraphDraftStore } from "@/features/core/graphDraft";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -146,7 +146,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (event.key === "Delete" || event.key === "Backspace") {
         const target = currentEditorCommandTarget();
-        if (!target) return;
+        if (!target || isGraphDraftSaving(target.resourceRef)) return;
         event.preventDefault();
         void commands.deleteSelected(target);
         return;
@@ -155,8 +155,10 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "z") {
         const target = currentEditorCommandTarget();
         if (!target) return;
-        const { canUndo, canRedo, pending } = useHistoryStore.getState();
-        if (event.shiftKey ? canRedo && !pending : canUndo && !pending) {
+        const session = useGraphDraftStore.getState().sessions[target.resourceRef];
+        const canUndo = Boolean(session?.undoStack.length);
+        const canRedo = Boolean(session?.redoStack.length);
+        if (!session?.saving && (event.shiftKey ? canRedo : canUndo)) {
           event.preventDefault();
           if (event.shiftKey) void commands.redo(target);
           else void commands.undo(target);
@@ -167,8 +169,8 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "y") {
         const target = currentEditorCommandTarget();
         if (!target) return;
-        const { canRedo, pending } = useHistoryStore.getState();
-        if (canRedo && !pending) {
+        const session = useGraphDraftStore.getState().sessions[target.resourceRef];
+        if (session?.redoStack.length && !session.saving) {
           event.preventDefault();
           void commands.redo(target);
         }
@@ -177,7 +179,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "c") {
         const target = currentEditorCommandTarget();
-        if (!target) return;
+        if (!target || isGraphDraftSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.copy(target);
         return;
@@ -185,7 +187,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "x") {
         const target = currentEditorCommandTarget();
-        if (!target) return;
+        if (!target || isGraphDraftSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.cut(target);
         return;
@@ -193,7 +195,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "v") {
         const target = currentEditorCommandTarget();
-        if (!target) return;
+        if (!target || isGraphDraftSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
           const point = getActiveCanvasLocalPoint(
@@ -208,7 +210,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "d") {
         const target = currentEditorCommandTarget();
-        if (!target) return;
+        if (!target || isGraphDraftSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) {
           void commands.duplicateSelected(target);

@@ -141,6 +141,14 @@ export interface InputStateDto {
   literal_override: unknown | null;
 }
 
+/** Raw unsaved Graph document owned by one frontend editor session. */
+export interface GraphDocumentDto {
+  nodes: Record<string, DocumentNodeDto>;
+  port_bindings: Array<[DocumentPortAddressDto, DynamicPortBindingDto]>;
+  connections: Record<string, DocumentConnectionDto>;
+  input_states: Array<[DocumentPortAddressDto, InputStateDto]>;
+}
+
 export type GraphDocumentOperationDto =
   | { operation: "insert_node"; node: DocumentNodeDto }
   | { operation: "remove_node"; node: DocumentNodeDto }
@@ -222,14 +230,6 @@ export type ResourceDocumentPatchDto =
   | { kind: "variable_scope_move"; patch: ResourcePathMovePatchDto }
   | { kind: "database"; patch: DatabaseDocumentPatchDto };
 
-export interface GraphDeltaDto<TPayload = GraphDocumentPatchDto> {
-  graphPath: string;
-  fromRevision: number;
-  toRevision: number;
-  causedBy: string | null;
-  payload: TPayload;
-}
-
 export interface ResourceDeltaDto<TPayload = ResourceDocumentPatchDto> {
   resource: ResourceKeyDto;
   fromRevision: number;
@@ -238,9 +238,21 @@ export interface ResourceDeltaDto<TPayload = ResourceDocumentPatchDto> {
   payload: TPayload;
 }
 
-export interface GraphMutationResultDto {
+export interface GraphEditorSessionDto {
+  document: GraphDocumentDto;
+  projection: EditorGraphProjectionDto;
+}
+
+export interface GraphDraftUpdateDto {
+  document: GraphDocumentDto;
+  patch: GraphDocumentPatchDto;
+  projectionReplacement: GraphProjectionReplacementDto;
+}
+
+export interface GraphDraftSaveDto {
   projectInstanceId: string;
-  delta: GraphDeltaDto;
+  operationId: string;
+  document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;
   history: HistoryStatusDto;
 }

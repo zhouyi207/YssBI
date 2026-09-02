@@ -1,0 +1,52 @@
+import { invoke } from "@tauri-apps/api/core";
+import { describe, expect, it, vi } from "vitest";
+import editorProjection from "@/tests/fixtures/node-system-contracts/editor-projection.json";
+import { GraphDraftService } from "./graphDraftService";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+
+const graphPath = "events/contract.yssbi-event";
+const document = { nodes: {}, port_bindings: [], connections: {}, input_states: [] };
+const projectionReplacement = { graphPath, projection: editorProjection };
+
+describe("GraphDraftService", () => {
+  it("transforms a frontend draft without a revision or operation envelope", async () => {
+    const mutation = { type: "deleteNodes" as const, payload: { nodeIds: [] } };
+    const result = { document, patch: { operations: [] }, projectionReplacement };
+    vi.mocked(invoke).mockResolvedValue(result);
+
+    await expect(
+      GraphDraftService.transform("project-a", graphPath, "en-US", document, mutation),
+    ).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("transform_graph_draft", {
+      projectInstanceId: "project-a",
+      graphPath,
+      locale: "en-US",
+      document,
+      mutation,
+    });
+  });
+
+  it("saves a complete draft with overwrite semantics and no expected revision", async () => {
+    const operationId = "00000000-0000-0000-0000-000000000010";
+    const result = {
+      projectInstanceId: "project-a",
+      operationId,
+      document,
+      projectionReplacement,
+      history: { canUndo: true, canRedo: false },
+    };
+    vi.mocked(invoke).mockResolvedValue(result);
+
+    await expect(
+      GraphDraftService.save("project-a", graphPath, "en-US", operationId, document),
+    ).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("save_project_graph", {
+      projectInstanceId: "project-a",
+      graphPath,
+      locale: "en-US",
+      operationId,
+      document,
+    });
+  });
+});

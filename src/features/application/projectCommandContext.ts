@@ -1,7 +1,4 @@
-import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { waitForPendingGraphMutations } from "@/features/application/editorMutation/pendingMutationRegistry";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -16,10 +13,6 @@ export interface ProjectCommandContext {
   operationPendingKey: string;
   isCurrent(): boolean;
   assertCurrent(): void;
-}
-
-export interface GraphSaveCommandContext extends ProjectCommandContext {
-  expectedRevision: number;
 }
 
 export interface RevisionedProjectCommandSnapshot<T> {
@@ -53,33 +46,4 @@ export function captureRevisionedProjectCommandSnapshot<T>(
   const authority = readAuthority();
   context.assertCurrent();
   return Object.freeze({ context, authority });
-}
-
-export function isGraphSaveCommandRevisionCurrent(
-  context: GraphSaveCommandContext,
-  graphPath: string,
-): boolean {
-  if (!context.isCurrent()) return false;
-  const basis = getGraphProjectionBasis(useGraphDataStore.getState(), graphPath);
-  return basis?.graphRevision === context.expectedRevision;
-}
-
-function graphSaveContextFrom(
-  context: ProjectCommandContext,
-  graphPath: string,
-): GraphSaveCommandContext {
-  const basis = getGraphProjectionBasis(useGraphDataStore.getState(), graphPath);
-  context.assertCurrent();
-  if (!basis) {
-    throw new Error(`Graph projection '${graphPath}' is not loaded`);
-  }
-  return { ...context, expectedRevision: basis.graphRevision };
-}
-
-export async function captureSettledGraphSaveCommandContext(
-  graphPath: string,
-): Promise<GraphSaveCommandContext> {
-  const context = captureProjectCommandContext();
-  await waitForPendingGraphMutations(graphPath);
-  return graphSaveContextFrom(context, graphPath);
 }

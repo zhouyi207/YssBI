@@ -13,7 +13,7 @@ function withInstantScroll(viewport: HTMLElement, update: () => void): void {
   viewport.style.scrollBehavior = previousBehavior;
 }
 
-/** Position the native viewport at the tail without invoking virtualizer scroll APIs (avoids multi-frame reconcile). */
+/** Position the native viewport at the tail without invoking virtualizer scroll APIs (avoids multi-frame layout churn). */
 export function snapLogViewportToBottom(viewport: HTMLElement, itemCount: number): void {
   const maxScrollTop = Math.max(0, estimatedLogListHeight(itemCount) - viewport.clientHeight);
   withInstantScroll(viewport, () => {

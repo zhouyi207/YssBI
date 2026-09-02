@@ -16,11 +16,8 @@ const target: EditorCommandTarget = Object.freeze({
 const mocks = vi.hoisted(() => ({
   targetCurrent: true,
   resolveActiveProjectPath: vi.fn(async () => "D:/projects/demo"),
-  captureSettledGraphSaveCommandContext: vi.fn(),
-  isGraphSaveCommandRevisionCurrent: vi.fn(() => true),
-  saveProjectGraph: vi.fn(async () => undefined),
+  saveGraphDraft: vi.fn(async () => true),
   saveChart: vi.fn(async () => true),
-  markResourceDirty: vi.fn(),
   warnCallFunctionIssuesBeforeSave: vi.fn(),
   showBlockingMessage: vi.fn(),
   showBlockingIpcError: vi.fn(),
@@ -51,18 +48,11 @@ vi.mock("@/features/core/chart/chartDocumentStore", () => ({
 }));
 
 vi.mock("@/features/core/resource", () => ({
-  markResourceDirty: mocks.markResourceDirty,
+  isResourceDocumentDirty: vi.fn(() => false),
 }));
 
-vi.mock("@/services/graph/graphService", () => ({
-  GraphService: {
-    saveProjectGraph: mocks.saveProjectGraph,
-  },
-}));
-
-vi.mock("@/features/application/projectCommandContext", () => ({
-  captureSettledGraphSaveCommandContext: mocks.captureSettledGraphSaveCommandContext,
-  isGraphSaveCommandRevisionCurrent: mocks.isGraphSaveCommandRevisionCurrent,
+vi.mock("@/features/application/graphDraft/saveGraphDraft", () => ({
+  saveGraphDraft: mocks.saveGraphDraft,
 }));
 
 vi.mock("@/features/application/graphDiagnostics/warnCallFunctionIssues", () => ({
@@ -101,19 +91,6 @@ import { useProjectOperations } from "./useProjectOperations";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function graphSaveContext() {
-  return {
-    projectInstanceId: "project-main",
-    projectEpoch: 1,
-    publicationRevision: 1,
-    expectedRevision: 7,
-    operationId: "save-main",
-    operationPendingKey: "project-main:save-main",
-    isCurrent: () => true,
-    assertCurrent: () => undefined,
-  };
-}
-
 describe("useProjectOperations saveGraph target authority", () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -123,9 +100,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     vi.clearAllMocks();
     mocks.targetCurrent = true;
     mocks.resolveActiveProjectPath.mockResolvedValue("D:/projects/demo");
-    mocks.captureSettledGraphSaveCommandContext.mockResolvedValue(graphSaveContext());
-    mocks.isGraphSaveCommandRevisionCurrent.mockReturnValue(true);
-    mocks.saveProjectGraph.mockResolvedValue(undefined);
+    mocks.saveGraphDraft.mockResolvedValue(true);
     mocks.saveChart.mockResolvedValue(true);
 
     host = document.createElement("div");
@@ -151,49 +126,34 @@ describe("useProjectOperations saveGraph target authority", () => {
     });
 
     expect(mocks.warnCallFunctionIssuesBeforeSave).toHaveBeenCalledWith(target.resourceRef);
-    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(target.resourceRef);
-    expect(mocks.saveProjectGraph).toHaveBeenCalledWith(
-      "project-main",
-      target.resourceRef,
-      7,
-      "save-main",
-    );
-    expect(mocks.markResourceDirty).toHaveBeenCalledWith(
-      {
-        id: target.resourceRef,
-        kind: target.resourceKind,
-      },
-      false,
-    );
+    expect(mocks.saveGraphDraft).toHaveBeenCalledWith(target.resourceRef, target.resourceKind);
   });
 
-  it("stops before graph IPC when the target changes while mutations settle", async () => {
-    mocks.captureSettledGraphSaveCommandContext.mockImplementationOnce(async () => {
+  it("stops before save when the target changes while project authority resolves", async () => {
+    mocks.resolveActiveProjectPath.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
-      return graphSaveContext();
+      return "D:/projects/demo";
     });
 
     await act(async () => {
       await operations.saveGraph(target);
     });
 
-    expect(mocks.captureSettledGraphSaveCommandContext).toHaveBeenCalledWith(target.resourceRef);
-    expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
-    expect(mocks.markResourceDirty).not.toHaveBeenCalled();
+    expect(mocks.saveGraphDraft).not.toHaveBeenCalled();
   });
 
-  it("does not clear dirty state when the target changes during graph IPC", async () => {
-    mocks.saveProjectGraph.mockImplementationOnce(async () => {
+  it("ignores stale settlement feedback when the target changes during save", async () => {
+    mocks.saveGraphDraft.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
+      return true;
     });
 
     await act(async () => {
       await operations.saveGraph(target);
     });
 
-    expect(mocks.saveProjectGraph).toHaveBeenCalledOnce();
-    expect(mocks.isGraphSaveCommandRevisionCurrent).not.toHaveBeenCalled();
-    expect(mocks.markResourceDirty).not.toHaveBeenCalled();
+    expect(mocks.saveGraphDraft).toHaveBeenCalledOnce();
+    expect(mocks.showBlockingMessage).not.toHaveBeenCalled();
   });
 
   it("saves a chart by its captured target and ignores stale settlement feedback", async () => {
@@ -213,8 +173,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     });
 
     expect(mocks.saveChart).toHaveBeenCalledWith(chartTarget.resourceRef);
-    expect(mocks.captureSettledGraphSaveCommandContext).not.toHaveBeenCalled();
-    expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
+    expect(mocks.saveGraphDraft).not.toHaveBeenCalled();
     expect(mocks.showBlockingMessage).not.toHaveBeenCalled();
   });
 });

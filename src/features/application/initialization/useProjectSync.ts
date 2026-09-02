@@ -4,29 +4,24 @@ import {
   loadActivatedProject,
   useProjectIOStore,
 } from "@/features/application/project/projectIOStore";
-import { createNodeCatalogPublication } from "@/features/core/nodeCatalog/publication";
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   createProjectEventIngress,
   type ProjectEventIngress,
 } from "@/features/application/project/projectEventIngress";
 import {
-  createProjectEventReconciler,
-  type ProjectEventReconciler,
-  type ProjectEventReconcilerDependencies,
-} from "@/features/application/project/projectEventReconciler";
+  createProjectEventConsumer,
+  type ProjectEventConsumer,
+  type ProjectEventConsumerDependencies,
+} from "@/features/application/project/projectEventConsumer";
 import {
   createProjectEventStream,
   type ProjectEventStream,
 } from "@/services/project/projectEventStream";
-import {
-  resetGraphProjectionCoordinator,
-  invalidateGraphProjection,
-} from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { resetGraphProjectionCoordinator } from "@/features/application/editorProjection/graphProjectionCoordinator";
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { reconcileProjectComputationSettingsEvent } from "@/features/application/projectSettings/useProjectComputationSettings";
 import { resetResultQueryProject } from "@/features/application/results";
 
 interface ProjectSyncRuntime {
@@ -39,7 +34,7 @@ interface ProjectSyncRuntime {
 
 let runtime: ProjectSyncRuntime | null = null;
 
-function hydrationDependencies(): ProjectEventReconcilerDependencies["hydration"] {
+function hydrationDependencies(): ProjectEventConsumerDependencies["hydration"] {
   return {
     loadCurrentProject: async () =>
       (await useProjectIOStore.getState().loadProject())
@@ -49,18 +44,13 @@ function hydrationDependencies(): ProjectEventReconcilerDependencies["hydration"
       (await useProjectIOStore.getState().refreshResourceIndex())
         ? { status: "published" as const }
         : { status: "failed" as const },
-    loadGraph: async (graphPath) =>
-      (await useProjectIOStore.getState().loadGraph(graphPath))
-        ? { status: "published" as const }
-        : { status: "failed" as const },
     replaceProject: resetGraphProjectionCoordinator,
   };
 }
 
-function createReconciler(): ProjectEventReconciler {
+function createConsumer(): ProjectEventConsumer {
   const hydration = hydrationDependencies();
-  const publication = createNodeCatalogPublication();
-  return createProjectEventReconciler({
+  return createProjectEventConsumer({
     hydration,
     activateProject: async (result) => Boolean(await loadActivatedProject(result)),
     currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
@@ -79,25 +69,15 @@ function createReconciler(): ProjectEventReconciler {
       if (result.invalidation.project) resetResultQueryProject();
     },
     publishProjectSaved: () => undefined,
-    publishComputationSettingsChanged: (result) => {
-      reconcileProjectComputationSettingsEvent(result);
-    },
-    publishGraphDelta: (payload) => {
-      void invalidateGraphProjection(payload.delta.graphPath);
-    },
-    publishResourceMutationCommitted: async (result) => {
-      await projectPublicationCoordinator.submit({ result: result as never });
-      publication.observeResourcePublication(result.projectInstanceId, result.publicationRevision);
-    },
-    requestAuthoritativeSnapshot: async () => {
-      await useProjectIOStore.getState().loadProject();
+    publishResourceMutationCommitted: async () => {
+      await useProjectIOStore.getState().refreshResourceIndex();
     },
   });
 }
 
 function createRuntime(): ProjectSyncRuntime {
   const stream = createProjectEventStream();
-  const ingress = createProjectEventIngress(createReconciler(), {
+  const ingress = createProjectEventIngress(createConsumer(), {
     requestAuthoritativeSnapshot: async () => {
       await useProjectIOStore.getState().loadProject();
     },

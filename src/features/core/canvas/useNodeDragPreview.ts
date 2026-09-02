@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
 import { getDragPreview, subscribeDragPreview } from "./dragPreview";
 
@@ -22,7 +22,7 @@ export function useNodeDragPreview(
     const apply = () => {
       const preview = getDragPreview(scope);
       const appliesHere = preview.active && preview.groupId === groupId;
-      const store = useGraphDataStore.getState();
+      const store = useGraphProjectionStore.getState();
 
       if (!appliesHere) {
         for (const nodeId of lastDraggedRef.current) {

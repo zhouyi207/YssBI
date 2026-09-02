@@ -12,8 +12,8 @@ vi.mock("@/features/core/history", () => ({
   executeCommand: vi.fn(),
   executeCommandOutcome: vi.fn(),
 }));
-vi.mock("@/features/application/editorMutation/registerGraphMutationPort", () => ({
-  ensureGraphMutationPortRegistered: vi.fn(),
+vi.mock("@/features/application/graphDraft/registerGraphDraftPort", () => ({
+  ensureGraphDraftPortRegistered: vi.fn(),
 }));
 
 const graphPath = "events/main.yssbi-event";
@@ -94,7 +94,7 @@ describe("edge operations", () => {
   );
 
   it("copies the position and sends one typed InsertReroute intent", async () => {
-    const outcome = { status: "conflict" } as const;
+    const outcome = { status: "saving" } as const;
     vi.mocked(executeCommandOutcome).mockResolvedValueOnce(outcome);
     const position = { x: 120, y: 80 };
 
@@ -113,7 +113,7 @@ describe("edge operations", () => {
     { status: "applied", result: {} },
     { status: "noop", result: {} },
     { status: "stale" },
-    { status: "conflict" },
+    { status: "saving" },
     { status: "rejected", code: "graph_connection_not_found" },
     false,
   ] as const)("propagates the typed reroute outcome unchanged: %j", async (outcome) => {

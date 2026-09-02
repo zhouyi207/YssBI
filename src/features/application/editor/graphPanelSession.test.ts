@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activateGraphPanelSession, deactivateGraphPanelSession } from "./graphPanelSession";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { getDocumentState, markResourceLoaded } from "@/features/core/resource";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
@@ -25,7 +25,7 @@ describe("activateGraphPanelSession", () => {
 
   beforeEach(() => {
     useGraphSessionStore.getState().reset();
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useDocumentStateStore.getState().clear();
     vi.restoreAllMocks();
     vi.mocked(unloadGraphDocument).mockResolvedValue(undefined);
@@ -33,7 +33,7 @@ describe("activateGraphPanelSession", () => {
 
   it("calls loadGraph once and completes editor activation when graph is available", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
 
     const loadGraph = vi.fn(async () => true);
@@ -61,7 +61,7 @@ describe("activateGraphPanelSession", () => {
   it("loads the new graph before unloading the previous session", async () => {
     const previousPath = "events/Previous.yssbi-event";
     const fixture = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     useGraphSessionStore.getState().setFocusedSession("editor-1", previousPath);
     const order: string[] = [];
     vi.mocked(unloadGraphDocument).mockImplementation(async () => {
@@ -85,7 +85,7 @@ describe("activateGraphPanelSession", () => {
     const pathC = "events/C.yssbi-event";
     const pendingB = deferred<boolean>();
     const fixtureC = makeEditorProjectionFixture({ graphPath: pathC });
-    useGraphDataStore.getState().replaceProjection(pathC, fixtureC.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(pathC, fixtureC.projection, 1);
     useGraphSessionStore.getState().setFocusedSession("editor-1", "events/A.yssbi-event");
     useProjectIOStore.setState({
       loadGraph: vi.fn((path: string) =>

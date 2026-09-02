@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   clearProjectLifecycle,
@@ -71,7 +71,7 @@ describe("Pin preview production path", () => {
     useProjectIOStore.setState({ projectInstanceId: "project-session-1" });
     clearProjectLifecycle();
     startProjectLifecycle("project-session-1");
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
@@ -99,11 +99,12 @@ describe("Pin preview production path", () => {
   it("routes output View through authoritative structured Pin history", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
-      useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1).applied,
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
+        .applied,
     ).toBe(true);
     markResourceLoaded({ id: graphPath, kind: "event" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
-    const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
     const execute = vi.spyOn(ProjectService, "executeGraphDocument");
 
@@ -145,9 +146,10 @@ describe("Pin preview production path", () => {
   it("opens an exact historical occurrence from the compact Pin context menu", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
-      useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1).applied,
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
+        .applied,
     ).toBe(true);
-    const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
     vi.mocked(ResultService.getPinHistory).mockResolvedValue([
       {
@@ -222,11 +224,12 @@ describe("Pin preview production path", () => {
     const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
     expect(
-      useGraphDataStore.getState().replaceProjection(functionPath, fixture.projection, 1).applied,
+      useGraphProjectionStore.getState().replaceProjection(functionPath, fixture.projection, 1)
+        .applied,
     ).toBe(true);
     markResourceLoaded({ id: functionPath, kind: "function" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
-    const pin = useGraphDataStore.getState().getGraphPin(functionPath, fixture.outputKey);
+    const pin = useGraphProjectionStore.getState().getGraphPin(functionPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected function output pin");
     const execute = vi.spyOn(ProjectService, "executeGraphDocument");
 

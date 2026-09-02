@@ -884,6 +884,15 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 删除前端 `LayoutTab` 平行模型、Dockview→Tab 投影与旧 tab workflow，统一使用
       `EditorResourceTarget`、`WorkbenchPanelInfo` 和 panel 语义命令，并确保 root Dockview read port
       唯一提供 editor panel/group 查询。
+- [x] 实现统计 Harness MVP：Pure Leaf automation contracts、Application read-only Gateway、durable
+      session/workflow/tool ledger、SQLite、Rig 0.42 adapter、ordered Tauri Channel/replay、assistant-ui
+      ExternalStore projection，以及 project-bound lifecycle reconciliation。
+- [x] 接入 `inspect_project`、`inspect_graph`、`search_node_catalog`、dataset schema/profile、bounded result
+      inspection、typed Statistical Plan/Method Card、builtin Skill、citable lexical Knowledge 与 Session Memory。
+- [x] 完成 `apply_graph_edit` closed contract、bounded staged batch、一次 Project commit/revision advance、request
+      fingerprint approval、原子一次消费、tool ledger 与 undo-capable receipt，并保持默认 Rig/MCP/Tauri 不路由。
+- [ ] 在生产开放 Project mutation 前补齐 pending invocation/approval UI、未知 commit outcome reconciliation 与
+      显式 undo receipt 操作；此前继续保持 `apply_graph_edit`、MCP Client 和 external write tools production-unrouted。
 - [ ] 修复 editor 仅在 group 内激活却未成为 root physical target、以及 preview canvas 注销 drop route
       的问题；保持 editor command focus gate 并恢复节点拖动与创建。
 - [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复
@@ -970,3 +979,16 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 完成 `frontend-refactor.md` 最终验收：production architecture audit 50/50 通过，TypeScript
       类型检查与 lint、Vite production build 通过；全量 Vitest 的唯一失败仍是既有
       `projectFilesystemContract` stale-classification 基线，与本次前端迁移无关。
+
+## 2026.09.02
+
+- [x] 将 Graph Editor 切换为前端 draft / Rust committed authority：Canvas 编辑只更新 draft，Save
+      期间锁定全部 Graph 写入口，并以无 frontend revision 前置条件的完整 document 原子覆盖 Rust 与磁盘。
+- [x] 删除 Canvas `GraphDelta` 回声、receipt/event 去重与旧 mutation coordinator；统一 Draft、Projection、
+      Consumer、Hydration、Prune 命名，并移除未接入生产的 Chart coordinator/rebase 平行状态路径。
+- [x] 将 OpenAI 模型、Base URL 与 API Key 纳入前端 AI 设置并持久化，通过 Tauri command 同步到 Harness；移除
+      `YSSBI_OPENAI_MODEL` 与 `YSSBI_OPENAI_API_KEY` 环境变量读取。
+- [x] 将全局 computation settings 合并到 `yss-settings`，删除项目 manifest、ProjectData、项目事件与项目
+      command 中的 computation settings authority；Settings modal 继续仅提供全局编辑入口。
+- [ ] 修复 Dockview 首次挂载时侧栏虚拟树缓存零高度造成节点目录前几行空白；未连接或隐藏阶段保留
+      预估行高，并补充聚焦回归测试。

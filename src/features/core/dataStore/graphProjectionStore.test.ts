@@ -8,7 +8,7 @@ import {
   getGraphSourceRevision,
   hasGraphBlockingDiagnostics,
 } from "./graphEntityAccess";
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { toUiNode } from "./nodeView";
 
 const output: PortAddressDto = {
@@ -152,7 +152,7 @@ function projection(
   };
 }
 
-describe("graphDataStore projection replacement", () => {
+describe("graphProjectionStore projection replacement", () => {
   it("requires projection metadata on every graph bucket", () => {
     expect(getGraphProjectionBasis({ graphEntities: {} }, "missing")).toBeUndefined();
     expect(getGraphSourceRevision({ graphEntities: {} }, "missing")).toBeUndefined();
@@ -162,10 +162,10 @@ describe("graphDataStore projection replacement", () => {
   });
 
   it("keeps projected canvas nodes independent from registry metadata", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection(), 1);
 
-    const bucket = useGraphDataStore.getState().graphEntities["functions/main"];
+    const bucket = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const canvasNode = toUiNode(bucket.nodes["shared-node"], {
       pins: bucket.nodePins["shared-node"].map((key) => ({
         pin: bucket.pins[key],
@@ -178,9 +178,9 @@ describe("graphDataStore projection replacement", () => {
   });
 
   it("constructs the candidate bucket before entering the Zustand setter", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection(), 1);
-    const previous = useGraphDataStore.getState().graphEntities["functions/main"];
+    const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const malformed = projection("functions/main", 5);
     Object.defineProperty(malformed.nodes[0].ports[0], "kind", {
       get: () => {
@@ -195,20 +195,20 @@ describe("graphDataStore projection replacement", () => {
       error: expect.any(Error),
     });
     expect((result as { error?: Error }).error?.message).toBe("candidate conversion failed");
-    expect(useGraphDataStore.getState().graphEntities["functions/main"]).toBe(previous);
+    expect(useGraphProjectionStore.getState().graphEntities["functions/main"]).toBe(previous);
   });
   beforeEach(() => {
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
   });
 
   it("atomically replaces a graph with projected canvas entities and metadata", () => {
     const nextProjection = projection();
 
-    const result = useGraphDataStore
+    const result = useGraphProjectionStore
       .getState()
       .replaceProjection("functions/main", nextProjection, 1);
 
-    const bucket = useGraphDataStore.getState().graphEntities["functions/main"];
+    const bucket = useGraphProjectionStore.getState().graphEntities["functions/main"];
     expect(result).toEqual({ applied: true, reason: "newer" });
     expect(bucket.sourceRevision).toBe(4);
     expect(bucket.requestGeneration).toBe(1);
@@ -228,7 +228,7 @@ describe("graphDataStore projection replacement", () => {
     });
     expect(bucket.connections["connection-1"].from).toBe(portAddressKey(output));
     expect(bucket.diagnostics).toEqual(nextProjection.diagnostics);
-    const state = useGraphDataStore.getState();
+    const state = useGraphProjectionStore.getState();
     expect(getGraphProjectionBasis(state, "functions/main")).toEqual(nextProjection.basis);
     expect(getGraphSourceRevision(state, "functions/main")).toBe(4);
     expect(getGraphRequestGeneration(state, "functions/main")).toBe(1);
@@ -249,29 +249,29 @@ describe("graphDataStore projection replacement", () => {
   });
 
   it("ignores a lower source revision even from a newer request generation", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection("functions/main", 4), 2);
-    const previous = useGraphDataStore.getState().graphEntities["functions/main"];
+    const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
 
     const result = store.replaceProjection("functions/main", projection("functions/main", 3), 3);
 
     expect(result.applied).toBe(false);
-    expect(useGraphDataStore.getState().graphEntities["functions/main"]).toBe(previous);
+    expect(useGraphProjectionStore.getState().graphEntities["functions/main"]).toBe(previous);
   });
 
   it("ignores older request generations even when their revision is higher", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection("functions/main", 4), 2);
-    const previous = useGraphDataStore.getState().graphEntities["functions/main"];
+    const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
 
     const result = store.replaceProjection("functions/main", projection("functions/main", 5), 1);
 
     expect(result.applied).toBe(false);
-    expect(useGraphDataStore.getState().graphEntities["functions/main"]).toBe(previous);
+    expect(useGraphProjectionStore.getState().graphEntities["functions/main"]).toBe(previous);
   });
 
   it("allows a newer generation to replace same-revision localized display data", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection("functions/main", 4, "English"), 1);
 
     const result = store.replaceProjection(
@@ -282,14 +282,14 @@ describe("graphDataStore projection replacement", () => {
 
     expect(result).toEqual({ applied: true, reason: "newer" });
     expect(
-      useGraphDataStore.getState().graphEntities["functions/main"].nodes["shared-node"].title,
+      useGraphProjectionStore.getState().graphEntities["functions/main"].nodes["shared-node"].title,
     ).toBe("本地化标题");
   });
 
   it("leaves the previous bucket byte-for-byte unchanged for malformed projections", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/main", projection(), 1);
-    const previous = useGraphDataStore.getState().graphEntities["functions/main"];
+    const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const previousBytes = JSON.stringify(previous);
     const malformed = projection("functions/main", 5);
     malformed.connections[0].input = {
@@ -301,12 +301,12 @@ describe("graphDataStore projection replacement", () => {
     const result = store.replaceProjection("functions/main", malformed, 2);
 
     expect(result.applied).toBe(false);
-    expect(useGraphDataStore.getState().graphEntities["functions/main"]).toBe(previous);
+    expect(useGraphProjectionStore.getState().graphEntities["functions/main"]).toBe(previous);
     expect(JSON.stringify(previous)).toBe(previousBytes);
   });
 
   it("isolates overlapping projected node ids by graphPath", () => {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection("functions/first", projection("functions/first", 1, "First"), 1);
     store.replaceProjection("functions/second", projection("functions/second", 1, "Second"), 1);
 
@@ -318,9 +318,9 @@ describe("graphDataStore projection replacement", () => {
     const firstPath = "functions/first";
     const secondPath = "functions/second";
     const updates = vi.fn();
-    const unsubscribe = useGraphDataStore.subscribe(updates);
+    const unsubscribe = useGraphProjectionStore.subscribe(updates);
 
-    const result = useGraphDataStore.getState().replaceProjectionsAtomically([
+    const result = useGraphProjectionStore.getState().replaceProjectionsAtomically([
       { graphPath: firstPath, projection: projection(firstPath, 1, "First") },
       { graphPath: secondPath, projection: projection(secondPath, 1, "Second") },
     ]);
@@ -328,22 +328,22 @@ describe("graphDataStore projection replacement", () => {
     unsubscribe();
     expect(result).toEqual({ applied: true, graphPaths: [firstPath, secondPath] });
     expect(updates).toHaveBeenCalledTimes(1);
-    expect(useGraphDataStore.getState().graphEntities[firstPath].nodes["shared-node"].title).toBe(
-      "First",
-    );
-    expect(useGraphDataStore.getState().graphEntities[secondPath].nodes["shared-node"].title).toBe(
-      "Second",
-    );
+    expect(
+      useGraphProjectionStore.getState().graphEntities[firstPath].nodes["shared-node"].title,
+    ).toBe("First");
+    expect(
+      useGraphProjectionStore.getState().graphEntities[secondPath].nodes["shared-node"].title,
+    ).toBe("Second");
   });
 
   it("installs zero projection replacements when one candidate is malformed", () => {
     const firstPath = "functions/first";
     const secondPath = "functions/second";
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     store.replaceProjection(firstPath, projection(firstPath, 1, "Current first"), 1);
     store.replaceProjection(secondPath, projection(secondPath, 1, "Current second"), 1);
-    const previousFirst = useGraphDataStore.getState().graphEntities[firstPath];
-    const previousSecond = useGraphDataStore.getState().graphEntities[secondPath];
+    const previousFirst = useGraphProjectionStore.getState().graphEntities[firstPath];
+    const previousSecond = useGraphProjectionStore.getState().graphEntities[secondPath];
     const malformed = projection(secondPath, 2, "Malformed second");
     malformed.connections[0].input = {
       kind: "declared",
@@ -351,9 +351,9 @@ describe("graphDataStore projection replacement", () => {
       portKey: "missing-port",
     };
     const updates = vi.fn();
-    const unsubscribe = useGraphDataStore.subscribe(updates);
+    const unsubscribe = useGraphProjectionStore.subscribe(updates);
 
-    const result = useGraphDataStore.getState().replaceProjectionsAtomically([
+    const result = useGraphProjectionStore.getState().replaceProjectionsAtomically([
       { graphPath: firstPath, projection: projection(firstPath, 2, "Replacement first") },
       { graphPath: secondPath, projection: malformed },
     ]);
@@ -361,7 +361,7 @@ describe("graphDataStore projection replacement", () => {
     unsubscribe();
     expect(result).toMatchObject({ applied: false, reason: "invalid" });
     expect(updates).not.toHaveBeenCalled();
-    expect(useGraphDataStore.getState().graphEntities[firstPath]).toBe(previousFirst);
-    expect(useGraphDataStore.getState().graphEntities[secondPath]).toBe(previousSecond);
+    expect(useGraphProjectionStore.getState().graphEntities[firstPath]).toBe(previousFirst);
+    expect(useGraphProjectionStore.getState().graphEntities[secondPath]).toBe(previousSecond);
   });
 });

@@ -1,4 +1,4 @@
-import type { CommandHandler, GraphMutationCommandResult } from "../types";
+import type { CommandHandler, GraphDraftCommandResult } from "../types";
 import type { MoveNodesArgs } from "./moveNodes";
 import type { SetPinValueArgs } from "./setPinValue";
 import type { ConnectPinsArgs } from "./connectPins";
@@ -13,19 +13,19 @@ import type { InsertSubgraphArgs } from "./insertSubgraph";
 import type { AddRepeatablePinArgs, RemoveRepeatablePinArgs } from "./repeatablePin";
 
 export interface CommandHandlerMap {
-  MoveNodes: CommandHandler<MoveNodesArgs, GraphMutationCommandResult>;
-  SetPinValue: CommandHandler<SetPinValueArgs, GraphMutationCommandResult>;
-  ConnectPins: CommandHandler<ConnectPinsArgs, GraphMutationCommandResult>;
-  DisconnectPort: CommandHandler<DisconnectPortArgs, GraphMutationCommandResult>;
-  DisconnectNode: CommandHandler<DisconnectNodeArgs, GraphMutationCommandResult>;
-  DisconnectConnections: CommandHandler<DisconnectConnectionsArgs, GraphMutationCommandResult>;
-  InsertReroute: CommandHandler<InsertRerouteArgs, GraphMutationCommandResult>;
-  MoveConnections: CommandHandler<MoveConnectionsArgs, GraphMutationCommandResult>;
-  DeleteNodes: CommandHandler<DeleteNodesArgs, GraphMutationCommandResult>;
-  DuplicateSubgraph: CommandHandler<DuplicateSubgraphArgs, GraphMutationCommandResult>;
-  InsertSubgraph: CommandHandler<InsertSubgraphArgs, GraphMutationCommandResult>;
-  AddRepeatablePin: CommandHandler<AddRepeatablePinArgs, GraphMutationCommandResult>;
-  RemoveRepeatablePin: CommandHandler<RemoveRepeatablePinArgs, GraphMutationCommandResult>;
+  MoveNodes: CommandHandler<MoveNodesArgs, GraphDraftCommandResult>;
+  SetPinValue: CommandHandler<SetPinValueArgs, GraphDraftCommandResult>;
+  ConnectPins: CommandHandler<ConnectPinsArgs, GraphDraftCommandResult>;
+  DisconnectPort: CommandHandler<DisconnectPortArgs, GraphDraftCommandResult>;
+  DisconnectNode: CommandHandler<DisconnectNodeArgs, GraphDraftCommandResult>;
+  DisconnectConnections: CommandHandler<DisconnectConnectionsArgs, GraphDraftCommandResult>;
+  InsertReroute: CommandHandler<InsertRerouteArgs, GraphDraftCommandResult>;
+  MoveConnections: CommandHandler<MoveConnectionsArgs, GraphDraftCommandResult>;
+  DeleteNodes: CommandHandler<DeleteNodesArgs, GraphDraftCommandResult>;
+  DuplicateSubgraph: CommandHandler<DuplicateSubgraphArgs, GraphDraftCommandResult>;
+  InsertSubgraph: CommandHandler<InsertSubgraphArgs, GraphDraftCommandResult>;
+  AddRepeatablePin: CommandHandler<AddRepeatablePinArgs, GraphDraftCommandResult>;
+  RemoveRepeatablePin: CommandHandler<RemoveRepeatablePinArgs, GraphDraftCommandResult>;
 }
 
 export type AvailableCommandType = keyof CommandHandlerMap;

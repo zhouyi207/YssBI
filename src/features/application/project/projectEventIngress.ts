@@ -1,9 +1,9 @@
 import type { ErrorReference } from "@/features/application/errorReference";
 import type {
   ProjectEvent,
-  ProjectEventReconciler,
-  ProjectReconciliationOutcome,
-} from "./projectEventReconciler";
+  ProjectEventConsumer,
+  ProjectEventConsumptionOutcome,
+} from "./projectEventConsumer";
 
 type Awaitable<T> = T | PromiseLike<T>;
 
@@ -17,14 +17,14 @@ export type ProjectEventDrainOutcome = { readonly status: "drained" };
 export type ProjectEventIngressRecoveryReason =
   | "queueOverflow"
   | "streamFailure"
-  | "reconcilerRejected"
+  | "consumerRejected"
   | "recoveryRequested";
 
 export interface ProjectEventIngressIssue {
   readonly code:
     | "project_event_queue_overflow"
     | "project_event_stream_failure"
-    | "project_event_reconciliation_rejected"
+    | "project_event_consumption_rejected"
     | "project_event_recovery_requested";
   readonly incidentId: string | null;
   readonly reason: ProjectEventIngressRecoveryReason;
@@ -53,14 +53,14 @@ function issueFor(
       ? "project_event_queue_overflow"
       : reason === "streamFailure"
         ? "project_event_stream_failure"
-        : reason === "reconcilerRejected"
-          ? "project_event_reconciliation_rejected"
+        : reason === "consumerRejected"
+          ? "project_event_consumption_rejected"
           : "project_event_recovery_requested";
   return { code, incidentId, reason };
 }
 
 export function createProjectEventIngress(
-  reconciler: ProjectEventReconciler,
+  consumer: ProjectEventConsumer,
   dependencies: ProjectEventIngressDependencies & {
     readonly capacity?: number;
   },
@@ -118,13 +118,13 @@ export function createProjectEventIngress(
           await beginRecovery("streamFailure", item.issue.incidentId, null);
           return;
         }
-        const outcome: ProjectReconciliationOutcome = await reconciler.acceptEvent(item.event);
+        const outcome: ProjectEventConsumptionOutcome = await consumer.acceptEvent(item.event);
         if (outcome.status === "recoveryRequested") {
           await beginRecovery("recoveryRequested", null, null);
           return;
         }
       } catch {
-        await beginRecovery("reconcilerRejected", null, null);
+        await beginRecovery("consumerRejected", null, null);
         return;
       }
     }

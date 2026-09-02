@@ -2,18 +2,13 @@ import i18n from "i18next";
 
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
-import {
-  captureSettledGraphSaveCommandContext,
-  isGraphSaveCommandRevisionCurrent,
-  type GraphSaveCommandContext,
-} from "@/features/application/projectCommandContext";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
-import { isResourceDocumentDirty, markResourceDirty, resourceKey } from "@/features/core/resource";
-import { GraphService } from "@/services/graph/graphService";
+import { isResourceDocumentDirty, resourceKey } from "@/features/core/resource";
 import { logger } from "@/features/application/observability/appLogger";
 
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
+import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
 
 interface DirtyEditorDocument {
   resourceRef: string;
@@ -50,7 +45,6 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
   if (dirty.length === 0) return true;
 
   for (const document of dirty) {
-    let context: GraphSaveCommandContext | undefined;
     try {
       if (document.resourceKind === "chart") {
         const saved = await saveChartDocument(document.resourceRef);
@@ -67,23 +61,9 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
       }
 
       warnCallFunctionIssuesBeforeSave(document.resourceRef);
-      context = await captureSettledGraphSaveCommandContext(document.resourceRef);
-      await GraphService.saveProjectGraph(
-        context.projectInstanceId,
-        document.resourceRef,
-        context.expectedRevision,
-        context.operationId,
-      );
-      if (!isGraphSaveCommandRevisionCurrent(context, document.resourceRef)) return false;
-      markResourceDirty(
-        {
-          id: document.resourceRef,
-          kind: document.resourceKind,
-        },
-        false,
-      );
+      const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
+      if (!saved) return false;
     } catch (error) {
-      if (context && !context.isCurrent()) return false;
       const message = error instanceof Error ? error.message : String(error);
       logger.app.error(
         `Failed to save graph '${document.title}' (${document.resourceRef}): ${message}`,

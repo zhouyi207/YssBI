@@ -1,8 +1,10 @@
 import type {
-  GraphDeltaDto,
   EditorGraphMutationDto,
   GraphDocumentPatchDto,
-  GraphMutationResultDto,
+  GraphDocumentDto,
+  GraphDraftSaveDto,
+  GraphDraftUpdateDto,
+  GraphEditorSessionDto,
   HistoryStatusDto,
   TypeExprDto,
 } from "./editorMutation";
@@ -245,9 +247,97 @@ function parseGraphPatch(value: unknown): GraphDocumentPatchDto {
     !Array.isArray(value.operations) ||
     !value.operations.every(isGraphOperation)
   ) {
-    throw new Error("GraphDelta graph patch operation is malformed");
+    throw new Error("Graph draft patch operation is malformed");
   }
   return { operations: value.operations } as GraphDocumentPatchDto;
+}
+
+export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["nodes", "port_bindings", "connections", "input_states"]) ||
+    !isRecord(value.nodes) ||
+    !Object.entries(value.nodes).every(
+      ([nodeId, node]) =>
+        isUuid(nodeId) && isDocumentNode(node) && (node as { id: string }).id === nodeId,
+    ) ||
+    !Array.isArray(value.port_bindings) ||
+    !value.port_bindings.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 2 &&
+        isDocumentPortAddress(entry[0]) &&
+        isDynamicPortBinding(entry[1]),
+    ) ||
+    !isRecord(value.connections) ||
+    !Object.entries(value.connections).every(
+      ([connectionId, connection]) =>
+        isUuid(connectionId) &&
+        isDocumentConnection(connection) &&
+        (connection as { id: string }).id === connectionId,
+    ) ||
+    !Array.isArray(value.input_states) ||
+    !value.input_states.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 2 &&
+        isDocumentPortAddress(entry[0]) &&
+        isInputState(entry[1]),
+    )
+  ) {
+    throw new Error("Graph draft document is malformed");
+  }
+  return structuredClone(value) as unknown as GraphDocumentDto;
+}
+
+export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDto {
+  if (!isRecord(value) || !hasExactKeys(value, ["document", "projection"])) {
+    throw new Error("Graph editor session is malformed");
+  }
+  const projection = isEditorProjection(value.projection) ? value.projection : null;
+  if (!projection) throw new Error("Graph editor session projection is malformed");
+  return {
+    document: parseGraphDocumentDto(value.document),
+    projection,
+  };
+}
+
+export function parseGraphDraftUpdateDto(value: unknown): GraphDraftUpdateDto {
+  if (!isRecord(value) || !hasExactKeys(value, ["document", "patch", "projectionReplacement"])) {
+    throw new Error("Graph draft update is malformed");
+  }
+  return {
+    document: parseGraphDocumentDto(value.document),
+    patch: parseGraphPatch(value.patch),
+    projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
+  };
+}
+
+export function parseGraphDraftSaveDto(
+  value: unknown,
+  expectedProjectInstanceId: string,
+): GraphDraftSaveDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "projectInstanceId",
+      "operationId",
+      "document",
+      "projectionReplacement",
+      "history",
+    ]) ||
+    value.projectInstanceId !== expectedProjectInstanceId ||
+    !isUuid(value.operationId)
+  ) {
+    throw new Error("Graph draft save result is malformed");
+  }
+  return {
+    projectInstanceId: expectedProjectInstanceId,
+    operationId: value.operationId,
+    document: parseGraphDocumentDto(value.document),
+    projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
+    history: parseHistoryStatusDto(value.history),
+  };
 }
 
 function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {
@@ -597,69 +687,4 @@ export function parseHistoryStatusDto(value: unknown): HistoryStatusDto {
     throw new Error("Graph mutation history is malformed");
   }
   return { canUndo: value.canUndo, canRedo: value.canRedo };
-}
-
-export function parseGraphDeltaDto(value: unknown): GraphDeltaDto {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["graphPath", "fromRevision", "toRevision", "causedBy", "payload"])
-  ) {
-    throw new Error("GraphDelta must have exact graphPath, revision, causedBy, and payload fields");
-  }
-  if (!isGraphResourcePath(value.graphPath)) throw new Error("GraphDelta graphPath is malformed");
-  const payload = parseGraphPatch(value.payload);
-  if (
-    !isSafeRevision(value.fromRevision) ||
-    !isSafeRevision(value.toRevision) ||
-    (payload.operations.length === 0
-      ? value.toRevision !== value.fromRevision
-      : value.toRevision !== value.fromRevision + 1)
-  ) {
-    throw new Error("GraphDelta revision is malformed");
-  }
-  if (value.causedBy !== null && !isUuid(value.causedBy)) {
-    throw new Error("GraphDelta causedBy is malformed");
-  }
-  return {
-    graphPath: value.graphPath,
-    fromRevision: value.fromRevision,
-    toRevision: value.toRevision,
-    causedBy: value.causedBy,
-    payload,
-  };
-}
-
-export function parseGraphMutationResultDto(
-  value: unknown,
-  expectedProjectInstanceId: string,
-): GraphMutationResultDto {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["projectInstanceId", "delta", "projectionReplacement", "history"])
-  ) {
-    throw new Error(
-      "Graph mutation result must have exact projectInstanceId, delta, projectionReplacement, and history fields",
-    );
-  }
-  if (
-    typeof value.projectInstanceId !== "string" ||
-    value.projectInstanceId.length === 0 ||
-    value.projectInstanceId !== expectedProjectInstanceId
-  ) {
-    throw new Error("Graph mutation result projectInstanceId is malformed or mismatched");
-  }
-  const delta = parseGraphDeltaDto(value.delta);
-  const projectionReplacement = parseGraphProjectionReplacementDto(value.projectionReplacement);
-  if (
-    projectionReplacement.graphPath !== delta.graphPath ||
-    projectionReplacement.projection.sourceRevision !== delta.toRevision
-  ) {
-    throw new Error("Graph mutation projection replacement disagrees with delta");
-  }
-  return {
-    projectInstanceId: value.projectInstanceId,
-    delta,
-    projectionReplacement,
-    history: parseHistoryStatusDto(value.history),
-  };
 }

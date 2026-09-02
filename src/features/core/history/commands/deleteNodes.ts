@@ -1,14 +1,14 @@
-import type { CommandHandler, GraphMutationCommandResult } from "../types";
-import { executeGraphIntent } from "./executeGraphIntent";
+import type { CommandHandler, GraphDraftCommandResult } from "../types";
+import { executeGraphDraftIntent } from "./executeGraphDraftIntent";
 
 export interface DeleteNodesArgs {
   nodeIds: string[];
 }
 
-export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, GraphMutationCommandResult> = {
+export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, GraphDraftCommandResult> = {
   execute(graphPath, args) {
     if (args.nodeIds.length === 0) return false;
-    return executeGraphIntent(graphPath, {
+    return executeGraphDraftIntent(graphPath, {
       type: "deleteNodes",
       payload: { nodeIds: args.nodeIds },
     });

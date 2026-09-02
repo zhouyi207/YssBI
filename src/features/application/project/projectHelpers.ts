@@ -2,14 +2,14 @@
 
 import { resourceKey, useResourceStore } from "@/features/core/resource";
 import type { GraphSnapshotData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { buildGraphSnapshot } from "@/features/core/dataStore/projectSnapshot";
 
 /** Assemble a graph projection from the frontend stores owned by Core. */
 export function getGraphByPath(graphPath: string): GraphSnapshotData | null {
   const resourceStore = useResourceStore.getState();
-  const dataStore = useGraphDataStore.getState();
+  const dataStore = useGraphProjectionStore.getState();
   const metaStore = useGraphMetaStore.getState();
   const snapshots = buildGraphSnapshot({
     graphOrder: resourceStore.graphOrder,

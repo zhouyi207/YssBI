@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
-import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
 import { measurePinConnectionAnchor } from "@/features/core/canvas/pinConnectionAnchor";
 import { resolvePinOffsetWaiters } from "@/features/core/canvas/pinOffsetWaiter";
@@ -17,11 +17,11 @@ export function useCanvasViewport(
   const viewportScope = groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
 
-  const graphNodeIds = useGraphDataStore(
+  const graphNodeIds = useGraphProjectionStore(
     useShallow((s) => (graphPath ? s.getGraphNodeIds(graphPath) : [])),
   );
 
-  const nodePositionMap = useGraphDataStore(
+  const nodePositionMap = useGraphProjectionStore(
     useShallow((s) => {
       const ids = graphPath ? s.getGraphNodeIds(graphPath) : [];
       const m: Record<string, { x: number; y: number }> = {};
@@ -33,7 +33,7 @@ export function useCanvasViewport(
     }),
   );
 
-  const pinNodeIdMap = useGraphDataStore(
+  const pinNodeIdMap = useGraphProjectionStore(
     useShallow((s) => {
       const ids = graphPath ? s.getGraphNodeIds(graphPath) : [];
       const m: Record<string, string> = {};

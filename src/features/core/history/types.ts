@@ -1,10 +1,10 @@
-import type { GraphMutationResultDto } from "@/shared/types/domain/editorMutation";
+import type { GraphDraftUpdateDto } from "@/shared/types/domain/editorMutation";
 
-export type GraphMutationCommandResult =
-  | { status: "applied"; result: GraphMutationResultDto }
-  | { status: "noop"; result: GraphMutationResultDto }
-  | { status: "stale"; result?: GraphMutationResultDto }
-  | { status: "conflict" }
+export type GraphDraftCommandResult =
+  | { status: "applied"; result: GraphDraftUpdateDto }
+  | { status: "noop"; result: GraphDraftUpdateDto }
+  | { status: "stale"; result?: GraphDraftUpdateDto }
+  | { status: "saving" }
   | { status: "rejected"; code: string }
   | false;
 

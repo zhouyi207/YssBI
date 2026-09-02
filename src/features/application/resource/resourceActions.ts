@@ -1,7 +1,7 @@
 import { useResourceStore, type ResourceRef } from "@/features/core/resource";
 import { commitAfterCommand } from "./resourceIndexCoordinator";
 import { getGraphProjectionBasis } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
@@ -25,7 +25,7 @@ import { executeDatabaseMutation } from "@/features/application/dataManagement/d
 export type { GraphResourceKind };
 
 function graphRevision(graphPath: string): number {
-  const basis = getGraphProjectionBasis(useGraphDataStore.getState(), graphPath);
+  const basis = getGraphProjectionBasis(useGraphProjectionStore.getState(), graphPath);
   if (basis) return basis.graphRevision;
 
   const resource = Object.values(useResourceStore.getState().resources).find(

@@ -27,17 +27,6 @@ const projectSavedResult = {
   history: { canUndo: true, canRedo: false },
 };
 
-const settingsResult = {
-  projectInstanceId,
-  operationId,
-  settingsRevision: 3,
-  publicationRevision: 4,
-  settings: {
-    numeric: { tolerance: { absolute: 1e-12, relative: 1e-9 } },
-    missingValues: { statistics: "listwise" },
-  },
-};
-
 const supportedEvents = [
   {
     type: "Project",
@@ -61,12 +50,7 @@ const supportedEvents = [
     type: "Project",
     payload: { type: "ProjectSaved", payload: { result: projectSavedResult } },
   },
-  {
-    type: "Project",
-    payload: { type: "ComputationSettingsChanged", payload: { result: settingsResult } },
-  },
   projectEvents.events[0],
-  projectEvents.events[1],
   {
     type: "Resource",
     payload: {
@@ -86,8 +70,6 @@ describe("project event parser", () => {
       "ProjectCleared",
       "ProjectLifecycleCommitted",
       "ProjectSaved",
-      "ComputationSettingsChanged",
-      "GraphDelta",
       "ResourceMutationCommitted",
       "ProjectIndexInvalidated",
     ]);
@@ -95,14 +77,11 @@ describe("project event parser", () => {
       ok: true,
       event: { type: "ProjectCleared", payload: undefined },
     });
-    expect(parsed[5]).toEqual({
+    expect(parsed[4]).toEqual({
       ok: true,
       event: {
-        type: "GraphDelta",
-        payload: {
-          projectInstanceId: "00000000-0000-0000-0000-000000000601",
-          delta: projectEvents.events[0].payload.payload.delta,
-        },
+        type: "ResourceMutationCommitted",
+        payload: projectEvents.events[0].payload.payload,
       },
     });
   });

@@ -1,16 +1,17 @@
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ChartDocument } from "@/shared/types/domain/chart";
-import { applyChartDraftUpdate, discardChartDraft } from "./publication";
+import { useChartDocumentStore } from "./chartDocumentStore";
 
 export interface ChartUi {
   updateDraft(
     chartPath: string,
     patch: DeepReadonly<Partial<ChartDocument>>,
   ): DeepReadonly<ChartDocument> | null;
-  discardDraft(chartPath: string): void;
 }
 
 export const chartUi: ChartUi = {
-  updateDraft: applyChartDraftUpdate,
-  discardDraft: discardChartDraft,
+  updateDraft: (chartPath, patch) =>
+    useChartDocumentStore
+      .getState()
+      .updateDocument(chartPath, structuredClone(patch) as Partial<ChartDocument>),
 };

@@ -1,10 +1,10 @@
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { getDocumentState } from "@/features/core/resource";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
 /** True when graph body is in memory and does not need a backend reload. */
 export function isGraphCachedInMemory(graphPath: string): boolean {
-  if (!useGraphDataStore.getState().hasGraph(graphPath)) return false;
+  if (!useGraphProjectionStore.getState().hasGraph(graphPath)) return false;
 
   const kind = inferGraphResourceKind(graphPath);
   if (!kind) return false;

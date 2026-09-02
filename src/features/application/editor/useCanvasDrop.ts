@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
-import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
@@ -79,7 +79,7 @@ export function useCanvasDrop({
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
       if (!graphPath) return;
-      const store = useGraphDataStore.getState();
+      const store = useGraphProjectionStore.getState();
       const template = store
         .getGraphNodePins(graphPath, nodeId)
         .map((pinId) => store.getGraphPin(graphPath, pinId))

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useDatabaseStore, useGraphDataStore, useGraphMetaStore } from "@/features/core/dataStore";
+import {
+  useDatabaseStore,
+  useGraphProjectionStore,
+  useGraphMetaStore,
+} from "@/features/core/dataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useResourceStore } from "@/features/core/resource";
@@ -165,7 +169,7 @@ describe("renameResource project ownership", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     useResourceStore.getState().clear();
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().setSnapshot({
       resources: [
         {
@@ -246,7 +250,7 @@ describe("renameResource project ownership", () => {
   it("uses the loaded graph projection revision instead of stale sidebar metadata for delete", async () => {
     const committed = deleteResult("project-instance-current");
     vi.spyOn(GraphService, "removeGraph").mockResolvedValue(committed);
-    useGraphDataStore.getState().replaceProjection(
+    useGraphProjectionStore.getState().replaceProjection(
       "events/Old.yssbi-event",
       makeEditorProjectionFixture({
         graphPath: "events/Old.yssbi-event",

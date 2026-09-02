@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphMetaStore, type GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import type { GraphPath } from "@/shared/types/domain/ids";
@@ -43,7 +43,7 @@ function cloneAndFreeze<T>(value: T): T {
 
 function buildSnapshot(): DeepReadonly<GraphProjectionSnapshot> {
   return Object.freeze({
-    graphEntities: cloneAndFreeze(useGraphDataStore.getState().graphEntities),
+    graphEntities: cloneAndFreeze(useGraphProjectionStore.getState().graphEntities),
     graphMeta: cloneAndFreeze(useGraphMetaStore.getState().graphs),
   });
 }
@@ -56,7 +56,7 @@ function refreshSnapshot(): void {
   for (const listener of listeners) listener();
 }
 
-useGraphDataStore.subscribe(refreshSnapshot);
+useGraphProjectionStore.subscribe(refreshSnapshot);
 useGraphMetaStore.subscribe(refreshSnapshot);
 
 export function getGraphSnapshot(): DeepReadonly<GraphProjectionSnapshot> {

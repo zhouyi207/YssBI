@@ -1,18 +1,9 @@
 import type {
-  GraphDeltaDto,
   HistoryStatusDto,
   ResourceKeyDto,
   ResourceMutationResultDto,
 } from "@/shared/types/dto/editorMutation";
-import {
-  parseGraphDeltaDto,
-  parseHistoryStatusDto,
-} from "@/shared/types/dto/editorMutationWireParser";
-import type {
-  ComputationSettingsMutationReceiptDto,
-  ProjectComputationSettingsDto,
-} from "@/shared/types/dto/projectComputationSettings";
-import { parseComputationSettingsMutationReceipt } from "@/shared/types/dto/projectComputationSettings";
+import { parseHistoryStatusDto } from "@/shared/types/dto/editorMutationWireParser";
 import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
@@ -38,19 +29,10 @@ export interface ProjectSavedPayload {
   readonly result: ProjectSaveResultDto;
 }
 
-export interface ComputationSettingsChangedPayload {
-  readonly result: ComputationSettingsMutationReceiptDto;
-}
-
 export interface ProjectIndexInvalidatedPayload {
   readonly projectInstanceId: string;
   readonly source: "watcher";
   readonly version: number;
-}
-
-export interface GraphDeltaEventPayload {
-  readonly projectInstanceId: string;
-  readonly delta: GraphDeltaDto;
 }
 
 export interface ResourceMutationCommittedPayload {
@@ -66,14 +48,9 @@ export type ProjectEvent =
     }
   | { readonly type: "ProjectSaved"; readonly payload: ProjectSavedPayload }
   | {
-      readonly type: "ComputationSettingsChanged";
-      readonly payload: ComputationSettingsChangedPayload;
-    }
-  | {
       readonly type: "ProjectIndexInvalidated";
       readonly payload: ProjectIndexInvalidatedPayload;
     }
-  | { readonly type: "GraphDelta"; readonly payload: GraphDeltaEventPayload }
   | {
       readonly type: "ResourceMutationCommitted";
       readonly payload: ResourceMutationCommittedPayload;
@@ -90,9 +67,7 @@ const PROJECT_EVENT_TYPES = {
   ProjectCleared: true,
   ProjectLifecycleCommitted: true,
   ProjectSaved: true,
-  ComputationSettingsChanged: true,
   ProjectIndexInvalidated: true,
-  GraphDelta: true,
   ResourceMutationCommitted: true,
 } as const;
 
@@ -331,33 +306,6 @@ function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
   };
 }
 
-function parseSettingsPayload(value: unknown): ComputationSettingsChangedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["result"])) return null;
-  try {
-    const parsed = parseComputationSettingsMutationReceipt(value.result);
-    const settings: ProjectComputationSettingsDto = {
-      numeric: {
-        tolerance: {
-          absolute: parsed.settings.numeric.tolerance.absolute,
-          relative: parsed.settings.numeric.tolerance.relative,
-        },
-      },
-      missingValues: { statistics: parsed.settings.missingValues.statistics },
-    };
-    return {
-      result: {
-        projectInstanceId: parsed.projectInstanceId,
-        operationId: parsed.operationId,
-        settingsRevision: parsed.settingsRevision,
-        publicationRevision: parsed.publicationRevision,
-        settings,
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
 function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPayload | null {
   if (
     !isRecord(value) ||
@@ -373,24 +321,6 @@ function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPa
     source: value.source,
     version: value.version,
   };
-}
-
-function parseGraphDeltaPayload(value: unknown): GraphDeltaEventPayload | null {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["projectInstanceId", "delta"]) ||
-    !isNonEmptyString(value.projectInstanceId)
-  ) {
-    return null;
-  }
-  try {
-    return {
-      projectInstanceId: value.projectInstanceId,
-      delta: parseGraphDeltaDto(value.delta),
-    };
-  } catch {
-    return null;
-  }
 }
 
 function parseResourceMutationPayload(value: unknown): ResourceMutationCommittedPayload | null {
@@ -462,20 +392,8 @@ export function parseProjectEvent(value: unknown): ProjectEventParseOutcome {
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };
     }
-    case "ComputationSettingsChanged": {
-      const payload = parseSettingsPayload(nested.payload);
-      return payload === null
-        ? invalidPayload()
-        : { ok: true, event: { type: nested.type, payload } };
-    }
     case "ProjectIndexInvalidated": {
       const payload = parseIndexInvalidatedPayload(nested.payload);
-      return payload === null
-        ? invalidPayload()
-        : { ok: true, event: { type: nested.type, payload } };
-    }
-    case "GraphDelta": {
-      const payload = parseGraphDeltaPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };

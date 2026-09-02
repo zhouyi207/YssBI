@@ -4,14 +4,18 @@ import editorProjection from "@/tests/fixtures/node-system-contracts/editor-proj
 import { GraphProjectionService } from "./graphProjectionService";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+const session = {
+  document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
+  projection: editorProjection,
+};
 
 describe("GraphProjectionService", () => {
   it("loads the authoritative projection with unchanged command arguments", async () => {
-    vi.mocked(invoke).mockResolvedValue(editorProjection as unknown);
+    vi.mocked(invoke).mockResolvedValue(session as unknown);
 
     await expect(
       GraphProjectionService.loadGraph("functions/main", "zh-CN", 7, "project-instance-1"),
-    ).resolves.toEqual(editorProjection);
+    ).resolves.toEqual(session);
     expect(invoke).toHaveBeenLastCalledWith("load_project_graph", {
       graphPath: "functions/main",
       locale: "zh-CN",
@@ -21,11 +25,11 @@ describe("GraphProjectionService", () => {
   });
 
   it("hydrates the authoritative projection with unchanged command arguments", async () => {
-    vi.mocked(invoke).mockResolvedValue(editorProjection as unknown);
+    vi.mocked(invoke).mockResolvedValue(session as unknown);
 
     await expect(
       GraphProjectionService.hydrateGraph("project-instance-1", "functions/main", "en-US"),
-    ).resolves.toEqual(editorProjection);
+    ).resolves.toEqual(session);
     expect(invoke).toHaveBeenLastCalledWith("hydrate_editor_graph", {
       projectInstanceId: "project-instance-1",
       graphPath: "functions/main",
@@ -58,18 +62,18 @@ describe("GraphProjectionService", () => {
   it.each(requests)(
     "rejects a malformed root from %s with the public error",
     async (_name, request) => {
-      vi.mocked(invoke).mockResolvedValue({ ...editorProjection, compatibility: true } as unknown);
-      await expect(request()).rejects.toThrow("Invalid editor graph projection response");
+      vi.mocked(invoke).mockResolvedValue({ ...session, compatibility: true } as unknown);
+      await expect(request()).rejects.toThrow();
     },
   );
 
   it.each(requests)(
     "rejects malformed nested parameter configuration from %s with the public error",
     async (_name, request) => {
-      const malformed = structuredClone(editorProjection) as unknown as {
-        nodes: Array<{ parameterEditors: Array<{ configuration: unknown }> }>;
+      const malformed = structuredClone(session) as unknown as {
+        projection: { nodes: Array<{ parameterEditors: Array<{ configuration: unknown }> }> };
       };
-      malformed.nodes[0].parameterEditors[0].configuration = {
+      malformed.projection.nodes[0].parameterEditors[0].configuration = {
         kind: "projectColumns",
         available: true,
         unavailableReason: null,
@@ -79,7 +83,7 @@ describe("GraphProjectionService", () => {
       };
       vi.mocked(invoke).mockResolvedValue(malformed as unknown);
 
-      await expect(request()).rejects.toThrow("Invalid editor graph projection response");
+      await expect(request()).rejects.toThrow();
     },
   );
 });

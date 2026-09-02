@@ -1,15 +1,15 @@
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import type { CommandHandler, GraphMutationCommandResult } from "../types";
-import { executeGraphIntent } from "./executeGraphIntent";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import type { CommandHandler, GraphDraftCommandResult } from "../types";
+import { executeGraphDraftIntent } from "./executeGraphDraftIntent";
 
 export interface ConnectPinsArgs {
   pinA: string;
   pinB: string;
 }
 
-export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphMutationCommandResult> = {
+export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphDraftCommandResult> = {
   execute(graphPath, args) {
-    const store = useGraphDataStore.getState();
+    const store = useGraphProjectionStore.getState();
     const pinA = store.getGraphPin(graphPath, args.pinA);
     const pinB = store.getGraphPin(graphPath, args.pinB);
     if (!pinA?.address || !pinB?.address) {
@@ -20,7 +20,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphMutationCo
     if (output.direction !== "output" || input.direction !== "input") {
       throw new Error("A connection requires one output port and one input port");
     }
-    return executeGraphIntent(graphPath, {
+    return executeGraphDraftIntent(graphPath, {
       type: "connect",
       payload: { output: output.address!, input: input.address!, order: null },
     });

@@ -260,7 +260,7 @@ export const FRONTEND_STATE_AUTHORITY: readonly FrontendStateAuthorityEntry[] = 
     member: "updateDocument",
     memberKind: "action",
     authority: "local-draft",
-    writes: ["draftsByPath.*", "dirtyByPath.*"],
+    writes: ["documents.*", "documents.*.dirty"],
     writerModule: "@/features/core/chart/ui",
     writerLayer: "CoreUi",
     readerLayers: ["Views", "Application"],

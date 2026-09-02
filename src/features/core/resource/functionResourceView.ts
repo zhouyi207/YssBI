@@ -5,7 +5,7 @@
  * | --- | --- |
  * | name | ResourceStore |
  * | functionInputs / functionOutputs | graphMetaStore |
- * | nodes / pins / connections | GraphDataStore |
+ * | nodes / pins / connections | GraphProjectionStore |
  *
  * UI / palette / Detail 只读此视图或 `useFunctionCatalog`，禁止第四处手写合并。
  */

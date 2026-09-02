@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useResourceStore } from "@/features/core/resource";
 import {
   countCallFunctionIssuesByGraph,
@@ -9,7 +9,7 @@ import {
 import { isCallFunctionNodeType } from "@/features/domain/nodeCatalog";
 
 export function useCallFunctionIssueCountsByGraph(): Record<string, number> {
-  const graphEntities = useGraphDataStore((s) => s.graphEntities);
+  const graphEntities = useGraphProjectionStore((s) => s.graphEntities);
   const resources = useResourceStore((s) => s.resources);
 
   return useMemo(
@@ -22,7 +22,7 @@ export function useCallFunctionIssue(
   graphPath: string | undefined,
   nodeId: string,
 ): CallFunctionIssue | null {
-  const node = useGraphDataStore((s) =>
+  const node = useGraphProjectionStore((s) =>
     graphPath ? s.getGraphNode(graphPath, nodeId) : undefined,
   );
   const targetPath =

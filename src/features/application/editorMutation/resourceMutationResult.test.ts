@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { buildGraphResourceMeta } from "@/features/core/resource";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import { prepareSynchronousPublicationCommit } from "./resourceMutationResult";
@@ -74,7 +75,7 @@ const caller = "events/Caller.yssbi-event";
 const oldTarget = "functions/Old.yssbi-function";
 
 function callerSnapshot() {
-  return structuredClone(useGraphDataStore.getState().graphEntities[caller]);
+  return structuredClone(useGraphProjectionStore.getState().graphEntities[caller]);
 }
 
 describe("resource mutation projection replacement protocol", () => {
@@ -82,15 +83,16 @@ describe("resource mutation projection replacement protocol", () => {
     vi.clearAllMocks();
     dockviewMocks.ready = true;
     dockviewMocks.panels.splice(0);
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphDraftStore.getState().clear();
     const projection = makeEditorProjectionFixture({
       graphPath: caller,
       nodeId: "call-1",
       nodeTypeId: "yssbi.project.function.call",
       title: "Loaded caller",
     }).projection;
-    useGraphDataStore.getState().replaceProjection(caller, projection, 1);
-    useGraphDataStore.setState((state) => ({
+    useGraphProjectionStore.getState().replaceProjection(caller, projection, 1);
+    useGraphProjectionStore.setState((state) => ({
       graphEntities: {
         ...state.graphEntities,
         [caller]: {
@@ -130,9 +132,59 @@ describe("resource mutation projection replacement protocol", () => {
       }),
     ).toThrow("complete replacement paths do not equal the declared expected graph paths");
     expect(callerSnapshot()).toEqual(before);
-    expect(useGraphDataStore.getState().graphEntities[caller]?.nodes["call-1"]?.subGraphPath).toBe(
-      oldTarget,
-    );
+    expect(
+      useGraphProjectionStore.getState().graphEntities[caller]?.nodes["call-1"]?.subGraphPath,
+    ).toBe(oldTarget);
+  });
+
+  it("does not replace a dirty Graph draft with a Rust projection publication", () => {
+    const replacement = makeEditorProjectionFixture({ graphPath: caller, sourceRevision: 2 });
+    useGraphDraftStore.setState({
+      sessions: {
+        [caller]: {
+          document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
+          savedDocument: {
+            nodes: {
+              "00000000-0000-0000-0000-000000000001": {
+                id: "00000000-0000-0000-0000-000000000001",
+                node_type: "yssbi.tests.node",
+                position: { x: 0, y: 0 },
+                parameters: {},
+                user_label: null,
+              },
+            },
+            port_bindings: [],
+            connections: {},
+            input_states: [],
+          },
+          projection: replacement.projection,
+          saving: false,
+          undoStack: [],
+          redoStack: [],
+        },
+      },
+    });
+    const result: ResourceMutationResultDto = {
+      operationId: "00000000-0000-0000-0000-000000000905",
+      projectInstanceId: "00000000-0000-0000-0000-000000000901",
+      publicationRevision: 2,
+      moves: [],
+      deltas: [],
+      projectionReplacements: [{ graphPath: caller, projection: replacement.projection }],
+      projectionStatus: { status: "complete", expectedGraphPaths: [caller] },
+      history: { canUndo: false, canRedo: false },
+    };
+
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId: result.projectInstanceId,
+      epoch: 1,
+      fingerprint: "dirty-draft-projection-suppression",
+      affectedGraphPaths: new Set([caller]),
+      moves: [],
+    });
+
+    expect(plan.projectionReplacements).toEqual([]);
+    expect(plan.graphProjectionPlan?.graphEntities[caller].sourceRevision).toBe(1);
   });
 });
 

@@ -11,12 +11,12 @@ import { useDatabaseStore, useGraphMetaStore, useVariableStore } from "@/feature
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
-  useGraphDataStore,
-} from "@/features/core/dataStore/graphDataStore";
+  useGraphProjectionStore,
+} from "@/features/core/dataStore/graphProjectionStore";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
   buildGraphResourceMeta,
-  reconcileResourceSnapshot,
+  prepareResourceProjectionSnapshot,
   resourceKey,
   useDocumentStateStore,
   useResourceStore,
@@ -357,7 +357,7 @@ function remapResources(
 
 function applyDocumentPatches(
   documents: Record<ResourceKey, DocumentState>,
-  patches: ReturnType<typeof reconcileResourceSnapshot>["documentPatches"],
+  patches: ReturnType<typeof prepareResourceProjectionSnapshot>["documentPatches"],
 ): void {
   for (const { key, patch } of patches) {
     const previous = documents[key];
@@ -479,14 +479,14 @@ export function prepareProjectRecoveryCommit(
   const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
   const remappedResources = remapResources(useResourceStore.getState().resources, plan);
   const incoming = recoveryResources(plan.index, variables, chartDocuments, databases);
-  const { resources: reconciledResources, documentPatches } = reconcileResourceSnapshot(
+  const { resources: projectedResources, documentPatches } = prepareResourceProjectionSnapshot(
     incoming,
     remappedResources,
     remappedDocuments,
   );
   const authoritativeKeys = new Set(incoming.map((resource) => resourceKey(resource)));
   const resources = Object.fromEntries(
-    reconciledResources
+    projectedResources
       .filter((resource) => authoritativeKeys.has(resourceKey(resource)))
       .map((resource) => [resourceKey(resource), resource]),
   ) as Record<ResourceKey, ProjectResourceMeta>;
@@ -518,7 +518,7 @@ export function prepareProjectRecoveryCommit(
     [...plan.graphPathsLoadedAtStart].map((path) => plan.pathRemaps.get(path) ?? path),
   );
   const concurrentGraphEntities = Object.fromEntries(
-    Object.entries(useGraphDataStore.getState().graphEntities).filter(
+    Object.entries(useGraphProjectionStore.getState().graphEntities).filter(
       ([path]) => authoritativeGraphPaths.has(path) && !loadedAtStartTerminals.has(path),
     ),
   );

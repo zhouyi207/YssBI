@@ -42,11 +42,8 @@ const mocks = vi.hoisted(() => {
   };
 
   const confirm3 = vi.fn();
-  const saveProjectGraph = vi.fn();
+  const saveGraphDraft = vi.fn();
   const saveChart = vi.fn();
-  const captureGraphSaveContext = vi.fn();
-  const isGraphSaveRevisionCurrent = vi.fn();
-  const markResourceDirty = vi.fn();
   const clearResourceDocumentState = vi.fn();
   const showBlockingIpcError = vi.fn();
   const showBlockingMessage = vi.fn();
@@ -113,11 +110,8 @@ const mocks = vi.hoisted(() => {
 
     for (const mock of [
       confirm3,
-      saveProjectGraph,
+      saveGraphDraft,
       saveChart,
-      captureGraphSaveContext,
-      isGraphSaveRevisionCurrent,
-      markResourceDirty,
       clearResourceDocumentState,
       showBlockingIpcError,
       showBlockingMessage,
@@ -136,16 +130,8 @@ const mocks = vi.hoisted(() => {
     }
 
     confirm3.mockResolvedValue("discard");
-    saveProjectGraph.mockResolvedValue(undefined);
+    saveGraphDraft.mockResolvedValue(true);
     saveChart.mockResolvedValue(true);
-    captureGraphSaveContext.mockResolvedValue({
-      projectInstanceId: "project-a",
-      projectEpoch: 1,
-      expectedRevision: 7,
-      operationId: "operation-a",
-      isCurrent: () => project.projectInstanceId === "project-a" && project.epoch === 1,
-    });
-    isGraphSaveRevisionCurrent.mockReturnValue(true);
     unloadGraphDocument.mockResolvedValue(undefined);
     setChartState.mockImplementation(applyChartState);
     resolveResourceDisplayName.mockImplementation((_ref: unknown, fallback: string) => {
@@ -186,11 +172,8 @@ const mocks = vi.hoisted(() => {
     chartState,
     dirtyKey,
     confirm3,
-    saveProjectGraph,
+    saveGraphDraft,
     saveChart,
-    captureGraphSaveContext,
-    isGraphSaveRevisionCurrent,
-    markResourceDirty,
     clearResourceDocumentState,
     showBlockingIpcError,
     showBlockingMessage,
@@ -243,12 +226,11 @@ vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () =>
 vi.mock("@/features/core/resource", () => ({
   isResourceDocumentDirty: (ref: { id: string; kind: string }) =>
     mocks.dirty.has(mocks.dirtyKey(ref)),
-  markResourceDirty: mocks.markResourceDirty,
   clearResourceDocumentState: mocks.clearResourceDocumentState,
 }));
 
-vi.mock("@/services/graph/graphService", () => ({
-  GraphService: { saveProjectGraph: mocks.saveProjectGraph },
+vi.mock("@/features/application/graphDraft/saveGraphDraft", () => ({
+  saveGraphDraft: mocks.saveGraphDraft,
 }));
 
 vi.mock("@/features/core/chart/chartDocumentStore", () => ({
@@ -263,11 +245,6 @@ vi.mock("@/features/core/chart/chartDocumentStore", () => ({
 
 vi.mock("@/features/application/chart/saveChartDocument", () => ({
   saveChartDocument: mocks.saveChart,
-}));
-
-vi.mock("@/features/application/projectCommandContext", () => ({
-  captureSettledGraphSaveCommandContext: mocks.captureGraphSaveContext,
-  isGraphSaveCommandRevisionCurrent: mocks.isGraphSaveRevisionCurrent,
 }));
 
 vi.mock("@/features/core/projectLifecycle/projectLifecycleAuthority", () => ({
@@ -632,12 +609,12 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.panels).toHaveLength(1);
   });
 
-  it("suppresses stale-project feedback when graph context capture rejects", async () => {
+  it("suppresses stale-project feedback when Graph save rejects", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([editorPanel("editor-a", graphPath)]);
     markDirty(graphPath, "event");
     mocks.confirm3.mockResolvedValueOnce("confirm");
-    mocks.captureGraphSaveContext.mockImplementationOnce(async () => {
+    mocks.saveGraphDraft.mockImplementationOnce(async () => {
       mocks.project.epoch += 1;
       throw new Error("stale project internals");
     });
@@ -729,9 +706,8 @@ describe("workbench panel close coordinator", () => {
 
     await expect(requestCloseWorkbenchPanels(["editor-a", "editor-b"])).resolves.toBe(false);
 
-    expect(mocks.saveProjectGraph).toHaveBeenCalledOnce();
-    expect(mocks.saveProjectGraph).toHaveBeenCalledWith("project-a", firstPath, 7, "operation-a");
-    expect(mocks.markResourceDirty).toHaveBeenCalledWith({ id: firstPath, kind: "event" }, false);
+    expect(mocks.saveGraphDraft).toHaveBeenCalledOnce();
+    expect(mocks.saveGraphDraft).toHaveBeenCalledWith(firstPath, "event");
     expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.panels).toHaveLength(2);
   });
@@ -746,7 +722,7 @@ describe("workbench panel close coordinator", () => {
     await expect(requestCloseWorkbenchPanel("chart-a")).resolves.toBe(false);
 
     expect(mocks.saveChart).toHaveBeenCalledWith(chartPath);
-    expect(mocks.saveProjectGraph).not.toHaveBeenCalled();
+    expect(mocks.saveGraphDraft).not.toHaveBeenCalled();
     expect(mocks.showBlockingMessage).toHaveBeenCalledOnce();
     expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.releasePane).not.toHaveBeenCalled();

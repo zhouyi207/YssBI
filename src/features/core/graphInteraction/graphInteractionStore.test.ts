@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { getCanvasInteraction, useGraphInteractionStore } from "./graphInteractionStore";
 
 describe("graphInteractionStore position overrides", () => {
@@ -66,7 +66,7 @@ describe("graphInteractionStore position overrides", () => {
   });
 
   it("cancels one graph interaction without changing installed projection", () => {
-    const projectionBefore = useGraphDataStore.getState().graphEntities;
+    const projectionBefore = useGraphProjectionStore.getState().graphEntities;
     const store = useGraphInteractionStore.getState();
     store.setPositionOverride("events/one", "node-a", { x: 10, y: 20 });
     store.setPositionOverride("events/two", "node-b", { x: 30, y: 40 });
@@ -95,6 +95,6 @@ describe("graphInteractionStore position overrides", () => {
     expect(useGraphInteractionStore.getState().positionOverrides).toEqual({
       "events/two": { "node-b": { x: 30, y: 40 } },
     });
-    expect(useGraphDataStore.getState().graphEntities).toBe(projectionBefore);
+    expect(useGraphProjectionStore.getState().graphEntities).toBe(projectionBefore);
   });
 });

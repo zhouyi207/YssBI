@@ -2,22 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { EditorGraphMutationDto } from "./editorMutation";
 import {
   parseEditorGraphMutationDto,
-  parseGraphDeltaDto,
-  parseGraphMutationResultDto,
   parseGraphProjectionReplacementDto,
 } from "./editorMutationWireParser";
 
 const graphPath = "events/Main.yssbi-event";
 const functionPath = "functions/Forecast.yssbi-function";
-const operationId = "00000000-0000-0000-0000-000000000401";
 const nodeId = "00000000-0000-0000-0000-000000000101";
-const instanceId = "00000000-0000-0000-0000-000000000102";
 const connectionId = "00000000-0000-0000-0000-000000000201";
-const declaredAddress = { node_id: nodeId, port: { kind: "declared", key: "value" } };
-const instanceAddress = {
-  node_id: nodeId,
-  port: { kind: "instance", template: "input", instance_id: instanceId },
-};
 const projectedDeclaredAddress = { kind: "declared" as const, nodeId, portKey: "value" };
 const phase1Mutations = [
   { type: "deleteNodes", payload: { nodeIds: [nodeId] } },
@@ -29,58 +20,6 @@ const phase1Mutations = [
     payload: { source: projectedDeclaredAddress, target: projectedDeclaredAddress },
   },
 ] satisfies EditorGraphMutationDto[];
-const node = {
-  id: nodeId,
-  node_type: "core.constant",
-  position: { x: 1, y: 2 },
-  parameters: {},
-  user_label: null,
-};
-const connection = {
-  id: connectionId,
-  output: declaredAddress,
-  input: instanceAddress,
-  order: null,
-};
-const operations = [
-  { operation: "insert_node", node },
-  { operation: "remove_node", node },
-  { operation: "update_node", before: node, after: { ...node, user_label: "After" } },
-  {
-    operation: "insert_port_binding",
-    address: instanceAddress,
-    binding: { kind: "user_created", order: "a" },
-  },
-  {
-    operation: "remove_port_binding",
-    address: instanceAddress,
-    binding: {
-      kind: "orphan",
-      origin: { kind: "schema_field", source: "databases/sales", field: "amount" },
-      order: "b",
-      last_known: { label: "Amount", value_type: { Concrete: "core.float64" } },
-    },
-  },
-  { operation: "insert_connection", connection },
-  { operation: "remove_connection", connection },
-  {
-    operation: "set_input_state",
-    address: instanceAddress,
-    before: null,
-    after: { literal_override: 12 },
-  },
-];
-
-function delta() {
-  return {
-    graphPath,
-    fromRevision: 4,
-    toRevision: 5,
-    causedBy: operationId,
-    payload: { operations },
-  };
-}
-
 function projection(path: string, revision: number) {
   return {
     basis: {
@@ -186,18 +125,6 @@ function functionEditorProjection(revision = 5) {
         dataType: { kind: "Array", inner: { kind: "String" } },
       },
     ],
-  };
-}
-
-function graphResult() {
-  return {
-    projectInstanceId: "project-a",
-    delta: delta(),
-    projectionReplacement: {
-      graphPath,
-      projection: projection(graphPath, 5),
-    },
-    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -468,197 +395,5 @@ describe("editor mutation wire parser", () => {
       };
       expect(() => parseGraphProjectionReplacementDto(malformed)).toThrow("projection replacement");
     }
-  });
-
-  it("parses every Rust graph patch operation from an exact delta", () => {
-    expect(parseGraphDeltaDto(delta())).toEqual(delta());
-  });
-
-  it("accepts and carries every structured orphan value_type wire variant", () => {
-    const valueTypes = [
-      { Concrete: "core.int64" },
-      { Generic: "value" },
-      { Applied: { constructor: "core.array", arguments: [{ Concrete: "core.string" }] } },
-      { Union: [{ Concrete: "core.int64" }, "Unknown"] },
-      "Unknown",
-    ];
-
-    for (const value_type of valueTypes) {
-      const value = delta();
-      const operation = structuredClone(operations[4]) as Record<string, any>;
-      operation.binding.last_known.value_type = value_type;
-      (value.payload.operations as unknown[]) = [operation];
-
-      expect(parseGraphDeltaDto(value)).toEqual(value);
-    }
-  });
-
-  it("accepts resolved metadata with an optional current value type", () => {
-    for (const last_known of [
-      { label: "Amount", value_type: { Concrete: "core.float64" } },
-      { label: "Amount" },
-    ]) {
-      const value = delta();
-      const operation = structuredClone(operations[4]) as Record<string, any>;
-      operation.binding = {
-        kind: "resolved",
-        origin: operation.binding.origin,
-        order: operation.binding.order,
-        last_known,
-      };
-      (value.payload.operations as unknown[]) = [operation];
-
-      expect(parseGraphDeltaDto(value)).toEqual(value);
-    }
-  });
-
-  it("rejects a resolved binding without last_known metadata", () => {
-    const value = delta();
-    const operation = structuredClone(operations[4]) as Record<string, any>;
-    operation.binding = {
-      kind: "resolved",
-      origin: operation.binding.origin,
-      order: operation.binding.order,
-    };
-    (value.payload.operations as unknown[]) = [operation];
-
-    expect(() => parseGraphDeltaDto(value)).toThrow("graph patch operation");
-  });
-
-  it("rejects malformed or extended resolved last_known metadata", () => {
-    for (const last_known of [
-      null,
-      {},
-      { label: 42 },
-      { label: "Amount", value_type: { Concrete: 42 } },
-      { label: "Amount", extra: true },
-    ]) {
-      const value = delta();
-      const operation = structuredClone(operations[4]) as Record<string, any>;
-      operation.binding = {
-        kind: "resolved",
-        origin: operation.binding.origin,
-        order: operation.binding.order,
-        last_known,
-      };
-      (value.payload.operations as unknown[]) = [operation];
-
-      expect(() => parseGraphDeltaDto(value)).toThrow("graph patch operation");
-    }
-  });
-
-  it("keeps label-only orphan metadata without inferring value_type", () => {
-    const value = delta();
-    const operation = structuredClone(operations[4]) as Record<string, any>;
-    delete operation.binding.last_known.value_type;
-    (value.payload.operations as unknown[]) = [operation];
-
-    const parsed = parseGraphDeltaDto(value);
-    expect(parsed).toEqual(value);
-    expect(
-      (parsed.payload.operations[0] as Record<string, any>).binding.last_known,
-    ).not.toHaveProperty("value_type");
-  });
-
-  it("rejects malformed, inferred, or extended orphan value_type wire shapes", () => {
-    const malformed = [
-      null,
-      "core.int64",
-      { Concrete: "core.int64", extra: true },
-      { Applied: { constructor: "core.array", arguments: "core.string" } },
-      { Union: "core.int64" },
-      { Unknown: true },
-    ];
-
-    for (const value_type of malformed) {
-      const value = delta();
-      const operation = structuredClone(operations[4]) as Record<string, any>;
-      operation.binding.last_known.value_type = value_type;
-      (value.payload.operations as unknown[]) = [operation];
-
-      expect(() => parseGraphDeltaDto(value)).toThrow("graph patch operation");
-    }
-  });
-
-  it.each([
-    "events/folder/sub-folder/Main.v2.yssbi-event",
-    "functions/library/math/Calculate.yssbi-function",
-    "events/Sales Report 中文.yssbi-event",
-    "functions/销售 预测.yssbi-function",
-  ])("accepts opaque graph mutation path %j", (nestedGraphPath) => {
-    const nested = { ...delta(), graphPath: nestedGraphPath };
-    expect(parseGraphDeltaDto(nested)).toEqual(nested);
-  });
-
-  it("accepts only empty operations for a same-revision graph delta", () => {
-    const noop = { ...delta(), toRevision: 4, payload: { operations: [] } };
-
-    expect(parseGraphDeltaDto(noop)).toEqual(noop);
-    expect(() =>
-      parseGraphDeltaDto({
-        ...noop,
-        payload: { operations: [operations[0]] },
-      }),
-    ).toThrow("revision");
-    expect(() =>
-      parseGraphDeltaDto({
-        ...noop,
-        toRevision: 5,
-      }),
-    ).toThrow("revision");
-  });
-
-  it("rejects malformed graph delta identity, revisions, operations, and extra fields", () => {
-    for (const malformedPath of [
-      "",
-      "not-a-resource",
-      "events/Main.yssbi-function",
-      "functions/Main.yssbi-event",
-      "events//Main.yssbi-event",
-      "events/../Main.yssbi-event",
-    ]) {
-      expect(() => parseGraphDeltaDto({ ...delta(), graphPath: malformedPath })).toThrow(
-        "graphPath",
-      );
-    }
-    expect(() => parseGraphDeltaDto({ ...delta(), toRevision: 5.5 })).toThrow("revision");
-    expect(() => parseGraphDeltaDto({ ...delta(), causedBy: "not-a-uuid" })).toThrow("causedBy");
-    expect(() => parseGraphDeltaDto({ ...delta(), extra: true })).toThrow("exact");
-    expect(() =>
-      parseGraphDeltaDto({
-        ...delta(),
-        payload: { operations: [{ operation: "insert_node", node: { ...node, id: "bad" } }] },
-      }),
-    ).toThrow("operation");
-  });
-
-  it("requires project identity and exact projection and history fields in graph results", () => {
-    const result = graphResult();
-    expect(parseGraphMutationResultDto(result, "project-a").projectInstanceId).toBe("project-a");
-    expect(() => parseGraphMutationResultDto(result, "project-b")).toThrow("projectInstanceId");
-    expect(() =>
-      parseGraphMutationResultDto({ ...result, projectInstanceId: undefined }, "project-a"),
-    ).toThrow("projectInstanceId");
-    expect(() => parseGraphMutationResultDto({ ...result, extra: true }, "project-a")).toThrow(
-      "exact",
-    );
-    expect(() =>
-      parseGraphMutationResultDto(
-        {
-          ...result,
-          projectionReplacement: { ...result.projectionReplacement, extra: true },
-        },
-        "project-a",
-      ),
-    ).toThrow("projection");
-    expect(() =>
-      parseGraphMutationResultDto(
-        {
-          ...result,
-          history: { ...result.history, extra: true },
-        },
-        "project-a",
-      ),
-    ).toThrow("history");
   });
 });

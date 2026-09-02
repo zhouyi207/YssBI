@@ -1,23 +1,17 @@
-import { useEffect } from "react";
-import { ensureHistoryStatus } from "@/features/application/editorMutation/historyCoordinator";
-import { useHistoryStore } from "@/features/core/history";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { useActiveEditorGroup } from "./editorGroupContext";
 
-/** Backend-derived undo/redo availability for the focused editor group's active tab. */
+/** Frontend-draft undo/redo availability for the focused Graph editor. */
 export function useEditorHistoryAvailability() {
   const { activeResourceRef } = useActiveEditorGroup();
-  const canUndoFromBackend = useHistoryStore((state) => state.canUndo);
-  const canRedoFromBackend = useHistoryStore((state) => state.canRedo);
-  const pending = useHistoryStore((state) => state.pending);
-  const available = Boolean(activeResourceRef) && !pending;
-
-  useEffect(() => {
-    void ensureHistoryStatus().catch(() => undefined);
-  }, []);
+  const session = useGraphDraftStore((state) =>
+    activeResourceRef ? state.sessions[activeResourceRef] : undefined,
+  );
+  const pending = session?.saving === true;
 
   return {
-    canUndo: available && canUndoFromBackend,
-    canRedo: available && canRedoFromBackend,
+    canUndo: Boolean(session?.undoStack.length) && !pending,
+    canRedo: Boolean(session?.redoStack.length) && !pending,
     pending,
     activeResourceRef,
   };

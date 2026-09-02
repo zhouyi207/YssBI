@@ -1,6 +1,6 @@
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import type { CommandHandler, GraphMutationCommandResult } from "../types";
-import { executeGraphIntent } from "./executeGraphIntent";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import type { CommandHandler, GraphDraftCommandResult } from "../types";
+import { executeGraphDraftIntent } from "./executeGraphDraftIntent";
 
 export interface AddRepeatablePinArgs {
   nodeId: string;
@@ -9,10 +9,10 @@ export interface AddRepeatablePinArgs {
 
 export const addRepeatablePinCommand: CommandHandler<
   AddRepeatablePinArgs,
-  GraphMutationCommandResult
+  GraphDraftCommandResult
 > = {
   execute(graphPath, args) {
-    return executeGraphIntent(graphPath, {
+    return executeGraphDraftIntent(graphPath, {
       type: "addPortInstance",
       payload: { nodeId: args.nodeId, template: args.template, order: null },
     });
@@ -26,17 +26,17 @@ export interface RemoveRepeatablePinArgs {
 
 export const removeRepeatablePinCommand: CommandHandler<
   RemoveRepeatablePinArgs,
-  GraphMutationCommandResult
+  GraphDraftCommandResult
 > = {
   execute(graphPath, args) {
-    const pin = useGraphDataStore.getState().getGraphPin(graphPath, args.pinId);
+    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin?.address || pin.address.kind !== "instance") {
       throw new Error(`Port '${args.pinId}' is not a removable port instance`);
     }
     if (pin.address.nodeId !== args.nodeId) {
       throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);
     }
-    return executeGraphIntent(graphPath, {
+    return executeGraphDraftIntent(graphPath, {
       type: "removePortInstance",
       payload: { address: pin.address },
     });

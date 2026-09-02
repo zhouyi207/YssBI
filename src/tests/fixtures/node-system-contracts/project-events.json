@@ -3,24 +3,6 @@
     {
       "payload": {
         "payload": {
-          "delta": {
-            "causedBy": "00000000-0000-0000-0000-000000000004",
-            "fromRevision": 7,
-            "graphPath": "events/contract.yssbi-event",
-            "payload": {
-              "operations": []
-            },
-            "toRevision": 7
-          },
-          "projectInstanceId": "00000000-0000-0000-0000-000000000601"
-        },
-        "type": "GraphDelta"
-      },
-      "type": "Project"
-    },
-    {
-      "payload": {
-        "payload": {
           "result": {
             "deltas": [
               {

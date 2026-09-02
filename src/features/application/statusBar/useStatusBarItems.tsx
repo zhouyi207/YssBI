@@ -5,7 +5,7 @@ import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
 } from "@/features/application/editor/editorCommandFocus";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
 import { useDockviewPortSnapshot } from "@/modules/workbench/public";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
@@ -72,7 +72,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     [graphTarget, selectedNodeIds],
   );
 
-  const graphStats = useGraphDataStore(
+  const graphStats = useGraphProjectionStore(
     useShallow((state) => {
       if (!editor.activeResourceRef) return { nodeCount: 0, connectionCount: 0 };
 

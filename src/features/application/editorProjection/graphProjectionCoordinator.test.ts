@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
@@ -11,7 +11,10 @@ import {
 } from "@/features/core/resource";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import * as coordinator from "./graphProjectionCoordinator";
 import { logger } from "@/features/application/observability/appLogger";
 
@@ -54,7 +57,7 @@ describe("graphProjectionCoordinator invalidation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     coordinator.resetGraphProjectionCoordinator();
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: "project-instance-1" });
     startProjectLifecycle("project-instance-1");
@@ -66,7 +69,9 @@ describe("graphProjectionCoordinator invalidation", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     const initialToken = coordinator.beginGraphLoadLifecycle(graphPath);
     expect(initialToken).toBeGreaterThan(1_000_000_000_000);
-    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(fixture.projection);
+    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
+      makeGraphEditorSession(fixture.projection),
+    );
 
     await expect(
       coordinator.prepareGraphProjectionForPublication(graphPath, "project-instance-1", 1),
@@ -99,12 +104,14 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 2,
       title: "Refreshed",
     });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     useResourceStore
       .getState()
       .upsertResource(buildGraphResourceMeta("event", graphPath, "Main", { revision: 1 }));
     markResourceLoaded({ id: graphPath, kind: "event" });
-    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(refreshed.projection);
+    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(
+      makeGraphEditorSession(refreshed.projection),
+    );
 
     const ok = await invalidationApi()(graphPath);
 
@@ -114,7 +121,7 @@ describe("graphProjectionCoordinator invalidation", () => {
       graphPath,
       "zh-CN",
     );
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
       nodes: { "local-node": { title: "Refreshed" } },
     });
@@ -138,9 +145,9 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 3,
       title: "Trailing refresh",
     });
-    const first = deferred<typeof firstRefresh.projection>();
-    const trailing = deferred<typeof trailingRefresh.projection>();
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    const first = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    const trailing = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph)
       .mockReturnValueOnce(first.promise)
@@ -153,17 +160,17 @@ describe("graphProjectionCoordinator invalidation", () => {
 
     expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(1);
 
-    first.resolve(firstRefresh.projection);
+    first.resolve(makeGraphEditorSession(firstRefresh.projection));
     await initialRequest;
     await vi.waitFor(() => {
       expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     });
 
-    trailing.resolve(trailingRefresh.projection);
+    trailing.resolve(makeGraphEditorSession(trailingRefresh.projection));
     await expect(coalescedRequest).resolves.toBe(true);
     await expect(alsoCoalescedRequest).resolves.toBe(true);
     expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
       nodes: { "local-node": { title: "Trailing refresh" } },
     });
@@ -172,7 +179,7 @@ describe("graphProjectionCoordinator invalidation", () => {
   it("logs hydrate IPC failure context while preserving the false API result", async () => {
     const graphPath = "events/Main.yssbi-event";
     const current = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph).mockRejectedValue(new Error("offline detail"));
 
@@ -193,9 +200,11 @@ describe("graphProjectionCoordinator invalidation", () => {
       nodeId: "missing",
       portKey: "missing",
     };
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(invalid.projection);
+    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(
+      makeGraphEditorSession(invalid.projection),
+    );
 
     await expect(invalidationApi()(graphPath)).resolves.toBe(false);
 
@@ -208,7 +217,7 @@ describe("graphProjectionCoordinator invalidation", () => {
   it("marks the loaded projection stale when refresh fails", async () => {
     const graphPath = "events/Main.yssbi-event";
     const current = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph).mockRejectedValue(new Error("offline"));
 
@@ -226,14 +235,16 @@ describe("graphProjectionCoordinator invalidation", () => {
       nodeId: "missing",
       portKey: "missing",
     };
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(invalid.projection);
+    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(
+      makeGraphEditorSession(invalid.projection),
+    );
 
     await expect(invalidationApi()(graphPath)).resolves.toBe(false);
 
     expect(getDocumentState({ id: graphPath, kind: "event" })?.stale).toBe(true);
-    expect(useGraphDataStore.getState().graphEntities[graphPath].sourceRevision).toBe(2);
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath].sourceRevision).toBe(2);
   });
 
   it("keeps the previous projection stale when the latest refresh has a lower revision", async () => {
@@ -244,13 +255,15 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 2,
       title: "Lower revision",
     });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(lowerRevision.projection);
+    vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(
+      makeGraphEditorSession(lowerRevision.projection),
+    );
 
     await expect(invalidationApi()(graphPath)).resolves.toBe(false);
 
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
       requestGeneration: 1,
       nodes: { "local-node": { title: "Current" } },
@@ -280,22 +293,22 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 1,
       title: "Replacement project",
     });
-    const pending = deferred<typeof stale.projection>();
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    const pending = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph).mockReturnValue(pending.promise);
 
     const request = invalidationApi()(graphPath);
     startProjectLifecycle("project-instance-2");
     useProjectIOStore.setState({ projectInstanceId: "project-instance-2" });
-    useGraphDataStore.setState({ graphEntities: {} });
-    useGraphDataStore.getState().replaceProjection(graphPath, replacement.projection, 1);
-    const replacementGraph = useGraphDataStore.getState().graphEntities[graphPath];
-    pending.resolve(stale.projection);
+    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().replaceProjection(graphPath, replacement.projection, 1);
+    const replacementGraph = useGraphProjectionStore.getState().graphEntities[graphPath];
+    pending.resolve(makeGraphEditorSession(stale.projection));
 
     await expect(request).resolves.toBe(false);
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(replacementGraph);
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(replacementGraph);
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 1,
       nodes: { "local-node": { title: "Replacement project" } },
     });
@@ -304,15 +317,15 @@ describe("graphProjectionCoordinator invalidation", () => {
   it("ignores a pending response after the coordinator is reset for another project", async () => {
     const graphPath = "events/Main.yssbi-event";
     const fixture = makeEditorProjectionFixture({ graphPath });
-    const pending = deferred<typeof fixture.projection>();
+    const pending = deferred<ReturnType<typeof makeGraphEditorSession>>();
     vi.mocked(GraphProjectionService.loadGraph).mockReturnValue(pending.promise);
 
     const request = coordinator.loadGraphProjection(graphPath);
     coordinator.resetGraphProjectionCoordinator();
-    pending.resolve(fixture.projection);
+    pending.resolve(makeGraphEditorSession(fixture.projection));
 
     await expect(request).resolves.toBe(false);
-    expect(useGraphDataStore.getState().hasGraph(graphPath)).toBe(false);
+    expect(useGraphProjectionStore.getState().hasGraph(graphPath)).toBe(false);
   });
 
   it("marks current when the latest response finds its generation already installed", async () => {
@@ -323,17 +336,17 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 2,
       title: "Installed",
     });
-    const pending = deferred<typeof installed.projection>();
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    const pending = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     vi.mocked(GraphProjectionService.hydrateGraph).mockReturnValue(pending.promise);
 
     const request = invalidationApi()(graphPath);
-    useGraphDataStore.getState().replaceProjection(graphPath, installed.projection, 2);
-    pending.resolve(installed.projection);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, installed.projection, 2);
+    pending.resolve(makeGraphEditorSession(installed.projection));
 
     await expect(request).resolves.toBe(true);
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
       requestGeneration: 2,
       nodes: { "local-node": { title: "Installed" } },
@@ -354,10 +367,10 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 3,
       title: "Newer response",
     });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    const first = deferred<typeof firstRefresh.projection>();
-    const second = deferred<typeof newer.projection>();
+    const first = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    const second = deferred<ReturnType<typeof makeGraphEditorSession>>();
     vi.mocked(GraphProjectionService.hydrateGraph)
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
@@ -365,15 +378,15 @@ describe("graphProjectionCoordinator invalidation", () => {
     const invalidate = invalidationApi();
     const firstRequest = invalidate(graphPath);
     const newerRequest = invalidate(graphPath);
-    first.resolve(firstRefresh.projection);
+    first.resolve(makeGraphEditorSession(firstRefresh.projection));
     await expect(firstRequest).resolves.toBe(true);
     await vi.waitFor(() => {
       expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     });
-    second.resolve(newer.projection);
+    second.resolve(makeGraphEditorSession(newer.projection));
     await expect(newerRequest).resolves.toBe(true);
 
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 3,
       nodes: { "local-node": { title: "Newer response" } },
     });
@@ -388,10 +401,10 @@ describe("graphProjectionCoordinator invalidation", () => {
       sourceRevision: 2,
       title: "First response",
     });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    const first = deferred<typeof firstRefresh.projection>();
-    const trailing = deferred<typeof firstRefresh.projection>();
+    const first = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    const trailing = deferred<ReturnType<typeof makeGraphEditorSession>>();
     vi.mocked(GraphProjectionService.hydrateGraph)
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(trailing.promise);
@@ -399,7 +412,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     const invalidate = invalidationApi();
     const firstRequest = invalidate(graphPath);
     const trailingRequest = invalidate(graphPath);
-    first.resolve(firstRefresh.projection);
+    first.resolve(makeGraphEditorSession(firstRefresh.projection));
     await expect(firstRequest).resolves.toBe(true);
     await vi.waitFor(() => {
       expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
@@ -407,7 +420,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     trailing.reject(new Error("latest refresh failed"));
     await expect(trailingRequest).resolves.toBe(false);
 
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
       nodes: { "local-node": { title: "First response" } },
     });

@@ -1,11 +1,11 @@
 import { logger } from "@/features/application/observability/appLogger";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useResourceStore } from "@/features/core/resource";
 import { collectCallFunctionIssuesForBucket } from "@/features/domain/graphDiagnostics";
 
 /** Non-blocking save warning when a graph contains broken Call Function targets. */
 export function warnCallFunctionIssuesBeforeSave(graphPath: string): void {
-  const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+  const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
   if (!bucket) return;
 
   const issues = collectCallFunctionIssuesForBucket(

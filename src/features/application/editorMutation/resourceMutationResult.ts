@@ -1,9 +1,10 @@
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
-  useGraphDataStore,
+  useGraphProjectionStore,
   type GraphEntityBucket,
-} from "@/features/core/dataStore/graphDataStore";
+} from "@/features/core/dataStore/graphProjectionStore";
+import { isGraphDraftDirty, isGraphDraftSaving } from "@/features/core/graphDraft";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
@@ -707,17 +708,21 @@ export function prepareSynchronousPublicationCommit(
     }
   }
   const graphOwned = hasGraphOwnedPublicationWork(result, context);
+  const applicableProjectionReplacements = result.projectionReplacements.filter(
+    (replacement) =>
+      !isGraphDraftDirty(replacement.graphPath) && !isGraphDraftSaving(replacement.graphPath),
+  );
   let graphProjectionPlan:
     | NonNullable<PreparedProjectPublication["graphProjectionPlan"]>
     | undefined;
   if (graphOwned) {
-    const baseGraphEntities = useGraphDataStore.getState().graphEntities;
+    const baseGraphEntities = useGraphProjectionStore.getState().graphEntities;
     const projectedRevisions = new Map(
       Object.entries(baseGraphEntities).map(
         ([path, bucket]) => [path, bucket.sourceRevision] as const,
       ),
     );
-    for (const replacement of result.projectionReplacements) {
+    for (const replacement of applicableProjectionReplacements) {
       const entities = toProjectionEntities(replacement.projection);
       if (entities.graphPath !== replacement.graphPath) {
         throw new Error(
@@ -733,7 +738,7 @@ export function prepareSynchronousPublicationCommit(
       projectedRevisions.set(replacement.graphPath, replacement.projection.sourceRevision);
     }
     const preparedGraph = prepareGraphProjectionReplacements(
-      result.projectionReplacements,
+      applicableProjectionReplacements,
       baseGraphEntities,
     );
     if (!preparedGraph.prepared) {
@@ -762,7 +767,7 @@ export function prepareSynchronousPublicationCommit(
   applyResourceLifecycleDeltasToAggregate(aggregate, result.deltas);
 
   const functionInstalls = graphOwned
-    ? prepareFunctionInstalls(result.deltas, result.projectionReplacements)
+    ? prepareFunctionInstalls(result.deltas, applicableProjectionReplacements)
     : [];
   for (const install of functionInstalls) {
     const graphMeta = aggregate.graphMeta;
@@ -805,7 +810,7 @@ export function prepareSynchronousPublicationCommit(
     ...(graphProjectionPlan && aggregate.graphEntities
       ? { graphProjectionPlan: { ...graphProjectionPlan, graphEntities: aggregate.graphEntities } }
       : {}),
-    projectionReplacements: result.projectionReplacements,
+    projectionReplacements: applicableProjectionReplacements,
     functionInstalls,
     variableInstalls,
     storeState: {

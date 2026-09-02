@@ -7,12 +7,12 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-interface ReconcilePathRequest {
+interface PathHydrationRequest {
   readonly identity: ProjectIdentitySnapshot;
   readonly promise: Promise<string | null>;
 }
 
-let reconcilePathInFlight: ReconcilePathRequest | null = null;
+let pathHydrationInFlight: PathHydrationRequest | null = null;
 
 function isSameProjectIdentity(
   left: ProjectIdentitySnapshot,
@@ -25,13 +25,13 @@ function isSameProjectIdentity(
  * Align `currentPath` with Rust `ProjectState.project_path` when the frontend
  * projection is missing (e.g. HMR store reset while the backend session survives).
  */
-export async function reconcileProjectPath(): Promise<string | null> {
+export async function hydrateProjectPath(): Promise<string | null> {
   const cached = useProjectIOStore.getState().currentPath;
   if (cached) return cached;
 
   const identity = captureProjectIdentity();
-  if (reconcilePathInFlight && isSameProjectIdentity(reconcilePathInFlight.identity, identity)) {
-    return reconcilePathInFlight.promise;
+  if (pathHydrationInFlight && isSameProjectIdentity(pathHydrationInFlight.identity, identity)) {
+    return pathHydrationInFlight.promise;
   }
 
   const promise = (async () => {
@@ -43,24 +43,24 @@ export async function reconcileProjectPath(): Promise<string | null> {
     }
     return null;
   })();
-  const request: ReconcilePathRequest = { identity, promise };
-  reconcilePathInFlight = request;
+  const request: PathHydrationRequest = { identity, promise };
+  pathHydrationInFlight = request;
 
   try {
     return await promise;
   } finally {
-    if (reconcilePathInFlight === request) {
-      reconcilePathInFlight = null;
+    if (pathHydrationInFlight === request) {
+      pathHydrationInFlight = null;
     }
   }
 }
 
-/** Resolve the active project path; reconciles from backend when needed. */
+/** Resolve the active project path; hydrates from Rust when needed. */
 export async function resolveActiveProjectPath(): Promise<string | null> {
-  return reconcileProjectPath();
+  return hydrateProjectPath();
 }
 
-/** Subscribe to the active project path projection (reconcile via explicit hydration / save). */
+/** Subscribe to the active project path projection (refresh through explicit hydration or save). */
 export function useActiveProjectPath(): string | null {
   return useProjectIOStore((state) => state.currentPath);
 }

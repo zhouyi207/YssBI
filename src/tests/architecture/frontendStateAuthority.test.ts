@@ -43,7 +43,7 @@ describe("frontend state authority audit", () => {
           memberKind: "action",
           authority: "local-draft",
           writes: ["documents[documentId].dirty"],
-          writerModule: "@/features/core/chart/reconciliation",
+          writerModule: "@/features/core/chart/ui",
           writerLayer: "Application",
         }),
       ],

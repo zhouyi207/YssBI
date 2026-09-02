@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDataSignaturePin } from "@/shared/types/domain/functionSignaturePin";
-import { useGraphDataStore, useGraphMetaStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore, useGraphMetaStore } from "@/features/core/dataStore";
 import * as graphDocumentActions from "./graphDocumentActions";
 
 const commitFunctionSignature = vi.hoisted(() => vi.fn());
@@ -13,7 +13,7 @@ describe("graphDocumentActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGraphMetaStore.setState({ graphs: {} });
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
   });
 
   it("delegates signature edits to the revisioned authoritative coordinator", async () => {
@@ -28,6 +28,6 @@ describe("graphDocumentActions", () => {
       inputs,
     });
     expect(useGraphMetaStore.getState().graphs).toEqual({});
-    expect(useGraphDataStore.getState().graphEntities).toEqual({});
+    expect(useGraphProjectionStore.getState().graphEntities).toEqual({});
   });
 });

@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { useGestureStore } from "@/features/core/gesture";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -128,7 +128,7 @@ function installPointerLoop(): () => void {
     const { session } = interaction;
     const canvas = queryCanvasElement(scope.panelInstanceId);
     if (!canvas) return;
-    const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+    const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
     if (!bucket) {
       cancelCanvasInteraction(graphPath, session.groupId);
       clearCanvasPointerScope(graphPath);
@@ -245,7 +245,9 @@ function installPointerLoop(): () => void {
       const delta = { x: session.delta.x + dx, y: session.delta.y + dy };
       const positions: Record<string, { x: number; y: number }> = {};
       for (const nodeId of session.nodeIds) {
-        const position = useGraphDataStore.getState().getGraphNode(graphPath, nodeId)?.position;
+        const position = useGraphProjectionStore
+          .getState()
+          .getGraphNode(graphPath, nodeId)?.position;
         if (position)
           positions[nodeId] = {
             x: position.x + delta.x,

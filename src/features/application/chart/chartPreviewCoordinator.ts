@@ -1,7 +1,7 @@
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ChartDocument, ChartPreviewPayload } from "@/shared/types/domain/chart";
-import { isChartDocument } from "./chartDocumentCoordinator";
+import { isChartDocument } from "./chartDocumentGuard";
 
 export interface ChartPreviewIdentity {
   readonly projectInstanceId: string;

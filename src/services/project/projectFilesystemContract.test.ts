@@ -36,7 +36,7 @@ function productionSources(directory = sourceRoot): Array<{ path: string; source
 }
 
 const lifecycleOwnedNodeCommandIdentityFields = {
-  mutate_graph_document: "projectInstanceId",
+  transform_graph_draft: "projectInstanceId",
   update_function_signature: "projectInstanceId",
   hydrate_editor_graph: "projectInstanceId",
   export_graph_subgraph: "projectInstanceId",
@@ -75,8 +75,6 @@ const activeProjectCommandIdentityFields = {
   get_project_databases_variables: "projectInstanceId",
   get_project_path: "projectInstanceId",
   get_project_index: "projectInstanceId",
-  get_project_computation_settings: "projectInstanceId",
-  update_project_computation_settings: "request",
   get_project_resource_path: "projectInstanceId",
   load_project_graph: "projectInstanceId",
   unload_project_graph: "projectInstanceId",
@@ -129,6 +127,8 @@ const globalCommandExemptions = [
   "get_window_states",
   "get_window_state",
   "save_window_state",
+  "get_application_settings",
+  "update_application_settings",
   "list_sqlite_tables",
   "list_sql_tables",
   "list_excel_sheets",
@@ -170,6 +170,22 @@ const capabilityCommandExemptions = [
   "read_bayes_density_plot_data",
   "read_bayes_autocorrelation_data",
   "read_bayes_posterior_predictive",
+
+  "get_harness_runtime_status",
+  "configure_harness_provider",
+  "create_harness_session",
+  "subscribe_harness_events",
+  "unsubscribe_harness_events",
+  "submit_harness_turn",
+  "cancel_harness_turn",
+  "close_harness_session",
+  "list_harness_memory",
+  "delete_harness_memory",
+  "plan_dataset_quality_review",
+  "advance_harness_workflow",
+  "pause_harness_workflow",
+  "resume_harness_workflow",
+  "cancel_harness_workflow",
 ] as const;
 
 const identityExemptCommands = [
@@ -180,7 +196,7 @@ const identityExemptCommands = [
 ] as const;
 
 function registeredTauriCommands(source: string): string[] {
-  const handler = source.match(/tauri::generate_handler!\[([\s\S]*?)\]\)/)?.[1] ?? "";
+  const handler = source.match(/tauri::generate_handler!\[([\s\S]*?)\]/)?.[1] ?? "";
   return handler
     .replace(/\/\/.*$/gm, "")
     .split(",")
@@ -403,7 +419,7 @@ function isForbiddenHandlerEffect(node: ts.CallExpression): boolean {
   const member = node.expression.name.text;
   return (
     ts.isIdentifier(owner) &&
-    ((owner.text === "useGraphDataStore" && member === "getState") ||
+    ((owner.text === "useGraphProjectionStore" && member === "getState") ||
       (owner.text === "useResourceStore" && member === "getState") ||
       (owner.text === "projectPublicationCoordinator" && member === "submit"))
   );
@@ -476,7 +492,7 @@ const workflowFiles = [
 describe("projectFilesystemContract", () => {
   it("classifies every registered Tauri command without duplicate or stale exemptions", () => {
     const registered = registeredTauriCommands(
-      readFileSync(resolve("src-tauri/src/lib.rs"), "utf8"),
+      readFileSync(resolve("src-tauri/crates/yss-api/src/lib.rs"), "utf8"),
     );
     const violations = commandClassificationViolations(
       registered,
@@ -665,15 +681,6 @@ describe("projectFilesystemContract", () => {
     ).toEqual([]);
   });
 
-  it("classifies project computation settings commands as active-project identity-required", () => {
-    expect(activeProjectCommandIdentityFields).toMatchObject({
-      get_project_computation_settings: "projectInstanceId",
-      update_project_computation_settings: "request",
-    });
-    expect(identityExemptCommands).not.toContain("get_project_computation_settings");
-    expect(identityExemptCommands).not.toContain("update_project_computation_settings");
-  });
-
   it("classifies localized catalog reads as active-project identity-required", () => {
     expect(activeProjectCommandIdentityFields).toMatchObject({
       get_localized_node_catalog: "projectInstanceId",
@@ -774,12 +781,8 @@ describe("projectFilesystemContract", () => {
           source.includes("assertCurrentProjectIdentity"));
       const usesCommandContextFacade =
         (source.includes("captureProjectCommandContext") ||
-          source.includes("captureGraphSaveCommandContext") ||
-          source.includes("captureSettledGraphSaveCommandContext") ||
           source.includes("captureRevisionedProjectCommandSnapshot")) &&
-        (source.includes(".isCurrent()") ||
-          source.includes(".assertCurrent()") ||
-          source.includes("isGraphSaveCommandRevisionCurrent"));
+        (source.includes(".isCurrent()") || source.includes(".assertCurrent()"));
       const usesLifecycleReceiptOwner =
         source.includes("registerPendingProjectLifecycleOperation") &&
         source.includes(".isCurrent()");
@@ -829,7 +832,7 @@ describe("projectFilesystemContract", () => {
       `
       export class FakeEffectTextHandler {
         handle(payload: Payload): void {
-          const documentation = 'useGraphDataStore.getState()';
+          const documentation = 'useGraphProjectionStore.getState()';
           // getPendingMutation(payload.operationId);
           if (!isCurrentProjectEvent(payload.projectInstanceId)) return;
           notifyIndexInvalidated('watcher');
@@ -892,7 +895,7 @@ describe("projectFilesystemContract", () => {
       `
       export class EarlyCapturedEffectHandler {
         handle(payload: Payload): void {
-          useGraphDataStore.getState();
+          useGraphProjectionStore.getState();
           const identity = captureCurrentProjectEventIdentity(payload.projectInstanceId);
           if (!identity) return;
         }

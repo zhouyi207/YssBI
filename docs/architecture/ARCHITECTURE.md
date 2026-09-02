@@ -124,7 +124,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-execution/`                  | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner                                                                                                                                                                              |
 | `src-tauri/crates/yss-execution-sci-adapter/`      | 独立 Backend Adapter：Execution live ACF/PACF port 到 `yss-sci-runtime` 的 request/result/control/typed-error 穷尽映射唯一 owner；不依赖 Tauri、Application、Project 或 Database state                                                                                                                       |
 | `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery                                                                                                                                                  |
-| `src-tauri/crates/yss-computation-settings/`       | 独立 Pure Leaf：持久化 computation settings、validation 与 project settings mutation wire contract 的唯一 canonical owner                                                                                                                                                                                    |
+| `src-tauri/crates/yss-settings/`                   | 独立 Application service：应用级后端 settings、全局 computation settings、revisioned persistence 与校验的唯一 owner；不持有 React UI、ProjectData 或 Tauri transport                                                                                                                                         |
 | `src-tauri/crates/yss-data-contract/`              | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner                                                                                                                                                                                                                        |
 | `src-tauri/crates/yss-database-contract/`          | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation、fingerprint 与 CSV/Parquet export format 的唯一 canonical owner                                                                                                                                                        |
 | `src-tauri/crates/yss-database-edit/`              | 独立 Database Core：共享 `EditOperation`、undo/redo `EditHistory` 与 `EditState` projection 的唯一 owner；不依赖 Polars、DuckDB、root database、Application 或 Tauri                                                                                                                                         |
@@ -153,7 +153,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-project-filesystem/`         | 独立 Stateful Project 层：native project-root identity、caller binding/revalidation、root lease/lifecycle admission、原子文件事务、rollback/recovery marker 与 filesystem typed error 的唯一 owner；不持有 `ProjectState`、完整 `ProjectSession`、resource revision 或 publication                           |
 | `src-tauri/crates/yss-project-history/`            | 独立 Project 层：mutation envelope、resource/document patch、undo/redo transaction 与内存 document state machine 的唯一 owner；不持有 filesystem、publication、transport 或 Graph edit adapter                                                                                                               |
 | `src-tauri/crates/yss-project-layout/`             | 独立且无依赖的 Pure Leaf：project 磁盘目录、文件名、扩展名与 index-input 相对路径分类的唯一 canonical owner；不持有 I/O、schema、watcher 或 workflow                                                                                                                                                         |
-| `src-tauri/crates/yss-project-manifest/`           | 独立 Pure Leaf：`metadata.yssbi` 当前 schema version、严格 manifest wire 与 computation settings fail-closed validation 的唯一 owner；不持有 ProjectData、时钟、I/O 或 lifecycle                                                                                                                             |
+| `src-tauri/crates/yss-project-manifest/`           | 独立 Pure Leaf：`metadata.yssbi` 当前 schema version 与严格 manifest wire 的唯一 owner；不持有 ProjectData、应用 settings、时钟、I/O 或 lifecycle                                                                                                                                                            |
 | `src-tauri/crates/yss-project/`                    | 独立 Stateful Project 层：`ProjectState`、运行期 session/instance、resource revision、history hydration、持久化事务编排与 commit 后 publication 的唯一 owner；组合专职 Project crates，但不依赖 Tauri、Commands、IPC schema、Application workflow 或 Database runtime                                        |
 | `src-tauri/crates/yss-project-model/`              | 独立 Project 层：内存 `ProjectData`、`ProjectMetadata`、Graph resource aggregate 与 `ProjectDataPatch` 的唯一 owner；不持有文件 I/O、时钟、publication 或整包 project JSON wire                                                                                                                              |
 | `src-tauri/crates/yss-project-operation/`          | 独立 Stateful Project 层：project/session 绑定的 operation admission、in-flight/completed replay protection 与 RAII reservation lifecycle 的唯一 owner；不持有 ProjectState、publication、I/O 或 transport                                                                                                   |
@@ -184,7 +184,10 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-diagnostics/`                | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing`                                                                                                                                                                                 |
 | `src-tauri/crates/yss-window-state/`               | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner                                                                                                                                                                                                                          |
 
-Rust 与 React 的职责单向流动：Rust 保存 domain authority，React 只保存 UI 状态和后端投影。资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用 `databases/{database-id}`，variable 使用 `variables/{VariableId}`。
+Rust 与 React 的职责单向流动：Rust 是已提交业务状态的唯一事实源；React 只保存 Rust
+只读投影、显式的未保存 editor draft 与 UI/runtime 状态，不维护第二份 committed model。
+资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用
+`databases/{database-id}`，variable 使用 `variables/{VariableId}`。
 
 ## 3. 前端组织与 IPC
 
@@ -229,7 +232,26 @@ Settings 与 node documentation 由 `WorkbenchOverlayHost` 承载。
 - root layout 只在启动 hydration 时恢复；当前按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`），payload 只有 `root` 与 `nested.logs`，不含版本字段、preferences、迁移或旧 reader。Project replacement 不会再次从该 key 恢复 root topology。
 - persisted Assistant 若存在则恢复其保存的 group/position；若用户已关闭 Assistant 且 snapshot 中缺失，startup restore 不会 additive ensure。Project replacement 保留 Details 与 Assistant topology，仅清理 project-scoped editor、Inspect 与 Result panels。
 
-### 3.1 Plot / Visualization
+### 3.1 Graph Draft 与覆盖保存
+
+Graph Editor 使用 document-style CQRS 边界：打开 Graph 时，Rust 返回 canonical document 与
+editor projection；Canvas 操作只推进前端 `GraphDraftSession`，不会修改 `ProjectState`，也不会
+发送 authoritative project event。Rust 可以作为无状态 domain transformer 校验一次 draft
+操作并返回新的 document/projection，但该调用不安装或持久化任何 Rust 状态。
+
+```text
+Load Graph → Frontend Draft → Dirty → Locked Save → Rust atomic overwrite
+```
+
+- Draft 保存期间 Graph Canvas、快捷键、Details、clipboard 和 undo/redo 全部不可写。
+- Save 提交完整 document，不携带 frontend `expectedRevision`；覆盖语义是 last write wins。
+- Rust 在文件事务中校验并持久化 candidate，再安装到 `ProjectState`；authority 安装失败会回滚文件。
+- Save 成功返回 canonical document/projection，前端整体采用并清除 dirty/history；失败保留原 draft。
+- dirty draft 不与 Rust snapshot 自动 merge/rebase。干净 projection 可因 watcher/event 被重新 hydrate。
+- Graph projection application、cache invalidation 和 Dockview stale-panel pruning 是单向投影/UI
+  生命周期操作，不命名为或实现为双状态 reconcile。
+
+### 3.2 Plot / Visualization
 
 Rust scientific modules 与 result payloads 拥有统计计算、canonical ordering、confidence fields 和其他科学决策。React 不成为第二套 scientific authority：Result 与 Chart source adapters 将 authoritative DTOs 转换为 source-independent discriminated `ChartModel` union；renderers 不感知 Rust、IPC、stores、report workflows 或 Bayes workflows。
 
@@ -299,7 +321,7 @@ command_bayes
 
 ### 5.1 ProjectData 与 ProjectStore
 
-`ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、chart、database declaration 和 computation settings 的 authoritative state。
+`ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、chart 和 database declaration 的 authoritative state；应用级 computation settings 由 `yss-settings` 统一负责。
 
 `ProjectStore` 只保留 Project session identity；随 project session 重建的运行时对象由
 `ApplicationSessionSlot` 持有：
@@ -416,7 +438,7 @@ yss-project-layout
 yss-path-display
   → Project registry + Application project query
 yss-project-layout + yss-project-identity
-  → yss-project-change → yss-project-watcher → yss-project-watcher-notify / Application reconciliation → Commands
+  → yss-project-change → yss-project-watcher → yss-project-watcher-notify / Application projection refresh → Commands
 yss-resource-naming
   → yss-graph-document
 yss-project-identity
@@ -429,9 +451,9 @@ yss-data-contract + yss-project-history + yss-project-identity
   → yss-function-editor-projection → Project index/Application events/Transport
 yss-project-layout + yss-project-progress
   → yss-project-discovery → yss-project-registry → Application/Commands
-yss-computation-settings
-  → yss-project-manifest → Project I/O/lifecycle
-yss-computation-settings + yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-chart-document
+yss-settings
+  → Application/Commands/Composition Root
+yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-chart-document
   → yss-project-model → yss-project
 yss-project-identity
   → yss-project-operation → yss-project
@@ -456,21 +478,21 @@ yss-display-naming
   → Project/Application database and variable display-name allocation
 yss-project-progress
   → Project registry workflows → Commands Tauri queue/Channel projection
-yss-computation-settings + yss-project-identity
-  → yss-project → Application SCI/Execution mappings → Commands/Event wire
+yss-settings
+  → Application SCI/Execution mappings → Commands wire
 yss-resource-naming + yss-project-identity
   → yss-chart-document → yss-project → Application/Commands
 ```
 
 - `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
-- `yss-computation-settings`：统一拥有持久化 numeric tolerance、missing-value policy、校验错误和 settings mutation envelopes。Project manifest 读取显式执行 fail-closed validation，嵌套 settings wire 拒绝未知字段；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
+- `yss-settings`：统一拥有应用级后端 settings、global numeric tolerance、missing-value policy、revisioned persistence 与校验。Project manifest 不再写入 computation settings；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
 - `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
 - `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Chart 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
 - `yss-project-change`：统一拥有不可绕过的 project-relative path 不变量、文件 change kind、显式 `RescanRequired` 与 `ProjectIndexInvalidation`。Watcher 故障不再伪造为 `metadata.yssbi` 文件变更，无关路径以 `None` 表示无操作而不是错误；notify adapter 忽略普通 read/open access 事件以避免自激重读循环，同时保留 `Close(Write)`、rename 语义和跨边界事件中的安全根内路径。`ProjectState` 重读、watcher lifecycle 与 Tauri event delivery 分别留在各自 owner，根 `project` 不提供 contract facade。
 - `yss-project-watcher`：统一拥有 watcher epoch、旧 session delivery admission 封锁、typed factory/session/drain protocol、超时后可重试的 drain ownership 与替换状态机。Application 只把 canonical `ProjectChange` 交给当前 Project authority，Notify adapter 只实现 filesystem observation；从核心删除未被使用的 duplicate quiet-period 常量及生产不可构造的 `DeliveryFailed` 分支，避免两个 debounce 事实源和伪终态。
 - `yss-project-watcher-notify`：统一拥有 `notify` backend、相关 event 到 canonical `ProjectChange` 的安全映射、单一 250ms debounce 事实、bounded coalescing worker 与可超时重试的 join handoff。根 crate 删除空 `platform` facade 和直接 `notify` 依赖，只在 composition root 将该 adapter 注入 `yss-project-watcher`；普通 read/open access 继续被忽略，callback uncertainty 显式升级为 rescan。
 - `yss-path-display`：统一移除用户可见或稳定存储路径中的 Windows `\\?\` 与 `\\?\UNC\` extended-length prefix。该纯字符串语义在所有宿主平台一致，避免离线测试或跨平台处理产生漂移；路径存在性、canonicalization 与 project validation 仍由调用方拥有，根 `project` 不提供兼容 facade。
-- `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version、manifest wire 与 computation settings 的反序列化校验；schema/settings 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
+- `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version 与 manifest wire；schema 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。应用 settings、文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
 - `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
 - `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
 - `yss-function-editor-projection`：统一从 `FunctionDocument` 构造带强类型 `ResourceRevision` 的 editor inputs/outputs，并拥有 Project index 与 mutation event 共用的严格 camelCase wire。三个调用方不再各自展开 parameter/signature，Transport 中字段完全相同的 DTO 镜像与复制转换已删除；Project I/O、Application event 编排和交付仍留在各自 owner。

@@ -1,7 +1,7 @@
 /**
  * Normalized editor-projection runtime structures.
  *
- * `graphDataStore` buckets are editor projections. `replaceProjection` is the
+ * `graphProjectionStore` buckets are editor projections. `replaceProjection` is the
  * only bucket creation path and always installs projection basis, revision,
  * request generation, and diagnostics together with normalized entities.
  */

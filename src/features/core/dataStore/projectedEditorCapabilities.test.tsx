@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { useRepeatablePinRemovable } from "@/features/core/pin/useRepeatablePinRemovable";
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { canCopyNode, canDeleteNode } from "./graphNodeSelectors";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,7 +23,7 @@ function installClipboardNode(canCopy: boolean | undefined, managed: boolean) {
     delete (capabilities as { canCopy?: boolean }).canCopy;
   }
   fixture.projection.nodes[0].capabilities = capabilities;
-  useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
 }
 
 function installProjectedCapabilities() {
@@ -40,13 +40,13 @@ function installProjectedCapabilities() {
     ...node.ports[1],
     canRemove: true,
   };
-  useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
   return fixture;
 }
 
 describe("projected active-editor capabilities", () => {
   beforeEach(() => {
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
   });
 
   it("protects Rust-managed nodes without a frontend node registry", () => {

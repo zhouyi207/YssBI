@@ -1368,7 +1368,7 @@ describe("workbench Dockview port", () => {
     expect((await port.serialize()).activeGroup).toBe(second.groupId);
   });
 
-  it("reconciles an active empty central group after removing the active sole panel", async () => {
+  it("repairs an active empty central group after removing the active sole panel", async () => {
     const fake = createFakeWorkbenchDockview();
     const { port, internal } = createDockviewHarness();
     internal.bind(fake.api);

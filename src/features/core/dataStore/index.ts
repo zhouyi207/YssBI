@@ -17,7 +17,7 @@ export * from "./datasetOverviewStore";
 export * from "./graphMetaStore";
 export * from "./variableStore";
 export * from "./graphEntityAccess";
-export * from "./graphDataStore";
+export * from "./graphProjectionStore";
 
 export { useNodeView } from "./useNodeView";
 export { REROUTE_NODE_STYLE_ID, toUiNode, uiNodeHasNoHeader, uiNodeIsReroute } from "./nodeView";

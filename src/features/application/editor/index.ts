@@ -31,7 +31,7 @@ export {
   requestCloseSavedEditorPanelsInGroup,
 } from "./editorPanelCloseCommands";
 export { resolveResourceDisplayName } from "./resolveResourceDisplayName";
-export { reconcileOpenEditorPanelsWithResources } from "./reconcileOpenEditorPanels";
+export { pruneEditorPanelsForMissingResources } from "./pruneEditorPanels";
 export { useProjectOperations } from "./useProjectOperations";
 export { useEditorCanvas } from "./useEditorCanvas";
 export { useDetailTarget } from "./useDetailTarget";

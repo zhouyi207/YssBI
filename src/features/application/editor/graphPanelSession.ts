@@ -1,5 +1,5 @@
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { useGraphDataStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { markResourceLoaded } from "@/features/core/resource";
 import { ensureEditorViewport } from "@/features/core/viewport";
@@ -44,7 +44,7 @@ export async function activateGraphPanelSession(
   touchGraphDocument(graphPath);
 
   const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
-  if (!loaded || !useGraphDataStore.getState().hasGraph(graphPath)) {
+  if (!loaded || !useGraphProjectionStore.getState().hasGraph(graphPath)) {
     const focused = useGraphSessionStore.getState().focusedSession;
     if (focused?.groupId === groupId && focused.graphPath === graphPath) {
       if (previous) {

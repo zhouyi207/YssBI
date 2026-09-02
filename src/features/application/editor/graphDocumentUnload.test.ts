@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   buildGraphResourceMeta,
@@ -12,7 +12,10 @@ import { resetGraphProjectionCoordinator } from "@/features/application/editorPr
 import * as graphProjectionCoordinator from "@/features/application/editorProjection/graphProjectionCoordinator";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { GraphService } from "@/services/graph/graphService";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 
@@ -58,7 +61,7 @@ describe("graph document lifecycle ownership", () => {
     );
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject("project-instance-1", 0);
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useProjectIOStore.setState({ projectInstanceId: "project-instance-1" });
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
@@ -72,8 +75,8 @@ describe("graph document lifecycle ownership", () => {
   it("starts a new load when an initial pending load is unloaded and immediately reopened", async () => {
     const oldFixture = makeEditorProjectionFixture({ graphPath, title: "Old load" });
     const reopenedFixture = makeEditorProjectionFixture({ graphPath, title: "Reopened load" });
-    const oldLoad = deferred<typeof oldFixture.projection>();
-    const reopenedLoad = deferred<typeof reopenedFixture.projection>();
+    const oldLoad = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    const reopenedLoad = deferred<ReturnType<typeof makeGraphEditorSession>>();
     vi.mocked(GraphProjectionService.loadGraph)
       .mockReturnValueOnce(oldLoad.promise)
       .mockReturnValueOnce(reopenedLoad.promise);
@@ -89,24 +92,26 @@ describe("graph document lifecycle ownership", () => {
       vi.mocked(graphProjectionCoordinator.loadGraphProjection).mock.calls[1]?.[1] ?? 0,
     );
 
-    oldLoad.resolve(oldFixture.projection);
+    oldLoad.resolve(makeGraphEditorSession(oldFixture.projection));
     await expect(initial).resolves.toBe(false);
-    reopenedLoad.resolve(reopenedFixture.projection);
+    reopenedLoad.resolve(makeGraphEditorSession(reopenedFixture.projection));
     await expect(reopened).resolves.toBe(true);
 
-    expect(useGraphDataStore.getState().graphEntities[graphPath]?.nodes["local-node"].title).toBe(
-      "Reopened load",
-    );
+    expect(
+      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].title,
+    ).toBe("Reopened load");
   });
 
   it("does not let an old unload completion overwrite a newer successful load", async () => {
     const current = makeEditorProjectionFixture({ graphPath, title: "Current" });
     const reopened = makeEditorProjectionFixture({ graphPath, title: "Reopened" });
-    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     const pendingUnload = deferred<void>();
     vi.mocked(GraphService.unloadProjectGraph).mockReturnValue(pendingUnload.promise);
-    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(reopened.projection);
+    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
+      makeGraphEditorSession(reopened.projection),
+    );
 
     const unloading = unloadGraphDocument(graphPath);
     await expect(useProjectIOStore.getState().loadGraph(graphPath)).resolves.toBe(true);
@@ -117,9 +122,9 @@ describe("graph document lifecycle ownership", () => {
     await unloading;
 
     expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);
-    expect(useGraphDataStore.getState().graphEntities[graphPath]?.nodes["local-node"].title).toBe(
-      "Reopened",
-    );
+    expect(
+      useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].title,
+    ).toBe("Reopened");
     expect(vi.mocked(GraphService.unloadProjectGraph).mock.calls[0]?.[2]).toBe(
       "project-instance-1",
     );

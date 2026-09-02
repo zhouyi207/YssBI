@@ -8,15 +8,15 @@
  */
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { toUiNode, type UINode } from "./nodeView";
 
 export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
-  const nodeData = useGraphDataStore((s) =>
+  const nodeData = useGraphProjectionStore((s) =>
     graphPath ? s.getGraphNode(graphPath, nodeId) : undefined,
   );
 
-  const pinObjs = useGraphDataStore(
+  const pinObjs = useGraphProjectionStore(
     useShallow((s) =>
       graphPath
         ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPin(graphPath, pid))
@@ -24,7 +24,7 @@ export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
     ),
   );
 
-  const pinConns = useGraphDataStore(
+  const pinConns = useGraphProjectionStore(
     useShallow((s) =>
       graphPath
         ? s

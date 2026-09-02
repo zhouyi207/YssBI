@@ -144,7 +144,8 @@ function EditorResourceDockPanel({ scope }: { scope: DockPanelScope }) {
 | panel/group/tab 物理位置与激活态          | Dockview                                              |
 | panel role、默认位置和生命周期规则        | Workbench                                             |
 | panel-local selection、viewport、临时交互 | 以 `panelInstanceId` 为 key 的 UI runtime state       |
-| Graph document、节点、连接、revision      | Rust authority；React 只保存 projection               |
+| 已提交 Graph document、节点、连接         | Rust authority；React 只保存 projection               |
+| 未保存 Graph editor draft                 | 当前 React editor session；Save 时完整覆盖提交        |
 | Chart document、revision                  | Rust authority；React 只保存 draft/projection         |
 | Database、Variable、Result                | Rust authority；React 只保存 projection/runtime state |
 

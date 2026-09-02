@@ -4,9 +4,9 @@ import {
 } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { NodePositionDto, PortAddressDto } from "@/shared/types/domain/editorProjection";
 import {
-  executeEditorMutation,
-  type ExecuteEditorMutationOutcome,
-} from "@/features/application/editorMutation/editorMutationCoordinator";
+  applyGraphDraftMutation,
+  type ApplyGraphDraftMutationOutcome,
+} from "@/features/application/graphDraft/graphDraftCoordinator";
 
 export interface CreateNodeFromDescriptorInput {
   graphPath: string;
@@ -18,12 +18,12 @@ export interface CreateNodeFromDescriptorInput {
 
 export async function createNodeFromDescriptor(
   input: CreateNodeFromDescriptorInput,
-): Promise<ExecuteEditorMutationOutcome> {
+): Promise<ApplyGraphDraftMutationOutcome> {
   if (!isNodeCreationDescriptor(input.descriptor)) {
     throw new Error("Unsupported node creation descriptor");
   }
 
-  return executeEditorMutation({
+  return applyGraphDraftMutation({
     graphPath: input.graphPath,
     locale: input.locale,
     mutation: {

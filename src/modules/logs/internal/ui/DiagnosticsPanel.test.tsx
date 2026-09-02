@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
@@ -53,7 +53,7 @@ describe("DiagnosticsPanel", () => {
   let root: Root;
 
   beforeEach(() => {
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useEditorStore.getState().clearDetailFocus();
     useGraphSessionStore.getState().reset();
     host = document.createElement("div");
@@ -67,7 +67,7 @@ describe("DiagnosticsPanel", () => {
   });
 
   it("lists diagnostics for every node in the focused graph", () => {
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: bucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
@@ -113,7 +113,7 @@ describe("DiagnosticsPanel", () => {
 
   it("shows an empty state when the focused graph has no node diagnostics", () => {
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
-    useGraphDataStore.setState({
+    useGraphProjectionStore.setState({
       graphEntities: {
         [graphPath]: {
           ...bucket,
@@ -165,7 +165,7 @@ describe("DiagnosticsPanel", () => {
         },
       },
     } as unknown as GraphEntityBucket;
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: portBucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: portBucket } });
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {

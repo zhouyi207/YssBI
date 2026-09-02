@@ -27,7 +27,10 @@ describe("project event stream", () => {
     const callback = listenMock.mock.calls[0][1] as (event: { payload: unknown }) => void;
     callback({ payload: projectEvents.events[0] });
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({ kind: "event", event: { type: "GraphDelta" } });
+    expect(received[0]).toMatchObject({
+      kind: "event",
+      event: { type: "ResourceMutationCommitted" },
+    });
 
     unsubscribe();
     unsubscribe();
@@ -51,8 +54,8 @@ describe("project event stream", () => {
       payload: {
         type: "Project",
         payload: {
-          type: "GraphDelta",
-          payload: { projectInstanceId: "project-1", message: "backend prose" },
+          type: "ResourceMutationCommitted",
+          payload: { message: "backend prose" },
         },
       },
     });

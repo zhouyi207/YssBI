@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
-import type { GraphMutationCommandResult } from "@/features/core/history/types";
+import type { GraphDraftCommandResult } from "@/features/core/history/types";
 import { useEditorOperations } from "./useEditorOperations";
 import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 
@@ -88,7 +88,7 @@ vi.mock("@/features/core/dataStore/graphNodeSelectors", () => ({
   canCutNode: (graphPath: string, nodeId: string) =>
     mocks.canCopyNode(graphPath, nodeId) && mocks.canDeleteNode(graphPath, nodeId),
 }));
-vi.mock("@/features/application/editorMutation/subgraphExportCoordinator", () => ({
+vi.mock("@/features/application/graphDraft/subgraphExportCoordinator", () => ({
   exportEditorSubgraph: mocks.exportEditorSubgraph,
 }));
 vi.mock("@/services/clipboard", () => ({
@@ -99,16 +99,16 @@ vi.mock("@/features/core/history", () => ({
   executeCommand: vi.fn(),
   executeCommandWithResult: mocks.executeCommandWithResult,
 }));
-vi.mock("@/features/application/editorMutation/historyCoordinator", () => ({
+vi.mock("@/features/application/graphDraft/historyCoordinator", () => ({
   undoEditorHistory: vi.fn(),
   redoEditorHistory: vi.fn(),
 }));
-vi.mock("@/features/application/editorMutation/safeGraphMutation", () => ({
-  executeSafeGraphMutation: vi.fn(),
+vi.mock("@/features/application/graphDraft/safeGraphDraftEdit", () => ({
+  executeSafeGraphDraftEdit: vi.fn(),
 }));
 vi.mock("./edgeOperations", () => ({ disconnectConnectionsById: vi.fn() }));
-vi.mock("@/features/core/dataStore/graphDataStore", () => ({
-  useGraphDataStore: { getState: vi.fn(() => ({ getGraphNodePins: () => [] })) },
+vi.mock("@/features/core/dataStore/graphProjectionStore", () => ({
+  useGraphProjectionStore: { getState: vi.fn(() => ({ getGraphNodePins: () => [] })) },
 }));
 vi.mock("./rightSidebarActions", () => ({
   setInspectionContext: mocks.setInspectionContext,
@@ -129,31 +129,29 @@ const snapshot: ClipboardSubgraphDto = {
   connections: [],
 };
 
-function appliedWithInserted(...nodeIds: string[]): GraphMutationCommandResult {
+function appliedWithInserted(...nodeIds: string[]): GraphDraftCommandResult {
   return {
     status: "applied",
     result: {
-      projectInstanceId: "project-a",
-      delta: {
-        graphPath,
-        fromRevision: 1,
-        toRevision: 2,
-        causedBy: "operation-a",
-        payload: {
-          operations: nodeIds.map((id) => ({
-            operation: "insert_node" as const,
-            node: {
-              id,
-              node_type: "tests.node",
-              position: { x: 0, y: 0 },
-              parameters: {},
-              user_label: null,
-            },
-          })),
-        },
+      document: {
+        nodes: {},
+        port_bindings: [],
+        connections: {},
+        input_states: [],
+      },
+      patch: {
+        operations: nodeIds.map((id) => ({
+          operation: "insert_node" as const,
+          node: {
+            id,
+            node_type: "tests.node",
+            position: { x: 0, y: 0 },
+            parameters: {},
+            user_label: null,
+          },
+        })),
       },
       projectionReplacement: {} as never,
-      history: { canUndo: true, canRedo: false },
     },
   };
 }
@@ -323,7 +321,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   it.each(["duplicate", "paste", "cut"] as const)(
     "preserves a newer node selection when %s settles in the same group and resource",
     async (operationType) => {
-      const pending = deferred<GraphMutationCommandResult | null>();
+      const pending = deferred<GraphDraftCommandResult | null>();
       mocks.executeCommandWithResult.mockReturnValueOnce(pending.promise);
 
       const operation =
@@ -352,7 +350,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     expect(mocks.selectionByGroup.get("group-a")).toEqual(["copy-a", "copy-b"]);
 
     mocks.selectionByGroup.set("group-a", ["copy-a", "copy-b"]);
-    const pending = deferred<GraphMutationCommandResult | null>();
+    const pending = deferred<GraphDraftCommandResult | null>();
     mocks.executeCommandWithResult.mockReturnValueOnce(pending.promise);
     const operation = operations.duplicateNodes(["copy-a"]);
     mocks.activeResourceByGroup.set("group-a", "events/other.yssbi-event");

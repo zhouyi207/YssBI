@@ -3,7 +3,7 @@ import { ProjectService } from "@/services/project/projectService";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
-  reconcileProjectPath,
+  hydrateProjectPath,
   resolveActiveProjectPath,
 } from "@/features/application/project/projectSession";
 
@@ -23,7 +23,7 @@ describe("projectSession", () => {
   it("returns cached path without calling backend", async () => {
     useProjectIOStore.setState({ currentPath: "D:/demo/metadata.yssbi" });
 
-    const path = await reconcileProjectPath();
+    const path = await hydrateProjectPath();
 
     expect(path).toBe("D:/demo/metadata.yssbi");
     expect(ProjectService.getProjectPath).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe("projectSession", () => {
     expect(useProjectIOStore.getState().currentPath).toBeNull();
   });
 
-  it("isolates reconciliation across project identity replacement", async () => {
+  it("isolates hydration across project identity replacement", async () => {
     let resolveProjectA!: (path: string | null) => void;
     let resolveProjectB!: (path: string | null) => void;
     const projectAPath = new Promise<string | null>((resolve) => {
@@ -60,20 +60,20 @@ describe("projectSession", () => {
       projectInstanceId === "project-instance-1" ? projectAPath : projectBPath,
     );
 
-    const projectAReconciliation = reconcileProjectPath();
+    const projectAHydration = hydrateProjectPath();
     startProjectLifecycle("project-instance-2");
     useProjectIOStore.setState({ currentPath: null });
-    const projectBReconciliation = reconcileProjectPath();
+    const projectBHydration = hydrateProjectPath();
 
     expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(1, "project-instance-1");
     expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(2, "project-instance-2");
 
     resolveProjectA("D:/project-a/metadata.yssbi");
-    await expect(projectAReconciliation).resolves.toBeNull();
+    await expect(projectAHydration).resolves.toBeNull();
     expect(useProjectIOStore.getState().currentPath).toBeNull();
 
     resolveProjectB("D:/project-b/metadata.yssbi");
-    await expect(projectBReconciliation).resolves.toBe("D:/project-b/metadata.yssbi");
+    await expect(projectBHydration).resolves.toBe("D:/project-b/metadata.yssbi");
     expect(useProjectIOStore.getState().currentPath).toBe("D:/project-b/metadata.yssbi");
   });
 });

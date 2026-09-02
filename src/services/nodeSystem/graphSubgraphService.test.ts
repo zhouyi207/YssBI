@@ -19,13 +19,14 @@ const completeSnapshot = {
   inputStates: [],
   connections: [],
 };
+const document = { nodes: {}, port_bindings: [], connections: {}, input_states: [] };
 
 describe("GraphSubgraphService", () => {
   it("exports through the identity-scoped command and parses the response", async () => {
     vi.mocked(invoke).mockResolvedValue(completeSnapshot);
 
     await expect(
-      GraphSubgraphService.exportSubgraph("project-a", "events/main.yssbi-event", [
+      GraphSubgraphService.exportSubgraph("project-a", "events/main.yssbi-event", document, [
         "node-a",
         "node-b",
       ]),
@@ -34,6 +35,7 @@ describe("GraphSubgraphService", () => {
     expect(invoke).toHaveBeenCalledWith("export_graph_subgraph", {
       projectInstanceId: "project-a",
       graphPath: "events/main.yssbi-event",
+      document,
       nodeIds: ["node-a", "node-b"],
     });
   });
@@ -42,7 +44,9 @@ describe("GraphSubgraphService", () => {
     vi.mocked(invoke).mockResolvedValue({ ...completeSnapshot, schemaVersion: 2 });
 
     await expect(
-      GraphSubgraphService.exportSubgraph("project-a", "events/main.yssbi-event", ["node-a"]),
+      GraphSubgraphService.exportSubgraph("project-a", "events/main.yssbi-event", document, [
+        "node-a",
+      ]),
     ).rejects.toThrow("Invalid clipboard subgraph response");
   });
 });

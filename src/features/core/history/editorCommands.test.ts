@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { portAddressKey } from "@/features/domain/editorProjection";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useExecutionStore } from "@/features/core/execution";
 import { executeCommand, executeCommandOutcome, executeCommandWithResult } from "./commandExecutor";
-import { ensureGraphMutationPortRegistered } from "@/features/application/editorMutation/registerGraphMutationPort";
+import { ensureGraphDraftPortRegistered } from "@/features/application/graphDraft/registerGraphDraftPort";
 
-const executeEditorMutation = vi.hoisted(() => vi.fn());
+const applyGraphDraftMutation = vi.hoisted(() => vi.fn());
 
-vi.mock("@/features/application/editorMutation/editorMutationCoordinator", () => ({
-  executeEditorMutation,
+vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
+  applyGraphDraftMutation,
 }));
 vi.mock(
   "@/features/application/editorProjection/graphProjectionCoordinator",
@@ -22,7 +22,7 @@ vi.mock(
   }),
 );
 
-ensureGraphMutationPortRegistered();
+ensureGraphDraftPortRegistered();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -52,7 +52,7 @@ function installProjection() {
     ...fixture.projection.connections[0],
     input: fixture.projection.nodes[0].ports[1].address,
   };
-  useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
   return {
     outputKey: portAddressKey(fixture.projection.nodes[0].ports[0].address),
     inputKey: portAddressKey(fixture.projection.nodes[0].ports[1].address),
@@ -64,7 +64,7 @@ function installProjection() {
 describe("forward-only editor commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
   });
 
   it.each([
@@ -159,20 +159,20 @@ describe("forward-only editor commands", () => {
     "sends $type as exactly one high-level intent without pre-response entity edits",
     async ({ type, build, mutation }) => {
       const fixture = installProjection();
-      const before = useGraphDataStore.getState().graphEntities[graphPath];
+      const before = useGraphProjectionStore.getState().graphEntities[graphPath];
       const pending = deferred<{ status: "applied" }>();
-      executeEditorMutation.mockReturnValueOnce(pending.promise);
+      applyGraphDraftMutation.mockReturnValueOnce(pending.promise);
       const randomId = vi.spyOn(crypto, "randomUUID");
 
       const command = executeCommand(graphPath, type, build(fixture) as never);
 
-      expect(executeEditorMutation).toHaveBeenCalledTimes(1);
-      expect(executeEditorMutation).toHaveBeenCalledWith({
+      expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
+      expect(applyGraphDraftMutation).toHaveBeenCalledWith({
         graphPath,
         locale: "en-US",
         mutation: mutation(fixture),
       });
-      expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(before);
+      expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(before);
       expect(randomId).not.toHaveBeenCalled();
 
       pending.resolve({ status: "applied" });
@@ -199,7 +199,7 @@ describe("forward-only editor commands", () => {
       },
     },
   ])(
-    "sends $type as one authoritative mutation and preserves its committed result",
+    "sends $type as one local draft edit and preserves its transformed result",
     async ({ type, args, mutation }) => {
       installProjection();
       const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
@@ -215,7 +215,7 @@ describe("forward-only editor commands", () => {
         projectionReplacement: {} as never,
         history: { canUndo: true, canRedo: false },
       };
-      executeEditorMutation.mockResolvedValueOnce({ status: "applied", result });
+      applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied", result });
       const randomId = vi.spyOn(crypto, "randomUUID");
 
       await expect(executeCommandWithResult(graphPath, type, args)).resolves.toEqual({
@@ -223,8 +223,8 @@ describe("forward-only editor commands", () => {
         result,
       });
 
-      expect(executeEditorMutation).toHaveBeenCalledOnce();
-      expect(executeEditorMutation).toHaveBeenCalledWith({
+      expect(applyGraphDraftMutation).toHaveBeenCalledOnce();
+      expect(applyGraphDraftMutation).toHaveBeenCalledWith({
         graphPath,
         locale: "en-US",
         mutation,
@@ -238,9 +238,9 @@ describe("forward-only editor commands", () => {
 
   it("sends InsertReroute without a disconnect, create, store write, or ID allocation", async () => {
     installProjection();
-    const before = useGraphDataStore.getState().graphEntities[graphPath];
+    const before = useGraphProjectionStore.getState().graphEntities[graphPath];
     const pending = deferred<{ status: "applied" }>();
-    executeEditorMutation.mockReturnValueOnce(pending.promise);
+    applyGraphDraftMutation.mockReturnValueOnce(pending.promise);
     const randomId = vi.spyOn(crypto, "randomUUID");
 
     const command = executeCommand(graphPath, "InsertReroute", {
@@ -248,8 +248,8 @@ describe("forward-only editor commands", () => {
       position: { x: 120, y: 80 },
     });
 
-    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
-    expect(executeEditorMutation).toHaveBeenCalledWith({
+    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
       graphPath,
       locale: "en-US",
       mutation: {
@@ -258,12 +258,12 @@ describe("forward-only editor commands", () => {
       },
     });
     expect(
-      executeEditorMutation.mock.calls.flatMap(([input]) => input.mutation.type),
+      applyGraphDraftMutation.mock.calls.flatMap(([input]) => input.mutation.type),
     ).not.toContain("disconnectConnections");
     expect(
-      executeEditorMutation.mock.calls.flatMap(([input]) => input.mutation.type),
+      applyGraphDraftMutation.mock.calls.flatMap(([input]) => input.mutation.type),
     ).not.toContain("createNode");
-    expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(before);
+    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(before);
     expect(randomId).not.toHaveBeenCalled();
 
     pending.resolve({ status: "applied" });
@@ -273,7 +273,7 @@ describe("forward-only editor commands", () => {
 
   it("keeps MoveNodes forward-only and sends final positions unchanged", async () => {
     installProjection();
-    executeEditorMutation.mockResolvedValueOnce({ status: "applied" });
+    applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied" });
 
     await expect(
       executeCommand(graphPath, "MoveNodes", {
@@ -281,8 +281,8 @@ describe("forward-only editor commands", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
-    expect(executeEditorMutation).toHaveBeenCalledWith({
+    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
       graphPath,
       locale: "en-US",
       mutation: {
@@ -304,7 +304,7 @@ describe("forward-only editor commands", () => {
 
       await expect(executeCommand(graphPath, type, args as never)).resolves.toBe(false);
 
-      expect(executeEditorMutation).not.toHaveBeenCalled();
+      expect(applyGraphDraftMutation).not.toHaveBeenCalled();
     },
   );
 
@@ -315,7 +315,7 @@ describe("forward-only editor commands", () => {
       status: "rejected" as const,
       code: "graph_connection_type_mismatch" as const,
     };
-    executeEditorMutation.mockResolvedValueOnce(rejection);
+    applyGraphDraftMutation.mockResolvedValueOnce(rejection);
 
     await expect(
       executeCommandOutcome(graphPath, "ConnectPins", {
@@ -324,7 +324,7 @@ describe("forward-only editor commands", () => {
       }),
     ).resolves.toEqual(rejection);
 
-    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
+    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
     expect(markGraphDirty).not.toHaveBeenCalled();
   });
 
@@ -332,11 +332,11 @@ describe("forward-only editor commands", () => {
     { status: "applied" as const, dirtyCalls: 1 },
     { status: "noop" as const, result: {} as never, dirtyCalls: 0 },
     { status: "rejected" as const, code: "graph_connection_type_mismatch" as const, dirtyCalls: 0 },
-    { status: "conflict" as const, dirtyCalls: 0 },
+    { status: "saving" as const, dirtyCalls: 0 },
   ])("marks InsertReroute dirty only for $status", async (outcome) => {
     installProjection();
     const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
-    executeEditorMutation.mockResolvedValueOnce(outcome);
+    applyGraphDraftMutation.mockResolvedValueOnce(outcome);
 
     await expect(
       executeCommandOutcome(graphPath, "InsertReroute", {
@@ -353,7 +353,7 @@ describe("forward-only editor commands", () => {
     installProjection();
     const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
     const noop = { status: "noop" as const, result: {} as never };
-    executeEditorMutation.mockResolvedValueOnce(noop);
+    applyGraphDraftMutation.mockResolvedValueOnce(noop);
 
     await expect(
       executeCommandOutcome(graphPath, "DeleteNodes", {
@@ -366,7 +366,7 @@ describe("forward-only editor commands", () => {
 
   it("infers graph mutation command outcomes at runtime without erasing the discriminant", async () => {
     const fixture = installProjection();
-    executeEditorMutation.mockResolvedValueOnce({
+    applyGraphDraftMutation.mockResolvedValueOnce({
       status: "rejected",
       code: "graph_connection_type_mismatch",
     });
@@ -385,7 +385,7 @@ describe("forward-only editor commands", () => {
 
   it("keeps the boolean command compatibility contract for rejected outcomes", async () => {
     const fixture = installProjection();
-    executeEditorMutation.mockResolvedValueOnce({
+    applyGraphDraftMutation.mockResolvedValueOnce({
       status: "rejected",
       code: "graph_connection_type_mismatch",
     });

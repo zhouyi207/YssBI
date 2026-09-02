@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import { executeEditorMutation } from "@/features/application/editorMutation/editorMutationCoordinator";
+import { applyGraphDraftMutation } from "@/features/application/graphDraft/graphDraftCoordinator";
 import { createNodeFromDescriptor } from "./createNodeFromDescriptor";
 
-vi.mock("@/features/application/editorMutation/editorMutationCoordinator", () => ({
-  executeEditorMutation: vi.fn(),
+vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
+  applyGraphDraftMutation: vi.fn(),
 }));
 
 describe("createNodeFromDescriptor", () => {
@@ -14,8 +14,8 @@ describe("createNodeFromDescriptor", () => {
   });
 
   it("sends the exact static descriptor and position through the mutation coordinator", async () => {
-    const outcome = { status: "conflict" as const };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const outcome = { status: "saving" as const };
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const descriptor: NodeCreationDescriptor = {
       kind: "static",
       nodeTypeId: "math.add",
@@ -30,8 +30,8 @@ describe("createNodeFromDescriptor", () => {
       }),
     ).resolves.toBe(outcome);
 
-    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
-    expect(executeEditorMutation).toHaveBeenCalledWith({
+    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
       graphPath: "functions/Main.yssbi-function",
       locale: "en-US",
       mutation: {
@@ -47,8 +47,8 @@ describe("createNodeFromDescriptor", () => {
   });
 
   it("sends the exact parameterized-static descriptor unchanged", async () => {
-    const outcome = { status: "conflict" as const };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const outcome = { status: "saving" as const };
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const descriptor: NodeCreationDescriptor = {
       kind: "parameterizedStatic",
       nodeTypeId: "yssbi.dataframe.project",
@@ -64,8 +64,8 @@ describe("createNodeFromDescriptor", () => {
       }),
     ).resolves.toBe(outcome);
 
-    expect(executeEditorMutation).toHaveBeenCalledOnce();
-    expect(executeEditorMutation).toHaveBeenCalledWith(
+    expect(applyGraphDraftMutation).toHaveBeenCalledOnce();
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         mutation: {
           type: "createNode",
@@ -76,8 +76,8 @@ describe("createNodeFromDescriptor", () => {
   });
 
   it("sends the exact resource-bound descriptor unchanged", async () => {
-    const outcome = { status: "conflict" as const };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const outcome = { status: "saving" as const };
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const descriptor: NodeCreationDescriptor = {
       kind: "resourceBound",
       nodeTypeId: "functions.call",
@@ -95,7 +95,7 @@ describe("createNodeFromDescriptor", () => {
       }),
     ).resolves.toBe(outcome);
 
-    expect(executeEditorMutation).toHaveBeenCalledWith(
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         mutation: {
           type: "createNode",
@@ -106,8 +106,8 @@ describe("createNodeFromDescriptor", () => {
   });
 
   it("forwards an exact source port for atomic create and connect", async () => {
-    const outcome = { status: "conflict" as const };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const outcome = { status: "saving" as const };
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const descriptor: NodeCreationDescriptor = { kind: "static", nodeTypeId: "math.add" };
     const connectFrom: PortAddressDto = {
       kind: "declared",
@@ -123,7 +123,7 @@ describe("createNodeFromDescriptor", () => {
       connectFrom,
     });
 
-    expect(executeEditorMutation).toHaveBeenCalledWith(
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         mutation: {
           type: "createNode",
@@ -149,6 +149,6 @@ describe("createNodeFromDescriptor", () => {
       }),
     ).rejects.toThrow("Unsupported node creation descriptor");
 
-    expect(executeEditorMutation).not.toHaveBeenCalled();
+    expect(applyGraphDraftMutation).not.toHaveBeenCalled();
   });
 });

@@ -316,7 +316,7 @@ describe("scoped node Catalog architecture audit", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps node creation behind one descriptor-authoritative mutation boundary", () => {
+  it("keeps node creation behind one descriptor-authoritative draft boundary", () => {
     const auditedFiles = scopedDirectories
       .flatMap(productionFiles)
       .map((path) => relative(resolve("."), resolve(path)).replace(/\\/g, "/"));

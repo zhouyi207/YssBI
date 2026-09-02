@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { ResolvedPinSpec } from "../resolveNodePinSpecs";
 import { NodePinInterfacePanel } from "./NodePinInterfacePanel";
 
@@ -165,7 +165,7 @@ function chooseSelectItem(item: HTMLElement | undefined): void {
 
 afterEach(() => {
   document.body.replaceChildren();
-  useGraphDataStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.setState({ graphEntities: {} });
 });
 
 beforeEach(() => {
@@ -177,7 +177,7 @@ beforeEach(() => {
 
 describe("NodePinInterfacePanel", () => {
   it("renders pin selectors with compatible graph options", async () => {
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -254,7 +254,7 @@ describe("NodePinInterfacePanel", () => {
   });
 
   it("uses the output slots to add and remove exact graph connections", async () => {
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -297,7 +297,7 @@ describe("NodePinInterfacePanel", () => {
     connectedBucket.pinConnections[output.id] = ["edge-1"];
     connectedBucket.pinConnections["target-input"] = ["edge-1"];
     await act(async () => {
-      useGraphDataStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
+      useGraphProjectionStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
@@ -322,7 +322,7 @@ describe("NodePinInterfacePanel", () => {
   it("does not expose a raw node id when a connection target lacks its node projection", async () => {
     const bucket = graphBucket();
     delete bucket.nodes.target;
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: bucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -354,7 +354,7 @@ describe("NodePinInterfacePanel", () => {
   });
 
   it("uses the input selector to connect or clear its upstream output", async () => {
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -398,7 +398,7 @@ describe("NodePinInterfacePanel", () => {
     connectedBucket.pinConnections[input.id] = ["edge-2"];
     connectedBucket.pinConnections["source-output"] = ["edge-2"];
     await act(async () => {
-      useGraphDataStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
+      useGraphProjectionStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,

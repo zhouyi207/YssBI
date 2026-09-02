@@ -1,5 +1,5 @@
 import type { ResourceMoveDto } from "@/shared/types/domain/editorMutation";
-import { useGraphDataStore, useGraphMetaStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore, useGraphMetaStore } from "@/features/core/dataStore";
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import {
   useGraphSessionStore,
@@ -205,7 +205,7 @@ export function prepareGraphResourceMove(
       `move destination replacement disagrees with source loaded ownership '${move.from}'`,
     );
   }
-  const graphState = useGraphDataStore.getState();
+  const graphState = useGraphProjectionStore.getState();
   if (graphState.graphEntities[move.to]) {
     throw new Error(`destination projection '${move.to}' already exists`);
   }

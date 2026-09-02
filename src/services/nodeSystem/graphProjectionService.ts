@@ -1,6 +1,6 @@
 import { invokeCommand } from "@/services/ipc";
-import type { EditorGraphProjectionDto } from "@/shared/types/dto/editorProjection";
-import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
+import type { GraphEditorSessionDto } from "@/shared/types/dto/editorMutation";
+import { parseGraphEditorSessionDto } from "@/shared/types/dto/editorMutationWireParser";
 
 export class GraphProjectionService {
   static async loadGraph(
@@ -8,26 +8,26 @@ export class GraphProjectionService {
     locale: string,
     lifecycleToken: number,
     projectInstanceId: string,
-  ): Promise<EditorGraphProjectionDto> {
+  ): Promise<GraphEditorSessionDto> {
     const response: unknown = await invokeCommand("load_project_graph", {
       graphPath,
       locale,
       lifecycleToken,
       projectInstanceId,
     });
-    return parseEditorGraphProjectionDto(response);
+    return parseGraphEditorSessionDto(response);
   }
 
   static async hydrateGraph(
     projectInstanceId: string,
     graphPath: string,
     locale: string,
-  ): Promise<EditorGraphProjectionDto> {
+  ): Promise<GraphEditorSessionDto> {
     const response: unknown = await invokeCommand("hydrate_editor_graph", {
       projectInstanceId,
       graphPath,
       locale,
     });
-    return parseEditorGraphProjectionDto(response);
+    return parseGraphEditorSessionDto(response);
   }
 }

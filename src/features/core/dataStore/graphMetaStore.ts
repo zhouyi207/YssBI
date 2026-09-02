@@ -3,7 +3,7 @@ import { GraphPath, NodeId, type FunctionSignaturePin } from "@/shared/types";
 import type { FunctionSignatureDto } from "@/shared/types/domain/editorMutation";
 import { logger } from "@/features/core/observability/logger";
 
-/** 函数签名投影（名称见 ResourceStore，图体见 GraphDataStore）。 */
+/** 函数签名投影（名称见 ResourceStore，图体见 GraphProjectionStore）。 */
 export interface GraphMeta {
   path: GraphPath;
   name: string;

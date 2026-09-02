@@ -5,7 +5,7 @@ import {
   loadActivatedProject,
   useProjectIOStore,
 } from "@/features/application/project/projectIOStore";
-import { reconcileProjectPath } from "@/features/application/project/projectSession";
+import { hydrateProjectPath } from "@/features/application/project/projectSession";
 
 /** Hydrate the current backend project for a window through the Application entrance. */
 export async function initializeProjectForCurrentWindow(): Promise<void> {
@@ -17,8 +17,8 @@ export async function initializeProjectForCurrentWindow(): Promise<void> {
   const { status, currentPath, loadProject } = useProjectIOStore.getState();
   if (status === LoadStatus.Ready) {
     if (currentPath) return;
-    const reconciled = await reconcileProjectPath();
-    if (!reconciled) return;
+    const hydrated = await hydrateProjectPath();
+    if (!hydrated) return;
   }
   await loadProject();
 }

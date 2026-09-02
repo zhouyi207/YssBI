@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { executeEditorMutation } from "@/features/application/editorMutation/editorMutationCoordinator";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { applyGraphDraftMutation } from "@/features/application/graphDraft/graphDraftCoordinator";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { setNodeParameters } from "./setNodeParameters";
 
-vi.mock("@/features/application/editorMutation/editorMutationCoordinator", () => ({
-  executeEditorMutation: vi.fn(),
+vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
+  applyGraphDraftMutation: vi.fn(),
 }));
 
 describe("setNodeParameters", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("forwards one exact atomic parameter mutation through the revision coordinator", async () => {
+  it("forwards one exact atomic parameter edit through the Graph draft coordinator", async () => {
     const outcome = { status: "applied" as const, result: {} as never };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const parameters = {
       predicate: {
         column: "count",
@@ -30,8 +30,8 @@ describe("setNodeParameters", () => {
       }),
     ).resolves.toBe(outcome);
 
-    expect(executeEditorMutation).toHaveBeenCalledOnce();
-    expect(executeEditorMutation).toHaveBeenCalledWith({
+    expect(applyGraphDraftMutation).toHaveBeenCalledOnce();
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
       graphPath: "events/Main.yssbi-event",
       locale: "en-US",
       mutation: {
@@ -43,8 +43,8 @@ describe("setNodeParameters", () => {
 
   it("removes a null override while preserving the complete atomic parameter map", async () => {
     const outcome = { status: "applied" as const, result: {} as never };
-    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
-    vi.spyOn(useGraphDataStore, "getState").mockReturnValue({
+    vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
+    vi.spyOn(useGraphProjectionStore, "getState").mockReturnValue({
       getGraphNode: () => ({
         parameterEditors: [
           { key: "constant", value: true },
@@ -61,7 +61,7 @@ describe("setNodeParameters", () => {
       parameters: { convergence_tolerance: null },
     });
 
-    expect(executeEditorMutation).toHaveBeenCalledWith(
+    expect(applyGraphDraftMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         mutation: {
           type: "setParameters",

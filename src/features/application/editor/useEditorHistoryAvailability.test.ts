@@ -2,32 +2,22 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHistoryStore } from "@/features/core/history";
-import { HistoryService } from "@/services/nodeSystem/historyService";
-import {
-  resetHistoryCoordinator,
-  setHistoryStatus,
-} from "@/features/application/editorMutation/historyCoordinator";
-import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const graphPath = "events/Main.yssbi-event";
 const activeEditor = vi.hoisted(() => ({
   activeResourceRef: "events/Main.yssbi-event" as string | null,
 }));
-const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 
 vi.mock("./editorGroupContext", () => ({
   useActiveEditorGroup: () => ({ activeResourceRef: activeEditor.activeResourceRef }),
 }));
-vi.mock("@/services/nodeSystem/historyService", () => ({
-  HistoryService: {
-    getStatus: vi.fn(async () => ({ canUndo: false, canRedo: false })),
-    undo: vi.fn(),
-    redo: vi.fn(),
-  },
-}));
+
+const draftDocument = { nodes: {}, port_bindings: [], connections: {}, input_states: [] };
+const version = { document: draftDocument, projection: {} as never };
 
 describe("useEditorHistoryAvailability", () => {
   let host: HTMLDivElement;
@@ -40,11 +30,8 @@ describe("useEditorHistoryAvailability", () => {
   }
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    resetHistoryCoordinator();
-    projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    activeEditor.activeResourceRef = "events/Main.yssbi-event";
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
+    activeEditor.activeResourceRef = graphPath;
+    useGraphDraftStore.setState({ sessions: {} });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -55,32 +42,33 @@ describe("useEditorHistoryAvailability", () => {
     host.remove();
   });
 
-  it("queries backend history status when availability is first consumed", async () => {
-    vi.mocked(HistoryService.getStatus).mockResolvedValueOnce({ canUndo: true, canRedo: false });
-
-    await act(async () => {
-      root.render(createElement(Harness));
-      await Promise.resolve();
+  it("derives undo/redo only from the active frontend draft and masks both while saving", () => {
+    useGraphDraftStore.setState({
+      sessions: {
+        [graphPath]: {
+          ...version,
+          savedDocument: draftDocument,
+          saving: false,
+          undoStack: [version],
+          redoStack: [version],
+        },
+      },
     });
-
-    expect(HistoryService.getStatus).toHaveBeenCalledOnce();
-    expect(HistoryService.getStatus).toHaveBeenCalledWith(projectInstanceId);
-    expect(current).toMatchObject({ canUndo: true, canRedo: false, pending: false });
-  });
-
-  it("uses project history status only for an active graph and masks it while pending", () => {
-    setHistoryStatus({ canUndo: true, canRedo: true });
     act(() => root.render(createElement(Harness)));
-
     expect(current).toEqual({
-      activeResourceRef: "events/Main.yssbi-event",
+      activeResourceRef: graphPath,
       canUndo: true,
       canRedo: true,
       pending: false,
     });
 
-    act(() => useHistoryStore.setState({ pending: true }));
-    expect(current).toMatchObject({ canUndo: false, canRedo: false, pending: true });
+    act(() => useGraphDraftStore.getState().beginSave(graphPath));
+    expect(current).toEqual({
+      activeResourceRef: graphPath,
+      canUndo: false,
+      canRedo: false,
+      pending: true,
+    });
 
     activeEditor.activeResourceRef = null;
     act(() => root.render(createElement(Harness)));
@@ -88,7 +76,7 @@ describe("useEditorHistoryAvailability", () => {
       activeResourceRef: null,
       canUndo: false,
       canRedo: false,
-      pending: true,
+      pending: false,
     });
   });
 });

@@ -71,12 +71,11 @@ describe("Rust-generated node-system golden contracts", () => {
     expect(row.functionEditorProjection.outputs[0].name).toBe("Array<String>");
   });
 
-  it("consumes the exact production GraphDelta and ResourceMutationCommitted event shapes", () => {
+  it("consumes the exact production ResourceMutationCommitted event shapes", () => {
     expect(projectEvents.format).toBe("yssbi.project-events.v1");
-    expect(projectEvents.events.map((event) => [event.type, event.payload.type])).toEqual([
-      ["Project", "GraphDelta"],
-      ...projectEvents.resourceMutationResults.map(() => ["Project", "ResourceMutationCommitted"]),
-    ]);
+    expect(projectEvents.events.map((event) => [event.type, event.payload.type])).toEqual(
+      projectEvents.resourceMutationResults.map(() => ["Project", "ResourceMutationCommitted"]),
+    );
     expect(projectEvents.resourceMutationResults.map(({ scenario }) => scenario)).toEqual([
       "create",
       "save",

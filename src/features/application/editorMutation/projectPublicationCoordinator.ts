@@ -13,7 +13,7 @@ import type {
   ChartIndexEntry,
 } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphDataStore";
+import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphProjectionStore";
 import {
   acceptProjectLifecycleActivation,
   captureProjectIdentity,
@@ -33,7 +33,7 @@ import type { ProjectIndexRow } from "@/shared/types/domain/project";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphProjectionForPublication } from "@/features/application/editorProjection/graphProjectionCoordinator";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useHistoryStore } from "@/features/core/history";
 import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 import {
@@ -670,7 +670,8 @@ function commitHistoryAfterPublication(plan: PreparedProjectPublication): void |
 const productionDependencies: ProjectPublicationDependencies = {
   loadRecoverySnapshot: (projectInstanceId) => ProjectService.getProjectIndex(projectInstanceId),
   prepareGraphProjection: prepareGraphProjectionForPublication,
-  captureLoadedGraphPaths: () => new Set(Object.keys(useGraphDataStore.getState().graphEntities)),
+  captureLoadedGraphPaths: () =>
+    new Set(Object.keys(useGraphProjectionStore.getState().graphEntities)),
   preparePublication: prepareSynchronousPublicationCommit,
   prepareRecovery: prepareProjectRecoveryCommit,
   prepareMove: prepareResourceMove,

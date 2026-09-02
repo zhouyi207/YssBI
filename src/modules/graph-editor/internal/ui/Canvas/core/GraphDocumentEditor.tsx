@@ -9,6 +9,7 @@ import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorPanelScope } from "@/modules/workbench/public";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
 import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
+import { useGraphDraftUi } from "@/features/core/graphDraft/ui";
 
 export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & {
   readonly catalogRowRenderer: NodePaletteCatalogRowRenderer;
@@ -27,7 +28,8 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   catalogRowRenderer,
 }: GraphDocumentEditorProps) {
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
-  const mode = useIsActiveEditorPanel(panelInstanceId) ? "interactive" : "preview";
+  const { saving } = useGraphDraftUi(graphPath);
+  const mode = useIsActiveEditorPanel(panelInstanceId) && !saving ? "interactive" : "preview";
   const { graphLoadStatus: graphLoads } = useProjectProjection();
   const graphLoadStatus = graphLoads[graphPath];
   const graphProjectionReady = useGraphRead((snapshot) =>
@@ -46,7 +48,11 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   const graphUnavailable = graphLoadStatus === "error" || graphDocument?.conflict === true;
 
   return (
-    <div className="flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden">
+    <div
+      className="flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden"
+      aria-busy={saving || undefined}
+      data-graph-saving={saving || undefined}
+    >
       <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
         <CanvasDropZone
           panelInstanceId={panelInstanceId}

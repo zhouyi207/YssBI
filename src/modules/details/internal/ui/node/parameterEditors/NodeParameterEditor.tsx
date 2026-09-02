@@ -58,12 +58,12 @@ function numberDraftErrorMessage(error: NumberDraftError, t: TFunction): string 
 
 type FailedMutationOutcome =
   | { status: "stale" }
-  | { status: "conflict" }
+  | { status: "saving" }
   | { status: "rejected"; code: string };
 
 function mutationOutcomeError(outcome: FailedMutationOutcome, t: TFunction): string {
   if (outcome.status === "stale") return t("notifications.parameter.stale");
-  if (outcome.status === "conflict") return t("notifications.parameter.conflict");
+  if (outcome.status === "saving") return t("notifications.parameter.stale");
   return t("notifications.parameter.rejected", { code: outcome.code });
 }
 

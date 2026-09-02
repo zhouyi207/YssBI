@@ -1,4 +1,5 @@
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
+import type { GraphEditorSessionDto } from "@/shared/types/dto/editorMutation";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface EditorProjectionFixtureOptions {
@@ -8,6 +9,20 @@ export interface EditorProjectionFixtureOptions {
   nodeTypeId?: string;
   title?: string;
   connectionId?: string;
+}
+
+export function makeGraphEditorSession(
+  projection: EditorGraphProjectionDto,
+): GraphEditorSessionDto {
+  return {
+    document: {
+      nodes: {},
+      port_bindings: [],
+      connections: {},
+      input_states: [],
+    },
+    projection,
+  };
 }
 
 export function makeEditorProjectionFixture(options: EditorProjectionFixtureOptions): {

@@ -1,11 +1,14 @@
 import i18n from "i18next";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 
 import { markResourceStale, useResourceStore } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
+import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
+import { getDocumentState } from "@/features/core/resource";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import {
@@ -30,7 +33,7 @@ let coordinatorEpoch = 0;
 
 function nextRequestGeneration(graphPath: string): number {
   const bucketGeneration =
-    useGraphDataStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
+    useGraphProjectionStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
   const generation = Math.max(latestGenerationByGraph.get(graphPath) ?? 0, bucketGeneration) + 1;
   latestGenerationByGraph.set(graphPath, generation);
   return generation;
@@ -65,7 +68,7 @@ function currentOrStartGraphLifecycle(graphPath: string): number {
 }
 
 function hasInstalledGenerationAtLeast(graphPath: string, requestGeneration: number): boolean {
-  const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+  const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
   return bucket != null && bucket.requestGeneration >= requestGeneration;
 }
 
@@ -80,16 +83,16 @@ async function requestGraphProjection(
     graphPath: string,
     locale: string,
     lifecycleToken: number,
-  ) => Promise<EditorGraphProjectionDto>,
+  ) => Promise<GraphEditorSessionDto>,
   locale = currentProjectionLocale(),
 ): Promise<boolean> {
   const requestGeneration = nextRequestGeneration(graphPath);
   const requestEpoch = coordinatorEpoch;
   setGraphProjectionStale(graphPath, true);
 
-  let projection: EditorGraphProjectionDto;
+  let session: GraphEditorSessionDto;
   try {
-    projection = await request(graphPath, locale, lifecycleToken);
+    session = await request(graphPath, locale, lifecycleToken);
     if (!isCurrentProjectIdentity(identity)) return false;
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
@@ -108,10 +111,12 @@ async function requestGraphProjection(
     !ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)
   )
     return false;
-  const result = useGraphDataStore
+  const projection = session.projection;
+  const result = useGraphProjectionStore
     .getState()
     .replaceProjection(graphPath, projection, requestGeneration);
   if (result.applied) {
+    useGraphDraftStore.getState().install(graphPath, session);
     const kind = inferGraphResourceKind(graphPath);
     if (kind) {
       useResourceStore
@@ -181,7 +186,7 @@ export async function prepareGraphProjectionForPublication(
       lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
     )
       return false;
-    return projection;
+    return projection.projection;
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(
@@ -213,8 +218,12 @@ export function loadGraphProjection(
 }
 
 export function hydrateGraphProjection(graphPath: string, locale: string): Promise<boolean> {
-  if (!useGraphDataStore.getState().hasGraph(graphPath)) {
+  if (!useGraphProjectionStore.getState().hasGraph(graphPath)) {
     setGraphProjectionStale(graphPath, true);
+    return Promise.resolve(false);
+  }
+  const kind = inferGraphResourceKind(graphPath);
+  if (kind && getDocumentState({ id: graphPath, kind })?.dirty) {
     return Promise.resolve(false);
   }
   const identity = captureProjectIdentity();

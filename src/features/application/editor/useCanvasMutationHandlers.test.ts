@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCanvasMutationHandlers } from "./useCanvasMutationHandlers";
 
-const executeSafeGraphMutationOutcome = vi.hoisted(() => vi.fn());
+const executeSafeGraphDraftEditOutcome = vi.hoisted(() => vi.fn());
 const insertRerouteAtConnection = vi.hoisted(() => vi.fn());
 const graphWarn = vi.hoisted(() => vi.fn());
 
-vi.mock("@/features/application/editorMutation/safeGraphMutation", () => ({
-  executeSafeGraphMutationOutcome,
+vi.mock("@/features/application/graphDraft/safeGraphDraftEdit", () => ({
+  executeSafeGraphDraftEditOutcome,
 }));
 vi.mock("./edgeOperations", () => ({ insertRerouteAtConnection }));
-vi.mock("@/features/application/editorMutation/registerGraphMutationPort", () => ({
-  ensureGraphMutationPortRegistered: vi.fn(),
+vi.mock("@/features/application/graphDraft/registerGraphDraftPort", () => ({
+  ensureGraphDraftPortRegistered: vi.fn(),
 }));
 vi.mock("@/features/application/observability/appLogger", () => ({
   logger: {
@@ -33,7 +33,7 @@ describe("canvas mutation application wiring", () => {
   ] as const)(
     "maps %s to one safe graph mutation intent",
     async (intent, operation, command, args) => {
-      executeSafeGraphMutationOutcome.mockResolvedValueOnce({ status: "applied", result: {} });
+      executeSafeGraphDraftEditOutcome.mockResolvedValueOnce({ status: "applied", result: {} });
       const handlers = createCanvasMutationHandlers();
 
       const outcome = await handlers.submitConnection({
@@ -43,8 +43,8 @@ describe("canvas mutation application wiring", () => {
         targetPinId: "target",
       });
 
-      expect(executeSafeGraphMutationOutcome).toHaveBeenCalledOnce();
-      expect(executeSafeGraphMutationOutcome).toHaveBeenCalledWith(
+      expect(executeSafeGraphDraftEditOutcome).toHaveBeenCalledOnce();
+      expect(executeSafeGraphDraftEditOutcome).toHaveBeenCalledWith(
         "events/main",
         operation,
         command,
@@ -55,7 +55,7 @@ describe("canvas mutation application wiring", () => {
   );
 
   it("maps Alt disconnect and reroute through application operations", async () => {
-    executeSafeGraphMutationOutcome.mockResolvedValueOnce({ status: "applied", result: {} });
+    executeSafeGraphDraftEditOutcome.mockResolvedValueOnce({ status: "applied", result: {} });
     insertRerouteAtConnection.mockResolvedValueOnce({ status: "applied", result: {} });
     const handlers = createCanvasMutationHandlers();
 
@@ -66,7 +66,7 @@ describe("canvas mutation application wiring", () => {
       position: { x: 25, y: 40 },
     });
 
-    expect(executeSafeGraphMutationOutcome).toHaveBeenCalledWith(
+    expect(executeSafeGraphDraftEditOutcome).toHaveBeenCalledWith(
       "events/main",
       "Alt disconnect port",
       "DisconnectPort",
@@ -79,7 +79,7 @@ describe("canvas mutation application wiring", () => {
   });
 
   it("adapts application error codes to a safe core outcome", async () => {
-    executeSafeGraphMutationOutcome.mockResolvedValueOnce({
+    executeSafeGraphDraftEditOutcome.mockResolvedValueOnce({
       status: "rejected",
       code: "graph_connection_type_mismatch",
     });

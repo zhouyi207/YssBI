@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { useGraphDataStore } from "./graphDataStore";
+import { useGraphProjectionStore } from "./graphProjectionStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { markResourceLoaded, resourceKey } from "@/features/core/resource";
 import { isGraphCachedInMemory } from "./graphDocumentLoadPolicy";
@@ -10,7 +10,7 @@ describe("graphDocumentLoadPolicy", () => {
   const docKey = resourceKey({ id: graphPath, kind: "event" });
 
   beforeEach(() => {
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useDocumentStateStore.getState().clear();
   });
 
@@ -20,20 +20,20 @@ describe("graphDocumentLoadPolicy", () => {
 
   it("returns false when path kind cannot be inferred", () => {
     const fixture = makeEditorProjectionFixture({ graphPath: "evt-1" });
-    useGraphDataStore.getState().replaceProjection("evt-1", fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection("evt-1", fixture.projection, 1);
     expect(isGraphCachedInMemory("evt-1")).toBe(false);
   });
 
   it("returns false when a bucket exists for an unloaded graph resource", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
 
     expect(isGraphCachedInMemory(graphPath)).toBe(false);
   });
 
   it("returns true when graph is cached and document is clean", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
 
     expect(isGraphCachedInMemory(graphPath)).toBe(true);
@@ -41,7 +41,7 @@ describe("graphDocumentLoadPolicy", () => {
 
   it("returns false when graph is stale", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     markResourceLoaded({ id: graphPath, kind: "event" });
     useDocumentStateStore.getState().patchDocument(docKey, { stale: true });
 

@@ -6,7 +6,7 @@ import {
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { captureRevisionedProjectCommandSnapshot } from "@/features/application/projectCommandContext";
 
-import { setHistoryStatus } from "@/features/application/editorMutation/historyCoordinator";
+import { setHistoryStatus } from "@/features/application/graphDraft/historyCoordinator";
 import {
   ProjectPublicationError,
   projectPublicationCoordinator,
@@ -30,11 +30,12 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
-  completePendingMutation,
-  invalidatePendingMutation,
-  registerPendingMutation,
-  type PendingMutationRecord,
-} from "./pendingMutationRegistry";
+  completePendingBackendMutation,
+  invalidatePendingBackendMutation,
+  registerPendingBackendMutation,
+  type PendingBackendMutationRecord,
+} from "./pendingBackendMutationRegistry";
+import { isGraphDraftSaving } from "@/features/core/graphDraft";
 
 export interface ExecuteFunctionSignatureMutationInput {
   functionPath: string;
@@ -103,7 +104,7 @@ function buildSignature(
 }
 
 function validateDirectSignatureResult(
-  pending: PendingMutationRecord,
+  pending: PendingBackendMutationRecord,
   requestPatch: FunctionDocumentPatchDto,
   result: ResourceMutationResultDto,
 ): string | undefined {
@@ -145,6 +146,7 @@ export async function executeFunctionSignatureMutation(
   input: ExecuteFunctionSignatureMutationInput,
   overrides: Partial<FunctionSignatureCoordinatorDependencies> = {},
 ): Promise<ExecuteFunctionSignatureMutationOutcome> {
+  if (isGraphDraftSaving(input.functionPath)) return { status: "stale" };
   const dependencies = { ...defaultDependencies, ...overrides };
   const { context, authority: meta } = captureRevisionedProjectCommandSnapshot(
     () => useGraphMetaStore.getState().graphs[input.functionPath],
@@ -158,7 +160,7 @@ export async function executeFunctionSignatureMutation(
     before: meta.functionSignature,
     after: buildSignature(meta.functionSignature, input.patch),
   };
-  const pending: PendingMutationRecord = {
+  const pending: PendingBackendMutationRecord = {
     operationId,
     graphPath: input.functionPath,
     baseRevision: meta.functionRevision,
@@ -174,7 +176,7 @@ export async function executeFunctionSignatureMutation(
     projectInstanceId: context.projectInstanceId,
     epoch: context.projectEpoch,
   };
-  registerPendingMutation(pending);
+  registerPendingBackendMutation(pending);
   pendingSignatureOperations.add(operationId);
 
   try {
@@ -218,7 +220,7 @@ export async function executeFunctionSignatureMutation(
     if (epoch !== coordinatorEpoch) return { status: "stale", result };
     return { status: "applied", result };
   } finally {
-    completePendingMutation(operationId);
+    completePendingBackendMutation(operationId);
     pendingSignatureOperations.delete(operationId);
   }
 }
@@ -236,6 +238,8 @@ export function commitFunctionSignature(
 
 export function resetFunctionSignatureCoordinator(): void {
   coordinatorEpoch += 1;
-  for (const operationId of pendingSignatureOperations) invalidatePendingMutation(operationId);
+  for (const operationId of pendingSignatureOperations) {
+    invalidatePendingBackendMutation(operationId);
+  }
   pendingSignatureOperations.clear();
 }

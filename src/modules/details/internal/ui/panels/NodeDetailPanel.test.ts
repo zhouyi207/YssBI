@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { NodeDetailPanel, selectNodeDetailNode } from "./NodeDetailPanel";
 import { NodeInspectPanel } from "./NodeInspectPanel";
@@ -117,7 +117,7 @@ describe("NodeDetailPanel projection selection", () => {
         options: null,
       },
     ];
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -143,7 +143,7 @@ describe("NodeDetailPanel projection selection", () => {
         related: [],
       },
     ];
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -183,7 +183,7 @@ describe("NodeDetailPanel projection selection", () => {
     };
     graphBucket.nodePins.shared = [pinId];
     graphBucket.pinConnections[pinId] = [];
-    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 

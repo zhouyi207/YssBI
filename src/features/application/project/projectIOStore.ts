@@ -10,7 +10,7 @@ import { normalizeDatabases } from "@/features/application/dataManagement/databa
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
@@ -20,8 +20,8 @@ import {
 } from "@/features/core/resource";
 import {
   applySnapshotDocumentPatches,
-  reconcileResourceSnapshot,
-} from "@/features/core/resource/resourceSnapshotReconcile";
+  prepareResourceProjectionSnapshot,
+} from "@/features/core/resource/resourceSnapshotProjection";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   applyVariableCatalogFromIndex,
@@ -29,11 +29,12 @@ import {
   variableRevisionsFromIndex,
 } from "@/features/core/variable/variableCatalog";
 import { resetClientProjectState } from "@/features/application/project/projectReset";
-import { reconcileProjectPresentation } from "@/features/application/project/projectPresentationReconciler";
+import { synchronizeProjectPresentation } from "@/features/application/project/projectPresentationSync";
 import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
-import { resetHistoryCoordinator } from "@/features/application/editorMutation/historyCoordinator";
+import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
+import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
 import {
   beginGraphLoadLifecycle,
   loadGraphProjection,
@@ -248,7 +249,10 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     });
 
     const previousByKey = useResourceStore.getState().resources;
-    const { resources, documentPatches } = reconcileResourceSnapshot(incoming, previousByKey);
+    const { resources, documentPatches } = prepareResourceProjectionSnapshot(
+      incoming,
+      previousByKey,
+    );
     applySnapshotDocumentPatches(documentPatches);
 
     useResourceStore.getState().setSnapshot({
@@ -256,7 +260,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       graphOrder,
     });
     hydrateFunctionSignaturesFromProjectIndex(index.graphs);
-    reconcileProjectPresentation();
+    synchronizeProjectPresentation();
     return true;
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;
@@ -336,6 +340,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
     prepared.index.publicationRevision,
   );
   commitProjectLoadStep("graph projection coordinator", resetGraphProjectionCoordinator);
+  commitProjectLoadStep("graph draft coordinator", resetGraphDraftCoordinator);
   loadGraphInFlight.clear();
   commitProjectLoadStep("graph load status", () =>
     useProjectIOStore.setState({
@@ -402,12 +407,14 @@ export async function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep("graph session", () =>
     useGraphSessionStore.setState({ focusedSession: null }),
   );
-  commitProjectLoadStep("graph data", () => useGraphDataStore.setState({ graphEntities: {} }));
+  commitProjectLoadStep("graph data", () =>
+    useGraphProjectionStore.setState({ graphEntities: {} }),
+  );
   commitProjectLoadStep("history", () => useHistoryStore.setState(prepared.storeState.history));
   commitProjectLoadStep("project IO", () =>
     useProjectIOStore.setState(prepared.storeState.projectIO),
   );
-  commitProjectLoadStep("open tab reconcile", reconcileProjectPresentation);
+  commitProjectLoadStep("open panel synchronization", synchronizeProjectPresentation);
   commitProjectLoadStep("completion log", () => {
     logger.sys.info("Project loaded (index from Rust)", "ProjectIOStore");
   });
@@ -509,13 +516,14 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     };
 
     if (!commitOwnedClear(resetGraphProjectionCoordinator)) return;
+    if (!commitOwnedClear(resetGraphDraftCoordinator)) return;
     if (!commitOwnedClear(() => loadGraphInFlight.clear())) return;
     if (!commitOwnedClear(() => set({ graphLoadStatus: {} }))) return;
     if (!commitOwnedClear(() => set({ projectInstanceId: null }))) return;
     expectedProjectInstanceId = null;
     if (
       !commitOwnedClear(() => {
-        useGraphDataStore.setState({ graphEntities: {} });
+        useGraphProjectionStore.setState({ graphEntities: {} });
       })
     )
       return;
@@ -552,7 +560,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
       })
     )
       return;
-    if (!commitOwnedClear(reconcileProjectPresentation)) return;
+    if (!commitOwnedClear(synchronizeProjectPresentation)) return;
     commitOwnedClear(() => {
       set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
     });

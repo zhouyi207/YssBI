@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { portAddressKey } from "@/features/domain/editorProjection";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import * as projectLifecycleAuthority from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
@@ -44,7 +44,9 @@ function installGraph(
       outputAddress.kind === "declared" ? outputAddress.portKey : outputAddress.templateKey;
     fixture.projection.connections[0].output = outputAddress;
   }
-  const applied = useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  const applied = useGraphProjectionStore
+    .getState()
+    .replaceProjection(graphPath, fixture.projection, 1);
   expect(applied.applied).toBe(true);
   const kind = graphPath.startsWith("events/") ? "event" : "function";
   markResourceLoaded({ id: graphPath, kind });
@@ -81,7 +83,7 @@ describe("requestPinPreview", () => {
     vi.restoreAllMocks();
     clearProjectLifecycle();
     startProjectLifecycle(frontendProjectInstanceId);
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
@@ -249,8 +251,9 @@ describe("requestPinPreview", () => {
       name: "control output",
       prepare: () => {
         const graph = installGraph();
-        useGraphDataStore.getState().graphEntities[eventGraphPath].pins[graph.outputKey].kind =
-          "control";
+        useGraphProjectionStore.getState().graphEntities[eventGraphPath].pins[
+          graph.outputKey
+        ].kind = "control";
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,
@@ -262,8 +265,9 @@ describe("requestPinPreview", () => {
       name: "effect output",
       prepare: () => {
         const graph = installGraph();
-        useGraphDataStore.getState().graphEntities[eventGraphPath].pins[graph.outputKey].kind =
-          "effect";
+        useGraphProjectionStore.getState().graphEntities[eventGraphPath].pins[
+          graph.outputKey
+        ].kind = "effect";
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,
@@ -275,8 +279,9 @@ describe("requestPinPreview", () => {
       name: "orphan output",
       prepare: () => {
         const graph = installGraph();
-        useGraphDataStore.getState().graphEntities[eventGraphPath].pins[graph.outputKey].orphan =
-          true;
+        useGraphProjectionStore.getState().graphEntities[eventGraphPath].pins[
+          graph.outputKey
+        ].orphan = true;
         return { graphPath: eventGraphPath, pinId: graph.outputKey, reason: "orphan-pin" } as const;
       },
     },
@@ -291,8 +296,9 @@ describe("requestPinPreview", () => {
       name: "missing projected address",
       prepare: () => {
         const graph = installGraph();
-        delete useGraphDataStore.getState().graphEntities[eventGraphPath].pins[graph.outputKey]
-          .address;
+        delete useGraphProjectionStore.getState().graphEntities[eventGraphPath].pins[
+          graph.outputKey
+        ].address;
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,
@@ -348,10 +354,10 @@ describe("requestPinPreview", () => {
     {
       name: "projection object replacement",
       replace: () => {
-        const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
-        useGraphDataStore.setState({
+        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
+        useGraphProjectionStore.setState({
           graphEntities: {
-            ...useGraphDataStore.getState().graphEntities,
+            ...useGraphProjectionStore.getState().graphEntities,
             [eventGraphPath]: { ...current, pins: { ...current.pins } },
           },
         });
@@ -360,14 +366,14 @@ describe("requestPinPreview", () => {
     {
       name: "request generation change",
       replace: () => {
-        const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
+        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
         current.requestGeneration += 1;
       },
     },
     {
       name: "source revision change",
       replace: () => {
-        const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
+        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
         current.sourceRevision += 1;
       },
     },
@@ -504,10 +510,10 @@ describe("requestPinPreview", () => {
     const failPinPreview = vi.spyOn(store, "failPinPreview");
     const removePinPreview = vi.spyOn(store, "removePinPreview");
     vi.spyOn(ProjectService, "executeGraphDocument").mockImplementation(async () => {
-      const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
-      useGraphDataStore.setState({
+      const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
+      useGraphProjectionStore.setState({
         graphEntities: {
-          ...useGraphDataStore.getState().graphEntities,
+          ...useGraphProjectionStore.getState().graphEntities,
           [eventGraphPath]: { ...current, pins: { ...current.pins } },
         },
       });
@@ -537,10 +543,10 @@ describe("requestPinPreview", () => {
 
     const staleRequest = requestPinPreview(eventGraphPath, outputKey);
     await Promise.resolve();
-    const previous = useGraphDataStore.getState().graphEntities[eventGraphPath];
-    useGraphDataStore.setState({
+    const previous = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
+    useGraphProjectionStore.setState({
       graphEntities: {
-        ...useGraphDataStore.getState().graphEntities,
+        ...useGraphProjectionStore.getState().graphEntities,
         [eventGraphPath]: { ...previous, pins: { ...previous.pins } },
       },
     });

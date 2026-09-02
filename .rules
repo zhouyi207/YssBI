@@ -9,9 +9,10 @@ Keep this file high-signal. It documents recurring traps, architectural
 invariants, and delivery policy. Current implementation maps, command matrices,
 and detailed subsystem documentation belong in maintained project docs.
 
-YssBI is a Tauri 2 desktop data-analysis IDE. Rust owns authoritative project
-state and business logic. React owns interaction, presentation, and frontend
-projections.
+YssBI is a Tauri 2 desktop data-analysis IDE. Rust is the single source of
+truth for committed application state and business logic. React is only the
+view and interaction layer over Rust projections, plus explicitly local UI
+state and unsaved editor drafts.
 
 ## Sources of truth
 
@@ -57,8 +58,12 @@ projections.
 
 * Rust owns authoritative project state, persistence, graph
   compilation/execution, databases, results, and scientific orchestration.
-* React stores are projections or UI/runtime state. Do not create a second
-  frontend authority for backend-owned state.
+* React stores are read-only Rust projections, unsaved editor drafts, or
+  UI/runtime state. Do not create a second frontend authority for committed
+  backend-owned state.
+* Do not reconcile or merge parallel committed Rust and React models. Apply or
+  replace Rust projections in one direction; keep local drafts separate until
+  an explicit save command succeeds.
 * Keep dependencies flowing toward domain/application logic rather than toward
   UI or framework layers.
 * Avoid duplicate sources of truth, compatibility paths, mirrored state models,
@@ -223,9 +228,19 @@ projections.
 * On project load, clear backend state before hydrating the new project.
 * On graph open, load the graph, bind runtime services, materialize dynamic pins,
   then hydrate the frontend projection.
-* Writes go through backend commands and authoritative project events.
-* Optimistic UI operations may suppress only the matching event echo. Do not
-  broadly suppress subsequent backend events.
+* Graph Canvas edits update only the frontend-owned unsaved draft. They must not
+  mutate authoritative Rust project state or emit authoritative project events
+  before Save.
+* Graph Save is an atomic full-document overwrite command. It has no
+  frontend-supplied revision precondition: Rust validates the submitted draft,
+  persists it, replaces authoritative project state, and returns the canonical
+  projection. A failure leaves the frontend draft dirty.
+* Lock the Graph editor before Save starts and reject Canvas, keyboard, Details,
+  clipboard, undo/redo, and other Graph draft mutations until Save settles.
+  Editing must not continue concurrently with an in-flight Save.
+* Do not automatically merge or rebase a dirty Graph draft with backend state.
+  External changes may invalidate a clean projection; a later explicit Save of
+  a dirty draft uses the documented overwrite semantics.
 * Save and close flows use application confirmation.
 * Secondary windows remain read-only with respect to authoritative project
   state.

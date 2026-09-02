@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
@@ -109,7 +109,7 @@ function capturePreviewRequest(
   if (!useGraphSessionStore.getState().isFocusedGraphPath(graphPath)) return "missing-session";
   if (!isGraphCachedInMemory(graphPath)) return "missing-resource";
 
-  const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+  const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
   if (!bucket) return "missing-resource";
   const pin = bucket.pins[pinId];
   const invalid = validatePin(pin);
@@ -130,7 +130,7 @@ function isPreviewAuthorityCurrent(graphPath: string, authority: PreviewAuthorit
   if (!isCurrentProjectIdentity(authority.project) || !isGraphCachedInMemory(graphPath)) {
     return false;
   }
-  const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+  const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
   return Boolean(
     bucket === authority.projection &&
     bucket.requestGeneration === authority.requestGeneration &&

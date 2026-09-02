@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createProjectEventIngress, type ProjectEventStreamItem } from "./projectEventIngress";
 import type {
   ProjectEvent,
-  ProjectReconciliationOutcome,
-  ProjectEventReconciler,
-} from "./projectEventReconciler";
+  ProjectEventConsumptionOutcome,
+  ProjectEventConsumer,
+} from "./projectEventConsumer";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -38,26 +38,21 @@ function item(operationId: string): ProjectEventStreamItem {
   return { kind: "event", event: event(operationId) };
 }
 
-const applied: ProjectReconciliationOutcome = { status: "applied" };
+const applied: ProjectEventConsumptionOutcome = { status: "applied" };
 
 describe("project event ingress", () => {
   it("serializes the FIFO and removes queued work before a closed drain completes", async () => {
-    const first = deferred<ProjectReconciliationOutcome>();
+    const first = deferred<ProjectEventConsumptionOutcome>();
     const accepted: string[] = [];
-    const reconciler: ProjectEventReconciler = {
+    const consumer: ProjectEventConsumer = {
       acceptEvent: vi.fn((received) => {
         accepted.push(received.payload.result.operationId);
         return received.payload.result.operationId === "a"
           ? first.promise
           : Promise.resolve(applied);
       }),
-      acceptCommittedReceipt: vi.fn(async () => applied),
-      acknowledgeOperation: vi.fn(),
-      rejectOperation: vi.fn(),
-      markUnknownOutcome: vi.fn(async () => applied),
-      resetForProject: vi.fn(),
     };
-    const ingress = createProjectEventIngress(reconciler, {
+    const ingress = createProjectEventIngress(consumer, {
       capacity: 4,
       requestAuthoritativeSnapshot: vi.fn(async () => undefined),
     });
@@ -76,24 +71,19 @@ describe("project event ingress", () => {
   });
 
   it("drops the incremental tail on overflow and performs one recovery before reopening", async () => {
-    const first = deferred<ProjectReconciliationOutcome>();
+    const first = deferred<ProjectEventConsumptionOutcome>();
     const recovery = deferred<void>();
     const accepted: string[] = [];
     const recover = vi.fn(() => recovery.promise);
-    const reconciler: ProjectEventReconciler = {
+    const consumer: ProjectEventConsumer = {
       acceptEvent: vi.fn((received) => {
         accepted.push(received.payload.result.operationId);
         return received.payload.result.operationId === "a"
           ? first.promise
           : Promise.resolve(applied);
       }),
-      acceptCommittedReceipt: vi.fn(async () => applied),
-      acknowledgeOperation: vi.fn(),
-      rejectOperation: vi.fn(),
-      markUnknownOutcome: vi.fn(async () => applied),
-      resetForProject: vi.fn(),
     };
-    const ingress = createProjectEventIngress(reconciler, {
+    const ingress = createProjectEventIngress(consumer, {
       capacity: 1,
       requestAuthoritativeSnapshot: recover,
     });
@@ -116,23 +106,18 @@ describe("project event ingress", () => {
     await ingress.closeAndDrain();
   });
 
-  it("turns a reconciler rejection into one safe recovery without applying the tail", async () => {
+  it("turns a consumer rejection into one safe recovery without applying the tail", async () => {
     const accepted: string[] = [];
     const recover = vi.fn(async () => undefined);
-    const reconciler: ProjectEventReconciler = {
+    const consumer: ProjectEventConsumer = {
       acceptEvent: vi.fn((received) => {
         accepted.push(received.payload.result.operationId);
         return received.payload.result.operationId === "a"
           ? Promise.reject(new Error("transport failure"))
           : Promise.resolve(applied);
       }),
-      acceptCommittedReceipt: vi.fn(async () => applied),
-      acknowledgeOperation: vi.fn(),
-      rejectOperation: vi.fn(),
-      markUnknownOutcome: vi.fn(async () => applied),
-      resetForProject: vi.fn(),
     };
-    const ingress = createProjectEventIngress(reconciler, {
+    const ingress = createProjectEventIngress(consumer, {
       requestAuthoritativeSnapshot: recover,
     });
 

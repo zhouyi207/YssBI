@@ -15,7 +15,7 @@ export async function synchronizeVisibleGraphPanel(
   return useProjectIOStore.getState().loadGraph(scope.graphPath);
 }
 
-/** Reconcile visible graph panels after Dockview and project resources are ready. */
+/** Synchronize visible graph panels after Dockview and project resources are ready. */
 export async function synchronizeVisibleGraphPanels(): Promise<void> {
   const scopesByGraph = new Map<string, Set<string>>();
 

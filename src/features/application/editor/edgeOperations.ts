@@ -1,7 +1,7 @@
 import { executeCommand } from "@/features/core/history";
-import type { GraphMutationCommandResult } from "@/features/core/history/types";
-import { executeSafeGraphMutationOutcome } from "@/features/application/editorMutation/safeGraphMutation";
-import { ensureGraphMutationPortRegistered } from "@/features/application/editorMutation/registerGraphMutationPort";
+import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import { executeSafeGraphDraftEditOutcome } from "@/features/application/graphDraft/safeGraphDraftEdit";
+import { ensureGraphDraftPortRegistered } from "@/features/application/graphDraft/registerGraphDraftPort";
 
 function isNonEmptyId(value: string): boolean {
   return value.trim().length > 0;
@@ -11,10 +11,10 @@ export async function connectPinsById(
   graphPath: string,
   pinA: string,
   pinB: string,
-): Promise<GraphMutationCommandResult> {
+): Promise<GraphDraftCommandResult> {
   if (!isNonEmptyId(pinA) || !isNonEmptyId(pinB)) return false;
-  ensureGraphMutationPortRegistered();
-  return executeSafeGraphMutationOutcome(graphPath, "Detail connect pins", "ConnectPins", {
+  ensureGraphDraftPortRegistered();
+  return executeSafeGraphDraftEditOutcome(graphPath, "Detail connect pins", "ConnectPins", {
     pinA,
     pinB,
   });
@@ -23,10 +23,10 @@ export async function connectPinsById(
 export async function disconnectConnectionById(
   graphPath: string,
   connectionId: string,
-): Promise<GraphMutationCommandResult> {
+): Promise<GraphDraftCommandResult> {
   if (!isNonEmptyId(connectionId)) return false;
-  ensureGraphMutationPortRegistered();
-  return executeSafeGraphMutationOutcome(
+  ensureGraphDraftPortRegistered();
+  return executeSafeGraphDraftEditOutcome(
     graphPath,
     "Detail disconnect connection",
     "DisconnectConnections",
@@ -37,10 +37,10 @@ export async function disconnectConnectionById(
 export async function disconnectPinById(
   graphPath: string,
   pinId: string,
-): Promise<GraphMutationCommandResult> {
+): Promise<GraphDraftCommandResult> {
   if (!isNonEmptyId(pinId)) return false;
-  ensureGraphMutationPortRegistered();
-  return executeSafeGraphMutationOutcome(graphPath, "Detail disconnect port", "DisconnectPort", {
+  ensureGraphDraftPortRegistered();
+  return executeSafeGraphDraftEditOutcome(graphPath, "Detail disconnect port", "DisconnectPort", {
     pinId,
   });
 }
@@ -60,11 +60,11 @@ export async function insertRerouteAtConnection(
   graphPath: string,
   connectionId: string,
   position: Readonly<{ x: number; y: number }>,
-): Promise<GraphMutationCommandResult> {
+): Promise<GraphDraftCommandResult> {
   if (!isNonEmptyId(connectionId) || !Number.isFinite(position.x) || !Number.isFinite(position.y))
     return false;
 
-  return executeSafeGraphMutationOutcome(graphPath, "Insert reroute", "InsertReroute", {
+  return executeSafeGraphDraftEditOutcome(graphPath, "Insert reroute", "InsertReroute", {
     connectionId,
     position: { x: position.x, y: position.y },
   });

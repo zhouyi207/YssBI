@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
-import type { ExecuteEditorMutationOutcome } from "@/features/application/editorMutation/editorMutationCoordinator";
+import type { ApplyGraphDraftMutationOutcome } from "@/features/application/graphDraft/graphDraftCoordinator";
 import { normalizeIpcError } from "@/services/ipc";
 import type { ParameterEditorDto } from "@/shared/types/dto/editorProjection";
 import { NodeParameterEditor } from "./NodeParameterEditor";
@@ -18,7 +18,7 @@ vi.mock("@/features/application/editor/setNodeParameters", () => ({ setNodeParam
 
 const graphPath = "events/Main.yssbi-event";
 const nodeId = "constant-node";
-const appliedOutcome: ExecuteEditorMutationOutcome = {
+const appliedOutcome: ApplyGraphDraftMutationOutcome = {
   status: "applied",
   result: {} as never,
 };
@@ -301,7 +301,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("guards synchronously against Enter plus blur duplicate commits", async () => {
-    let resolveMutation: (outcome: ExecuteEditorMutationOutcome) => void = () => undefined;
+    let resolveMutation: (outcome: ApplyGraphDraftMutationOutcome) => void = () => undefined;
     setNodeParameters.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -350,7 +350,7 @@ describe("NodeParameterEditor ordinary controls", () => {
 
   it("shows an IPC update failure beside the field without exposing backend details", async () => {
     setNodeParameters.mockRejectedValueOnce(
-      normalizeIpcError("mutate_graph_document", {
+      normalizeIpcError("transform_graph_draft", {
         code: "parameter_update_failed",
         details: { debug: "raw backend parameter failure" },
         incidentId: "incident-parameter-42",

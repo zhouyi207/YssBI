@@ -14,7 +14,7 @@ describe("blocking IPC error dialog", () => {
 
   it("presents the IPC code and incident ID without backend details", () => {
     const error = normalizeIpcError("save_project_graph", {
-      code: "graph_revision_conflict",
+      code: "graph_save_rejected",
       details: { debug: "sensitive backend detail" },
       incidentId: "incident-save-42",
     });
@@ -23,7 +23,7 @@ describe("blocking IPC error dialog", () => {
 
     expect(alert).toHaveBeenCalledWith({
       title: "localized:common.error",
-      message: "localized:save-failed:graph_revision_conflict",
+      message: "localized:save-failed:graph_save_rejected",
       closeText: "localized:common.close",
       type: "error",
       incidentId: "incident-save-42",

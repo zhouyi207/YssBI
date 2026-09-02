@@ -13,11 +13,7 @@ import {
   workbenchDockviewRead,
 } from "@/modules/workbench/public";
 import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
-import {
-  clearResourceDocumentState,
-  isResourceDocumentDirty,
-  markResourceDirty,
-} from "@/features/core/resource";
+import { clearResourceDocumentState, isResourceDocumentDirty } from "@/features/core/resource";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
 import {
   captureProjectIdentity,
@@ -27,20 +23,15 @@ import {
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { editorViewportScope, releaseEditorViewport } from "@/features/core/viewport";
-import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";
 
-import {
-  captureSettledGraphSaveCommandContext,
-  isGraphSaveCommandRevisionCurrent,
-  type GraphSaveCommandContext,
-} from "@/features/application/projectCommandContext";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import { saveChartDocument as saveChartDraft } from "@/features/application/chart/saveChartDocument";
 import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
+import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
 
 type EditorDocument = {
   readonly key: string;
@@ -203,35 +194,16 @@ async function saveChartDocument(
 }
 
 async function saveGraphDocument(
-  document: EditorDocument,
+  document: EditorDocument & { readonly resourceKind: "event" | "function" },
   identity: ProjectIdentitySnapshot,
 ): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return false;
-  let context: GraphSaveCommandContext | undefined;
   try {
     warnCallFunctionIssuesBeforeSave(document.resourceRef);
-    context = await captureSettledGraphSaveCommandContext(document.resourceRef);
-    if (
-      !isCurrentProjectIdentity(identity) ||
-      context.projectInstanceId !== identity.projectInstanceId ||
-      context.projectEpoch !== identity.epoch
-    )
-      return false;
-    await GraphService.saveProjectGraph(
-      context.projectInstanceId,
-      document.resourceRef,
-      context.expectedRevision,
-      context.operationId,
-    );
-    if (
-      !isCurrentProjectIdentity(identity) ||
-      !isGraphSaveCommandRevisionCurrent(context, document.resourceRef)
-    )
-      return false;
-    markResourceDirty({ id: document.resourceRef, kind: document.resourceKind }, false);
-    return true;
+    const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
+    return saved && isCurrentProjectIdentity(identity);
   } catch (error) {
-    if (!isCurrentProjectIdentity(identity) || (context && !context.isCurrent())) return false;
+    if (!isCurrentProjectIdentity(identity)) return false;
     showBlockingIpcError(error, "save_project_graph", (code) =>
       i18n.t("notifications.editor.documentSaveFailed", {
         title: document.name,
@@ -248,7 +220,10 @@ function saveEditorDocument(
 ): Promise<boolean> {
   return document.resourceKind === "chart"
     ? saveChartDocument(document, identity)
-    : saveGraphDocument(document, identity);
+    : saveGraphDocument(
+        document as EditorDocument & { readonly resourceKind: "event" | "function" },
+        identity,
+      );
 }
 
 function isCloseSnapshotCurrent(snapshot: CloseSnapshot): boolean {

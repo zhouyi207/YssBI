@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { loadActivatedProject } from "@/features/application/project/projectIOStore";
 import { resolveActiveProjectPath } from "@/features/application/project/projectSession";
-import { markResourceDirty } from "@/features/core/resource";
+import { isResourceDocumentDirty } from "@/features/core/resource";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -11,7 +11,6 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { ProjectService, isExecutionCancelledError } from "@/services/project/projectService";
 import { openPathDialog } from "@/services/platform/pathDialog";
-import { GraphService } from "@/services/graph/graphService";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 import { cancelActiveGraphRun } from "./cancelActiveGraphRun";
 import {
@@ -20,17 +19,8 @@ import {
   type GraphRunOutcomeState,
 } from "./observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
-import {
-  hasPendingGraphMutations,
-  waitForPendingGraphMutations,
-} from "@/features/application/editorMutation/pendingMutationRegistry";
 import { resultRef } from "@/features/application/results";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
-import {
-  captureSettledGraphSaveCommandContext,
-  isGraphSaveCommandRevisionCurrent,
-  type GraphSaveCommandContext,
-} from "@/features/application/projectCommandContext";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
 import { getExecutionEventGraph, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
@@ -55,6 +45,7 @@ import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
+import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
 
 function projectParentDirectory(metadataOrRootPath: string): string {
   const normalized = metadataOrRootPath.replace(/\\/g, "/");
@@ -163,7 +154,6 @@ export function useProjectOperations() {
       }
       if (!isEditorCommandTargetCurrent(target)) return;
 
-      let context: GraphSaveCommandContext | undefined;
       try {
         const projectPath = await resolveActiveProjectPath();
         if (!isEditorCommandTargetCurrent(target)) return;
@@ -186,20 +176,15 @@ export function useProjectOperations() {
         }
 
         warnCallFunctionIssuesBeforeSave(target.resourceRef);
-
-        context = await captureSettledGraphSaveCommandContext(target.resourceRef);
+        const saved = await saveGraphDraft(target.resourceRef, target.resourceKind);
         if (!isEditorCommandTargetCurrent(target)) return;
-        await GraphService.saveProjectGraph(
-          context.projectInstanceId,
-          target.resourceRef,
-          context.expectedRevision,
-          context.operationId,
-        );
-        if (!isEditorCommandTargetCurrent(target)) return;
-        if (!isGraphSaveCommandRevisionCurrent(context, target.resourceRef)) return;
-        markResourceDirty({ id: target.resourceRef, kind: target.resourceKind }, false);
+        if (!saved) {
+          showBlockingMessage(
+            t("notifications.project.saveFailed", { error: "graph_save_not_committed" }),
+          );
+        }
       } catch (e) {
-        if (!isEditorCommandTargetCurrent(target) || (context && !context.isCurrent())) return;
+        if (!isEditorCommandTargetCurrent(target)) return;
         logger.app.error(String(e), "ProjectOperations");
         showBlockingIpcError(e, "save_project_graph", (code) =>
           t("notifications.project.saveFailed", { error: code }),
@@ -276,12 +261,11 @@ export function useProjectOperations() {
         return;
       }
 
-      if (hasPendingGraphMutations(graphPath)) {
-        await waitForPendingGraphMutations(graphPath);
-        if (!isCurrentProjectIdentity(project)) return;
-      }
-
       try {
+        if (isResourceDocumentDirty({ id: graphPath, kind: "event" })) {
+          const saved = await saveGraphDraft(graphPath, "event");
+          if (!saved || !isCurrentProjectIdentity(project)) return;
+        }
         logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
 
         const recording: RecordedEvent[] = [];

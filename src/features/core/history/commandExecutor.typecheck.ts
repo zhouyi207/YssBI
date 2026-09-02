@@ -2,8 +2,8 @@ import {
   executeCommand,
   executeCommandOutcome,
   type CommandInvocation,
-  type GraphMutationCommandInvocation,
-  type GraphMutationCommandType,
+  type GraphDraftCommandInvocation,
+  type GraphDraftCommandType,
 } from "./commandExecutor";
 import type { AvailableCommandType } from "./commands/registryTypes";
 
@@ -12,7 +12,7 @@ type Equal<TLeft, TRight> =
 type Assert<T extends true> = T;
 
 type GraphCommandsAreDerivedFromRegistry = Assert<
-  Equal<GraphMutationCommandType, AvailableCommandType>
+  Equal<GraphDraftCommandType, AvailableCommandType>
 >;
 
 void (null as GraphCommandsAreDerivedFromRegistry | null);
@@ -35,7 +35,7 @@ function assertCommandCallTypes(): void {
   // @ts-expect-error InsertReroute requires position.
   executeCommand("events/main.yssbi-event", "InsertReroute", { connectionId: "edge-1" });
 
-  const invocation: GraphMutationCommandInvocation =
+  const invocation: GraphDraftCommandInvocation =
     Math.random() > 0.5
       ? ["ConnectPins", { pinA: "pin-a", pinB: "pin-b" }]
       : ["MoveConnections", { sourcePinId: "pin-a", targetPinId: "pin-b" }];

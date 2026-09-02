@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useExecutionStore } from "@/features/core/execution";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { OutputPanel } from "./OutputPanel";
@@ -48,7 +48,7 @@ describe("OutputPanel", () => {
 
   beforeEach(() => {
     useExecutionStore.setState({ graphs: {}, playbackGraphPath: null, isPlaying: false });
-    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -63,7 +63,7 @@ describe("OutputPanel", () => {
   it("renders ordered program output with semantic source labels", () => {
     const execution = useExecutionStore.getState();
     act(() => {
-      useGraphDataStore.setState({ graphEntities: { [sourceGraphPath]: sourceBucket } });
+      useGraphProjectionStore.setState({ graphEntities: { [sourceGraphPath]: sourceBucket } });
       useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
       execution.startExecution(graphPath);
       execution.setActiveRunId(graphPath, "41");

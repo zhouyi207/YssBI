@@ -1,6 +1,6 @@
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import type { CommandHandler, GraphMutationCommandResult } from "../types";
-import { executeGraphIntent } from "./executeGraphIntent";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import type { CommandHandler, GraphDraftCommandResult } from "../types";
+import { executeGraphDraftIntent } from "./executeGraphDraftIntent";
 
 export interface SetPinValueArgs {
   pinId: string;
@@ -8,14 +8,14 @@ export interface SetPinValueArgs {
   newValue: unknown;
 }
 
-export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphMutationCommandResult> = {
+export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphDraftCommandResult> = {
   execute(graphPath, args) {
-    const pin = useGraphDataStore.getState().getGraphPin(graphPath, args.pinId);
+    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin?.address) throw new Error(`Port '${args.pinId}' has no structured address`);
     if (pin.address.nodeId !== args.nodeId) {
       throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);
     }
-    return executeGraphIntent(graphPath, {
+    return executeGraphDraftIntent(graphPath, {
       type: "setLiteral",
       payload: { address: pin.address, literal: args.newValue ?? null },
     });
