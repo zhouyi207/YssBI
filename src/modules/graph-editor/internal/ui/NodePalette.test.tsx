@@ -358,7 +358,6 @@ describe("NodePalette", () => {
             x={12}
             y={34}
             graphPath="events/Main.yssbi-event"
-            graphRevision={7}
             sourcePort={{
               kind: "declared",
               nodeId: "00000000-0000-0000-0000-000000000101",

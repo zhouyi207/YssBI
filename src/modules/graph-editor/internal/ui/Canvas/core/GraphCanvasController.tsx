@@ -119,11 +119,6 @@ export function GraphCanvasController({
       ? (snapshot.graphEntities[activeResourceRef]?.graphNodes ?? EMPTY_NODE_IDS)
       : EMPTY_NODE_IDS,
   );
-  const graphRevision = useGraphRead((snapshot) =>
-    interactive && activeResourceRef
-      ? (snapshot.graphEntities[activeResourceRef]?.sourceRevision ?? null)
-      : null,
-  );
   const { getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
     groupId,
@@ -196,7 +191,6 @@ export function GraphCanvasController({
             x: contextMenu.x,
             y: contextMenu.y,
             graphPath: activeResourceRef,
-            graphRevision,
             sourcePort,
             onSelect: handlePaletteSelect,
             onClose: closePalette,
@@ -242,7 +236,6 @@ export function GraphCanvasController({
       closePalette,
       contextMenu,
       executeGraph,
-      graphRevision,
       handlePaletteSelect,
       handleVariableDropGet,
       handleVariableDropSet,

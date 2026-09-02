@@ -36,7 +36,6 @@ export function NodePalette({
   x,
   y,
   graphPath = null,
-  graphRevision = null,
   sourcePort = null,
   catalogRowRenderer: CatalogRowRenderer,
   onSelect,
@@ -45,7 +44,6 @@ export function NodePalette({
   x: number;
   y: number;
   graphPath?: string | null;
-  graphRevision?: number | null;
   sourcePort?: PortAddressDto | null;
   catalogRowRenderer: NodePaletteCatalogRowRenderer;
   onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
@@ -56,7 +54,6 @@ export function NodePalette({
   const compatible = useCompatibleNodeCatalog({
     enabled: sourcePort !== null,
     graphPath,
-    graphRevision,
     sourcePort,
   });
   const { status, error, catalog, searchIndex } = sourcePort ? compatible : localized;

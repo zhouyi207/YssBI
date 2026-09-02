@@ -4,6 +4,7 @@ import {
   type LocalizedCatalogDto,
 } from "@/shared/types/dto/localizedCatalog";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
+import type { GraphDocumentDto } from "@/shared/types/dto/editorMutation";
 
 export type {
   LocalizedCatalogDto,
@@ -16,7 +17,7 @@ export type {
 export interface CompatibleNodeCatalogRequest {
   projectInstanceId: string;
   graphPath: string;
-  graphRevision: number;
+  document: GraphDocumentDto;
   sourcePort: PortAddressDto;
   locale: string;
 }
@@ -28,7 +29,7 @@ export class CatalogService {
     const response: unknown = await invokeCommand("get_compatible_node_catalog", {
       projectInstanceId: request.projectInstanceId,
       graphPath: request.graphPath,
-      graphRevision: request.graphRevision,
+      document: request.document,
       sourcePort: request.sourcePort,
       locale: request.locale,
     });

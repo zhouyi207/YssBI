@@ -16,7 +16,8 @@ use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_document::GraphResourceKind;
 use yss_graph_document::{
-    DocumentNode, GraphResourcePath, NodeId, NodePosition, ParameterValues, PortAddress,
+    DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
+    PortAddress,
 };
 use yss_graph_protocol::{NodeTypeId, PortKey};
 use yss_graph_runtime::{
@@ -129,7 +130,16 @@ fn staged_session(
     }
 }
 
-fn compatible_project(path: &GraphResourcePath, source_node: NodeId) -> ProjectData {
+fn compatible_project(path: &GraphResourcePath) -> ProjectData {
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        path.clone(),
+        GraphResourceDocument::new("Main", GraphResourceKind::Event),
+    );
+    project
+}
+
+fn compatible_draft(source_node: NodeId) -> GraphDocument {
     let mut graph = GraphResourceDocument::new("Main", GraphResourceKind::Event);
     graph.document.nodes.insert(
         source_node,
@@ -141,9 +151,7 @@ fn compatible_project(path: &GraphResourcePath, source_node: NodeId) -> ProjectD
             user_label: None,
         },
     );
-    let mut project = ProjectData::new();
-    project.graphs.insert(path.clone(), graph);
-    project
+    graph.document
 }
 
 #[test]
@@ -213,18 +221,18 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
 }
 
 #[test]
-fn compatible_catalog_filters_against_current_analyzed_source() {
+fn compatible_catalog_filters_against_unsaved_draft_source() {
     let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
     let source_node = NodeId::new();
     let session = staged_session(
-        compatible_project(&graph_path, source_node),
-        "compatible-current-source",
+        compatible_project(&graph_path),
+        "compatible-draft-source",
         GraphRuntimeTestControl::default(),
     );
     let request = CompatibleCatalogRequest::new(
         session.session.project_instance_id().clone(),
         graph_path,
-        GraphRevision::INITIAL,
+        compatible_draft(source_node),
         PortAddress::declared(source_node, PortKey::new("value").unwrap()),
         "en-US",
     );
@@ -242,37 +250,6 @@ fn compatible_catalog_filters_against_current_analyzed_source() {
 
     assert!(ids.contains("yssbi.numeric.add.int64"));
     assert!(!ids.contains("yssbi.logic.not"));
-}
-
-#[test]
-fn stale_graph_revision_returns_typed_compatibility_error() {
-    let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-    let source_node = NodeId::new();
-    let session = staged_session(
-        compatible_project(&graph_path, source_node),
-        "compatible-stale-revision",
-        GraphRuntimeTestControl::default(),
-    );
-    let request = CompatibleCatalogRequest::new(
-        session.session.project_instance_id().clone(),
-        graph_path,
-        GraphRevision::new(1),
-        PortAddress::declared(source_node, PortKey::new("value").unwrap()),
-        "en-US",
-    );
-
-    let error = session
-        .application
-        .compatible_node_catalog(request)
-        .unwrap_err();
-
-    assert!(matches!(
-        error,
-        CatalogQueryApplicationError::Graph(GraphCatalogQueryError::RevisionConflict {
-            expected,
-            current,
-        }) if expected == GraphRevision::new(1) && current == GraphRevision::INITIAL
-    ));
 }
 
 #[test]

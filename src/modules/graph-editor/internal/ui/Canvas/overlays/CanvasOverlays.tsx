@@ -20,7 +20,6 @@ export type CanvasPaletteOverlayModel =
       x: number;
       y: number;
       graphPath: string | null;
-      graphRevision: number | null;
       sourcePort: PortAddressDto | null;
       onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
       onClose: () => void;
@@ -88,7 +87,6 @@ export default function CanvasOverlays({
               x={palette.x}
               y={palette.y}
               graphPath={palette.graphPath}
-              graphRevision={palette.graphRevision}
               sourcePort={palette.sourcePort}
               catalogRowRenderer={catalogRowRenderer}
               onSelect={palette.onSelect}

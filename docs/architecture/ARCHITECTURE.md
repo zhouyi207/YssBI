@@ -250,6 +250,16 @@ Load Graph → Frontend Draft → Dirty → Locked Save → Rust atomic overwrit
 - dirty draft 不与 Rust snapshot 自动 merge/rebase。干净 projection 可因 watcher/event 被重新 hydrate。
 - Graph projection application、cache invalidation 和 Dockview stale-panel pruning 是单向投影/UI
   生命周期操作，不命名为或实现为双状态 reconcile。
+- Canvas node/port display、capability、type、literal 和 diagnostic facts 均直接来自 Rust editor
+  projection；Frontend 不保留 NodeDefinition/PinSlot registry 或 Call Function 引用诊断副本。
+- Pin-drop compatible catalog 查询随请求提交当前 Draft document，由 Rust 使用同一 Graph
+  compatibility domain logic 无状态计算；它不读取 committed Graph document，也不设置 revision
+  precondition，因此新建但未保存的节点可以立即参与后续编辑。
+- Editor projection wire 只在根部携带一个 `sourceRevision`；basis 和 node 不重复版本字段。
+  该版本仅用于拒绝倒退的 Rust projection 和提供资源事务 authority，不作为 Graph Draft、Save
+  或 compatible catalog 的前端提交前置条件。
+- Canvas 按 canonical `display.styleId` 选择布局；`builtin.reroute` 使用紧凑 Reroute layout，
+  其余当前 style ID 使用统一 Default layout。
 
 ### 3.2 Plot / Visualization
 

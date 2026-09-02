@@ -26,11 +26,11 @@ fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandEr
             CommandError::diagnosed("graph_contract_failed", error)
         }
         CatalogQueryApplicationError::Graph(error) => match error {
-            yss_application::catalog_query::GraphCatalogQueryError::RevisionConflict { .. } => {
-                CommandError::expected("graph_revision_conflict")
-            }
             yss_application::catalog_query::GraphCatalogQueryError::GraphNotLoaded { .. } => {
                 CommandError::expected("graph_not_loaded")
+            }
+            yss_application::catalog_query::GraphCatalogQueryError::InvalidDraft(_) => {
+                CommandError::expected("compatible_source_invalid")
             }
             yss_application::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
                 CommandError::expected("compatible_source_invalid")
@@ -93,7 +93,7 @@ pub fn get_compatible_node_catalog(
     state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    graph_revision: yss_project_identity::ResourceRevision,
+    document: yss_graph_document::GraphDocument,
     source_port: crate::schema::graph_mutation::PortAddressDto,
     locale: String,
 ) -> Result<LocalizedCatalogDto, CommandError> {
@@ -104,7 +104,7 @@ pub fn get_compatible_node_catalog(
         .compatible_node_catalog(CompatibleCatalogRequest::new(
             project_instance_id,
             parse_graph_path(graph_path)?,
-            graph_revision.to_graph_revision(),
+            document,
             source_port,
             locale,
         ))

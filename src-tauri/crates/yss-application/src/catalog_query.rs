@@ -12,7 +12,8 @@ use yss_function_editor_projection::parse_function_data_type;
 use yss_graph_catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
-use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, PortAddress};
+use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
+use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, VariableValueContract};
 use yss_graph_runtime::GraphRuntimeCatalogError;
@@ -50,11 +51,11 @@ impl LocalizedCatalogRequest {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CompatibleCatalogRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
-    graph_revision: GraphRevision,
+    document: GraphDocument,
     source_port: PortAddress,
     locale: Box<str>,
 }
@@ -63,14 +64,14 @@ impl CompatibleCatalogRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        graph_revision: GraphRevision,
+        document: GraphDocument,
         source_port: PortAddress,
         locale: impl Into<Box<str>>,
     ) -> Self {
         Self {
             project_instance_id,
             graph_path,
-            graph_revision,
+            document,
             source_port,
             locale: locale.into(),
         }
@@ -84,8 +85,8 @@ impl CompatibleCatalogRequest {
         &self.graph_path
     }
 
-    pub const fn graph_revision(&self) -> GraphRevision {
-        self.graph_revision
+    pub fn document(&self) -> &GraphDocument {
+        &self.document
     }
 
     pub fn source_port(&self) -> &PortAddress {
@@ -162,13 +163,10 @@ pub enum ProjectCatalogReadError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphCatalogQueryError {
-    #[error("graph revision changed during catalog query")]
-    RevisionConflict {
-        expected: GraphRevision,
-        current: GraphRevision,
-    },
     #[error("graph is not loaded")]
     GraphNotLoaded { graph: GraphResourcePath },
+    #[error("compatible-catalog graph draft is invalid")]
+    InvalidDraft(#[source] DocumentError),
     #[error("compatible-catalog source port is invalid")]
     CompatibleSourceInvalid,
 }
@@ -402,7 +400,7 @@ impl LocalizedCatalogProjectFacts {
 #[derive(Clone, Debug)]
 pub struct CompatibleCatalogProjectFacts {
     localized: LocalizedCatalogProjectFacts,
-    graph: ResidentGraphCatalogFacts,
+    graph: DraftGraphCatalogFacts,
 }
 
 impl CompatibleCatalogProjectFacts {
@@ -410,25 +408,20 @@ impl CompatibleCatalogProjectFacts {
         &self.localized
     }
 
-    pub(crate) fn resident_graph(&self) -> &ResidentGraphCatalogFacts {
+    pub(crate) fn draft_graph(&self) -> &DraftGraphCatalogFacts {
         &self.graph
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ResidentGraphCatalogFacts {
+pub(crate) struct DraftGraphCatalogFacts {
     path: GraphResourcePath,
-    revision: GraphRevision,
     document: Arc<GraphDocument>,
 }
 
-impl ResidentGraphCatalogFacts {
+impl DraftGraphCatalogFacts {
     pub(crate) fn path(&self) -> &GraphResourcePath {
         &self.path
-    }
-
-    pub(crate) const fn revision(&self) -> GraphRevision {
-        self.revision
     }
 
     pub(crate) fn document(&self) -> &GraphDocument {
@@ -466,7 +459,7 @@ pub(crate) fn capture_localized_project_facts(
 pub(crate) fn capture_compatible_project_facts(
     session: &ApplicationSession,
     path: &GraphResourcePath,
-    expected_revision: GraphRevision,
+    document: &GraphDocument,
 ) -> Result<CompatibleCatalogProjectFacts, CatalogQueryApplicationError> {
     let localized = capture_localized_project_facts(session)?;
     let data = session
@@ -475,25 +468,18 @@ pub(crate) fn capture_compatible_project_facts(
         .map_err(map_project_catalog_error)
         .map_err(CatalogQueryApplicationError::Project)?;
     revalidate_project_catalog_facts(session, &localized)?;
-    let graph = data
-        .graphs
-        .get(path)
-        .ok_or_else(|| GraphCatalogQueryError::GraphNotLoaded {
+    if !data.graphs.contains_key(path) {
+        return Err(GraphCatalogQueryError::GraphNotLoaded {
             graph: path.clone(),
-        })?;
-    if graph.document.revision != expected_revision {
-        return Err(GraphCatalogQueryError::RevisionConflict {
-            expected: expected_revision,
-            current: graph.document.revision,
         }
         .into());
     }
+    validate_graph_document(document).map_err(GraphCatalogQueryError::InvalidDraft)?;
     Ok(CompatibleCatalogProjectFacts {
         localized,
-        graph: ResidentGraphCatalogFacts {
+        graph: DraftGraphCatalogFacts {
             path: path.clone(),
-            revision: graph.document.revision,
-            document: Arc::new(graph.document.clone()),
+            document: Arc::new(document.clone()),
         },
     })
 }
@@ -556,11 +542,7 @@ pub(crate) fn compatible_node_catalog_in_session(
 ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
     ensure_requested_project(captured, request.project_instance_id())?;
     let project =
-        capture_compatible_project_facts(captured, request.graph_path(), request.graph_revision())?;
-    debug_assert_eq!(
-        project.resident_graph().revision(),
-        request.graph_revision()
-    );
+        capture_compatible_project_facts(captured, request.graph_path(), request.document())?;
     let database = catalog_snapshot(captured.database())?;
     revalidate_declaration_observations(
         captured.database(),
@@ -570,8 +552,8 @@ pub(crate) fn compatible_node_catalog_in_session(
     let localized = captured
         .graph()
         .compatible_catalog_with_resources(
-            project.resident_graph().path(),
-            project.resident_graph().document(),
+            project.draft_graph().path(),
+            project.draft_graph().document(),
             request.source_port(),
             &graph_catalog,
             project.localized().resources().entries(),

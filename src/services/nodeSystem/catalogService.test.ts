@@ -7,13 +7,19 @@ import { CatalogService } from "./catalogService";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 const registryFingerprint = "0000000000000000000000000000000000000000000000000000000000000000";
+const draftDocument = {
+  nodes: {},
+  port_bindings: [],
+  connections: {},
+  input_states: [],
+};
 
 describe("CatalogService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("requests a backend-filtered compatible catalog with exact graph authority", async () => {
+  it("requests a backend-filtered compatible catalog for the supplied Graph Draft", async () => {
     vi.mocked(invoke).mockResolvedValue(localizedCatalog);
     const sourcePort = {
       kind: "declared" as const,
@@ -25,7 +31,7 @@ describe("CatalogService", () => {
       CatalogService.getCompatibleNodeCatalog({
         projectInstanceId: localizedCatalog.projectInstanceId,
         graphPath: "events/Main.yssbi-event",
-        graphRevision: 7,
+        document: draftDocument,
         sourcePort,
         locale: localizedCatalog.locale,
       }),
@@ -34,7 +40,7 @@ describe("CatalogService", () => {
     expect(invoke).toHaveBeenCalledWith("get_compatible_node_catalog", {
       projectInstanceId: localizedCatalog.projectInstanceId,
       graphPath: "events/Main.yssbi-event",
-      graphRevision: 7,
+      document: draftDocument,
       sourcePort,
       locale: localizedCatalog.locale,
     });
@@ -47,7 +53,7 @@ describe("CatalogService", () => {
       CatalogService.getCompatibleNodeCatalog({
         projectInstanceId: localizedCatalog.projectInstanceId,
         graphPath: "events/Main.yssbi-event",
-        graphRevision: 7,
+        document: draftDocument,
         sourcePort: {
           kind: "declared",
           nodeId: "00000000-0000-0000-0000-000000000101",

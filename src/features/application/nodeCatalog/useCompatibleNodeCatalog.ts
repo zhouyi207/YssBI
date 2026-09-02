@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
@@ -19,7 +20,6 @@ import type { LocalizedNodeCatalogState } from "./useLocalizedNodeCatalog";
 interface CompatibleNodeCatalogInput {
   enabled: boolean;
   graphPath: string | null;
-  graphRevision: number | null;
   sourcePort: PortAddressDto | null;
 }
 
@@ -38,7 +38,6 @@ const IDLE_STATE: CompatibleRequestState = {
 export function useCompatibleNodeCatalog({
   enabled,
   graphPath,
-  graphRevision,
   sourcePort,
 }: CompatibleNodeCatalogInput): LocalizedNodeCatalogState {
   const { i18n } = useTranslation();
@@ -47,9 +46,12 @@ export function useCompatibleNodeCatalog({
   const [refreshGeneration, setRefreshGeneration] = useState(0);
   const [state, setState] = useState<CompatibleRequestState>(IDLE_STATE);
   const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : "";
+  const document = useGraphDraftStore((store) =>
+    graphPath ? store.sessions[graphPath]?.document : undefined,
+  );
 
   useEffect(() => {
-    if (!enabled || !projectInstanceId || !graphPath || graphRevision === null || !sourcePort) {
+    if (!enabled || !projectInstanceId || !graphPath || !document || !sourcePort) {
       setState(IDLE_STATE);
       return;
     }
@@ -68,7 +70,7 @@ export function useCompatibleNodeCatalog({
     void CatalogService.getCompatibleNodeCatalog({
       projectInstanceId,
       graphPath,
-      graphRevision,
+      document,
       sourcePort,
       locale,
     })
@@ -101,15 +103,7 @@ export function useCompatibleNodeCatalog({
     return () => {
       current = false;
     };
-  }, [
-    enabled,
-    graphPath,
-    graphRevision,
-    locale,
-    projectInstanceId,
-    refreshGeneration,
-    sourcePortKey,
-  ]);
+  }, [enabled, document, graphPath, locale, projectInstanceId, refreshGeneration, sourcePortKey]);
 
   const refresh = useCallback(() => {
     if (enabled) setRefreshGeneration((generation) => generation + 1);
