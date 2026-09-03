@@ -58,7 +58,7 @@ plot 需要进行处理，其计算逻辑不要放置在前端，而是要放置
 src-tauri/Cargo.toml
 src-tauri/tauri.conf.json
 package.json
-src/app/appConfig/appLinks.ts
+src\shared\appLinks.ts
 
 
 提交并 push，或手动再跑 publish.yml
