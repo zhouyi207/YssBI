@@ -12,6 +12,22 @@ import {
 } from "./projectService";
 
 const projectInstanceId = "project-instance-1";
+const compiledSourceHash = "3".repeat(64);
+
+function executeGraph(
+  demand: ExecutionDemandDto,
+  onEvent?: (event: RunEvent) => void,
+  onOutput?: (event: RunOutputChannelEvent) => void,
+): Promise<void> {
+  return ProjectService.executeGraphDocument({
+    projectInstanceId,
+    graphPath: "events/Main.yssbi-event",
+    compiledSourceHash,
+    demand,
+    onEvent,
+    onOutput,
+  });
+}
 
 vi.mock("@tauri-apps/api/core", () => {
   class TestChannel<T> {
@@ -94,11 +110,7 @@ describe("ProjectService execution contract", () => {
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
-    await expect(
-      ProjectService.executeGraphDocument(projectInstanceId, "events/Main.yssbi-event", {
-        type: "default",
-      }),
-    ).rejects.toMatchObject({
+    await expect(executeGraph({ type: "default" })).rejects.toMatchObject({
       kind: "backend",
       code: "internal_compilation_failure",
       details: commandError.details,
@@ -119,11 +131,9 @@ describe("ProjectService execution contract", () => {
       incidentId: null,
     });
 
-    await expect(
-      ProjectService.executeGraphDocument(projectInstanceId, "events/Main.yssbi-event", {
-        type: "default",
-      }),
-    ).rejects.toThrow("Invalid internal compilation failure response");
+    await expect(executeGraph({ type: "default" })).rejects.toThrow(
+      "Invalid internal compilation failure response",
+    );
   });
 
   it.each([
@@ -166,11 +176,7 @@ describe("ProjectService execution contract", () => {
     const commandError = { code: "test_stop", details: null, incidentId: null };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      demand,
-    );
+    const execution = executeGraph(demand);
 
     await expect(execution).rejects.toMatchObject({
       kind: "backend",
@@ -183,9 +189,7 @@ describe("ProjectService execution contract", () => {
   it("rejects a malformed demand before invoking execute_graph_document", async () => {
     const malformed = { type: "default", extra: true } as unknown as ExecutionDemandDto;
 
-    await expect(
-      ProjectService.executeGraphDocument(projectInstanceId, "events/Main.yssbi-event", malformed),
-    ).rejects.toThrow("Invalid default execution demand");
+    await expect(executeGraph(malformed)).rejects.toThrow("Invalid default execution demand");
 
     expect(invoke).not.toHaveBeenCalled();
   });
@@ -199,12 +203,7 @@ describe("ProjectService execution contract", () => {
     );
     const received: RunEvent[] = [];
 
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      { type: "default" },
-      (event) => received.push(event),
-    );
+    const execution = executeGraph({ type: "default" }, (event) => received.push(event));
 
     expect(invoke).toHaveBeenCalledOnce();
     const [command, args] = vi.mocked(invoke).mock.calls[0] as [
@@ -215,6 +214,7 @@ describe("ProjectService execution contract", () => {
     expect(args).toEqual({
       projectInstanceId,
       graphPath: "events/Main.yssbi-event",
+      compiledSourceHash,
       demand: { type: "default" },
       onEvent: expect.any(Channel),
     });
@@ -238,9 +238,7 @@ describe("ProjectService execution contract", () => {
     vi.mocked(invoke).mockResolvedValue(undefined);
     const receivedRunEvents: RunEvent[] = [];
     const receivedOutput: RunOutputChannelEvent[] = [];
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
+    const execution = executeGraph(
       { type: "default" },
       (event) => receivedRunEvents.push(event),
       (event) => receivedOutput.push(event),
@@ -286,14 +284,9 @@ describe("ProjectService execution contract", () => {
   it("surfaces a throwing runCompleted consumer after a successful invoke settles", async () => {
     const consumerError = new Error("runCompleted consumer failed");
     vi.mocked(invoke).mockResolvedValue(undefined);
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      { type: "default" },
-      () => {
-        throw consumerError;
-      },
-    );
+    const execution = executeGraph({ type: "default" }, () => {
+      throw consumerError;
+    });
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
       string,
       { graphPath: string; onEvent: Channel<RunEvent> },
@@ -326,14 +319,9 @@ describe("ProjectService execution contract", () => {
     async ({ terminal, commandError }) => {
       const consumerError = new Error(`${terminal.type} consumer failed`);
       vi.mocked(invoke).mockRejectedValue(commandError);
-      const execution = ProjectService.executeGraphDocument(
-        projectInstanceId,
-        "events/Main.yssbi-event",
-        { type: "default" },
-        () => {
-          throw consumerError;
-        },
-      );
+      const execution = executeGraph({ type: "default" }, () => {
+        throw consumerError;
+      });
       const [, args] = vi.mocked(invoke).mock.calls[0] as [
         string,
         { graphPath: string; onEvent: Channel<RunEvent> },
@@ -352,11 +340,7 @@ describe("ProjectService execution contract", () => {
 
   it("rejects its pending drain when HMR disposes the execution channel", async () => {
     vi.mocked(invoke).mockResolvedValue(undefined);
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      { type: "default" },
-    );
+    const execution = executeGraph({ type: "default" });
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
       string,
       { graphPath: string; onEvent: Channel<RunEvent> },
@@ -387,11 +371,7 @@ describe("ProjectService execution contract", () => {
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      { type: "default" },
-    );
+    const execution = executeGraph({ type: "default" });
     disposeTrackedChannelsForHmr();
 
     await expect(execution).rejects.toMatchObject({
@@ -410,12 +390,7 @@ describe("ProjectService execution contract", () => {
     vi.mocked(invoke).mockRejectedValue(commandError);
     const received: RunEvent[] = [];
 
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      "events/Main.yssbi-event",
-      { type: "default" },
-      (event) => received.push(event),
-    );
+    const execution = executeGraph({ type: "default" }, (event) => received.push(event));
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
       string,
       { graphPath: string; onEvent: Channel<RunEvent> },

@@ -10,6 +10,26 @@ const document = { nodes: {}, port_bindings: [], connections: {}, input_states: 
 const projectionReplacement = { graphPath, projection: editorProjection };
 
 describe("GraphDraftService", () => {
+  it("compiles a draft into a content-addressed projection without saving it", async () => {
+    const result = {
+      sourceHash: "a".repeat(64),
+      cacheHit: false,
+      document,
+      projection: editorProjection,
+    };
+    vi.mocked(invoke).mockResolvedValue(result);
+
+    await expect(
+      GraphDraftService.compile("project-a", graphPath, "en-US", document),
+    ).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("compile_graph_draft", {
+      projectInstanceId: "project-a",
+      graphPath,
+      locale: "en-US",
+      document,
+    });
+  });
+
   it("transforms a frontend draft without a revision or operation envelope", async () => {
     const mutation = { type: "deleteNodes" as const, payload: { nodeIds: [] } };
     const result = { document, patch: { operations: [] }, projectionReplacement };

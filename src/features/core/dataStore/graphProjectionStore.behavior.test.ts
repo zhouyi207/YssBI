@@ -25,7 +25,7 @@ describe("graphProjectionStore projected entity truth", () => {
     const bucket = useGraphProjectionStore.getState().graphEntities["graph-1"];
     const output = bucket.pins[fixture.outputKey];
     const input = bucket.pins[fixture.inputKey];
-    expect(output).toMatchObject({ type: "object", dataType: { kind: "Float64" } });
+    expect(output).toMatchObject({ dataType: { kind: "Float64" } });
     expect(input.dataType).toEqual({ kind: "DataSeries", inner: { kind: "Float64" } });
     expect(pinTypeLabel(input)).toBe("DataSeries<Float64>");
   });

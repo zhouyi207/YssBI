@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 
 import { loadActivatedProject } from "@/features/application/project/projectIOStore";
 import { resolveActiveProjectPath } from "@/features/application/project/projectSession";
-import { isResourceDocumentDirty } from "@/features/core/resource";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -45,6 +44,8 @@ import {
   type EditorCommandTarget,
 } from "./editorCommandFocus";
 import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
+import { compileGraphDraft } from "@/features/application/graphDraft/compileGraphDraft";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 
 function projectParentDirectory(metadataOrRootPath: string): string {
   const normalized = metadataOrRootPath.replace(/\\/g, "/");
@@ -243,6 +244,23 @@ export function useProjectOperations() {
     [],
   );
 
+  const compileGraph = useCallback(
+    async (targetGraphPath?: string) => {
+      const graphPath = resolveExecutionGraphPath(targetGraphPath);
+      if (!graphPath) return false;
+      try {
+        return await compileGraphDraft(graphPath);
+      } catch (error) {
+        logger.exec.error(`编译失败: ${formatErrorMessage(error)}`);
+        showBlockingIpcError(error, "compile_graph_draft", (code) =>
+          t("notifications.project.compileFailed", { error: code }),
+        );
+        return false;
+      }
+    },
+    [t],
+  );
+
   const executeGraph = useCallback(
     async (targetGraphPath?: string) => {
       const graphPath = resolveExecutionGraphPath(targetGraphPath);
@@ -259,32 +277,34 @@ export function useProjectOperations() {
       }
 
       try {
-        if (isResourceDocumentDirty({ id: graphPath, kind: "event" })) {
-          const saved = await saveGraphDraft(graphPath, "event");
-          if (!saved || !isCurrentProjectIdentity(project)) return;
+        const draft = useGraphDraftStore.getState().sessions[graphPath];
+        if (draft?.compileStatus !== "compiled" || !draft.compiledSourceHash) {
+          showBlockingMessage(t("notifications.project.compileRequired"));
+          return;
         }
-        logger.exec.info(`执行当前 Event: ${target.name} (${graphPath})`);
+        logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);
 
         const recording: RecordedEvent[] = [];
         const runState: GraphRunOutcomeState = { outcome: "success" };
         useExecutionStore.getState().startExecution(graphPath);
 
-        await ProjectService.executeGraphDocument(
-          project.projectInstanceId,
+        await ProjectService.executeGraphDocument({
+          projectInstanceId: project.projectInstanceId,
           graphPath,
-          { type: "default" },
-          (event) => {
+          compiledSourceHash: draft.compiledSourceHash,
+          demand: { type: "default" },
+          onEvent: (event) => {
             if (!isCurrentProjectIdentity(project)) return;
             observeGraphRunEvent(graphPath, event, runState);
             if (event.kind.type === "resultInspectionRequested") {
               void openInspectableResult(resultRef(event.kind.resultId), t);
             }
           },
-          (event) => {
+          onOutput: (event) => {
             if (!isCurrentProjectIdentity(project)) return;
             observeGraphRunOutput(graphPath, event);
           },
-        );
+        });
 
         if (!isCurrentProjectIdentity(project)) return;
         finalizeExecutionRun(graphPath, recording, runState.outcome);
@@ -333,6 +353,7 @@ export function useProjectOperations() {
     saveGraph,
     saveGraphAs,
     importGraph,
+    compileGraph,
     executeGraph,
     cancelGraphExecution,
     clearGraphArtifacts,

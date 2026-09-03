@@ -4,7 +4,6 @@ import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTyp
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
-import { isExecPin } from "@/shared/types/domain/pinSemantics";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
@@ -41,11 +40,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const inlineParameters = node.parameterEditors.filter(
     (parameter) => parameter.presentation === "inlineAndDetail",
   );
-  const inputsExec = node.inputs.filter(isExecPin);
-  const inputsData = node.inputs.filter((p) => !isExecPin(p));
-  const outputsExec = node.outputs.filter(isExecPin);
-  const outputsData = node.outputs.filter((p) => !isExecPin(p));
-
   const getPinDragState = useCallback(
     (pin: PinData): "normal" | "highlighted" | "dimmed" => {
       if (!activePin) return "normal";
@@ -83,51 +77,9 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
 
       {/* Body */}
       <div className="flex flex-col min-h-[60px]">
-        {/* Top Row: Flow Pins (Exec) */}
-        {(inputsExec.length > 0 || outputsExec.length > 0) && (
-          <div className="flex gap-2 px-2 pt-2 whitespace-nowrap items-start">
-            <div className="flex flex-col gap-1 flex-1">
-              {inputsExec.map((pin) => {
-                const ds = getPinDragState(pin);
-                return (
-                  <GraphPinController
-                    key={pin.id}
-                    pin={pin}
-                    graphPath={graphPath}
-                    groupId={groupId}
-                    contextMenuActions={contextMenuActions}
-                    isActive={activePinId === pin.id}
-                    pinDragState={ds}
-                    onPinPointerDown={onPinPointerDown}
-                  />
-                );
-              })}
-            </div>
-            <div className="flex-1" />
-            <div className="flex flex-col gap-1 flex-1 items-end">
-              {outputsExec.map((pin) => {
-                const ds = getPinDragState(pin);
-                return (
-                  <GraphPinController
-                    key={pin.id}
-                    pin={pin}
-                    graphPath={graphPath}
-                    groupId={groupId}
-                    contextMenuActions={contextMenuActions}
-                    isActive={activePinId === pin.id}
-                    pinDragState={ds}
-                    onPinPointerDown={onPinPointerDown}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Middle/Bottom Row: Data Pins (Centered) */}
         <div className="flex-1 flex gap-2 px-2 py-2 whitespace-nowrap items-center">
           <div className="flex flex-col gap-1 flex-1">
-            {inputsData.map((pin) => {
+            {node.inputs.map((pin) => {
               const ds = getPinDragState(pin);
               return (
                 <GraphPinController
@@ -145,7 +97,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           </div>
           <div className="flex-1" />
           <div className="flex flex-col gap-1 flex-1 items-end">
-            {outputsData.map((pin) => {
+            {node.outputs.map((pin) => {
               const ds = getPinDragState(pin);
               return (
                 <GraphPinController

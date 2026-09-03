@@ -3,6 +3,7 @@ import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjecti
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -31,8 +32,8 @@ export type PinPreviewRejectionReason =
   | "missing-resource"
   | "missing-pin"
   | "input-pin"
-  | "non-data-output"
   | "orphan-pin"
+  | "compile-required"
   | "generation-exhausted"
   | "stale-project-lifecycle";
 
@@ -53,13 +54,12 @@ type PreviewAuthority = {
 
 export function isPinPreviewActionAvailable(
   graphPath: string | undefined,
-  pin: Pick<PinData, "direction" | "kind" | "address" | "orphan" | "status">,
+  pin: Pick<PinData, "direction" | "address" | "orphan" | "status">,
 ): boolean {
   return Boolean(
     graphPath &&
     inferGraphResourceKind(graphPath) === "event" &&
     pin.direction === "output" &&
-    pin.kind === "data" &&
     !pin.orphan &&
     pin.status !== "orphan",
   );
@@ -67,6 +67,7 @@ export function isPinPreviewActionAvailable(
 
 type ValidPreviewRequest = {
   output: GraphOutputRefDto;
+  compiledSourceHash: string;
   authority: PreviewAuthority;
 };
 
@@ -81,7 +82,6 @@ function staleSettlement(): PinPreviewRequestResult {
 function validatePin(pin: PinData | undefined): PinPreviewRejectionReason | null {
   if (!pin) return "missing-pin";
   if (pin.direction !== "output") return "input-pin";
-  if (pin.kind !== "data") return "non-data-output";
   if (pin.orphan || pin.status === "orphan") return "orphan-pin";
   return null;
 }
@@ -108,9 +108,14 @@ function capturePreviewRequest(
   const pin = bucket.pins[pinId];
   const invalid = validatePin(pin);
   if (invalid) return invalid;
+  const draft = useGraphDraftStore.getState().sessions[graphPath];
+  if (draft?.compileStatus !== "compiled" || !draft.compiledSourceHash) {
+    return "compile-required";
+  }
 
   return {
     output: { graphPath, port: pin.address },
+    compiledSourceHash: draft.compiledSourceHash,
     authority: {
       project,
       projection: bucket,
@@ -169,20 +174,21 @@ export async function requestPinPreview(
   };
 
   try {
-    await ProjectService.executeGraphDocument(
-      captured.authority.project.projectInstanceId,
+    await ProjectService.executeGraphDocument({
+      projectInstanceId: captured.authority.project.projectInstanceId,
       graphPath,
-      {
+      compiledSourceHash: captured.compiledSourceHash,
+      demand: {
         type: "pinPreview",
         output: captured.output,
         generation,
       },
-      (event) => {
+      onEvent: (event) => {
         if (!lease.isCurrent()) return;
         if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) return;
         observeGraphRunEvent(graphPath, event, outcome, observation);
       },
-    );
+    });
   } catch (error) {
     if (!lease.isCurrent()) return staleSettlement();
     if (

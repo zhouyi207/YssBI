@@ -33,8 +33,7 @@ export interface Graph {
 export interface FunctionSignaturePin {
   id: string;
   name: string;
-  /** 结构化类型；缺省表示 exec pin */
-  dataType?: DataType;
+  dataType: DataType;
 }
 
 export type FunctionPinSpec = FunctionSignaturePin;

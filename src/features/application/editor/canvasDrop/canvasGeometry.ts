@@ -1,14 +1,5 @@
-import { getViewport, editorViewportScope } from "@/features/core/viewport";
+import { editorViewportScope, getViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/shared/config-default";
-
-export interface VariableDropMenu {
-  x: number;
-  y: number;
-  worldX: number;
-  worldY: number;
-  variableId: string;
-  variableName: string;
-}
 
 export function clientToWorldInCanvas(
   canvasEl: HTMLElement,

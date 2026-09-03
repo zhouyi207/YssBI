@@ -61,13 +61,13 @@ export function GraphCanvasController({
       resetPinValue,
       setSelectedNodeIds,
       setSelectedConnectionIds,
+      compileGraph,
       executeGraph,
       cancelGraphExecution,
       clearGraphArtifacts,
       createNode,
     },
-    workspace: { activeGraph, selectedNodeIds, selectedConnectionIds },
-    resources: { variables },
+    workspace: { activeGraph, selectedNodeIds, selectedConnectionIds, compileStatus },
     interaction: {
       onCanvasPointerDown,
       onNodePointerDown,
@@ -125,18 +125,11 @@ export function GraphCanvasController({
     activeResourceRef,
   );
   useCanvasWheelZoom(canvasElementRef, viewportScope, interactive);
-  const {
-    variableDropMenu,
-    setVariableDropMenu,
-    handleContextMenu,
-    handleVariableDropGet,
-    handleVariableDropSet,
-  } = useCanvasDrop({
+  const { handleContextMenu } = useCanvasDrop({
     canvasElementRef,
     panelInstanceId,
     groupId,
     graphPath: activeResourceRef,
-    variables,
     setContextMenu,
     setPendingConnection,
     createNode,
@@ -194,37 +187,26 @@ export function GraphCanvasController({
             onClose: closePalette,
           }
         : { kind: "hidden" },
-      variable: variableDropMenu
+      execution: activeGraph
         ? {
-            kind: "visible",
-            x: variableDropMenu.x,
-            y: variableDropMenu.y,
-            variableName: variableDropMenu.variableName,
-            onGet: () => {
-              void handleVariableDropGet(variableDropMenu);
+            kind: "graph",
+            graphPath: activeGraph.graphPath,
+            canExecute: activeGraph.kind === "event",
+            compileStatus,
+            onCompile: () => {
+              void compileGraph(activeGraph.graphPath);
             },
-            onSet: () => {
-              void handleVariableDropSet(variableDropMenu);
+            onExecute: () => {
+              void executeGraph(activeGraph.graphPath);
             },
-            onClose: () => setVariableDropMenu(null),
+            onCancelExecution: () => {
+              void cancelGraphExecution(activeGraph.graphPath);
+            },
+            onClearArtifacts: () => {
+              void clearGraphArtifacts(activeGraph.graphPath);
+            },
           }
         : { kind: "hidden" },
-      execution:
-        activeGraph?.kind === "event"
-          ? {
-              kind: "event",
-              graphPath: activeGraph.graphPath,
-              onExecute: () => {
-                void executeGraph(activeGraph.graphPath);
-              },
-              onCancelExecution: () => {
-                void cancelGraphExecution(activeGraph.graphPath);
-              },
-              onClearArtifacts: () => {
-                void clearGraphArtifacts(activeGraph.graphPath);
-              },
-            }
-          : { kind: "hidden" },
     }),
     [
       activeGraph,
@@ -232,14 +214,12 @@ export function GraphCanvasController({
       cancelGraphExecution,
       clearGraphArtifacts,
       closePalette,
+      compileGraph,
       contextMenu,
       executeGraph,
       handlePaletteSelect,
-      handleVariableDropGet,
-      handleVariableDropSet,
-      setVariableDropMenu,
       sourcePort,
-      variableDropMenu,
+      compileStatus,
     ],
   );
   const contextMenuActions = useMemo(

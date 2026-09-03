@@ -88,12 +88,6 @@ function catalog(
         resourceNames: [localized.title],
         ports: [
           {
-            key: "flow-in",
-            label: locale === "zh-CN" ? "执行" : "Execute",
-            direction: "input",
-            kind: "control",
-          },
-          {
             key: "result",
             label: locale === "zh-CN" ? "结果" : "Result",
             direction: "output",
@@ -185,8 +179,9 @@ describe("NodeDocumentationModal", () => {
     expect(document.body.textContent).not.toContain("English documentation");
     expect(document.body.textContent).toContain("Node ID");
     expect(document.body.textContent).toContain("function.call");
-    expect(document.body.textContent).toContain("flow-in");
-    expect(document.body.textContent).toContain("执行");
+    expect(document.body.textContent).toContain("result");
+    expect(document.body.textContent).toContain("结果");
+    expect(document.body.textContent).toContain("data");
     expect(document.body.textContent).toContain("timeout");
     expect(document.body.textContent).toContain("超时");
     expect(document.body.textContent).toContain("functions/opaque/%E5%8A%A9%E6%89%8B.fn");

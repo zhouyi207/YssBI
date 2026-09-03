@@ -24,7 +24,6 @@ export function makeProjectedPinData(
     id: overrides.id,
     nodeId: overrides.nodeId,
     name: label,
-    type: kind === "data" ? "object" : "exec",
     direction: overrides.direction,
     dataType,
     address: {

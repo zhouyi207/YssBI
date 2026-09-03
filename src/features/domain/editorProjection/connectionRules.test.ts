@@ -28,22 +28,16 @@ const TYPE_SYSTEM: TypeSystemSnapshot = {
 function pin(
   partial: Partial<ConnectionCandidatePin> & { direction: PinDirection },
 ): ConnectionCandidatePin {
-  const type = partial.type ?? "object";
-  const kind = partial.kind ?? (type === "exec" ? "control" : "data");
-  const dataType = kind === "data" ? partial.dataType : undefined;
+  const dataType = partial.dataType;
   const resolvedType =
-    kind !== "data"
-      ? null
-      : (partial.resolvedType ??
-        (dataType ? { display: dataType.kind, resolved: true, dataType } : null));
+    partial.resolvedType ??
+    (dataType ? { display: dataType.kind, resolved: true, dataType } : null);
   return {
     ...partial,
     id: partial.id ?? "p1",
     nodeId: partial.nodeId ?? "n1",
-    type,
     direction: partial.direction,
     dataType,
-    kind,
     orphan: partial.orphan ?? false,
     connections: partial.connections ?? {
       current: 0,
@@ -140,14 +134,12 @@ describe("getPinCompatibility", () => {
       id: "output",
       nodeId: "source",
       direction: "output",
-      kind: "data",
       resolvedType: { display: "Unknown", resolved: false, dataType: null },
     });
     const input = pin({
       id: "input",
       nodeId: "target",
       direction: "input",
-      kind: "data",
       resolvedType: { display: "core.float64", resolved: true, dataType: FLOAT64 },
       dataType: FLOAT64,
     });
@@ -180,7 +172,6 @@ describe("resolveConnectionCompatibility", () => {
     id: "output",
     nodeId: "source",
     direction: "output",
-    kind: "data",
     dataType: FLOAT64,
     connections: appendCapability,
   });
@@ -188,7 +179,6 @@ describe("resolveConnectionCompatibility", () => {
     id: "input",
     nodeId: "target",
     direction: "input",
-    kind: "data",
     dataType: FLOAT64,
     connections: appendCapability,
   });
@@ -215,7 +205,6 @@ describe("resolveConnectionCompatibility", () => {
     ["samePort", output, output],
     ["sameNode", output, pin({ ...input, nodeId: output.nodeId })],
     ["directionMismatch", output, pin({ ...input, direction: "output" })],
-    ["kindMismatch", output, pin({ ...input, type: "exec", kind: "control", dataType: undefined })],
     [
       "typeMismatch",
       output,
@@ -241,42 +230,6 @@ describe("resolveConnectionCompatibility", () => {
     ],
   ] as const)("returns the %s invalid reason", (reason, source, target) => {
     expect(resolveConnectionCompatibility(source, target)).toEqual({ kind: "invalid", reason });
-  });
-
-  it.each(["control", "effect"] as const)("checks %s capability before succeeding", (kind) => {
-    const source = pin({
-      ...output,
-      type: "exec",
-      kind,
-      dataType: undefined,
-    });
-    const fullTarget = pin({
-      ...input,
-      type: "exec",
-      kind,
-      dataType: undefined,
-      connections: {
-        ...appendCapability,
-        current: 1,
-        canAppend: false,
-        canReplace: false,
-      },
-    });
-
-    expect(resolveConnectionCompatibility(source, fullTarget)).toEqual({
-      kind: "invalid",
-      reason: "capacityReached",
-    });
-  });
-
-  it("does not allow control and effect exec pins to interconnect", () => {
-    const control = pin({ ...output, type: "exec", kind: "control", dataType: undefined });
-    const effect = pin({ ...input, type: "exec", kind: "effect", dataType: undefined });
-
-    expect(resolveConnectionCompatibility(control, effect)).toEqual({
-      kind: "invalid",
-      reason: "kindMismatch",
-    });
   });
 
   it("preserves structured data type compatibility and argument-order independence", () => {

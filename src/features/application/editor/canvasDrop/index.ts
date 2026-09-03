@@ -1,6 +1,5 @@
 export type { CreateNodeFn } from "./createNodeFn";
-export type { VariableDropMenu } from "./variableDrop";
-export { clientToWorldInCanvas, isPointInsideCanvas } from "./variableDrop";
+export { clientToWorldInCanvas, isPointInsideCanvas } from "./canvasGeometry";
 export {
   findResourceNodeSpawnTemplate,
   spawnNodeFromTemplate,

@@ -125,11 +125,8 @@ function parseRunErrorCode(value: unknown): RunErrorCode {
     case "relationalHintInvalid":
     case "stream":
     case "missingValue":
-    case "invalidCondition":
     case "outputCount":
     case "operationAlreadyExecuted":
-    case "unsatisfiedEffectDependency":
-    case "loopLimitExceeded":
     case "functionPlanNotFound":
     case "functionPlanFailed":
     case "recursionLimitExceeded":

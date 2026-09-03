@@ -1,9 +1,7 @@
 import { createPortal } from "react-dom";
-import { useTranslation } from "react-i18next";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
-import { ActionMenu } from "@/shared/ui/actionMenu";
 import { NodePalette, type NodePaletteCatalogRowRenderer } from "../../NodePalette";
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
@@ -25,23 +23,14 @@ export type CanvasPaletteOverlayModel =
       onClose: () => void;
     };
 
-export type CanvasVariableOverlayModel =
-  | { kind: "hidden" }
-  | {
-      kind: "visible";
-      x: number;
-      y: number;
-      variableName: string;
-      onGet: () => void;
-      onSet: () => void;
-      onClose: () => void;
-    };
-
 export type CanvasExecutionOverlayModel =
   | { kind: "hidden" }
   | {
-      kind: "event";
+      kind: "graph";
       graphPath: string;
+      canExecute: boolean;
+      compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
+      onCompile: () => void;
       onExecute: () => void;
       onCancelExecution: () => void;
       onClearArtifacts: () => void;
@@ -50,7 +39,6 @@ export type CanvasExecutionOverlayModel =
 export interface CanvasOverlaysModel {
   graph: CanvasOverlayGraphModel;
   palette: CanvasPaletteOverlayModel;
-  variable: CanvasVariableOverlayModel;
   execution: CanvasExecutionOverlayModel;
 }
 
@@ -61,8 +49,7 @@ export default function CanvasOverlays({
   model: CanvasOverlaysModel;
   catalogRowRenderer: NodePaletteCatalogRowRenderer;
 }) {
-  const { t } = useTranslation();
-  const { graph, palette, variable, execution } = model;
+  const { graph, palette, execution } = model;
 
   return (
     <>
@@ -72,9 +59,12 @@ export default function CanvasOverlays({
         </div>
       ) : null}
 
-      {execution.kind === "event" ? (
+      {execution.kind === "graph" ? (
         <CanvasExecutionToolbar
           graphPath={execution.graphPath}
+          canExecute={execution.canExecute}
+          compileStatus={execution.compileStatus}
+          onCompile={execution.onCompile}
           onExecute={execution.onExecute}
           onCancelExecution={execution.onCancelExecution}
           onClearArtifacts={execution.onClearArtifacts}
@@ -95,33 +85,6 @@ export default function CanvasOverlays({
             getOverlayPortalRoot(),
           )
         : null}
-
-      {variable.kind === "visible" ? (
-        <ActionMenu
-          position={{ x: variable.x, y: variable.y }}
-          sections={[
-            {
-              items: [
-                {
-                  id: "get-variable",
-                  label: t("canvas.getVariable", { name: variable.variableName }),
-                  onClick: variable.onGet,
-                },
-              ],
-            },
-            {
-              items: [
-                {
-                  id: "set-variable",
-                  label: t("canvas.setVariable", { name: variable.variableName }),
-                  onClick: variable.onSet,
-                },
-              ],
-            },
-          ]}
-          onClose={variable.onClose}
-        />
-      ) : null}
     </>
   );
 }

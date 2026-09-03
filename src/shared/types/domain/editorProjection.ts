@@ -116,7 +116,7 @@ export interface PortDisplayDto {
   instanceLabel: string | null;
 }
 export type PortDirectionDto = "input" | "output";
-export type PortKindDto = "data" | "control" | "effect";
+export type PortKindDto = "data";
 export interface PortInstanceAdditionDto {
   templateKey: string;
   label: string;

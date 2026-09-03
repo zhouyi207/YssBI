@@ -42,14 +42,12 @@ describe("theme token resolver", () => {
 
     expect(Object.keys(palette).sort()).toEqual([
       "boolean",
-      "exec",
       "numeric",
       "object",
       "table",
       "temporal",
       "text",
     ]);
-    expect(palette.exec).toBe("#ffffff");
     expect(palette.numeric).toBe("#5eead4");
   });
 });

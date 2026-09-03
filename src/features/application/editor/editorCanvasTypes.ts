@@ -1,6 +1,6 @@
 import type { useNodeManagement } from "@/features/application/dataManagement/useNodeManagement";
 import type { CanvasMutationOutcome } from "@/features/core/canvas";
-import type { EditorContextMenuState, EditorVariables } from "@/features/core/editor";
+import type { EditorContextMenuState } from "@/features/core/editor";
 import type { GraphSelection } from "@/modules/workbench/public";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { EditorCommandTarget } from "./editorCommandFocus";
@@ -38,7 +38,7 @@ export type EditorCanvasCommandsSlice = Pick<
 > &
   Pick<
     ReturnType<typeof useProjectOperations>,
-    "executeGraph" | "cancelGraphExecution" | "clearGraphArtifacts"
+    "compileGraph" | "executeGraph" | "cancelGraphExecution" | "clearGraphArtifacts"
   > &
   Pick<ReturnType<typeof useNodeManagement>, "createNode">;
 
@@ -50,10 +50,7 @@ export interface EditorCanvasWorkspaceSlice {
   } | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
-}
-
-export interface EditorCanvasResourcesSlice {
-  variables: EditorVariables;
+  compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
 }
 
 export interface EditorCanvasInteractionSlice {
@@ -79,6 +76,5 @@ export interface EditorCanvasInteractionSlice {
 export interface EditorCanvasSession {
   commands: EditorCanvasCommandsSlice;
   workspace: EditorCanvasWorkspaceSlice;
-  resources: EditorCanvasResourcesSlice;
   interaction: EditorCanvasInteractionSlice;
 }

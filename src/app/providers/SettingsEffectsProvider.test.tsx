@@ -21,7 +21,6 @@ describe("applyThemeTokens", () => {
     expect(root.style.getPropertyValue("--border")).toBe(tokens.border);
     expect(root.style.getPropertyValue("--grid-lines")).toBe(tokens.grid);
     expect(root.style.getPropertyValue("--selection-region")).toBe(tokens.selection);
-    expect(root.style.getPropertyValue("--pin-exec")).toBe(tokens.pins.exec);
     expect(root.style.getPropertyValue("--pin-table")).toBe(tokens.pins.table);
   });
 });

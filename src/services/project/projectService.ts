@@ -40,6 +40,15 @@ export type ProjectCleanupProgressEvent =
   | { kind: "checking"; current: number; total: number }
   | { kind: "removing"; removed: number; total: number };
 
+export interface ExecuteGraphDocumentRequest {
+  projectInstanceId: string;
+  graphPath: string;
+  compiledSourceHash: string;
+  demand: ExecutionDemandDto;
+  onEvent?: (event: RunEvent) => void;
+  onOutput?: (event: RunOutputChannelEvent) => void;
+}
+
 export const PICKER_TASK_CANCELLED = "picker_task_cancelled";
 
 export function isPickerTaskCancelledError(error: unknown): boolean {
@@ -465,13 +474,14 @@ export class ProjectService {
     });
   }
   /** Execute one graph document and drain its streamed run events. */
-  static async executeGraphDocument(
-    projectInstanceId: string,
-    graphPath: string,
-    demand: ExecutionDemandDto,
-    onEvent?: (event: RunEvent) => void,
-    onOutput?: (event: RunOutputChannelEvent) => void,
-  ): Promise<void> {
+  static async executeGraphDocument({
+    projectInstanceId,
+    graphPath,
+    compiledSourceHash,
+    demand,
+    onEvent,
+    onOutput,
+  }: ExecuteGraphDocumentRequest): Promise<void> {
     const parsedDemand = parseExecutionDemandDto(demand);
     const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent, onOutput);
     try {
@@ -479,6 +489,7 @@ export class ProjectService {
         await invokeCommand<void>("execute_graph_document", {
           projectInstanceId,
           graphPath,
+          compiledSourceHash,
           demand: parsedDemand,
           onEvent: channel,
         });

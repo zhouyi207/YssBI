@@ -3,7 +3,6 @@
  * Extracted from Sidebar.tsx.
  */
 export const PIN_COLORS: Record<string, string> = {
-  exec: "var(--pin-exec)",
   Int32: "var(--pin-numeric)",
   Int64: "var(--pin-numeric)",
   Float32: "var(--pin-numeric)",

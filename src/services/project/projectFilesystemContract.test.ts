@@ -37,6 +37,7 @@ function productionSources(directory = sourceRoot): Array<{ path: string; source
 
 const lifecycleOwnedNodeCommandIdentityFields = {
   transform_graph_draft: "projectInstanceId",
+  compile_graph_draft: "projectInstanceId",
   update_function_signature: "projectInstanceId",
   hydrate_editor_graph: "projectInstanceId",
   export_graph_subgraph: "projectInstanceId",

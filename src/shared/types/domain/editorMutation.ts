@@ -243,6 +243,13 @@ export interface GraphEditorSessionDto {
   projection: EditorGraphProjectionDto;
 }
 
+export interface CompileGraphDraftDto {
+  sourceHash: string;
+  cacheHit: boolean;
+  document: GraphDocumentDto;
+  projection: EditorGraphProjectionDto;
+}
+
 export interface GraphDraftUpdateDto {
   document: GraphDocumentDto;
   patch: GraphDocumentPatchDto;

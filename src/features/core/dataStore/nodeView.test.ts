@@ -32,7 +32,6 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
     id,
     nodeId: "node-1",
     name: label,
-    type: "object",
     direction,
     dataType: { kind: "Float64" },
     address: { kind: "declared", nodeId: "node-1", portKey: id },
@@ -108,7 +107,7 @@ describe("isRerouteNodeView", () => {
               ...inputPin,
               id: "projected-address-key",
               nodeId: "reroute-1",
-              kind: "effect",
+              kind: "data",
               address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
               resolvedType: { display: "Unknown", resolved: false, dataType: null },
             },
@@ -123,7 +122,7 @@ describe("isRerouteNodeView", () => {
     expect(view.nodeType).toBe("opaque.backend.identity");
     expect(view.inputs[0]).toMatchObject({
       id: "projected-address-key",
-      kind: "effect",
+      kind: "data",
       address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
       resolvedType: { display: "Unknown", resolved: false, dataType: null },
     });

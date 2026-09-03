@@ -1,32 +1,20 @@
 /**
- * Pin runtime semantics — single source for exec/data discrimination,
- * display labels, and theme keys. Editor connection compatibility uses the
+ * Data pin runtime semantics — single source for display labels and theme
+ * keys. Editor connection compatibility uses the
  * Rust-projected resolved type and never infers data semantics from bare strings.
  */
 
 import type { DataType } from "./dataType";
 import { dataTypeDisplay } from "./dataType";
 
-export type PinFlowKind = "Exec" | "Data";
-
 export type PinContainerOverlay = "array" | "dataseries";
 
 export interface PinSemanticsFields {
-  type: string;
   dataType?: DataType;
-}
-
-export function isExecPin(pin: Pick<PinSemanticsFields, "type">): boolean {
-  return pin.type === "exec";
-}
-
-export function pinFlowKind(pin: Pick<PinSemanticsFields, "type">): PinFlowKind {
-  return isExecPin(pin) ? "Exec" : "Data";
 }
 
 /** UI label only — not used for compatibility or coercion. */
 export function pinTypeLabel(pin: PinSemanticsFields): string {
-  if (isExecPin(pin)) return "exec";
   if (pin.dataType) return dataTypeDisplay(pin.dataType);
   return "unknown";
 }

@@ -1,16 +1,33 @@
 import { invokeCommand } from "@/services/ipc";
 import type {
+  CompileGraphDraftDto,
   EditorGraphMutationDto,
   GraphDocumentDto,
   GraphDraftSaveDto,
   GraphDraftUpdateDto,
 } from "@/shared/types/dto/editorMutation";
 import {
+  parseCompileGraphDraftDto,
   parseGraphDraftSaveDto,
   parseGraphDraftUpdateDto,
 } from "@/shared/types/dto/editorMutationWireParser";
 
 export class GraphDraftService {
+  static async compile(
+    projectInstanceId: string,
+    graphPath: string,
+    locale: string,
+    document: GraphDocumentDto,
+  ): Promise<CompileGraphDraftDto> {
+    const response: unknown = await invokeCommand("compile_graph_draft", {
+      projectInstanceId,
+      graphPath,
+      locale,
+      document,
+    });
+    return parseCompileGraphDraftDto(response);
+  }
+
   static async transform(
     projectInstanceId: string,
     graphPath: string,

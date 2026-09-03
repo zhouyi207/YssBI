@@ -8,11 +8,11 @@
       "title": "Constants"
     },
     {
-      "categoryId": "control",
+      "categoryId": "dataflow",
       "order": 40,
       "parentCategoryId": null,
-      "searchText": "flow control",
-      "title": "Flow Control"
+      "searchText": "data flow",
+      "title": "Data Flow"
     },
     {
       "categoryId": "conversion",
@@ -129,7 +129,7 @@
         "kind": "static",
         "nodeTypeId": "yssbi.constant.bool"
       },
-      "documentation": "# Boolean Constant\n\nEmits a fixed `Boolean` value configured on the node (no input pins).\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| *(editor)* **Value** | Editable `true` / `false` on the node body |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Value** | Constant `Boolean` |\n\n## Usage\n\nSupply flags to **Branch**, **And**/**Or**, or **Set Variable**. Change the literal in the node UI without rewiring.\n",
+      "documentation": "# Boolean Constant\n\nEmits a fixed `Boolean` value configured on the node (no input pins).\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| *(editor)* **Value** | Editable `true` / `false` on the node body |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Value** | Constant `Boolean` |\n\n## Usage\n\nSupply flags to Boolean operations, filters, or other data transformations. Change the literal in the node UI without rewiring.\n",
       "iconId": "builtin.constants",
       "nodeTypeId": "yssbi.constant.bool",
       "parameters": [
@@ -241,7 +241,7 @@
         "resourcePath": "functions/contract-function",
         "resourceRevision": 11
       },
-      "documentation": "# Call Function\n\nInvokes a **function subgraph** bound to this node. Execution enters at **In** and continues from **Out** after the subgraph finishes.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| **In** (exec) | Trigger to run the linked function graph |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Out** (exec) | Fires when the function subgraph completes |\n\n## Usage\n\nSelect the target function in the node inspector, wire **In** from upstream exec flow, and connect **Out** to the next step. Function inputs/outputs are exposed as dynamic pins on this node.\n",
+      "documentation": "# Call Function\n\nEvaluates a reusable **function subgraph** as part of the analysis dataflow.\n\n## Usage\n\nSelect the target function in the node inspector. Function parameters and results are exposed as derived data pins, and the compiler schedules the function from their data dependencies.\n",
       "iconId": "builtin.project",
       "nodeTypeId": "yssbi.project.function.call",
       "parameters": [
@@ -254,12 +254,6 @@
       "ports": [
         {
           "direction": "input",
-          "key": "enter",
-          "kind": "control",
-          "label": "Enter"
-        },
-        {
-          "direction": "input",
           "key": "arguments",
           "kind": "data",
           "label": "Arguments"
@@ -269,12 +263,6 @@
           "key": "results",
           "kind": "data",
           "label": "Results"
-        },
-        {
-          "direction": "output",
-          "key": "then",
-          "kind": "control",
-          "label": "Then"
         }
       ],
       "resourceNames": ["Contract Function"],

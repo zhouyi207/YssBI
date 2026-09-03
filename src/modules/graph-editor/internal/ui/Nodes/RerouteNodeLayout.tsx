@@ -1,6 +1,5 @@
 import type React from "react";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { PortKindDto } from "@/shared/types/domain/editorProjection";
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import {
@@ -21,20 +20,6 @@ interface RerouteNodeLayoutProps {
   onPinPointerDown?: (event: React.PointerEvent, pin: PinData) => void;
 }
 
-function projectedRerouteKind(node: UINode): PortKindDto | undefined {
-  return node.inputs[0]?.kind ?? node.outputs[0]?.kind;
-}
-
-function gripClassName(kind: PortKindDto | undefined): string {
-  const semanticShape =
-    kind === "effect"
-      ? "rotate-45 rounded-none"
-      : kind === "control"
-        ? "rounded-none"
-        : "rounded-full";
-  return `absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border border-current opacity-70 ${semanticShape}`;
-}
-
 export function RerouteNodeLayout({
   node,
   activePinId,
@@ -45,14 +30,9 @@ export function RerouteNodeLayout({
 }: RerouteNodeLayoutProps) {
   const input = node.inputs[0];
   const output = node.outputs[0];
-  const kind = projectedRerouteKind(node);
 
   return (
-    <div
-      data-reroute-layout
-      data-reroute-kind={kind}
-      className="relative flex h-full w-full items-center justify-between"
-    >
+    <div data-reroute-layout className="relative flex h-full w-full items-center justify-between">
       {input ? (
         <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 [&_.pin-container]:h-5 [&_.pin-container>span]:hidden [&_.pin-circle]:m-0 [&_.pin-circle]:h-5 [&_.pin-circle]:w-5">
           <GraphPinController
@@ -67,8 +47,7 @@ export function RerouteNodeLayout({
       ) : null}
       <div
         data-reroute-grip
-        data-reroute-kind={kind}
-        className={gripClassName(kind)}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-70"
         style={{ width: REROUTE_GRIP_SIZE_PX, height: REROUTE_GRIP_SIZE_PX }}
       />
       {output ? (

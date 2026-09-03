@@ -17,11 +17,8 @@ export type RunErrorCode =
   | "relationalHintInvalid"
   | "stream"
   | "missingValue"
-  | "invalidCondition"
   | "outputCount"
   | "operationAlreadyExecuted"
-  | "unsatisfiedEffectDependency"
-  | "loopLimitExceeded"
   | "functionPlanNotFound"
   | "functionPlanFailed"
   | "recursionLimitExceeded"
@@ -45,11 +42,8 @@ export const RUN_ERROR_CODES = {
   relationalHintInvalid: true,
   stream: true,
   missingValue: true,
-  invalidCondition: true,
   outputCount: true,
   operationAlreadyExecuted: true,
-  unsatisfiedEffectDependency: true,
-  loopLimitExceeded: true,
   functionPlanNotFound: true,
   functionPlanFailed: true,
   recursionLimitExceeded: true,

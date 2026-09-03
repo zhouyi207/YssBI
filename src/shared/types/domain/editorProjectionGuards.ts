@@ -11,7 +11,7 @@ import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath"
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(["input", "output"]);
-const portKinds = new Set(["data", "control", "effect"]);
+const portKinds = new Set(["data"]);
 const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbound"]);
 const scalarTypes = new Set([
   "boolean",

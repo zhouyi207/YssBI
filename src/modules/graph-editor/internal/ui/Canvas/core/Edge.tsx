@@ -1,39 +1,15 @@
 import React from "react";
 import { computeEdgePath } from "@/features/core/canvas";
 
-export type EdgeKind = "exec" | "data";
-
-/** 流动态：exec 控制流 / data 值沿 output→input 传递（原高亮流动样式） */
-const FLOW_EDGE_STYLE: Record<
-  EdgeKind,
-  {
-    stroke: string;
-    flowStroke: string;
-    glow: string;
-    idleGlow: string;
-    flowDasharray: string;
-    flowAnimation: string;
-    glowAnimation: string;
-  }
-> = {
-  data: {
-    stroke: "var(--status-success)",
-    flowStroke: "var(--pin-numeric)",
-    glow: "color-mix(in srgb, var(--status-success) 50%, transparent)",
-    idleGlow: "color-mix(in srgb, var(--status-success) 25%, transparent)",
-    flowDasharray: "14 26",
-    flowAnimation: "edgeFlowData 1.2s linear infinite",
-    glowAnimation: "edgeGlowData 1.6s ease-in-out infinite",
-  },
-  exec: {
-    stroke: "var(--status-warning)",
-    flowStroke: "var(--pin-text)",
-    glow: "color-mix(in srgb, var(--status-warning) 55%, transparent)",
-    idleGlow: "color-mix(in srgb, var(--status-warning) 30%, transparent)",
-    flowDasharray: "6 10",
-    flowAnimation: "edgeFlowExec 0.65s linear infinite",
-    glowAnimation: "edgeGlowExec 0.9s ease-in-out infinite",
-  },
+/** 数据值沿 output → input 传播时的视觉样式。 */
+const FLOW_EDGE_STYLE = {
+  stroke: "var(--status-success)",
+  flowStroke: "var(--pin-numeric)",
+  glow: "color-mix(in srgb, var(--status-success) 50%, transparent)",
+  idleGlow: "color-mix(in srgb, var(--status-success) 25%, transparent)",
+  flowDasharray: "14 26",
+  flowAnimation: "edgeFlowData 1.2s linear infinite",
+  glowAnimation: "edgeGlowData 1.6s ease-in-out infinite",
 };
 
 /** 取数态：消费者声明 data 依赖（ConnectionActive），细虚线向 input 侧轻 pulse */
@@ -57,11 +33,10 @@ interface EdgeProps {
   y2: number;
   color?: string;
   thickness?: number;
-  edgeKind?: EdgeKind;
   startIsInput?: boolean;
   /** data 取数依赖已声明 */
   isPullActive?: boolean;
-  /** data 值流动 / exec 控制流经过 */
+  /** 数据值已经沿连接传播 */
   isFlowActive?: boolean;
   isError?: boolean;
   isRunning?: boolean;
@@ -113,7 +88,6 @@ export const Edge = React.memo<EdgeProps>(
     y2,
     color = "var(--muted-foreground)",
     thickness = 2,
-    edgeKind = "data",
     startIsInput = false,
     isPullActive = false,
     isFlowActive = false,
@@ -129,8 +103,8 @@ export const Edge = React.memo<EdgeProps>(
   }) => {
     const [hovered, setHovered] = React.useState(false);
     const pathData = computeEdgePath(x1, y1, x2, y2, startIsInput);
-    const flow = FLOW_EDGE_STYLE[edgeKind];
-    const showPull = edgeKind === "data" && isPullActive && !isError;
+    const flow = FLOW_EDGE_STYLE;
+    const showPull = isPullActive && !isError;
     const showFlow = isFlowActive && !isError;
     const highlighted = showPull || showFlow;
     const strokeColor = isError
@@ -214,7 +188,7 @@ export const Edge = React.memo<EdgeProps>(
               d={pathData}
               fill="none"
               stroke={isError ? "var(--status-danger)" : flow.flowStroke}
-              strokeWidth={edgeKind === "exec" ? thickness + 3 : thickness + 2}
+              strokeWidth={thickness + 2}
               strokeLinecap="round"
               className="pointer-events-none"
               style={{
@@ -228,7 +202,7 @@ export const Edge = React.memo<EdgeProps>(
               stroke={
                 isError ? "color-mix(in srgb, var(--status-danger) 50%, transparent)" : flow.glow
               }
-              strokeWidth={edgeKind === "exec" ? thickness + 10 : thickness + 8}
+              strokeWidth={thickness + 8}
               strokeLinecap="round"
               className="pointer-events-none"
               style={{
@@ -244,7 +218,7 @@ export const Edge = React.memo<EdgeProps>(
             d={pathData}
             fill="none"
             stroke={flow.idleGlow}
-            strokeWidth={edgeKind === "exec" ? thickness + 8 : thickness + 6}
+            strokeWidth={thickness + 6}
             strokeLinecap="round"
             className="pointer-events-none"
             style={{ filter: "blur(4px)" }}

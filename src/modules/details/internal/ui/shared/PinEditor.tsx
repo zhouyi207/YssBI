@@ -73,7 +73,6 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
           {pins.map((pin, idx) => {
             const editorType = signatureEditorTypeOption(pin);
             const container = signatureContainerOverlay(pin.dataType);
-            const isExec = editorType === "exec";
 
             return (
               <div key={pin.id} className={detailPinRowClass}>
@@ -102,7 +101,6 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      disabled={isExec}
                       onClick={() => {
                         const newPins = [...pins];
                         newPins[idx] = cycleSignatureContainer(pin);

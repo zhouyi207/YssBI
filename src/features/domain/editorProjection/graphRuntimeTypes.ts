@@ -8,7 +8,7 @@
 
 import type { ConnectionId, GraphPath, NodeId, PinId } from "@/shared/types/domain/ids";
 export type { NodeId, PinId, GraphPath, ConnectionId };
-import type { PinDirection, RuntimePinKind } from "@/shared/types/domain/pin";
+import type { PinDirection } from "@/shared/types/domain/pin";
 import type { DataType } from "@/shared/types/domain/dataType";
 import type {
   DiagnosticDto,
@@ -47,7 +47,6 @@ export interface PinData {
   id: string;
   nodeId: string;
   name: string;
-  type: RuntimePinKind;
   direction: PinDirection;
   /** Derived display/interaction alias for `resolvedType.dataType`. */
   dataType?: DataType;

@@ -1,14 +1,7 @@
 import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/shared/config-default";
 import type { ThemeMode, ThemeSettings } from "@/shared/types/settings";
 
-export type PinSemanticCategory =
-  | "exec"
-  | "numeric"
-  | "boolean"
-  | "text"
-  | "temporal"
-  | "table"
-  | "object";
+export type PinSemanticCategory = "numeric" | "boolean" | "text" | "temporal" | "table" | "object";
 
 export type PinPalette = Record<PinSemanticCategory, string>;
 
@@ -46,7 +39,6 @@ export interface ResolvedThemeTokens {
 }
 
 const DARK_PIN_PALETTE: PinPalette = {
-  exec: "#ffffff",
   numeric: "#5eead4",
   boolean: "#fb7185",
   text: "#fbbf24",
@@ -56,7 +48,6 @@ const DARK_PIN_PALETTE: PinPalette = {
 };
 
 const LIGHT_PIN_PALETTE: PinPalette = {
-  exec: "#111827",
   numeric: "#0e7490",
   boolean: "#b91c1c",
   text: "#a16207",

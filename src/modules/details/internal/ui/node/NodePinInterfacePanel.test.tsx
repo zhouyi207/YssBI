@@ -64,20 +64,14 @@ const output: NodePinViewModel = {
 
 const graphPath = "events/Main.yssbi-event";
 
-function makePin(
-  id: string,
-  nodeId: string,
-  name: string,
-  direction: "input" | "output",
-  kind: "data" | "control" = "data",
-) {
+function makePin(id: string, nodeId: string, name: string, direction: "input" | "output") {
   return makeProjectedPinData({
     id,
     nodeId,
     name,
     direction,
-    dataType: kind === "control" ? undefined : { kind: "Float64" as const },
-    kind,
+    dataType: { kind: "Float64" as const },
+    kind: "data",
     connections: {
       current: 0,
       maximum: null,
@@ -139,7 +133,6 @@ function graphBucket(): GraphEntityBucket {
       [output.id]: makePin(output.id, "current", output.name, "output"),
       "source-output": makePin("source-output", "source", "Result", "output"),
       "target-input": makePin("target-input", "target", "Value", "input"),
-      "exec-input": makePin("exec-input", "target", "Exec", "input", "control"),
     },
     connections: {},
     graphNodes: ["current", "source", "target"],
@@ -148,7 +141,6 @@ function graphBucket(): GraphEntityBucket {
       [output.id]: [],
       "source-output": [],
       "target-input": [],
-      "exec-input": [],
     },
   };
 }
@@ -221,12 +213,6 @@ describe("NodePinInterfacePanel", () => {
         item.textContent?.trim(),
       ),
     ).toContain("Source node · Result");
-    expect(
-      Array.from(document.querySelectorAll('[data-slot="select-item"]')).map((item) =>
-        item.textContent?.trim(),
-      ),
-    ).not.toContain("Target node · Exec");
-
     await act(async () => {
       container
         .querySelectorAll<HTMLElement>('[data-slot="collapsible-trigger"]')[1]
@@ -438,7 +424,7 @@ describe("NodePinInterfacePanel", () => {
     const address = {
       kind: "instance" as const,
       nodeId: "current",
-      templateKey: "then",
+      templateKey: "column",
       instanceId: "00000000-0000-0000-0000-000000000011",
     };
     bucket.pins[output.id] = {
@@ -448,8 +434,8 @@ describe("NodePinInterfacePanel", () => {
     };
     const additions = [
       {
-        templateKey: "then",
-        label: "Then",
+        templateKey: "column",
+        label: "Column",
         direction: "output" as const,
         canAdd: true,
       },
@@ -475,10 +461,12 @@ describe("NodePinInterfacePanel", () => {
     });
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="add-port-instance-then"]')?.click();
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="add-port-instance-column"]')
+        ?.click();
       await Promise.resolve();
     });
-    expect(addPortInstance).toHaveBeenCalledWith(graphPath, "current", "then");
+    expect(addPortInstance).toHaveBeenCalledWith(graphPath, "current", "column");
 
     await act(async () => {
       container

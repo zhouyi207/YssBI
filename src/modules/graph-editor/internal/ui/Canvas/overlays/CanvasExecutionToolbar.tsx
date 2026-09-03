@@ -10,6 +10,7 @@ import {
   VscDebugRestart,
   VscPlay,
   VscRunAll,
+  VscGear,
 } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
 
@@ -30,11 +31,17 @@ function CanvasToolbarButton({
 
 export function CanvasExecutionToolbar({
   graphPath,
+  canExecute,
+  compileStatus,
+  onCompile,
   onExecute,
   onCancelExecution,
   onClearArtifacts,
 }: {
   graphPath: string;
+  canExecute: boolean;
+  compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
+  onCompile: () => void;
   onExecute: () => void;
   onCancelExecution: () => void;
   onClearArtifacts: () => void;
@@ -55,6 +62,8 @@ export function CanvasExecutionToolbar({
   const isLiveRunning = graphStatus === "running";
   const canReplay = hasRecording && !graphDirty && !isLiveRunning;
   const canClear = !isLiveRunning && !playbackActive && graphHasClearableArtifacts(graphState);
+  const isCompiling = compileStatus === "compiling";
+  const canRunCompiled = canExecute && compileStatus === "compiled" && !isLiveRunning;
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
@@ -111,6 +120,18 @@ export function CanvasExecutionToolbar({
         type="button"
         variant="ghost"
         size="sm"
+        onClick={onCompile}
+        disabled={isCompiling || isLiveRunning}
+        className="text-blue-400 hover:text-blue-300 disabled:opacity-40"
+        tooltip={isCompiling ? t("canvas.compilingGraph") : t("canvas.compileGraph")}
+      >
+        <VscGear size={14} />
+      </CanvasToolbarButton>
+
+      <CanvasToolbarButton
+        type="button"
+        variant="ghost"
+        size="sm"
         onClick={onClearArtifacts}
         disabled={!canClear}
         className={
@@ -145,13 +166,21 @@ export function CanvasExecutionToolbar({
         variant="ghost"
         size="sm"
         onClick={onExecute}
-        disabled={isLiveRunning}
+        disabled={!canRunCompiled}
         className={
-          isLiveRunning
+          !canRunCompiled
             ? "text-green-400 opacity-60 cursor-not-allowed"
             : "text-green-400 hover:text-green-300"
         }
-        tooltip={isLiveRunning ? t("canvas.executing") : t("canvas.executeCurrentEvent")}
+        tooltip={
+          isLiveRunning
+            ? t("canvas.executing")
+            : !canExecute
+              ? t("canvas.functionRunUnavailable")
+              : compileStatus !== "compiled"
+                ? t("canvas.compileRequired")
+                : t("canvas.executeCurrentGraph")
+        }
       >
         <VscRunAll size={14} />
       </CanvasToolbarButton>

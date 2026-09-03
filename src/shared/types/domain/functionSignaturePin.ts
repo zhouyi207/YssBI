@@ -1,6 +1,5 @@
 /**
- * Function signature pin — structured DataType contract (single source).
- * `dataType` absent = exec pin; present = data pin.
+ * Function signature pin — structured data-only contract.
  */
 
 import type { DataType } from "./dataType";
@@ -12,18 +11,11 @@ export type SignatureScalarKind = "Boolean" | "Int64" | "Float64" | "String" | "
 export type SignatureContainerOverlay = import("./pinSemantics").PinContainerOverlay;
 
 /** PinEditor 下拉选项（展示标签）→ 标量 DataType kind */
-export const SIGNATURE_EDITOR_TYPE_OPTIONS = [
-  "exec",
-  "int",
-  "float",
-  "bool",
-  "string",
-  "object",
-] as const;
+export const SIGNATURE_EDITOR_TYPE_OPTIONS = ["int", "float", "bool", "string", "object"] as const;
 
 export type SignatureEditorTypeOption = (typeof SIGNATURE_EDITOR_TYPE_OPTIONS)[number];
 
-const EDITOR_TO_SCALAR: Record<Exclude<SignatureEditorTypeOption, "exec">, SignatureScalarKind> = {
+const EDITOR_TO_SCALAR: Record<SignatureEditorTypeOption, SignatureScalarKind> = {
   int: "Int64",
   float: "Float64",
   bool: "Boolean",
@@ -31,7 +23,7 @@ const EDITOR_TO_SCALAR: Record<Exclude<SignatureEditorTypeOption, "exec">, Signa
   object: "Object",
 };
 
-const SCALAR_TO_EDITOR: Record<SignatureScalarKind, Exclude<SignatureEditorTypeOption, "exec">> = {
+const SCALAR_TO_EDITOR: Record<SignatureScalarKind, SignatureEditorTypeOption> = {
   Boolean: "bool",
   Int64: "int",
   Float64: "float",
@@ -39,12 +31,8 @@ const SCALAR_TO_EDITOR: Record<SignatureScalarKind, Exclude<SignatureEditorTypeO
   Object: "object",
 };
 
-export function isExecSignaturePin(pin: { dataType?: DataType }): boolean {
-  return pin.dataType == null;
-}
-
 export function signatureContainerOverlay(
-  dataType: DataType | undefined,
+  dataType: DataType,
 ): SignatureContainerOverlay | undefined {
   return dataTypeContainerOverlay(dataType);
 }
@@ -75,18 +63,14 @@ export function buildSignatureDataType(
   return base;
 }
 
-export function signatureEditorTypeOption(pin: { dataType?: DataType }): SignatureEditorTypeOption {
-  if (isExecSignaturePin(pin)) return "exec";
-  return SCALAR_TO_EDITOR[signatureScalarKind(pin.dataType!)];
+export function signatureEditorTypeOption(pin: { dataType: DataType }): SignatureEditorTypeOption {
+  return SCALAR_TO_EDITOR[signatureScalarKind(pin.dataType)];
 }
 
 export function applySignatureEditorType(
-  pin: { id: string; name: string; dataType?: DataType },
+  pin: FunctionSignaturePin,
   option: SignatureEditorTypeOption,
-): { id: string; name: string; dataType?: DataType } {
-  if (option === "exec") {
-    return { id: pin.id, name: pin.name };
-  }
+): FunctionSignaturePin {
   const container = signatureContainerOverlay(pin.dataType);
   return {
     id: pin.id,
@@ -95,12 +79,7 @@ export function applySignatureEditorType(
   };
 }
 
-export function cycleSignatureContainer(pin: { id: string; name: string; dataType?: DataType }): {
-  id: string;
-  name: string;
-  dataType?: DataType;
-} {
-  if (isExecSignaturePin(pin) || !pin.dataType) return pin;
+export function cycleSignatureContainer(pin: FunctionSignaturePin): FunctionSignaturePin {
   const scalar = signatureScalarKind(pin.dataType);
   const overlay = signatureContainerOverlay(pin.dataType);
   const next: SignatureContainerOverlay | undefined =
@@ -110,10 +89,6 @@ export function cycleSignatureContainer(pin: { id: string; name: string; dataTyp
     name: pin.name,
     dataType: buildSignatureDataType(scalar, next),
   };
-}
-
-export function createExecSignaturePin(id: string, name: string): FunctionSignaturePin {
-  return { id, name };
 }
 
 export function createDataSignaturePin(

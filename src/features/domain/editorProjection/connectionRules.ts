@@ -5,15 +5,7 @@ import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTyp
 
 export type ConnectionCandidatePin = Pick<
   PinData,
-  | "id"
-  | "nodeId"
-  | "type"
-  | "direction"
-  | "dataType"
-  | "connections"
-  | "kind"
-  | "orphan"
-  | "resolvedType"
+  "id" | "nodeId" | "direction" | "dataType" | "connections" | "orphan" | "resolvedType"
 >;
 
 export type TypeCompatibility = "compatible" | "incompatible" | "indeterminate";
@@ -89,8 +81,6 @@ export function getPinCompatibility(
   )
     return "incompatible";
 
-  if (source.kind !== target.kind) return "incompatible";
-  if (source.kind !== "data") return "compatible";
   return getDataTypeCompatibility(
     projectedPinDataType(source),
     projectedPinDataType(target),
@@ -102,7 +92,6 @@ export type ConnectionInvalidReason =
   | "samePort"
   | "sameNode"
   | "directionMismatch"
-  | "kindMismatch"
   | "typeMismatch"
   | "orphan"
   | "capacityReached";
@@ -111,10 +100,6 @@ export type ConnectionCompatibility =
   | { kind: "append" }
   | { kind: "replace" }
   | { kind: "invalid"; reason: ConnectionInvalidReason };
-
-function connectionKind(pin: ConnectionCandidatePin): "data" | "control" | "effect" {
-  return pin.kind;
-}
 
 function canAppendOrReplace(pin: ConnectionCandidatePin): boolean {
   return pin.connections.canAppend || pin.connections.canReplace;
@@ -131,16 +116,12 @@ export function resolveConnectionCompatibility(
 
   const source = a.direction === "output" ? a : b;
   const target = a.direction === "input" ? a : b;
-  const sourceKind = connectionKind(source);
-  const targetKind = connectionKind(target);
-
-  if (sourceKind !== targetKind) return { kind: "invalid", reason: "kindMismatch" };
   if (source.orphan || target.orphan) return { kind: "invalid", reason: "orphan" };
   if (!canAppendOrReplace(source) || !canAppendOrReplace(target)) {
     return { kind: "invalid", reason: "capacityReached" };
   }
 
-  if (sourceKind === "data" && getPinCompatibility(source, target, typeSystem) === "incompatible") {
+  if (getPinCompatibility(source, target, typeSystem) === "incompatible") {
     return { kind: "invalid", reason: "typeMismatch" };
   }
 

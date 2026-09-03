@@ -38,8 +38,8 @@ describe("useGraphDiagnosticCounts", () => {
 
     const withDiagnostic = makeEditorProjectionFixture({ graphPath });
     withDiagnostic.projection.diagnostics.push({
-      code: "compiler.control.call.target_invalid",
-      message: "Call target is invalid",
+      code: "compiler.dependency.value_cycle",
+      message: "Data dependencies contain a cycle",
       severity: "error",
       blocking: true,
       location: { kind: "node", nodeId: withDiagnostic.projection.nodes[0].nodeId },

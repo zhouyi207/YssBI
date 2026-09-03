@@ -6,7 +6,6 @@ export const GRAPH_DRAFT_ERROR_CODES = [
   "graph_connection_not_found",
   "graph_port_orphan",
   "graph_connection_direction_mismatch",
-  "graph_connection_kind_mismatch",
   "graph_connection_type_mismatch",
   "graph_connection_type_unavailable",
   "graph_connection_type_unresolved",

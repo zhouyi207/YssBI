@@ -8,7 +8,6 @@ import {
 } from "react";
 import { useCanvasInteraction } from "@/features/core/canvas";
 import { useNodeManagement } from "@/features/application/dataManagement";
-import { useVariableStore } from "@/features/core/dataStore";
 import {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
@@ -24,7 +23,6 @@ import type {
   EditorCanvasCommandsSlice,
   EditorCanvasInteractionSlice,
   EditorCanvasMode,
-  EditorCanvasResourcesSlice,
   EditorCanvasScope,
   EditorCanvasSession,
   EditorCanvasWorkspaceSlice,
@@ -32,6 +30,7 @@ import type {
 import { useCanvasMutationHandlers } from "./useCanvasMutationHandlers";
 import { useEditorOperations } from "./useEditorOperations";
 import { useProjectOperations } from "./useProjectOperations";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 
 export interface UseEditorCanvasOptions {
   mode: EditorCanvasMode;
@@ -44,11 +43,13 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   const projectCommands = useProjectOperations();
   const nodeCommands = useNodeManagement();
   const { setContextMenu: setEditorContextMenu } = useEditorUIActions();
-  const variables = useVariableStore((state) => state.variables);
   const paneSelection = useEditorPaneStateStore(
     (state) => state.selections[scope.panelInstanceId] ?? EMPTY_EDITOR_PANE_SELECTION,
   );
   const mutationHandlers = useCanvasMutationHandlers();
+  const compileStatus = useGraphDraftStore(
+    (state) => state.sessions[scope.graphPath]?.compileStatus ?? "uncompiled",
+  );
   const interactive = mode === "interactive";
   const groupIdRef = useRef(scope.groupId);
   const graphPathRef = useRef<string | null>(scope.graphPath);
@@ -183,6 +184,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
         editorCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
       setSelectedNodeIds,
       setSelectedConnectionIds,
+      compileGraph: projectCommands.compileGraph,
       executeGraph: projectCommands.executeGraph,
       cancelGraphExecution: projectCommands.cancelGraphExecution,
       clearGraphArtifacts: projectCommands.clearGraphArtifacts,
@@ -202,6 +204,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       setSelectedNodeIds,
       setSelectedConnectionIds,
       projectCommands.executeGraph,
+      projectCommands.compileGraph,
       projectCommands.cancelGraphExecution,
       projectCommands.clearGraphArtifacts,
       createNode,
@@ -214,10 +217,9 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       activeGraph: { graphPath: scope.graphPath, kind: scope.graphKind },
       selectedNodeIds: paneSelection.selectedNodeIds,
       selectedConnectionIds: paneSelection.selectedConnectionIds,
+      compileStatus,
     };
-  }, [paneSelection.selectedConnectionIds, paneSelection.selectedNodeIds, scope]);
-
-  const resources = useMemo((): EditorCanvasResourcesSlice => ({ variables }), [variables]);
+  }, [compileStatus, paneSelection.selectedConnectionIds, paneSelection.selectedNodeIds, scope]);
 
   const interaction = useMemo(
     (): EditorCanvasInteractionSlice => ({
@@ -242,8 +244,5 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
     ],
   );
 
-  return useMemo(
-    () => ({ commands, workspace, resources, interaction }),
-    [commands, interaction, resources, workspace],
-  );
+  return useMemo(() => ({ commands, workspace, interaction }), [commands, interaction, workspace]);
 }

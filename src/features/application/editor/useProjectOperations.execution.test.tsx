@@ -10,10 +10,16 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { useProjectOperations } from "./useProjectOperations";
 
 const projectInstanceId = "project-instance-1";
 const graphPath = "events/Main.yssbi-event";
+const compiledSourceHash = "2".repeat(64);
 
 function runStartedEvent(): RunEvent {
   return {
@@ -92,6 +98,16 @@ describe("useProjectOperations execution demand", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     vi.spyOn(ProjectService, "executeGraphDocument").mockResolvedValue(undefined);
+    const projection = makeEditorProjectionFixture({ graphPath }).projection;
+    const session = makeGraphEditorSession(projection);
+    useGraphDraftStore.getState().install(graphPath, session);
+    expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
+    useGraphDraftStore.getState().completeCompile(graphPath, {
+      sourceHash: compiledSourceHash,
+      cacheHit: false,
+      document: session.document,
+      projection,
+    });
 
     function Harness() {
       operations = useProjectOperations();
@@ -104,6 +120,7 @@ describe("useProjectOperations execution demand", () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
+    useGraphDraftStore.getState().clear();
     clearProjectLifecycle();
   });
 
@@ -112,50 +129,49 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(ProjectService.executeGraphDocument).toHaveBeenCalledWith(
+    expect(ProjectService.executeGraphDocument).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      { type: "default" },
-      expect.any(Function),
-      expect.any(Function),
-    );
+      compiledSourceHash,
+      demand: { type: "default" },
+      onEvent: expect.any(Function),
+      onOutput: expect.any(Function),
+    });
   });
 
   it("opens only the backend-requested result window", async () => {
-    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
-      async (_projectInstanceId, _graphPath, _demand, onEvent) => {
-        onEvent?.({
-          ...runStartedEvent(),
-          kind: {
-            type: "pinPreviewResultReady",
-            output: {
-              graphPath,
-              port: {
-                kind: "declared",
-                nodeId: "00000000-0000-0000-0000-000000000001",
-                portKey: "value",
-              },
-            },
-            generation: 3,
-            resultId: "16",
-          },
-        });
-        expect(openInspectableResult).not.toHaveBeenCalled();
-        onEvent?.({
-          ...runStartedEvent(),
-          kind: {
-            type: "resultInspectionRequested",
-            resultId: "17",
-            source: {
-              graphPath: "functions/Inspect.yssbi-function",
-              nodeId: null,
-              portAddress: null,
+    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(async ({ onEvent }) => {
+      onEvent?.({
+        ...runStartedEvent(),
+        kind: {
+          type: "pinPreviewResultReady",
+          output: {
+            graphPath,
+            port: {
+              kind: "declared",
+              nodeId: "00000000-0000-0000-0000-000000000001",
+              portKey: "value",
             },
           },
-        });
-        return undefined;
-      },
-    );
+          generation: 3,
+          resultId: "16",
+        },
+      });
+      expect(openInspectableResult).not.toHaveBeenCalled();
+      onEvent?.({
+        ...runStartedEvent(),
+        kind: {
+          type: "resultInspectionRequested",
+          resultId: "17",
+          source: {
+            graphPath: "functions/Inspect.yssbi-function",
+            nodeId: null,
+            portAddress: null,
+          },
+        },
+      });
+      return undefined;
+    });
 
     await act(async () => {
       await operations.executeGraph();
@@ -181,8 +197,8 @@ describe("useProjectOperations execution demand", () => {
     let emit!: (event: RunEvent) => void;
     let resolveExecution!: () => void;
     vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
-      (_projectInstanceId, _graphPath, _demand, onEvent) =>
-        new Promise((resolve) => {
+      ({ onEvent }) =>
+        new Promise<void>((resolve) => {
           emit = onEvent ?? (() => undefined);
           resolveExecution = resolve;
         }),

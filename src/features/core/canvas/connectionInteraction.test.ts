@@ -63,12 +63,6 @@ describe("connectionInteraction", () => {
       { kind: "invalid", reason: "same-direction" },
     ],
     [
-      "kind",
-      source,
-      pin({ ...target, type: "exec", kind: "control", dataType: undefined }),
-      { kind: "invalid", reason: "kind-mismatch" },
-    ],
-    [
       "type",
       source,
       pin({
@@ -77,18 +71,6 @@ describe("connectionInteraction", () => {
         resolvedType: { display: "String", resolved: true, dataType: { kind: "String" } },
       }),
       { kind: "invalid", reason: "type-mismatch" },
-    ],
-    [
-      "control",
-      pin({ ...source, type: "exec", kind: "control", dataType: undefined }),
-      pin({ ...target, type: "exec", kind: "control", dataType: undefined }),
-      { kind: "append" },
-    ],
-    [
-      "effect",
-      pin({ ...source, type: "exec", kind: "effect", dataType: undefined }),
-      pin({ ...target, type: "exec", kind: "effect", dataType: undefined }),
-      { kind: "append" },
     ],
   ] as const)(
     "maps %s compatibility into interaction feedback",

@@ -32,7 +32,6 @@ function PreviewCanvasDropProbe() {
     panelInstanceId: "editor-a",
     groupId: "group-a",
     graphPath: "events/Main.yssbi-event",
-    variables: {},
     setContextMenu: vi.fn(),
     setPendingConnection: vi.fn(),
     createNode: vi.fn(async () => true),

@@ -3,25 +3,17 @@ import {
   applySignatureEditorType,
   buildSignatureDataType,
   createDataSignaturePin,
-  createExecSignaturePin,
   cycleSignatureContainer,
-  isExecSignaturePin,
   signatureEditorTypeOption,
 } from "./functionSignaturePin";
 
 describe("functionSignaturePin", () => {
-  it("creates exec and data signature pins", () => {
-    expect(createExecSignaturePin("in", "In")).toEqual({ id: "in", name: "In" });
+  it("creates typed data signature pins", () => {
     expect(createDataSignaturePin("a", "A", { kind: "Float64" })).toEqual({
       id: "a",
       name: "A",
       dataType: { kind: "Float64" },
     });
-  });
-
-  it("treats missing dataType as exec", () => {
-    expect(isExecSignaturePin({})).toBe(true);
-    expect(signatureEditorTypeOption({})).toBe("exec");
   });
 
   it("builds container types from scalar + overlay", () => {
@@ -45,8 +37,8 @@ describe("functionSignaturePin", () => {
   });
 
   it("maps editor type options to structured dataType", () => {
-    const pin = { id: "a", name: "V" };
+    const pin = { id: "a", name: "V", dataType: { kind: "Int64" as const } };
     expect(applySignatureEditorType(pin, "float").dataType).toEqual({ kind: "Float64" });
-    expect(applySignatureEditorType(pin, "exec").dataType).toBeUndefined();
+    expect(signatureEditorTypeOption(pin)).toBe("int");
   });
 });

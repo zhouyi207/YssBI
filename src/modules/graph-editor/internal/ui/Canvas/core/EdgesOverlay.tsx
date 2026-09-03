@@ -96,7 +96,6 @@ export function buildEdgeData(
       sourceNodeId: fromPin.nodeId,
       targetNodeId: toPin?.nodeId,
       colorKey: visual.colorKey,
-      edgeKind: visual.edgeKind,
     });
   }
   return result;
@@ -271,10 +270,8 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
       <style>{`
         @keyframes edgeFlowData { to { stroke-dashoffset: -40; } }
         @keyframes edgePullData { to { stroke-dashoffset: 40; } }
-        @keyframes edgeFlowExec { to { stroke-dashoffset: -16; } }
         @keyframes edgeGlowData { 0%,100% { opacity: .3; } 50% { opacity: .7; } }
         @keyframes edgePullGlow { 0%,100% { opacity: .2; } 50% { opacity: .5; } }
-        @keyframes edgeGlowExec { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
       `}</style>
       {edges.map((edge) => {
         const start = getPinWorldPos(edge.fromPinId);
@@ -288,10 +285,9 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
         const hasPull = completedConnections?.has(connKey) ?? false;
         const hasFlow = flowingConnections?.has(connKey) ?? false;
         // data：先取数、后流动；ConnectionFlow 仅在 pin 已有值时由后端发出
-        const isPullActive = edge.edgeKind === "data" && hasPull && !hasFlow && !isError;
-        const isFlowActive = edge.edgeKind === "exec" ? hasPull : hasFlow;
+        const isPullActive = hasPull && !hasFlow && !isError;
+        const isFlowActive = hasFlow;
         const color = getPinTypeColor(edge.colorKey, tokens);
-        const edgeKind = edge.edgeKind;
 
         return (
           <g key={edge.id} {...replacementEdgeAttributes(edge.id, highlightedConnectionIds)}>
@@ -305,7 +301,6 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
               y2={end.y}
               color={color}
               thickness={2}
-              edgeKind={edgeKind}
               isPullActive={isPullActive}
               isFlowActive={isFlowActive}
               isError={isError}

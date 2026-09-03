@@ -10,7 +10,6 @@ export function toInteractionPinData(pin: DeepReadonly<PinData>): PinData {
     id: pin.id,
     nodeId: pin.nodeId,
     name: pin.name,
-    type: pin.type,
     direction: pin.direction,
     dataType: pin.dataType,
     address: pin.address,

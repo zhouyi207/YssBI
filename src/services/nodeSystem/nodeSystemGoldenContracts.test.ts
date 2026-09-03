@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import semanticProtocol from "@/tests/fixtures/node-system-contracts/semantic-protocol.json";
 import i18nInventory from "@/tests/fixtures/node-system-contracts/i18n-inventory.json";
 import localizedCatalog from "@/tests/fixtures/node-system-contracts/localized-catalog.json";
 import editorProjection from "@/tests/fixtures/node-system-contracts/editor-projection.json";
@@ -90,7 +89,6 @@ describe("Rust-generated node-system golden contracts", () => {
   });
 
   it("shares one canonical Registry fingerprint across every wire purpose", () => {
-    expect(semanticProtocol.format).toBe("yssbi.semantic-node-protocol.v1");
     expect(i18nInventory.format).toBe("yssbi.i18n-inventory.v1");
     expect(i18nInventory.defaultLocale).toBe("en-US");
     expect(i18nInventory.requiredKeys.length).toBeGreaterThan(0);

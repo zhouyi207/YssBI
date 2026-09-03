@@ -61,30 +61,13 @@ function GraphPinShape({
         fill: "none" as const,
         stroke: baseColor,
         strokeWidth: 2.5,
-        strokeDasharray:
-          visualSpec.shape === "exec" ? "6 24" : visualSpec.shape === "gridRect" ? "8 28" : "7 21",
+        strokeDasharray: visualSpec.shape === "gridRect" ? "8 28" : "7 21",
         className: "pin-flow-stroke",
         filter: "url(#pinGlow)",
       }
     : null;
 
   switch (visualSpec.shape) {
-    case "exec":
-      return (
-        <>
-          <path
-            d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-            fill={fill}
-            stroke={stroke}
-            strokeWidth={strokeWidth}
-            strokeLinejoin="miter"
-            {...dashed}
-          />
-          {pulseStrokeProps ? (
-            <path d="M2 2 L7 2 L11 6 L7 10 L2 10 Z" strokeLinejoin="miter" {...pulseStrokeProps} />
-          ) : null}
-        </>
-      );
     case "gridRect":
       return (
         <>
@@ -244,7 +227,7 @@ export function GraphPinView({
                   </filter>
                 </defs>
               ) : null}
-              {isConnected && visualSpec.edgeKind === "data" ? (
+              {isConnected ? (
                 <circle cx="6" cy="6" r="1.2" fill="white" className="pointer-events-none" />
               ) : null}
             </svg>

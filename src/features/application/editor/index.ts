@@ -42,7 +42,6 @@ export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";
 export { useCanvasWheelZoom } from "./useCanvasWheelZoom";
 export { useCanvasDrop } from "./useCanvasDrop";
-export type { VariableDropMenu } from "./canvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
 export {
   revealDetails,

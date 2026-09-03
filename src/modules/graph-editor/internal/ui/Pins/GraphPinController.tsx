@@ -22,11 +22,7 @@ import {
   isUnboundInputDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { dataValueFromBackend, dataValueToRaw } from "@/shared/types/domain/dataValue";
-import {
-  isExecPin,
-  PRIMITIVE_SCALAR_INPUT_KEYS,
-  scalarPinInputKey,
-} from "@/shared/types/domain/pinSemantics";
+import { PRIMITIVE_SCALAR_INPUT_KEYS, scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import { PinContextMenu } from "../ContextMenu";
@@ -79,12 +75,10 @@ export function GraphPinController(props: GraphPinControllerProps) {
     id,
     nodeId,
     name,
-    type,
     direction,
     connected = false,
     linkCount = 0,
     address,
-    kind,
     orphan,
     status,
     input,
@@ -96,12 +90,12 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const { t } = useTranslation();
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const pinSemantics = useMemo(() => ({ type, dataType }), [dataType, type]);
+  const pinSemantics = useMemo(() => ({ dataType }), [dataType]);
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
   const renderStyle = useMemo(
-    () => resolvePinRenderStyle(visualSpec, isConnected, baseColor, tokens.mutedForeground),
-    [baseColor, isConnected, tokens.mutedForeground, visualSpec],
+    () => resolvePinRenderStyle(isConnected, baseColor, tokens.mutedForeground),
+    [baseColor, isConnected, tokens.mutedForeground],
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -164,11 +158,10 @@ export function GraphPinController(props: GraphPinControllerProps) {
             graphPath,
             address,
             direction,
-            isExec: isExecPin(pinSemantics),
             connections,
           })
         : null,
-    [address, connections, direction, graphPath, pinSemantics],
+    [address, connections, direction, graphPath],
   );
   const viewState = useMemo(
     () => (viewParams ? evaluatePinViewState(viewParams) : null),
@@ -176,7 +169,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
   );
   const previewActionAvailable = isPinPreviewActionAvailable(graphPath, {
     direction,
-    kind,
     address,
     orphan,
     status,

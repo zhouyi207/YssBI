@@ -12,7 +12,7 @@ export interface LocalizedCategoryDto {
 }
 
 export type LocalizedPortDirectionDto = "input" | "output";
-export type LocalizedPortKindDto = "data" | "control" | "effect";
+export type LocalizedPortKindDto = "data";
 
 export interface LocalizedPortDto {
   key: string;
@@ -95,7 +95,7 @@ function isLocalizedPort(value: unknown): value is LocalizedPortDto {
     typeof candidate.key === "string" &&
     typeof candidate.label === "string" &&
     (candidate.direction === "input" || candidate.direction === "output") &&
-    (candidate.kind === "data" || candidate.kind === "control" || candidate.kind === "effect")
+    candidate.kind === "data"
   );
 }
 

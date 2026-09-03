@@ -94,7 +94,6 @@ export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens)
   set("--status-warning", tokens.status.warning);
   set("--status-danger", tokens.status.danger);
   set("--status-info", tokens.status.info);
-  set("--pin-exec", tokens.pins.exec);
   set("--pin-numeric", tokens.pins.numeric);
   set("--pin-boolean", tokens.pins.boolean);
   set("--pin-text", tokens.pins.text);

@@ -1,7 +1,6 @@
 import type { PinSemanticCategory, ResolvedThemeTokens } from "@/shared/theme/themeTokens";
 
 const PIN_TYPE_TO_CATEGORY: Record<string, PinSemanticCategory> = {
-  exec: "exec",
   Int8: "numeric",
   Int16: "numeric",
   Int32: "numeric",

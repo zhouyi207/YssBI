@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type {
   EditorGraphProjectionDto,
   GraphDocumentDto,
+  CompileGraphDraftDto,
   GraphDraftSaveDto,
   GraphDraftUpdateDto,
   GraphEditorSessionDto,
@@ -15,6 +16,9 @@ interface GraphDraftVersion {
 
 export interface GraphDraftSession extends GraphDraftVersion {
   readonly saving: boolean;
+  readonly compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
+  readonly compiledSourceHash: string | null;
+  readonly compileCacheHit: boolean;
   readonly savedDocument: GraphDocumentDto;
   readonly undoStack: readonly GraphDraftVersion[];
   readonly redoStack: readonly GraphDraftVersion[];
@@ -24,6 +28,9 @@ interface GraphDraftStore {
   readonly sessions: Readonly<Record<string, GraphDraftSession>>;
   install(graphPath: string, session: GraphEditorSessionDto): void;
   applyUpdate(graphPath: string, update: GraphDraftUpdateDto): void;
+  beginCompile(graphPath: string): boolean;
+  completeCompile(graphPath: string, result: CompileGraphDraftDto): void;
+  failCompile(graphPath: string): void;
   beginSave(graphPath: string): boolean;
   completeSave(graphPath: string, saved: GraphDraftSaveDto): void;
   failSave(graphPath: string): void;
@@ -51,6 +58,9 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
           document: structuredClone(session.document),
           projection: structuredClone(session.projection),
           saving: false,
+          compileStatus: "uncompiled",
+          compiledSourceHash: null,
+          compileCacheHit: false,
           savedDocument: structuredClone(session.document),
           undoStack: [],
           redoStack: [],
@@ -69,6 +79,9 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
             document: structuredClone(update.document),
             projection: structuredClone(update.projectionReplacement.projection),
             saving: current.saving,
+            compileStatus: "uncompiled",
+            compiledSourceHash: null,
+            compileCacheHit: false,
             savedDocument: current.savedDocument,
             undoStack: [...current.undoStack, cloneVersion(current)],
             redoStack: [],
@@ -77,9 +90,57 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
       };
     }),
 
+  beginCompile: (graphPath) => {
+    const current = get().sessions[graphPath];
+    if (!current || current.saving || current.compileStatus === "compiling") return false;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [graphPath]: { ...state.sessions[graphPath], compileStatus: "compiling" },
+      },
+    }));
+    return true;
+  },
+
+  completeCompile: (graphPath, result) =>
+    set((state) => {
+      const current = state.sessions[graphPath];
+      if (!current || current.compileStatus !== "compiling") return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [graphPath]: {
+            ...current,
+            document: structuredClone(result.document),
+            projection: structuredClone(result.projection),
+            compileStatus: "compiled",
+            compiledSourceHash: result.sourceHash,
+            compileCacheHit: result.cacheHit,
+          },
+        },
+      };
+    }),
+
+  failCompile: (graphPath) =>
+    set((state) => {
+      const current = state.sessions[graphPath];
+      if (!current || current.compileStatus !== "compiling") return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [graphPath]: {
+            ...current,
+            compileStatus: "failed",
+            compiledSourceHash: null,
+            compileCacheHit: false,
+          },
+        },
+      };
+    }),
+
   beginSave: (graphPath) => {
     const current = get().sessions[graphPath];
-    if (!current || current.saving) return false;
+    if (!current || current.saving || current.compileStatus === "compiling") return false;
     set((state) => ({
       sessions: {
         ...state.sessions,
@@ -91,7 +152,8 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
 
   completeSave: (graphPath, saved) =>
     set((state) => {
-      if (!state.sessions[graphPath]) return state;
+      const current = state.sessions[graphPath];
+      if (!current) return state;
       return {
         sessions: {
           ...state.sessions,
@@ -99,6 +161,9 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
             document: structuredClone(saved.document),
             projection: structuredClone(saved.projectionReplacement.projection),
             saving: false,
+            compileStatus: current.compileStatus,
+            compiledSourceHash: current.compiledSourceHash,
+            compileCacheHit: current.compileCacheHit,
             savedDocument: structuredClone(saved.document),
             undoStack: [],
             redoStack: [],
@@ -130,6 +195,9 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         [graphPath]: {
           ...cloneVersion(previous),
           saving: false,
+          compileStatus: "uncompiled",
+          compiledSourceHash: null,
+          compileCacheHit: false,
           savedDocument: current.savedDocument,
           undoStack: nextUndo,
           redoStack: [...current.redoStack, cloneVersion(current)],
@@ -150,6 +218,9 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         [graphPath]: {
           ...cloneVersion(next),
           saving: false,
+          compileStatus: "uncompiled",
+          compiledSourceHash: null,
+          compileCacheHit: false,
           savedDocument: current.savedDocument,
           undoStack: [...current.undoStack, cloneVersion(current)],
           redoStack: nextRedo,

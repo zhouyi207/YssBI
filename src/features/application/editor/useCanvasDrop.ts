@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
-import { BUILTIN_NODE_TYPE_IDS, type VariableNodeTypeId } from "@/features/domain/nodeCatalog";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
@@ -10,24 +9,19 @@ import {
   isNodeTemplateDragState,
   type SidebarDragState,
 } from "@/features/core/dnd";
-import type { EditorVariables } from "@/features/core/editor";
 import {
   clientToWorldInCanvas,
   findResourceNodeSpawnTemplate,
   isPointInsideCanvas,
   spawnNodeFromTemplate,
   type CreateNodeFn,
-  type VariableDropMenu,
 } from "./canvasDrop";
-
-export type { VariableDropMenu } from "./canvasDrop";
 
 interface UseCanvasDropParams {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
   panelInstanceId: string;
   groupId: string;
   graphPath: string | null;
-  variables: EditorVariables;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: PinData | null) => void;
   createNode: CreateNodeFn;
@@ -43,13 +37,11 @@ export function useCanvasDrop({
   panelInstanceId,
   groupId,
   graphPath,
-  variables,
   setContextMenu,
   setPendingConnection,
   createNode,
   enabled = true,
 }: UseCanvasDropParams) {
-  const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
   const { catalog, refresh: refreshCatalog } = useLocalizedNodeCatalog();
 
   useEffect(() => {
@@ -91,33 +83,6 @@ export function useCanvasDrop({
       setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
     },
     [setContextMenu],
-  );
-
-  const spawnFromVariableMenu = useCallback(
-    async (menu: VariableDropMenu, nodeTypeId: VariableNodeTypeId) => {
-      setVariableDropMenu(null);
-      const resourcePath = variables[menu.variableId]?.resourcePath;
-      const template =
-        resourcePath && catalog
-          ? findResourceNodeSpawnTemplate(catalog.items, resourcePath, "variable", nodeTypeId)
-          : null;
-      if (!template) {
-        refreshCatalog();
-        return;
-      }
-      await spawnNodeFromTemplate(template, { x: menu.worldX, y: menu.worldY }, { createNode });
-    },
-    [catalog, createNode, refreshCatalog, variables],
-  );
-
-  const handleVariableDropGet = useCallback(
-    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, BUILTIN_NODE_TYPE_IDS.getVariable),
-    [spawnFromVariableMenu],
-  );
-
-  const handleVariableDropSet = useCallback(
-    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, BUILTIN_NODE_TYPE_IDS.setVariable),
-    [spawnFromVariableMenu],
   );
 
   const handleSidebarCanvasDrop = useCallback(
@@ -163,10 +128,6 @@ export function useCanvasDrop({
   }, [handleSidebarCanvasDrop, panelInstanceId]);
 
   return {
-    variableDropMenu,
-    setVariableDropMenu,
     handleContextMenu,
-    handleVariableDropGet,
-    handleVariableDropSet,
   };
 }

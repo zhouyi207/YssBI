@@ -33,7 +33,6 @@ describe("pinViewTarget", () => {
       graphPath,
       address: output,
       direction: "output",
-      isExec: false,
     });
 
     expect(state).toMatchObject({ showMenu: true, enabled: true, disabledReason: null });
@@ -45,7 +44,6 @@ describe("pinViewTarget", () => {
       graphPath,
       address: input,
       direction: "input",
-      isExec: false,
       connections: [connection],
     });
 
@@ -60,28 +58,17 @@ describe("pinViewTarget", () => {
         graphPath,
         address: otherInput,
         direction: "input",
-        isExec: false,
         connections: [connection],
       }),
     ).toEqual([]);
   });
 
-  it("hides view for exec and unconnected input pins", () => {
+  it("hides view for unconnected input pins", () => {
     expect(
       evaluatePinViewState({
         graphPath,
         address: input,
         direction: "input",
-        isExec: true,
-        connections: [connection],
-      }).showMenu,
-    ).toBe(false);
-    expect(
-      evaluatePinViewState({
-        graphPath,
-        address: input,
-        direction: "input",
-        isExec: false,
         connections: [],
       }).showMenu,
     ).toBe(false);
@@ -93,7 +80,6 @@ describe("pinViewTarget", () => {
         graphPath,
         address: output,
         direction: "output",
-        isExec: false,
       }),
     ).toMatchObject({ showMenu: true, enabled: true, disabledReason: null });
   });

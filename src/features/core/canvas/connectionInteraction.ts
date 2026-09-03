@@ -7,7 +7,6 @@ export type ConnectionInvalidReason =
   | "same-port"
   | "same-node"
   | "same-direction"
-  | "kind-mismatch"
   | "type-mismatch"
   | "orphan"
   | "capacity";
@@ -34,7 +33,6 @@ const REASONS = {
   samePort: "same-port",
   sameNode: "same-node",
   directionMismatch: "same-direction",
-  kindMismatch: "kind-mismatch",
   typeMismatch: "type-mismatch",
   orphan: "orphan",
   capacityReached: "capacity",

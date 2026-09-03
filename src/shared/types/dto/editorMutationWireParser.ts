@@ -1,4 +1,5 @@
 import type {
+  CompileGraphDraftDto,
   EditorGraphMutationDto,
   GraphDocumentPatchDto,
   GraphDocumentDto,
@@ -17,6 +18,7 @@ import {
 } from "./editorProjectionGuards";
 
 type UnknownRecord = Record<string, unknown>;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -281,6 +283,25 @@ export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDt
   return {
     document: parseGraphDocumentDto(value.document),
     projection,
+  };
+}
+
+export function parseCompileGraphDraftDto(value: unknown): CompileGraphDraftDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["sourceHash", "cacheHit", "document", "projection"]) ||
+    typeof value.sourceHash !== "string" ||
+    !SHA256_HEX_PATTERN.test(value.sourceHash) ||
+    typeof value.cacheHit !== "boolean" ||
+    !isEditorGraphProjectionDto(value.projection)
+  ) {
+    throw new Error("Graph draft compilation result is malformed");
+  }
+  return {
+    sourceHash: value.sourceHash,
+    cacheHit: value.cacheHit,
+    document: parseGraphDocumentDto(value.document),
+    projection: value.projection,
   };
 }
 

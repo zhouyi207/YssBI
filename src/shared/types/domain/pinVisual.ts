@@ -6,14 +6,11 @@
 import {
   dataTypeContainerOverlay,
   dataTypeToThemePinType,
-  isExecPin,
   pinTypeLabel,
   type PinSemanticsFields,
 } from "./pinSemantics";
 
-export type PinShape = "exec" | "circle" | "diamond" | "roundedRect" | "gridRect" | "hexagon";
-
-export type PinEdgeKind = "exec" | "data";
+export type PinShape = "circle" | "diamond" | "roundedRect" | "gridRect" | "hexagon";
 
 export interface PinVisualInput extends PinSemanticsFields {}
 
@@ -22,7 +19,6 @@ export interface PinVisualSpec {
   shape: PinShape;
   colorKey: string;
   container?: import("./pinSemantics").PinContainerOverlay;
-  edgeKind: PinEdgeKind;
   dashedStroke: boolean;
 }
 
@@ -33,7 +29,6 @@ export interface PinRenderStyle {
 }
 
 function resolveShape(pin: PinVisualInput): PinShape {
-  if (isExecPin(pin)) return "exec";
   if (pin.dataType?.kind === "DataFrame") return "gridRect";
   if (pin.dataType?.kind === "Struct") return "hexagon";
 
@@ -44,17 +39,7 @@ function resolveShape(pin: PinVisualInput): PinShape {
 }
 
 export function resolvePinVisualSpec(pin: PinVisualInput): PinVisualSpec {
-  if (isExecPin(pin)) {
-    return {
-      label: pinTypeLabel(pin),
-      shape: "exec",
-      colorKey: "exec",
-      edgeKind: "exec",
-      dashedStroke: false,
-    };
-  }
-
-  const colorKey = pin.dataType ? dataTypeToThemePinType(pin.dataType) : pin.type;
+  const colorKey = pin.dataType ? dataTypeToThemePinType(pin.dataType) : "object";
   const container = dataTypeContainerOverlay(pin.dataType);
 
   return {
@@ -62,25 +47,18 @@ export function resolvePinVisualSpec(pin: PinVisualInput): PinVisualSpec {
     shape: resolveShape(pin),
     colorKey,
     container,
-    edgeKind: "data",
     dashedStroke: pin.dataType?.kind === "OneOf",
   };
 }
 
 export function resolvePinRenderStyle(
-  spec: PinVisualSpec,
   isConnected: boolean,
   baseColor: string,
   mutedForeground: string,
 ): PinRenderStyle {
-  const isExec = spec.edgeKind === "exec";
   return {
-    fill: isConnected
-      ? baseColor
-      : isExec
-        ? "color-mix(in srgb, var(--muted-foreground) 10%, transparent)"
-        : "color-mix(in srgb, var(--muted-foreground) 5%, transparent)",
-    stroke: isExec && !isConnected ? mutedForeground : baseColor,
-    strokeWidth: isExec ? 1.5 : 2,
+    fill: isConnected ? baseColor : "color-mix(in srgb, var(--muted-foreground) 5%, transparent)",
+    stroke: isConnected ? baseColor : mutedForeground,
+    strokeWidth: 2,
   };
 }

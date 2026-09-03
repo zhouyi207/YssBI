@@ -104,7 +104,6 @@ function buildProjectionBucket(
       id: portId,
       nodeId: port.address.nodeId,
       name: port.display.instanceLabel ?? port.display.label,
-      type: port.kind === "data" ? "object" : "exec",
       direction: port.direction,
       dataType:
         port.kind === "data" && port.resolvedType?.resolved
