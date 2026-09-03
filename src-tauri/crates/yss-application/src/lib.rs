@@ -12,6 +12,7 @@ pub(crate) mod database_session;
 pub mod editor_projection;
 pub mod execution;
 pub mod graph_commit;
+pub mod graph_compile;
 pub mod graph_contracts;
 pub mod graph_open;
 pub mod hypothesis;

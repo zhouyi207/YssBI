@@ -427,6 +427,17 @@ impl BuiltinCatalog {
         protocol: &yss_graph_protocol::NodeProtocol,
         locale: &str,
     ) -> LocalizedCatalogItem {
+        let title = match entry.create_args {
+            ResourceBoundCreateArgs::Variable => format!(
+                "{} · {}",
+                self.text(locale, &protocol.catalog.title_key),
+                entry.name
+            )
+            .into(),
+            ResourceBoundCreateArgs::Function | ResourceBoundCreateArgs::Database => {
+                entry.name.clone()
+            }
+        };
         let documentation =
             super::documentation::documentation(&protocol.type_id, locale).map(Into::into);
         let aliases = match protocol.catalog.aliases_key.as_ref() {
@@ -441,7 +452,7 @@ impl BuiltinCatalog {
         let resource_names = vec![entry.name.clone()];
         LocalizedCatalogItem {
             node_type_id: entry.node_type_id.as_str().into(),
-            title: entry.name.clone(),
+            title,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
             icon_id: protocol.catalog.icon_id.as_str().into(),
@@ -477,8 +488,6 @@ impl BuiltinCatalog {
                 },
                 kind: match port.kind {
                     yss_graph_protocol::PortKind::Data => "data".into(),
-                    yss_graph_protocol::PortKind::Control => "control".into(),
-                    yss_graph_protocol::PortKind::Effect => "effect".into(),
                 },
             })
             .collect()

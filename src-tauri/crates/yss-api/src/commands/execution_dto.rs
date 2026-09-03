@@ -5,7 +5,9 @@ use yss_application::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunDemand,
 };
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{PinResultEntry, ResultId, ResultUsage, StoredResult};
+use yss_execution::result::{
+    PinResultEntry, ResultId, ResultUsage, StoredResult, StoredResultSnapshot,
+};
 use yss_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_execution::value::RuntimeValue;
 use yss_graph_document::GraphResourcePath;
@@ -432,36 +434,46 @@ pub struct ResultDescriptorDto {
 }
 
 impl ResultDescriptorDto {
-    pub(crate) fn from_execution(result_id: ResultId, result: &StoredResult) -> Self {
-        let stored = result.value();
+    pub(crate) fn from_execution(
+        result_id: ResultId,
+        result: &StoredResultSnapshot,
+    ) -> Result<Self, RunEventDtoError> {
+        let stored = result.value().value();
         let (value_kind, total_count) = match stored {
-            StoredResult::Categorized { value, .. } => {
-                return Self::from_execution(result_id, value);
-            }
+            StoredResult::Categorized { .. } => return Err(RunEventDtoError::InvalidOutput),
             StoredResult::Runtime(RuntimeValue::List(values)) => {
                 (ResultValueKindDto::Sequence, Some(values.len()))
             }
             StoredResult::Empty => (ResultValueKindDto::Unknown, Some(0)),
             _ => (ResultValueKindDto::Scalar, Some(1)),
         };
-        Self {
+        let output = result.output();
+        let entry = result.entry();
+        let output_dto = output_dto(output)?;
+        let node_id = match &output_dto.port {
+            PortAddressDto::Declared { node_id, .. } | PortAddressDto::Instance { node_id, .. } => {
+                node_id.clone()
+            }
+        };
+        let provenance = ResultProvenanceDto {
+            run_id: entry.run_id().get().to_string(),
+            activation_id: entry.activation_id().get().to_string(),
+            graph_path: output.graph().as_str().to_owned(),
+            graph_revision: entry.graph_revision().get().to_string(),
+            node_id: node_id.into(),
+            output: Some(output_dto),
+            created_at_ms: entry.created_at_ms().to_string(),
+        };
+        Ok(Self {
             result_id: result_id.get().to_string(),
             state: ResultStateDto::Ready,
-            provenance: ResultProvenanceDto {
-                run_id: result_id.get().to_string(),
-                activation_id: result_id.get().to_string(),
-                graph_path: "events/application.yssbi-event".into(),
-                graph_revision: "0".into(),
-                node_id: uuid::Uuid::nil().to_string(),
-                output: None,
-                created_at_ms: "0".into(),
-            },
-            presentation: result_presentation(result.category()),
+            provenance,
+            presentation: result_presentation(result.value().category()),
             value_kind,
             metadata: None,
             total_count,
             title: "Result".into(),
-        }
+        })
     }
 }
 

@@ -1,14 +1,11 @@
 pub(crate) use crate::builtin::BuiltinAssemblyError;
 pub(crate) use crate::builtin::ProviderFragment;
-pub(crate) use crate::builtin::assembled_decimal;
 use crate::builtin::{assembled_interface, assembled_parameters, sid};
 use crate::{Aliases, Text};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use yss_graph_protocol::*;
-use yss_graph_registry::{
-    CategoryRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
-};
+use yss_graph_registry::{CategoryRegistration, RegisteredNode, TransparentNodeRole};
 
 impl ProviderFragment {
     pub(crate) fn add_node_messages(
@@ -77,10 +74,6 @@ impl NodeKeys {
 
 pub(crate) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
     super::super::builtin::leaf(protocol, kernel)
-}
-
-pub(crate) fn structural(protocol: NodeProtocol, role: StructuralNodeRole) -> RegisteredNode {
-    RegisteredNode::structural(Arc::new(protocol), role)
 }
 
 pub(in crate::core_nodes) fn transparent(
@@ -157,28 +150,6 @@ pub(crate) fn data_port_with_instances(
     })
 }
 
-pub(crate) fn control_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    instances: PortInstances,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: semantic(key, PortKey::new)?,
-        title: title.into(),
-        direction,
-        kind: PortKind::Control,
-        value_type: TypeExpr::Unknown,
-        instances,
-        connections: ConnectionsPerPort::Single,
-        input_binding: None,
-        consumption: None,
-        production: None,
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
-}
-
 pub(crate) fn parameter(
     node_id: &'static str,
     key: &'static str,
@@ -213,24 +184,7 @@ pub(crate) fn data_series(element: &'static str) -> Result<TypeExpr, BuiltinAsse
 pub(crate) fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        purity: Purity::Pure,
-        evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
-        effects: EffectSemantics::None,
-        idempotent: false,
-        retry: None,
-    }
-}
-
-pub(crate) fn effectful() -> ExecutionSemantics {
-    ExecutionSemantics {
-        determinism: Determinism::EnvironmentDependent,
-        purity: Purity::Effectful,
-        evaluation: EvaluationPolicy::EagerWhenRegionEntered,
-        cache: CachePolicy::Disabled,
-        effects: EffectSemantics::Ordered,
-        idempotent: false,
-        retry: None,
     }
 }
 

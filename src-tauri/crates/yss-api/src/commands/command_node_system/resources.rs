@@ -87,8 +87,9 @@ pub fn save_project_graph(
             document,
         )
         .map_err(map_graph_draft_save_error)?;
-    crate::schema::graph_draft::graph_draft_save_to_transport(&result)
-        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+    Ok(crate::schema::graph_draft::graph_draft_save_to_transport(
+        &result,
+    ))
 }
 
 #[tauri::command]

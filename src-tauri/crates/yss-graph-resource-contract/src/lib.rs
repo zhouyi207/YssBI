@@ -9,7 +9,7 @@ mod catalog;
 mod schema;
 
 pub use catalog::{
-    FunctionCatalogEntry, FunctionSignature, GraphResourceId, ResourceCatalogFingerprint,
-    ResourceCatalogSnapshot, VariableValueContract,
+    FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,
+    ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
 };
 pub use schema::{ColumnSchema, DataSchema};

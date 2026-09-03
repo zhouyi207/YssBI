@@ -633,10 +633,10 @@ fn inspect_result(
     let mut budget = ResultProjectionBudget {
         remaining: usize::from(CapabilityId::InspectResult.descriptor().maximum_results),
     };
-    let value = inspect_stored_result(&result, &mut budget)?;
+    let value = inspect_stored_result(result.value(), &mut budget)?;
     Ok(ResultInspection {
         result_id: request.result_id,
-        category: inspect_result_category(result.category()),
+        category: inspect_result_category(result.value().category()),
         value,
     })
 }

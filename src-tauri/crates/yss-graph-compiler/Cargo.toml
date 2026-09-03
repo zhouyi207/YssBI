@@ -12,3 +12,6 @@ yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-graph-registry = { path = "../yss-graph-registry" }
+
+[dev-dependencies]
+yss-graph-catalog = { path = "../yss-graph-catalog" }

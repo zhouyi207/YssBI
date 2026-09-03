@@ -16,8 +16,8 @@ use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_document::GraphResourceKind;
 use yss_graph_document::{
-    DocumentNode, DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, NodePosition,
-    OrderKey, ParameterValues, PortAddress, PortInstanceId,
+    DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
+    PortAddress,
 };
 use yss_graph_protocol::{NodeTypeId, PortKey};
 use yss_graph_runtime::{
@@ -250,56 +250,6 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
 
     assert!(ids.contains("yssbi.numeric.add.int64"));
     assert!(!ids.contains("yssbi.logic.not"));
-}
-
-#[test]
-fn compatible_catalog_accepts_sequence_then_instance_from_unsaved_draft() {
-    let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-    let source_node = NodeId::new();
-    let source_port = PortAddress::instance(
-        source_node,
-        PortKey::new("then").unwrap(),
-        PortInstanceId::new(),
-    );
-    let mut document = GraphDocument::default();
-    document.nodes.insert(
-        source_node,
-        DocumentNode {
-            id: source_node,
-            node_type: NodeTypeId::new("yssbi.control.sequence").unwrap(),
-            position: NodePosition { x: 0.0, y: 0.0 },
-            parameters: ParameterValues::new(),
-            user_label: None,
-        },
-    );
-    document.port_bindings.insert(
-        source_port.clone(),
-        DynamicPortBinding::UserCreated {
-            order: OrderKey::new("00000"),
-        },
-    );
-    let session = staged_session(
-        compatible_project(&graph_path),
-        "compatible-sequence-then-instance",
-        GraphRuntimeTestControl::default(),
-    );
-
-    let catalog = session
-        .application
-        .compatible_node_catalog(CompatibleCatalogRequest::new(
-            session.session.project_instance_id().clone(),
-            graph_path,
-            document,
-            source_port,
-            "en-US",
-        ))
-        .expect("a concrete Sequence Then instance is a valid compatible-catalog source");
-
-    assert!(catalog.catalog.items.iter().any(|item| {
-        item.ports
-            .iter()
-            .any(|port| port.direction.as_ref() == "input" && port.kind.as_ref() == "control")
-    }));
 }
 
 #[test]

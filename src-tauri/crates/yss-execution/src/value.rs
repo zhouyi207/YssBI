@@ -101,35 +101,4 @@ impl RuntimeValue {
             _ => Err(RuntimeValueError::InvalidCoercion),
         }
     }
-
-    pub fn add(self, other: Self) -> Result<Self, RuntimeValueError> {
-        numeric_binary(self, other, |left, right| left + right)
-    }
-
-    pub fn subtract(self, other: Self) -> Result<Self, RuntimeValueError> {
-        numeric_binary(self, other, |left, right| left - right)
-    }
-}
-
-fn numeric_binary(
-    left: RuntimeValue,
-    right: RuntimeValue,
-    operation: impl FnOnce(f64, f64) -> f64,
-) -> Result<RuntimeValue, RuntimeValueError> {
-    let left = numeric(left)?;
-    let right = numeric(right)?;
-    let value = operation(left, right);
-    value
-        .is_finite()
-        .then_some(RuntimeValue::Decimal(value))
-        .ok_or(RuntimeValueError::NonFinite)
-}
-
-fn numeric(value: RuntimeValue) -> Result<f64, RuntimeValueError> {
-    match value {
-        RuntimeValue::Integer(value) => Ok(value as f64),
-        RuntimeValue::Unsigned(value) => Ok(value as f64),
-        RuntimeValue::Decimal(value) if value.is_finite() => Ok(value),
-        _ => Err(RuntimeValueError::InvalidCoercion),
-    }
 }

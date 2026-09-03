@@ -21,12 +21,11 @@ pub use identity::{
     TypeConstructorId, TypeId, TypeParameterId,
 };
 pub use model::{
-    CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
-    ExecutionSemantics, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
-    NodeCatalogProtocol, NodeInstanceDisplaySpec, NodeInterfaceProtocol, NodeProtocol, NodeScope,
-    OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec,
-    PortSpec, ProtocolError, Purity, ResourceDisplayKind, RetryPolicy, RetryPolicyError,
-    validate_execution,
+    CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InputBindingSpec,
+    InputConsumption, LiteralPolicy, ManagedNodeRole, NodeCatalogProtocol, NodeInstanceDisplaySpec,
+    NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction, PortDirection,
+    PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec, PortSpec, ProtocolError,
+    ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterPresentation,

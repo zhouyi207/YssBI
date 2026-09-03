@@ -5,8 +5,6 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use std::num::NonZeroU32;
-use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeProtocol {
@@ -136,8 +134,6 @@ pub enum PortDirection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PortKind {
     Data,
-    Control,
-    Effect,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,19 +189,7 @@ pub enum PortEditorSpec {
 #[serde(deny_unknown_fields)]
 pub struct ExecutionSemantics {
     pub determinism: Determinism,
-    pub purity: Purity,
-    pub evaluation: EvaluationPolicy,
     pub cache: CachePolicy,
-    pub effects: EffectSemantics,
-    pub idempotent: bool,
-    pub retry: Option<RetryPolicy>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EffectSemantics {
-    None,
-    Ordered,
-    Exclusive,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -216,71 +200,11 @@ pub enum Determinism {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Purity {
-    Pure,
-    Effectful,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EvaluationPolicy {
-    DemandDriven,
-    EagerWhenRegionEntered,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CachePolicy {
     Disabled,
     PerRun,
     PerSession,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RetryPolicy {
-    pub max_attempts: NonZeroU32,
-    pub initial_backoff: Duration,
-    pub max_backoff: Duration,
-}
-
-impl RetryPolicy {
-    pub fn new(
-        max_attempts: NonZeroU32,
-        initial_backoff: Duration,
-        max_backoff: Duration,
-    ) -> Result<Self, RetryPolicyError> {
-        let policy = Self {
-            max_attempts,
-            initial_backoff,
-            max_backoff,
-        };
-        policy.validate()?;
-        Ok(policy)
-    }
-
-    pub fn validate(&self) -> Result<(), RetryPolicyError> {
-        if self.initial_backoff > self.max_backoff {
-            return Err(RetryPolicyError::InitialBackoffExceedsMaximum);
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RetryPolicyError {
-    InitialBackoffExceedsMaximum,
-}
-
-impl std::fmt::Display for RetryPolicyError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InitialBackoffExceedsMaximum => {
-                formatter.write_str("retry initial backoff cannot exceed maximum backoff")
-            }
-        }
-    }
-}
-
-impl std::error::Error for RetryPolicyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeScope {
@@ -291,7 +215,6 @@ pub enum NodeScope {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ManagedNodeRole {
-    EventBegin,
     FunctionEntry,
     FunctionReturn,
 }
@@ -410,36 +333,30 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
         ));
     }
 
-    let is_data_input = port.kind == PortKind::Data && port.direction == PortDirection::Input;
-    let is_data_output = port.kind == PortKind::Data && port.direction == PortDirection::Output;
-    if port.input_binding.is_some() && !is_data_input {
+    let is_input = port.direction == PortDirection::Input;
+    let is_output = port.direction == PortDirection::Output;
+    if port.input_binding.is_some() && !is_input {
         return Err(invalid_port(
             &port.key,
             "only data inputs may declare literal/default bindings",
         ));
     }
-    if port.consumption.is_some() && !is_data_input {
+    if port.consumption.is_some() && !is_input {
         return Err(invalid_port(
             &port.key,
             "only data inputs may declare consumption",
         ));
     }
-    if port.production.is_some() && !is_data_output {
+    if port.production.is_some() && !is_output {
         return Err(invalid_port(
             &port.key,
             "only data outputs may declare production",
         ));
     }
-    if port.schema.is_some() && !is_data_output {
+    if port.schema.is_some() && !is_output {
         return Err(invalid_port(
             &port.key,
             "only data outputs may declare a schema expression",
-        ));
-    }
-    if port.kind != PortKind::Data && port.value_type != TypeExpr::Unknown {
-        return Err(invalid_port(
-            &port.key,
-            "control and effect ports cannot declare a value type",
         ));
     }
     if let Some(binding) = &port.input_binding {
@@ -462,39 +379,14 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
 }
 
 pub fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
-    if execution.idempotent != execution.retry.is_some() {
+    if execution.determinism == Determinism::NonDeterministic
+        && execution.cache != CachePolicy::Disabled
+    {
         return Err(ProtocolError::InvalidExecutionSemantics(
-            "retry policy and idempotence must be declared together",
+            "non-deterministic nodes cannot cache outputs",
         ));
     }
-    if let Some(policy) = execution.retry {
-        if policy.validate().is_err() {
-            return Err(ProtocolError::InvalidExecutionSemantics(
-                "retry policy has invalid backoff bounds",
-            ));
-        }
-        if !execution.idempotent
-            || execution.determinism != Determinism::Deterministic
-            || execution.purity != Purity::Pure
-            || execution.effects != EffectSemantics::None
-        {
-            return Err(ProtocolError::InvalidExecutionSemantics(
-                "retry requires deterministic, pure, effect-free idempotent execution",
-            ));
-        }
-    }
-    match (execution.purity, execution.effects) {
-        (Purity::Pure, EffectSemantics::None)
-        | (Purity::Effectful, EffectSemantics::Ordered | EffectSemantics::Exclusive) => Ok(()),
-        (Purity::Pure, _) => Err(ProtocolError::InvalidExecutionSemantics(
-            "pure nodes cannot declare effects",
-        )),
-        (Purity::Effectful, EffectSemantics::None) => {
-            Err(ProtocolError::InvalidExecutionSemantics(
-                "effectful nodes must declare effect ordering",
-            ))
-        }
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -583,23 +475,6 @@ mod tests {
     }
 
     #[test]
-    fn retry_policy_constructor_rejects_inverted_backoff_bounds() {
-        let attempts = NonZeroU32::new(2).unwrap();
-        assert!(matches!(
-            RetryPolicy::new(
-                attempts,
-                Duration::from_millis(20),
-                Duration::from_millis(10),
-            ),
-            Err(RetryPolicyError::InitialBackoffExceedsMaximum)
-        ));
-        assert!(serde_json::from_str::<RetryPolicy>(
-            r#"{"max_attempts":0,"initial_backoff":{"secs":0,"nanos":0},"max_backoff":{"secs":0,"nanos":0}}"#,
-        )
-        .is_err());
-    }
-
-    #[test]
     fn effective_cache_policy_serde_uses_canonical_names() {
         assert_eq!(
             serde_json::to_string(&CachePolicy::Disabled).unwrap(),
@@ -616,16 +491,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_purity_effect_mismatches() {
-        let pure_effect = ExecutionSemantics {
-            determinism: Determinism::Deterministic,
-            purity: Purity::Pure,
-            evaluation: EvaluationPolicy::DemandDriven,
+    fn rejects_caching_for_non_deterministic_nodes() {
+        let non_deterministic = ExecutionSemantics {
+            determinism: Determinism::NonDeterministic,
             cache: CachePolicy::PerRun,
-            effects: EffectSemantics::Ordered,
-            idempotent: false,
-            retry: None,
         };
-        assert!(validate_execution(pure_effect).is_err());
+        assert!(validate_execution(non_deterministic).is_err());
     }
 }

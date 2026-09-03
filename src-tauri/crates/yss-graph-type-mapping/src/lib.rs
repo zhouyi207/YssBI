@@ -5,7 +5,9 @@
 
 use thiserror::Error;
 use yss_data_contract::{DataType, DataTypeParseError};
-use yss_graph_protocol::{InvalidSemanticId, TypeConstructorId, TypeExpr, TypeId};
+use yss_graph_protocol::{
+    InvalidSemanticId, RelationalScalarType, TypeConstructorId, TypeExpr, TypeId,
+};
 
 #[derive(Debug, Error)]
 pub enum GraphTypeMappingError {
@@ -43,6 +45,25 @@ pub fn type_expr_from_data_type(data_type: &DataType) -> Result<TypeExpr, GraphT
     }
 }
 
+pub fn relational_scalar_type_from_data_type(data_type: &DataType) -> RelationalScalarType {
+    match data_type {
+        DataType::Boolean => RelationalScalarType::Boolean,
+        DataType::Int64 => RelationalScalarType::Int64,
+        DataType::Float64 => RelationalScalarType::Float64,
+        DataType::String | DataType::Categorical => RelationalScalarType::String,
+        DataType::Date => RelationalScalarType::Date,
+        DataType::Datetime => RelationalScalarType::DateTime,
+        DataType::Time
+        | DataType::Array(_)
+        | DataType::Object
+        | DataType::DataFrame
+        | DataType::DataSeries(_)
+        | DataType::Struct(_)
+        | DataType::OneOf(_)
+        | DataType::Any => RelationalScalarType::Unknown,
+    }
+}
+
 fn concrete_type(semantic_id: &str) -> Result<TypeExpr, GraphTypeMappingError> {
     TypeId::new(semantic_id)
         .map(TypeExpr::Concrete)
@@ -58,7 +79,10 @@ fn applied_type(constructor: &str, element: &DataType) -> Result<TypeExpr, Graph
 
 #[cfg(test)]
 mod tests {
-    use super::{GraphTypeMappingError, type_expr_from_data_type, type_expr_from_data_type_name};
+    use super::{
+        GraphTypeMappingError, relational_scalar_type_from_data_type, type_expr_from_data_type,
+        type_expr_from_data_type_name,
+    };
     use yss_data_contract::DataType;
     use yss_graph_protocol::TypeExpr;
 
@@ -134,5 +158,17 @@ mod tests {
             type_expr_from_data_type(&DataType::Struct("Invalid Type".into())),
             Err(GraphTypeMappingError::InvalidGraphTypeIdentifier(_))
         ));
+    }
+
+    #[test]
+    fn maps_persisted_types_to_relational_schema_scalars() {
+        assert_eq!(
+            relational_scalar_type_from_data_type(&DataType::Datetime),
+            yss_graph_protocol::RelationalScalarType::DateTime
+        );
+        assert_eq!(
+            relational_scalar_type_from_data_type(&DataType::DataFrame),
+            yss_graph_protocol::RelationalScalarType::Unknown
+        );
     }
 }

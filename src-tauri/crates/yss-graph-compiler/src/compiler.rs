@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::package::{
-    GraphCompiledPackage, GraphInputBinding, GraphInputKind, GraphInputSource,
-    GraphObservationIntent, GraphOperation, GraphParameterHandle, GraphParameterPayload,
+    GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
+    GraphOperation, GraphOutputBinding, GraphParameterHandle, GraphParameterPayload,
     GraphParameterScalar, GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
 use crate::{GraphCompileError, GraphCompileErrorCode};
@@ -12,14 +12,14 @@ use yss_graph_document::{
     DocumentConnection, DynamicPortBinding, GraphDocument, GraphResourcePath, GraphRevision,
     NodeId, OrderKey, PortAddress, PortRef, TypedValue,
 };
-use yss_graph_protocol::{PortDirection, PortKind, PortSpec, protocol_value_to_json};
+use yss_graph_protocol::{PortDirection, PortInstances, PortSpec, protocol_value_to_json};
 use yss_graph_registry::NodeRegistry;
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
 struct ResolvedInputContracts {
     ordered_by_node: BTreeMap<NodeId, Box<[PortAddress]>>,
-    kinds: BTreeMap<PortAddress, GraphInputKind>,
+    known_inputs: BTreeSet<PortAddress>,
     values: BTreeMap<PortAddress, TypedValue>,
 }
 
@@ -58,6 +58,7 @@ pub fn compile(
             code: GraphCompileErrorCode::InvalidDocument,
         });
     }
+    validate_data_dag(input.document, &input.graph)?;
 
     lower_package(
         input.document,
@@ -67,23 +68,71 @@ pub fn compile(
     )
 }
 
+fn validate_data_dag(
+    document: &GraphDocument,
+    graph: &GraphResourcePath,
+) -> Result<(), GraphCompileError> {
+    let mut remaining_dependencies = document
+        .nodes
+        .keys()
+        .map(|node_id| (*node_id, 0_usize))
+        .collect::<BTreeMap<_, _>>();
+    let mut dependents = BTreeMap::<NodeId, Vec<NodeId>>::new();
+    for connection in document.connections.values() {
+        let Some(remaining) = remaining_dependencies.get_mut(&connection.input.node_id) else {
+            return Err(lowering_error(graph));
+        };
+        *remaining = remaining
+            .checked_add(1)
+            .ok_or_else(|| lowering_error(graph))?;
+        dependents
+            .entry(connection.output.node_id)
+            .or_default()
+            .push(connection.input.node_id);
+    }
+    let mut ready = remaining_dependencies
+        .iter()
+        .filter_map(|(node_id, remaining)| (*remaining == 0).then_some(*node_id))
+        .collect::<VecDeque<_>>();
+    let mut visited = 0_usize;
+    while let Some(node_id) = ready.pop_front() {
+        visited = visited
+            .checked_add(1)
+            .ok_or_else(|| lowering_error(graph))?;
+        for dependent in dependents.get(&node_id).into_iter().flatten() {
+            let Some(remaining) = remaining_dependencies.get_mut(dependent) else {
+                return Err(lowering_error(graph));
+            };
+            *remaining = remaining
+                .checked_sub(1)
+                .ok_or_else(|| lowering_error(graph))?;
+            if *remaining == 0 {
+                ready.push_back(*dependent);
+            }
+        }
+    }
+    if visited != document.nodes.len() {
+        return Err(GraphCompileError::InvalidGraph {
+            graph: graph.clone(),
+            code: GraphCompileErrorCode::CyclicDataDependency,
+        });
+    }
+    Ok(())
+}
+
 fn lower_package(
     document: &GraphDocument,
     registry: &NodeRegistry,
     graph: GraphResourcePath,
     compile_id: CompileId,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
-    let value_refs = node_value_refs(document, &graph)?;
+    let output_contracts = resolve_output_contracts(document, registry, &graph)?;
     let input_contracts = resolve_input_contracts(document, registry, &graph)?;
     let connections = connections_by_input(document);
     let operations = document
         .nodes
         .values()
         .map(|node| {
-            let value_ref = value_refs
-                .get(&node.id)
-                .copied()
-                .ok_or_else(|| lowering_error(&graph))?;
             let result_category = result_category_for_node(node.node_type.as_str());
             let parameter_handles = node
                 .parameters
@@ -91,15 +140,40 @@ fn lower_package(
                 .map(|key| node_parameter_handle(node.id, key.as_str()))
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
-            let inputs =
-                lower_input_bindings(node.id, &input_contracts, &connections, &value_refs, &graph)?;
-            let observation_intents: Box<[GraphObservationIntent]> = if node.node_type.as_str()
-                == DEBUG_VIEW_NODE_TYPE
-            {
-                vec![GraphObservationIntent::InspectInput { input: value_ref }].into_boxed_slice()
-            } else {
-                Box::new([])
-            };
+            let inputs = lower_input_bindings(
+                node.id,
+                &input_contracts,
+                &connections,
+                &output_contracts.value_refs,
+                &graph,
+            )?;
+            let observation_intents: Box<[GraphObservationIntent]> =
+                if node.node_type.as_str() == DEBUG_VIEW_NODE_TYPE {
+                    inputs
+                        .first()
+                        .map(|binding| GraphObservationIntent::InspectInput {
+                            source: binding.source().clone(),
+                        })
+                        .into_iter()
+                        .collect()
+                } else {
+                    Box::new([])
+                };
+            let outputs = output_contracts
+                .ordered_by_node
+                .get(&node.id)
+                .ok_or_else(|| lowering_error(&graph))?
+                .iter()
+                .map(|address| {
+                    output_contracts
+                        .value_refs
+                        .get(address)
+                        .copied()
+                        .map(|value| GraphOutputBinding::new(address.to_string(), value))
+                        .ok_or_else(|| lowering_error(&graph))
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_boxed_slice();
             Ok(GraphOperation::new(
                 GraphSourceIdentity::new(graph.clone(), Some(node.id), None),
                 node.node_type.as_str(),
@@ -107,7 +181,7 @@ fn lower_package(
                 parameter_handles,
                 inputs,
                 observation_intents,
-                Some(value_ref),
+                outputs,
             ))
         })
         .collect::<Result<Vec<_>, GraphCompileError>>()?;
@@ -145,28 +219,78 @@ fn lower_parameters(
     Ok(parameters)
 }
 
-fn node_value_refs(
+struct ResolvedOutputContracts {
+    ordered_by_node: BTreeMap<NodeId, Box<[PortAddress]>>,
+    value_refs: BTreeMap<PortAddress, GraphValueRef>,
+}
+
+fn resolve_output_contracts(
     document: &GraphDocument,
+    registry: &NodeRegistry,
     graph_path: &GraphResourcePath,
-) -> Result<BTreeMap<yss_graph_document::NodeId, GraphValueRef>, GraphCompileError> {
-    document
-        .nodes
-        .keys()
-        .copied()
+) -> Result<ResolvedOutputContracts, GraphCompileError> {
+    let mut ordered_by_node = BTreeMap::new();
+    let mut ordered_outputs = Vec::new();
+    for node in document.nodes.values() {
+        let protocol = registry
+            .protocol(&node.node_type)
+            .ok_or_else(|| lowering_error(graph_path))?;
+        let mut addresses = Vec::new();
+        for spec in protocol
+            .interface
+            .ports
+            .iter()
+            .filter(|spec| spec.direction == PortDirection::Output)
+        {
+            match &spec.instances {
+                PortInstances::Declared => {
+                    addresses.push(PortAddress::declared(node.id, spec.key.clone()));
+                }
+                PortInstances::UserCreated { .. } | PortInstances::Derived { .. } => {
+                    let mut instances = document
+                        .port_bindings
+                        .iter()
+                        .filter(|(address, binding)| {
+                            address.node_id == node.id
+                                && matches!(
+                                    &address.port,
+                                    PortRef::Instance { template, .. } if template == &spec.key
+                                )
+                                && binding_matches_instances(binding, &spec.instances)
+                        })
+                        .collect::<Vec<_>>();
+                    instances.sort_by(|(left_address, left), (right_address, right)| {
+                        dynamic_port_order(left)
+                            .cmp(dynamic_port_order(right))
+                            .then_with(|| left_address.cmp(right_address))
+                    });
+                    addresses.extend(instances.into_iter().map(|(address, _)| address.clone()));
+                }
+            }
+        }
+        ordered_outputs.extend(addresses.iter().cloned());
+        ordered_by_node.insert(node.id, addresses.into_boxed_slice());
+    }
+    let value_refs = ordered_outputs
+        .into_iter()
         .enumerate()
-        .map(|(index, node_id)| {
+        .map(|(index, address)| {
             u32::try_from(index)
-                .map(|index| (node_id, GraphValueRef::new(index)))
+                .map(|index| (address, GraphValueRef::new(index)))
                 .map_err(|_| lowering_error(graph_path))
         })
-        .collect()
+        .collect::<Result<_, _>>()?;
+    Ok(ResolvedOutputContracts {
+        ordered_by_node,
+        value_refs,
+    })
 }
 
 fn lower_input_bindings(
     node_id: NodeId,
     input_contracts: &ResolvedInputContracts,
     connections: &BTreeMap<PortAddress, Vec<&DocumentConnection>>,
-    value_refs: &BTreeMap<NodeId, GraphValueRef>,
+    value_refs: &BTreeMap<PortAddress, GraphValueRef>,
     graph_path: &GraphResourcePath,
 ) -> Result<Box<[GraphInputBinding]>, GraphCompileError> {
     let mut bindings = Vec::new();
@@ -175,20 +299,17 @@ fn lower_input_bindings(
         .get(&node_id)
         .ok_or_else(|| lowering_error(graph_path))?;
     for port in ports {
-        let kind = input_contracts
-            .kinds
-            .get(port)
-            .copied()
-            .ok_or_else(|| lowering_error(graph_path))?;
+        if !input_contracts.known_inputs.contains(port) {
+            return Err(lowering_error(graph_path));
+        }
         if let Some(port_connections) = connections.get(port) {
             for connection in port_connections {
                 let source = value_refs
-                    .get(&connection.output.node_id)
+                    .get(&connection.output)
                     .copied()
                     .ok_or_else(|| lowering_error(graph_path))?;
                 bindings.push(GraphInputBinding::new(
                     port.to_string(),
-                    kind,
                     GraphInputSource::Value(source),
                 ));
             }
@@ -196,7 +317,6 @@ fn lower_input_bindings(
             let port_text = port.to_string();
             bindings.push(GraphInputBinding::new(
                 port_text.clone(),
-                kind,
                 GraphInputSource::Parameter(input_parameter_handle(&port_text)),
             ));
         }
@@ -215,7 +335,7 @@ fn resolve_input_contracts(
         .map(|connection| connection.input.clone())
         .collect::<std::collections::BTreeSet<_>>();
     let mut ordered_by_node = BTreeMap::new();
-    let mut kinds = BTreeMap::new();
+    let mut known_inputs = BTreeSet::new();
     let mut values = BTreeMap::new();
 
     for node in document.nodes.values() {
@@ -236,7 +356,7 @@ fn resolve_input_contracts(
                 document,
                 &connected_inputs,
                 &mut ordered,
-                &mut kinds,
+                &mut known_inputs,
                 &mut values,
                 graph_path,
             )?;
@@ -264,7 +384,7 @@ fn resolve_input_contracts(
                     document,
                     &connected_inputs,
                     &mut ordered,
-                    &mut kinds,
+                    &mut known_inputs,
                     &mut values,
                     graph_path,
                 )?;
@@ -276,18 +396,18 @@ fn resolve_input_contracts(
     if document
         .connections
         .values()
-        .any(|connection| !kinds.contains_key(&connection.input))
+        .any(|connection| !known_inputs.contains(&connection.input))
         || document
             .input_states
             .keys()
-            .any(|address| !kinds.contains_key(address))
+            .any(|address| !known_inputs.contains(address))
     {
         return Err(lowering_error(graph_path));
     }
 
     Ok(ResolvedInputContracts {
         ordered_by_node,
-        kinds,
+        known_inputs,
         values,
     })
 }
@@ -299,20 +419,15 @@ fn resolve_input_port(
     document: &GraphDocument,
     connected_inputs: &std::collections::BTreeSet<PortAddress>,
     ordered: &mut Vec<PortAddress>,
-    kinds: &mut BTreeMap<PortAddress, GraphInputKind>,
+    known_inputs: &mut BTreeSet<PortAddress>,
     values: &mut BTreeMap<PortAddress, TypedValue>,
     graph_path: &GraphResourcePath,
 ) -> Result<(), GraphCompileError> {
-    let kind = match spec.kind {
-        PortKind::Data => GraphInputKind::Data,
-        PortKind::Control => GraphInputKind::Control,
-        PortKind::Effect => GraphInputKind::Effect,
-    };
-    if kinds.insert(address.clone(), kind).is_some() {
+    if !known_inputs.insert(address.clone()) {
         return Err(lowering_error(graph_path));
     }
     ordered.push(address.clone());
-    if kind != GraphInputKind::Data || connected_inputs.contains(address) {
+    if connected_inputs.contains(address) {
         return Ok(());
     }
     let value = document
@@ -337,6 +452,19 @@ fn dynamic_port_order(binding: &DynamicPortBinding) -> &OrderKey {
         | DynamicPortBinding::Resolved { order, .. }
         | DynamicPortBinding::Orphan { order, .. } => order,
     }
+}
+
+fn binding_matches_instances(binding: &DynamicPortBinding, instances: &PortInstances) -> bool {
+    matches!(
+        (binding, instances),
+        (
+            DynamicPortBinding::UserCreated { .. },
+            PortInstances::UserCreated { .. }
+        ) | (
+            DynamicPortBinding::Resolved { .. },
+            PortInstances::Derived { .. }
+        )
+    )
 }
 
 fn connections_by_input(
@@ -451,6 +579,8 @@ fn lowering_error(graph: &GraphResourcePath) -> GraphCompileError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
     use yss_graph_registry::NodeRegistryBuilder;
 
     fn graph_path() -> GraphResourcePath {
@@ -505,6 +635,144 @@ mod tests {
                 graph: error_graph,
                 code: GraphCompileErrorCode::InvalidDocument,
             } if error_graph == graph
+        ));
+    }
+
+    #[test]
+    fn connections_consume_the_exact_multi_output_port_value() {
+        let builtin = build_builtin_node_system().expect("built-in graph system is valid");
+        let producer = NodeId::new();
+        let consumer = NodeId::new();
+        let fitted = PortAddress::declared(
+            producer,
+            "fitted".parse().expect("built-in port key is valid"),
+        );
+        let input = PortAddress::declared(
+            consumer,
+            "data".parse().expect("built-in port key is valid"),
+        );
+        let connection_id = yss_graph_document::ConnectionId::new();
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            producer,
+            DocumentNode {
+                id: producer,
+                node_type: "yssbi.statistics.ols.fit"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        document.nodes.insert(
+            consumer,
+            DocumentNode {
+                id: consumer,
+                node_type: "yssbi.debug.view"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 300.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        document.connections.insert(
+            connection_id,
+            DocumentConnection {
+                id: connection_id,
+                output: fitted.clone(),
+                input,
+                order: None,
+            },
+        );
+
+        let package = compile(GraphCompilationInput::new(
+            &document,
+            &builtin.registry,
+            document.revision,
+            graph_path(),
+            CompileId::new(9),
+        ))
+        .expect("the dataflow document compiles");
+        let producer_operation = package
+            .operations()
+            .iter()
+            .find(|operation| operation.source().node() == Some(producer))
+            .expect("producer operation is lowered");
+        let fitted_value = producer_operation
+            .outputs()
+            .iter()
+            .find(|output| output.port() == fitted.to_string())
+            .expect("fitted output is lowered")
+            .value();
+        let consumer_operation = package
+            .operations()
+            .iter()
+            .find(|operation| operation.source().node() == Some(consumer))
+            .expect("consumer operation is lowered");
+
+        assert!(matches!(
+            consumer_operation.inputs()[0].source(),
+            GraphInputSource::Value(value) if *value == fitted_value
+        ));
+        assert_eq!(producer_operation.outputs().len(), 3);
+    }
+
+    #[test]
+    fn compilation_rejects_a_cycle_anywhere_in_the_graph() {
+        let builtin = build_builtin_node_system().expect("built-in graph system is valid");
+        let left = NodeId::new();
+        let right = NodeId::new();
+        let mut document = GraphDocument::default();
+        for (node_id, x) in [(left, 0.0), (right, 300.0)] {
+            document.nodes.insert(
+                node_id,
+                DocumentNode {
+                    id: node_id,
+                    node_type: "yssbi.value.convert"
+                        .parse()
+                        .expect("built-in node type is valid"),
+                    position: NodePosition { x, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        for (output_node, input_node) in [(left, right), (right, left)] {
+            let id = yss_graph_document::ConnectionId::new();
+            document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output: PortAddress::declared(
+                        output_node,
+                        "output".parse().expect("built-in port key is valid"),
+                    ),
+                    input: PortAddress::declared(
+                        input_node,
+                        "input".parse().expect("built-in port key is valid"),
+                    ),
+                    order: None,
+                },
+            );
+        }
+
+        let error = compile(GraphCompilationInput::new(
+            &document,
+            &builtin.registry,
+            document.revision,
+            graph_path(),
+            CompileId::new(10),
+        ))
+        .expect_err("the complete Graph must be acyclic");
+
+        assert!(matches!(
+            error,
+            GraphCompileError::InvalidGraph {
+                code: GraphCompileErrorCode::CyclicDataDependency,
+                ..
+            }
         ));
     }
 }

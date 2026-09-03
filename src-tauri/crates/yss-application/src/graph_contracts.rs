@@ -8,9 +8,9 @@ use yss_execution::plan::{
     CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
     CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
     PlanInputBinding, PlanInputSource, PlanNodeId, PlanObservationIntent, PlanOperation,
-    PlanOperationKind, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
-    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
-    ValueRef,
+    PlanOperationKind, PlanOutputBinding, PlanOutputRef, PlanParameterFieldId,
+    PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue,
+    PlanPortAddress, PlanProvenance, PlanSourceIdentity, ValueRef,
 };
 use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_analysis_contract::{
@@ -242,29 +242,8 @@ pub fn execution_package_from_graph(
                 .map(|binding| {
                     let port = PlanPortAddress::new(binding.port().to_owned().into_boxed_str())
                         .map_err(GraphPackageMappingError::Identity)?;
-                    let source = match binding.source() {
-                        GraphInputSource::Value(value) => {
-                            PlanInputSource::Value(ValueRef::new(value.index()))
-                        }
-                        GraphInputSource::Parameter(handle) => PlanInputSource::Parameter(
-                            CompiledParameterHandle::new(
-                                handle.as_str().to_owned().into_boxed_str(),
-                            )
-                            .map_err(GraphPackageMappingError::ParameterIdentity)?,
-                        ),
-                    };
-                    let kind = match binding.kind() {
-                        yss_graph_compiler::GraphInputKind::Data => {
-                            yss_execution::plan::PlanInputKind::Data
-                        }
-                        yss_graph_compiler::GraphInputKind::Control => {
-                            yss_execution::plan::PlanInputKind::Control
-                        }
-                        yss_graph_compiler::GraphInputKind::Effect => {
-                            yss_execution::plan::PlanInputKind::Effect
-                        }
-                    };
-                    Ok(PlanInputBinding::new(port, kind, source))
+                    let source = plan_input_source(binding.source())?;
+                    Ok(PlanInputBinding::new(port, source))
                 })
                 .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
                 .into_boxed_slice();
@@ -272,15 +251,28 @@ pub fn execution_package_from_graph(
                 .observation_intents()
                 .iter()
                 .map(|intent| match intent {
-                    GraphObservationIntent::InspectInput { input } => {
-                        PlanObservationIntent::InspectInput {
-                            input: ValueRef::new(input.index()),
-                        }
+                    GraphObservationIntent::InspectInput { source } => {
+                        Ok(PlanObservationIntent::InspectInput {
+                            source: plan_input_source(source)?,
+                        })
                     }
                 })
-                .collect::<Vec<_>>()
+                .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
                 .into_boxed_slice();
-            let output = operation.output().map(|value| ValueRef::new(value.index()));
+            let output_graph = source.graph().clone();
+            let outputs = operation
+                .outputs()
+                .iter()
+                .map(|binding| {
+                    let port = PlanPortAddress::new(binding.port().to_owned().into_boxed_str())
+                        .map_err(GraphPackageMappingError::Identity)?;
+                    Ok(PlanOutputBinding::new(
+                        PlanOutputRef::new(output_graph.clone(), port),
+                        ValueRef::new(binding.value().index()),
+                    ))
+                })
+                .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
+                .into_boxed_slice();
             Ok(PlanOperation::new(
                 source,
                 kind,
@@ -288,7 +280,7 @@ pub fn execution_package_from_graph(
                 parameter_handles,
                 inputs,
                 observation_intents,
-                output,
+                outputs,
             ))
         })
         .collect::<Result<Vec<_>, GraphPackageMappingError>>()?;
@@ -317,6 +309,18 @@ pub fn execution_package_from_graph(
         std::sync::Arc::new(parameters.freeze()),
         provenance,
     ))
+}
+
+fn plan_input_source(
+    source: &GraphInputSource,
+) -> Result<PlanInputSource, GraphPackageMappingError> {
+    Ok(match source {
+        GraphInputSource::Value(value) => PlanInputSource::Value(ValueRef::new(value.index())),
+        GraphInputSource::Parameter(handle) => PlanInputSource::Parameter(
+            CompiledParameterHandle::new(handle.as_str().to_owned().into_boxed_str())
+                .map_err(GraphPackageMappingError::ParameterIdentity)?,
+        ),
+    })
 }
 
 fn plan_source_identity(
@@ -429,7 +433,7 @@ mod tests {
     use yss_database_edit::EditHistory;
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_database_runtime::{DatabaseInstance, DatabaseState};
-    use yss_graph_resource_contract::VariableValueContract;
+    use yss_graph_resource_contract::{FunctionParameterContract, VariableValueContract};
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
@@ -475,7 +479,14 @@ mod tests {
         let mut functions = BTreeMap::new();
         functions.insert(
             function_path.clone(),
-            FunctionSignature::new(vec![DataType::Float64], Some(DataType::Float64)),
+            FunctionSignature::new(
+                vec![FunctionParameterContract::new(
+                    yss_graph_document::FunctionParameterId::new("x"),
+                    "X",
+                    DataType::Float64,
+                )],
+                Some(DataType::Float64),
+            ),
         );
         let variable_id = GraphResourceId::new("variables/input");
         let mut variables = BTreeMap::new();

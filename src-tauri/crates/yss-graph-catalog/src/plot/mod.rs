@@ -127,7 +127,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
 }
 
 fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let mut ports = vec![control_port("enter", "Enter", PortDirection::Input)?];
+    let mut ports = Vec::new();
     match spec.inputs {
         PlotInputs::Pair => {
             ports.push(data_port(
@@ -185,7 +185,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             )?);
         }
     }
-    ports.push(control_port("then", "Then", PortDirection::Output)?);
     ports.push(data_port(
         "result",
         "Result",
@@ -209,33 +208,12 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         parameters: assembled_parameters(spec.id, vec![])?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
-            determinism: Determinism::EnvironmentDependent,
-            purity: Purity::Effectful,
-            evaluation: EvaluationPolicy::EagerWhenRegionEntered,
-            cache: CachePolicy::Disabled,
-            effects: EffectSemantics::Ordered,
-            idempotent: false,
-            retry: None,
+            determinism: Determinism::Deterministic,
+            cache: CachePolicy::PerRun,
         },
         scope: NodeScope::Any,
         managed_role: None,
     })
-}
-
-fn control_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
-        key,
-        title,
-        direction,
-        PortKind::Control,
-        TypeExpr::Unknown,
-        PortInstances::Declared,
-        None,
-    )
 }
 
 fn data_port(
@@ -246,31 +224,11 @@ fn data_port(
     instances: PortInstances,
     default_value: Option<TypedValue>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
-        key,
-        title,
-        direction,
-        PortKind::Data,
-        value_type,
-        instances,
-        default_value,
-    )
-}
-
-fn port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    kind: PortKind,
-    value_type: TypeExpr,
-    instances: PortInstances,
-    default_value: Option<TypedValue>,
-) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
         title: title.into(),
         direction,
-        kind,
+        kind: PortKind::Data,
         value_type,
         instances,
         connections: if direction == PortDirection::Input {
@@ -281,15 +239,13 @@ fn port(
                 ordered: false,
             }
         },
-        input_binding: (kind == PortKind::Data && direction == PortDirection::Input).then_some(
-            InputBindingSpec {
-                literal_policy: LiteralPolicy::Allowed,
-                default_value,
-            },
-        ),
-        consumption: (kind == PortKind::Data && direction == PortDirection::Input)
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Allowed,
+            default_value,
+        }),
+        consumption: (direction == PortDirection::Input)
             .then_some(InputConsumption::FullyMaterialized),
-        production: (kind == PortKind::Data && direction == PortDirection::Output)
+        production: (direction == PortDirection::Output)
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
@@ -303,8 +259,8 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Plo
     out.extend([
         ("en-US", title, Message::Text(spec.en)),
         ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", documentation, Message::Text("This effectful view node requires the plot-sink resource and returns the published presentation result.")),
-        ("zh-CN", documentation, Message::Text("此视图节点具有显式副作用，需要绘图接收器资源，并返回已发布的展示结果。")),
+        ("en-US", documentation, Message::Text("This dataflow view node returns a presentation result that can be opened from the graph output.")),
+        ("zh-CN", documentation, Message::Text("此数据流视图节点返回可从图结果中打开的展示结果。")),
         ("en-US", aliases, Message::Aliases(spec.aliases)),
         ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
     ]);

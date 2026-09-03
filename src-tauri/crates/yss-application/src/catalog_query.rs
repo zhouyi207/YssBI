@@ -15,7 +15,9 @@ use yss_graph_catalog::{
 use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_registry::RegistryFingerprint;
-use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, VariableValueContract};
+use yss_graph_resource_contract::{
+    FunctionParameterContract, FunctionSignature, GraphResourceId, VariableValueContract,
+};
 use yss_graph_runtime::GraphRuntimeCatalogError;
 use yss_project::ProjectIndex;
 use yss_project_filesystem::ProjectFilesystemError;
@@ -292,17 +294,14 @@ impl ProjectCatalogResources {
                 return Err(ProjectCatalogReadSource::invalid_declaration_facts());
             }
             let get_node_type = node_type("yssbi.project.variable.get")?;
-            let set_node_type = node_type("yssbi.project.variable.set")?;
-            for node_type_id in [get_node_type, set_node_type] {
-                entries.push(CatalogResourceEntry {
-                    name: variable.name.clone().into_boxed_str(),
-                    node_type_id,
-                    resource_path: CatalogResourcePath::new(variable.resource_path.as_str()),
-                    resource_revision: variable.revision.get(),
-                    create_args: ResourceBoundCreateArgs::Variable,
-                    technical_terms: vec!["variable".into()],
-                });
-            }
+            entries.push(CatalogResourceEntry {
+                name: variable.name.into_boxed_str(),
+                node_type_id: get_node_type,
+                resource_path: CatalogResourcePath::new(variable.resource_path.as_str()),
+                resource_revision: variable.revision.get(),
+                create_args: ResourceBoundCreateArgs::Variable,
+                technical_terms: vec!["variable".into()],
+            });
         }
 
         let mut declaration_observations = Vec::new();
@@ -657,7 +656,17 @@ fn graph_signature(
     let parameters = signature
         .parameters
         .iter()
-        .map(|parameter| parse_function_data_type(&parameter.type_name).map_err(|_| ()))
+        .map(|parameter| {
+            parse_function_data_type(&parameter.type_name)
+                .map(|data_type| {
+                    FunctionParameterContract::new(
+                        parameter.id.clone(),
+                        parameter.name.clone(),
+                        data_type,
+                    )
+                })
+                .map_err(|_| ())
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let result = signature
         .return_type

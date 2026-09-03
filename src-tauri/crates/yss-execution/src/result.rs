@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::plan::PlanGraphRevision;
-use crate::plan::ResultCategory;
+use crate::plan::{PlanGraphRevision, PlanOutputRef, ResultCategory};
 use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
@@ -92,14 +91,12 @@ pub struct PinResultEntry {
 }
 
 impl PinResultEntry {
-    #[cfg(test)]
-    pub(crate) fn new(
+    pub(crate) fn produced(
         result_id: ResultId,
         run_id: RunId,
         activation_id: ActivationId,
         graph_revision: PlanGraphRevision,
         created_at_ms: u64,
-        usage: ResultUsage,
     ) -> Self {
         Self {
             result_id,
@@ -107,7 +104,7 @@ impl PinResultEntry {
             activation_id,
             graph_revision,
             created_at_ms,
-            usage,
+            usage: ResultUsage::Produced,
         }
     }
 
@@ -157,4 +154,39 @@ impl PinResultHistorySnapshot {
 pub enum ExecutionResultQueryError {
     #[error("pin history references a missing result")]
     ResultSourceReadFailed { result_id: ResultId },
+}
+
+/// One coherent view of a cached output value and the same provenance entry
+/// used by pin history lookup.
+#[derive(Clone, Debug)]
+pub struct StoredResultSnapshot {
+    value: Arc<StoredResult>,
+    output: PlanOutputRef,
+    entry: PinResultEntry,
+}
+
+impl StoredResultSnapshot {
+    pub(crate) fn new(
+        value: Arc<StoredResult>,
+        output: PlanOutputRef,
+        entry: PinResultEntry,
+    ) -> Self {
+        Self {
+            value,
+            output,
+            entry,
+        }
+    }
+
+    pub fn value(&self) -> &Arc<StoredResult> {
+        &self.value
+    }
+
+    pub fn output(&self) -> &PlanOutputRef {
+        &self.output
+    }
+
+    pub fn entry(&self) -> &PinResultEntry {
+        &self.entry
+    }
 }

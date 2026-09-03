@@ -465,12 +465,7 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
-            purity: Purity::Pure,
-            evaluation: EvaluationPolicy::DemandDriven,
             cache: CachePolicy::Disabled,
-            effects: EffectSemantics::None,
-            idempotent: false,
-            retry: None,
         },
         scope: NodeScope::Any,
         managed_role: None,

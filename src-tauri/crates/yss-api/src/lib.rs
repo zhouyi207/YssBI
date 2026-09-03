@@ -23,6 +23,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         rename_graph_resource,
         update_function_signature,
         hydrate_editor_graph,
+        compile_graph_draft,
         export_graph_subgraph,
         transform_graph_draft,
         get_project_history_status,

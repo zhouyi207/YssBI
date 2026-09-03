@@ -135,12 +135,12 @@ pub fn load_project_graph(
             locale.as_deref().unwrap_or("en-US"),
         ))
         .map_err(open_graph_command_error)?;
-    crate::schema::graph_draft::graph_editor_session_to_transport(
-        receipt.graph_path(),
-        receipt.document(),
-        receipt.projection(),
+    Ok(
+        crate::schema::graph_draft::graph_editor_session_to_transport(
+            receipt.document(),
+            receipt.projection(),
+        ),
     )
-    .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
 }
 
 fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {

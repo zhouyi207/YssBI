@@ -13,5 +13,6 @@ impl ValueRef {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanObservationIntent {
-    InspectInput { input: ValueRef },
+    InspectInput { source: PlanInputSource },
 }
+use super::model::PlanInputSource;

@@ -182,8 +182,6 @@ pub enum PortDirectionDto {
 #[serde(rename_all = "camelCase")]
 pub enum PortKindDto {
     Data,
-    Control,
-    Effect,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

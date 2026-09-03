@@ -1,4 +1,4 @@
-use super::identity::{PlanOperationKind, PlanPortAddress, PlanSourceIdentity};
+use super::identity::{PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanSourceIdentity};
 use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::CompiledParameterHandle;
 use super::result_category::ResultCategory;
@@ -9,31 +9,19 @@ pub enum PlanInputSource {
     Parameter(CompiledParameterHandle),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PlanInputKind {
-    Data,
-    Control,
-    Effect,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanInputBinding {
     port: PlanPortAddress,
-    kind: PlanInputKind,
     source: PlanInputSource,
 }
 
 impl PlanInputBinding {
-    pub fn new(port: PlanPortAddress, kind: PlanInputKind, source: PlanInputSource) -> Self {
-        Self { port, kind, source }
+    pub fn new(port: PlanPortAddress, source: PlanInputSource) -> Self {
+        Self { port, source }
     }
 
     pub fn port(&self) -> &PlanPortAddress {
         &self.port
-    }
-
-    pub const fn kind(&self) -> PlanInputKind {
-        self.kind
     }
 
     pub fn source(&self) -> &PlanInputSource {
@@ -49,7 +37,27 @@ pub struct PlanOperation {
     parameter_handles: Box<[CompiledParameterHandle]>,
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
-    output: Option<ValueRef>,
+    outputs: Box<[PlanOutputBinding]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanOutputBinding {
+    output: PlanOutputRef,
+    value: ValueRef,
+}
+
+impl PlanOutputBinding {
+    pub fn new(output: PlanOutputRef, value: ValueRef) -> Self {
+        Self { output, value }
+    }
+
+    pub fn output(&self) -> &PlanOutputRef {
+        &self.output
+    }
+
+    pub const fn value(&self) -> ValueRef {
+        self.value
+    }
 }
 
 impl PlanOperation {
@@ -60,7 +68,7 @@ impl PlanOperation {
         parameter_handles: Box<[CompiledParameterHandle]>,
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
-        output: Option<ValueRef>,
+        outputs: Box<[PlanOutputBinding]>,
     ) -> Self {
         Self {
             source,
@@ -69,7 +77,7 @@ impl PlanOperation {
             parameter_handles,
             inputs,
             observation_intents,
-            output,
+            outputs,
         }
     }
 
@@ -97,9 +105,18 @@ impl PlanOperation {
         &self.observation_intents
     }
 
-    pub const fn output(&self) -> Option<ValueRef> {
-        self.output
+    pub fn outputs(&self) -> &[PlanOutputBinding] {
+        &self.outputs
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanExecutionDemand {
+    Default,
+    Outputs {
+        outputs: Box<[PlanOutputRef]>,
+        include_default_results: bool,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

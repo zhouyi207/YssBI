@@ -33,11 +33,7 @@ impl fmt::Debug for LeafImplementation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StructuralNodeRole {
-    Sequence,
-    Branch,
-    Loop,
     Call,
-    EventBegin,
     FunctionEntry,
     FunctionReturn,
 }

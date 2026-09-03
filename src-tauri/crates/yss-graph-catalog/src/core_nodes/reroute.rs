@@ -1,11 +1,7 @@
 use super::support::{
-    BuiltinAssemblyError, NodeTextSpec, ProviderFragment, effectful, protocol, pure, semantic,
-    transparent,
+    BuiltinAssemblyError, NodeTextSpec, ProviderFragment, protocol, pure, semantic, transparent,
 };
-use crate::{
-    CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
-    REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT,
-};
+use crate::{DATA_REROUTE_NODE_TYPE, REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT};
 use yss_graph_protocol::{
     ConnectionsPerPort, InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId,
     OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec,
@@ -14,19 +10,16 @@ use yss_graph_protocol::{
 use yss_graph_registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for kind in [PortKind::Data, PortKind::Control, PortKind::Effect] {
-        let node_type = node_type_for_kind(kind);
-        fragment.add_node_messages(&NodeTextSpec {
-            id: node_type,
-            title: "Reroute",
-            zh_title: "重路由",
-            documentation: "Persistent compiler-transparent connection routing point.",
-            zh_documentation: "持久化且对编译器透明的连接路由点。",
-            aliases: &[],
-            zh_aliases: &[],
-        })?;
-        fragment.nodes.push(build_protocol(kind)?);
-    }
+    fragment.add_node_messages(&NodeTextSpec {
+        id: DATA_REROUTE_NODE_TYPE,
+        title: "Reroute",
+        zh_title: "重路由",
+        documentation: "Persistent compiler-transparent data routing point.",
+        zh_documentation: "持久化且对编译器透明的数据路由点。",
+        aliases: &[],
+        zh_aliases: &[],
+    })?;
+    fragment.nodes.push(build_protocol()?);
     Ok(())
 }
 
@@ -38,9 +31,8 @@ pub struct RerouteProtocolContract {
 
 pub fn validate_reroute_protocol_contract(
     registered: &RegisteredNode,
-    kind: PortKind,
 ) -> Result<RerouteProtocolContract, &'static str> {
-    let canonical = build_protocol(kind).map_err(|_| "canonical reroute protocol is invalid")?;
+    let canonical = build_protocol().map_err(|_| "canonical reroute protocol is invalid")?;
     if registered.transparent_role() != canonical.transparent_role()
         || registered.implementation().is_some()
         || registered.structural_role().is_some()
@@ -57,60 +49,36 @@ pub fn validate_reroute_protocol_contract(
     })
 }
 
-pub(crate) const fn node_type_for_kind(kind: PortKind) -> &'static str {
-    match kind {
-        PortKind::Data => DATA_REROUTE_NODE_TYPE,
-        PortKind::Control => CONTROL_REROUTE_NODE_TYPE,
-        PortKind::Effect => EFFECT_REROUTE_NODE_TYPE,
-    }
-}
-
-fn build_protocol(
-    kind: PortKind,
-) -> Result<yss_graph_registry::RegisteredNode, BuiltinAssemblyError> {
-    let node_type = node_type_for_kind(kind);
+fn build_protocol() -> Result<yss_graph_registry::RegisteredNode, BuiltinAssemblyError> {
+    let node_type = DATA_REROUTE_NODE_TYPE;
     let input_key = semantic(REROUTE_INPUT_PORT, PortKey::new)?;
     let generic = semantic("t", TypeParameterId::new)?;
-    let value_type = match kind {
-        PortKind::Data => TypeExpr::Generic(generic.clone()),
-        PortKind::Control | PortKind::Effect => TypeExpr::Unknown,
-    };
+    let value_type = TypeExpr::Generic(generic.clone());
     let mut reroute = protocol(
         node_type,
-        "control",
+        "dataflow",
         vec![
             port(
                 REROUTE_INPUT_PORT,
                 "Input",
                 PortDirection::Input,
-                kind,
                 value_type.clone(),
             )?,
             port(
                 REROUTE_OUTPUT_PORT,
                 "Output",
                 PortDirection::Output,
-                kind,
                 value_type,
             )?,
         ],
-        (kind == PortKind::Data)
-            .then_some(generic)
-            .into_iter()
-            .collect(),
+        vec![generic],
         vec![],
         vec![],
-        if kind == PortKind::Effect {
-            effectful()
-        } else {
-            pure()
-        },
+        pure(),
     )?;
     reroute.catalog.hidden = true;
     reroute.catalog.style_id = semantic("builtin.reroute", NodeStyleId::new)?;
-    if kind == PortKind::Data {
-        reroute.interface.ports[1].schema = Some(SchemaExpr::Input(input_key));
-    }
+    reroute.interface.ports[1].schema = Some(SchemaExpr::Input(input_key));
     Ok(transparent(reroute, TransparentNodeRole::Reroute))
 }
 
@@ -118,14 +86,13 @@ fn port(
     key: &'static str,
     title: &'static str,
     direction: PortDirection,
-    kind: PortKind,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind,
+        kind: PortKind::Data,
         value_type,
         instances: PortInstances::Declared,
         connections: if direction == PortDirection::Input {
@@ -136,15 +103,13 @@ fn port(
                 ordered: false,
             }
         },
-        input_binding: (direction == PortDirection::Input && kind == PortKind::Data).then_some(
-            InputBindingSpec {
-                literal_policy: LiteralPolicy::Forbidden,
-                default_value: None,
-            },
-        ),
-        consumption: (direction == PortDirection::Input && kind == PortKind::Data)
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Forbidden,
+            default_value: None,
+        }),
+        consumption: (direction == PortDirection::Input)
             .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output && kind == PortKind::Data)
+        production: (direction == PortDirection::Output)
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,

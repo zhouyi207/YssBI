@@ -11,7 +11,6 @@ mod localization;
 mod plot;
 mod project;
 mod statistics;
-mod structured_control;
 
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
@@ -19,8 +18,6 @@ pub use builtin::{
 #[cfg(any(test, feature = "test-support"))]
 pub use builtin::{builtin_bundle_parts_for_test, validate_builtin_bundle_for_test};
 pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
-pub(crate) const CONTROL_REROUTE_NODE_TYPE: &str = "yssbi.reroute.control";
-pub(crate) const EFFECT_REROUTE_NODE_TYPE: &str = "yssbi.reroute.effect";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
@@ -31,11 +28,9 @@ pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
 };
-pub fn reroute_node_type_for_kind(
-    kind: yss_graph_protocol::PortKind,
-) -> yss_graph_protocol::NodeTypeId {
-    yss_graph_protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
-        .expect("built-in reroute protocol identifiers are valid")
+pub fn data_reroute_node_type() -> yss_graph_protocol::NodeTypeId {
+    yss_graph_protocol::NodeTypeId::new(DATA_REROUTE_NODE_TYPE)
+        .expect("built-in data reroute identifier is valid")
 }
 
 pub(crate) use localization::{Aliases, Message, Text};
@@ -47,7 +42,13 @@ pub use localization::{
 
 #[cfg(test)]
 mod tests {
-    use super::build_builtin_node_system;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use super::{
+        CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
+        build_builtin_node_system,
+    };
+    use yss_graph_protocol::{NodeTypeId, PortKind};
 
     #[test]
     fn numeric_type_class_contains_only_int64_and_float64() {
@@ -67,5 +68,74 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(members, ["core.float64", "core.int64"]);
+    }
+
+    #[test]
+    fn variable_resource_has_one_localized_read_action() {
+        let system = build_builtin_node_system().expect("production built-ins must assemble");
+        let resource_path = CatalogResourcePath::new("variables/score");
+        let entries = [CatalogResourceEntry {
+            name: "Score".into(),
+            node_type_id: NodeTypeId::new("yssbi.project.variable.get")
+                .expect("built-in node type is valid"),
+            resource_path: resource_path.clone(),
+            resource_revision: 3,
+            create_args: ResourceBoundCreateArgs::Variable,
+            technical_terms: vec!["variable".into()],
+        }];
+
+        let catalog = system
+            .catalog
+            .localize_with_resources(&system.registry, "zh-CN", &entries);
+        let titles = catalog
+            .items
+            .iter()
+            .filter(|item| item.resource_path.as_ref() == Some(&resource_path))
+            .map(|item| (item.node_type_id.as_ref(), item.title.as_ref()))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(titles.len(), 1);
+        assert_eq!(titles["yssbi.project.variable.get"], "读取变量 · Score");
+    }
+
+    #[test]
+    fn analysis_catalog_contains_only_dataflow_nodes_and_ports() {
+        let registry = build_builtin_node_system()
+            .expect("production built-ins must assemble")
+            .registry;
+        let registered = registry
+            .iter()
+            .map(|(node_type, _)| node_type.as_str())
+            .collect::<BTreeSet<_>>();
+
+        for removed in [
+            "yssbi.project.event.begin",
+            "yssbi.project.variable.set",
+            "yssbi.debug.print",
+            "yssbi.control.branch",
+            "yssbi.control.sequence",
+            "yssbi.control.loop",
+            "yssbi.control.do",
+            "yssbi.control.merge",
+            "yssbi.control.sleep",
+            "yssbi.reroute.control",
+            "yssbi.reroute.effect",
+        ] {
+            assert!(
+                !registered.contains(removed),
+                "removed flow node '{removed}'"
+            );
+        }
+        for (_, node) in registry.iter() {
+            assert!(
+                node.protocol()
+                    .interface
+                    .ports
+                    .iter()
+                    .all(|port| port.kind == PortKind::Data),
+                "analysis node '{}' exposes a non-data port",
+                node.protocol().type_id
+            );
+        }
     }
 }

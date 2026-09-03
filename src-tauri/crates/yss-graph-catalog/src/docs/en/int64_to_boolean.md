@@ -4,4 +4,4 @@ Casts `DataSeries<Int64>` to `DataSeries<Boolean>`: $0 \to \text{false}$, non-ze
 
 ## Usage
 
-Turn numeric indicator columns into boolean masks for **Branch** or filtering. Zero is explicitly false.
+Turn numeric indicator columns into Boolean masks for filtering or downstream transformations. Zero is explicitly false.

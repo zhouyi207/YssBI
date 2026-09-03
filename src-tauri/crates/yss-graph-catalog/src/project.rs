@@ -28,13 +28,6 @@ pub(super) fn register(
 ) -> Result<(), BuiltinAssemblyError> {
     for (id, en, zh, aliases, zh_aliases) in [
         (
-            "yssbi.project.event.begin",
-            "Event Begin",
-            "事件开始",
-            &["event", "start", "entry"][..],
-            &["事件", "开始", "入口"][..],
-        ),
-        (
             "yssbi.project.function.entry",
             "Function Entry",
             "函数入口",
@@ -62,22 +55,11 @@ pub(super) fn register(
             &["get", "read", "variable"][..],
             &["读取", "获取", "变量"][..],
         ),
-        (
-            "yssbi.project.variable.set",
-            "Set Variable",
-            "写入变量",
-            &["set", "write", "variable"][..],
-            &["写入", "设置", "变量"][..],
-        ),
     ] {
         add_node_messages(messages, id, en, zh, aliases, zh_aliases);
     }
 
     nodes.extend([
-        RegisteredNode::structural(
-            Arc::new(event_begin_protocol()?),
-            StructuralNodeRole::EventBegin,
-        ),
         RegisteredNode::structural(
             Arc::new(function_entry_protocol()?),
             StructuralNodeRole::FunctionEntry,
@@ -91,61 +73,42 @@ pub(super) fn register(
             StructuralNodeRole::Call,
         ),
         leaf(variable_get_protocol()?, "project.variable.get"),
-        leaf(variable_set_protocol()?, "project.variable.set"),
     ]);
     add_messages(messages);
     Ok(())
 }
 
-fn event_begin_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
-    protocol(
-        "yssbi.project.event.begin",
-        vec![control_port("then", "Then", PortDirection::Output)?],
-        vec![],
-        vec![],
-        NodeScope::Event,
-        Some(ManagedNodeRole::EventBegin),
-        structural(),
-    )
-}
-
 fn function_entry_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.entry",
-        vec![
-            control_port("then", "Then", PortDirection::Output)?,
-            derived_data_port(
-                "parameters",
-                "Parameters",
-                PortDirection::Output,
-                FUNCTION_ENTRY_PARAMETERS_RESOLVER,
-            )?,
-        ],
+        vec![derived_data_port(
+            "parameters",
+            "Parameters",
+            PortDirection::Output,
+            FUNCTION_ENTRY_PARAMETERS_RESOLVER,
+        )?],
         vec![],
         vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionEntry),
-        structural(),
+        pure(),
     )
 }
 
 fn function_return_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.return",
-        vec![
-            control_port("enter", "Enter", PortDirection::Input)?,
-            derived_data_port(
-                "results",
-                "Results",
-                PortDirection::Input,
-                FUNCTION_RETURN_RESULTS_RESOLVER,
-            )?,
-        ],
+        vec![derived_data_port(
+            "results",
+            "Results",
+            PortDirection::Input,
+            FUNCTION_RETURN_RESULTS_RESOLVER,
+        )?],
         vec![],
         vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionReturn),
-        structural(),
+        pure(),
     )
 }
 
@@ -153,7 +116,6 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.call",
         vec![
-            control_port("enter", "Enter", PortDirection::Input)?,
             derived_data_port(
                 "arguments",
                 "Arguments",
@@ -166,13 +128,12 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Output,
                 FUNCTION_CALL_RESULTS_RESOLVER,
             )?,
-            control_port("then", "Then", PortDirection::Output)?,
         ],
         vec![],
         vec![resource_parameter("target")?],
         NodeScope::Any,
         None,
-        structural(),
+        pure(),
     )
 }
 
@@ -192,29 +153,6 @@ fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         NodeScope::Any,
         None,
         pure(),
-    )
-}
-
-fn variable_set_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let generic = sid("value", TypeParameterId::new)?;
-    protocol(
-        "yssbi.project.variable.set",
-        vec![
-            control_port("enter", "Enter", PortDirection::Input)?,
-            data_port(
-                "value",
-                "Value",
-                PortDirection::Input,
-                TypeExpr::Generic(generic.clone()),
-                PortInstances::Declared,
-            )?,
-            control_port("then", "Then", PortDirection::Output)?,
-        ],
-        vec![generic],
-        vec![resource_parameter("variable")?],
-        NodeScope::Any,
-        None,
-        structural(),
     )
 }
 
@@ -245,33 +183,16 @@ fn protocol(
                 parameter: sid("target", ParameterKey::new)?,
                 kind: ResourceDisplayKind::Function,
             },
-            "yssbi.project.variable.get" | "yssbi.project.variable.set" => {
-                NodeInstanceDisplaySpec::ResourceParameter {
-                    parameter: sid("variable", ParameterKey::new)?,
-                    kind: ResourceDisplayKind::Variable,
-                }
-            }
+            "yssbi.project.variable.get" => NodeInstanceDisplaySpec::ResourceParameter {
+                parameter: sid("variable", ParameterKey::new)?,
+                kind: ResourceDisplayKind::Variable,
+            },
             _ => NodeInstanceDisplaySpec::Static,
         },
         execution,
         scope,
         managed_role,
     })
-}
-
-fn control_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
-        key,
-        title,
-        direction,
-        PortKind::Control,
-        TypeExpr::Unknown,
-        PortInstances::Declared,
-    )
 }
 
 fn derived_data_port(
@@ -298,33 +219,20 @@ fn data_port(
     value_type: TypeExpr,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(key, title, direction, PortKind::Data, value_type, instances)
-}
-
-fn port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    kind: PortKind,
-    value_type: TypeExpr,
-    instances: PortInstances,
-) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: sid(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind,
+        kind: PortKind::Data,
         value_type,
         instances,
         connections: ConnectionsPerPort::Single,
-        input_binding: (kind == PortKind::Data && direction == PortDirection::Input).then_some(
-            InputBindingSpec {
-                literal_policy: LiteralPolicy::Forbidden,
-                default_value: None,
-            },
-        ),
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Forbidden,
+            default_value: None,
+        }),
         consumption: None,
-        production: (kind == PortKind::Data && direction == PortDirection::Output)
+        production: (direction == PortDirection::Output)
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
@@ -361,24 +269,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::EnvironmentDependent,
-        purity: Purity::Pure,
-        evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
-        effects: EffectSemantics::None,
-        idempotent: false,
-        retry: None,
-    }
-}
-
-fn structural() -> ExecutionSemantics {
-    ExecutionSemantics {
-        determinism: Determinism::EnvironmentDependent,
-        purity: Purity::Effectful,
-        evaluation: EvaluationPolicy::EagerWhenRegionEntered,
-        cache: CachePolicy::Disabled,
-        effects: EffectSemantics::Ordered,
-        idempotent: false,
-        retry: None,
     }
 }
 

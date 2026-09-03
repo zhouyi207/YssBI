@@ -1,7 +1,8 @@
 use super::*;
 use std::collections::BTreeMap;
 use yss_graph_analysis::{
-    GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphProjectionFacts,
+    GraphNodeProjectionFacts, GraphPortBacking, GraphPortConnectionFacts, GraphPortEditorFact,
+    GraphProjectionFacts,
 };
 use yss_graph_analysis_contract::{CompilationBasis, ResourceKey, ResourceVersion};
 use yss_graph_document::{
@@ -38,6 +39,7 @@ fn port(
         instance_label: None,
         direction,
         kind: PortKind::Data,
+        backing: GraphPortBacking::Declared,
         orphan: false,
         can_remove: false,
         connections: GraphPortConnectionFacts {

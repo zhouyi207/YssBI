@@ -15,4 +15,4 @@ $$
 
 ## Usage
 
-Combine multiple conditions before **Branch** or **Set Variable**. Chain comparisons with **Equal** into **A** and **B**.
+Combine multiple Boolean masks before filtering or another downstream data transformation. Chain comparisons with **Equal** into **A** and **B**.

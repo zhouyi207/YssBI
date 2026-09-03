@@ -10,4 +10,4 @@ Compares scalar `Float64` operands using value equality. Output is a single `Boo
 
 ## Usage
 
-Drive **Branch** conditions or combine with **And** / **Or**. For series-wise comparison, use dedicated **DataSeries** compare nodes.
+Produce a Boolean condition for filters or combine it with **And** / **Or**. For series-wise comparison, use dedicated **DataSeries** compare nodes.

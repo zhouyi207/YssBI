@@ -1,10 +1,10 @@
-use std::sync::Arc;
-
 use thiserror::Error;
 
 use super::session_slot::{ApplicationState, SessionCaptureError};
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{ExecutionResultQueryError, PinResultHistorySnapshot, ResultId};
+use yss_execution::result::{
+    ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResultSnapshot,
+};
 use yss_graph_document::{GraphResourcePath, PortAddress};
 
 pub struct ResultPinQuery {
@@ -30,7 +30,7 @@ impl ApplicationState {
     pub fn query_result(
         &self,
         result_id: ResultId,
-    ) -> Result<Option<Arc<yss_execution::result::StoredResult>>, ResultQueryApplicationError> {
+    ) -> Result<Option<StoredResultSnapshot>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         Ok(captured.execution().query_result(result_id))
     }

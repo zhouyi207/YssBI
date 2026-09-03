@@ -10,8 +10,10 @@ use yss_graph_analysis_contract::{
     ResourceVersionSet,
 };
 use yss_graph_document::GraphRevision;
-use yss_graph_document::{ConnectionId, GraphDocument, NodeId, OrderKey, PortAddress, TypedValue};
-use yss_graph_document::{DynamicPortBinding, PortRef};
+use yss_graph_document::{
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, NodeId, OrderKey,
+    PortAddress, PortRef, TypedValue,
+};
 use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
 use yss_graph_protocol::{
     ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
@@ -19,7 +21,15 @@ use yss_graph_protocol::{
     SchemaExpr, TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
+mod derived_ports;
 mod result_category;
+mod schema_resolution;
+
+use derived_ports::{derived_port_address, derived_port_members};
+use schema_resolution::resolve_editor_schemas;
+
+pub use derived_ports::materialize_derived_port_bindings;
 
 pub use result_category::{
     GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind, result_category_for_node,
@@ -143,6 +153,7 @@ pub struct GraphPortFact {
     pub instance_label: Option<Box<str>>,
     pub direction: PortDirection,
     pub kind: PortKind,
+    pub backing: GraphPortBacking,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: GraphPortConnectionFacts,
@@ -151,6 +162,13 @@ pub struct GraphPortFact {
     pub value_type: TypeExpr,
     pub schema: Option<SchemaExpr>,
     pub resolved_schema: Option<ResolvedSchemaFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GraphPortBacking {
+    Declared,
+    DocumentInstance,
+    ProjectedDerived { origin: DynamicMemberLocator },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -268,8 +286,10 @@ pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
 pub fn editor_projection_facts(
     document: &GraphDocument,
     registry: &NodeRegistry,
+    resources: &ResourceCatalogSnapshot,
 ) -> GraphProjectionFacts {
     let mut complete = true;
+    let resolved_schemas = resolve_editor_schemas(document, registry, resources);
     let nodes = document
         .nodes
         .values()
@@ -298,7 +318,13 @@ pub fn editor_projection_facts(
             let mut ports = Vec::new();
             for spec in protocol.interface.ports.iter() {
                 if matches!(spec.instances, PortInstances::Declared) {
-                    ports.push(project_declared_port(document, node.id, spec));
+                    let address = PortAddress::declared(node.id, spec.key.clone());
+                    ports.push(project_declared_port(
+                        document,
+                        address.clone(),
+                        spec,
+                        resolved_schemas.get(&address),
+                    ));
                     continue;
                 }
 
@@ -326,13 +352,45 @@ pub fn editor_projection_facts(
                     }
                     ports.push(project_bound_port(
                         document,
-                        node.id,
                         protocol,
                         spec,
                         address,
                         binding,
                         &node_bindings,
+                        resolved_schemas.get(address),
                     ));
+                }
+                if let PortInstances::Derived { resolver } = &spec.instances {
+                    for member in derived_port_members(
+                        document,
+                        node.id,
+                        resolver.as_str(),
+                        &resolved_schemas,
+                        resources,
+                    ) {
+                        if node_bindings.iter().any(|(_, binding)| {
+                            binding_origin(binding).is_some_and(|origin| origin == &member.locator)
+                        }) {
+                            continue;
+                        }
+                        let address =
+                            derived_port_address(document, node.id, &spec.key, &member.locator);
+                        ports.push(project_concrete_port(
+                            document,
+                            spec,
+                            ConcretePortProjection {
+                                address,
+                                backing: GraphPortBacking::ProjectedDerived {
+                                    origin: member.locator,
+                                },
+                                orphan: false,
+                                can_remove: false,
+                                instance_label: Some(member.label),
+                                value_type: member.value_type,
+                                resolved_schema: None,
+                            },
+                        ));
+                    }
                 }
             }
             if node_bindings
@@ -406,6 +464,15 @@ fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
     }
 }
 
+fn binding_origin(binding: &DynamicPortBinding) -> Option<&DynamicMemberLocator> {
+    match binding {
+        DynamicPortBinding::UserCreated { .. } => None,
+        DynamicPortBinding::Resolved { origin, .. } | DynamicPortBinding::Orphan { origin, .. } => {
+            Some(origin)
+        }
+    }
+}
+
 fn binding_matches_policy(binding: &DynamicPortBinding, policy: &PortInstances) -> bool {
     matches!(
         (binding, policy),
@@ -421,36 +488,39 @@ fn binding_matches_policy(binding: &DynamicPortBinding, policy: &PortInstances) 
 
 fn project_declared_port(
     document: &GraphDocument,
-    node_id: NodeId,
+    address: PortAddress,
     spec: &yss_graph_protocol::PortSpec,
+    resolved_schema: Option<&ResolvedSchemaFact>,
 ) -> GraphPortFact {
     debug_assert!(matches!(spec.instances, PortInstances::Declared));
     project_concrete_port(
         document,
         spec,
         ConcretePortProjection {
-            address: PortAddress::declared(node_id, spec.key.clone()),
+            address,
+            backing: GraphPortBacking::Declared,
             orphan: false,
             can_remove: false,
             instance_label: None,
             value_type: spec.value_type.clone(),
+            resolved_schema: resolved_schema.cloned(),
         },
     )
 }
 
 fn project_bound_port(
     document: &GraphDocument,
-    node_id: NodeId,
     protocol: &yss_graph_protocol::NodeProtocol,
     spec: &yss_graph_protocol::PortSpec,
     address: &PortAddress,
     binding: &DynamicPortBinding,
     node_bindings: &[(&PortAddress, &DynamicPortBinding)],
+    resolved_schema: Option<&ResolvedSchemaFact>,
 ) -> GraphPortFact {
     let (orphan, can_remove, instance_label, value_type) = match binding {
         DynamicPortBinding::UserCreated { .. } => (
             false,
-            can_remove_user_created_port(node_id, protocol, spec, address, node_bindings),
+            can_remove_user_created_port(address.node_id, protocol, spec, address, node_bindings),
             None,
             spec.value_type.clone(),
         ),
@@ -478,20 +548,24 @@ fn project_bound_port(
         spec,
         ConcretePortProjection {
             address: address.clone(),
+            backing: GraphPortBacking::DocumentInstance,
             orphan,
             can_remove,
             instance_label,
             value_type,
+            resolved_schema: resolved_schema.cloned(),
         },
     )
 }
 
 struct ConcretePortProjection {
     address: PortAddress,
+    backing: GraphPortBacking,
     orphan: bool,
     can_remove: bool,
     instance_label: Option<Box<str>>,
     value_type: TypeExpr,
+    resolved_schema: Option<ResolvedSchemaFact>,
 }
 
 fn project_concrete_port(
@@ -501,10 +575,12 @@ fn project_concrete_port(
 ) -> GraphPortFact {
     let ConcretePortProjection {
         address,
+        backing,
         orphan,
         can_remove,
         instance_label,
         value_type,
+        resolved_schema,
     } = projection;
     let connections = document
         .connections
@@ -521,6 +597,7 @@ fn project_concrete_port(
         instance_label,
         direction: spec.direction,
         kind: spec.kind,
+        backing,
         orphan,
         can_remove,
         connections: GraphPortConnectionFacts {
@@ -537,7 +614,7 @@ fn project_concrete_port(
         }),
         value_type,
         schema: spec.schema.clone(),
-        resolved_schema: None,
+        resolved_schema,
     }
 }
 

@@ -4,6 +4,7 @@ use yss_graph_document::GraphResourcePath;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GraphCompileErrorCode {
     InvalidDocument,
+    CyclicDataDependency,
     LoweringInvariant,
 }
 

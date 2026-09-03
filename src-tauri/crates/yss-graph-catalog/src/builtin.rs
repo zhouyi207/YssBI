@@ -1,4 +1,4 @@
-use super::{core_nodes, dataframe, distribution, plot, project, statistics, structured_control};
+use super::{core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::{Aliases, BuiltinCatalog, Message, Text};
 use yss_graph_compiler_diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
@@ -564,7 +564,6 @@ fn assemble_builtin_parts()
         "logic.not",
     ));
 
-    structured_control::register(nodes, messages)?;
     project::register(nodes, messages)?;
 
     fragment.types.extend(
@@ -588,7 +587,7 @@ fn assemble_builtin_parts()
             ("constants", 10),
             ("numeric", 20),
             ("logic", 30),
-            ("control", 40),
+            ("dataflow", 40),
             ("project", 50),
         ]
         .into_iter()
@@ -814,12 +813,7 @@ fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        purity: Purity::Pure,
-        evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
-        effects: EffectSemantics::None,
-        idempotent: false,
-        retry: None,
     }
 }
 
@@ -892,7 +886,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("categories.constants.title", "Constants", "常量"),
         ("categories.numeric.title", "Numeric", "数值"),
         ("categories.logic.title", "Logic", "逻辑"),
-        ("categories.control.title", "Flow Control", "流程控制"),
+        ("categories.dataflow.title", "Data Flow", "数据流"),
         ("categories.project.title", "Project", "项目"),
         ("parameters.value.title", "Value", "值"),
         (

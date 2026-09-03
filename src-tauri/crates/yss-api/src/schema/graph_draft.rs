@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::application_event::{
-    GraphProjectionReplacementDto, GraphProjectionTransportError,
-    graph_projection_replacement_to_transport,
+    GraphProjectionReplacementDto, graph_projection_replacement_to_transport,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,45 +29,66 @@ pub struct GraphDraftSaveDto {
     pub history: yss_project_history::HistoryStatusDto,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CompileGraphDraftDto {
+    pub source_hash: Box<str>,
+    pub cache_hit: bool,
+    pub document: yss_graph_document::GraphDocument,
+    pub projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
+}
+
+pub(crate) fn compile_graph_draft_to_transport(
+    receipt: &yss_application::graph_compile::CompileGraphDraftReceipt,
+) -> CompileGraphDraftDto {
+    CompileGraphDraftDto {
+        source_hash: receipt
+            .source_hash
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+            .into(),
+        cache_hit: receipt.cache_hit,
+        document: receipt.document.clone(),
+        projection: crate::schema::editor_projection::map_editor_projection(&receipt.projection),
+    }
+}
+
 pub(crate) fn graph_editor_session_to_transport(
-    graph_path: &yss_graph_document::GraphResourcePath,
     document: &yss_graph_document::GraphDocument,
     projection: &yss_application::editor_projection::EditorProjectionModel,
-) -> Result<GraphEditorSessionDto, GraphProjectionTransportError> {
-    let _ = graph_path;
-    crate::schema::editor_projection::map_editor_projection(projection)
-        .map_err(GraphProjectionTransportError::Projection)
-        .map(|projection| GraphEditorSessionDto {
-            document: document.clone(),
-            projection,
-        })
+) -> GraphEditorSessionDto {
+    GraphEditorSessionDto {
+        document: document.clone(),
+        projection: crate::schema::editor_projection::map_editor_projection(projection),
+    }
 }
 
 pub(crate) fn graph_draft_update_to_transport(
     update: &yss_application::resource_mutation::GraphDraftUpdate,
-) -> Result<GraphDraftUpdateDto, GraphProjectionTransportError> {
-    Ok(GraphDraftUpdateDto {
+) -> GraphDraftUpdateDto {
+    GraphDraftUpdateDto {
         document: update.document.clone(),
         patch: update.patch.clone(),
         projection_replacement: graph_projection_replacement_to_transport(
             &update.projection_replacement,
-        )?,
-    })
+        ),
+    }
 }
 
 pub(crate) fn graph_draft_save_to_transport(
     saved: &yss_application::resource_mutation::GraphDraftSave,
-) -> Result<GraphDraftSaveDto, GraphProjectionTransportError> {
-    Ok(GraphDraftSaveDto {
+) -> GraphDraftSaveDto {
+    GraphDraftSaveDto {
         project_instance_id: saved.project_instance_id.to_string(),
         operation_id: saved.operation_id,
         document: saved.document.clone(),
         projection_replacement: graph_projection_replacement_to_transport(
             &saved.projection_replacement,
-        )?,
+        ),
         history: yss_project_history::HistoryStatusDto {
             can_undo: saved.history.can_undo,
             can_redo: saved.history.can_redo,
         },
-    })
+    }
 }

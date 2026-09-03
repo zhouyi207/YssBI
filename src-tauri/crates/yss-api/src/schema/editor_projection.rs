@@ -1,27 +1,17 @@
 use yss_application::editor_projection::{
     EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
-    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorParameterModel, EditorPortModel,
-    EditorPortStatus, EditorProjectionModel, ParameterEditorKind,
+    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorFilterLiteralType,
+    EditorParameterConfiguration, EditorParameterModel, EditorParameterValueSource,
+    EditorPortModel, EditorPortStatus, EditorProjectionModel, EditorSchemaSummary,
+    EditorSchemaSummaryKind, ParameterEditorKind,
 };
 use yss_graph_registry::RegistryFingerprint;
 
 pub use super::editor_projection_types::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum TransportMappingError {
-    #[error("editor projection parameter configuration has no accessible typed wire contract")]
-    ParameterConfigurationWireContractUnavailable,
-    #[error("editor projection parameter value source has no accessible typed wire contract")]
-    ParameterValueSourceWireContractUnavailable,
-    #[error("editor projection schema summary has no accessible typed wire contract")]
-    ResolvedSchemaWireContractUnavailable,
-}
-
-impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
-    type Error = TransportMappingError;
-
-    fn try_from(model: &EditorProjectionModel) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<&EditorProjectionModel> for EditorGraphProjectionDto {
+    fn from(model: &EditorProjectionModel) -> Self {
+        Self {
             basis: ProjectionBasis {
                 graph_path: model.basis.graph_path.as_str().into(),
                 registry_fingerprint: RegistryFingerprint::from_bytes(
@@ -35,7 +25,7 @@ impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
                 .nodes
                 .iter()
                 .map(|node| map_node(model, node))
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect(),
             connections: model
                 .connections
                 .iter()
@@ -53,22 +43,20 @@ impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
                 .iter()
                 .any(|diagnostic| diagnostic.severity == EditorDiagnosticSeverity::Error)
                 || !matches!(model.outcome, EditorCompilationOutcome::Complete),
-        })
+        }
     }
 }
 
 /// Explicit command-facing entry point for the sole editor wire mapper.
-pub fn map_editor_projection(
-    model: &EditorProjectionModel,
-) -> Result<EditorGraphProjectionDto, TransportMappingError> {
-    model.try_into()
+pub fn map_editor_projection(model: &EditorProjectionModel) -> EditorGraphProjectionDto {
+    model.into()
 }
 
 fn map_node(
     model: &EditorProjectionModel,
     node: &yss_application::editor_projection::EditorNodeModel,
-) -> Result<EditorNodeProjectionDto, TransportMappingError> {
-    Ok(EditorNodeProjectionDto {
+) -> EditorNodeProjectionDto {
+    EditorNodeProjectionDto {
         graph_path: model.graph_path.as_str().into(),
         node_id: node.node_id.to_string().into(),
         node_type_id: node.node_type.as_str().into(),
@@ -82,11 +70,7 @@ fn map_node(
             icon_id: node.display.icon_id.clone(),
             style_id: node.display.style_id.clone(),
         },
-        ports: node
-            .ports
-            .iter()
-            .map(map_port)
-            .collect::<Result<Vec<_>, _>>()?,
+        ports: node.ports.iter().map(map_port).collect(),
         port_instance_additions: node
             .port_instance_additions
             .iter()
@@ -97,11 +81,7 @@ fn map_node(
                 can_add: addition.can_add,
             })
             .collect(),
-        parameter_editors: node
-            .parameters
-            .iter()
-            .map(map_parameter)
-            .collect::<Result<Vec<_>, _>>()?,
+        parameter_editors: node.parameters.iter().map(map_parameter).collect(),
         capabilities: NodeCapabilitiesDto {
             managed: node.capabilities.managed,
             can_copy: node.capabilities.can_copy,
@@ -111,14 +91,11 @@ fn map_node(
             supports_inline_literals: node.capabilities.supports_inline_literals,
         },
         diagnostics: node.diagnostics.iter().map(map_diagnostic).collect(),
-    })
+    }
 }
 
-fn map_port(port: &EditorPortModel) -> Result<EditorPortDto, TransportMappingError> {
-    if port.resolved_schema.is_some() {
-        return Err(TransportMappingError::ResolvedSchemaWireContractUnavailable);
-    }
-    Ok(EditorPortDto {
+fn map_port(port: &EditorPortModel) -> EditorPortDto {
+    EditorPortDto {
         address: (&port.address).into(),
         display: PortDisplayDto {
             label: port.display.label.clone(),
@@ -156,12 +133,12 @@ fn map_port(port: &EditorPortModel) -> Result<EditorPortDto, TransportMappingErr
             data_type: value.data_type.clone(),
             internal_type_expr: Some(value.internal_type_expr.clone()),
         }),
-        resolved_schema: None,
+        resolved_schema: port.resolved_schema.as_ref().map(map_schema_summary),
         status: match port.status {
             EditorPortStatus::Resolved => ResolvedPortStatusDto::Resolved,
             EditorPortStatus::Orphan => ResolvedPortStatusDto::Orphan,
         },
-    })
+    }
 }
 
 fn map_port_direction(direction: yss_graph_protocol::PortDirection) -> PortDirectionDto {
@@ -174,21 +151,11 @@ fn map_port_direction(direction: yss_graph_protocol::PortDirection) -> PortDirec
 fn map_port_kind(kind: yss_graph_protocol::PortKind) -> PortKindDto {
     match kind {
         yss_graph_protocol::PortKind::Data => PortKindDto::Data,
-        yss_graph_protocol::PortKind::Control => PortKindDto::Control,
-        yss_graph_protocol::PortKind::Effect => PortKindDto::Effect,
     }
 }
 
-fn map_parameter(
-    parameter: &EditorParameterModel,
-) -> Result<ParameterEditorDto, TransportMappingError> {
-    if parameter.configuration.is_some() {
-        return Err(TransportMappingError::ParameterConfigurationWireContractUnavailable);
-    }
-    if parameter.value_source.is_some() {
-        return Err(TransportMappingError::ParameterValueSourceWireContractUnavailable);
-    }
-    Ok(ParameterEditorDto {
+fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
+    ParameterEditorDto {
         key: parameter.key.as_str().into(),
         display: ParameterDisplayDto {
             title: parameter.display.title.clone(),
@@ -206,11 +173,109 @@ fn map_parameter(
         value_type: parameter.value_type.clone(),
         multiline: parameter.multiline,
         value: parameter.value.clone(),
-        configuration: None,
+        configuration: parameter
+            .configuration
+            .as_ref()
+            .map(map_parameter_configuration),
         inherited_value: parameter.inherited_value.clone(),
-        value_source: None,
+        value_source: parameter.value_source.map(|source| match source {
+            EditorParameterValueSource::Project => ParameterValueSourceDto::Project,
+            EditorParameterValueSource::Node => ParameterValueSourceDto::Node,
+        }),
         options: parameter.options.as_ref().map(|options| options.to_vec()),
-    })
+    }
+}
+
+fn map_schema_summary(summary: &EditorSchemaSummary) -> SchemaSummaryDto {
+    SchemaSummaryDto {
+        kind: match summary.kind {
+            EditorSchemaSummaryKind::Input => SchemaSummaryKindDto::Input,
+            EditorSchemaSummaryKind::Project => SchemaSummaryKindDto::Project,
+            EditorSchemaSummaryKind::Append => SchemaSummaryKindDto::Append,
+            EditorSchemaSummaryKind::Rename => SchemaSummaryKindDto::Rename,
+            EditorSchemaSummaryKind::Filter => SchemaSummaryKindDto::Filter,
+            EditorSchemaSummaryKind::Derived => SchemaSummaryKindDto::Derived,
+        },
+        fields: summary
+            .fields
+            .iter()
+            .map(|field| SchemaFieldDto {
+                name: field.name.clone(),
+                scalar_type: map_relational_scalar_type(field.scalar_type),
+            })
+            .collect(),
+    }
+}
+
+fn map_parameter_configuration(
+    configuration: &EditorParameterConfiguration,
+) -> SchemaAwareParameterEditorDto {
+    match configuration {
+        EditorParameterConfiguration::ProjectColumns {
+            available,
+            unavailable_reason,
+            options,
+            value,
+        } => SchemaAwareParameterEditorDto::ProjectColumns {
+            available: *available,
+            unavailable_reason: unavailable_reason.clone(),
+            options: options
+                .iter()
+                .map(|option| DataframeColumnOptionDto {
+                    name: option.name.clone(),
+                    data_type: map_relational_scalar_type(option.data_type),
+                })
+                .collect(),
+            value: value.to_vec(),
+        },
+        EditorParameterConfiguration::FilterPredicate {
+            available,
+            unavailable_reason,
+            columns,
+            value,
+        } => SchemaAwareParameterEditorDto::FilterPredicate {
+            available: *available,
+            unavailable_reason: unavailable_reason.clone(),
+            columns: columns
+                .iter()
+                .map(|column| FilterColumnOptionDto {
+                    name: column.name.clone(),
+                    data_type: map_relational_scalar_type(column.data_type),
+                    operators: column.operators.to_vec(),
+                    literal_types: column
+                        .literal_types
+                        .iter()
+                        .copied()
+                        .map(map_filter_literal_type)
+                        .collect(),
+                })
+                .collect(),
+            value: value.clone(),
+        },
+    }
+}
+
+fn map_relational_scalar_type(
+    scalar_type: yss_graph_protocol::RelationalScalarType,
+) -> RelationalScalarTypeDto {
+    match scalar_type {
+        yss_graph_protocol::RelationalScalarType::Boolean => RelationalScalarTypeDto::Boolean,
+        yss_graph_protocol::RelationalScalarType::Int64 => RelationalScalarTypeDto::Int64,
+        yss_graph_protocol::RelationalScalarType::Float64 => RelationalScalarTypeDto::Float64,
+        yss_graph_protocol::RelationalScalarType::String => RelationalScalarTypeDto::String,
+        yss_graph_protocol::RelationalScalarType::Date => RelationalScalarTypeDto::Date,
+        yss_graph_protocol::RelationalScalarType::DateTime => RelationalScalarTypeDto::DateTime,
+        yss_graph_protocol::RelationalScalarType::Unknown => RelationalScalarTypeDto::Unknown,
+    }
+}
+
+fn map_filter_literal_type(literal_type: EditorFilterLiteralType) -> FilterLiteralTypeDto {
+    match literal_type {
+        EditorFilterLiteralType::Boolean => FilterLiteralTypeDto::Boolean,
+        EditorFilterLiteralType::Integer => FilterLiteralTypeDto::Integer,
+        EditorFilterLiteralType::Decimal => FilterLiteralTypeDto::Decimal,
+        EditorFilterLiteralType::String => FilterLiteralTypeDto::String,
+    }
 }
 
 fn map_diagnostic(diagnostic: &EditorDiagnosticModel) -> DiagnosticDto {
@@ -287,9 +352,11 @@ mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
     use yss_application::editor_projection::{
-        EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities, EditorNodeDisplay,
-        EditorNodeModel, EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortModel,
-        EditorPortStatus, EditorProjectionBasis, EditorTypeSummary,
+        EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities,
+        EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
+        EditorParameterModel, EditorParameterValueSource, EditorPortConnectionCapabilities,
+        EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
+        EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind, EditorTypeSummary,
     };
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
@@ -297,7 +364,10 @@ mod tests {
     use yss_graph_document::{
         ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
     };
-    use yss_graph_protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
+    use yss_graph_protocol::{
+        NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind,
+        RelationalScalarType, TypeExpr, TypeId,
+    };
 
     #[test]
     fn editor_projection_serializes_canonical_camel_case_wire_and_safe_diagnostics() {
@@ -364,11 +434,40 @@ mod tests {
                             TypeId::new("core.bool").expect("test type id is valid"),
                         ),
                     }),
-                    resolved_schema: None,
+                    resolved_schema: Some(EditorSchemaSummary {
+                        kind: EditorSchemaSummaryKind::Derived,
+                        fields: Box::new([EditorSchemaField {
+                            name: "sales".into(),
+                            scalar_type: RelationalScalarType::Float64,
+                        }]),
+                    }),
                     status: EditorPortStatus::Resolved,
                 }]),
                 port_instance_additions: Box::new([]),
-                parameters: Box::new([]),
+                parameters: Box::new([EditorParameterModel {
+                    key: ParameterKey::new("columns").expect("test parameter key is valid"),
+                    display: EditorParameterDisplay {
+                        title: "Columns".into(),
+                        description: None,
+                    },
+                    editor: ParameterEditorKind::Select,
+                    presentation: ParameterPresentation::DetailPanel,
+                    value_type: Some(yss_data_contract::DataType::String),
+                    multiline: false,
+                    value: Some(json!(["sales"])),
+                    configuration: Some(EditorParameterConfiguration::ProjectColumns {
+                        available: true,
+                        unavailable_reason: None,
+                        options: Box::new([EditorColumnOption {
+                            name: "sales".into(),
+                            data_type: RelationalScalarType::Float64,
+                        }]),
+                        value: Box::new(["sales".into()]),
+                    }),
+                    inherited_value: None,
+                    value_source: Some(EditorParameterValueSource::Node),
+                    options: None,
+                }]),
                 capabilities: EditorNodeCapabilities {
                     managed: false,
                     can_copy: true,
@@ -389,10 +488,8 @@ mod tests {
             outcome: EditorCompilationOutcome::Complete,
         };
 
-        let wire = serde_json::to_value(
-            EditorGraphProjectionDto::try_from(&model).expect("typed model is mappable"),
-        )
-        .expect("editor wire should serialize");
+        let wire = serde_json::to_value(EditorGraphProjectionDto::from(&model))
+            .expect("editor wire should serialize");
         assert_eq!(wire["basis"]["graphPath"], "events/contract.yssbi-event");
         assert!(wire["basis"].get("graphRevision").is_none());
         assert_eq!(
@@ -405,7 +502,28 @@ mod tests {
         assert!(wire["nodes"][0]["ports"][0].get("templateKey").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("origin").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("instanceKind").is_none());
+        assert_eq!(
+            wire["nodes"][0]["ports"][0]["resolvedSchema"],
+            json!({
+                "kind": "derived",
+                "fields": [{"name": "sales", "scalarType": "float64"}],
+            })
+        );
         assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
+        assert_eq!(
+            wire["nodes"][0]["parameterEditors"][0]["valueSource"],
+            "node"
+        );
+        assert_eq!(
+            wire["nodes"][0]["parameterEditors"][0]["configuration"],
+            json!({
+                "kind": "projectColumns",
+                "available": true,
+                "unavailableReason": null,
+                "options": [{"name": "sales", "dataType": "float64"}],
+                "value": ["sales"],
+            })
+        );
         assert_eq!(wire["connections"][0]["output"]["portKey"], "value");
         assert_eq!(wire["diagnostics"][0]["code"], "graph.invalid");
         assert_eq!(wire["diagnostics"][0]["message"], "graph.invalid");

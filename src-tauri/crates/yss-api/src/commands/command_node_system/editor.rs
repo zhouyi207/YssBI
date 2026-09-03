@@ -1,7 +1,9 @@
 use super::common::parse_graph_path;
 use crate::error::CommandError;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
-use crate::schema::graph_draft::{GraphDraftUpdateDto, GraphEditorSessionDto};
+use crate::schema::graph_draft::{
+    CompileGraphDraftDto, GraphDraftUpdateDto, GraphEditorSessionDto,
+};
 use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::State;
 use yss_application::execution::{ApplicationState, SessionCaptureError};
@@ -26,12 +28,66 @@ pub fn hydrate_editor_graph(
             locale,
         ))
         .map_err(open_graph_command_error)?;
-    crate::schema::graph_draft::graph_editor_session_to_transport(
-        receipt.graph_path(),
-        receipt.document(),
-        receipt.projection(),
+    Ok(
+        crate::schema::graph_draft::graph_editor_session_to_transport(
+            receipt.document(),
+            receipt.projection(),
+        ),
     )
-    .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+}
+
+#[tauri::command]
+pub fn compile_graph_draft(
+    application: State<'_, ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    locale: String,
+    document: yss_graph_document::GraphDocument,
+) -> Result<CompileGraphDraftDto, CommandError> {
+    let receipt = yss_application::graph_compile::compile_graph_draft(
+        &application,
+        project_instance_id,
+        parse_graph_path(graph_path)?,
+        document,
+        &locale,
+    )
+    .map_err(compile_graph_draft_error)?;
+    Ok(crate::schema::graph_draft::compile_graph_draft_to_transport(&receipt))
+}
+
+fn compile_graph_draft_error(
+    error: yss_application::graph_compile::CompileGraphDraftError,
+) -> CommandError {
+    use yss_application::graph_compile::CompileGraphDraftError;
+    match error {
+        CompileGraphDraftError::SessionCapture(error) => session_capture_command_error(error),
+        CompileGraphDraftError::ProjectIdentityMismatch => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        CompileGraphDraftError::GraphUnavailable => CommandError::expected("graph_not_loaded"),
+        CompileGraphDraftError::InvalidDocument(_) => CommandError::expected("graph_draft_invalid"),
+        CompileGraphDraftError::Project(error) => {
+            crate::commands::project_failure::application_project_command_error(error)
+        }
+        CompileGraphDraftError::ProjectFacts(error) => {
+            CommandError::diagnosed("catalog_project_read_failed", error)
+        }
+        CompileGraphDraftError::Database(error) => {
+            CommandError::diagnosed("database_catalog_failed", error)
+        }
+        CompileGraphDraftError::Contract(error) => {
+            CommandError::diagnosed("graph_contract_failed", error)
+        }
+        CompileGraphDraftError::Compilation(error) => {
+            CommandError::diagnosed("graph_draft_compile_failed", error)
+        }
+        CompileGraphDraftError::Projection(error) => {
+            CommandError::diagnosed("editor_projection_failed", error)
+        }
+        CompileGraphDraftError::SessionChanged(error) => {
+            CommandError::diagnosed("resource_session_changed", error)
+        }
+    }
 }
 
 fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
@@ -150,8 +206,9 @@ pub fn transform_graph_draft(
             mutation,
         )
         .map_err(map_editor_resource_error)?;
-    crate::schema::graph_draft::graph_draft_update_to_transport(&result)
-        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+    Ok(crate::schema::graph_draft::graph_draft_update_to_transport(
+        &result,
+    ))
 }
 
 fn map_editor_resource_error(

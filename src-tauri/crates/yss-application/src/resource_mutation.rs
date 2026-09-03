@@ -160,13 +160,12 @@ fn build_graph_shell(
 ) -> Result<GraphResourceDocument, ResourceMutationApplicationError> {
     let mut resource = GraphResourceDocument::new(name, kind);
     let shell_types: &[(&str, f64)] = match kind {
-        GraphResourceKind::Event => &[("yssbi.project.event.begin", 120.0)],
+        GraphResourceKind::Event => &[],
         GraphResourceKind::Function => &[
             ("yssbi.project.function.entry", 120.0),
             ("yssbi.project.function.return", 560.0),
         ],
     };
-    let mut shell_nodes = Vec::new();
     for (node_type, x) in shell_types {
         let id = yss_graph_document::NodeId::new();
         let parameters = if kind == GraphResourceKind::Function {
@@ -201,37 +200,6 @@ fn build_graph_shell(
                 user_label: None,
             },
         );
-        shell_nodes.push(id);
-    }
-    if let [entry, returned] = shell_nodes.as_slice() {
-        let id = yss_graph_document::ConnectionId::new();
-        resource.document.connections.insert(
-            id,
-            yss_graph_document::DocumentConnection {
-                id,
-                output: yss_graph_document::PortAddress::declared(
-                    *entry,
-                    yss_graph_protocol::PortKey::new("then").map_err(|error| {
-                        ResourceMutationApplicationError::Project(
-                            ProjectFilesystemError::TransactionPrepareFailed {
-                                message: error.to_string(),
-                            },
-                        )
-                    })?,
-                ),
-                input: yss_graph_document::PortAddress::declared(
-                    *returned,
-                    yss_graph_protocol::PortKey::new("enter").map_err(|error| {
-                        ResourceMutationApplicationError::Project(
-                            ProjectFilesystemError::TransactionPrepareFailed {
-                                message: error.to_string(),
-                            },
-                        )
-                    })?,
-                ),
-                order: None,
-            },
-        );
     }
     Ok(resource)
 }
@@ -246,7 +214,7 @@ fn build_graph_projection_replacement(
         .map_err(ResourceMutationApplicationError::Catalog)?;
     let database = catalog_snapshot(captured.database())
         .map_err(ResourceMutationApplicationError::Database)?;
-    let _validated_graph_catalog = build_resource_catalog(project.resources().graph(), &database)
+    let graph_catalog = build_resource_catalog(project.resources().graph(), &database)
         .map_err(ResourceMutationApplicationError::Contract)?;
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
@@ -260,6 +228,7 @@ fn build_graph_projection_replacement(
     let analysis = captured.graph().analyze(
         document,
         &graph_basis,
+        &graph_catalog,
         project.resources().entries(),
         locale,
     );

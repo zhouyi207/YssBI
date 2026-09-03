@@ -13,4 +13,4 @@ $$
 
 ## Usage
 
-Invert a condition for **Branch** (take **False** when predicate holds) or flip flags before storage.
+Invert a Boolean mask before filtering or another downstream data transformation.

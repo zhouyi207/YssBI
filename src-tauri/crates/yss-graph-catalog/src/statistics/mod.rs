@@ -86,7 +86,7 @@ fn configure_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError
 }
 
 fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    let mut ports = vec![control_input("enter", "Enter")?];
+    let mut ports = Vec::new();
     if matches!(spec.family, Family::Vec) {
         ports.push(user_data_input(
             "variables",
@@ -108,13 +108,12 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     ports.push(data_output("model", "Model", model_type(spec)?)?);
     ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
     ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
-    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
 fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let family = spec.family;
-    let mut ports = vec![control_input("enter", "Enter")?];
+    let mut ports = Vec::new();
     match family {
         Family::Adf => ports.push(data_input(
             "test_result",
@@ -157,22 +156,19 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
     )?);
     ports.push(data_output("result", "Result", summary_result_type(spec)?)?);
     ports.push(data_output("report", "Report", report_type()?)?);
-    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
 fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        control_input("enter", "Enter")?,
         data_input("model", "Model", prediction_model_type(family)?)?,
         user_data_input("predictors", "Predictors", series_type()?, 1)?,
         data_output("prediction", "Prediction", float_series_type()?)?,
-        control_output("then", "Then")?,
     ])
 }
 
 fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    let mut ports = vec![control_input("enter", "Enter")?];
+    let mut ports = Vec::new();
     match family {
         Family::Adf => ports.push(data_input("series", "DataSeries", series_type()?)?),
         Family::Var | Family::VecRank => ports.push(user_data_input(
@@ -184,7 +180,6 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
     }
     ports.push(data_output("result", "Result", result_type(family)?)?);
-    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
@@ -272,63 +267,11 @@ fn configure_parameters(family: Family) -> Result<Vec<ParameterSpec>, BuiltinAss
     Ok(parameters)
 }
 
-fn execution(stage: Stage) -> ExecutionSemantics {
-    let effectful = !matches!(stage, Stage::Constant | Stage::Configure);
+fn execution(_stage: Stage) -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        purity: if effectful {
-            Purity::Effectful
-        } else {
-            Purity::Pure
-        },
-        evaluation: if effectful {
-            EvaluationPolicy::EagerWhenRegionEntered
-        } else {
-            EvaluationPolicy::DemandDriven
-        },
-        cache: if effectful {
-            CachePolicy::Disabled
-        } else {
-            CachePolicy::PerRun
-        },
-        effects: if effectful {
-            EffectSemantics::Ordered
-        } else {
-            EffectSemantics::None
-        },
-        idempotent: false,
-        retry: None,
+        cache: CachePolicy::PerRun,
     }
-}
-
-fn control_input(key: &'static str, title: &'static str) -> Result<PortSpec, BuiltinAssemblyError> {
-    control_port(key, title, PortDirection::Input)
-}
-fn control_output(
-    key: &'static str,
-    title: &'static str,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    control_port(key, title, PortDirection::Output)
-}
-fn control_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: port_key(key)?,
-        title: title.into(),
-        direction,
-        kind: PortKind::Control,
-        value_type: TypeExpr::Unknown,
-        instances: PortInstances::Declared,
-        connections: ConnectionsPerPort::Single,
-        input_binding: None,
-        consumption: None,
-        production: None,
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
 }
 fn data_input(
     key: &'static str,

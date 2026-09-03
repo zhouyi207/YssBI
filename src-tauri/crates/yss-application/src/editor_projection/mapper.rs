@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
 use yss_graph_analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
-    GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact,
+    GraphParameterConfigurationFact, GraphParameterFact, GraphPortBacking, GraphPortFact,
     GraphPortInstanceAdditionFact, GraphProjectionFacts,
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
@@ -262,18 +262,24 @@ fn project_port(
 }
 
 fn port_fact_has_concrete_address(port: &GraphPortFact, document: &GraphDocument) -> bool {
-    match &port.address.port {
-        PortRef::Declared { .. } => !port.orphan && !port.can_remove,
-        PortRef::Instance { .. } => match document.port_bindings.get(&port.address) {
-            Some(yss_graph_document::DynamicPortBinding::UserCreated { .. }) => !port.orphan,
-            Some(yss_graph_document::DynamicPortBinding::Resolved { .. }) => {
-                !port.orphan && !port.can_remove
+    match (&port.backing, &port.address.port) {
+        (GraphPortBacking::Declared, PortRef::Declared { .. }) => !port.orphan && !port.can_remove,
+        (GraphPortBacking::DocumentInstance, PortRef::Instance { .. }) => {
+            match document.port_bindings.get(&port.address) {
+                Some(yss_graph_document::DynamicPortBinding::UserCreated { .. }) => !port.orphan,
+                Some(yss_graph_document::DynamicPortBinding::Resolved { .. }) => {
+                    !port.orphan && !port.can_remove
+                }
+                Some(yss_graph_document::DynamicPortBinding::Orphan { .. }) => {
+                    port.orphan && port.can_remove
+                }
+                None => false,
             }
-            Some(yss_graph_document::DynamicPortBinding::Orphan { .. }) => {
-                port.orphan && port.can_remove
-            }
-            None => false,
-        },
+        }
+        (GraphPortBacking::ProjectedDerived { .. }, PortRef::Instance { .. }) => {
+            !document.port_bindings.contains_key(&port.address) && !port.orphan && !port.can_remove
+        }
+        _ => false,
     }
 }
 

@@ -11,7 +11,7 @@ use yss_graph_document::{
 };
 use yss_graph_protocol::{
     ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortDirection,
-    PortInstances, PortKey, PortKind, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
+    PortInstances, PortKey, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
@@ -175,7 +175,6 @@ fn type_expr_is_unresolved(expression: &TypeExpr, parameters: &[TypeParameterId]
 pub(crate) struct SourcePort {
     pub address: PortAddress,
     pub direction: PortDirection,
-    pub kind: PortKind,
     pub value_type: TypeExpr,
     pub type_parameters: Box<[TypeParameterId]>,
 }
@@ -284,15 +283,6 @@ pub(crate) fn validate_connection_types(
             "connection endpoints have invalid directions",
         ));
     }
-    if output.kind != input.kind {
-        return Err(mutation_validation_error(
-            EditorMutationErrorCode::GraphConnectionKindMismatch,
-            "connection endpoint kinds do not match",
-        ));
-    }
-    if output.kind != PortKind::Data {
-        return Ok(());
-    }
     if type_expr_is_unresolved(&output.value_type, &output.type_parameters)
         || type_expr_is_unresolved(&input.value_type, &input.type_parameters)
     {
@@ -338,7 +328,6 @@ fn source_port_with_optional_catalog(
     let mut source = SourcePort {
         address,
         direction: spec.direction,
-        kind: spec.kind,
         value_type: binding
             .and_then(|binding| match binding {
                 DynamicPortBinding::Resolved { last_known, .. } => last_known.value_type.clone(),
@@ -357,7 +346,6 @@ fn source_port_with_optional_catalog(
 pub(crate) struct CandidatePort {
     pub template: PortKey,
     pub direction: PortDirection,
-    pub kind: PortKind,
     pub connections: ConnectionsPerPort,
     pub value_type: TypeExpr,
     pub type_parameters: Box<[TypeParameterId]>,
@@ -377,9 +365,6 @@ pub(crate) fn refine_source_type(
     protocol: &NodeProtocol,
     resources: &CatalogMutationValidationSnapshot,
 ) -> Result<(), EditorMutationError> {
-    if source.kind != PortKind::Data {
-        return Ok(());
-    }
     let Some(node) = document.nodes.get(&source.address.node_id) else {
         return Ok(());
     };
@@ -560,23 +545,18 @@ pub(crate) fn catalog_query_source_port(
             DynamicPortBinding::UserCreated { .. } | DynamicPortBinding::Orphan { .. } => None,
         })
         .unwrap_or_else(|| resolved.spec.value_type.clone());
-    if resolved.spec.kind == PortKind::Data {
-        refine_catalog_query_resource_type(
-            &mut value_type,
-            &document.nodes[&address.node_id],
-            resolved.protocol,
-            catalog,
-        )?;
-    }
-    if resolved.spec.kind == PortKind::Data
-        && type_expr_is_unresolved(&value_type, &resolved.protocol.interface.type_parameters)
-    {
+    refine_catalog_query_resource_type(
+        &mut value_type,
+        &document.nodes[&address.node_id],
+        resolved.protocol,
+        catalog,
+    )?;
+    if type_expr_is_unresolved(&value_type, &resolved.protocol.interface.type_parameters) {
         return Err(CatalogCompatibilityError::SourceInvalid);
     }
     Ok(SourcePort {
         address: address.clone(),
         direction: resolved.spec.direction,
-        kind: resolved.spec.kind,
         value_type,
         type_parameters: resolved.protocol.interface.type_parameters.clone(),
     })
@@ -639,7 +619,6 @@ fn catalog_query_candidate_ports(
         .map(|port| CandidatePort {
             template: port.key.clone(),
             direction: port.direction,
-            kind: port.kind,
             connections: port.connections,
             value_type: port.value_type.clone(),
             type_parameters: protocol.interface.type_parameters.clone(),
@@ -677,16 +656,32 @@ fn catalog_query_candidate_ports(
                 .iter()
                 .find(|port| port.key.as_str() == "arguments");
             if let Some(arguments) = arguments {
-                for data_type in signature.parameters() {
+                for (index, parameter) in signature.parameters().iter().enumerate() {
                     candidates.push(CandidatePort {
                         template: arguments.key.clone(),
                         direction: arguments.direction,
-                        kind: arguments.kind,
                         connections: arguments.connections,
-                        value_type: yss_graph_type_mapping::type_expr_from_data_type(data_type)
-                            .ok()?,
+                        value_type: yss_graph_type_mapping::type_expr_from_data_type(
+                            parameter.data_type(),
+                        )
+                        .ok()?,
                         type_parameters: Box::new([]),
-                        dynamic: None,
+                        dynamic: Some(DynamicCandidate {
+                            origin: DynamicMemberLocator::FunctionParameter {
+                                function: function_path.clone(),
+                                parameter: parameter.id().clone(),
+                            },
+                            order: OrderKey::new(format!("{index:05}")),
+                            last_known: LastKnownPortMetadata {
+                                label: parameter.name().to_owned(),
+                                value_type: Some(
+                                    yss_graph_type_mapping::type_expr_from_data_type(
+                                        parameter.data_type(),
+                                    )
+                                    .ok()?,
+                                ),
+                            },
+                        }),
                     });
                 }
             }
@@ -701,11 +696,22 @@ fn catalog_query_candidate_ports(
                 candidates.push(CandidatePort {
                     template: results.key.clone(),
                     direction: results.direction,
-                    kind: results.kind,
                     connections: results.connections,
                     value_type: yss_graph_type_mapping::type_expr_from_data_type(data_type).ok()?,
                     type_parameters: Box::new([]),
-                    dynamic: None,
+                    dynamic: Some(DynamicCandidate {
+                        origin: DynamicMemberLocator::FunctionParameter {
+                            function: function_path,
+                            parameter: FunctionParameterId::new("return"),
+                        },
+                        order: OrderKey::new("00000"),
+                        last_known: LastKnownPortMetadata {
+                            label: "Result".to_owned(),
+                            value_type: Some(
+                                yss_graph_type_mapping::type_expr_from_data_type(data_type).ok()?,
+                            ),
+                        },
+                    }),
                 });
             }
         }
@@ -715,9 +721,7 @@ fn catalog_query_candidate_ports(
 
 fn override_data_candidate_types(candidates: &mut [CandidatePort], value_type: TypeExpr) {
     for candidate in candidates {
-        if candidate.kind == PortKind::Data {
-            candidate.value_type = value_type.clone();
-        }
+        candidate.value_type = value_type.clone();
     }
 }
 
@@ -769,7 +773,6 @@ fn candidate_ports(
             Ok(CandidatePort {
                 template: spec.key.clone(),
                 direction: spec.direction,
-                kind: spec.kind,
                 connections: spec.connections,
                 value_type: resource_type_override(resource)?
                     .unwrap_or_else(|| spec.value_type.clone()),
@@ -796,7 +799,6 @@ fn candidate_ports(
                 ports.push(CandidatePort {
                     template: spec.key.clone(),
                     direction: spec.direction,
-                    kind: spec.kind,
                     connections: spec.connections,
                     value_type: function_type_expr(&parameter.type_name)?,
                     type_parameters: Box::new([]),
@@ -825,7 +827,6 @@ fn candidate_ports(
             ports.push(CandidatePort {
                 template: spec.key.clone(),
                 direction: spec.direction,
-                kind: spec.kind,
                 connections: spec.connections,
                 value_type: function_type_expr(return_type)?,
                 type_parameters: Box::new([]),
@@ -926,11 +927,8 @@ fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Re
 }
 
 fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool {
-    if source.direction == candidate.direction || source.kind != candidate.kind {
+    if source.direction == candidate.direction {
         return false;
-    }
-    if source.kind != PortKind::Data {
-        return true;
     }
     if type_expr_is_unresolved(&source.value_type, &source.type_parameters)
         || type_expr_is_unresolved(&candidate.value_type, &candidate.type_parameters)

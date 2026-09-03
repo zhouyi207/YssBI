@@ -3761,6 +3761,7 @@ fn graph_analysis_has_one_behavior_owner_without_noop_context_inputs() {
         "src-tauri/crates/yss-graph-analysis/Cargo.toml",
         "src-tauri/crates/yss-graph-analysis/src/lib.rs",
         "src-tauri/crates/yss-graph-analysis/src/result_category.rs",
+        "src-tauri/crates/yss-graph-analysis/src/schema_resolution.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -3781,17 +3782,17 @@ fn graph_analysis_has_one_behavior_owner_without_noop_context_inputs() {
     let source =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-analysis/src/lib.rs"))
             .expect("graph analysis source must be readable");
-    for removed in [
-        "GraphCompileSettings",
-        "ResourceCatalogSnapshot",
-        "input.catalog",
-        "input.settings",
-    ] {
+    for removed in ["GraphCompileSettings", "input.catalog", "input.settings"] {
         assert!(
             !source.contains(removed),
             "graph analysis must not restore ignored context input '{removed}'"
         );
     }
+    assert!(
+        source.contains("resources: &ResourceCatalogSnapshot")
+            && source.contains("resolve_editor_schemas(document, registry, resources)"),
+        "graph analysis must consume the resource catalog only for concrete schema facts"
+    );
 }
 
 #[test]
@@ -4395,7 +4396,6 @@ fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
         std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-runtime/src/lib.rs"))
             .expect("the graph runtime owner must be readable");
     for removed in [
-        "resource_catalog:",
         "fn accepts_basis(",
         "fn resource_catalog(",
         "bind_open_graph",
@@ -4407,6 +4407,11 @@ fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
             "the graph runtime must not restore dead or root-private API '{removed}'"
         );
     }
+    assert!(
+        runtime.contains("resource_catalog: &ResourceCatalogSnapshot")
+            && runtime.contains("graph_draft_source_hash"),
+        "graph runtime compilation must bind its cache to the explicit resource catalog"
+    );
     assert!(
         runtime.contains("cfg(any(test, feature = \"test-support\"))"),
         "runtime fault injection must remain behind the explicit test-support boundary"
@@ -6452,7 +6457,9 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
     assert!(
         application_event
             .contains("Option<yss_function_editor_projection::FunctionEditorProjection>")
-            && application_event.contains(".function_editor_projection\n                .clone()"),
+            && application_event.contains(
+                "function_editor_projection: replacement.function_editor_projection.clone()"
+            ),
         "event transport must reuse the canonical projection wire without field copying"
     );
 

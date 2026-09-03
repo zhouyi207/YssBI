@@ -80,13 +80,8 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
             markdown!("categorical_to_float64")
         }
 
-        "yssbi.control.branch" => markdown!("branch"),
-        "yssbi.control.sequence" => markdown!("sequence"),
-        "yssbi.project.event.begin" => markdown!("event_begin"),
         "yssbi.project.function.call" => markdown!("call_function"),
         "yssbi.project.variable.get" => markdown!("get_variable"),
-        "yssbi.project.variable.set" => markdown!("set_variable"),
-        "yssbi.debug.print" => markdown!("print"),
         "yssbi.debug.view" => markdown!("view"),
 
         "yssbi.dataframe.source.get" => markdown!("get_dataframe"),
@@ -236,7 +231,7 @@ mod tests {
 
     #[test]
     fn leaves_unmapped_nodes_without_documentation() {
-        let node_type_id = NodeTypeId::new("yssbi.control.loop").unwrap();
+        let node_type_id = NodeTypeId::new("yssbi.unknown.node").unwrap();
 
         assert!(documentation(&node_type_id, "en-US").is_none());
     }

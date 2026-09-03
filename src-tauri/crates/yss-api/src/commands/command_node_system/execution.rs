@@ -54,8 +54,8 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         ExecutionApplicationError::DatabaseCatalog(error) => {
             CommandError::diagnosed("execution_database_catalog_failed", error)
         }
-        ExecutionApplicationError::GraphCompilation(error) => {
-            CommandError::diagnosed("invalid_graph", error)
+        ExecutionApplicationError::CompiledDraftUnavailable => {
+            CommandError::expected("graph_compile_required")
         }
         ExecutionApplicationError::GraphContract(error) => {
             CommandError::diagnosed("graph_contract_failed", error)
@@ -152,7 +152,9 @@ fn prepared_execution_command_code(
         ExecutePreparedError::RunRegistry(_) => "execution_run_registry_failed",
         ExecutePreparedError::Cancelled { .. } => "run_cancelled",
         ExecutePreparedError::DeadlineExceeded { .. } => "run_deadline_exceeded",
-        ExecutePreparedError::KernelUnavailable | ExecutePreparedError::Kernel(_) => "run_failed",
+        ExecutePreparedError::Kernel(_) => "run_failed",
+        ExecutePreparedError::ResultIdentityExhausted
+        | ExecutePreparedError::ResultTimestamp(_) => "execution_result_publication_failed",
     }
 }
 
@@ -191,27 +193,27 @@ pub async fn execute_graph_document(
     state: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
+    compiled_source_hash: String,
     demand: ExecutionDemandDto,
     on_event: Channel<ExecutionChannelEventDto>,
 ) -> Result<(), CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let demand = crate::commands::execution_dto::execution_demand_to_application(demand)
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
+    let compiled_source_hash = parse_compiled_source_hash(&compiled_source_hash)?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let channel = TauriExecutionChannelAdapter { channel: on_event };
         let mut delivery_failed = false;
-        let execution = run_graph_with_sink(
-            &state,
-            RunGraphRequest::new(project_instance_id, graph_path).with_demand(demand),
-            |event| {
-                let delivered = channel.deliver(event);
-                if !delivered {
-                    delivery_failed = true;
-                }
-                delivered
-            },
-        );
+        let request = RunGraphRequest::new(project_instance_id, graph_path, compiled_source_hash)
+            .with_demand(demand);
+        let execution = run_graph_with_sink(&state, request, |event| {
+            let delivered = channel.deliver(event);
+            if !delivered {
+                delivery_failed = true;
+            }
+            delivered
+        });
         if delivery_failed {
             Err(execution_channel_command_error())
         } else {
@@ -223,4 +225,16 @@ pub async fn execute_graph_document(
     })
     .await
     .map_err(CommandError::internal)?
+}
+
+fn parse_compiled_source_hash(value: &str) -> Result<[u8; 32], CommandError> {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(CommandError::expected("invalid_compiled_source_hash"));
+    }
+    let mut bytes = [0_u8; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| CommandError::expected("invalid_compiled_source_hash"))?;
+    }
+    Ok(bytes)
 }

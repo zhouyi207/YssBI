@@ -10,4 +10,4 @@ Compares scalar `Float64` operands. Output is a single `Boolean`.
 
 ## Usage
 
-Negate equality checks in control flow. Pair with **Branch** to route when values differ.
+Produce a Boolean mask for filters or downstream data transformations when values differ.

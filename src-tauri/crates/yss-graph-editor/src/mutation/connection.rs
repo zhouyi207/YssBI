@@ -165,12 +165,6 @@ fn validate_move_endpoints(
             "connection move endpoints have different directions",
         ));
     }
-    if source.spec.kind != target.spec.kind {
-        return Err(editor_error(
-            EditorMutationErrorCode::GraphConnectionKindMismatch,
-            "connection move endpoints have different kinds",
-        ));
-    }
     Ok(())
 }
 
@@ -447,12 +441,6 @@ fn validate_document_connection_endpoints(
             "connection endpoints have invalid directions",
         ));
     }
-    if output.spec.kind != input.spec.kind {
-        return Err(editor_error(
-            EditorMutationErrorCode::GraphConnectionKindMismatch,
-            "connection endpoint kinds do not match",
-        ));
-    }
     Ok(())
 }
 
@@ -533,9 +521,9 @@ fn resolve_literal_target<'a>(
             "orphan ports cannot carry literal overrides",
         ));
     }
-    if port.spec.direction != PortDirection::Input || port.spec.kind != PortKind::Data {
+    if port.spec.direction != PortDirection::Input {
         return Err(invalid_editor_mutation(
-            "literal overrides require a data input port",
+            "literal overrides require an input port",
         ));
     }
     if !matches!(

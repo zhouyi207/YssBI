@@ -87,12 +87,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
-            purity: Purity::Pure,
-            evaluation: EvaluationPolicy::DemandDriven,
             cache: CachePolicy::PerRun,
-            effects: EffectSemantics::None,
-            idempotent: false,
-            retry: None,
         },
         scope: NodeScope::Any,
         managed_role: None,

@@ -11,6 +11,7 @@ test-support = []
 
 [dependencies]
 thiserror.workspace = true
+yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-catalog = { path = "../yss-graph-catalog" }
@@ -20,3 +21,8 @@ yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-editor = { path = "../yss-graph-editor" }
 yss-graph-registry = { path = "../yss-graph-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
+
+[dev-dependencies]
+serde_json.workspace = true
+yss-data-contract = { path = "../yss-data-contract" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }

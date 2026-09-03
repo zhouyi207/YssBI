@@ -26,35 +26,22 @@ pub enum GraphInputSource {
     Parameter(GraphParameterHandle),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphInputKind {
-    Data,
-    Control,
-    Effect,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphInputBinding {
     port: Box<str>,
-    kind: GraphInputKind,
     source: GraphInputSource,
 }
 
 impl GraphInputBinding {
-    pub fn new(port: impl Into<Box<str>>, kind: GraphInputKind, source: GraphInputSource) -> Self {
+    pub fn new(port: impl Into<Box<str>>, source: GraphInputSource) -> Self {
         Self {
             port: port.into(),
-            kind,
             source,
         }
     }
 
     pub fn port(&self) -> &str {
         &self.port
-    }
-
-    pub const fn kind(&self) -> GraphInputKind {
-        self.kind
     }
 
     pub fn source(&self) -> &GraphInputSource {
@@ -143,7 +130,30 @@ impl GraphSourceIdentity {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphObservationIntent {
-    InspectInput { input: GraphValueRef },
+    InspectInput { source: GraphInputSource },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphOutputBinding {
+    port: Box<str>,
+    value: GraphValueRef,
+}
+
+impl GraphOutputBinding {
+    pub fn new(port: impl Into<Box<str>>, value: GraphValueRef) -> Self {
+        Self {
+            port: port.into(),
+            value,
+        }
+    }
+
+    pub fn port(&self) -> &str {
+        &self.port
+    }
+
+    pub const fn value(&self) -> GraphValueRef {
+        self.value
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,7 +164,7 @@ pub struct GraphOperation {
     parameter_handles: Box<[GraphParameterHandle]>,
     inputs: Box<[GraphInputBinding]>,
     observation_intents: Box<[GraphObservationIntent]>,
-    output: Option<GraphValueRef>,
+    outputs: Box<[GraphOutputBinding]>,
 }
 
 impl GraphOperation {
@@ -166,7 +176,7 @@ impl GraphOperation {
         parameter_handles: Box<[GraphParameterHandle]>,
         inputs: Box<[GraphInputBinding]>,
         observation_intents: Box<[GraphObservationIntent]>,
-        output: Option<GraphValueRef>,
+        outputs: Box<[GraphOutputBinding]>,
     ) -> Self {
         Self {
             source,
@@ -175,7 +185,7 @@ impl GraphOperation {
             parameter_handles,
             inputs,
             observation_intents,
-            output,
+            outputs,
         }
     }
 
@@ -203,8 +213,8 @@ impl GraphOperation {
         &self.observation_intents
     }
 
-    pub const fn output(&self) -> Option<GraphValueRef> {
-        self.output
+    pub fn outputs(&self) -> &[GraphOutputBinding] {
+        &self.outputs
     }
 }
 

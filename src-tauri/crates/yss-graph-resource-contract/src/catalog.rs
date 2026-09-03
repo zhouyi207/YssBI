@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 use yss_data_contract::DataType;
-use yss_graph_document::GraphResourcePath;
+use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GraphResourceId(Box<str>);
@@ -24,21 +24,50 @@ impl fmt::Display for GraphResourceId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FunctionParameterContract {
+    id: FunctionParameterId,
+    name: Box<str>,
+    data_type: DataType,
+}
+
+impl FunctionParameterContract {
+    pub fn new(id: FunctionParameterId, name: impl Into<Box<str>>, data_type: DataType) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            data_type,
+        }
+    }
+
+    pub fn id(&self) -> &FunctionParameterId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionSignature {
-    parameters: Box<[DataType]>,
+    parameters: Box<[FunctionParameterContract]>,
     result: Option<DataType>,
 }
 
 impl FunctionSignature {
-    pub fn new(parameters: Vec<DataType>, result: Option<DataType>) -> Self {
+    pub fn new(parameters: Vec<FunctionParameterContract>, result: Option<DataType>) -> Self {
         Self {
             parameters: parameters.into_boxed_slice(),
             result,
         }
     }
 
-    pub fn parameters(&self) -> &[DataType] {
+    pub fn parameters(&self) -> &[FunctionParameterContract] {
         &self.parameters
     }
 
@@ -135,8 +164,8 @@ impl ResourceCatalogSnapshot {
 #[cfg(test)]
 mod tests {
     use super::{
-        FunctionCatalogEntry, FunctionSignature, GraphResourceId, ResourceCatalogFingerprint,
-        ResourceCatalogSnapshot, VariableValueContract,
+        FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,
+        ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
     };
     use crate::{ColumnSchema, DataSchema};
     use std::collections::BTreeMap;
@@ -149,7 +178,11 @@ mod tests {
         let variable_id = GraphResourceId::new("variables/forecast-input");
         let database_id = GraphResourceId::new("databases/forecast-source");
         let function = FunctionCatalogEntry::new(FunctionSignature::new(
-            vec![DataType::DataSeries(Box::new(DataType::Float64))],
+            vec![FunctionParameterContract::new(
+                yss_graph_document::FunctionParameterId::new("series"),
+                "Series",
+                DataType::DataSeries(Box::new(DataType::Float64)),
+            )],
             Some(DataType::Float64),
         ));
         let variable = VariableValueContract::new(DataType::Float64);

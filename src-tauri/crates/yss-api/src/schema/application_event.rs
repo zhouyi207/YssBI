@@ -143,23 +143,16 @@ pub type ApplicationEventDto = EventProject;
 #[error("application event transport mapping failed")]
 pub struct TransportMappingError;
 
-#[derive(Debug, thiserror::Error)]
-pub enum GraphProjectionTransportError {
-    #[error("editor projection transport mapping failed")]
-    Projection(#[source] crate::schema::editor_projection::TransportMappingError),
-}
-
 pub(crate) fn graph_projection_replacement_to_transport(
     replacement: &yss_application::events::GraphProjectionReplacement,
-) -> Result<GraphProjectionReplacementDto, GraphProjectionTransportError> {
-    Ok(GraphProjectionReplacementDto {
+) -> GraphProjectionReplacementDto {
+    GraphProjectionReplacementDto {
         graph_path: replacement.graph_path.to_string(),
         projection: crate::schema::editor_projection::map_editor_projection(
             &replacement.projection,
-        )
-        .map_err(GraphProjectionTransportError::Projection)?,
+        ),
         function_editor_projection: replacement.function_editor_projection.clone(),
-    })
+    }
 }
 
 pub fn application_event_to_transport(

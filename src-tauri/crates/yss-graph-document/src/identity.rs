@@ -19,6 +19,10 @@ macro_rules! uuid_id {
                 Self(value)
             }
 
+            pub const fn from_bytes(value: [u8; 16]) -> Self {
+                Self(Uuid::from_bytes(value))
+            }
+
             pub const fn as_uuid(self) -> Uuid {
                 self.0
             }

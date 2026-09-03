@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
 #[cfg(any(test, feature = "test-support"))]
-use std::sync::{Barrier, Mutex};
+use std::sync::Barrier;
 
 use thiserror::Error;
 use yss_graph_analysis::{
@@ -141,8 +142,59 @@ fn wait_for_test_rendezvous(rendezvous: Option<GraphRuntimeTestRendezvous>) {
 pub struct GraphRuntimeState {
     epoch: GraphRuntimeEpoch,
     components: GraphRuntimeComponents,
+    compiled_drafts: Mutex<BTreeMap<GraphResourcePath, CachedGraphDraft>>,
     #[cfg(any(test, feature = "test-support"))]
     test_control: Option<Arc<GraphRuntimeTestControl>>,
+}
+
+#[derive(Clone)]
+struct CachedGraphDraft {
+    source_hash: [u8; 32],
+    resource_catalog_fingerprint: [u8; 32],
+    document: Arc<GraphDocument>,
+    package: GraphCompiledPackage,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompiledGraphDraft {
+    source_hash: [u8; 32],
+    resource_catalog_fingerprint: [u8; 32],
+    document: Arc<GraphDocument>,
+    package: GraphCompiledPackage,
+}
+
+impl CompiledGraphDraft {
+    pub const fn source_hash(&self) -> &[u8; 32] {
+        &self.source_hash
+    }
+
+    pub fn document(&self) -> &GraphDocument {
+        &self.document
+    }
+
+    pub const fn resource_catalog_fingerprint(&self) -> &[u8; 32] {
+        &self.resource_catalog_fingerprint
+    }
+
+    pub fn package(&self) -> &GraphCompiledPackage {
+        &self.package
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphDraftCompilation {
+    source_hash: [u8; 32],
+    cache_hit: bool,
+}
+
+impl GraphDraftCompilation {
+    pub const fn source_hash(&self) -> &[u8; 32] {
+        &self.source_hash
+    }
+
+    pub const fn cache_hit(&self) -> bool {
+        self.cache_hit
+    }
 }
 
 impl GraphRuntimeState {
@@ -150,6 +202,7 @@ impl GraphRuntimeState {
         Self {
             epoch,
             components,
+            compiled_drafts: Mutex::new(BTreeMap::new()),
             #[cfg(any(test, feature = "test-support"))]
             test_control: None,
         }
@@ -164,6 +217,7 @@ impl GraphRuntimeState {
         Self {
             epoch,
             components,
+            compiled_drafts: Mutex::new(BTreeMap::new()),
             test_control: Some(Arc::new(control)),
         }
     }
@@ -176,7 +230,7 @@ impl GraphRuntimeState {
         self.components.registry.as_ref()
     }
 
-    pub fn compile_graph(
+    fn compile_graph(
         &self,
         document: &GraphDocument,
         expected_revision: GraphRevision,
@@ -190,6 +244,74 @@ impl GraphRuntimeState {
             graph,
             compile_id,
         ))
+    }
+
+    pub fn compile_draft(
+        &self,
+        document: &GraphDocument,
+        graph: GraphResourcePath,
+        resource_catalog: &ResourceCatalogSnapshot,
+    ) -> Result<GraphDraftCompilation, GraphDraftCompilationError> {
+        let source_hash = graph_draft_source_hash(
+            document,
+            &self.registry_fingerprint(),
+            resource_catalog.fingerprint().as_bytes(),
+        )?;
+        if self
+            .compiled_drafts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&graph)
+            .filter(|cached| cached.source_hash == source_hash)
+            .is_some()
+        {
+            return Ok(GraphDraftCompilation {
+                source_hash,
+                cache_hit: true,
+            });
+        }
+        let compile_id = CompileId::new(u64::from_be_bytes(
+            source_hash[..8]
+                .try_into()
+                .expect("SHA-256 prefix has exactly eight bytes"),
+        ));
+        let package = self
+            .compile_graph(document, document.revision, graph.clone(), compile_id)
+            .map_err(GraphDraftCompilationError::Compile)?;
+        self.compiled_drafts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                graph,
+                CachedGraphDraft {
+                    source_hash,
+                    resource_catalog_fingerprint: *resource_catalog.fingerprint().as_bytes(),
+                    document: Arc::new(document.clone()),
+                    package: package.clone(),
+                },
+            );
+        Ok(GraphDraftCompilation {
+            source_hash,
+            cache_hit: false,
+        })
+    }
+
+    pub fn compiled_draft(
+        &self,
+        graph: &GraphResourcePath,
+        source_hash: &[u8; 32],
+    ) -> Option<CompiledGraphDraft> {
+        self.compiled_drafts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(graph)
+            .filter(|cached| &cached.source_hash == source_hash)
+            .map(|cached| CompiledGraphDraft {
+                source_hash: cached.source_hash,
+                resource_catalog_fingerprint: cached.resource_catalog_fingerprint,
+                document: Arc::clone(&cached.document),
+                package: cached.package.clone(),
+            })
     }
 
     pub fn plan_editor_mutation(
@@ -225,6 +347,7 @@ impl GraphRuntimeState {
         &self,
         document: &GraphDocument,
         basis: &CompilationBasis<yss_graph_document::GraphRevision>,
+        resource_catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> GraphAnalysis {
@@ -234,9 +357,25 @@ impl GraphRuntimeState {
             self.components.registry.as_ref(),
             resources,
             &self.components.catalog.localization(locale),
-            editor_projection_facts(document, self.components.registry.as_ref()),
+            editor_projection_facts(
+                document,
+                self.components.registry.as_ref(),
+                resource_catalog,
+            ),
         );
         analysis.with_editor_projection_facts(facts)
+    }
+
+    pub fn materialize_draft(
+        &self,
+        document: &GraphDocument,
+        resources: &ResourceCatalogSnapshot,
+    ) -> GraphDocument {
+        yss_graph_analysis::materialize_derived_port_bindings(
+            document,
+            self.components.registry.as_ref(),
+            resources,
+        )
     }
 
     pub fn materialize_open_candidate(
@@ -301,6 +440,44 @@ impl GraphRuntimeState {
         }
         Ok(localized)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum GraphDraftCompilationError {
+    #[error("graph draft source hashing failed")]
+    SourceHash(#[source] yss_canonical_hash::CanonicalEncodingError),
+    #[error("graph draft compilation failed")]
+    Compile(#[source] GraphCompileError),
+}
+
+fn graph_draft_source_hash(
+    document: &GraphDocument,
+    registry_fingerprint: &[u8; 32],
+    resource_catalog_fingerprint: &[u8; 32],
+) -> Result<[u8; 32], GraphDraftCompilationError> {
+    let nodes = document
+        .nodes
+        .iter()
+        .map(|(id, node)| (id, &node.node_type, &node.parameters))
+        .collect::<Vec<_>>();
+    let mut connections = document
+        .connections
+        .values()
+        .map(|connection| (&connection.output, &connection.input, &connection.order))
+        .collect::<Vec<_>>();
+    connections.sort();
+    yss_canonical_hash::hash_canonical(
+        "yssbi.graph-draft-compilation.v1",
+        &(
+            nodes,
+            &document.port_bindings,
+            connections,
+            &document.input_states,
+            registry_fingerprint,
+            resource_catalog_fingerprint,
+        ),
+    )
+    .map_err(GraphDraftCompilationError::SourceHash)
 }
 
 fn localize_projection_facts(
@@ -394,10 +571,7 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_document::{
-        DocumentNode, DynamicPortBinding, GraphRevision, NodePosition, OrderKey, ParameterValues,
-        PortInstanceId, PortRef,
-    };
+    use yss_graph_document::{DocumentNode, GraphRevision, NodePosition, ParameterValues};
     use yss_graph_registry::RegistryFingerprint;
 
     fn components() -> GraphRuntimeComponents {
@@ -406,6 +580,15 @@ mod tests {
             registry: builtin.registry,
             catalog: builtin.catalog,
         }
+    }
+
+    fn empty_resource_catalog() -> ResourceCatalogSnapshot {
+        ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
+        )
     }
 
     #[test]
@@ -447,57 +630,6 @@ mod tests {
     }
 
     #[test]
-    fn compilation_lowers_an_unbound_protocol_default_as_a_data_input() {
-        let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
-        let node_id = NodeId::new();
-        let node_type = runtime
-            .registry()
-            .iter()
-            .map(|(node_type, _)| node_type)
-            .find(|node_type| node_type.as_str() == "yssbi.debug.print")
-            .cloned()
-            .expect("the Print node is registered");
-        let mut document = GraphDocument::default();
-        document.nodes.insert(
-            node_id,
-            DocumentNode {
-                id: node_id,
-                node_type,
-                position: NodePosition { x: 0.0, y: 0.0 },
-                parameters: ParameterValues::new(),
-                user_label: None,
-            },
-        );
-        let graph = GraphResourcePath::new("events/Print.yssbi-event")
-            .expect("fixture graph path is valid");
-
-        let package = runtime
-            .compile_graph(&document, document.revision, graph, CompileId::new(1))
-            .expect("the protocol default makes Print executable");
-
-        let operation = package
-            .operations()
-            .first()
-            .expect("Print lowers to one operation");
-        let input = operation
-            .inputs()
-            .first()
-            .expect("Print has its default Message input");
-        assert_eq!(input.kind(), yss_graph_compiler::GraphInputKind::Data);
-        assert_eq!(input.port(), format!("{node_id}:message"));
-        let yss_graph_compiler::GraphInputSource::Parameter(handle) = input.source() else {
-            panic!("the unbound default must lower through the parameter bundle");
-        };
-        assert!(matches!(
-            package.parameters().get(handle).map(|payload| payload.value()),
-            Some(yss_graph_compiler::GraphParameterValue::Scalar(
-                yss_graph_compiler::GraphParameterScalar::String(value)
-            )) if value.as_ref() == "Hello, World!"
-        ));
-    }
-
-    #[test]
     fn analysis_localizes_editor_node_titles() {
         let runtime =
             GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
@@ -527,7 +659,7 @@ mod tests {
             resource_observations: BTreeMap::new(),
         };
 
-        let analysis = runtime.analyze(&document, &basis, &[], "zh-CN");
+        let analysis = runtime.analyze(&document, &basis, &empty_resource_catalog(), &[], "zh-CN");
         let node = analysis
             .editor_projection_facts()
             .and_then(|facts| facts.nodes().first())
@@ -537,34 +669,83 @@ mod tests {
     }
 
     #[test]
-    fn sequence_projection_exposes_only_addressable_then_instances() {
+    fn dataframe_schema_compilation_expands_decompose_output_pins() {
+        use yss_data_contract::DataType;
+        use yss_graph_resource_contract::{
+            ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint,
+        };
+
         let runtime =
             GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
-        let node_id = NodeId::new();
-        let then_instance_id = PortInstanceId::new();
-        let then_address = PortAddress::instance(
-            node_id,
-            "then".parse().expect("built-in port key is valid"),
-            then_instance_id,
+        let source_id = NodeId::new();
+        let decompose_id = NodeId::new();
+        let source_output = PortAddress::declared(
+            source_id,
+            "dataframe".parse().expect("built-in port key is valid"),
+        );
+        let decompose_input = PortAddress::declared(
+            decompose_id,
+            "dataframe".parse().expect("built-in port key is valid"),
         );
         let mut document = GraphDocument::default();
         document.nodes.insert(
-            node_id,
+            source_id,
             DocumentNode {
-                id: node_id,
-                node_type: "yssbi.control.sequence"
+                id: source_id,
+                node_type: "yssbi.dataframe.source.get"
                     .parse()
                     .expect("built-in node type is valid"),
                 position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::from([(
+                    "dataframe"
+                        .parse()
+                        .expect("built-in parameter key is valid"),
+                    serde_json::json!("databases/sales"),
+                )]),
+                user_label: None,
+            },
+        );
+        document.nodes.insert(
+            decompose_id,
+            DocumentNode {
+                id: decompose_id,
+                node_type: "yssbi.dataframe.decompose"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 300.0, y: 0.0 },
                 parameters: ParameterValues::new(),
                 user_label: None,
             },
         );
-        document.port_bindings.insert(
-            then_address.clone(),
-            DynamicPortBinding::UserCreated {
-                order: OrderKey::new("00000"),
+        let connection_id = yss_graph_document::ConnectionId::new();
+        document.connections.insert(
+            connection_id,
+            yss_graph_document::DocumentConnection {
+                id: connection_id,
+                output: source_output.clone(),
+                input: decompose_input.clone(),
+                order: None,
             },
+        );
+        let resources = ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::from([(
+                GraphResourceId::new("databases/sales"),
+                DataSchema {
+                    columns: vec![
+                        ColumnSchema {
+                            name: "customer_id".into(),
+                            data_type: DataType::Int64,
+                        },
+                        ColumnSchema {
+                            name: "amount".into(),
+                            data_type: DataType::Float64,
+                        },
+                    ],
+                },
+            )]),
+            ResourceCatalogFingerprint::from_bytes([7; 32]),
         );
         let basis = CompilationBasis {
             graph_revision: GraphRevision::INITIAL,
@@ -573,27 +754,169 @@ mod tests {
             resource_observations: BTreeMap::new(),
         };
 
-        let analysis = runtime.analyze(&document, &basis, &[], "en-US");
+        let document = runtime.materialize_draft(&document, &resources);
+        let analysis = runtime.analyze(&document, &basis, &resources, &[], "en-US");
         let node = analysis
             .editor_projection_facts()
-            .and_then(|facts| facts.nodes().first())
-            .expect("Sequence projection facts include the node");
-
-        assert_eq!(node.ports.len(), 2);
-        let then_port = node
+            .and_then(|facts| {
+                facts
+                    .nodes()
+                    .iter()
+                    .find(|node| node.node_id == decompose_id)
+            })
+            .expect("Decompose projection is available");
+        let outputs = node
             .ports
             .iter()
-            .find(|port| port.address == then_address)
-            .expect("the concrete Then instance is projected");
-        assert!(!then_port.can_remove);
-        assert!(!node.ports.iter().any(|port| {
-            matches!(&port.address.port, PortRef::Declared { key } if key.as_str() == "then")
+            .filter(|port| port.direction == yss_graph_protocol::PortDirection::Output)
+            .collect::<Vec<_>>();
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(
+            outputs
+                .iter()
+                .map(|port| port.label.as_ref())
+                .collect::<Vec<_>>(),
+            ["customer_id", "amount"]
+        );
+        assert!(outputs.iter().all(|port| {
+            port.address.is_instance()
+                && matches!(
+                    port.backing,
+                    yss_graph_analysis::GraphPortBacking::DocumentInstance
+                )
         }));
-        let addition = node
-            .port_instance_additions
-            .first()
-            .expect("Sequence exposes one node-owned Then addition capability");
-        assert_eq!(addition.template_key.as_str(), "then");
-        assert!(addition.can_add);
+        assert_eq!(document.port_bindings.len(), 2);
+        assert_eq!(runtime.materialize_draft(&document, &resources), document);
+        assert_eq!(
+            analysis
+                .editor_projection_facts()
+                .and_then(|facts| facts.nodes().iter().find(|node| node.node_id == source_id))
+                .and_then(|node| node.ports.first())
+                .and_then(|port| port.resolved_schema.as_ref())
+                .map(|schema| schema.fields.len()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn function_signature_compilation_materializes_call_ports() {
+        use yss_data_contract::DataType;
+        use yss_graph_resource_contract::{
+            FunctionCatalogEntry, FunctionParameterContract, FunctionSignature,
+            ResourceCatalogFingerprint,
+        };
+
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let function = GraphResourcePath::new("functions/Forecast.yssbi-function")
+            .expect("test function path is valid");
+        let node_id = NodeId::new();
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: "yssbi.project.function.call"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::from([(
+                    "target".parse().expect("built-in parameter key is valid"),
+                    serde_json::json!(function.as_str()),
+                )]),
+                user_label: None,
+            },
+        );
+        let resources = ResourceCatalogSnapshot::new(
+            BTreeMap::from([(
+                function,
+                FunctionCatalogEntry::new(FunctionSignature::new(
+                    vec![
+                        FunctionParameterContract::new(
+                            yss_graph_document::FunctionParameterId::new("series"),
+                            "Series",
+                            DataType::DataSeries(Box::new(DataType::Float64)),
+                        ),
+                        FunctionParameterContract::new(
+                            yss_graph_document::FunctionParameterId::new("horizon"),
+                            "Horizon",
+                            DataType::Int64,
+                        ),
+                    ],
+                    Some(DataType::DataSeries(Box::new(DataType::Float64))),
+                )),
+            )]),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            ResourceCatalogFingerprint::from_bytes([8; 32]),
+        );
+
+        let materialized = runtime.materialize_draft(&document, &resources);
+        let mut labels = materialized
+            .port_bindings
+            .values()
+            .filter_map(|binding| match binding {
+                yss_graph_document::DynamicPortBinding::Resolved { last_known, .. } => {
+                    Some(last_known.label.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        labels.sort_unstable();
+
+        assert_eq!(labels, ["Horizon", "Result", "Series"]);
+        assert_eq!(
+            runtime.materialize_draft(&materialized, &resources),
+            materialized
+        );
+    }
+
+    #[test]
+    fn draft_compilation_cache_tracks_semantics_not_layout() {
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let graph =
+            GraphResourcePath::new("events/Cache.yssbi-event").expect("test graph path is valid");
+        let node_id = NodeId::new();
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: "yssbi.constant.int64"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::from([(
+                    "value".parse().expect("built-in parameter key is valid"),
+                    serde_json::json!(7),
+                )]),
+                user_label: None,
+            },
+        );
+        let resources = empty_resource_catalog();
+
+        let first = runtime
+            .compile_draft(&document, graph.clone(), &resources)
+            .expect("initial draft compiles");
+        assert!(!first.cache_hit());
+
+        document.nodes.get_mut(&node_id).unwrap().position = NodePosition { x: 20.0, y: 40.0 };
+        let layout_only = runtime
+            .compile_draft(&document, graph.clone(), &resources)
+            .expect("layout-only draft compiles");
+        assert!(layout_only.cache_hit());
+        assert_eq!(layout_only.source_hash(), first.source_hash());
+
+        document.nodes.get_mut(&node_id).unwrap().parameters.insert(
+            "value".parse().expect("built-in parameter key is valid"),
+            serde_json::json!(8),
+        );
+        let semantic_change = runtime
+            .compile_draft(&document, graph, &resources)
+            .expect("updated draft compiles");
+        assert!(!semantic_change.cache_hit());
+        assert_ne!(semantic_change.source_hash(), first.source_hash());
     }
 }

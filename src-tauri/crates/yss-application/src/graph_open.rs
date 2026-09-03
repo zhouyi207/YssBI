@@ -261,14 +261,6 @@ pub(crate) fn open_graph_in_session(
     })?;
     let loaded_document = Arc::new(resource.document.clone());
 
-    // Staged Graph boundary: the old Project load above remains the only
-    // active lower-level load/commit operation. Graph owns the lock-free
-    // binding and candidate materialization stage; the candidate is never
-    // sent through the mutation-only graph commit primitive.
-    let candidate_document = captured
-        .graph()
-        .materialize_open_candidate(&loaded_document)?;
-
     let project = capture_localized_project_facts(captured)
         .map_err(|error| map_project_facts_open_error(request.graph_path(), error))?;
     let database = catalog_snapshot(captured.database())?;
@@ -276,7 +268,17 @@ pub(crate) fn open_graph_in_session(
         captured.database(),
         project.resources().database_observations(),
     )?;
-    let _validated_graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
+    let graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
+    // Dynamic interface members are compile facts installed only in this
+    // frontend draft candidate. Loading the project above remains the sole
+    // authoritative Project mutation; Save is still the only persistence
+    // commit for the materialized draft.
+    let materialized_document = captured
+        .graph()
+        .materialize_draft(&loaded_document, &graph_catalog);
+    let candidate_document = captured
+        .graph()
+        .materialize_open_candidate(&materialized_document)?;
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
@@ -289,6 +291,7 @@ pub(crate) fn open_graph_in_session(
     let analysis = captured.graph().analyze(
         &candidate_document,
         &graph_basis,
+        &graph_catalog,
         project.resources().entries(),
         request.locale(),
     );

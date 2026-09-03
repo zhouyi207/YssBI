@@ -49,10 +49,18 @@ pub fn get_result_descriptor(
     let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
     state
         .query_result(result_id)
-        .map(|result| {
+        .and_then(|result| {
             result
-                .as_deref()
+                .as_ref()
                 .map(|result| ResultDescriptorDto::from_execution(result_id, result))
+                .transpose()
+                .map_err(|_| {
+                    ResultQueryApplicationError::Execution(
+                        yss_execution::result::ExecutionResultQueryError::ResultSourceReadFailed {
+                            result_id,
+                        },
+                    )
+                })
         })
         .map_err(result_query_command_error)
 }
@@ -69,10 +77,13 @@ pub fn get_result_value(
     else {
         return Ok(None);
     };
-    if matches!(result.value(), StoredResult::Runtime(RuntimeValue::List(_))) {
+    if matches!(
+        result.value().value(),
+        StoredResult::Runtime(RuntimeValue::List(_))
+    ) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
-    let values = execution_result_values(&result, 0, 1)?;
+    let values = execution_result_values(result.value(), 0, 1)?;
     let value = values
         .into_vec()
         .into_iter()
@@ -101,13 +112,13 @@ pub fn get_result_page(
     else {
         return Ok(None);
     };
-    let total_count = execution_result_len(&result);
-    let values = execution_result_values(&result, offset, limit)?;
+    let total_count = execution_result_len(result.value());
+    let values = execution_result_values(result.value(), offset, limit)?;
     Ok(Some(ResultPageDto::from_execution(
         result_id,
         offset.min(total_count),
         limit,
-        execution_result_kind(&result),
+        execution_result_kind(result.value()),
         total_count,
         values,
     )))

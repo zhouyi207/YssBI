@@ -5,16 +5,37 @@
 //! candidate, replace one of its results, or detach its grant evidence.
 
 use crate::plan::{
-    PlanCompileId, PlanResourceId, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
-    ResourceKind,
+    PlanCompileId, PlanOutputRef, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+    ResourceAccess, ResourceKind,
 };
-use crate::result_store::{ResultId, StoredResult};
+use crate::result::{PinResultEntry, ResultId, StoredResult};
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct ReadyPinResult {
+    output: PlanOutputRef,
+    entry: PinResultEntry,
+}
+
+impl ReadyPinResult {
+    pub(crate) fn new(output: PlanOutputRef, entry: PinResultEntry) -> Self {
+        Self { output, entry }
+    }
+
+    pub(crate) fn output(&self) -> &PlanOutputRef {
+        &self.output
+    }
+
+    pub(crate) fn entry(&self) -> &PinResultEntry {
+        &self.entry
+    }
+}
 
 /// A result that became ready during one Execution run.
 #[derive(Debug, PartialEq)]
 pub struct ReadyResult {
     result_id: ResultId,
     value: StoredResult,
+    pin: ReadyPinResult,
 }
 
 impl ReadyResult {
@@ -22,10 +43,12 @@ impl ReadyResult {
         result_id: ResultId,
         value: StoredResult,
         category: crate::plan::ResultCategory,
+        pin: ReadyPinResult,
     ) -> Self {
         Self {
             result_id,
             value: StoredResult::with_category(value, category),
+            pin,
         }
     }
 
@@ -39,6 +62,14 @@ impl ReadyResult {
 
     pub fn category(&self) -> crate::plan::ResultCategory {
         self.value.category()
+    }
+
+    pub fn output(&self) -> &PlanOutputRef {
+        self.pin.output()
+    }
+
+    pub(crate) fn pin(&self) -> &ReadyPinResult {
+        &self.pin
     }
 }
 
@@ -170,7 +201,12 @@ impl ExecutionFinalizationHandoff {
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support {
     use super::*;
-    use crate::plan::{PlanGraphId, PlanSourceIdentity};
+    use crate::plan::{
+        PlanGraphId, PlanGraphRevision, PlanNodeId, PlanOutputRef, PlanPortAddress,
+        PlanSourceIdentity,
+    };
+    use crate::result::{ActivationId, PinResultEntry};
+    use crate::run_registry::RunId;
 
     /// Test-only owner fixture. Production code has no equivalent constructor.
     pub fn candidate(
@@ -181,17 +217,41 @@ pub mod test_support {
         let observation_intents = if explicit_inspection {
             vec![ResultObservationIntent {
                 result_id,
-                requester,
+                requester: requester.clone(),
             }]
         } else {
             Vec::new()
         };
 
+        let output = PlanOutputRef::new(
+            requester.graph().clone(),
+            PlanPortAddress::from_existing(
+                format!(
+                    "{}:value",
+                    requester
+                        .node()
+                        .map(PlanNodeId::as_str)
+                        .unwrap_or("00000000-0000-0000-0000-000000000000")
+                )
+                .into_boxed_str(),
+            ),
+        );
+        let pin = ReadyPinResult::new(
+            output,
+            PinResultEntry::produced(
+                result_id,
+                RunId::from_existing(1),
+                ActivationId::from_existing(result_id.get()),
+                PlanGraphRevision::INITIAL,
+                0,
+            ),
+        );
         SuccessfulExecutionCandidate::from_scheduler(
             vec![ReadyResult::from_scheduler(
                 result_id,
                 StoredResult::Scalar(3.5),
                 crate::plan::ResultCategory::Value,
+                pin,
             )]
             .into_boxed_slice(),
             observation_intents.into_boxed_slice(),

@@ -1,4 +1,4 @@
-use yss_graph_catalog::reroute_node_type_for_kind;
+use yss_graph_catalog::data_reroute_node_type;
 use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -11,7 +11,7 @@ use yss_graph_document_edit::{
 };
 use yss_graph_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
-    PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
+    PortInstances, PortKey, PortMemberGroupSpec, PortSpec,
 };
 use yss_graph_registry::NodeRegistry;
 
@@ -37,7 +37,6 @@ pub enum EditorMutationErrorCode {
     GraphConnectionNotFound,
     GraphPortOrphan,
     GraphConnectionDirectionMismatch,
-    GraphConnectionKindMismatch,
     GraphConnectionTypeMismatch,
     GraphConnectionTypeUnavailable,
     GraphConnectionTypeUnresolved,
@@ -60,7 +59,6 @@ impl EditorMutationErrorCode {
             Self::GraphConnectionNotFound => "graph_connection_not_found",
             Self::GraphPortOrphan => "graph_port_orphan",
             Self::GraphConnectionDirectionMismatch => "graph_connection_direction_mismatch",
-            Self::GraphConnectionKindMismatch => "graph_connection_kind_mismatch",
             Self::GraphConnectionTypeMismatch => "graph_connection_type_mismatch",
             Self::GraphConnectionTypeUnavailable => "graph_connection_type_unavailable",
             Self::GraphConnectionTypeUnresolved => "graph_connection_type_unresolved",
@@ -673,19 +671,12 @@ fn insert_reroute_operations_with_allocators(
             "reroute connection endpoints have invalid directions",
         ));
     }
-    if output.spec.kind != input.spec.kind {
-        return Err(invalid_editor_mutation(
-            "reroute connection endpoints have different port kinds",
-        ));
-    }
-
-    let reroute_node_type = reroute_node_type_for_kind(output.spec.kind);
+    let reroute_node_type = data_reroute_node_type();
     let registered = registry.get(&reroute_node_type).ok_or_else(|| {
         invalid_editor_mutation(format!("unknown reroute node type '{reroute_node_type}'"))
     })?;
-    let contract =
-        yss_graph_catalog::validate_reroute_protocol_contract(registered, output.spec.kind)
-            .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
+    let contract = yss_graph_catalog::validate_reroute_protocol_contract(registered)
+        .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
 
     let reroute_id = allocate_node_id();
     let source_connection_id = allocate_connection_id();

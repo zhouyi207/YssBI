@@ -24,8 +24,8 @@ pub trait LocalizationLookup {
 }
 pub use provenance::{CompileProvenance, GraphSessionId};
 pub use semantic::{
-    ControlEdge, EffectDependency, SemanticDependency, ValidatedSemanticGraph,
-    ValidatedSemanticNode, ValidatedSemanticNodeSet, ValidatedSemanticPort, ValueEdge,
+    ValidatedSemanticGraph, ValidatedSemanticNode, ValidatedSemanticNodeSet, ValidatedSemanticPort,
+    ValueEdge,
 };
 pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,

@@ -344,11 +344,6 @@ fn validate_node(
     }
     match (protocol.managed_role, protocol.scope, node.structural_role) {
         (
-            Some(ManagedNodeRole::EventBegin),
-            NodeScope::Event,
-            Some(StructuralNodeRole::EventBegin),
-        )
-        | (
             Some(ManagedNodeRole::FunctionEntry),
             NodeScope::Function,
             Some(StructuralNodeRole::FunctionEntry),
