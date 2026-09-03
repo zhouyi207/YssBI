@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscEye, VscLink, VscRefresh, VscTrash } from "react-icons/vsc";
+import { VscEye, VscLink, VscRefresh } from "react-icons/vsc";
 import {
   ActionMenu,
   type ActionMenuPosition,
@@ -11,7 +11,6 @@ import type { PinResultEntry } from "@/shared/types/domain/result";
 
 export interface PinContextMenuProps {
   position: ActionMenuPosition;
-  removable?: boolean;
   hasLinks?: boolean;
   canReset?: boolean;
   onBreakLinks?: () => void;
@@ -22,13 +21,11 @@ export interface PinContextMenuProps {
   onView?: () => void;
   historyEntries?: readonly PinResultEntry[];
   onViewHistory?: (resultId: string) => void;
-  onRemove?: () => void;
   onClose: () => void;
 }
 
 export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   position,
-  removable,
   hasLinks,
   canReset,
   onBreakLinks,
@@ -39,7 +36,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   onView,
   historyEntries,
   onViewHistory,
-  onRemove,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -87,24 +83,9 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
       });
     });
 
-    return [
-      { items: primaryItems },
-      {
-        items: [
-          {
-            id: "removePin",
-            label: p("removePin"),
-            icon: <VscTrash size={12} />,
-            danger: true,
-            disabled: !removable,
-            onClick: onRemove,
-          },
-        ],
-      },
-    ];
+    return [{ items: primaryItems }];
   }, [
     t,
-    removable,
     hasLinks,
     canReset,
     onBreakLinks,
@@ -115,7 +96,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
     onView,
     historyEntries,
     onViewHistory,
-    onRemove,
   ]);
 
   return <ActionMenu position={position} sections={sections} onClose={onClose} />;

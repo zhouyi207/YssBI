@@ -26,8 +26,6 @@ export interface GraphNodeControllerProps {
   activePin?: PinData | null;
   contextMenuActions?: GraphContextMenuActions | null;
   onPointerDown?: (nodeId: string, event: React.PointerEvent) => void;
-  onAddInput?: (id: string) => void;
-  onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinPointerDown?: (pin: PinData, event: React.PointerEvent) => void;
 }
 
@@ -39,8 +37,6 @@ export const GraphNodeController = memo(function GraphNodeController({
   activePin,
   contextMenuActions,
   onPointerDown,
-  onAddInput,
-  onRemovePin,
   onPinPointerDown,
 }: GraphNodeControllerProps) {
   const node = useNodeView(id, graphPath);
@@ -55,11 +51,11 @@ export const GraphNodeController = memo(function GraphNodeController({
   const graphBucket = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath] : undefined,
   );
-  const projectedCapabilities = graphBucket?.nodes[id]?.capabilities;
+  const projectedNode = graphBucket?.nodes[id];
+  const projectedCapabilities = projectedNode?.capabilities;
   const hasLinks =
-    graphBucket?.nodePins[id]?.some(
-      (pinId) => (graphBucket.pinConnections[pinId]?.length ?? 0) > 0,
-    ) ?? false;
+    projectedNode?.pinIds.some((pinId) => (graphBucket?.pinConnections[pinId]?.length ?? 0) > 0) ??
+    false;
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const nodeDimmed = useMemo(() => {
@@ -82,8 +78,6 @@ export const GraphNodeController = memo(function GraphNodeController({
     graphPath,
     groupId,
     contextMenuActions,
-    onAddInput,
-    onRemovePin,
     onPinPointerDown: handlePinPointerDown,
   };
   const isReroute = isRerouteNodeView(node);

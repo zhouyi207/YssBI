@@ -10,7 +10,7 @@ import type { MoveConnectionsArgs } from "./moveConnections";
 import type { DeleteNodesArgs } from "./deleteNodes";
 import type { DuplicateSubgraphArgs } from "./duplicateSubgraph";
 import type { InsertSubgraphArgs } from "./insertSubgraph";
-import type { AddRepeatablePinArgs, RemoveRepeatablePinArgs } from "./repeatablePin";
+import type { AddPortInstanceArgs, RemovePortInstanceArgs } from "./portInstance";
 
 export interface CommandHandlerMap {
   MoveNodes: CommandHandler<MoveNodesArgs, GraphDraftCommandResult>;
@@ -24,8 +24,8 @@ export interface CommandHandlerMap {
   DeleteNodes: CommandHandler<DeleteNodesArgs, GraphDraftCommandResult>;
   DuplicateSubgraph: CommandHandler<DuplicateSubgraphArgs, GraphDraftCommandResult>;
   InsertSubgraph: CommandHandler<InsertSubgraphArgs, GraphDraftCommandResult>;
-  AddRepeatablePin: CommandHandler<AddRepeatablePinArgs, GraphDraftCommandResult>;
-  RemoveRepeatablePin: CommandHandler<RemoveRepeatablePinArgs, GraphDraftCommandResult>;
+  AddPortInstance: CommandHandler<AddPortInstanceArgs, GraphDraftCommandResult>;
+  RemovePortInstance: CommandHandler<RemovePortInstanceArgs, GraphDraftCommandResult>;
 }
 
 export type AvailableCommandType = keyof CommandHandlerMap;

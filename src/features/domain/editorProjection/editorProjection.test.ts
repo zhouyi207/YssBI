@@ -42,11 +42,9 @@ function validProjection(): EditorGraphProjectionDto {
         ports: [
           {
             address: declaredOutput,
-            templateKey: "output",
             display: { label: "结果", instanceLabel: null },
             direction: "output",
             kind: "data",
-            instanceKind: "declared",
             orphan: false,
             canRemove: false,
             connections: {
@@ -68,11 +66,9 @@ function validProjection(): EditorGraphProjectionDto {
           },
           {
             address: instanceInput,
-            templateKey: "input",
             display: { label: "变量", instanceLabel: "变量 1" },
             direction: "input",
             kind: "data",
-            instanceKind: "userCreated",
             orphan: false,
             canRemove: true,
             connections: {
@@ -91,6 +87,14 @@ function validProjection(): EditorGraphProjectionDto {
             resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
             resolvedSchema: { kind: "input", fields: [] },
             status: "resolved",
+          },
+        ],
+        portInstanceAdditions: [
+          {
+            templateKey: "input",
+            label: "变量",
+            direction: "input",
+            canAdd: true,
           },
         ],
         parameterEditors: [
@@ -114,7 +118,6 @@ function validProjection(): EditorGraphProjectionDto {
           canDelete: true,
           canEditLabel: true,
           canEditParameters: true,
-          hasDynamicPorts: true,
           supportsInlineLiterals: true,
         },
         diagnostics: [
@@ -264,6 +267,13 @@ describe("validateEditorGraphProjection", () => {
     expect(validateEditorGraphProjection(projection)).toBe(projection);
   });
 
+  it("rejects a removable port that carries a declared address", () => {
+    const projection = validProjection();
+    projection.nodes[0].ports[0].canRemove = true;
+
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+  });
+
   it.each([
     [
       "basis graph path",
@@ -296,6 +306,14 @@ describe("validateEditorGraphProjection", () => {
     duplicateConnection.connections.push(structuredClone(duplicateConnection.connections[0]));
     expect(() => validateEditorGraphProjection(duplicateConnection)).toThrow(
       /duplicate connection/,
+    );
+
+    const duplicateAddition = validProjection();
+    duplicateAddition.nodes[0].portInstanceAdditions.push(
+      structuredClone(duplicateAddition.nodes[0].portInstanceAdditions[0]),
+    );
+    expect(() => validateEditorGraphProjection(duplicateAddition)).toThrow(
+      /duplicate port instance addition/,
     );
   });
 
@@ -400,9 +418,9 @@ describe("toProjectionEntities", () => {
       },
     });
     expect(entities.connections["connection-1"]).toEqual(projection.connections[0]);
-    expect(entities.portKeysByNodeId["node-1"]).toEqual([outputKey, inputKey]);
-    expect(entities.connectionIdsByPortKey[outputKey]).toEqual(["connection-1"]);
-    expect(entities.connectionIdsByPortKey[inputKey]).toEqual(["connection-1"]);
+    expect(entities.portIdsByNodeId["node-1"]).toEqual([outputKey, inputKey]);
+    expect(entities.connectionIdsByPortId[outputKey]).toEqual(["connection-1"]);
+    expect(entities.connectionIdsByPortId[inputKey]).toEqual(["connection-1"]);
     expect(entities.diagnostics).toEqual(projection.diagnostics);
     expect(entities.outcome).toEqual({ type: "success" });
     expect(entities.hasBlockingDiagnostics).toBe(false);

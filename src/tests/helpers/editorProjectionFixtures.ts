@@ -32,10 +32,8 @@ export function makeProjectedPinData(
       nodeId: overrides.nodeId,
       portKey: overrides.id,
     },
-    templateKey: overrides.id,
     display: { label, instanceLabel: null },
     kind,
-    instanceKind: "declared",
     orphan: false,
     canRemove: false,
     connections: {
@@ -127,11 +125,9 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
           ports: [
             {
               address: outputAddress,
-              templateKey: "local-out",
               display: { label: "Output", instanceLabel: null },
               direction: "output",
               kind: "data",
-              instanceKind: "declared",
               orphan: false,
               canRemove: false,
               connections: {
@@ -149,11 +145,9 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
             },
             {
               address: inputAddress,
-              templateKey: "local-in",
               display: { label: "Input", instanceLabel: null },
               direction: "input",
               kind: "data",
-              instanceKind: "declared",
               orphan: false,
               canRemove: false,
               connections: {
@@ -174,6 +168,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               status: "resolved",
             },
           ],
+          portInstanceAdditions: [],
           parameterEditors: [],
           capabilities: {
             managed: false,
@@ -181,7 +176,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
             canDelete: true,
             canEditLabel: true,
             canEditParameters: false,
-            hasDynamicPorts: false,
             supportsInlineLiterals: false,
           },
           diagnostics: [],

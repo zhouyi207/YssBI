@@ -10,7 +10,7 @@ import { moveConnectionsCommand } from "./moveConnections";
 import { deleteNodesCommand } from "./deleteNodes";
 import { duplicateSubgraphCommand } from "./duplicateSubgraph";
 import { insertSubgraphCommand } from "./insertSubgraph";
-import { addRepeatablePinCommand, removeRepeatablePinCommand } from "./repeatablePin";
+import { addPortInstanceCommand, removePortInstanceCommand } from "./portInstance";
 
 export const commandRegistry: CommandHandlerMap = {
   MoveNodes: moveNodesCommand,
@@ -24,8 +24,8 @@ export const commandRegistry: CommandHandlerMap = {
   DeleteNodes: deleteNodesCommand,
   DuplicateSubgraph: duplicateSubgraphCommand,
   InsertSubgraph: insertSubgraphCommand,
-  AddRepeatablePin: addRepeatablePinCommand,
-  RemoveRepeatablePin: removeRepeatablePinCommand,
+  AddPortInstance: addPortInstanceCommand,
+  RemovePortInstance: removePortInstanceCommand,
 };
 
 export function getCommandHandler(type: AvailableCommandType) {
@@ -44,4 +44,4 @@ export type { MoveConnectionsArgs } from "./moveConnections";
 export type { DeleteNodesArgs } from "./deleteNodes";
 export type { DuplicateSubgraphArgs } from "./duplicateSubgraph";
 export type { InsertSubgraphArgs } from "./insertSubgraph";
-export type { AddRepeatablePinArgs, RemoveRepeatablePinArgs } from "./repeatablePin";
+export type { AddPortInstanceArgs, RemovePortInstanceArgs } from "./portInstance";

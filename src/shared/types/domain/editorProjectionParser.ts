@@ -88,6 +88,16 @@ function validateNode(
     }
     portDirections.set(key, port.direction);
   }
+
+  const additionKeys = new Set<string>();
+  for (const addition of node.portInstanceAdditions) {
+    if (additionKeys.has(addition.templateKey)) {
+      throw new Error(
+        `projection node '${node.nodeId}' contains duplicate port instance addition '${addition.templateKey}'`,
+      );
+    }
+    additionKeys.add(addition.templateKey);
+  }
 }
 
 function portAddressKey(address: PortAddressDto): string {

@@ -128,8 +128,6 @@ export function GraphCanvasController({
   const {
     variableDropMenu,
     setVariableDropMenu,
-    handleNodeAddInput,
-    handleNodeRemovePin,
     handleContextMenu,
     handleVariableDropGet,
     handleVariableDropSet,
@@ -255,7 +253,6 @@ export function GraphCanvasController({
       selectLinkedNodes,
       disconnectPin: disconnectPinById,
       resetPinValue,
-      removeRepeatablePin: handleNodeRemovePin,
     }),
     [
       breakAllNodeLinks,
@@ -265,7 +262,6 @@ export function GraphCanvasController({
       disconnectPinById,
       duplicateNodes,
       groupId,
-      handleNodeRemovePin,
       resetPinValue,
       selectLinkedNodes,
       setSelectedNodeIds,
@@ -317,8 +313,6 @@ export function GraphCanvasController({
           activePin={activePin}
           contextMenuActions={interactive ? contextMenuActions : null}
           onPointerDown={onNodePointerDown}
-          onAddInput={handleNodeAddInput}
-          onRemovePin={handleNodeRemovePin}
           onPinPointerDown={onPinPointerDown}
         />
       ))}

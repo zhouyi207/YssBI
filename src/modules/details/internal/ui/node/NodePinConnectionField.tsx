@@ -8,9 +8,7 @@ import type {
   PinData,
   ConnectionData,
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { GraphDraftCommandResult } from "@/features/core/history/types";
 import { Select } from "@/shared/ui/Select";
-import { graphDraftErrorMessageKey } from "@/features/application/graphDraft/graphDraftError";
 import {
   connectPinsById,
   disconnectConnectionById,
@@ -24,6 +22,7 @@ import {
   listCompatiblePinOptions,
   listPinConnections,
 } from "./nodePinConnectionOptions";
+import { graphDraftMutationMessageKey, graphDraftMutationSucceeded } from "./nodeMutationFeedback";
 
 interface NodePinConnectionFieldProps {
   graphPath: string;
@@ -32,6 +31,7 @@ interface NodePinConnectionFieldProps {
   pins: readonly PinData[];
   nodes: Readonly<Record<string, NodeData>>;
   connections: readonly ConnectionData[];
+  disabled?: boolean;
 }
 
 interface ConnectionRowProps {
@@ -40,6 +40,7 @@ interface ConnectionRowProps {
   onRemove: () => void;
   showRemove: boolean;
   testId: string;
+  disabled: boolean;
 }
 
 function ConnectionRow({
@@ -48,6 +49,7 @@ function ConnectionRow({
   onRemove,
   showRemove,
   testId,
+  disabled,
 }: ConnectionRowProps) {
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -59,6 +61,7 @@ function ConnectionRow({
           size="icon-xs"
           aria-label={removeLabel}
           data-testid={testId}
+          disabled={disabled}
           onClick={onRemove}
         >
           <VscRemove aria-hidden="true" data-icon="inline-start" />
@@ -68,18 +71,6 @@ function ConnectionRow({
   );
 }
 
-function mutationSucceeded(result: GraphDraftCommandResult): boolean {
-  return result !== false && (result.status === "applied" || result.status === "noop");
-}
-
-function mutationMessageKey(result: GraphDraftCommandResult): string | null {
-  if (mutationSucceeded(result)) return null;
-  const code = result !== false && result.status === "rejected" ? result.code : null;
-  return code
-    ? (graphDraftErrorMessageKey(code) ?? "detail.nodeDoc.connectionFailed")
-    : "detail.nodeDoc.connectionFailed";
-}
-
 export function NodePinConnectionField({
   graphPath,
   pin,
@@ -87,6 +78,7 @@ export function NodePinConnectionField({
   pins,
   nodes,
   connections,
+  disabled = false,
 }: NodePinConnectionFieldProps) {
   const { t } = useTranslation();
   const [emptySlots, setEmptySlots] = useState(0);
@@ -127,32 +119,32 @@ export function NodePinConnectionField({
   }, [anchor, connections, connectionTargets, nodes, pins]);
 
   const handleInputChange = async (value: string) => {
-    if (!anchor || busy) return;
+    if (!anchor || busy || disabled) return;
     setBusy(true);
     setErrorKey(null);
     const result = value
       ? await connectPinsById(graphPath, value, anchor.id)
       : await disconnectPinById(graphPath, anchor.id);
-    setErrorKey(mutationMessageKey(result));
+    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 
   const handleOutputConnect = async (value: string) => {
-    if (!anchor || !value || busy) return;
+    if (!anchor || !value || busy || disabled) return;
     setBusy(true);
     setErrorKey(null);
     const result = await connectPinsById(graphPath, anchor.id, value);
-    if (mutationSucceeded(result)) setEmptySlots((count) => Math.max(0, count - 1));
-    setErrorKey(mutationMessageKey(result));
+    if (graphDraftMutationSucceeded(result)) setEmptySlots((count) => Math.max(0, count - 1));
+    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 
   const handleOutputDisconnect = async (connectionId: string) => {
-    if (busy) return;
+    if (busy || disabled) return;
     setBusy(true);
     setErrorKey(null);
     const result = await disconnectConnectionById(graphPath, connectionId);
-    setErrorKey(mutationMessageKey(result));
+    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 
@@ -169,7 +161,7 @@ export function NodePinConnectionField({
             value={currentOutputId}
             options={[{ value: "", label: t("detail.nodeDoc.unconnected") }, ...inputOptions]}
             onChange={handleInputChange}
-            disabled={busy || !anchor}
+            disabled={busy || disabled || !anchor}
             id={`detail-input-${pin.id}`}
           />
         </DetailFieldRow>
@@ -192,7 +184,7 @@ export function NodePinConnectionField({
         size="icon-xs"
         aria-label={t("detail.nodeDoc.addConnection")}
         data-testid={`add-output-connection-${pin.id}`}
-        disabled={busy || outputOptions.length === 0}
+        disabled={busy || disabled || outputOptions.length === 0}
         onClick={() => setEmptySlots((count) => count + 1)}
       >
         <VscAdd aria-hidden="true" data-icon="inline-start" />
@@ -221,6 +213,7 @@ export function NodePinConnectionField({
                 onRemove={() => void handleOutputDisconnect(connection.id)}
                 showRemove
                 testId={`remove-output-connection-${pin.id}-${index}`}
+                disabled={busy || disabled}
               >
                 <Select
                   value={targetId}
@@ -239,12 +232,13 @@ export function NodePinConnectionField({
               onRemove={() => setEmptySlots((count) => Math.max(0, count - 1))}
               showRemove={connectionRecords.length + pendingCount > 1}
               testId={`remove-output-connection-${pin.id}-${connectionRecords.length + index}`}
+              disabled={busy || disabled}
             >
               <Select
                 value=""
                 options={[{ value: "", label: t("detail.nodeDoc.selectInput") }, ...outputOptions]}
                 onChange={handleOutputConnect}
-                disabled={busy || !anchor}
+                disabled={busy || disabled || !anchor}
                 id={`detail-output-${pin.id}-${connectionRecords.length + index}`}
               />
             </ConnectionRow>

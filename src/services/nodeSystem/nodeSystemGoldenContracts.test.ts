@@ -251,7 +251,8 @@ describe("Rust-generated node-system golden contracts", () => {
     for (const { value, missing } of variants) {
       const projection = clone(editorProjection) as unknown as Record<string, unknown>;
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-      (node.ports as Array<Record<string, unknown>>)[0].address = value;
+      const port = (node.ports as Array<Record<string, unknown>>)[0];
+      port.address = value;
       expect(isEditorGraphProjectionDto(projection)).toBe(true);
 
       const validNodeId = value.nodeId;

@@ -19,7 +19,6 @@ export interface GraphEntityBucket {
   pins: Record<PinId, PinData>;
   connections: Record<ConnectionId, ConnectionData>;
   graphNodes: NodeId[];
-  nodePins: Record<NodeId, PinId[]>;
   pinConnections: Record<PinId, ConnectionId[]>;
   basis: ProjectionBasisDto;
   sourceRevision: number;
@@ -69,7 +68,7 @@ export function getGraphNodePins(
   graphPath: GraphPath,
   nodeId: NodeId,
 ): PinId[] {
-  return state.graphEntities[graphPath]?.nodePins[nodeId] ?? [];
+  return state.graphEntities[graphPath]?.nodes[nodeId]?.pinIds ?? [];
 }
 
 export function getGraphPinConnections(

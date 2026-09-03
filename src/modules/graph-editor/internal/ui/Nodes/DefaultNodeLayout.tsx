@@ -5,7 +5,6 @@ import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
-import { Button } from "@/components/ui/button";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
@@ -14,8 +13,6 @@ interface DefaultNodeLayoutProps {
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  onAddInput?: (id: string) => void;
-  onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinData) => void;
 }
 
@@ -39,8 +36,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   graphPath,
   groupId,
   contextMenuActions,
-  onAddInput,
-  onRemovePin,
   onPinPointerDown,
 }) => {
   const inlineParameters = node.parameterEditors.filter(
@@ -50,17 +45,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const inputsData = node.inputs.filter((p) => !isExecPin(p));
   const outputsExec = node.outputs.filter(isExecPin);
   const outputsData = node.outputs.filter((p) => !isExecPin(p));
-
-  const hasRepeatableInput = node.inputs.some(
-    (pin) => !isExecPin(pin) && pin.instanceKind === "userCreated",
-  );
-
-  const removePinHandler = onRemovePin
-    ? (pinId: string) => {
-        const pin = [...node.inputs, ...node.outputs].find((candidate) => candidate.id === pinId);
-        if (pin?.canRemove) onRemovePin(node.id, pinId);
-      }
-    : undefined;
 
   const getPinDragState = useCallback(
     (pin: PinData): "normal" | "highlighted" | "dimmed" => {
@@ -115,7 +99,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinPointerDown={onPinPointerDown}
-                    onRemovePin={removePinHandler}
                   />
                 );
               })}
@@ -134,7 +117,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinPointerDown={onPinPointerDown}
-                    onRemovePin={removePinHandler}
                   />
                 );
               })}
@@ -157,7 +139,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinPointerDown={onPinPointerDown}
-                  onRemovePin={removePinHandler}
                 />
               );
             })}
@@ -176,30 +157,11 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinPointerDown={onPinPointerDown}
-                  onRemovePin={removePinHandler}
                 />
               );
             })}
           </div>
         </div>
-
-        {hasRepeatableInput && onAddInput && (
-          <div className="flex justify-end px-2 pb-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddInput(node.id);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="h-4 w-4 text-[10px]"
-            >
-              +
-            </Button>
-          </div>
-        )}
       </div>
     </>
   );

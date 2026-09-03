@@ -8,5 +8,4 @@ export interface GraphContextMenuActions {
   selectLinkedNodes: (nodeId: string) => void;
   disconnectPin: (pinId: string) => Promise<boolean | undefined>;
   resetPinValue: (nodeId: string, pinId: string) => Promise<boolean | undefined>;
-  removeRepeatablePin: (nodeId: string, pinId: string) => Promise<void>;
 }

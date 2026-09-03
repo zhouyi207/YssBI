@@ -79,33 +79,29 @@ function buildProjectionBucket(
     pins: {},
     connections: {},
     graphNodes: [],
-    nodePins: {},
     pinConnections: {},
   };
 
   for (const node of Object.values(entities.nodes)) {
-    const portKeys = entities.portKeysByNodeId[node.nodeId];
-    const inputs = portKeys.filter((key) => entities.ports[key]?.direction === "input");
-    const outputs = portKeys.filter((key) => entities.ports[key]?.direction === "output");
+    const portIds = entities.portIdsByNodeId[node.nodeId];
     bucket.nodes[node.nodeId] = {
       id: node.nodeId,
       graphPath: node.graphPath,
       nodeType: node.nodeTypeId,
       position: node.position,
-      inputs,
-      outputs,
+      pinIds: portIds,
       display: node.display,
       parameterEditors: node.parameterEditors,
+      portInstanceAdditions: node.portInstanceAdditions,
       capabilities: node.capabilities,
       diagnostics: node.diagnostics,
     };
     bucket.graphNodes.push(node.nodeId);
-    bucket.nodePins[node.nodeId] = portKeys;
   }
 
-  for (const [key, port] of Object.entries(entities.ports)) {
-    bucket.pins[key] = {
-      id: key,
+  for (const [portId, port] of Object.entries(entities.ports)) {
+    bucket.pins[portId] = {
+      id: portId,
       nodeId: port.address.nodeId,
       name: port.display.instanceLabel ?? port.display.label,
       type: port.kind === "data" ? "object" : "exec",
@@ -115,10 +111,8 @@ function buildProjectionBucket(
           ? (port.resolvedType.dataType ?? undefined)
           : undefined,
       address: port.address,
-      templateKey: port.templateKey,
       display: port.display,
       kind: port.kind,
-      instanceKind: port.instanceKind,
       orphan: port.orphan,
       canRemove: port.canRemove,
       connections: port.connections,
@@ -127,7 +121,7 @@ function buildProjectionBucket(
       resolvedSchema: port.resolvedSchema,
       status: port.status,
     };
-    bucket.pinConnections[key] = entities.connectionIdsByPortKey[key];
+    bucket.pinConnections[portId] = entities.connectionIdsByPortId[portId];
   }
 
   for (const connection of Object.values(entities.connections)) {

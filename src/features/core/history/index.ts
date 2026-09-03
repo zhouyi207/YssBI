@@ -15,6 +15,6 @@ export type {
   DeleteNodesArgs,
   DuplicateSubgraphArgs,
   InsertSubgraphArgs,
-  AddRepeatablePinArgs,
-  RemoveRepeatablePinArgs,
+  AddPortInstanceArgs,
+  RemovePortInstanceArgs,
 } from "./commands";

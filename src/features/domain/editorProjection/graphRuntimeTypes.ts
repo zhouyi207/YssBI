@@ -16,10 +16,10 @@ import type {
   NodeCapabilitiesDto,
   NodeDisplayDto,
   ParameterEditorDto,
+  PortInstanceAdditionDto,
   PortAddressDto,
   PortConnectionCapabilityDto,
   PortDisplayDto,
-  PortInstanceKindDto,
   PortKindDto,
   ResolvedPortStatusDto,
   SchemaSummaryDto,
@@ -32,11 +32,11 @@ export interface NodeData {
   id: string;
   graphPath: string;
   nodeType: string;
-  inputs: string[]; // Pin IDs
-  outputs: string[]; // Pin IDs
+  pinIds: string[];
   position: { x: number; y: number };
   display: NodeDisplayDto;
   parameterEditors: ParameterEditorDto[];
+  portInstanceAdditions: PortInstanceAdditionDto[];
   capabilities: NodeCapabilitiesDto;
   diagnostics: DiagnosticDto[];
 }
@@ -53,10 +53,8 @@ export interface PinData {
   dataType?: DataType;
   /** Stable structured address; projected pins use its local key as `id`. */
   address: PortAddressDto;
-  templateKey: string;
   display: PortDisplayDto;
   kind: PortKindDto;
-  instanceKind: PortInstanceKindDto;
   orphan: boolean;
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;

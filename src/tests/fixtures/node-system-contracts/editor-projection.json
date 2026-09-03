@@ -15,7 +15,6 @@
         "canDelete": true,
         "canEditLabel": true,
         "canEditParameters": true,
-        "hasDynamicPorts": false,
         "managed": false,
         "supportsInlineLiterals": false
       },
@@ -49,6 +48,7 @@
           }
         }
       ],
+      "portInstanceAdditions": [],
       "ports": [
         {
           "address": {
@@ -71,7 +71,6 @@
             "label": "Value"
           },
           "input": null,
-          "instanceKind": "declared",
           "kind": "data",
           "orphan": false,
           "resolvedSchema": null,
@@ -82,8 +81,7 @@
             "display": "core.bool",
             "resolved": true
           },
-          "status": "resolved",
-          "templateKey": "value"
+          "status": "resolved"
         }
       ],
       "position": {

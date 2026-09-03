@@ -33,7 +33,6 @@ afterEach(() => {
 describe("PinContextMenu", () => {
   it("omits promote to variable and retains supported actions", () => {
     renderMenu({
-      removable: true,
       hasLinks: true,
       canReset: true,
       showView: true,
@@ -44,24 +43,21 @@ describe("PinContextMenu", () => {
     expect(item("breakLinks")).toBeDefined();
     expect(item("resetValue")).toBeDefined();
     expect(item("view")).toBeDefined();
-    expect(item("removePin")).toBeDefined();
+    expect(item("removePin")).toBeUndefined();
   });
 
   it("preserves disabled state for unavailable supported actions", () => {
-    renderMenu({ removable: false, hasLinks: false, canReset: false });
+    renderMenu({ hasLinks: false, canReset: false });
 
     expect(item("breakLinks")?.hasAttribute("data-disabled")).toBe(true);
     expect(item("resetValue")?.hasAttribute("data-disabled")).toBe(true);
-    expect(item("removePin")?.hasAttribute("data-disabled")).toBe(true);
   });
 
-  it("invokes enabled break, reset, view, and remove actions", () => {
+  it("invokes enabled break, reset, and view actions", () => {
     const onBreakLinks = vi.fn();
     const onResetValue = vi.fn();
     const onView = vi.fn();
-    const onRemove = vi.fn();
     renderMenu({
-      removable: true,
       hasLinks: true,
       canReset: true,
       onBreakLinks,
@@ -69,18 +65,15 @@ describe("PinContextMenu", () => {
       showView: true,
       viewEnabled: true,
       onView,
-      onRemove,
     });
 
     for (const [label, callback] of [
       ["breakLinks", onBreakLinks],
       ["resetValue", onResetValue],
       ["view", onView],
-      ["removePin", onRemove],
     ] as const) {
       renderMenu(
         {
-          removable: true,
           hasLinks: true,
           canReset: true,
           onBreakLinks,
@@ -88,7 +81,6 @@ describe("PinContextMenu", () => {
           showView: true,
           viewEnabled: true,
           onView,
-          onRemove,
         },
         label,
       );

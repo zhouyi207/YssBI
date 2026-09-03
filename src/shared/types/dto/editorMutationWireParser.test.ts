@@ -75,11 +75,9 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
       ports: [
         {
           address: { kind: "declared", nodeId, portKey: "value" },
-          templateKey: "value",
           display: { label: "Value", instanceLabel: null },
           direction: "output",
           kind: "data",
-          instanceKind: "declared",
           orphan: false,
           canRemove: false,
           connections: {
@@ -96,6 +94,7 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
           status: "resolved",
         },
       ],
+      portInstanceAdditions: [],
       parameterEditors: [],
       capabilities: {
         managed: false,
@@ -103,7 +102,6 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
         canDelete: true,
         canEditLabel: true,
         canEditParameters: false,
-        hasDynamicPorts: false,
         supportsInlineLiterals: false,
       },
       diagnostics: [],

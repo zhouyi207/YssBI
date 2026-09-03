@@ -15,26 +15,26 @@ export function toProjectionEntities(
   const nodes = emptyRecord<EditorProjectionEntities["nodes"][string]>();
   const ports = emptyRecord<EditorProjectionEntities["ports"][string]>();
   const connections = emptyRecord<EditorProjectionEntities["connections"][string]>();
-  const portKeysByNodeId = emptyRecord<string[]>();
-  const connectionIdsByPortKey = emptyRecord<string[]>();
+  const portIdsByNodeId = emptyRecord<string[]>();
+  const connectionIdsByPortId = emptyRecord<string[]>();
 
   for (const node of projection.nodes) {
     const { ports: nodePorts, ...nodeEntity } = node;
     nodes[node.nodeId] = nodeEntity;
-    portKeysByNodeId[node.nodeId] = [];
+    portIdsByNodeId[node.nodeId] = [];
 
     for (const port of nodePorts) {
-      const key = portAddressKey(port.address);
-      ports[key] = port;
-      portKeysByNodeId[node.nodeId].push(key);
-      connectionIdsByPortKey[key] = [];
+      const portId = portAddressKey(port.address);
+      ports[portId] = port;
+      portIdsByNodeId[node.nodeId].push(portId);
+      connectionIdsByPortId[portId] = [];
     }
   }
 
   for (const connection of projection.connections) {
     connections[connection.connectionId] = connection;
-    connectionIdsByPortKey[portAddressKey(connection.output)].push(connection.connectionId);
-    connectionIdsByPortKey[portAddressKey(connection.input)].push(connection.connectionId);
+    connectionIdsByPortId[portAddressKey(connection.output)].push(connection.connectionId);
+    connectionIdsByPortId[portAddressKey(connection.input)].push(connection.connectionId);
   }
 
   return {
@@ -44,8 +44,8 @@ export function toProjectionEntities(
     nodes,
     ports,
     connections,
-    portKeysByNodeId,
-    connectionIdsByPortKey,
+    portIdsByNodeId,
+    connectionIdsByPortId,
     diagnostics: projection.diagnostics,
     outcome: projection.outcome,
     hasBlockingDiagnostics: projection.hasBlockingDiagnostics,

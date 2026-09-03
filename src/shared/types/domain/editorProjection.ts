@@ -58,7 +58,8 @@ export interface EditorNodeProjectionDto {
   nodeTypeId: string;
   position: NodePositionDto;
   display: NodeDisplayDto;
-  ports: ResolvedPortDto[];
+  ports: EditorPortDto[];
+  portInstanceAdditions: PortInstanceAdditionDto[];
   parameterEditors: ParameterEditorDto[];
   capabilities: NodeCapabilitiesDto;
   diagnostics: DiagnosticDto[];
@@ -89,17 +90,14 @@ export interface NodeCapabilitiesDto {
   canDelete: boolean;
   canEditLabel: boolean;
   canEditParameters: boolean;
-  hasDynamicPorts: boolean;
   supportsInlineLiterals: boolean;
 }
 
-export interface ResolvedPortDto {
+export interface EditorPortDto {
   address: PortAddressDto;
-  templateKey: string;
   display: PortDisplayDto;
   direction: PortDirectionDto;
   kind: PortKindDto;
-  instanceKind: PortInstanceKindDto;
   orphan: boolean;
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
@@ -119,7 +117,12 @@ export interface PortDisplayDto {
 }
 export type PortDirectionDto = "input" | "output";
 export type PortKindDto = "data" | "control" | "effect";
-export type PortInstanceKindDto = "declared" | "userCreated" | "derived";
+export interface PortInstanceAdditionDto {
+  templateKey: string;
+  label: string;
+  direction: PortDirectionDto;
+  canAdd: boolean;
+}
 
 export interface PortConnectionCapabilityDto {
   current: number;

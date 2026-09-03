@@ -20,8 +20,8 @@ export type CommandType =
   | "DeleteNodes"
   | "DuplicateSubgraph"
   | "InsertSubgraph"
-  | "AddRepeatablePin"
-  | "RemoveRepeatablePin";
+  | "AddPortInstance"
+  | "RemovePortInstance";
 
 export interface CommandHandler<TArgs = unknown, TResult = unknown> {
   execute(graphPath: string, args: TArgs): Promise<TResult> | TResult;

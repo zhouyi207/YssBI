@@ -39,7 +39,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const { catalog } = useLocalizedNodeCatalog(Boolean(node));
   const pinObjs = useGraphRead((snapshot) => {
     const bucket = snapshot.graphEntities[graphPath];
-    const pinIds = bucket?.nodePins[nodeId];
+    const pinIds = bucket?.nodes[nodeId]?.pinIds;
     if (!bucket || !pinIds?.length) return EMPTY_PINS;
     return pinIds
       .map((pinId) => bucket.pins[pinId])
@@ -48,7 +48,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   });
   const pinConns = useGraphRead((snapshot) => {
     const bucket = snapshot.graphEntities[graphPath];
-    const pinIds = bucket?.nodePins[nodeId];
+    const pinIds = bucket?.nodes[nodeId]?.pinIds;
     if (!bucket || !pinIds?.length) return EMPTY_PIN_CONNECTIONS;
     return pinIds.map((pinId) => [...(bucket.pinConnections[pinId] ?? [])]);
   });
@@ -140,8 +140,10 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       )}
       <NodePinInterfacePanel
         graphPath={graphPath}
+        nodeId={nodeId}
         inputs={pinSpecs.inputs}
         outputs={pinSpecs.outputs}
+        portInstanceAdditions={node.portInstanceAdditions}
       />
       {documentation && <NodeDocumentationPanel markdown={documentation} />}
     </DetailPanelShell>

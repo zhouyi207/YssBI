@@ -1,5 +1,4 @@
 import type { DataType } from "@/shared/types/domain/dataType";
-import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import { structCanAccept } from "@/shared/types/domain/typeSystem";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
@@ -90,10 +89,8 @@ export function getPinCompatibility(
   )
     return "incompatible";
 
-  const sourceIsExec = isExecPin(source);
-  const targetIsExec = isExecPin(target);
-  if (sourceIsExec !== targetIsExec) return "incompatible";
-  if (sourceIsExec) return "compatible";
+  if (source.kind !== target.kind) return "incompatible";
+  if (source.kind !== "data") return "compatible";
   return getDataTypeCompatibility(
     projectedPinDataType(source),
     projectedPinDataType(target),

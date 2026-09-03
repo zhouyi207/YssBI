@@ -12,7 +12,6 @@ const fingerprintPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(["input", "output"]);
 const portKinds = new Set(["data", "control", "effect"]);
-const portInstanceKinds = new Set(["declared", "userCreated", "derived"]);
 const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbound"]);
 const scalarTypes = new Set([
   "boolean",
@@ -140,7 +139,6 @@ function isCapabilities(value: unknown): boolean {
       "canDelete",
       "canEditLabel",
       "canEditParameters",
-      "hasDynamicPorts",
       "supportsInlineLiterals",
     ])
   )
@@ -221,14 +219,12 @@ function isSchemaSummary(value: unknown): boolean {
 }
 
 function isPort(value: unknown): boolean {
-  return (
-    hasExactKeys(value, [
+  if (
+    !hasExactKeys(value, [
       "address",
-      "templateKey",
       "display",
       "direction",
       "kind",
-      "instanceKind",
       "orphan",
       "canRemove",
       "connections",
@@ -236,20 +232,32 @@ function isPort(value: unknown): boolean {
       "resolvedType",
       "resolvedSchema",
       "status",
-    ]) &&
-    isPortAddressDto(value.address) &&
+    ]) ||
+    !isPortAddressDto(value.address) ||
+    !isPortDisplay(value.display) ||
+    !portDirections.has(value.direction as string) ||
+    !portKinds.has(value.kind as string) ||
+    typeof value.orphan !== "boolean" ||
+    typeof value.canRemove !== "boolean" ||
+    !isConnectionCapability(value.connections) ||
+    (value.input !== null && !isInputBinding(value.input)) ||
+    (value.resolvedType !== null && !isTypeSummary(value.resolvedType)) ||
+    (value.resolvedSchema !== null && !isSchemaSummary(value.resolvedSchema)) ||
+    !portStatuses.has(value.status as string)
+  ) {
+    return false;
+  }
+
+  return !value.canRemove || value.address.kind === "instance";
+}
+
+function isPortInstanceAddition(value: unknown): boolean {
+  return (
+    hasExactKeys(value, ["templateKey", "label", "direction", "canAdd"]) &&
     typeof value.templateKey === "string" &&
-    isPortDisplay(value.display) &&
+    typeof value.label === "string" &&
     portDirections.has(value.direction as string) &&
-    portKinds.has(value.kind as string) &&
-    portInstanceKinds.has(value.instanceKind as string) &&
-    typeof value.orphan === "boolean" &&
-    typeof value.canRemove === "boolean" &&
-    isConnectionCapability(value.connections) &&
-    (value.input === null || isInputBinding(value.input)) &&
-    (value.resolvedType === null || isTypeSummary(value.resolvedType)) &&
-    (value.resolvedSchema === null || isSchemaSummary(value.resolvedSchema)) &&
-    portStatuses.has(value.status as string)
+    typeof value.canAdd === "boolean"
   );
 }
 
@@ -335,6 +343,7 @@ function isNode(value: unknown): boolean {
       "position",
       "display",
       "ports",
+      "portInstanceAdditions",
       "parameterEditors",
       "capabilities",
       "diagnostics",
@@ -346,6 +355,8 @@ function isNode(value: unknown): boolean {
     isNodeDisplay(value.display) &&
     Array.isArray(value.ports) &&
     value.ports.every(isPort) &&
+    Array.isArray(value.portInstanceAdditions) &&
+    value.portInstanceAdditions.every(isPortInstanceAddition) &&
     Array.isArray(value.parameterEditors) &&
     value.parameterEditors.every(isParameterEditor) &&
     isCapabilities(value.capabilities) &&

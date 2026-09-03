@@ -53,11 +53,9 @@ function projection(
         ports: [
           {
             address: graphOutput,
-            templateKey: "output",
             display: { label: "Output", instanceLabel: null },
             direction: "output",
             kind: "data",
-            instanceKind: "declared",
             orphan: false,
             canRemove: false,
             connections: {
@@ -75,11 +73,9 @@ function projection(
           },
           {
             address: graphInput,
-            templateKey: "input",
             display: { label: "Input", instanceLabel: "Input 1" },
             direction: "input",
             kind: "data",
-            instanceKind: "userCreated",
             orphan: false,
             canRemove: true,
             connections: {
@@ -98,6 +94,14 @@ function projection(
             resolvedType: { display: "Number", resolved: true, dataType: { kind: "Float64" } },
             resolvedSchema: null,
             status: "resolved",
+          },
+        ],
+        portInstanceAdditions: [
+          {
+            templateKey: "input",
+            label: "Input",
+            direction: "input",
+            canAdd: true,
           },
         ],
         parameterEditors: [
@@ -121,7 +125,6 @@ function projection(
           canDelete: true,
           canEditLabel: true,
           canEditParameters: true,
-          hasDynamicPorts: true,
           supportsInlineLiterals: true,
         },
         diagnostics: [],
@@ -165,7 +168,7 @@ describe("graphProjectionStore projection replacement", () => {
 
     const bucket = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const canvasNode = toUiNode(bucket.nodes["shared-node"], {
-      pins: bucket.nodePins["shared-node"].map((key) => ({
+      pins: bucket.nodes["shared-node"].pinIds.map((key) => ({
         pin: bucket.pins[key],
         connectionIds: bucket.pinConnections[key],
       })),
@@ -221,7 +224,6 @@ describe("graphProjectionStore projection replacement", () => {
     expect(bucket.pins[portAddressKey(input)]).toMatchObject({
       id: portAddressKey(input),
       address: input,
-      instanceKind: "userCreated",
       canRemove: true,
     });
     expect(bucket.connections["connection-1"].from).toBe(portAddressKey(output));
@@ -234,7 +236,7 @@ describe("graphProjectionStore projection replacement", () => {
     expect(hasGraphBlockingDiagnostics(state, "functions/main")).toBe(false);
 
     const canvasNode = toUiNode(bucket.nodes["shared-node"], {
-      pins: bucket.nodePins["shared-node"].map((key) => ({
+      pins: bucket.nodes["shared-node"].pinIds.map((key) => ({
         pin: bucket.pins[key],
         connectionIds: bucket.pinConnections[key],
       })),

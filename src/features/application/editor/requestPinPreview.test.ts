@@ -40,8 +40,6 @@ function installGraph(
   const fixture = makeEditorProjectionFixture({ graphPath });
   if (outputAddress) {
     fixture.projection.nodes[0].ports[0].address = outputAddress;
-    fixture.projection.nodes[0].ports[0].templateKey =
-      outputAddress.kind === "declared" ? outputAddress.portKey : outputAddress.templateKey;
     fixture.projection.connections[0].output = outputAddress;
   }
   const applied = useGraphProjectionStore

@@ -52,8 +52,7 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
         id: "shared",
         graphPath,
         nodeType: "projected.call-function",
-        inputs: [],
-        outputs: [],
+        pinIds: [],
         position: { x: 0, y: 0 },
         display: {
           title,
@@ -62,13 +61,13 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
           styleId: null,
         },
         parameterEditors: [],
+        portInstanceAdditions: [],
         capabilities: {
           managed: false,
           canCopy: true,
           canDelete: true,
           canEditLabel: false,
           canEditParameters: true,
-          hasDynamicPorts: false,
           supportsInlineLiterals: false,
         },
         diagnostics: [],
@@ -77,7 +76,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
     pins: {},
     connections: {},
     graphNodes: ["shared"],
-    nodePins: { shared: [] },
     pinConnections: {},
   };
 }
@@ -177,7 +175,7 @@ describe("NodeDetailPanel projection selection", () => {
       display: { label: "Value", instanceLabel: null },
       address,
     });
-    graphBucket.nodePins.shared = [pinId];
+    graphBucket.nodes.shared.pinIds = [pinId];
     graphBucket.pinConnections[pinId] = [];
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");

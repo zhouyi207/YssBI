@@ -44,20 +44,20 @@ function installProjection() {
       templateKey: "inputs",
       instanceId: "00000000-0000-0000-0000-000000000011",
     },
-    templateKey: "inputs",
-    instanceKind: "userCreated",
     canRemove: true,
   };
   fixture.projection.connections[0] = {
     ...fixture.projection.connections[0],
     input: fixture.projection.nodes[0].ports[1].address,
   };
+  const inputAddress = fixture.projection.nodes[0].ports[1].address;
+  if (inputAddress.kind !== "instance") throw new Error("fixture input must be an instance port");
   useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
   return {
     outputKey: portAddressKey(fixture.projection.nodes[0].ports[0].address),
     inputKey: portAddressKey(fixture.projection.nodes[0].ports[1].address),
     outputAddress: fixture.projection.nodes[0].ports[0].address,
-    inputAddress: fixture.projection.nodes[0].ports[1].address,
+    inputAddress,
   };
 }
 
@@ -137,18 +137,17 @@ describe("forward-only editor commands", () => {
       mutation: () => ({ type: "deleteNodes", payload: { nodeIds: ["node-a", "node-b"] } }),
     },
     {
-      type: "AddRepeatablePin" as const,
-      build: () => ({ nodeId: "local-node", template: "inputs" }),
+      type: "AddPortInstance" as const,
+      build: () => ({ nodeId: "local-node", templateKey: "inputs" }),
       mutation: () => ({
         type: "addPortInstance",
-        payload: { nodeId: "local-node", template: "inputs", order: null },
+        payload: { nodeId: "local-node", templateKey: "inputs", order: null },
       }),
     },
     {
-      type: "RemoveRepeatablePin" as const,
+      type: "RemovePortInstance" as const,
       build: (fixture: ReturnType<typeof installProjection>) => ({
-        nodeId: "local-node",
-        pinId: fixture.inputKey,
+        address: fixture.inputAddress,
       }),
       mutation: (fixture: ReturnType<typeof installProjection>) => ({
         type: "removePortInstance",

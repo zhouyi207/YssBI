@@ -14,7 +14,6 @@ import {
 } from "@/features/core/execution/pinViewTarget";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
-import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useTheme } from "@/features/core/theme/useTheme";
 import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
@@ -64,7 +63,6 @@ export interface GraphPinControllerProps {
   onPinPointerDown?: (event: React.PointerEvent, pin: PinData) => void;
   isActive?: boolean;
   pinDragState?: GraphPinDragState;
-  onRemovePin?: (pinId: string) => void;
 }
 
 export function GraphPinController(props: GraphPinControllerProps) {
@@ -76,7 +74,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
     onPinPointerDown,
     isActive,
     pinDragState = "normal",
-    onRemovePin,
   } = props;
   const {
     id,
@@ -109,9 +106,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [historyProjection, setHistoryProjection] = useState<PinHistoryProjection>();
-  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, graphPath);
-  const canRemovePin =
-    canRemoveRepeatable && (onRemovePin != null || contextMenuActions?.removeRepeatablePin != null);
 
   const connectionFeedback = useGraphInteractionUi((state) => {
     if (!graphPath || !groupId) return null;
@@ -196,14 +190,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
   );
   const firstHistoryOutput = historyOutputs[0];
 
-  const handleRemovePin = useCallback(() => {
-    if (onRemovePin) {
-      onRemovePin(id);
-      return;
-    }
-    void contextMenuActions?.removeRepeatablePin(nodeId, id);
-  }, [contextMenuActions, id, nodeId, onRemovePin]);
-
   const handleView = useCallback(() => {
     if (!viewParams || !graphPath) return;
     if (viewState?.enabled) {
@@ -277,7 +263,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const contextMenuSlot = contextMenu ? (
     <PinContextMenu
       position={contextMenu}
-      removable={canRemovePin}
       hasLinks={hasLinks}
       canReset={canReset}
       onBreakLinks={
@@ -299,7 +284,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
         });
         void openPinInspectableView(viewParams, t, { selectedResultId: resultId });
       }}
-      onRemove={handleRemovePin}
       onClose={() => setContextMenu(null)}
     />
   ) : null;

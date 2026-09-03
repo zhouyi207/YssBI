@@ -11,8 +11,8 @@ const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   "DisconnectConnections",
   "InsertReroute",
   "MoveConnections",
-  "AddRepeatablePin",
-  "RemoveRepeatablePin",
+  "AddPortInstance",
+  "RemovePortInstance",
 ]);
 
 export function notifyStructuralChange(type: CommandType, graphPath: string) {

@@ -13,11 +13,18 @@ import { NodePinInterfacePanel } from "./NodePinInterfacePanel";
 const connectPinsById = vi.hoisted(() => vi.fn());
 const disconnectConnectionById = vi.hoisted(() => vi.fn());
 const disconnectPinById = vi.hoisted(() => vi.fn());
+const addPortInstance = vi.hoisted(() => vi.fn());
+const removePortInstance = vi.hoisted(() => vi.fn());
 
 vi.mock("@/features/application/editor/edgeOperations", () => ({
   connectPinsById,
   disconnectConnectionById,
   disconnectPinById,
+}));
+
+vi.mock("@/features/application/editor/portInstanceActions", () => ({
+  addPortInstance,
+  removePortInstance,
 }));
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -33,6 +40,9 @@ vi.mock("react-i18next", async (importOriginal) => ({
         "detail.nodeDoc.addConnection": "Add connection",
         "detail.nodeDoc.removeConnection": "Remove connection",
         "detail.nodeDoc.unconnected": "Not connected",
+        "detail.nodeDoc.addPort": "Add pin",
+        "detail.nodeDoc.removePort": "Remove pin",
+        "detail.nodeDoc.portInstanceFailed": "Could not update pin",
       })[key] ?? key,
   }),
 }));
@@ -90,18 +100,17 @@ function makeNode(
     id,
     graphPath,
     nodeType,
-    inputs,
-    outputs,
+    pinIds: [...inputs, ...outputs],
     position: { x: 0, y: 0 },
     display: { title, userLabel: null, iconId: null, styleId: "builtin.default" },
     parameterEditors: [],
+    portInstanceAdditions: [],
     capabilities: {
       managed: false,
       canCopy: true,
       canDelete: true,
       canEditLabel: true,
       canEditParameters: false,
-      hasDynamicPorts: false,
       supportsInlineLiterals: true,
     },
     diagnostics: [],
@@ -134,11 +143,6 @@ function graphBucket(): GraphEntityBucket {
     },
     connections: {},
     graphNodes: ["current", "source", "target"],
-    nodePins: {
-      current: [input.id, output.id],
-      source: ["source-output"],
-      target: ["target-input", "exec-input"],
-    },
     pinConnections: {
       [input.id]: [],
       [output.id]: [],
@@ -165,6 +169,8 @@ beforeEach(() => {
   connectPinsById.mockResolvedValue({ status: "applied", result: {} });
   disconnectConnectionById.mockResolvedValue({ status: "applied", result: {} });
   disconnectPinById.mockResolvedValue({ status: "applied", result: {} });
+  addPortInstance.mockResolvedValue({ status: "applied", result: {} });
+  removePortInstance.mockResolvedValue({ status: "applied", result: {} });
 });
 
 describe("NodePinInterfacePanel", () => {
@@ -177,8 +183,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [input],
           outputs: [output],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -254,8 +262,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [],
           outputs: [output],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -293,8 +303,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [],
           outputs: [output],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -322,8 +334,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [],
           outputs: [output],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -354,8 +368,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [input],
           outputs: [],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -394,8 +410,10 @@ describe("NodePinInterfacePanel", () => {
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
+          nodeId: "current",
           inputs: [input],
           outputs: [],
+          portInstanceAdditions: [],
         }),
       );
     });
@@ -411,6 +429,64 @@ describe("NodePinInterfacePanel", () => {
       chooseSelectItem(emptyItem);
     });
     expect(disconnectPinById).toHaveBeenCalledWith(graphPath, input.id);
+
+    await act(async () => root.unmount());
+  });
+
+  it("manages output port instances from the projected node capability", async () => {
+    const bucket = graphBucket();
+    const address = {
+      kind: "instance" as const,
+      nodeId: "current",
+      templateKey: "then",
+      instanceId: "00000000-0000-0000-0000-000000000011",
+    };
+    bucket.pins[output.id] = {
+      ...bucket.pins[output.id],
+      address,
+      canRemove: true,
+    };
+    const additions = [
+      {
+        templateKey: "then",
+        label: "Then",
+        direction: "output" as const,
+        canAdd: true,
+      },
+    ];
+    bucket.nodes.current.portInstanceAdditions = additions;
+    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(NodePinInterfacePanel, {
+          graphPath,
+          nodeId: "current",
+          inputs: [],
+          outputs: [output],
+          portInstanceAdditions: additions,
+        }),
+      );
+    });
+    await act(async () => {
+      container.querySelectorAll<HTMLElement>('[data-slot="collapsible-trigger"]')[1]?.click();
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="add-port-instance-then"]')?.click();
+      await Promise.resolve();
+    });
+    expect(addPortInstance).toHaveBeenCalledWith(graphPath, "current", "then");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(`[data-testid="remove-port-instance-${output.id}"]`)
+        ?.click();
+      await Promise.resolve();
+    });
+    expect(removePortInstance).toHaveBeenCalledWith(graphPath, address);
 
     await act(async () => root.unmount());
   });

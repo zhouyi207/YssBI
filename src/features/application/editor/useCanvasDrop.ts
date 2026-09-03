@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
-import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
-import { executeCommand } from "@/features/core/history";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { BUILTIN_NODE_TYPE_IDS, type VariableNodeTypeId } from "@/features/domain/nodeCatalog";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
@@ -38,7 +36,7 @@ interface UseCanvasDropParams {
 }
 
 /**
- * Canvas drop logic: template drop, variable drop menu, add input, click outside, context menu.
+ * Canvas drop logic: template drop, variable drop menu, click outside, and context menu.
  */
 export function useCanvasDrop({
   canvasElementRef,
@@ -75,30 +73,6 @@ export function useCanvasDrop({
     };
     return addGlobalEventListener(window, "pointerdown", handleClickOutside, { capture: true });
   }, [enabled, canvasElementRef, setPendingConnection]);
-
-  const handleNodeAddInput = useCallback(
-    (nodeId: string) => {
-      if (!graphPath) return;
-      const store = useGraphProjectionStore.getState();
-      const template = store
-        .getGraphNodePins(graphPath, nodeId)
-        .map((pinId) => store.getGraphPin(graphPath, pinId))
-        .find((pin) => pin?.instanceKind === "userCreated" && pin.templateKey)?.templateKey;
-      if (!template) return;
-      void executeCommand(graphPath, "AddRepeatablePin", { nodeId, template });
-    },
-    [graphPath],
-  );
-
-  const handleNodeRemovePin = useCallback(
-    (nodeId: string, pinId: string) => {
-      if (!graphPath) return Promise.resolve();
-      return executeCommand(graphPath, "RemoveRepeatablePin", { nodeId, pinId }).then(
-        () => undefined,
-      );
-    },
-    [graphPath],
-  );
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -191,11 +165,8 @@ export function useCanvasDrop({
   return {
     variableDropMenu,
     setVariableDropMenu,
-    handleNodeAddInput,
-    handleNodeRemovePin,
     handleContextMenu,
     handleVariableDropGet,
     handleVariableDropSet,
-    handleSidebarCanvasDrop,
   };
 }

@@ -118,7 +118,6 @@ describe("Pin preview production path", () => {
       selectLinkedNodes: vi.fn(),
       disconnectPin: asyncAction,
       resetPinValue: asyncAction,
-      removeRepeatablePin: vi.fn(async () => undefined),
     };
 
     act(() =>

@@ -1,13 +1,7 @@
-// @vitest-environment happy-dom
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
-import { useRepeatablePinRemovable } from "@/features/core/pin/useRepeatablePinRemovable";
 import { useGraphProjectionStore } from "./graphProjectionStore";
 import { canCopyNode, canDeleteNode } from "./graphNodeSelectors";
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const graphPath = "functions/projected-capabilities";
 const nodeId = "managed-node";
@@ -34,14 +28,8 @@ function installProjectedCapabilities() {
     managed: true,
     canCopy: false,
     canDelete: false,
-    hasDynamicPorts: true,
-  };
-  node.ports[1] = {
-    ...node.ports[1],
-    canRemove: true,
   };
   useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
-  return fixture;
 }
 
 describe("projected active-editor capabilities", () => {
@@ -74,30 +62,5 @@ describe("projected active-editor capabilities", () => {
     installClipboardNode(true, false);
 
     expect(canCopyNode(graphPath, nodeId)).toBe(true);
-  });
-
-  it("uses the projected port removal capability without a frontend node definition", async () => {
-    const fixture = installProjectedCapabilities();
-    let removable = false;
-    let host: HTMLDivElement;
-    let root: Root;
-
-    function Harness(): null {
-      removable = useRepeatablePinRemovable(nodeId, fixture.inputKey, graphPath);
-      return null;
-    }
-
-    host = document.createElement("div");
-    document.body.appendChild(host);
-    root = createRoot(host);
-
-    await act(async () => {
-      root.render(<Harness />);
-    });
-
-    expect(removable).toBe(true);
-
-    await act(async () => root.unmount());
-    host.remove();
   });
 });
