@@ -252,6 +252,10 @@ Load Graph → Frontend Draft → Dirty → Locked Save → Rust atomic overwrit
   生命周期操作，不命名为或实现为双状态 reconcile。
 - Canvas node/port display、capability、type、literal 和 diagnostic facts 均直接来自 Rust editor
   projection；Frontend 不保留 NodeDefinition/PinSlot registry 或 Call Function 引用诊断副本。
+- Editor node projection 的 `ports` 只包含具有 canonical `PortAddress` 的真实可交互 Pin；declared、
+  user-created 与 derived Pin 共用同一实体集合和节点 `pinIds` 索引。节点另行投影可序列化的
+  `portInstanceAdditions` capability，Details 在 Inputs/Outputs 区域据此新增实例，不把动态模板伪装成
+  declared Pin，也不在 Canvas 或 React 中推导协议数量规则。
 - Pin-drop compatible catalog 查询随请求提交当前 Draft document，由 Rust 使用同一 Graph
   compatibility domain logic 无状态计算；它不读取 committed Graph document，也不设置 revision
   precondition，因此新建但未保存的节点可以立即参与后续编辑。

@@ -231,6 +231,9 @@ state and unsaved editor drafts.
 * Graph Canvas edits update only the frontend-owned unsaved draft. They must not
   mutate authoritative Rust project state or emit authoritative project events
   before Save.
+* Editor projections expose only concrete, addressable ports. User-created port
+  templates are node-owned serializable addition capabilities; never represent a
+  dynamic template as a synthetic declared port or a frontend callback.
 * Graph Save is an atomic full-document overwrite command. It has no
   frontend-supplied revision precondition: Rust validates the submitted draft,
   persists it, replaces authoritative project state, and returns the canonical

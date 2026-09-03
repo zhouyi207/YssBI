@@ -1040,3 +1040,12 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       并在无用户覆盖时将 protocol default 写入不可变执行参数包。
 - [ ] 恢复 Print 的有序有界 Run Output：只消费 Message 数据输入，经同一运行 Channel 发送文本与
       truncation/drop 状态，保留 graph/node/port 来源身份及既有 flat wire。
+
+## 2026.09.03
+
+- [ ] 将节点可新增 Port 实例的能力与真实 Port 实体分开投影；Sequence `Then` 只发布具有
+      `instanceId` 的可寻址实例，不再生成 `declared` 模板伪 Pin。
+- [ ] 将全部真实 Pin 收敛到统一实体集合和节点 `pinIds` 索引，并把 Port 实例增删迁入 Details 的
+      Inputs/Outputs 折叠区；删除 Canvas 新增按钮、Pin 菜单删除入口及 RepeatablePin 旧命名。
+- [ ] 对齐 Port address、orphan 删除、Control/Effect 兼容判断与 compatible catalog 错误分类，并删除
+      Graph Draft 中重复的 editor projection wire parser。
