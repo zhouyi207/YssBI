@@ -1,13 +1,13 @@
 use super::model::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
 use yss_graph_analysis::{
     GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
-    GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact, GraphPortInstanceKind,
-    GraphProjectionFacts,
+    GraphParameterConfigurationFact, GraphParameterFact, GraphPortFact,
+    GraphPortInstanceAdditionFact, GraphProjectionFacts,
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
-use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress};
+use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress, PortRef};
 use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
 
 pub fn build_editor_projection(
@@ -25,7 +25,10 @@ pub fn build_editor_projection(
     }
 
     let empty_facts = GraphProjectionFacts::new([], [], GraphCompilationOutcome::Complete);
-    let facts = input.analysis.projection_facts().unwrap_or(&empty_facts);
+    let facts = input
+        .analysis
+        .editor_projection_facts()
+        .unwrap_or(&empty_facts);
     validate_facts(input.document, input.analysis, facts)?;
 
     let nodes = input
@@ -103,10 +106,19 @@ fn validate_facts(
         }
         for port in &node.ports {
             if port.address.node_id != node.node_id
+                || !port_fact_has_concrete_address(port, document)
                 || count_connections(document, &port.address) != port.connections.current
             {
                 return Err(EditorProjectionError::ProjectionFactsMismatch);
             }
+        }
+        let mut addition_keys = BTreeSet::new();
+        if node
+            .port_instance_additions
+            .iter()
+            .any(|addition| !addition_keys.insert(&addition.template_key))
+        {
+            return Err(EditorProjectionError::ProjectionFactsMismatch);
         }
     }
     if node_ids.len() != document.nodes.len() {
@@ -136,6 +148,12 @@ fn project_node(
         .iter()
         .map(|port| project_port(port, document))
         .collect::<Result<Vec<_>, _>>()?;
+    let port_instance_additions = facts
+        .port_instance_additions
+        .iter()
+        .map(project_port_instance_addition)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let capabilities = EditorNodeCapabilities {
         managed: facts.managed,
         can_copy: !facts.managed,
@@ -145,12 +163,6 @@ fn project_node(
             .parameters
             .iter()
             .any(|parameter| !matches!(parameter.editor, ParameterEditorSpec::Hidden)),
-        has_dynamic_ports: facts.ports.iter().any(|port| {
-            matches!(
-                port.instance_kind,
-                GraphPortInstanceKind::UserCreated | GraphPortInstanceKind::Derived
-            )
-        }),
         supports_inline_literals: facts.ports.iter().any(|port| {
             matches!(
                 port.editor,
@@ -172,6 +184,7 @@ fn project_node(
             style_id: facts.style_id.clone(),
         },
         ports: ports.into_boxed_slice(),
+        port_instance_additions,
         parameters,
         capabilities,
         diagnostics: diagnostics
@@ -207,10 +220,6 @@ fn project_port(
             effective,
         }
     });
-    let can_remove = port.orphan && port.address.is_instance()
-        || matches!(port.instance_kind, GraphPortInstanceKind::UserCreated)
-            && (!port.member_complete
-                || port.member_instance_count > usize::from(port.member_minimum));
     let current = port.connections.current;
     let connections = EditorPortConnectionCapabilities {
         current,
@@ -226,7 +235,6 @@ fn project_port(
     };
     Ok(EditorPortModel {
         address: port.address.clone(),
-        template_key: port.template_key.clone(),
         display: EditorPortDisplay {
             label: port
                 .instance_label
@@ -236,9 +244,8 @@ fn project_port(
         },
         direction: port.direction,
         kind: port.kind,
-        instance_kind: project_instance_kind(port.instance_kind),
         orphan: port.orphan,
-        can_remove,
+        can_remove: port.can_remove,
         connections,
         input,
         resolved_type: Some(project_type_summary(&port.value_type)),
@@ -252,6 +259,33 @@ fn project_port(
             EditorPortStatus::Resolved
         },
     })
+}
+
+fn port_fact_has_concrete_address(port: &GraphPortFact, document: &GraphDocument) -> bool {
+    match &port.address.port {
+        PortRef::Declared { .. } => !port.orphan && !port.can_remove,
+        PortRef::Instance { .. } => match document.port_bindings.get(&port.address) {
+            Some(yss_graph_document::DynamicPortBinding::UserCreated { .. }) => !port.orphan,
+            Some(yss_graph_document::DynamicPortBinding::Resolved { .. }) => {
+                !port.orphan && !port.can_remove
+            }
+            Some(yss_graph_document::DynamicPortBinding::Orphan { .. }) => {
+                port.orphan && port.can_remove
+            }
+            None => false,
+        },
+    }
+}
+
+fn project_port_instance_addition(
+    addition: &GraphPortInstanceAdditionFact,
+) -> EditorPortInstanceAdditionModel {
+    EditorPortInstanceAdditionModel {
+        template_key: addition.template_key.clone(),
+        label: addition.label.clone(),
+        direction: addition.direction,
+        can_add: addition.can_add,
+    }
 }
 
 fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> {
@@ -344,14 +378,6 @@ fn project_filter_literal_type(
         yss_graph_analysis::GraphFilterLiteralType::Integer => EditorFilterLiteralType::Integer,
         yss_graph_analysis::GraphFilterLiteralType::Decimal => EditorFilterLiteralType::Decimal,
         yss_graph_analysis::GraphFilterLiteralType::String => EditorFilterLiteralType::String,
-    }
-}
-
-fn project_instance_kind(value: GraphPortInstanceKind) -> EditorPortInstanceKind {
-    match value {
-        GraphPortInstanceKind::Declared => EditorPortInstanceKind::Declared,
-        GraphPortInstanceKind::UserCreated => EditorPortInstanceKind::UserCreated,
-        GraphPortInstanceKind::Derived => EditorPortInstanceKind::Derived,
     }
 }
 

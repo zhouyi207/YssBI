@@ -23,6 +23,7 @@ pub struct EditorNodeModel {
     pub position: NodePosition,
     pub display: EditorNodeDisplay,
     pub ports: Box<[EditorPortModel]>,
+    pub port_instance_additions: Box<[EditorPortInstanceAdditionModel]>,
     pub parameters: Box<[EditorParameterModel]>,
     pub capabilities: EditorNodeCapabilities,
     pub diagnostics: Box<[EditorDiagnosticModel]>,
@@ -43,18 +44,15 @@ pub struct EditorNodeCapabilities {
     pub can_delete: bool,
     pub can_edit_label: bool,
     pub can_edit_parameters: bool,
-    pub has_dynamic_ports: bool,
     pub supports_inline_literals: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorPortModel {
     pub address: PortAddress,
-    pub template_key: PortKey,
     pub display: EditorPortDisplay,
     pub direction: PortDirection,
     pub kind: PortKind,
-    pub instance_kind: EditorPortInstanceKind,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: EditorPortConnectionCapabilities,
@@ -70,11 +68,12 @@ pub struct EditorPortDisplay {
     pub instance_label: Option<Box<str>>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EditorPortInstanceKind {
-    Declared,
-    UserCreated,
-    Derived,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditorPortInstanceAdditionModel {
+    pub template_key: PortKey,
+    pub label: Box<str>,
+    pub direction: PortDirection,
+    pub can_add: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

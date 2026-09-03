@@ -7,7 +7,7 @@ use std::sync::{Barrier, Mutex};
 
 use thiserror::Error;
 use yss_graph_analysis::{
-    GraphAnalysis, GraphAnalysisInput, GraphProjectionFacts, analyze, projection_facts,
+    GraphAnalysis, GraphAnalysisInput, GraphProjectionFacts, analyze, editor_projection_facts,
 };
 use yss_graph_analysis_contract::{
     CompilationBasis, CompileId, DiagnosticArguments, LocalizationLookup,
@@ -17,8 +17,8 @@ use yss_graph_compiler::{GraphCompilationInput, GraphCompileError, GraphCompiled
 use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress};
 use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
 use yss_graph_editor::{
-    CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
-    export_subgraph, filter_compatible_catalog,
+    CatalogCompatibilityError, CatalogMutationValidationSnapshot, ClipboardSubgraph,
+    EditorGraphMutation, MutationConflict, export_subgraph, filter_compatible_catalog,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
@@ -234,9 +234,9 @@ impl GraphRuntimeState {
             self.components.registry.as_ref(),
             resources,
             &self.components.catalog.localization(locale),
-            projection_facts(document, self.components.registry.as_ref()),
+            editor_projection_facts(document, self.components.registry.as_ref()),
         );
-        analysis.with_projection_facts(facts)
+        analysis.with_editor_projection_facts(facts)
     }
 
     pub fn materialize_open_candidate(
@@ -294,7 +294,7 @@ impl GraphRuntimeState {
             resources,
             localized,
         )
-        .map_err(|_| GraphRuntimeCatalogError)?;
+        .map_err(GraphRuntimeCatalogError::from)?;
         #[cfg(any(test, feature = "test-support"))]
         if let Some(control) = &self.test_control {
             control.after_catalog_compute();
@@ -365,8 +365,18 @@ fn localize_projection_facts(
 }
 
 #[derive(Debug, Error)]
-#[error("compatible source port is invalid")]
-pub struct GraphRuntimeCatalogError;
+pub enum GraphRuntimeCatalogError {
+    #[error("compatible source port is invalid")]
+    SourceInvalid,
+}
+
+impl From<CatalogCompatibilityError> for GraphRuntimeCatalogError {
+    fn from(error: CatalogCompatibilityError) -> Self {
+        match error {
+            CatalogCompatibilityError::SourceInvalid => Self::SourceInvalid,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 #[error("graph materialization invariant failed")]
@@ -384,7 +394,10 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_document::{DocumentNode, GraphRevision, NodePosition, ParameterValues};
+    use yss_graph_document::{
+        DocumentNode, DynamicPortBinding, GraphRevision, NodePosition, OrderKey, ParameterValues,
+        PortInstanceId, PortRef,
+    };
     use yss_graph_registry::RegistryFingerprint;
 
     fn components() -> GraphRuntimeComponents {
@@ -516,10 +529,71 @@ mod tests {
 
         let analysis = runtime.analyze(&document, &basis, &[], "zh-CN");
         let node = analysis
-            .projection_facts()
+            .editor_projection_facts()
             .and_then(|facts| facts.nodes().first())
             .expect("editor projection facts include the node");
 
         assert_eq!(node.title.as_ref(), "布尔常量");
+    }
+
+    #[test]
+    fn sequence_projection_exposes_only_addressable_then_instances() {
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let node_id = NodeId::new();
+        let then_instance_id = PortInstanceId::new();
+        let then_address = PortAddress::instance(
+            node_id,
+            "then".parse().expect("built-in port key is valid"),
+            then_instance_id,
+        );
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: "yssbi.control.sequence"
+                    .parse()
+                    .expect("built-in node type is valid"),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        document.port_bindings.insert(
+            then_address.clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey::new("00000"),
+            },
+        );
+        let basis = CompilationBasis {
+            graph_revision: GraphRevision::INITIAL,
+            registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        };
+
+        let analysis = runtime.analyze(&document, &basis, &[], "en-US");
+        let node = analysis
+            .editor_projection_facts()
+            .and_then(|facts| facts.nodes().first())
+            .expect("Sequence projection facts include the node");
+
+        assert_eq!(node.ports.len(), 2);
+        let then_port = node
+            .ports
+            .iter()
+            .find(|port| port.address == then_address)
+            .expect("the concrete Then instance is projected");
+        assert!(!then_port.can_remove);
+        assert!(!node.ports.iter().any(|port| {
+            matches!(&port.address.port, PortRef::Declared { key } if key.as_str() == "then")
+        }));
+        let addition = node
+            .port_instance_additions
+            .first()
+            .expect("Sequence exposes one node-owned Then addition capability");
+        assert_eq!(addition.template_key.as_str(), "then");
+        assert!(addition.can_add);
     }
 }

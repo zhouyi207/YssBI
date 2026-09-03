@@ -1135,7 +1135,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::editor_projection::model::EditorParameterModel",
             "yss_application::editor_projection::model::EditorPortConnectionCapabilities",
             "yss_application::editor_projection::model::EditorPortDisplay",
-            "yss_application::editor_projection::model::EditorPortInstanceKind",
+            "yss_application::editor_projection::model::EditorPortInstanceAdditionModel",
             "yss_application::editor_projection::model::EditorPortModel",
             "yss_application::editor_projection::model::EditorPortStatus",
             "yss_application::editor_projection::model::EditorProjectionModel",
@@ -1249,8 +1249,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/control.rs",
-        fully_qualified_owner: "yss_graph_catalog::control",
+        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/structured_control.rs",
+        fully_qualified_owner: "yss_graph_catalog::structured_control",
         canonical_origin_targets: &[
             "yss_graph_catalog::builtin::BuiltinAssemblyError",
             "yss_graph_catalog::builtin::assembled_interface",

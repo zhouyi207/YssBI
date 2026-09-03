@@ -1,8 +1,7 @@
 use super::*;
 use std::collections::BTreeMap;
 use yss_graph_analysis::{
-    GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
-    GraphProjectionFacts,
+    GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphProjectionFacts,
 };
 use yss_graph_analysis_contract::{CompilationBasis, ResourceKey, ResourceVersion};
 use yss_graph_document::{
@@ -29,28 +28,23 @@ fn bool_type() -> TypeExpr {
 
 fn port(
     address: PortAddress,
-    template_key: &str,
     label: &str,
     direction: PortDirection,
     current: u32,
 ) -> yss_graph_analysis::GraphPortFact {
     yss_graph_analysis::GraphPortFact {
         address,
-        template_key: PortKey::new(template_key).expect("test port key is valid"),
         label: label.into(),
         instance_label: None,
         direction,
         kind: PortKind::Data,
-        instance_kind: GraphPortInstanceKind::Declared,
         orphan: false,
+        can_remove: false,
         connections: GraphPortConnectionFacts {
             current,
             maximum: Some(1),
             ordered: false,
         },
-        member_minimum: 0,
-        member_instance_count: 0,
-        member_complete: true,
         editor: GraphPortEditorFact::Default,
         protocol_default: None,
         value_type: bool_type(),
@@ -85,6 +79,7 @@ fn node_facts(
             configuration: None,
         }]),
         ports,
+        port_instance_additions: Box::new([]),
     }
 }
 
@@ -106,7 +101,7 @@ fn analysis_with_facts(
         document,
         basis: &basis,
     })
-    .with_projection_facts(facts)
+    .with_editor_projection_facts(facts)
 }
 
 #[test]
@@ -167,24 +162,12 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             node_facts(
                 source,
                 source_type,
-                Box::new([port(
-                    output.clone(),
-                    "value",
-                    "Value",
-                    PortDirection::Output,
-                    1,
-                )]),
+                Box::new([port(output.clone(), "Value", PortDirection::Output, 1)]),
             ),
             node_facts(
                 target,
                 target_type,
-                Box::new([port(
-                    input.clone(),
-                    "value",
-                    "Value",
-                    PortDirection::Input,
-                    1,
-                )]),
+                Box::new([port(input.clone(), "Value", PortDirection::Input, 1)]),
             ),
         ],
         [],

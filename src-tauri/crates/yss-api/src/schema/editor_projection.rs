@@ -1,8 +1,7 @@
 use yss_application::editor_projection::{
     EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
-    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorParameterModel,
-    EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionModel,
-    ParameterEditorKind,
+    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorParameterModel, EditorPortModel,
+    EditorPortStatus, EditorProjectionModel, ParameterEditorKind,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -88,6 +87,16 @@ fn map_node(
             .iter()
             .map(map_port)
             .collect::<Result<Vec<_>, _>>()?,
+        port_instance_additions: node
+            .port_instance_additions
+            .iter()
+            .map(|addition| PortInstanceAdditionDto {
+                template_key: addition.template_key.as_str().into(),
+                label: addition.label.clone(),
+                direction: map_port_direction(addition.direction),
+                can_add: addition.can_add,
+            })
+            .collect(),
         parameter_editors: node
             .parameters
             .iter()
@@ -99,38 +108,24 @@ fn map_node(
             can_delete: node.capabilities.can_delete,
             can_edit_label: node.capabilities.can_edit_label,
             can_edit_parameters: node.capabilities.can_edit_parameters,
-            has_dynamic_ports: node.capabilities.has_dynamic_ports,
             supports_inline_literals: node.capabilities.supports_inline_literals,
         },
         diagnostics: node.diagnostics.iter().map(map_diagnostic).collect(),
     })
 }
 
-fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingError> {
+fn map_port(port: &EditorPortModel) -> Result<EditorPortDto, TransportMappingError> {
     if port.resolved_schema.is_some() {
         return Err(TransportMappingError::ResolvedSchemaWireContractUnavailable);
     }
-    Ok(ResolvedPortDto {
+    Ok(EditorPortDto {
         address: (&port.address).into(),
-        template_key: port.template_key.as_str().into(),
         display: PortDisplayDto {
             label: port.display.label.clone(),
             instance_label: port.display.instance_label.clone(),
         },
-        direction: match port.direction {
-            yss_graph_protocol::PortDirection::Input => PortDirectionDto::Input,
-            yss_graph_protocol::PortDirection::Output => PortDirectionDto::Output,
-        },
-        kind: match port.kind {
-            yss_graph_protocol::PortKind::Data => PortKindDto::Data,
-            yss_graph_protocol::PortKind::Control => PortKindDto::Control,
-            yss_graph_protocol::PortKind::Effect => PortKindDto::Effect,
-        },
-        instance_kind: match port.instance_kind {
-            EditorPortInstanceKind::Declared => PortInstanceKindDto::Declared,
-            EditorPortInstanceKind::UserCreated => PortInstanceKindDto::UserCreated,
-            EditorPortInstanceKind::Derived => PortInstanceKindDto::Derived,
-        },
+        direction: map_port_direction(port.direction),
+        kind: map_port_kind(port.kind),
         orphan: port.orphan,
         can_remove: port.can_remove,
         connections: PortConnectionCapabilityDto {
@@ -167,6 +162,21 @@ fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingE
             EditorPortStatus::Orphan => ResolvedPortStatusDto::Orphan,
         },
     })
+}
+
+fn map_port_direction(direction: yss_graph_protocol::PortDirection) -> PortDirectionDto {
+    match direction {
+        yss_graph_protocol::PortDirection::Input => PortDirectionDto::Input,
+        yss_graph_protocol::PortDirection::Output => PortDirectionDto::Output,
+    }
+}
+
+fn map_port_kind(kind: yss_graph_protocol::PortKind) -> PortKindDto {
+    match kind {
+        yss_graph_protocol::PortKind::Data => PortKindDto::Data,
+        yss_graph_protocol::PortKind::Control => PortKindDto::Control,
+        yss_graph_protocol::PortKind::Effect => PortKindDto::Effect,
+    }
 }
 
 fn map_parameter(
@@ -278,9 +288,8 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_application::editor_projection::{
         EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities, EditorNodeDisplay,
-        EditorNodeModel, EditorPortConnectionCapabilities, EditorPortDisplay,
-        EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
-        EditorTypeSummary,
+        EditorNodeModel, EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortModel,
+        EditorPortStatus, EditorProjectionBasis, EditorTypeSummary,
     };
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
@@ -291,7 +300,7 @@ mod tests {
     use yss_graph_protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
 
     #[test]
-    fn application_model_preserves_existing_camel_case_wire_and_safe_diagnostics() {
+    fn editor_projection_serializes_canonical_camel_case_wire_and_safe_diagnostics() {
         let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
         let graph_path = GraphResourcePath::new("events/contract.yssbi-event")
             .expect("test graph path is valid");
@@ -330,14 +339,12 @@ mod tests {
                 },
                 ports: Box::new([EditorPortModel {
                     address: port_address.clone(),
-                    template_key: PortKey::new("value").expect("test port key is valid"),
                     display: EditorPortDisplay {
                         label: "Value".into(),
                         instance_label: None,
                     },
                     direction: PortDirection::Output,
                     kind: PortKind::Data,
-                    instance_kind: EditorPortInstanceKind::Declared,
                     orphan: false,
                     can_remove: false,
                     connections: EditorPortConnectionCapabilities {
@@ -360,6 +367,7 @@ mod tests {
                     resolved_schema: None,
                     status: EditorPortStatus::Resolved,
                 }]),
+                port_instance_additions: Box::new([]),
                 parameters: Box::new([]),
                 capabilities: EditorNodeCapabilities {
                     managed: false,
@@ -367,7 +375,6 @@ mod tests {
                     can_delete: true,
                     can_edit_label: true,
                     can_edit_parameters: true,
-                    has_dynamic_ports: false,
                     supports_inline_literals: false,
                 },
                 diagnostics: Box::new([diagnostic.clone()]),
@@ -395,7 +402,10 @@ mod tests {
         assert_eq!(wire["nodes"][0]["nodeId"], node_id.to_string());
         assert!(wire["nodes"][0].get("sourceRevision").is_none());
         assert_eq!(wire["nodes"][0]["display"]["iconId"], "builtin.constants");
-        assert_eq!(wire["nodes"][0]["ports"][0]["templateKey"], "value");
+        assert!(wire["nodes"][0]["ports"][0].get("templateKey").is_none());
+        assert!(wire["nodes"][0]["ports"][0].get("origin").is_none());
+        assert!(wire["nodes"][0]["ports"][0].get("instanceKind").is_none());
+        assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
         assert_eq!(wire["connections"][0]["output"]["portKey"], "value");
         assert_eq!(wire["diagnostics"][0]["code"], "graph.invalid");
         assert_eq!(wire["diagnostics"][0]["message"], "graph.invalid");

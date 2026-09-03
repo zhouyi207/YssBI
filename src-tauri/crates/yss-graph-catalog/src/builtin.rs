@@ -1,4 +1,4 @@
-use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
+use super::{core_nodes, dataframe, distribution, plot, project, statistics, structured_control};
 use crate::{Aliases, BuiltinCatalog, Message, Text};
 use yss_graph_compiler_diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
@@ -564,7 +564,7 @@ fn assemble_builtin_parts()
         "logic.not",
     ));
 
-    control::register(nodes, messages)?;
+    structured_control::register(nodes, messages)?;
     project::register(nodes, messages)?;
 
     fragment.types.extend(

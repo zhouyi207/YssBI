@@ -3,7 +3,6 @@
 #![deny(unused_must_use)]
 
 mod builtin;
-mod control;
 mod core_nodes;
 mod dataframe;
 mod distribution;
@@ -12,6 +11,7 @@ mod localization;
 mod plot;
 mod project;
 mod statistics;
+mod structured_control;
 
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,

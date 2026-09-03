@@ -55,6 +55,27 @@ pub fn port_member_group_state<'a>(
     }
 }
 
+pub fn user_created_port_instance_count<'a>(
+    node_id: NodeId,
+    template: &PortKey,
+    bindings: impl IntoIterator<Item = (&'a PortAddress, &'a DynamicPortBinding)>,
+) -> usize {
+    bindings
+        .into_iter()
+        .filter(|(address, binding)| {
+            address.node_id == node_id
+                && matches!(
+                    &address.port,
+                    yss_graph_document::PortRef::Instance {
+                        template: current,
+                        ..
+                    } if current == template
+                )
+                && matches!(binding, DynamicPortBinding::UserCreated { .. })
+        })
+        .count()
+}
+
 pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentError> {
     for (id, node) in &document.nodes {
         if id != &node.id {

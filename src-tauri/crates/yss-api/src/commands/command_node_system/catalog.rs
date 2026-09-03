@@ -30,7 +30,7 @@ fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandEr
                 CommandError::expected("graph_not_loaded")
             }
             yss_application::catalog_query::GraphCatalogQueryError::InvalidDraft(_) => {
-                CommandError::expected("compatible_source_invalid")
+                CommandError::expected("compatible_draft_invalid")
             }
             yss_application::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
                 CommandError::expected("compatible_source_invalid")

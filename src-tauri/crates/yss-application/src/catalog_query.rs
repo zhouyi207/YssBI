@@ -643,8 +643,12 @@ fn map_project_catalog_error(error: ProjectFilesystemError) -> ProjectCatalogRea
     }
 }
 
-fn map_graph_catalog_error(_: GraphRuntimeCatalogError) -> CatalogQueryApplicationError {
-    GraphCatalogQueryError::CompatibleSourceInvalid.into()
+fn map_graph_catalog_error(error: GraphRuntimeCatalogError) -> CatalogQueryApplicationError {
+    match error {
+        GraphRuntimeCatalogError::SourceInvalid => {
+            GraphCatalogQueryError::CompatibleSourceInvalid.into()
+        }
+    }
 }
 
 fn graph_signature(

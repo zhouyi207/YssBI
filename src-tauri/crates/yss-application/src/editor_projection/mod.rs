@@ -8,7 +8,7 @@ pub use model::{
     EditorFilterColumnOption, EditorFilterLiteralType, EditorInputBinding, EditorNodeCapabilities,
     EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
     EditorParameterModel, EditorParameterValueSource, EditorPortConnectionCapabilities,
-    EditorPortDisplay, EditorPortInstanceKind, EditorPortModel, EditorPortStatus,
+    EditorPortDisplay, EditorPortInstanceAdditionModel, EditorPortModel, EditorPortStatus,
     EditorProjectionBasis, EditorProjectionError, EditorProjectionInput, EditorProjectionModel,
     EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind, EditorTypeSummary,
     ParameterEditorKind,

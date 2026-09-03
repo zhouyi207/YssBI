@@ -9727,6 +9727,7 @@ dependencies = [
  "serde",
  "yss-graph-analysis-contract",
  "yss-graph-document",
+ "yss-graph-document-edit",
  "yss-graph-protocol",
  "yss-graph-registry",
 ]

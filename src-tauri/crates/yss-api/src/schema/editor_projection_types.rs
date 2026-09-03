@@ -97,7 +97,8 @@ pub struct EditorNodeProjectionDto {
     pub node_type_id: Box<str>,
     pub position: NodePositionDto,
     pub display: NodeDisplayDto,
-    pub ports: Vec<ResolvedPortDto>,
+    pub ports: Vec<EditorPortDto>,
+    pub port_instance_additions: Vec<PortInstanceAdditionDto>,
     pub parameter_editors: Vec<ParameterEditorDto>,
     pub capabilities: NodeCapabilitiesDto,
     pub diagnostics: Vec<DiagnosticDto>,
@@ -144,19 +145,16 @@ pub struct NodeCapabilitiesDto {
     pub can_delete: bool,
     pub can_edit_label: bool,
     pub can_edit_parameters: bool,
-    pub has_dynamic_ports: bool,
     pub supports_inline_literals: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedPortDto {
+pub struct EditorPortDto {
     pub address: PortAddressDto,
-    pub template_key: Box<str>,
     pub display: PortDisplayDto,
     pub direction: PortDirectionDto,
     pub kind: PortKindDto,
-    pub instance_kind: PortInstanceKindDto,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: PortConnectionCapabilityDto,
@@ -188,12 +186,13 @@ pub enum PortKindDto {
     Effect,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum PortInstanceKindDto {
-    Declared,
-    UserCreated,
-    Derived,
+pub struct PortInstanceAdditionDto {
+    pub template_key: Box<str>,
+    pub label: Box<str>,
+    pub direction: PortDirectionDto,
+    pub can_add: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

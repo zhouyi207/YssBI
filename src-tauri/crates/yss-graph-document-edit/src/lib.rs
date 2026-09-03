@@ -14,4 +14,7 @@ pub use patch::{
     GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
     apply_graph_document_patch_to_candidate,
 };
-pub use validation::{PortMemberGroupState, port_member_group_state, validate_graph_document};
+pub use validation::{
+    PortMemberGroupState, port_member_group_state, user_created_port_instance_count,
+    validate_graph_document,
+};

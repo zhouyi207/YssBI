@@ -10,8 +10,9 @@ use yss_graph_analysis_contract::{
     ResourceVersionSet,
 };
 use yss_graph_document::GraphRevision;
-use yss_graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress, TypedValue};
+use yss_graph_document::{ConnectionId, GraphDocument, NodeId, OrderKey, PortAddress, TypedValue};
 use yss_graph_document::{DynamicPortBinding, PortRef};
+use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
 use yss_graph_protocol::{
     ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
     PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
@@ -74,6 +75,7 @@ pub struct GraphNodeProjectionFacts {
     pub managed: bool,
     pub parameters: Box<[GraphParameterFact]>,
     pub ports: Box<[GraphPortFact]>,
+    pub port_instance_additions: Box<[GraphPortInstanceAdditionFact]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -137,17 +139,13 @@ pub enum GraphFilterLiteralType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphPortFact {
     pub address: PortAddress,
-    pub template_key: PortKey,
     pub label: Box<str>,
     pub instance_label: Option<Box<str>>,
     pub direction: PortDirection,
     pub kind: PortKind,
-    pub instance_kind: GraphPortInstanceKind,
     pub orphan: bool,
+    pub can_remove: bool,
     pub connections: GraphPortConnectionFacts,
-    pub member_minimum: u16,
-    pub member_instance_count: usize,
-    pub member_complete: bool,
     pub editor: GraphPortEditorFact,
     pub protocol_default: Option<TypedValue>,
     pub value_type: TypeExpr,
@@ -155,11 +153,12 @@ pub struct GraphPortFact {
     pub resolved_schema: Option<ResolvedSchemaFact>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphPortInstanceKind {
-    Declared,
-    UserCreated,
-    Derived,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphPortInstanceAdditionFact {
+    pub template_key: PortKey,
+    pub label: Box<str>,
+    pub direction: PortDirection,
+    pub can_add: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -211,7 +210,7 @@ pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
     graph_revision: u64,
     resource_versions: ResourceVersionSet,
-    projection_facts: Option<GraphProjectionFacts>,
+    editor_projection_facts: Option<GraphProjectionFacts>,
 }
 
 impl GraphAnalysis {
@@ -231,12 +230,12 @@ impl GraphAnalysis {
         &self.resource_versions
     }
 
-    pub fn projection_facts(&self) -> Option<&GraphProjectionFacts> {
-        self.projection_facts.as_ref()
+    pub fn editor_projection_facts(&self) -> Option<&GraphProjectionFacts> {
+        self.editor_projection_facts.as_ref()
     }
 
-    pub fn with_projection_facts(mut self, facts: GraphProjectionFacts) -> Self {
-        self.projection_facts = Some(facts);
+    pub fn with_editor_projection_facts(mut self, facts: GraphProjectionFacts) -> Self {
+        self.editor_projection_facts = Some(facts);
         self
     }
 }
@@ -262,11 +261,14 @@ pub fn analyze(input: GraphAnalysisInput<'_>) -> GraphAnalysis {
         registry_fingerprint: *input.basis.registry_fingerprint.as_bytes(),
         graph_revision: input.basis.graph_revision.get(),
         resource_versions: input.basis.resource_versions.clone(),
-        projection_facts: None,
+        editor_projection_facts: None,
     }
 }
 
-pub fn projection_facts(document: &GraphDocument, registry: &NodeRegistry) -> GraphProjectionFacts {
+pub fn editor_projection_facts(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+) -> GraphProjectionFacts {
     let mut complete = true;
     let nodes = document
         .nodes
@@ -284,38 +286,69 @@ pub fn projection_facts(document: &GraphDocument, registry: &NodeRegistry) -> Gr
                     managed: false,
                     parameters: Box::new([]),
                     ports: Box::new([]),
+                    port_instance_additions: Box::new([]),
                 };
             };
 
-            let mut ports = protocol
-                .interface
-                .ports
+            let node_bindings = document
+                .port_bindings
                 .iter()
-                .map(|spec| projection_port(document, node.id, protocol, spec, None))
+                .filter(|(address, _)| address.node_id == node.id)
                 .collect::<Vec<_>>();
-            for (address, binding) in &document.port_bindings {
-                if address.node_id != node.id || ports.iter().any(|port| port.address == *address) {
+            let mut ports = Vec::new();
+            for spec in protocol.interface.ports.iter() {
+                if matches!(spec.instances, PortInstances::Declared) {
+                    ports.push(project_declared_port(document, node.id, spec));
                     continue;
                 }
-                let template = match &address.port {
-                    PortRef::Declared { key } | PortRef::Instance { template: key, .. } => key,
-                };
-                let Some(spec) = protocol
-                    .interface
-                    .ports
+
+                let mut bindings = node_bindings
                     .iter()
-                    .find(|spec| &spec.key == template)
-                else {
-                    complete = false;
-                    continue;
-                };
-                ports.push(projection_port(
-                    document,
-                    node.id,
-                    protocol,
-                    spec,
-                    Some((address, binding)),
-                ));
+                    .copied()
+                    .filter(|(address, _)| {
+                        matches!(
+                            &address.port,
+                            PortRef::Instance { template, .. } if template == &spec.key
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                bindings.sort_by(
+                    |(left_address, left_binding), (right_address, right_binding)| {
+                        binding_order(left_binding)
+                            .cmp(binding_order(right_binding))
+                            .then_with(|| left_address.cmp(right_address))
+                    },
+                );
+                for (address, binding) in bindings {
+                    if !binding_matches_policy(binding, &spec.instances) {
+                        complete = false;
+                        continue;
+                    }
+                    ports.push(project_bound_port(
+                        document,
+                        node.id,
+                        protocol,
+                        spec,
+                        address,
+                        binding,
+                        &node_bindings,
+                    ));
+                }
+            }
+            if node_bindings
+                .iter()
+                .any(|(address, _)| match &address.port {
+                    PortRef::Declared { key } | PortRef::Instance { template: key, .. } => {
+                        !protocol.interface.ports.iter().any(|spec| &spec.key == key)
+                    }
+                })
+            {
+                complete = false;
+            }
+            let (port_instance_additions, minimum_instances_present) =
+                project_port_instance_additions(node.id, protocol, &node_bindings);
+            if !minimum_instances_present {
+                complete = false;
             }
 
             GraphNodeProjectionFacts {
@@ -350,6 +383,7 @@ pub fn projection_facts(document: &GraphDocument, registry: &NodeRegistry) -> Gr
                     })
                     .collect(),
                 ports: ports.into_boxed_slice(),
+                port_instance_additions: port_instance_additions.into_boxed_slice(),
             }
         })
         .collect::<Vec<_>>();
@@ -364,31 +398,64 @@ pub fn projection_facts(document: &GraphDocument, registry: &NodeRegistry) -> Gr
     )
 }
 
-fn projection_port(
+fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
+    match binding {
+        DynamicPortBinding::UserCreated { order }
+        | DynamicPortBinding::Resolved { order, .. }
+        | DynamicPortBinding::Orphan { order, .. } => order,
+    }
+}
+
+fn binding_matches_policy(binding: &DynamicPortBinding, policy: &PortInstances) -> bool {
+    matches!(
+        (binding, policy),
+        (
+            DynamicPortBinding::UserCreated { .. },
+            PortInstances::UserCreated { .. }
+        ) | (
+            DynamicPortBinding::Resolved { .. } | DynamicPortBinding::Orphan { .. },
+            PortInstances::Derived { .. }
+        )
+    )
+}
+
+fn project_declared_port(
+    document: &GraphDocument,
+    node_id: NodeId,
+    spec: &yss_graph_protocol::PortSpec,
+) -> GraphPortFact {
+    debug_assert!(matches!(spec.instances, PortInstances::Declared));
+    project_concrete_port(
+        document,
+        spec,
+        ConcretePortProjection {
+            address: PortAddress::declared(node_id, spec.key.clone()),
+            orphan: false,
+            can_remove: false,
+            instance_label: None,
+            value_type: spec.value_type.clone(),
+        },
+    )
+}
+
+fn project_bound_port(
     document: &GraphDocument,
     node_id: NodeId,
     protocol: &yss_graph_protocol::NodeProtocol,
     spec: &yss_graph_protocol::PortSpec,
-    dynamic: Option<(&PortAddress, &DynamicPortBinding)>,
+    address: &PortAddress,
+    binding: &DynamicPortBinding,
+    node_bindings: &[(&PortAddress, &DynamicPortBinding)],
 ) -> GraphPortFact {
-    let address = dynamic
-        .map(|(address, _)| address.clone())
-        .unwrap_or_else(|| PortAddress::declared(node_id, spec.key.clone()));
-    let (instance_kind, orphan, instance_label, value_type) = match dynamic {
-        None => (
-            graph_port_instance_kind(&spec.instances),
+    let (orphan, can_remove, instance_label, value_type) = match binding {
+        DynamicPortBinding::UserCreated { .. } => (
             false,
+            can_remove_user_created_port(node_id, protocol, spec, address, node_bindings),
             None,
             spec.value_type.clone(),
         ),
-        Some((_, DynamicPortBinding::UserCreated { .. })) => (
-            GraphPortInstanceKind::UserCreated,
+        DynamicPortBinding::Resolved { last_known, .. } => (
             false,
-            None,
-            spec.value_type.clone(),
-        ),
-        Some((_, DynamicPortBinding::Resolved { last_known, .. })) => (
-            GraphPortInstanceKind::Derived,
             false,
             Some(last_known.label.clone().into_boxed_str()),
             last_known
@@ -396,8 +463,8 @@ fn projection_port(
                 .clone()
                 .unwrap_or_else(|| spec.value_type.clone()),
         ),
-        Some((_, DynamicPortBinding::Orphan { last_known, .. })) => (
-            GraphPortInstanceKind::Derived,
+        DynamicPortBinding::Orphan { last_known, .. } => (
+            true,
             true,
             Some(last_known.label.clone().into_boxed_str()),
             last_known
@@ -406,6 +473,39 @@ fn projection_port(
                 .unwrap_or_else(|| spec.value_type.clone()),
         ),
     };
+    project_concrete_port(
+        document,
+        spec,
+        ConcretePortProjection {
+            address: address.clone(),
+            orphan,
+            can_remove,
+            instance_label,
+            value_type,
+        },
+    )
+}
+
+struct ConcretePortProjection {
+    address: PortAddress,
+    orphan: bool,
+    can_remove: bool,
+    instance_label: Option<Box<str>>,
+    value_type: TypeExpr,
+}
+
+fn project_concrete_port(
+    document: &GraphDocument,
+    spec: &yss_graph_protocol::PortSpec,
+    projection: ConcretePortProjection,
+) -> GraphPortFact {
+    let ConcretePortProjection {
+        address,
+        orphan,
+        can_remove,
+        instance_label,
+        value_type,
+    } = projection;
     let connections = document
         .connections
         .values()
@@ -415,44 +515,19 @@ fn projection_port(
         ConnectionsPerPort::Single => (Some(1), false),
         ConnectionsPerPort::Multiple { max, ordered } => (max.map(u32::from), ordered),
     };
-    let (member_minimum, member_instance_count, member_complete) = protocol
-        .interface
-        .member_group_for_template(&spec.key)
-        .map(|group| {
-            let member_instance_count = document
-                .port_bindings
-                .keys()
-                .filter(|address| match &address.port {
-                    PortRef::Declared { key } | PortRef::Instance { template: key, .. } => {
-                        key == &spec.key
-                    }
-                })
-                .count()
-                .saturating_add(1);
-            (
-                group.min,
-                member_instance_count,
-                member_instance_count >= usize::from(group.min),
-            )
-        })
-        .unwrap_or((0, 1, true));
     GraphPortFact {
         address,
-        template_key: spec.key.clone(),
         label: instance_label.clone().unwrap_or_else(|| spec.title.clone()),
         instance_label,
         direction: spec.direction,
         kind: spec.kind,
-        instance_kind,
         orphan,
+        can_remove,
         connections: GraphPortConnectionFacts {
             current: connections,
             maximum,
             ordered,
         },
-        member_minimum,
-        member_instance_count,
-        member_complete,
         editor: graph_port_editor_fact(&spec.editor),
         protocol_default: spec.input_binding.as_ref().and_then(|binding| {
             binding
@@ -466,12 +541,74 @@ fn projection_port(
     }
 }
 
-fn graph_port_instance_kind(instances: &PortInstances) -> GraphPortInstanceKind {
-    match instances {
-        PortInstances::Declared => GraphPortInstanceKind::Declared,
-        PortInstances::UserCreated { .. } => GraphPortInstanceKind::UserCreated,
-        PortInstances::Derived { .. } => GraphPortInstanceKind::Derived,
+fn can_remove_user_created_port(
+    node_id: NodeId,
+    protocol: &yss_graph_protocol::NodeProtocol,
+    spec: &yss_graph_protocol::PortSpec,
+    address: &PortAddress,
+    node_bindings: &[(&PortAddress, &DynamicPortBinding)],
+) -> bool {
+    let PortRef::Instance { instance_id, .. } = address.port else {
+        return false;
+    };
+    if let Some(group) = protocol.interface.member_group_for_template(&spec.key) {
+        let state = port_member_group_state(node_id, group, node_bindings.iter().copied());
+        return !state.is_complete(instance_id) || state.complete_count() > usize::from(group.min);
     }
+    let PortInstances::UserCreated { min, .. } = spec.instances else {
+        return false;
+    };
+    user_created_port_instance_count(node_id, &spec.key, node_bindings.iter().copied())
+        > usize::from(min)
+}
+
+fn project_port_instance_additions(
+    node_id: NodeId,
+    protocol: &yss_graph_protocol::NodeProtocol,
+    node_bindings: &[(&PortAddress, &DynamicPortBinding)],
+) -> (Vec<GraphPortInstanceAdditionFact>, bool) {
+    let mut minimum_instances_present = true;
+    let additions = protocol
+        .interface
+        .ports
+        .iter()
+        .filter_map(|spec| {
+            let PortInstances::UserCreated { min, max } = spec.instances else {
+                return None;
+            };
+            let (minimum_instances, maximum_instances, current_instances) =
+                if let Some(group) = protocol.interface.member_group_for_template(&spec.key) {
+                    if group.templates.first() != Some(&spec.key) {
+                        return None;
+                    }
+                    (
+                        group.min,
+                        group.max,
+                        port_member_group_state(node_id, group, node_bindings.iter().copied())
+                            .complete_count(),
+                    )
+                } else {
+                    (
+                        min,
+                        max,
+                        user_created_port_instance_count(
+                            node_id,
+                            &spec.key,
+                            node_bindings.iter().copied(),
+                        ),
+                    )
+                };
+            minimum_instances_present &= current_instances >= usize::from(minimum_instances);
+            Some(GraphPortInstanceAdditionFact {
+                template_key: spec.key.clone(),
+                label: spec.title.clone(),
+                direction: spec.direction,
+                can_add: maximum_instances
+                    .is_none_or(|maximum| current_instances < usize::from(maximum)),
+            })
+        })
+        .collect();
+    (additions, minimum_instances_present)
 }
 
 fn graph_port_editor_fact(editor: &PortEditorSpec) -> GraphPortEditorFact {

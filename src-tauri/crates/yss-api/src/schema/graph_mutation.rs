@@ -145,7 +145,7 @@ pub enum EditorGraphMutationDto {
     },
     AddPortInstance {
         node_id: NodeId,
-        template: PortKey,
+        template_key: PortKey,
         order: Option<OrderKey>,
     },
     RemovePortInstance {
@@ -262,11 +262,11 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             },
             EditorGraphMutationDto::AddPortInstance {
                 node_id,
-                template,
+                template_key,
                 order,
             } => yss_graph_editor::EditorGraphMutation::AddPortInstance {
                 node_id,
-                template,
+                template_key,
                 order,
             },
             EditorGraphMutationDto::RemovePortInstance { address: value } => {

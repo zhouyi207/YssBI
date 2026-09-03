@@ -201,6 +201,50 @@ fn port_resolution_rejects_binding_kind_drift() {
 }
 
 #[test]
+fn remove_port_instance_cleans_up_an_orphaned_derived_port() {
+    let registry = build_builtin_node_system()
+        .expect("built-in registry must assemble")
+        .registry;
+    let mut document = GraphDocument::default();
+    let node_id = insert_node(
+        &mut document,
+        document_node("yssbi.project.function.call", 0.0),
+    );
+    let address = PortAddress::instance(
+        node_id,
+        PortKey::new("arguments").expect("fixture port key must be valid"),
+        PortInstanceId::new(),
+    );
+    document.port_bindings.insert(
+        address.clone(),
+        DynamicPortBinding::Orphan {
+            origin: DynamicMemberLocator::FunctionParameter {
+                function: GraphResourcePath::new("functions/Missing.yssbi-function")
+                    .expect("fixture resource path must be valid"),
+                parameter: FunctionParameterId::new("value"),
+            },
+            order: OrderKey::new("00000"),
+            last_known: LastKnownPortMetadata {
+                label: "Value".into(),
+                value_type: Some(TypeExpr::Concrete(
+                    "core.int64".parse().expect("fixture type ID must be valid"),
+                )),
+            },
+        },
+    );
+
+    let patch = EditorGraphMutation::RemovePortInstance {
+        address: address.clone(),
+    }
+    .into_patch(&graph_path(), &document, registry.as_ref())
+    .expect("orphaned derived ports must be removable");
+    apply_graph_document_patch(&mut document, &patch)
+        .expect("orphan cleanup patch must remain structurally valid");
+
+    assert!(!document.port_bindings.contains_key(&address));
+}
+
+#[test]
 fn resource_type_refinement_uses_the_protocol_binding_parameter() {
     let registry = build_builtin_node_system()
         .expect("built-in registry must assemble")

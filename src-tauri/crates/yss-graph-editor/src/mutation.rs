@@ -7,7 +7,7 @@ use yss_graph_document::{
 };
 use yss_graph_document_edit::{
     DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
-    port_member_group_state,
+    port_member_group_state, user_created_port_instance_count,
 };
 use yss_graph_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
@@ -179,7 +179,7 @@ pub enum EditorGraphMutation {
     },
     AddPortInstance {
         node_id: NodeId,
-        template: PortKey,
+        template_key: PortKey,
         order: Option<OrderKey>,
     },
     RemovePortInstance {
@@ -421,9 +421,9 @@ impl EditorGraphMutation {
             }
             Self::AddPortInstance {
                 node_id,
-                template,
+                template_key,
                 order,
-            } => add_port_instance_operations(document, registry, node_id, template, order)?,
+            } => add_port_instance_operations(document, registry, node_id, template_key, order)?,
             Self::RemovePortInstance { address } => {
                 remove_port_instance_operations(document, registry, address)?
             }
@@ -1008,10 +1008,10 @@ fn add_port_instance_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
     node_id: NodeId,
-    template: PortKey,
+    template_key: PortKey,
     order: Option<OrderKey>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let contract = user_created_port_contract(document, registry, node_id, &template)?;
+    let contract = user_created_port_contract(document, registry, node_id, &template_key)?;
     let (templates, count, max) = if let Some(group) = contract.group {
         let state = port_member_group_state(node_id, group, document.port_bindings.iter());
         (group.templates.as_ref(), state.complete_count(), group.max)
@@ -1021,13 +1021,13 @@ fn add_port_instance_operations(
         };
         (
             std::slice::from_ref(&contract.spec.key),
-            user_created_instance_count(document, node_id, &template),
+            user_created_port_instance_count(node_id, &template_key, document.port_bindings.iter()),
             max,
         )
     };
     if max.is_some_and(|maximum| count >= usize::from(maximum)) {
         return Err(invalid_editor_mutation(format!(
-            "port member for template '{template}' has reached its maximum instance count"
+            "port member for template '{template_key}' has reached its maximum instance count"
         )));
     }
     let instance_id = PortInstanceId::new();
@@ -1060,22 +1060,26 @@ fn remove_port_instance_operations(
         }
     };
     let node_id = address.node_id;
-    let contract = user_created_port_contract(document, registry, node_id, &template)?;
-    let binding = document
-        .port_bindings
-        .get(&address)
-        .cloned()
-        .ok_or_else(|| {
-            editor_error(
-                EditorMutationErrorCode::GraphPortNotFound,
-                format!("port binding '{address}' does not exist"),
-            )
-        })?;
-    if !matches!(binding, DynamicPortBinding::UserCreated { .. }) {
-        return Err(invalid_editor_mutation(
-            "only user-created port instances can be removed",
-        ));
+    let resolved = crate::compatibility::resolve_editor_port(document, registry, &address)
+        .map_err(MutationConflict::Editor)?;
+    let binding = resolved.binding.ok_or_else(|| {
+        editor_error(
+            EditorMutationErrorCode::GraphPortNotFound,
+            format!("port binding '{address}' does not exist"),
+        )
+    })?;
+    match binding {
+        DynamicPortBinding::Orphan { .. } => {
+            return Ok(remove_port_addresses_operations(document, &[address]));
+        }
+        DynamicPortBinding::Resolved { .. } => {
+            return Err(invalid_editor_mutation(
+                "resolved derived port instances cannot be removed",
+            ));
+        }
+        DynamicPortBinding::UserCreated { .. } => {}
     }
+    let contract = user_created_port_contract(document, registry, node_id, &template)?;
 
     let (addresses, count, min, enforce_minimum) = if let Some(group) = contract.group {
         let state = port_member_group_state(node_id, group, document.port_bindings.iter());
@@ -1095,7 +1099,7 @@ fn remove_port_instance_operations(
         };
         (
             vec![address],
-            user_created_instance_count(document, node_id, &template),
+            user_created_port_instance_count(node_id, &template, document.port_bindings.iter()),
             min,
             true,
         )
@@ -1182,20 +1186,4 @@ fn user_created_port_contract<'a>(
         spec,
         group: protocol.interface.member_group_for_template(template),
     })
-}
-
-fn user_created_instance_count(
-    document: &GraphDocument,
-    node_id: NodeId,
-    template: &PortKey,
-) -> usize {
-    document
-        .port_bindings
-        .iter()
-        .filter(|(address, binding)| {
-            address.node_id == node_id
-                && matches!(&address.port, PortRef::Instance { template: current, .. } if current == template)
-                && matches!(binding, DynamicPortBinding::UserCreated { .. })
-        })
-        .count()
 }
