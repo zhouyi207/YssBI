@@ -149,8 +149,8 @@ state and unsaved editor drafts.
 * Never log secrets or user payload content, including DataFrame rows or cells,
   document contents, clipboard contents, SQL text, connection strings, tokens,
   or comparable sensitive payloads.
-* User-controlled Print/stdout/stderr belongs to the ordered bounded Run Output
-  channel and Output panel, never diagnostic logs.
+* User-controlled Workflow/tool stdout/stderr belongs to the ordered bounded
+  Run Output channel and Output panel, never diagnostic logs.
 * Preserve opaque source graph and node identities on output events.
 * React owns user-facing application-error presentation.
 * Use stable error codes and safe structured details for UI feedback.
@@ -231,6 +231,21 @@ state and unsaved editor drafts.
 * Graph Canvas edits update only the frontend-owned unsaved draft. They must not
   mutate authoritative Rust project state or emit authoritative project events
   before Save.
+* Analysis Graphs contain only data ports and data-dependency edges. Control,
+  effect, execution-sequence, and side-effect nodes belong to a separate
+  Workflow system; do not reintroduce them as Analysis Graph compatibility paths.
+* Graph Compile consumes the complete draft and compiles every node. Schema,
+  type, and lineage are facts propagated over the same data edges, never a
+  second schema-edge topology or frontend-owned inference model. Incremental
+  reuse may optimize unchanged nodes but must still produce a complete-graph
+  artifact.
+* Compile and Save are independent commands. Compile installs a content-addressed
+  in-memory artifact and projection without committing Project state; Execute
+  requires the exact current artifact hash. Save alone persists the draft.
+* A node evaluation is the computation and cache-invalidating unit. Its outputs
+  are addressed individually for downstream dependencies and inspection, but
+  must come from the same complete node evaluation rather than independent
+  per-pin mutation lifecycles.
 * Editor projections expose only concrete, addressable ports. User-created port
   templates are node-owned serializable addition capabilities; never represent a
   dynamic template as a synthetic declared port or a frontend callback.

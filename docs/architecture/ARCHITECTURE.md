@@ -240,9 +240,21 @@ editor projection；Canvas 操作只推进前端 `GraphDraftSession`，不会修
 操作并返回新的 document/projection，但该调用不安装或持久化任何 Rust 状态。
 
 ```text
-Load Graph → Frontend Draft → Dirty → Locked Save → Rust atomic overwrite
+Load Graph → Frontend Draft ──→ Compile All ──→ in-memory CompiledGraph ──→ Execute
+                         └────→ Locked Save ──→ Rust atomic overwrite
 ```
 
+- Analysis Graph 只包含 Data Port 和 Data Edge；执行顺序、Control/Effect Port、Print 等副作用节点
+  不属于该模型，未来由独立 Workflow owner 承担。
+- Compile 消费完整 Draft 并覆盖所有节点，构造完整数据依赖 DAG、解析全部动态接口、传播
+  DataContract/Schema/lineage、检测环路和降低 immutable execution plan。增量缓存可以复用未变化
+  节点的事实，但最终 artifact 必须描述整张 Graph，不能按某个 output 局部编译。
+- Schema 只是沿现有 Data Edge 传播的编译事实；不存在第二套 Schema Edge、Schema Pin 或 React
+  schema authority。数据库 schema 与函数签名来自同一次 coherent Rust resource snapshot。
+- Compile 使用语义 document、registry fingerprint 与 resource catalog fingerprint 生成
+  content-addressed source hash；布局位置不参与该 hash。Execute 必须携带当前 hash，并只消费匹配的
+  Rust compile cache，不能隐式 Save 或回退到已保存 Graph 重新编译。
+- Compile 与 Save 语义独立：Compile 不提交 `ProjectState` 或文件，Save 不替代 Compile。
 - Draft 保存期间 Graph Canvas、快捷键、Details、clipboard 和 undo/redo 全部不可写。
 - Save 提交完整 document，不携带 frontend `expectedRevision`；覆盖语义是 last write wins。
 - Rust 在文件事务中校验并持久化 candidate，再安装到 `ProjectState`；authority 安装失败会回滚文件。
@@ -545,21 +557,24 @@ Execution runtime 只消费 immutable plan、prepared resource grants 与 typed 
 
 ### 6.2 当前执行链
 
-前端调用 `execute_graph_document`，只执行显式 graph 和显式 `ExecutionDemand`：
+前端调用 `execute_graph_document` 时必须携带显式 graph、`ExecutionDemand` 与当前
+`compiledSourceHash`；Application 只接受 GraphRuntime 中精确匹配的完整编译产物：
 
 ```mermaid
 flowchart TD
   FE[ProjectService.executeGraphDocument] --> CMD[execute_graph_document command]
   CMD --> APP[application execution coordinator]
   APP --> CAP[Capture ApplicationSession + Project basis]
-  CAP --> LOAD[Graph open / neutral package]
+  CAP --> LOAD[Resolve content-addressed CompiledGraph]
   LOAD --> PREP[Prepare generation-pinned Execution plan/resources]
   PREP --> RUN[ExecutionRuntimeState]
   RUN --> RESULTS[Execution ResultStore]
   RUN --> OUTPUT[Run Output channel]
 ```
 
-Application execution coordinates project identity, Graph package mapping, resource preparation and finalization. `ApplicationSessionSlot` owns the session generation; replacement closes admission and drains old work before publishing the next candidate.
+Application execution coordinates project identity、Graph package mapping、resource preparation 和 finalization。`ApplicationSessionSlot` owns the session generation；replacement 会先关闭 admission 并 drain 旧 work，再发布新 candidate。Graph 的默认 demand 从完整 plan 的全部终端输出反向选择依赖，因此一次合法全图运行会覆盖所有可达节点；Pin Preview/显式 Outputs demand 只改变执行调度范围，不改变编译范围。
+
+Execution 在一次运行成功后，按编译后的精确 output address 保存每个已执行节点产生的所有输出；下游输入、Pin Inspector、Pin history 与 Result UI 读取同一 `ResultStore` 值。多输出节点的 Kernel 返回按 output address 命名的完整集合，不把一个节点级值复制到所有 output，也不为每个 pin 建立独立失效生命周期。
 
 Execution publishes a sealed finalization handoff; Project commits variable/resource effects only after its final authority gate. Commands only adapt the ordered channel and map the typed error/result wire.
 
@@ -583,7 +598,7 @@ Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段�
 
 ### 7.2 Run Output
 
-用户 Print/stdout/stderr 使用独立 typed `RunOutputMessage`，与 `RunEvent` 共用有序 Tauri channel transport，但 wire shape 和前端 projection 分离。每条记录保留：
+未来 Workflow/tool 的用户 stdout/stderr 使用独立 typed `RunOutputMessage`，与 `RunEvent` 共用有序 Tauri channel transport，但 wire shape 和前端 projection 分离；Analysis Graph 不提供 Print 节点。每条记录保留：
 
 - `runId` 与严格递增 `sequence`；
 - stdout/stderr stream；
@@ -746,7 +761,7 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 - catalog/registry 声明 trusted descriptor 和 implementation；
 - compiler lowerer 将 document/config 转成 immutable plan；
 - runtime kernel 只消费 plan-local parameters/resources；
-- logical output 进入 `ResultStore`，Print 进入 Run Output，内部观察使用 Rust `tracing` diagnostics。
+- logical output 进入 `ResultStore`，未来 Workflow/tool stdout 进入 Run Output，内部观察使用 Rust `tracing` diagnostics。
 
 ### 新 scientific operation
 

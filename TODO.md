@@ -1049,3 +1049,16 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       Inputs/Outputs 折叠区；删除 Canvas 新增按钮、Pin 菜单删除入口及 RepeatablePin 旧命名。
 - [ ] 对齐 Port address、orphan 删除、Control/Effect 兼容判断与 compatible catalog 错误分类，并删除
       Graph Draft 中重复的 editor projection wire parser。
+- [ ] 将 editor projection transport 收敛为不可失败的穷尽映射，完整传输 schema summary、参数配置和
+      value source，恢复 Function Graph 以及数据库、变量资源节点的编辑路径。
+- [ ] 保留变量 Get/Set 两种资源节点能力，并用本地化动作标题区分目录条目，避免同名变量显示为重复项。
+- [ ] 以纯数据依赖重新定义 Analysis Graph，删除 Event Begin、Print、Variable Set、Control/Effect、
+      Sequence/Branch/Loop 与非数据 Reroute 节点；变量目录只保留唯一的读取节点入口。
+- [ ] 新增显式全图 Compile 与 content-addressed GraphRuntime cache，将 Compile、Execute 和 Save 分离；
+      Execute 必须提交当前 compiled source hash，不再隐式保存或回退编译已保存 Graph。
+- [ ] 沿同一组 Data Edge 在 Rust 编译期传播 DataFrame Schema，并将 Decompose 列与函数签名成员物化为
+      稳定可寻址的 derived Pin，恢复动态输出的连接、编译和精确多输出 value ref lowering。
+- [ ] 将执行调度改为完整数据 DAG 与精确 output demand，缓存一次运行中所有已执行节点的 output pin；
+      节点 Kernel 返回按 output address 命名的输出集合，Pin Preview 不再误取首个结果。
+- [ ] 从 Analysis Graph 协议与前端签名编辑器中彻底移除 Control/Effect/exec pin 能力、结构化流程角色、
+      控制流 diagnostics、主题颜色和 stale golden；所有函数参数、结果、Reroute 与 catalog port 均为数据端口。
