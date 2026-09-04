@@ -19,6 +19,7 @@ import {
 
 const latestGenerationByGraph = new Map<string, number>();
 const lifecycleTokenByGraph = new Map<string, number>();
+const graphSessionIdByGraph = new Map<string, string>();
 
 interface PendingInvalidation {
   inFlight: Promise<boolean>;
@@ -60,6 +61,7 @@ function ownsLatestRequest(
 function startGraphLifecycle(graphPath: string): number {
   const lifecycleToken = ++nextLifecycleToken;
   lifecycleTokenByGraph.set(graphPath, lifecycleToken);
+  graphSessionIdByGraph.set(graphPath, crypto.randomUUID());
   return lifecycleToken;
 }
 
@@ -162,6 +164,32 @@ export function beginGraphRenameLifecycle(graphPath: string): number {
 
 export function isGraphLifecycleCurrent(graphPath: string, lifecycleToken: number): boolean {
   return lifecycleTokenByGraph.get(graphPath) === lifecycleToken;
+}
+
+export interface GraphProjectionRequestIdentity {
+  readonly graphSessionId: string;
+  readonly requestGeneration: number;
+}
+
+export function reserveGraphProjectionRequest(graphPath: string): GraphProjectionRequestIdentity {
+  currentOrStartGraphLifecycle(graphPath);
+  const graphSessionId = graphSessionIdByGraph.get(graphPath);
+  if (!graphSessionId) throw new Error(`Graph projection session '${graphPath}' is unavailable`);
+  return {
+    graphSessionId,
+    requestGeneration: nextRequestGeneration(graphPath),
+  };
+}
+
+export function isGraphProjectionRequestCurrent(
+  graphPath: string,
+  graphSessionId: string,
+  requestGeneration: number,
+): boolean {
+  return (
+    graphSessionIdByGraph.get(graphPath) === graphSessionId &&
+    latestGenerationByGraph.get(graphPath) === requestGeneration
+  );
 }
 
 export async function prepareGraphProjectionForPublication(
@@ -295,9 +323,10 @@ export function invalidateGraphProjectionRequests(graphPath: string): void {
   nextRequestGeneration(graphPath);
 }
 
-export function resetGraphProjectionCoordinator(): void {
+export function resetGraphProjectionLifecycle(): void {
   coordinatorEpoch += 1;
   latestGenerationByGraph.clear();
   lifecycleTokenByGraph.clear();
+  graphSessionIdByGraph.clear();
   pendingInvalidationByGraph.clear();
 }

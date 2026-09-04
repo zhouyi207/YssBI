@@ -1,4 +1,4 @@
-import { currentProjectionLocale } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { getGraphDraftDocument, useGraphDraftStore } from "@/features/core/graphDraft";
 import {

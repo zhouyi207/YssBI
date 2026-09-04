@@ -1,5 +1,5 @@
 import { registerGraphDraftPort } from "@/features/core/history/graphDraftPort";
-import { currentProjectionLocale } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { applyGraphDraftMutation } from "./graphDraftCoordinator";
 
 let registered = false;

@@ -35,10 +35,10 @@ vi.mock("@/features/application/project/projectWorkbenchLifecycle", () => ({
 }));
 
 vi.mock(
-  "@/features/application/editorProjection/graphProjectionCoordinator",
+  "@/features/application/graphProjection/graphProjectionLifecycle",
   async (importOriginal) => ({
     ...(await importOriginal<
-      typeof import("@/features/application/editorProjection/graphProjectionCoordinator")
+      typeof import("@/features/application/graphProjection/graphProjectionLifecycle")
     >()),
     beginGraphLoadLifecycle: () => 1,
     loadGraphProjection,

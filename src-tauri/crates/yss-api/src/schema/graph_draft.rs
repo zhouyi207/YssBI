@@ -13,10 +13,25 @@ pub struct GraphEditorSessionDto {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GraphDraftUpdateDto {
+pub struct GraphDraftAcceptedDto {
+    pub project_instance_id: String,
+    pub graph_session_id: String,
+    pub graph_path: String,
+    pub accepted_revision: u64,
+    pub request_generation: u64,
+    pub operation_id: yss_project_identity::OperationId,
     pub document: yss_graph_document::GraphDocument,
     pub patch: yss_graph_document_edit::GraphDocumentPatch,
-    pub projection_replacement: GraphProjectionReplacementDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphProjectionRequestDto {
+    pub graph_session_id: String,
+    pub graph_path: String,
+    pub accepted_revision: u64,
+    pub request_generation: u64,
+    pub operation_id: yss_project_identity::OperationId,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,15 +79,24 @@ pub(crate) fn graph_editor_session_to_transport(
     }
 }
 
-pub(crate) fn graph_draft_update_to_transport(
-    update: &yss_application::resource_mutation::GraphDraftUpdate,
-) -> GraphDraftUpdateDto {
-    GraphDraftUpdateDto {
+pub(crate) fn graph_draft_accepted_to_transport(
+    update: &yss_application::resource_mutation::GraphDraftAccepted,
+    project_instance_id: &yss_project_identity::ProjectInstanceId,
+    graph_session_id: String,
+    graph_path: &yss_graph_document::GraphResourcePath,
+    accepted_revision: u64,
+    request_generation: u64,
+    operation_id: yss_project_identity::OperationId,
+) -> GraphDraftAcceptedDto {
+    GraphDraftAcceptedDto {
+        project_instance_id: project_instance_id.to_string(),
+        graph_session_id,
+        graph_path: graph_path.as_str().to_owned(),
+        accepted_revision,
+        request_generation,
+        operation_id,
         document: update.document.clone(),
         patch: update.patch.clone(),
-        projection_replacement: graph_projection_replacement_to_transport(
-            &update.projection_replacement,
-        ),
     }
 }
 

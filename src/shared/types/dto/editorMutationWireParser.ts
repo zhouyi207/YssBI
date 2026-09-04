@@ -4,7 +4,7 @@ import type {
   GraphDocumentPatchDto,
   GraphDocumentDto,
   GraphDraftSaveDto,
-  GraphDraftUpdateDto,
+  GraphDraftAcceptedDto,
   GraphEditorSessionDto,
   HistoryStatusDto,
   TypeExprDto,
@@ -305,14 +305,41 @@ export function parseCompileGraphDraftDto(value: unknown): CompileGraphDraftDto 
   };
 }
 
-export function parseGraphDraftUpdateDto(value: unknown): GraphDraftUpdateDto {
-  if (!isRecord(value) || !hasExactKeys(value, ["document", "patch", "projectionReplacement"])) {
-    throw new Error("Graph draft update is malformed");
+export function parseGraphDraftAcceptedDto(value: unknown): GraphDraftAcceptedDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "projectInstanceId",
+      "graphSessionId",
+      "graphPath",
+      "acceptedRevision",
+      "requestGeneration",
+      "operationId",
+      "document",
+      "patch",
+    ]) ||
+    typeof value.projectInstanceId !== "string" ||
+    value.projectInstanceId.length === 0 ||
+    typeof value.graphSessionId !== "string" ||
+    value.graphSessionId.length === 0 ||
+    !isGraphResourcePath(value.graphPath) ||
+    !Number.isSafeInteger(value.acceptedRevision) ||
+    (value.acceptedRevision as number) <= 0 ||
+    !Number.isSafeInteger(value.requestGeneration) ||
+    (value.requestGeneration as number) <= 0 ||
+    !isUuid(value.operationId)
+  ) {
+    throw new Error("Graph draft acceptance is malformed");
   }
   return {
+    projectInstanceId: value.projectInstanceId,
+    graphSessionId: value.graphSessionId,
+    graphPath: value.graphPath,
+    acceptedRevision: value.acceptedRevision as number,
+    requestGeneration: value.requestGeneration as number,
+    operationId: value.operationId,
     document: parseGraphDocumentDto(value.document),
     patch: parseGraphPatch(value.patch),
-    projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
   };
 }
 

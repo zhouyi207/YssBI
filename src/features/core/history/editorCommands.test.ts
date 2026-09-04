@@ -12,10 +12,10 @@ vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
   applyGraphDraftMutation,
 }));
 vi.mock(
-  "@/features/application/editorProjection/graphProjectionCoordinator",
+  "@/features/application/graphProjection/graphProjectionLifecycle",
   async (importOriginal) => ({
     ...(await importOriginal<
-      typeof import("@/features/application/editorProjection/graphProjectionCoordinator")
+      typeof import("@/features/application/graphProjection/graphProjectionLifecycle")
     >()),
     currentProjectionLocale: () => "en-US",
     hydrateGraphProjection: vi.fn(async () => true),
@@ -204,15 +204,13 @@ describe("forward-only editor commands", () => {
       const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
       const result = {
         projectInstanceId: "project-a",
-        delta: {
-          graphPath,
-          fromRevision: 3,
-          toRevision: 4,
-          causedBy: "operation-a",
-          payload: { operations: [] },
-        },
-        projectionReplacement: {} as never,
-        history: { canUndo: true, canRedo: false },
+        graphSessionId: "graph-session-a",
+        graphPath,
+        acceptedRevision: 1,
+        requestGeneration: 2,
+        operationId: "00000000-0000-0000-0000-000000000001",
+        document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
+        patch: { operations: [] },
       };
       applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied", result });
       const randomId = vi.spyOn(crypto, "randomUUID");

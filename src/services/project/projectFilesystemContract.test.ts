@@ -45,6 +45,8 @@ const lifecycleOwnedNodeCommandIdentityFields = {
   undo_graph_document: "projectInstanceId",
   redo_graph_document: "projectInstanceId",
   execute_graph_document: "projectInstanceId",
+  subscribe_graph_projections: "projectInstanceId",
+  get_graph_projection_snapshot: "projectInstanceId",
 } as const;
 
 const projectDatabaseIdentityFields = {
@@ -154,6 +156,7 @@ const processGlobalAllocatorCommandExemptions = [
 ] as const;
 
 const capabilityCommandExemptions = [
+  "unsubscribe_graph_projections",
   "cancel_graph_run",
   "get_result_descriptor",
   "get_result_value",
@@ -478,7 +481,7 @@ function eventHandlerIdentityGuardViolations(path: string, source: string): stri
 
 const workflowFiles = [
   "src/features/application/project/projectIOStore.ts",
-  "src/features/application/editorProjection/graphProjectionCoordinator.ts",
+  "src/features/application/graphProjection/graphProjectionLifecycle.ts",
   "src/features/application/editor/graphDocumentUnload.ts",
   "src/features/application/editor/chartDelete.ts",
   "src/features/application/editor/saveAllDirtyGraphs.ts",

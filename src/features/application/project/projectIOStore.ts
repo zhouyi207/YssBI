@@ -35,11 +35,12 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
 import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
 import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
+import { resetGraphProjectionCoordinator } from "@/features/application/graphProjection/graphProjectionCoordinator";
 import {
   beginGraphLoadLifecycle,
   loadGraphProjection,
-  resetGraphProjectionCoordinator,
-} from "@/features/application/editorProjection/graphProjectionCoordinator";
+  resetGraphProjectionLifecycle,
+} from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { hydrateFunctionSignaturesFromProjectIndex } from "@/features/application/graphDocument/functionSignatureSync";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
@@ -339,7 +340,8 @@ export async function commitPreparedAuthoritativeProjectLoad(
     nextProjectInstanceId,
     prepared.index.publicationRevision,
   );
-  commitProjectLoadStep("graph projection coordinator", resetGraphProjectionCoordinator);
+  commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
+  commitProjectLoadStep("graph projection channel coordinator", resetGraphProjectionCoordinator);
   commitProjectLoadStep("graph draft coordinator", resetGraphDraftCoordinator);
   loadGraphInFlight.clear();
   commitProjectLoadStep("graph load status", () =>
@@ -515,6 +517,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
       return true;
     };
 
+    if (!commitOwnedClear(resetGraphProjectionLifecycle)) return;
     if (!commitOwnedClear(resetGraphProjectionCoordinator)) return;
     if (!commitOwnedClear(resetGraphDraftCoordinator)) return;
     if (!commitOwnedClear(() => loadGraphInFlight.clear())) return;

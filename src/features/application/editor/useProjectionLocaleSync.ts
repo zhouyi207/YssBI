@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { hydrateGraphProjections } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { hydrateGraphProjections } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { useResourceStore } from "@/features/core/resource";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 

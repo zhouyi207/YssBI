@@ -7,6 +7,8 @@ import {
   getGraphRequestGeneration,
   getGraphSourceRevision,
   hasGraphBlockingDiagnostics,
+  isGraphProjectionExecutable,
+  type GraphEntityBucket,
 } from "./graphEntityAccess";
 import { useGraphProjectionStore } from "./graphProjectionStore";
 import { toUiNode } from "./nodeView";
@@ -152,6 +154,28 @@ function projection(
 }
 
 describe("graphProjectionStore projection replacement", () => {
+  it("requires both a successful outcome and no blocking diagnostics for execution", () => {
+    expect(
+      isGraphProjectionExecutable({
+        outcome: { type: "success" },
+        hasBlockingDiagnostics: false,
+      }),
+    ).toBe(true);
+    expect(
+      isGraphProjectionExecutable({
+        outcome: { type: "success" },
+        hasBlockingDiagnostics: true,
+      }),
+    ).toBe(false);
+    expect(
+      isGraphProjectionExecutable({
+        outcome: { type: "analysisBlocked" },
+        hasBlockingDiagnostics: false,
+      }),
+    ).toBe(false);
+    expect(isGraphProjectionExecutable(undefined)).toBe(false);
+  });
+
   it("requires projection metadata on every graph bucket", () => {
     expect(getGraphProjectionBasis({ graphEntities: {} }, "missing")).toBeUndefined();
     expect(getGraphSourceRevision({ graphEntities: {} }, "missing")).toBeUndefined();
@@ -202,10 +226,20 @@ describe("graphProjectionStore projection replacement", () => {
 
   it("atomically replaces a graph with projected canvas entities and metadata", () => {
     const nextProjection = projection();
+    nextProjection.nodes[0].ports[0].resolvedSchema = {
+      kind: "derived",
+      fields: [{ name: "value", scalarType: "float64" }],
+    };
+    const observedBuckets: GraphEntityBucket[] = [];
+    const unsubscribe = useGraphProjectionStore.subscribe((state) => {
+      const observed = state.graphEntities["functions/main"];
+      if (observed) observedBuckets.push(observed);
+    });
 
     const result = useGraphProjectionStore
       .getState()
       .replaceProjection("functions/main", nextProjection, 1);
+    unsubscribe();
 
     const bucket = useGraphProjectionStore.getState().graphEntities["functions/main"];
     expect(result).toEqual({ applied: true, reason: "newer" });
@@ -224,8 +258,26 @@ describe("graphProjectionStore projection replacement", () => {
       address: input,
       canRemove: true,
     });
+    expect(bucket.pins[portAddressKey(output)].resolvedSchema).toEqual({
+      kind: "derived",
+      fields: [{ name: "value", scalarType: "float64" }],
+    });
+    expect(bucket.nodes["shared-node"].parameterEditors).toEqual(
+      nextProjection.nodes[0].parameterEditors,
+    );
     expect(bucket.connections["connection-1"].from).toBe(portAddressKey(output));
     expect(bucket.diagnostics).toEqual(nextProjection.diagnostics);
+    expect(bucket.outcome).toEqual(nextProjection.outcome);
+    expect(observedBuckets).toHaveLength(1);
+    expect(observedBuckets[0]).toMatchObject({
+      sourceRevision: nextProjection.sourceRevision,
+      diagnostics: nextProjection.diagnostics,
+      outcome: nextProjection.outcome,
+      hasBlockingDiagnostics: nextProjection.hasBlockingDiagnostics,
+    });
+    expect(observedBuckets[0].pins[portAddressKey(output)].resolvedSchema).toEqual(
+      nextProjection.nodes[0].ports[0].resolvedSchema,
+    );
     const state = useGraphProjectionStore.getState();
     expect(getGraphProjectionBasis(state, "functions/main")).toEqual(nextProjection.basis);
     expect(getGraphSourceRevision(state, "functions/main")).toBe(4);
@@ -335,6 +387,69 @@ describe("graphProjectionStore projection replacement", () => {
       useGraphProjectionStore.getState().graphEntities[secondPath].nodes["shared-node"].display
         .title,
     ).toBe("Second");
+  });
+
+  it("atomically installs a published batch with its exact request generations", () => {
+    const firstPath = "functions/first";
+    const secondPath = "functions/second";
+    const updates = vi.fn();
+    const unsubscribe = useGraphProjectionStore.subscribe(updates);
+
+    const result = useGraphProjectionStore.getState().replacePublishedProjectionsAtomically([
+      {
+        graphPath: firstPath,
+        projection: projection(firstPath, 5, "First published"),
+        requestGeneration: 7,
+      },
+      {
+        graphPath: secondPath,
+        projection: projection(secondPath, 8, "Second published"),
+        requestGeneration: 11,
+      },
+    ]);
+
+    unsubscribe();
+    expect(result).toEqual({ applied: true, graphPaths: [firstPath, secondPath] });
+    expect(updates).toHaveBeenCalledTimes(1);
+    expect(useGraphProjectionStore.getState().graphEntities[firstPath]).toMatchObject({
+      sourceRevision: 5,
+      requestGeneration: 7,
+      diagnostics: projection(firstPath, 5).diagnostics,
+    });
+    expect(useGraphProjectionStore.getState().graphEntities[secondPath]).toMatchObject({
+      sourceRevision: 8,
+      requestGeneration: 11,
+    });
+  });
+
+  it("rejects an entire published batch when one generation is stale", () => {
+    const firstPath = "functions/first";
+    const secondPath = "functions/second";
+    useGraphProjectionStore
+      .getState()
+      .replaceProjection(firstPath, projection(firstPath, 5, "Current"), 5);
+    const previous = useGraphProjectionStore.getState().graphEntities[firstPath];
+
+    const result = useGraphProjectionStore.getState().replacePublishedProjectionsAtomically([
+      {
+        graphPath: firstPath,
+        projection: projection(firstPath, 6, "Stale generation"),
+        requestGeneration: 4,
+      },
+      {
+        graphPath: secondPath,
+        projection: projection(secondPath, 1, "Must not install"),
+        requestGeneration: 1,
+      },
+    ]);
+
+    expect(result).toEqual({
+      applied: false,
+      reason: "stale-generation",
+      graphPath: firstPath,
+    });
+    expect(useGraphProjectionStore.getState().graphEntities[firstPath]).toBe(previous);
+    expect(useGraphProjectionStore.getState().graphEntities[secondPath]).toBeUndefined();
   });
 
   it("installs zero projection replacements when one candidate is malformed", () => {

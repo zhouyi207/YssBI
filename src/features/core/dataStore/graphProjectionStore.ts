@@ -51,10 +51,14 @@ export type AtomicProjectionApplyResult =
   | { applied: true; graphPaths: string[] }
   | {
       applied: false;
-      reason: "duplicate-graph-path" | "invalid" | "non-monotonic-revision";
+      reason: "duplicate-graph-path" | "invalid" | "non-monotonic-revision" | "stale-generation";
       graphPath: string;
       error?: unknown;
     };
+
+export type PublishedGraphProjectionReplacement = GraphProjectionReplacementDto & {
+  readonly requestGeneration: number;
+};
 
 function commitGraphBucket(
   state: { graphEntities: Record<GraphPath, GraphEntityBucket> },
@@ -218,6 +222,9 @@ interface GraphProjectionStore {
   replaceProjectionsAtomically(
     replacements: GraphProjectionReplacementDto[],
   ): AtomicProjectionApplyResult;
+  replacePublishedProjectionsAtomically(
+    replacements: PublishedGraphProjectionReplacement[],
+  ): AtomicProjectionApplyResult;
 }
 
 export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) => ({
@@ -268,5 +275,53 @@ export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) =
     if (!prepared.prepared) return { applied: false, ...prepared };
     commitPreparedGraphProjectionReplacements(prepared.plan);
     return { applied: true, graphPaths: [...prepared.plan.graphPaths] };
+  },
+
+  replacePublishedProjectionsAtomically: (replacements) => {
+    const seen = new Set<string>();
+    const candidates: Array<[GraphPath, GraphEntityBucket]> = [];
+    for (const replacement of replacements) {
+      if (seen.has(replacement.graphPath)) {
+        return {
+          applied: false,
+          reason: "duplicate-graph-path",
+          graphPath: replacement.graphPath,
+        };
+      }
+      seen.add(replacement.graphPath);
+      const current = get().graphEntities[replacement.graphPath];
+      if (current && replacement.requestGeneration <= current.requestGeneration) {
+        return {
+          applied: false,
+          reason: "stale-generation",
+          graphPath: replacement.graphPath,
+        };
+      }
+      let candidate: GraphEntityBucket;
+      try {
+        candidate = buildProjectionCandidate(
+          replacement.graphPath,
+          replacement.projection,
+          replacement.requestGeneration,
+        );
+      } catch (error) {
+        return { applied: false, reason: "invalid", graphPath: replacement.graphPath, error };
+      }
+      if (current && candidate.sourceRevision < current.sourceRevision) {
+        return {
+          applied: false,
+          reason: "non-monotonic-revision",
+          graphPath: replacement.graphPath,
+        };
+      }
+      candidates.push([replacement.graphPath, candidate]);
+    }
+    set((state) => ({
+      graphEntities: {
+        ...state.graphEntities,
+        ...Object.fromEntries(candidates),
+      },
+    }));
+    return { applied: true, graphPaths: replacements.map(({ graphPath }) => graphPath) };
   },
 }));

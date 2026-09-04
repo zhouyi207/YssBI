@@ -47,6 +47,7 @@ describe("useEditorHistoryAvailability", () => {
       sessions: {
         [graphPath]: {
           ...version,
+          draftRevision: 0,
           savedDocument: draftDocument,
           saving: false,
           compileStatus: "uncompiled",

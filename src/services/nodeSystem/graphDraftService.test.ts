@@ -30,18 +30,44 @@ describe("GraphDraftService", () => {
     });
   });
 
-  it("transforms a frontend draft without a revision or operation envelope", async () => {
+  it("accepts a frontend draft intent and returns its projection request identity", async () => {
     const mutation = { type: "deleteNodes" as const, payload: { nodeIds: [] } };
-    const result = { document, patch: { operations: [] }, projectionReplacement };
+    const operationId = "00000000-0000-0000-0000-000000000011";
+    const result = {
+      projectInstanceId: "project-a",
+      graphSessionId: "graph-session-a",
+      graphPath,
+      acceptedRevision: 1,
+      requestGeneration: 2,
+      operationId,
+      document,
+      patch: { operations: [] },
+    };
     vi.mocked(invoke).mockResolvedValue(result);
 
     await expect(
-      GraphDraftService.transform("project-a", graphPath, "en-US", document, mutation),
+      GraphDraftService.transform(
+        "project-a",
+        "graph-session-a",
+        graphPath,
+        "en-US",
+        1,
+        2,
+        operationId,
+        document,
+        mutation,
+      ),
     ).resolves.toEqual(result);
     expect(invoke).toHaveBeenCalledWith("transform_graph_draft", {
       projectInstanceId: "project-a",
-      graphPath,
       locale: "en-US",
+      projectionRequest: {
+        graphSessionId: "graph-session-a",
+        graphPath,
+        acceptedRevision: 1,
+        requestGeneration: 2,
+        operationId,
+      },
       document,
       mutation,
     });

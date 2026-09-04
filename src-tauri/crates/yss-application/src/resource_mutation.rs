@@ -69,10 +69,9 @@ pub enum ResourceMutationApplicationError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct GraphDraftUpdate {
+pub struct GraphDraftAccepted {
     pub document: GraphDocument,
     pub patch: GraphDocumentPatch,
-    pub projection_replacement: GraphProjectionReplacement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -299,10 +298,9 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        locale: String,
         mut document: GraphDocument,
         mutation: EditorGraphMutation,
-    ) -> Result<GraphDraftUpdate, ResourceMutationApplicationError> {
+    ) -> Result<GraphDraftAccepted, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         document.revision = captured
             .project()
@@ -326,15 +324,45 @@ impl ApplicationState {
         apply_graph_document_patch(&mut candidate, &patch).map_err(|error| {
             ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
         })?;
-        let projection =
-            build_graph_projection_replacement(&captured, &graph_path, &candidate, &locale)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(GraphDraftUpdate {
+        Ok(GraphDraftAccepted {
             document: candidate,
             patch,
-            projection_replacement: projection,
         })
+    }
+
+    pub fn resolve_graph_draft_projection(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        locale: String,
+        document: GraphDocument,
+    ) -> Result<GraphProjectionReplacement, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let current_revision = captured
+            .project()
+            .get_data()
+            .map_err(ResourceMutationApplicationError::Project)?
+            .graphs
+            .get(&graph_path)
+            .map(|resource| resource.document.revision)
+            .ok_or_else(|| ResourceMutationApplicationError::GraphUnavailable {
+                graph: graph_path.clone(),
+            })?;
+        if current_revision != document.revision {
+            return Err(ResourceMutationApplicationError::SessionChanged(
+                SessionRevalidationError::Changed,
+            ));
+        }
+        validate_graph_document(&document).map_err(|error| {
+            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+        })?;
+        let replacement =
+            build_graph_projection_replacement(&captured, &graph_path, &document, &locale)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(replacement)
     }
 
     pub fn save_graph_draft(

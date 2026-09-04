@@ -23,6 +23,7 @@ export interface GraphEntityBucket {
   basis: ProjectionBasisDto;
   sourceRevision: number;
   requestGeneration: number;
+  /** Complete canonical problem set copied from the same projection as the entities. */
   diagnostics: DiagnosticDto[];
   outcome: CompilationOutcomeDto;
   hasBlockingDiagnostics: boolean;
@@ -128,4 +129,14 @@ export function hasGraphBlockingDiagnostics(
   graphPath: GraphPath,
 ): boolean | undefined {
   return state.graphEntities[graphPath]?.hasBlockingDiagnostics;
+}
+
+export function isGraphProjectionExecutable(
+  projection: Pick<GraphEntityBucket, "outcome" | "hasBlockingDiagnostics"> | undefined,
+): boolean {
+  return (
+    projection !== undefined &&
+    projection.outcome.type === "success" &&
+    !projection.hasBlockingDiagnostics
+  );
 }

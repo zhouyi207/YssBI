@@ -123,6 +123,7 @@ describe("resource mutation projection replacement protocol", () => {
     useGraphDraftStore.setState({
       sessions: {
         [caller]: {
+          draftRevision: 0,
           document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
           savedDocument: {
             nodes: {

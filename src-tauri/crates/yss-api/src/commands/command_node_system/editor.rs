@@ -2,7 +2,7 @@ use super::common::parse_graph_path;
 use crate::error::CommandError;
 use crate::schema::graph_clipboard::ClipboardSubgraphDto;
 use crate::schema::graph_draft::{
-    CompileGraphDraftDto, GraphDraftUpdateDto, GraphEditorSessionDto,
+    CompileGraphDraftDto, GraphDraftAcceptedDto, GraphEditorSessionDto, GraphProjectionRequestDto,
 };
 use crate::schema::graph_mutation::EditorGraphMutationDto;
 use tauri::State;
@@ -190,25 +190,57 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
 #[tauri::command]
 pub fn transform_graph_draft(
     application: State<'_, ApplicationState>,
+    projection_runtime: State<'_, crate::GraphProjectionRuntime>,
     project_instance_id: ProjectInstanceId,
-    graph_path: String,
     locale: String,
+    projection_request: GraphProjectionRequestDto,
     document: yss_graph_document::GraphDocument,
     mutation: serde_json::Value,
-) -> Result<GraphDraftUpdateDto, CommandError> {
+) -> Result<GraphDraftAcceptedDto, CommandError> {
+    let GraphProjectionRequestDto {
+        graph_session_id,
+        graph_path,
+        accepted_revision,
+        request_generation,
+        operation_id,
+    } = projection_request;
+    if graph_session_id.is_empty() || accepted_revision == 0 || request_generation == 0 {
+        return Err(CommandError::expected("invalid_graph_projection_request"));
+    }
     let mutation = parse_editor_mutation(mutation)?;
+    let graph_path = parse_graph_path(graph_path)?;
     let result = application
         .transform_graph_draft(
-            project_instance_id,
-            parse_graph_path(graph_path)?,
-            locale,
+            project_instance_id.clone(),
+            graph_path.clone(),
             document,
             mutation,
         )
         .map_err(map_editor_resource_error)?;
-    Ok(crate::schema::graph_draft::graph_draft_update_to_transport(
-        &result,
-    ))
+    if !result.patch.operations.is_empty() {
+        super::projections::submit_graph_projection_request(
+            &projection_runtime,
+            crate::graph_projection_runtime::ResolveGraphProjectionRequest {
+                project_instance_id: project_instance_id.clone(),
+                graph_session_id: graph_session_id.clone(),
+                graph_path: graph_path.clone(),
+                request_generation,
+                locale,
+                document: result.document.clone(),
+            },
+        )?;
+    }
+    Ok(
+        crate::schema::graph_draft::graph_draft_accepted_to_transport(
+            &result,
+            &project_instance_id,
+            graph_session_id,
+            &graph_path,
+            accepted_revision,
+            request_generation,
+            operation_id,
+        ),
+    )
 }
 
 fn map_editor_resource_error(

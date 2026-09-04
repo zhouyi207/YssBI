@@ -37,6 +37,7 @@ export interface NodeData {
   parameterEditors: ParameterEditorDto[];
   portInstanceAdditions: PortInstanceAdditionDto[];
   capabilities: NodeCapabilitiesDto;
+  /** Node-local diagnostic index; the graph bucket owns the canonical problem set. */
   diagnostics: DiagnosticDto[];
 }
 

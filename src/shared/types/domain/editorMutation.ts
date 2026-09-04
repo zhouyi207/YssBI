@@ -250,10 +250,15 @@ export interface CompileGraphDraftDto {
   projection: EditorGraphProjectionDto;
 }
 
-export interface GraphDraftUpdateDto {
+export interface GraphDraftAcceptedDto {
+  projectInstanceId: string;
+  graphSessionId: string;
+  graphPath: string;
+  acceptedRevision: number;
+  requestGeneration: number;
+  operationId: string;
   document: GraphDocumentDto;
   patch: GraphDocumentPatchDto;
-  projectionReplacement: GraphProjectionReplacementDto;
 }
 
 export interface GraphDraftSaveDto {

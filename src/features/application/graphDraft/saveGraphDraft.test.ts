@@ -24,6 +24,8 @@ import {
   makeGraphEditorSession,
 } from "@/tests/helpers/editorProjectionFixtures";
 import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
+import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { acceptGraphProjectionEvent } from "@/features/application/graphProjection/graphProjectionCoordinator";
 
 vi.mock("@/services/nodeSystem/graphDraftService", () => ({
   GraphDraftService: { save: vi.fn() },
@@ -56,6 +58,7 @@ describe("Graph draft save boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetGraphDraftCoordinator();
+    resetGraphProjectionLifecycle();
     useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphDraftStore.getState().clear();
     useResourceStore.getState().clear();
@@ -67,31 +70,58 @@ describe("Graph draft save boundary", () => {
 
   it("applies an editor mutation only to the frontend draft and marks it dirty", async () => {
     const { fixture, session } = installGraph();
-    const transform = vi.fn().mockResolvedValue({
-      document: session.document,
-      patch: {
-        operations: [
-          {
-            operation: "update_node",
-            before: {
-              id: "00000000-0000-0000-0000-000000000001",
-              node_type: "tests.node",
-              position: { x: 0, y: 0 },
-              parameters: {},
-              user_label: null,
+    const transform = vi
+      .fn()
+      .mockImplementation(
+        (
+          requestProjectInstanceId: string,
+          graphSessionId: string,
+          requestGraphPath: string,
+          _locale: string,
+          acceptedRevision: number,
+          requestGeneration: number,
+          operationId: string,
+        ) => {
+          acceptGraphProjectionEvent({
+            type: "projectionReplaced",
+            projectInstanceId: requestProjectInstanceId,
+            graphSessionId,
+            graphPath: requestGraphPath,
+            requestGeneration,
+            replacement: { graphPath: requestGraphPath, projection: fixture.projection },
+          });
+          return {
+            projectInstanceId: requestProjectInstanceId,
+            graphSessionId,
+            graphPath: requestGraphPath,
+            acceptedRevision,
+            requestGeneration,
+            operationId,
+            document: session.document,
+            patch: {
+              operations: [
+                {
+                  operation: "update_node",
+                  before: {
+                    id: "00000000-0000-0000-0000-000000000001",
+                    node_type: "tests.node",
+                    position: { x: 0, y: 0 },
+                    parameters: {},
+                    user_label: null,
+                  },
+                  after: {
+                    id: "00000000-0000-0000-0000-000000000001",
+                    node_type: "tests.node",
+                    position: { x: 30, y: 40 },
+                    parameters: {},
+                    user_label: null,
+                  },
+                },
+              ],
             },
-            after: {
-              id: "00000000-0000-0000-0000-000000000001",
-              node_type: "tests.node",
-              position: { x: 30, y: 40 },
-              parameters: {},
-              user_label: null,
-            },
-          },
-        ],
-      },
-      projectionReplacement: { graphPath, projection: fixture.projection },
-    });
+          };
+        },
+      );
 
     await expect(
       applyGraphDraftMutation(
@@ -117,6 +147,95 @@ describe("Graph draft save boundary", () => {
     expect(transform).toHaveBeenCalledOnce();
     expect(getDocumentState({ id: graphPath, kind: "event" })?.dirty).toBe(true);
     expect(useGraphProjectionStore.getState().graphEntities[graphPath].sourceRevision).toBe(4);
+    expect(useGraphDraftStore.getState().sessions[graphPath].draftRevision).toBe(1);
+  });
+
+  it("settles a no-op acknowledgement without waiting for a projection event", async () => {
+    const { session } = installGraph();
+    const transform = vi
+      .fn()
+      .mockImplementation(
+        (
+          requestProjectInstanceId: string,
+          graphSessionId: string,
+          requestGraphPath: string,
+          _locale: string,
+          acceptedRevision: number,
+          requestGeneration: number,
+          operationId: string,
+        ) => ({
+          projectInstanceId: requestProjectInstanceId,
+          graphSessionId,
+          graphPath: requestGraphPath,
+          acceptedRevision,
+          requestGeneration,
+          operationId,
+          document: session.document,
+          patch: { operations: [] },
+        }),
+      );
+
+    await expect(
+      applyGraphDraftMutation(
+        {
+          graphPath,
+          locale: "en-US",
+          mutation: { type: "deleteNodes", payload: { nodeIds: [] } },
+        },
+        { transform },
+      ),
+    ).resolves.toMatchObject({ status: "noop" });
+    expect(useGraphDraftStore.getState().sessions[graphPath].draftRevision).toBe(1);
+  });
+
+  it("does not install an early projection when the command acknowledgement is lost", async () => {
+    installGraph();
+    const ghost = makeEditorProjectionFixture({
+      graphPath,
+      sourceRevision: 4,
+      title: "Unacknowledged projection",
+    });
+    let earlyEvent: Parameters<typeof acceptGraphProjectionEvent>[0] | undefined;
+    const transform = vi
+      .fn()
+      .mockImplementation(
+        (
+          requestProjectInstanceId: string,
+          graphSessionId: string,
+          requestGraphPath: string,
+          _locale: string,
+          _acceptedRevision: number,
+          requestGeneration: number,
+        ) => {
+          earlyEvent = {
+            type: "projectionReplaced",
+            projectInstanceId: requestProjectInstanceId,
+            graphSessionId,
+            graphPath: requestGraphPath,
+            requestGeneration,
+            replacement: { graphPath: requestGraphPath, projection: ghost.projection },
+          };
+          acceptGraphProjectionEvent(earlyEvent);
+          throw new Error("response transport lost");
+        },
+      );
+
+    await expect(
+      applyGraphDraftMutation(
+        {
+          graphPath,
+          locale: "en-US",
+          mutation: { type: "deleteNodes", payload: { nodeIds: [] } },
+        },
+        { transform },
+      ),
+    ).rejects.toThrow("response transport lost");
+    if (earlyEvent) acceptGraphProjectionEvent(earlyEvent);
+
+    expect(
+      useGraphProjectionStore.getState().graphEntities[graphPath].nodes["local-node"].display.title,
+    ).not.toBe("Unacknowledged projection");
+    expect(useGraphDraftStore.getState().sessions[graphPath].draftRevision).toBe(0);
   });
 
   it("locks every new Graph edit until the overwrite save settles", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EditorGraphMutationDto } from "./editorMutation";
 import {
   parseEditorGraphMutationDto,
+  parseGraphDraftAcceptedDto,
   parseGraphProjectionReplacementDto,
 } from "./editorMutationWireParser";
 
@@ -124,6 +125,27 @@ function functionEditorProjection(revision = 5) {
 }
 
 describe("editor mutation wire parser", () => {
+  it("parses the exact asynchronous Graph draft acceptance identity", () => {
+    const accepted = {
+      projectInstanceId: "project-a",
+      graphSessionId: "graph-session-a",
+      graphPath,
+      acceptedRevision: 3,
+      requestGeneration: 7,
+      operationId: "00000000-0000-0000-0000-000000000001",
+      document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
+      patch: { operations: [] },
+    };
+
+    expect(parseGraphDraftAcceptedDto(accepted)).toEqual(accepted);
+    expect(() => parseGraphDraftAcceptedDto({ ...accepted, requestGeneration: 0 })).toThrow(
+      "Graph draft acceptance",
+    );
+    expect(() => parseGraphDraftAcceptedDto({ ...accepted, graphSessionId: "" })).toThrow(
+      "Graph draft acceptance",
+    );
+  });
+
   it("parses the exact InsertReroute DTO wire shape", () => {
     const mutation = {
       type: "insertReroute",

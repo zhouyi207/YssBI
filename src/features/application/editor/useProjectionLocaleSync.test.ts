@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectionLocaleSync } from "./useProjectionLocaleSync";
-import { resetGraphProjectionCoordinator } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   clearProjectLifecycle,
@@ -63,7 +63,7 @@ describe("useProjectionLocaleSync", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localeState.language = "zh-CN";
-    resetGraphProjectionCoordinator();
+    resetGraphProjectionLifecycle();
     clearProjectLifecycle();
     startProjectLifecycle("project-instance-1");
     useGraphProjectionStore.setState({ graphEntities: {} });

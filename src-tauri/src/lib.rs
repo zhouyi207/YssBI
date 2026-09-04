@@ -179,7 +179,11 @@ pub fn run() {
             let project_state = Arc::new(initialize_project_state());
             let application_state = initialize_application_state(Arc::clone(&project_state))
                 .map_err(Box::<dyn std::error::Error>::from)?;
+            let graph_projection_runtime =
+                yss_api::GraphProjectionRuntime::initialize(application_state.clone())
+                    .map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(application_state.clone());
+            app.manage(graph_projection_runtime);
 
             let app_dir = app.path().app_data_dir()?;
             let settings_path = app.path().app_config_dir()?.join("settings.json");

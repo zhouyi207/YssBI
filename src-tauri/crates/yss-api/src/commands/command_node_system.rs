@@ -3,6 +3,7 @@ mod common;
 mod editor;
 mod execution;
 mod history;
+mod projections;
 mod resources;
 mod results;
 
@@ -12,6 +13,9 @@ pub use editor::{
 };
 pub use execution::{allocate_pin_preview_generation, cancel_graph_run, execute_graph_document};
 pub use history::{get_project_history_status, redo_graph_document, undo_graph_document};
+pub use projections::{
+    get_graph_projection_snapshot, subscribe_graph_projections, unsubscribe_graph_projections,
+};
 pub use resources::{
     create_event, create_function, duplicate_graph, remove_graph, rename_graph_resource,
     save_project_graph, unload_project_graph, update_function_signature,

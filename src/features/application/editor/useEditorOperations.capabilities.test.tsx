@@ -151,7 +151,12 @@ function appliedWithInserted(...nodeIds: string[]): GraphDraftCommandResult {
           },
         })),
       },
-      projectionReplacement: {} as never,
+      projectInstanceId: "project-a",
+      graphSessionId: "graph-session-a",
+      graphPath,
+      acceptedRevision: 1,
+      requestGeneration: 1,
+      operationId: "00000000-0000-0000-0000-000000000001",
     },
   };
 }

@@ -15,7 +15,7 @@ import {
   makeEditorProjectionFixture,
   makeGraphEditorSession,
 } from "@/tests/helpers/editorProjectionFixtures";
-import * as coordinator from "./graphProjectionCoordinator";
+import * as coordinator from "./graphProjectionLifecycle";
 import { logger } from "@/features/application/observability/appLogger";
 
 vi.mock("@/services/nodeSystem/graphProjectionService", () => ({
@@ -53,10 +53,10 @@ function invalidationApi() {
   return invalidate!;
 }
 
-describe("graphProjectionCoordinator invalidation", () => {
+describe("graphProjectionLifecycle invalidation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    coordinator.resetGraphProjectionCoordinator();
+    coordinator.resetGraphProjectionLifecycle();
     useGraphProjectionStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: "project-instance-1" });
@@ -321,7 +321,7 @@ describe("graphProjectionCoordinator invalidation", () => {
     vi.mocked(GraphProjectionService.loadGraph).mockReturnValue(pending.promise);
 
     const request = coordinator.loadGraphProjection(graphPath);
-    coordinator.resetGraphProjectionCoordinator();
+    coordinator.resetGraphProjectionLifecycle();
     pending.resolve(makeGraphEditorSession(fixture.projection));
 
     await expect(request).resolves.toBe(false);

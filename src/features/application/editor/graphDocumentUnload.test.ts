@@ -8,8 +8,8 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from "@/features/core/resource";
-import { resetGraphProjectionCoordinator } from "@/features/application/editorProjection/graphProjectionCoordinator";
-import * as graphProjectionCoordinator from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import * as graphProjectionLifecycle from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { GraphService } from "@/services/graph/graphService";
 import {
@@ -44,19 +44,19 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const beginGraphLoadLifecycleImpl = graphProjectionCoordinator.beginGraphLoadLifecycle;
-const loadGraphProjectionImpl = graphProjectionCoordinator.loadGraphProjection;
+const beginGraphLoadLifecycleImpl = graphProjectionLifecycle.beginGraphLoadLifecycle;
+const loadGraphProjectionImpl = graphProjectionLifecycle.loadGraphProjection;
 
 describe("graph document lifecycle ownership", () => {
   const graphPath = "events/Main.yssbi-event";
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    resetGraphProjectionCoordinator();
-    vi.spyOn(graphProjectionCoordinator, "beginGraphLoadLifecycle").mockImplementation(
+    resetGraphProjectionLifecycle();
+    vi.spyOn(graphProjectionLifecycle, "beginGraphLoadLifecycle").mockImplementation(
       beginGraphLoadLifecycleImpl,
     );
-    vi.spyOn(graphProjectionCoordinator, "loadGraphProjection").mockImplementation(
+    vi.spyOn(graphProjectionLifecycle, "loadGraphProjection").mockImplementation(
       loadGraphProjectionImpl,
     );
     projectPublicationCoordinator.cancelProject();
@@ -85,11 +85,9 @@ describe("graph document lifecycle ownership", () => {
     await unloadGraphDocument(graphPath);
     const reopened = useProjectIOStore.getState().loadGraph(graphPath);
 
-    expect(graphProjectionCoordinator.loadGraphProjection).toHaveBeenCalledTimes(2);
-    expect(
-      vi.mocked(graphProjectionCoordinator.loadGraphProjection).mock.calls[0]?.[1],
-    ).toBeLessThan(
-      vi.mocked(graphProjectionCoordinator.loadGraphProjection).mock.calls[1]?.[1] ?? 0,
+    expect(graphProjectionLifecycle.loadGraphProjection).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(graphProjectionLifecycle.loadGraphProjection).mock.calls[0]?.[1]).toBeLessThan(
+      vi.mocked(graphProjectionLifecycle.loadGraphProjection).mock.calls[1]?.[1] ?? 0,
     );
 
     oldLoad.resolve(makeGraphEditorSession(oldFixture.projection));
@@ -131,7 +129,7 @@ describe("graph document lifecycle ownership", () => {
       "project-instance-1",
     );
     expect(vi.mocked(GraphService.unloadProjectGraph).mock.calls[0]?.[1]).toBeLessThan(
-      vi.mocked(graphProjectionCoordinator.loadGraphProjection).mock.calls[0]?.[1] ?? 0,
+      vi.mocked(graphProjectionLifecycle.loadGraphProjection).mock.calls[0]?.[1] ?? 0,
     );
   });
 });

@@ -31,7 +31,7 @@ import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { ProjectService } from "@/services/project/projectService";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
-import { prepareGraphProjectionForPublication } from "@/features/application/editorProjection/graphProjectionCoordinator";
+import { prepareGraphProjectionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useHistoryStore } from "@/features/core/history";
