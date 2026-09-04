@@ -5,7 +5,7 @@
  * 用于节点之间的数据依赖连接
  */
 
-import type { DataType } from "./dataType";
+import type { PortTypeStateDto } from "./editorProjection";
 
 /**
  * Pin 方向
@@ -21,5 +21,5 @@ export interface Pin {
   nodeId: string;
   name: string;
   direction: PinDirection;
-  dataType?: DataType;
+  typeState: PortTypeStateDto;
 }

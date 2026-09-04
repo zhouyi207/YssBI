@@ -9,7 +9,6 @@
 import type { ConnectionId, GraphPath, NodeId, PinId } from "@/shared/types/domain/ids";
 export type { NodeId, PinId, GraphPath, ConnectionId };
 import type { PinDirection } from "@/shared/types/domain/pin";
-import type { DataType } from "@/shared/types/domain/dataType";
 import type {
   DiagnosticDto,
   EditorInputBindingDto,
@@ -20,9 +19,10 @@ import type {
   PortAddressDto,
   PortConnectionCapabilityDto,
   PortDisplayDto,
+  PortTypeStateDto,
   ResolvedPortStatusDto,
   SchemaSummaryDto,
-  TypeSummaryDto,
+  AcceptedTypeDto,
 } from "@/shared/types/domain/editorProjection";
 
 // ==================== NodeData ====================
@@ -48,8 +48,6 @@ export interface PinData {
   nodeId: string;
   name: string;
   direction: PinDirection;
-  /** Derived display/interaction alias for `resolvedType.dataType`. */
-  dataType?: DataType;
   /** Stable structured address; projected pins use its local key as `id`. */
   address: PortAddressDto;
   display: PortDisplayDto;
@@ -57,7 +55,8 @@ export interface PinData {
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
   input: EditorInputBindingDto | null;
-  resolvedType: TypeSummaryDto | null;
+  acceptedType: AcceptedTypeDto;
+  typeState: PortTypeStateDto;
   resolvedSchema: SchemaSummaryDto | null;
   status: ResolvedPortStatusDto;
 }

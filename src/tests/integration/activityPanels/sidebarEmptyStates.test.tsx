@@ -30,7 +30,7 @@ function readyCatalogState(): LocalizedNodeCatalogState {
     ],
     items: [
       {
-        nodeTypeId: "yssbi.numeric.add.int64",
+        nodeTypeId: "yssbi.numeric.add",
         title: "Add",
         documentation: null,
         categoryId: "math",
@@ -42,7 +42,7 @@ function readyCatalogState(): LocalizedNodeCatalogState {
         resourceNames: [],
         ports: [],
         parameters: [],
-        creation: { kind: "static" as const, nodeTypeId: "yssbi.numeric.add.int64" },
+        creation: { kind: "static" as const, nodeTypeId: "yssbi.numeric.add" },
       },
     ],
   };
@@ -143,17 +143,17 @@ describe("Sidebar tab-level empty states", () => {
     act(() => setInputValue(input!, "add"));
 
     expect(host.textContent).toContain("Add");
-    expect(host.textContent).not.toContain("yssbi.numeric.add.int64");
-    expect(host.querySelector('[title="yssbi.numeric.add.int64"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("yssbi.numeric.add");
+    expect(host.querySelector('[title="yssbi.numeric.add"]')).not.toBeNull();
 
     expect(draggableInputs).toContainEqual({
-      id: "sidebar-item-node-static:yssbi.numeric.add.int64",
+      id: "sidebar-item-node-static:yssbi.numeric.add",
       disabled: false,
       data: {
         type: "node-template",
         template: {
           title: "Add",
-          descriptor: { kind: "static", nodeTypeId: "yssbi.numeric.add.int64" },
+          descriptor: { kind: "static", nodeTypeId: "yssbi.numeric.add" },
         },
       },
     });

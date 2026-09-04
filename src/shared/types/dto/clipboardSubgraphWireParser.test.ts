@@ -53,7 +53,12 @@ const completeSnapshot = {
   inputStates: [
     {
       address: { nodeId: "node/1", port: { kind: "declared", key: "input" } },
-      state: { literalOverride: 42 },
+      state: {
+        literalOverride: {
+          value_type: { Concrete: "core.int64" },
+          value: { Integer: 42 },
+        },
+      },
     },
   ],
   connections: [
@@ -84,6 +89,11 @@ describe("parseClipboardSubgraphDto", () => {
   it("rejects unsupported schema versions and non-array collections", () => {
     expect(() => parseClipboardSubgraphDto({ ...completeSnapshot, schemaVersion: 2 })).toThrow();
     expect(() => parseClipboardSubgraphDto({ ...completeSnapshot, nodes: {} })).toThrow();
+
+    const untypedLiteral = cloneSnapshot();
+    const inputState = (untypedLiteral.inputStates as Array<Record<string, unknown>>)[0];
+    (inputState.state as Record<string, unknown>).literalOverride = 42;
+    expect(() => parseClipboardSubgraphDto(untypedLiteral)).toThrow();
   });
 
   it("rejects empty clipboard-local IDs", () => {

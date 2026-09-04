@@ -5,7 +5,7 @@ import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTyp
 
 export type ConnectionCandidatePin = Pick<
   PinData,
-  "id" | "nodeId" | "direction" | "dataType" | "connections" | "orphan" | "resolvedType"
+  "id" | "nodeId" | "direction" | "connections" | "orphan" | "acceptedType" | "typeState"
 >;
 
 export type TypeCompatibility = "compatible" | "incompatible" | "indeterminate";
@@ -28,6 +28,7 @@ export function getDataTypeCompatibility(
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): TypeCompatibility {
   if (!source || !target) return "indeterminate";
+  if (source.kind === "Int64" && target.kind === "Float64") return "compatible";
   if (source.kind === "OneOf") {
     return everyCompatibility(
       source.inner.map((member) => getDataTypeCompatibility(member, target, typeSystem)),
@@ -58,14 +59,19 @@ export function isPinCompatible(
 ): boolean {
   const source = candidate.direction === "output" ? candidate : dragged;
   const target = candidate.direction === "input" ? candidate : dragged;
-  return getPinCompatibility(source, target, typeSystem) === "compatible";
+  return getPinCompatibility(source, target, typeSystem) !== "incompatible";
 }
 
-function projectedPinDataType(pin: ConnectionCandidatePin): DataType | null | undefined {
-  if (pin.resolvedType) {
-    return pin.resolvedType.resolved ? pin.resolvedType.dataType : null;
+function effectiveDomain(pin: ConnectionCandidatePin): readonly DataType[] | null {
+  switch (pin.typeState.status) {
+    case "exact":
+      return pin.typeState.dataType ? [pin.typeState.dataType] : null;
+    case "constrained":
+      return pin.typeState.domain;
+    case "unknown":
+    case "conflict":
+      return null;
   }
-  return pin.dataType;
 }
 
 export function getPinCompatibility(
@@ -81,11 +87,22 @@ export function getPinCompatibility(
   )
     return "incompatible";
 
-  return getDataTypeCompatibility(
-    projectedPinDataType(source),
-    projectedPinDataType(target),
-    typeSystem,
+  const sourceDomain = effectiveDomain(source);
+  const targetDomain = target.acceptedType.domain;
+  if (!sourceDomain || !targetDomain || sourceDomain.length === 0 || targetDomain.length === 0) {
+    return "indeterminate";
+  }
+  const sourceResults = sourceDomain.map((sourceType) =>
+    someCompatibility(
+      targetDomain.map((targetType) =>
+        getDataTypeCompatibility(sourceType, targetType, typeSystem),
+      ),
+    ),
   );
+  if (sourceResults.every((result) => result === "compatible")) return "compatible";
+  return sourceResults.some((result) => result !== "incompatible")
+    ? "indeterminate"
+    : "incompatible";
 }
 
 export type ConnectionInvalidReason =

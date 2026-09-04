@@ -117,10 +117,27 @@ export type DynamicMemberLocatorDto =
 
 export type TypeExprDto =
   | { Concrete: string }
+  | { Class: string }
   | { Generic: string }
   | { Applied: { constructor: string; arguments: TypeExprDto[] } }
   | { Union: TypeExprDto[] }
   | "Unknown";
+
+export type ProtocolValueDto =
+  | "Null"
+  | { Bool: boolean }
+  | { Integer: number }
+  | { Unsigned: number }
+  | { Decimal: string }
+  | { String: string }
+  | { Bytes: number[] }
+  | { List: ProtocolValueDto[] }
+  | { Object: Record<string, ProtocolValueDto> };
+
+export interface TypedLiteralDto {
+  value_type: TypeExprDto;
+  value: ProtocolValueDto;
+}
 
 export type DynamicPortBindingDto =
   | { kind: "user_created"; order: string }
@@ -138,7 +155,7 @@ export type DynamicPortBindingDto =
     };
 
 export interface InputStateDto {
-  literal_override: unknown | null;
+  literal_override: TypedLiteralDto | null;
 }
 
 /** Raw unsaved Graph document owned by one frontend editor session. */

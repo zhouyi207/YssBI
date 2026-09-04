@@ -936,7 +936,6 @@ export const enUS = {
         graph_connection_direction_mismatch: "Connect an output port to an input port",
         graph_connection_type_mismatch: "These port types are incompatible",
         graph_connection_type_unavailable: "Port type information is unavailable",
-        graph_connection_type_unresolved: "Resolve the port types before connecting",
         graph_connection_limit_reached: "This port has reached its connection limit",
         graph_connection_order_required: "This connection requires an order",
         graph_connection_order_forbidden: "This connection does not accept an order",

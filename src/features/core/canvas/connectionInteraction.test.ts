@@ -67,8 +67,8 @@ describe("connectionInteraction", () => {
       source,
       pin({
         ...target,
-        dataType: { kind: "String" },
-        resolvedType: { display: "String", resolved: true, dataType: { kind: "String" } },
+        acceptedType: { display: "String", domain: [{ kind: "String" }] },
+        typeState: { status: "exact", display: "String", dataType: { kind: "String" } },
       }),
       { kind: "invalid", reason: "type-mismatch" },
     ],

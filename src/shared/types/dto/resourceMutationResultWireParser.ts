@@ -10,6 +10,7 @@ import type {
   ResourceMutationResultDto,
 } from "@/shared/types/dto/editorMutation";
 import {
+  isTypedLiteralWire,
   isTypeExprWire,
   parseGraphProjectionReplacementDto,
   parseHistoryStatusDto,
@@ -113,7 +114,7 @@ function isInputStateShape(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["literal_override"]) &&
-    isJsonValue(value.literal_override)
+    (value.literal_override === null || isTypedLiteralWire(value.literal_override))
   );
 }
 

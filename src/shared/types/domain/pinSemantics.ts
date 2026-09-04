@@ -6,16 +6,27 @@
 
 import type { DataType } from "./dataType";
 import { dataTypeDisplay } from "./dataType";
+import type { PortTypeStateDto } from "./editorProjection";
 
 export type PinContainerOverlay = "array" | "dataseries";
 
 export interface PinSemanticsFields {
-  dataType?: DataType;
+  typeState: PortTypeStateDto;
+}
+
+export function exactPinDataType(pin: PinSemanticsFields): DataType | undefined {
+  return pin.typeState.status === "exact" ? (pin.typeState.dataType ?? undefined) : undefined;
 }
 
 /** UI label only — not used for compatibility or coercion. */
 export function pinTypeLabel(pin: PinSemanticsFields): string {
-  if (pin.dataType) return dataTypeDisplay(pin.dataType);
+  const dataType = exactPinDataType(pin);
+  if (dataType) {
+    return dataTypeDisplay(dataType);
+  }
+  if (pin.typeState.status === "constrained") {
+    return pin.typeState.domain.map(dataTypeDisplay).join(" | ");
+  }
   return "unknown";
 }
 

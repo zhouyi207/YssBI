@@ -5,13 +5,19 @@ describe("pinSemantics", () => {
   it("derives labels from structured dataType", () => {
     expect(
       pinTypeLabel({
-        dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+        typeState: {
+          status: "exact",
+          display: "ignored",
+          dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+        },
       }),
     ).toBe("DataSeries<Float64>");
   });
 
   it("requires structured dataType for data pin labels", () => {
-    expect(pinTypeLabel({})).toBe("unknown");
+    expect(
+      pinTypeLabel({ typeState: { status: "unknown", reasonCode: "unresolved_upstream" } }),
+    ).toBe("unknown");
   });
 
   it("maps structured data types to theme keys", () => {

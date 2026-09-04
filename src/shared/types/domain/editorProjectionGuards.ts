@@ -194,13 +194,42 @@ function isInputBinding(value: unknown): boolean {
   );
 }
 
-function isTypeSummary(value: unknown): boolean {
+function isAcceptedType(value: unknown): boolean {
   return (
-    hasExactKeys(value, ["display", "resolved", "dataType"]) &&
+    hasExactKeys(value, ["display", "domain"]) &&
     typeof value.display === "string" &&
-    typeof value.resolved === "boolean" &&
-    (value.dataType === null || isBackendDataType(value.dataType))
+    (value.domain === null ||
+      (Array.isArray(value.domain) && value.domain.every(isBackendDataType)))
   );
+}
+
+function isPortTypeState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  switch (value.status) {
+    case "exact":
+      return (
+        hasExactKeys(value, ["status", "display", "dataType"]) &&
+        typeof value.display === "string" &&
+        (value.dataType === null || isBackendDataType(value.dataType))
+      );
+    case "constrained":
+      return (
+        hasExactKeys(value, ["status", "display", "domain"]) &&
+        typeof value.display === "string" &&
+        Array.isArray(value.domain) &&
+        value.domain.length > 0 &&
+        value.domain.every(isBackendDataType)
+      );
+    case "unknown":
+      return hasExactKeys(value, ["status", "reasonCode"]) && typeof value.reasonCode === "string";
+    case "conflict":
+      return (
+        hasExactKeys(value, ["status", "diagnosticCode"]) &&
+        typeof value.diagnosticCode === "string"
+      );
+    default:
+      return false;
+  }
 }
 
 function isSchemaSummary(value: unknown): boolean {
@@ -227,7 +256,8 @@ function isPort(value: unknown): boolean {
       "canRemove",
       "connections",
       "input",
-      "resolvedType",
+      "acceptedType",
+      "typeState",
       "resolvedSchema",
       "status",
     ]) ||
@@ -238,7 +268,8 @@ function isPort(value: unknown): boolean {
     typeof value.canRemove !== "boolean" ||
     !isConnectionCapability(value.connections) ||
     (value.input !== null && !isInputBinding(value.input)) ||
-    (value.resolvedType !== null && !isTypeSummary(value.resolvedType)) ||
+    !isAcceptedType(value.acceptedType) ||
+    !isPortTypeState(value.typeState) ||
     (value.resolvedSchema !== null && !isSchemaSummary(value.resolvedSchema)) ||
     !portStatuses.has(value.status as string)
   ) {

@@ -130,6 +130,7 @@ export function isTypeExprWire(value: unknown): value is TypeExprDto {
   if (value === "Unknown") return true;
   if (!isRecord(value) || Object.keys(value).length !== 1) return false;
   if (hasExactKeys(value, ["Concrete"])) return typeof value.Concrete === "string";
+  if (hasExactKeys(value, ["Class"])) return typeof value.Class === "string";
   if (hasExactKeys(value, ["Generic"])) return typeof value.Generic === "string";
   if (hasExactKeys(value, ["Applied"])) {
     return (
@@ -144,6 +145,51 @@ export function isTypeExprWire(value: unknown): value is TypeExprDto {
     hasExactKeys(value, ["Union"]) &&
     Array.isArray(value.Union) &&
     value.Union.every(isTypeExprWire)
+  );
+}
+
+function isCanonicalDecimal(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(value) && value !== "-0"
+  );
+}
+
+export function isProtocolValueWire(value: unknown): boolean {
+  if (value === "Null") return true;
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if ("Bool" in value) return typeof value.Bool === "boolean";
+  if ("Integer" in value) return Number.isSafeInteger(value.Integer);
+  if ("Unsigned" in value) {
+    return (
+      typeof value.Unsigned === "number" &&
+      Number.isSafeInteger(value.Unsigned) &&
+      value.Unsigned >= 0
+    );
+  }
+  if ("Decimal" in value) return isCanonicalDecimal(value.Decimal);
+  if ("String" in value) return typeof value.String === "string";
+  if ("Bytes" in value) {
+    return (
+      Array.isArray(value.Bytes) &&
+      value.Bytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+    );
+  }
+  if ("List" in value) {
+    return Array.isArray(value.List) && value.List.every(isProtocolValueWire);
+  }
+  return (
+    "Object" in value &&
+    isRecord(value.Object) &&
+    Object.values(value.Object).every(isProtocolValueWire)
+  );
+}
+
+export function isTypedLiteralWire(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["value_type", "value"]) &&
+    isTypeExprWire(value.value_type) &&
+    isProtocolValueWire(value.value)
   );
 }
 
@@ -185,7 +231,11 @@ function isDocumentConnection(value: unknown): boolean {
 }
 
 function isInputState(value: unknown): boolean {
-  return isRecord(value) && hasExactKeys(value, ["literal_override"]);
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["literal_override"]) &&
+    (value.literal_override === null || isTypedLiteralWire(value.literal_override))
+  );
 }
 
 function isGraphOperation(value: unknown): boolean {

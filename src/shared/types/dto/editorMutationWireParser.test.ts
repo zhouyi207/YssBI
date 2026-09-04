@@ -39,7 +39,10 @@ function projection(path: string, revision: number) {
 }
 
 function projectionWithParameterEditor(): Record<string, unknown> {
-  const value = projectionWithResolvedType(null);
+  const value = projectionWithTypeState({
+    status: "unknown",
+    reasonCode: "unconnected_input",
+  });
   const projectedNode = (value.nodes as Array<Record<string, unknown>>)[0];
   projectedNode.parameterEditors = [
     {
@@ -59,7 +62,7 @@ function projectionWithParameterEditor(): Record<string, unknown> {
   return value;
 }
 
-function projectionWithResolvedType(resolvedType: unknown): Record<string, unknown> {
+function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
   const value: Record<string, unknown> = projection(graphPath, 5);
   value.nodes = [
     {
@@ -89,7 +92,8 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
             canMove: false,
           },
           input: null,
-          resolvedType,
+          acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+          typeState,
           resolvedSchema: null,
           status: "resolved",
         },
@@ -202,9 +206,9 @@ describe("editor mutation wire parser", () => {
   });
 
   it("requires all six exact connection capability fields", () => {
-    const valid = projectionWithResolvedType({
+    const valid = projectionWithTypeState({
+      status: "exact",
       display: "Float64",
-      resolved: true,
       dataType: { kind: "Float64" },
     });
     const node = (valid.nodes as Array<Record<string, unknown>>)[0];
@@ -330,20 +334,21 @@ describe("editor mutation wire parser", () => {
     expect(() => parseGraphProjectionReplacementDto(replacement)).toThrow("projection replacement");
   });
 
-  it("requires an exact structured dataType on every non-null resolved type", () => {
-    const malformedResolvedTypes = [
-      { display: "Float64", resolved: true },
-      { display: "Float64", resolved: true, dataType: "Float64" },
-      { display: "Float64", resolved: true, dataType: { kind: "Float32" } },
-      { display: "Array", resolved: true, dataType: { kind: "Array" } },
-      { display: "Float64", resolved: true, dataType: { kind: "Float64", extra: true } },
+  it("requires a strict structured state for every projected port type", () => {
+    const malformedTypeStates = [
+      { status: "exact", display: "Float64" },
+      { status: "exact", display: "Float64", dataType: "Float64" },
+      { status: "exact", display: "Float64", dataType: { kind: "Float32" } },
+      { status: "constrained", display: "Number", domain: [] },
+      { status: "unknown" },
+      { status: "conflict", diagnosticCode: 1 },
     ];
 
-    for (const resolvedType of malformedResolvedTypes) {
+    for (const typeState of malformedTypeStates) {
       expect(() =>
         parseGraphProjectionReplacementDto({
           graphPath,
-          projection: projectionWithResolvedType(resolvedType),
+          projection: projectionWithTypeState(typeState),
         }),
       ).toThrow("projection replacement");
     }
@@ -352,9 +357,9 @@ describe("editor mutation wire parser", () => {
   it("accepts structured dataType independently from its display label", () => {
     const replacement = {
       graphPath,
-      projection: projectionWithResolvedType({
+      projection: projectionWithTypeState({
+        status: "exact",
         display: "Not parsed by the frontend",
-        resolved: true,
         dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
       }),
     };

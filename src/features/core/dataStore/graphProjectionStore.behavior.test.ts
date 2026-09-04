@@ -14,9 +14,9 @@ describe("graphProjectionStore projected entity truth", () => {
 
   it("materializes exact structured data types for pin semantics", () => {
     const fixture = makeEditorProjectionFixture({ graphPath: "graph-1" });
-    fixture.projection.nodes[0].ports[1].resolvedType = {
+    fixture.projection.nodes[0].ports[1].typeState = {
+      status: "exact",
       display: "Frontend must not parse this text",
-      resolved: true,
       dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
     };
 
@@ -25,25 +25,35 @@ describe("graphProjectionStore projected entity truth", () => {
     const bucket = useGraphProjectionStore.getState().graphEntities["graph-1"];
     const output = bucket.pins[fixture.outputKey];
     const input = bucket.pins[fixture.inputKey];
-    expect(output).toMatchObject({ dataType: { kind: "Float64" } });
-    expect(input.dataType).toEqual({ kind: "DataSeries", inner: { kind: "Float64" } });
+    expect(output.typeState).toEqual({
+      status: "exact",
+      display: "Float64",
+      dataType: { kind: "Float64" },
+    });
+    expect(input.typeState).toEqual({
+      status: "exact",
+      display: "Frontend must not parse this text",
+      dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+    });
     expect(pinTypeLabel(input)).toBe("DataSeries<Float64>");
   });
 
   it("preserves unresolved projected types without materializing Any", () => {
     const fixture = makeEditorProjectionFixture({ graphPath: "graph-1" });
-    fixture.projection.nodes[0].ports[1].resolvedType = {
-      display: "Unknown",
-      resolved: false,
-      dataType: null,
+    fixture.projection.nodes[0].ports[1].typeState = {
+      status: "unknown",
+      reasonCode: "unresolved_upstream",
     };
 
     useGraphProjectionStore.getState().replaceProjection("graph-1", fixture.projection, 1);
 
     const input =
       useGraphProjectionStore.getState().graphEntities["graph-1"].pins[fixture.inputKey];
-    expect(input.resolvedType).toEqual({ display: "Unknown", resolved: false, dataType: null });
-    expect(input.dataType).toBeUndefined();
+    expect(input.typeState).toEqual({
+      status: "unknown",
+      reasonCode: "unresolved_upstream",
+    });
+    expect(input.typeState.status).toBe("unknown");
   });
 
   it("stores projected connection topology and required metadata", () => {

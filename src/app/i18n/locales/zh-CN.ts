@@ -888,7 +888,6 @@ export const zhCN = {
         graph_connection_direction_mismatch: "请将输出端口连接到输入端口",
         graph_connection_type_mismatch: "这些端口的数据类型不兼容",
         graph_connection_type_unavailable: "端口类型信息不可用",
-        graph_connection_type_unresolved: "请先解析端口类型再连接",
         graph_connection_limit_reached: "该端口已达到连接数量上限",
         graph_connection_order_required: "该连接需要指定顺序",
         graph_connection_order_forbidden: "该连接不允许指定顺序",

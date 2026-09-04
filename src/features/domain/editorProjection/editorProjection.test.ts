@@ -55,9 +55,13 @@ function validProjection(): EditorGraphProjectionDto {
               canMove: true,
             },
             input: null,
-            resolvedType: {
+            acceptedType: {
               display: "Model",
-              resolved: true,
+              domain: [{ kind: "Struct", inner: "Model" }],
+            },
+            typeState: {
+              status: "exact",
+              display: "Model",
               dataType: { kind: "Struct", inner: "Model" },
             },
             resolvedSchema: { kind: "derived", fields: [] },
@@ -82,7 +86,8 @@ function validProjection(): EditorGraphProjectionDto {
               protocolDefault: 0,
               effective: "connections",
             },
-            resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+            acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+            typeState: { status: "exact", display: "Float64", dataType: { kind: "Float64" } },
             resolvedSchema: { kind: "input", fields: [] },
             status: "resolved",
           },

@@ -76,7 +76,7 @@
     "projection": {
       "basis": {
         "graphPath": "functions/forecast.yssbi-function",
-        "registryFingerprint": "6f6f86529229414b43869164a8e162d83b33b8503755b00938dc40a62a03c86c",
+        "registryFingerprint": "f769f73df586cfffdcc1c12ac870c3086a529a0114e300ffdf9aa2589f72d9d3",
         "resourceVersions": {
           "functions/forecast.yssbi-function": "revision:1"
         }

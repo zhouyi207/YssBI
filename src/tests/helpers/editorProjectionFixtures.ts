@@ -14,16 +14,17 @@ export interface EditorProjectionFixtureOptions {
 }
 
 export function makeProjectedPinData(
-  overrides: Partial<PinData> & Pick<PinData, "id" | "nodeId" | "direction">,
+  overrides: Partial<PinData> &
+    Pick<PinData, "id" | "nodeId" | "direction"> & { dataType?: DataType },
 ): PinData {
-  const dataType: DataType | undefined = overrides.dataType ?? { kind: "Float64" };
+  const { dataType: overriddenDataType, ...projectedOverrides } = overrides;
+  const dataType: DataType | undefined = overriddenDataType ?? { kind: "Float64" };
   const label = overrides.name ?? overrides.id;
   const base: PinData = {
     id: overrides.id,
     nodeId: overrides.nodeId,
     name: label,
     direction: overrides.direction,
-    dataType,
     address: {
       kind: "declared",
       nodeId: overrides.nodeId,
@@ -44,11 +45,19 @@ export function makeProjectedPinData(
       overrides.direction === "input"
         ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
         : null,
-    resolvedType: dataType ? { display: dataType.kind, resolved: true, dataType } : null,
+    acceptedType: overrides.acceptedType ?? {
+      display: dataType?.kind ?? "unknown",
+      domain: dataType ? [dataType] : null,
+    },
+    typeState:
+      overrides.typeState ??
+      (dataType
+        ? { status: "exact", display: dataType.kind, dataType }
+        : { status: "unknown", reasonCode: "unsupported_declaration" }),
     resolvedSchema: null,
     status: "resolved",
   };
-  return { ...base, ...overrides };
+  return { ...base, ...projectedOverrides };
 }
 
 export function makeGraphEditorSession(
@@ -134,7 +143,12 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 canMove: true,
               },
               input: null,
-              resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+              acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+              typeState: {
+                status: "exact",
+                display: "Float64",
+                dataType: { kind: "Float64" },
+              },
               resolvedSchema: null,
               status: "resolved",
             },
@@ -157,7 +171,12 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 protocolDefault: null,
                 effective: "connections",
               },
-              resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+              acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+              typeState: {
+                status: "exact",
+                display: "Float64",
+                dataType: { kind: "Float64" },
+              },
               resolvedSchema: null,
               status: "resolved",
             },

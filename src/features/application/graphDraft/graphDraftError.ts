@@ -8,7 +8,6 @@ export const GRAPH_DRAFT_ERROR_CODES = [
   "graph_connection_direction_mismatch",
   "graph_connection_type_mismatch",
   "graph_connection_type_unavailable",
-  "graph_connection_type_unresolved",
   "graph_connection_limit_reached",
   "graph_connection_order_required",
   "graph_connection_order_forbidden",

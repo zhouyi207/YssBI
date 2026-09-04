@@ -48,14 +48,14 @@ describe("Task 17 focused Catalog search wire golden", () => {
 
   it("preserves raw Rust metadata until the shared frontend builder normalizes it", () => {
     const catalog = parsedCatalog();
-    const staticItem = catalog.items.find((item) => item.nodeTypeId === "yssbi.numeric.add.int64");
+    const staticItem = catalog.items.find((item) => item.nodeTypeId === "yssbi.numeric.add");
     const resourceItem = catalog.items.find(
       (item) => item.resourcePath === "functions/catalog-search-wire",
     );
     expect(staticItem).toBeDefined();
     expect(resourceItem).toBeDefined();
 
-    expect(staticItem!.backendSearchText).toEqual(["Add", "plus", "sum", "+"]);
+    expect(staticItem!.backendSearchText).toEqual(["Add", "plus", "sum", "series add", "+"]);
     expect(resourceItem!.resourceNames).toEqual(["Straße_Data Cafe\u0301 数据"]);
     expect(resourceItem!.technicalTerms).toContain("Maße_Value\u0301");
     expect(resourceItem!.technicalTerms).toContain("技术_Term");

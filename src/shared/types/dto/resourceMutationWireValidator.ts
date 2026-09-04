@@ -2,7 +2,7 @@ import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath"
 import type { ResourceDeltaDto } from "@/shared/types/dto/editorMutation";
 import { isRustDataValueWire } from "@/shared/types/dto/dataValue";
 import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
-import { isTypeExprWire } from "@/shared/types/dto/editorMutationWireParser";
+import { isTypedLiteralWire, isTypeExprWire } from "@/shared/types/dto/editorMutationWireParser";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -108,7 +108,11 @@ function isDocumentConnection(value: unknown): boolean {
 }
 
 function isInputState(value: unknown): boolean {
-  return isRecord(value) && hasOwn(value, "literal_override");
+  return (
+    isRecord(value) &&
+    hasOwn(value, "literal_override") &&
+    (value.literal_override === null || isTypedLiteralWire(value.literal_override))
+  );
 }
 
 function isNullableInputState(value: unknown): boolean {

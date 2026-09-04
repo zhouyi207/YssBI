@@ -1,5 +1,5 @@
 import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
-import type { TypeExprDto } from "@/shared/types/domain/editorMutation";
+import type { TypeExprDto, TypedLiteralDto } from "@/shared/types/domain/editorMutation";
 
 export type ClipboardNodeCreationDto =
   | { kind: "static"; nodeTypeId: string }
@@ -57,7 +57,7 @@ export interface ClipboardPortBindingDto {
 
 export interface ClipboardInputStateDto {
   address: ClipboardPortAddressDto;
-  state: { literalOverride: unknown | null };
+  state: { literalOverride: TypedLiteralDto | null };
 }
 
 export interface ClipboardConnectionDto {

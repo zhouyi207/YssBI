@@ -26,18 +26,22 @@ const TYPE_SYSTEM: TypeSystemSnapshot = {
 };
 
 function pin(
-  partial: Partial<ConnectionCandidatePin> & { direction: PinDirection },
+  partial: Partial<ConnectionCandidatePin> & { direction: PinDirection; dataType?: DataType },
 ): ConnectionCandidatePin {
-  const dataType = partial.dataType;
-  const resolvedType =
-    partial.resolvedType ??
-    (dataType ? { display: dataType.kind, resolved: true, dataType } : null);
+  const { dataType, ...projected } = partial;
+  const acceptedType =
+    partial.acceptedType ??
+    (dataType ? { display: dataType.kind, domain: [dataType] } : { display: "T", domain: null });
+  const typeState =
+    partial.typeState ??
+    (dataType
+      ? { status: "exact" as const, display: dataType.kind, dataType }
+      : { status: "unknown" as const, reasonCode: "unresolved_upstream" });
   return {
-    ...partial,
+    ...projected,
     id: partial.id ?? "p1",
     nodeId: partial.nodeId ?? "n1",
     direction: partial.direction,
-    dataType,
     orphan: partial.orphan ?? false,
     connections: partial.connections ?? {
       current: 0,
@@ -47,7 +51,8 @@ function pin(
       canReplace: false,
       canMove: true,
     },
-    resolvedType,
+    acceptedType,
+    typeState,
   };
 }
 
@@ -134,17 +139,46 @@ describe("getPinCompatibility", () => {
       id: "output",
       nodeId: "source",
       direction: "output",
-      resolvedType: { display: "Unknown", resolved: false, dataType: null },
+      typeState: { status: "unknown", reasonCode: "unresolved_upstream" },
     });
     const input = pin({
       id: "input",
       nodeId: "target",
       direction: "input",
-      resolvedType: { display: "core.float64", resolved: true, dataType: FLOAT64 },
+      acceptedType: { display: "core.float64", domain: [FLOAT64] },
+      typeState: { status: "exact", display: "core.float64", dataType: FLOAT64 },
       dataType: FLOAT64,
     });
 
     expect(getPinCompatibility(output, input)).toBe("indeterminate");
+  });
+
+  it("uses the resolved source domain without treating a constrained Pin as an exact Union", () => {
+    const output = pin({
+      id: "output",
+      nodeId: "source",
+      direction: "output",
+      typeState: {
+        status: "constrained",
+        display: "core.int64 | core.float64",
+        domain: [{ kind: "Int64" }, FLOAT64],
+      },
+    });
+    const floatInput = pin({
+      id: "float-input",
+      nodeId: "float-target",
+      direction: "input",
+      acceptedType: { display: "core.float64", domain: [FLOAT64] },
+    });
+    const intInput = pin({
+      id: "int-input",
+      nodeId: "int-target",
+      direction: "input",
+      acceptedType: { display: "core.int64", domain: [{ kind: "Int64" }] },
+    });
+
+    expect(getPinCompatibility(output, floatInput)).toBe("compatible");
+    expect(getPinCompatibility(output, intInput)).toBe("indeterminate");
   });
 });
 
@@ -211,7 +245,8 @@ describe("resolveConnectionCompatibility", () => {
       pin({
         ...input,
         dataType: STRING,
-        resolvedType: { display: "String", resolved: true, dataType: STRING },
+        acceptedType: { display: "String", domain: [STRING] },
+        typeState: { status: "exact", display: "String", dataType: STRING },
       }),
     ],
     ["orphan", output, pin({ ...input, orphan: true })],

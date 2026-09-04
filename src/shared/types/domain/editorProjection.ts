@@ -103,7 +103,8 @@ export interface EditorPortDto {
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
   input: EditorInputBindingDto | null;
-  resolvedType: TypeSummaryDto | null;
+  acceptedType: AcceptedTypeDto;
+  typeState: PortTypeStateDto;
   resolvedSchema: SchemaSummaryDto | null;
   status: ResolvedPortStatusDto;
 }
@@ -145,11 +146,16 @@ export type EffectiveInputBindingKindDto =
   | "protocolDefault"
   | "unbound";
 
-export interface TypeSummaryDto {
+export interface AcceptedTypeDto {
   display: string;
-  resolved: boolean;
-  dataType: DataType | null;
+  domain: DataType[] | null;
 }
+
+export type PortTypeStateDto =
+  | { status: "exact"; display: string; dataType: DataType | null }
+  | { status: "constrained"; display: string; domain: DataType[] }
+  | { status: "unknown"; reasonCode: string }
+  | { status: "conflict"; diagnosticCode: string };
 
 export interface SchemaSummaryDto {
   kind: SchemaSummaryKindDto;

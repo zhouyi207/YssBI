@@ -33,7 +33,6 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
     nodeId: "node-1",
     name: label,
     direction,
-    dataType: { kind: "Float64" },
     address: { kind: "declared", nodeId: "node-1", portKey: id },
     display: { label, instanceLabel: null },
     orphan: false,
@@ -50,7 +49,8 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
       direction === "input"
         ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
         : null,
-    resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
+    acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+    typeState: { status: "exact", display: "Float64", dataType: { kind: "Float64" } },
     resolvedSchema: null,
     status: "resolved",
   };
@@ -107,7 +107,8 @@ describe("isRerouteNodeView", () => {
               id: "projected-address-key",
               nodeId: "reroute-1",
               address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
-              resolvedType: { display: "Unknown", resolved: false, dataType: null },
+              acceptedType: { display: "T", domain: null },
+              typeState: { status: "unknown", reasonCode: "unresolved_upstream" },
             },
             connectionIds: ["edge-a"],
           },
@@ -121,7 +122,7 @@ describe("isRerouteNodeView", () => {
     expect(view.inputs[0]).toMatchObject({
       id: "projected-address-key",
       address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
-      resolvedType: { display: "Unknown", resolved: false, dataType: null },
+      typeState: { status: "unknown", reasonCode: "unresolved_upstream" },
     });
   });
 });

@@ -82,15 +82,15 @@ export function GraphPinController(props: GraphPinControllerProps) {
     orphan,
     status,
     input,
-    resolvedType,
+    typeState,
   } = pin;
-  const dataType = resolvedType?.resolved ? (resolvedType.dataType ?? undefined) : undefined;
+  const dataType = typeState.status === "exact" ? (typeState.dataType ?? undefined) : undefined;
   const defaultValue = input?.protocolDefault;
   const userValue = input?.literalOverride;
   const { t } = useTranslation();
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const pinSemantics = useMemo(() => ({ dataType }), [dataType]);
+  const pinSemantics = useMemo(() => ({ typeState }), [typeState]);
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
   const renderStyle = useMemo(

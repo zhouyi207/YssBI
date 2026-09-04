@@ -1,4 +1,5 @@
 import type { ClipboardSubgraphDto } from "./clipboardSubgraph";
+import { isTypedLiteralWire } from "./editorMutationWireParser";
 
 interface UnknownRecord {
   [key: string]: unknown;
@@ -174,7 +175,7 @@ function isInputState(value: unknown): boolean {
     isPortAddress(value.address) &&
     isRecord(value.state) &&
     hasExactKeys(value.state, ["literalOverride"]) &&
-    isJsonValue(value.state.literalOverride)
+    (value.state.literalOverride === null || isTypedLiteralWire(value.state.literalOverride))
   );
 }
 

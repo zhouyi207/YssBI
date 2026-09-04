@@ -6,6 +6,7 @@
 import {
   dataTypeContainerOverlay,
   dataTypeToThemePinType,
+  exactPinDataType,
   pinTypeLabel,
   type PinSemanticsFields,
 } from "./pinSemantics";
@@ -29,25 +30,27 @@ export interface PinRenderStyle {
 }
 
 function resolveShape(pin: PinVisualInput): PinShape {
-  if (pin.dataType?.kind === "DataFrame") return "gridRect";
-  if (pin.dataType?.kind === "Struct") return "hexagon";
+  const dataType = exactPinDataType(pin);
+  if (dataType?.kind === "DataFrame") return "gridRect";
+  if (dataType?.kind === "Struct") return "hexagon";
 
-  const container = dataTypeContainerOverlay(pin.dataType);
+  const container = dataTypeContainerOverlay(dataType);
   if (container === "array") return "roundedRect";
   if (container === "dataseries") return "diamond";
   return "circle";
 }
 
 export function resolvePinVisualSpec(pin: PinVisualInput): PinVisualSpec {
-  const colorKey = pin.dataType ? dataTypeToThemePinType(pin.dataType) : "object";
-  const container = dataTypeContainerOverlay(pin.dataType);
+  const dataType = exactPinDataType(pin);
+  const colorKey = dataType ? dataTypeToThemePinType(dataType) : "object";
+  const container = dataTypeContainerOverlay(dataType);
 
   return {
     label: pinTypeLabel(pin),
     shape: resolveShape(pin),
     colorKey,
     container,
-    dashedStroke: pin.dataType?.kind === "OneOf",
+    dashedStroke: dataType?.kind === "OneOf",
   };
 }
 

@@ -68,7 +68,8 @@ function projection(
               canMove: true,
             },
             input: null,
-            resolvedType: { display: "Number", resolved: true, dataType: { kind: "Float64" } },
+            acceptedType: { display: "Number", domain: [{ kind: "Float64" }] },
+            typeState: { status: "exact", display: "Number", dataType: { kind: "Float64" } },
             resolvedSchema: null,
             status: "resolved",
           },
@@ -91,7 +92,8 @@ function projection(
               protocolDefault: 1,
               effective: "connections",
             },
-            resolvedType: { display: "Number", resolved: true, dataType: { kind: "Float64" } },
+            acceptedType: { display: "Number", domain: [{ kind: "Float64" }] },
+            typeState: { status: "exact", display: "Number", dataType: { kind: "Float64" } },
             resolvedSchema: null,
             status: "resolved",
           },
@@ -205,7 +207,7 @@ describe("graphProjectionStore projection replacement", () => {
     store.replaceProjection("functions/main", projection(), 1);
     const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const malformed = projection("functions/main", 5);
-    Object.defineProperty(malformed.nodes[0].ports[0], "resolvedType", {
+    Object.defineProperty(malformed.nodes[0].ports[0], "typeState", {
       get: () => {
         throw new Error("candidate conversion failed");
       },

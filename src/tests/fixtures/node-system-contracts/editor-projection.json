@@ -1,7 +1,7 @@
 {
   "basis": {
     "graphPath": "events/contract.yssbi-event",
-    "registryFingerprint": "6f6f86529229414b43869164a8e162d83b33b8503755b00938dc40a62a03c86c",
+    "registryFingerprint": "f769f73df586cfffdcc1c12ac870c3086a529a0114e300ffdf9aa2589f72d9d3",
     "resourceVersions": {}
   },
   "connections": [],
@@ -72,13 +72,21 @@
           },
           "input": null,
           "orphan": false,
+          "acceptedType": {
+            "display": "core.bool",
+            "domain": [
+              {
+                "kind": "Boolean"
+              }
+            ]
+          },
           "resolvedSchema": null,
-          "resolvedType": {
+          "typeState": {
+            "status": "exact",
             "dataType": {
               "kind": "Boolean"
             },
-            "display": "core.bool",
-            "resolved": true
+            "display": "core.bool"
           },
           "status": "resolved"
         }
