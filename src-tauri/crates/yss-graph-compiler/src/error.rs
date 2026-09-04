@@ -5,6 +5,7 @@ use yss_graph_document::GraphResourcePath;
 pub enum GraphCompileErrorCode {
     InvalidDocument,
     CyclicDataDependency,
+    SemanticTypeUnresolved,
     LoweringInvariant,
 }
 

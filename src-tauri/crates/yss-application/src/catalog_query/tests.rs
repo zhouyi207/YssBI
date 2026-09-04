@@ -248,7 +248,7 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
         .map(|item| item.node_type_id.as_ref())
         .collect::<std::collections::BTreeSet<_>>();
 
-    assert!(ids.contains("yssbi.numeric.add.int64"));
+    assert!(ids.contains("yssbi.numeric.add"));
     assert!(!ids.contains("yssbi.logic.not"));
 }
 

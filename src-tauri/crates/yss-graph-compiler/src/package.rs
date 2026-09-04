@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use yss_graph_analysis::GraphResultCategory;
+use yss_graph_analysis::{GraphKernelSpecialization, GraphResultCategory};
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
 
@@ -159,33 +159,32 @@ impl GraphOutputBinding {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphOperation {
     source: GraphSourceIdentity,
-    kind: Box<str>,
     result_category: GraphResultCategory,
     parameter_handles: Box<[GraphParameterHandle]>,
     inputs: Box<[GraphInputBinding]>,
     observation_intents: Box<[GraphObservationIntent]>,
     outputs: Box<[GraphOutputBinding]>,
+    specialization: GraphKernelSpecialization,
 }
 
 impl GraphOperation {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         source: GraphSourceIdentity,
-        kind: impl Into<Box<str>>,
         result_category: GraphResultCategory,
         parameter_handles: Box<[GraphParameterHandle]>,
         inputs: Box<[GraphInputBinding]>,
         observation_intents: Box<[GraphObservationIntent]>,
         outputs: Box<[GraphOutputBinding]>,
+        specialization: GraphKernelSpecialization,
     ) -> Self {
         Self {
             source,
-            kind: kind.into(),
             result_category,
             parameter_handles,
             inputs,
             observation_intents,
             outputs,
+            specialization,
         }
     }
 
@@ -194,7 +193,7 @@ impl GraphOperation {
     }
 
     pub fn kind(&self) -> &str {
-        &self.kind
+        &self.specialization.implementation
     }
 
     pub const fn result_category(&self) -> GraphResultCategory {
@@ -215,6 +214,10 @@ impl GraphOperation {
 
     pub fn outputs(&self) -> &[GraphOutputBinding] {
         &self.outputs
+    }
+
+    pub fn specialization(&self) -> &GraphKernelSpecialization {
+        &self.specialization
     }
 }
 

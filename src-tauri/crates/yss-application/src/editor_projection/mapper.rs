@@ -2,13 +2,15 @@ use super::model::*;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
 use yss_graph_analysis::{
-    GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeProjectionFacts,
-    GraphParameterConfigurationFact, GraphParameterFact, GraphPortBacking, GraphPortFact,
-    GraphPortInstanceAdditionFact, GraphProjectionFacts,
+    GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeSemanticFact,
+    GraphParameterConfigurationFact, GraphParameterFact, GraphPortBacking,
+    GraphPortInstanceAdditionFact, GraphPortSemanticFact, GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress, PortRef};
-use yss_graph_protocol::{ParameterEditorSpec, PortDirection, TypeExpr};
+use yss_graph_protocol::{
+    ParameterEditorSpec, PortDirection, ResolvedType, TypeDomain, TypeExpr, TypeState,
+};
 
 pub fn build_editor_projection(
     input: EditorProjectionInput<'_>,
@@ -24,24 +26,20 @@ pub fn build_editor_projection(
         return Err(EditorProjectionError::RegistryMismatch);
     }
 
-    let empty_facts = GraphProjectionFacts::new([], [], GraphCompilationOutcome::Complete);
-    let facts = input
-        .analysis
-        .editor_projection_facts()
-        .unwrap_or(&empty_facts);
-    validate_facts(input.document, input.analysis, facts)?;
+    let snapshot = input.analysis.semantic_snapshot();
+    validate_semantic_snapshot(input.document, snapshot)?;
 
     let nodes = input
         .document
         .nodes
         .values()
         .map(|node| {
-            let node_facts = facts
+            let node_semantics = snapshot
                 .nodes()
                 .iter()
-                .find(|facts| facts.node_id == node.id)
-                .ok_or(EditorProjectionError::ProjectionFactsMismatch)?;
-            project_node(node, node_facts, facts.diagnostics(), input.document)
+                .find(|semantics| semantics.node_id == node.id)
+                .ok_or(EditorProjectionError::SemanticSnapshotMismatch)?;
+            project_node(node, node_semantics, snapshot.diagnostics(), input.document)
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_boxed_slice();
@@ -57,7 +55,7 @@ pub fn build_editor_projection(
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let diagnostics = facts
+    let diagnostics = snapshot
         .diagnostics()
         .iter()
         .map(project_diagnostic)
@@ -75,41 +73,29 @@ pub fn build_editor_projection(
         nodes,
         connections,
         diagnostics,
-        outcome: project_outcome(facts.outcome()),
+        outcome: project_outcome(snapshot.outcome()),
     })
 }
 
-fn validate_facts(
+fn validate_semantic_snapshot(
     document: &GraphDocument,
-    analysis: &yss_graph_analysis::GraphAnalysis,
-    facts: &GraphProjectionFacts,
+    snapshot: &GraphSemanticSnapshot,
 ) -> Result<(), EditorProjectionError> {
-    if analysis.nodes().len() != document.nodes.len()
-        || analysis.nodes().iter().any(|analysis_node| {
-            document
-                .nodes
-                .get(&analysis_node.node_id)
-                .is_none_or(|node| node.node_type != analysis_node.node_type)
-        })
-    {
-        return Err(EditorProjectionError::ProjectionFactsMismatch);
-    }
-
     let mut node_ids = BTreeMap::new();
-    for node in facts.nodes() {
+    for node in snapshot.nodes() {
         let Some(document_node) = document.nodes.get(&node.node_id) else {
-            return Err(EditorProjectionError::ProjectionFactsMismatch);
+            return Err(EditorProjectionError::SemanticSnapshotMismatch);
         };
         if document_node.node_type != node.node_type || node_ids.insert(node.node_id, ()).is_some()
         {
-            return Err(EditorProjectionError::ProjectionFactsMismatch);
+            return Err(EditorProjectionError::SemanticSnapshotMismatch);
         }
         for port in &node.ports {
             if port.address.node_id != node.node_id
                 || !port_fact_has_concrete_address(port, document)
                 || count_connections(document, &port.address) != port.connections.current
             {
-                return Err(EditorProjectionError::ProjectionFactsMismatch);
+                return Err(EditorProjectionError::SemanticSnapshotMismatch);
             }
         }
         let mut addition_keys = BTreeSet::new();
@@ -118,18 +104,18 @@ fn validate_facts(
             .iter()
             .any(|addition| !addition_keys.insert(&addition.template_key))
         {
-            return Err(EditorProjectionError::ProjectionFactsMismatch);
+            return Err(EditorProjectionError::SemanticSnapshotMismatch);
         }
     }
     if node_ids.len() != document.nodes.len() {
-        return Err(EditorProjectionError::ProjectionFactsMismatch);
+        return Err(EditorProjectionError::SemanticSnapshotMismatch);
     }
     Ok(())
 }
 
 fn project_node(
     node: &yss_graph_document::DocumentNode,
-    facts: &GraphNodeProjectionFacts,
+    facts: &GraphNodeSemanticFact,
     diagnostics: &[GraphDiagnosticFact],
     document: &GraphDocument,
 ) -> Result<EditorNodeModel, EditorProjectionError> {
@@ -197,14 +183,15 @@ fn project_node(
 }
 
 fn project_port(
-    port: &GraphPortFact,
+    port: &GraphPortSemanticFact,
     document: &GraphDocument,
 ) -> Result<EditorPortModel, EditorProjectionError> {
     let input = (port.direction == PortDirection::Input).then(|| {
         let literal_override = document
             .input_states
             .get(&port.address)
-            .and_then(|state| state.literal_override.clone());
+            .and_then(|state| state.literal_override.as_ref())
+            .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value));
         let effective = if has_connection(document, &port.address) {
             EditorEffectiveInputBinding::Connections
         } else if literal_override.is_some() {
@@ -216,7 +203,10 @@ fn project_port(
         };
         EditorInputBinding {
             literal_override,
-            protocol_default: port.protocol_default.clone(),
+            protocol_default: port
+                .protocol_default
+                .as_ref()
+                .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value)),
             effective,
         }
     });
@@ -247,7 +237,8 @@ fn project_port(
         can_remove: port.can_remove,
         connections,
         input,
-        resolved_type: Some(project_type_summary(&port.value_type)),
+        accepted_type: project_accepted_type(&port.accepted_type, port.accepted_domain.as_ref()),
+        type_state: project_type_state(&port.type_state),
         resolved_schema: port
             .schema
             .as_ref()
@@ -260,7 +251,7 @@ fn project_port(
     })
 }
 
-fn port_fact_has_concrete_address(port: &GraphPortFact, document: &GraphDocument) -> bool {
+fn port_fact_has_concrete_address(port: &GraphPortSemanticFact, document: &GraphDocument) -> bool {
     match (&port.backing, &port.address.port) {
         (GraphPortBacking::Declared, PortRef::Declared { .. }) => !port.orphan && !port.can_remove,
         (GraphPortBacking::DocumentInstance, PortRef::Instance { .. }) => {
@@ -386,12 +377,66 @@ fn project_filter_literal_type(
     }
 }
 
-fn project_type_summary(value: &TypeExpr) -> EditorTypeSummary {
-    EditorTypeSummary {
+fn project_accepted_type(value: &TypeExpr, domain: Option<&TypeDomain>) -> EditorAcceptedType {
+    EditorAcceptedType {
         display: type_display(value).into(),
-        resolved: type_is_resolved(value),
-        data_type: data_type_for(value),
-        internal_type_expr: value.clone(),
+        domain: domain.map(|domain| {
+            domain
+                .types()
+                .iter()
+                .filter_map(yss_graph_type_mapping::data_type_from_resolved_type)
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+        }),
+    }
+}
+
+fn project_type_state(value: &TypeState) -> EditorPortTypeState {
+    match value {
+        TypeState::Exact(value) => EditorPortTypeState::Exact {
+            display: resolved_type_display(value).into(),
+            data_type: yss_graph_type_mapping::data_type_from_resolved_type(value),
+        },
+        TypeState::Constrained(domain) => EditorPortTypeState::Constrained {
+            display: resolved_domain_display(domain).into(),
+            domain: domain
+                .types()
+                .iter()
+                .filter_map(yss_graph_type_mapping::data_type_from_resolved_type)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        },
+        TypeState::Unknown(reason) => EditorPortTypeState::Unknown { reason: *reason },
+        TypeState::Conflict(conflict) => EditorPortTypeState::Conflict {
+            conflict: *conflict,
+        },
+    }
+}
+
+fn resolved_domain_display(value: &TypeDomain) -> String {
+    value
+        .types()
+        .iter()
+        .map(resolved_type_display)
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+fn resolved_type_display(value: &ResolvedType) -> String {
+    match value {
+        ResolvedType::Nominal(id) => id.as_str().to_owned(),
+        ResolvedType::Applied {
+            constructor,
+            arguments,
+        } => format!(
+            "{}<{}>",
+            constructor.as_str(),
+            arguments
+                .iter()
+                .map(resolved_type_display)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 
@@ -520,13 +565,14 @@ fn data_type_for(value: &TypeExpr) -> Option<DataType> {
             .map(data_type_for)
             .collect::<Option<Vec<_>>>()
             .map(DataType::one_of),
-        TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_) => None,
+        TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_) => None,
     }
 }
 
 fn type_display(value: &TypeExpr) -> String {
     match value {
         TypeExpr::Concrete(id) => id.as_str().to_owned(),
+        TypeExpr::Class(id) => id.as_str().to_owned(),
         TypeExpr::Generic(id) => id.as_str().to_owned(),
         TypeExpr::Applied {
             constructor,
@@ -546,15 +592,5 @@ fn type_display(value: &TypeExpr) -> String {
             .collect::<Vec<_>>()
             .join(" | "),
         TypeExpr::Unknown => "unknown".to_owned(),
-    }
-}
-
-fn type_is_resolved(value: &TypeExpr) -> bool {
-    match value {
-        TypeExpr::Concrete(_) => true,
-        TypeExpr::Applied { arguments, .. } | TypeExpr::Union(arguments) => {
-            arguments.iter().all(type_is_resolved)
-        }
-        TypeExpr::Generic(_) | TypeExpr::Unknown => false,
     }
 }

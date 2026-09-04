@@ -6,7 +6,7 @@ $$
 \text{Result} = A \times B
 $$
 
-任一输入为 `DataSeries` 时，双方提升为 `DataSeries<Float64>`；标量广播到序列长度。纯标量输出 `Float64`。
+任一输入为 `DataSeries` 时，标量广播到序列长度且结果为 `DataSeries`。仅在任一输入为 `Float64` 时才提升元素类型；纯标量输入输出标量。
 
 ## 用法
 

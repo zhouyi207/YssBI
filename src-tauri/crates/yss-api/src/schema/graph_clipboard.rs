@@ -6,13 +6,13 @@
 
 use serde::{Deserialize, Serialize};
 
-use yss_graph_document::{NodePosition, TypedValue};
+use yss_graph_document::NodePosition;
 use yss_graph_editor::{
     ClipboardConnection, ClipboardDynamicMemberOrigin, ClipboardDynamicPortBinding,
     ClipboardInputState, ClipboardLastKnownPortMetadata, ClipboardNode, ClipboardNodeCreation,
     ClipboardPortAddress, ClipboardPortBinding, ClipboardPortRef, ClipboardSubgraph,
 };
-use yss_graph_protocol::{ParameterValues, TypeExpr};
+use yss_graph_protocol::{ParameterValues, TypeExpr, TypedValue};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(

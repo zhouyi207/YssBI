@@ -225,6 +225,7 @@ fn build_graph_projection_replacement(
     );
     let graph_basis = graph_compilation_basis(&basis);
     let analysis = captured.graph().analyze(
+        graph_path,
         document,
         &graph_basis,
         &graph_catalog,

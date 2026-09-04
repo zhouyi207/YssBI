@@ -5,7 +5,7 @@ use yss_graph_document::{
     GraphResourcePath, LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId,
     PortRef,
 };
-use yss_graph_protocol::{PortInstances, TypeExpr};
+use yss_graph_protocol::{PortCardinality, TypeExpr};
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
@@ -109,7 +109,7 @@ pub fn materialize_derived_port_bindings(
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
 ) -> GraphDocument {
-    let schemas = crate::schema_resolution::resolve_editor_schemas(document, registry, resources);
+    let schemas = crate::schema_resolution::resolve_graph_schemas(document, registry, resources);
     let mut candidate = document.clone();
     let templates = document
         .nodes
@@ -120,7 +120,7 @@ pub fn materialize_derived_port_bindings(
                 .into_iter()
                 .flat_map(move |protocol| {
                     protocol.interface.ports.iter().filter_map(move |spec| {
-                        let PortInstances::Derived { resolver } = &spec.instances else {
+                        let PortCardinality::Derived { resolver } = &spec.cardinality else {
                             return None;
                         };
                         Some((node.id, spec.key.clone(), resolver.as_str().to_owned()))

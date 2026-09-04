@@ -2,8 +2,8 @@ use yss_application::editor_projection::{
     EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
     EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorFilterLiteralType,
     EditorParameterConfiguration, EditorParameterModel, EditorParameterValueSource,
-    EditorPortModel, EditorPortStatus, EditorProjectionModel, EditorSchemaSummary,
-    EditorSchemaSummaryKind, ParameterEditorKind,
+    EditorPortModel, EditorPortStatus, EditorPortTypeState, EditorProjectionModel,
+    EditorSchemaSummary, EditorSchemaSummaryKind, ParameterEditorKind,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -126,16 +126,57 @@ fn map_port(port: &EditorPortModel) -> EditorPortDto {
                 EditorEffectiveInputBinding::Unbound => EffectiveInputBindingKindDto::Unbound,
             },
         }),
-        resolved_type: port.resolved_type.as_ref().map(|value| TypeSummaryDto {
-            display: value.display.clone(),
-            resolved: value.resolved,
-            data_type: value.data_type.clone(),
-            internal_type_expr: Some(value.internal_type_expr.clone()),
-        }),
+        accepted_type: AcceptedTypeDto {
+            display: port.accepted_type.display.clone(),
+            domain: port
+                .accepted_type
+                .domain
+                .as_ref()
+                .map(|domain| domain.to_vec()),
+        },
+        type_state: map_type_state(&port.type_state),
         resolved_schema: port.resolved_schema.as_ref().map(map_schema_summary),
         status: match port.status {
             EditorPortStatus::Resolved => ResolvedPortStatusDto::Resolved,
             EditorPortStatus::Orphan => ResolvedPortStatusDto::Orphan,
+        },
+    }
+}
+
+fn map_type_state(value: &EditorPortTypeState) -> PortTypeStateDto {
+    match value {
+        EditorPortTypeState::Exact {
+            display, data_type, ..
+        } => PortTypeStateDto::Exact {
+            display: display.clone(),
+            data_type: data_type.clone(),
+        },
+        EditorPortTypeState::Constrained {
+            display, domain, ..
+        } => PortTypeStateDto::Constrained {
+            display: display.clone(),
+            domain: domain.to_vec(),
+        },
+        EditorPortTypeState::Unknown { reason } => PortTypeStateDto::Unknown {
+            reason_code: match reason {
+                yss_graph_protocol::TypeUnknownReason::UnconnectedInput => "unconnected_input",
+                yss_graph_protocol::TypeUnknownReason::UnresolvedUpstream => "unresolved_upstream",
+                yss_graph_protocol::TypeUnknownReason::MissingResource => "missing_resource",
+                yss_graph_protocol::TypeUnknownReason::UnsupportedDeclaration => {
+                    "unsupported_declaration"
+                }
+                yss_graph_protocol::TypeUnknownReason::OrphanedPort => "orphaned_port",
+            }
+            .into(),
+        },
+        EditorPortTypeState::Conflict { conflict } => PortTypeStateDto::Conflict {
+            diagnostic_code: match conflict {
+                yss_graph_protocol::TypeConflict::InputNotAccepted => "input_not_accepted",
+                yss_graph_protocol::TypeConflict::IncompatibleInputs => "incompatible_inputs",
+                yss_graph_protocol::TypeConflict::MissingParameter => "missing_parameter",
+                yss_graph_protocol::TypeConflict::UnsupportedParameter => "unsupported_parameter",
+            }
+            .into(),
         },
     }
 }
@@ -345,11 +386,12 @@ mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
     use yss_application::editor_projection::{
-        EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities,
-        EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
-        EditorParameterModel, EditorParameterValueSource, EditorPortConnectionCapabilities,
-        EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
-        EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind, EditorTypeSummary,
+        EditorAcceptedType, EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel,
+        EditorNodeCapabilities, EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration,
+        EditorParameterDisplay, EditorParameterModel, EditorParameterValueSource,
+        EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortModel, EditorPortStatus,
+        EditorPortTypeState, EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary,
+        EditorSchemaSummaryKind,
     };
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
@@ -359,7 +401,7 @@ mod tests {
     };
     use yss_graph_protocol::{
         NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
-        RelationalScalarType, TypeExpr, TypeId,
+        RelationalScalarType,
     };
 
     #[test]
@@ -418,14 +460,14 @@ mod tests {
                         can_move: false,
                     },
                     input: None,
-                    resolved_type: Some(EditorTypeSummary {
+                    accepted_type: EditorAcceptedType {
                         display: "core.bool".into(),
-                        resolved: true,
+                        domain: Some(Box::new([yss_data_contract::DataType::Boolean])),
+                    },
+                    type_state: EditorPortTypeState::Exact {
+                        display: "core.bool".into(),
                         data_type: Some(yss_data_contract::DataType::Boolean),
-                        internal_type_expr: TypeExpr::Concrete(
-                            TypeId::new("core.bool").expect("test type id is valid"),
-                        ),
-                    }),
+                    },
                     resolved_schema: Some(EditorSchemaSummary {
                         kind: EditorSchemaSummaryKind::Derived,
                         fields: Box::new([EditorSchemaField {

@@ -23,7 +23,7 @@ pub(crate) struct DerivedSchemaPortMember {
     pub value_type: TypeExpr,
 }
 
-pub(crate) fn resolve_editor_schemas(
+pub(crate) fn resolve_graph_schemas(
     document: &GraphDocument,
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,

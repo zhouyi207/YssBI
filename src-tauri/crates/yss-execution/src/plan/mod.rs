@@ -19,8 +19,9 @@ pub use identity::{
     PlanSourceIdentity,
 };
 pub use model::{
-    ExecutionPlan, FunctionPlanAbi, PlanExecutionDemand, PlanInputBinding, PlanInputSource,
-    PlanOperation, PlanOutputBinding,
+    ExecutionPlan, FunctionPlanAbi, PlanExecutionDemand, PlanInputBinding, PlanInputCoercion,
+    PlanInputCoercionKind, PlanInputSource, PlanKernelSpecialization, PlanOperation,
+    PlanOutputBinding, PlanTypeBinding,
 };
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::{CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan};

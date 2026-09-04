@@ -17,7 +17,7 @@ impl LeafImplementation {
         Self(Arc::from(identity.into()))
     }
 
-    pub(crate) fn implementation_identity(&self) -> &str {
+    pub fn implementation_identity(&self) -> &str {
         &self.0
     }
 }
@@ -141,6 +141,18 @@ impl TypeRegistry {
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&TypeId, &TypeRegistration)> {
         self.types.iter()
+    }
+
+    pub fn implements(&self, type_id: &TypeId, class: &TypeClassId) -> bool {
+        self.types
+            .get(type_id)
+            .is_some_and(|registration| registration.classes.contains(class))
+    }
+
+    pub fn class_members(&self, class: &TypeClassId) -> impl Iterator<Item = &TypeRegistration> {
+        self.types
+            .values()
+            .filter(move |registration| registration.classes.contains(class))
     }
 }
 

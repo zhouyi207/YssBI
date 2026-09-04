@@ -1,6 +1,6 @@
 use super::{
     CanonicalDecimal, NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey,
-    ParameterValues, TypeExpr, TypeId, TypedValue, Value,
+    ParameterValues, TypeClassId, TypeConstructorId, TypeExpr, TypeId, TypedValue, Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,35 +29,30 @@ pub enum LiteralValidationIssue {
 pub fn validate_typed_literal(
     wire: &serde_json::Value,
     declared_type: &TypeExpr,
-    nominal: &impl NominalParameterValidator,
+    nominal: &impl TypeValidationContext,
 ) -> Result<TypedValue, LiteralValidationIssue> {
     let decoded = serde_json::from_value::<TypedValue>(wire.clone())
         .map_err(|_| LiteralValidationIssue::MalformedWire)?;
-    validate_decoded_literal(decoded, declared_type, nominal)
+    validate_typed_value(decoded, declared_type, nominal)
 }
 
 pub fn normalize_json_literal(
     raw: &serde_json::Value,
     declared_type: &TypeExpr,
-    nominal: &impl NominalParameterValidator,
+    nominal: &impl TypeValidationContext,
 ) -> Result<TypedValue, LiteralValidationIssue> {
-    let value = json_literal_to_protocol_value(raw, declared_type)?;
-    validate_decoded_literal(
-        TypedValue {
-            value_type: declared_type.clone(),
-            value,
-        },
-        declared_type,
-        nominal,
-    )
+    let value_type = resolve_json_literal_type(raw, declared_type, nominal)
+        .ok_or(LiteralValidationIssue::ValueTypeMismatch)?;
+    let value = json_literal_to_protocol_value(raw, &value_type)?;
+    validate_typed_value(TypedValue { value_type, value }, declared_type, nominal)
 }
 
-fn validate_decoded_literal(
+pub fn validate_typed_value(
     decoded: TypedValue,
     declared_type: &TypeExpr,
-    nominal: &impl NominalParameterValidator,
+    nominal: &impl TypeValidationContext,
 ) -> Result<TypedValue, LiteralValidationIssue> {
-    if !type_expr_accepts(declared_type, &decoded.value_type) {
+    if !type_expr_accepts(declared_type, &decoded.value_type, nominal) {
         return Err(LiteralValidationIssue::DeclaredTypeMismatch);
     }
     if !protocol_value_matches_type(&decoded.value, &decoded.value_type, nominal) {
@@ -116,7 +111,11 @@ fn json_literal_to_protocol_value(
     }
 }
 
-fn type_expr_accepts(declared: &TypeExpr, actual: &TypeExpr) -> bool {
+fn type_expr_accepts(
+    declared: &TypeExpr,
+    actual: &TypeExpr,
+    nominal: &impl TypeValidationContext,
+) -> bool {
     match (declared, actual) {
         (TypeExpr::Concrete(expected), TypeExpr::Concrete(actual)) => expected == actual,
         (
@@ -134,30 +133,133 @@ fn type_expr_accepts(declared: &TypeExpr, actual: &TypeExpr) -> bool {
                 && expected_arguments
                     .iter()
                     .zip(actual_arguments)
-                    .all(|(expected, actual)| type_expr_accepts(expected, actual))
+                    .all(|(expected, actual)| type_expr_accepts(expected, actual, nominal))
         }
         (TypeExpr::Union(options), TypeExpr::Union(actual_options)) => {
             !actual_options.is_empty()
                 && actual_options.iter().all(|actual| {
                     options
                         .iter()
-                        .any(|option| type_expr_accepts(option, actual))
+                        .any(|option| type_expr_accepts(option, actual, nominal))
                 })
         }
         (TypeExpr::Union(options), actual) => options
             .iter()
-            .any(|option| type_expr_accepts(option, actual)),
-        (TypeExpr::Generic(_) | TypeExpr::Unknown, _)
-        | (_, TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_))
+            .any(|option| type_expr_accepts(option, actual, nominal)),
+        (TypeExpr::Class(class), TypeExpr::Concrete(actual)) => nominal
+            .type_implements_class(actual, class)
+            .unwrap_or(false),
+        (TypeExpr::Generic(_), TypeExpr::Concrete(_) | TypeExpr::Applied { .. }) => true,
+        (TypeExpr::Unknown, _)
+        | (_, TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_))
+        | (TypeExpr::Class(_), TypeExpr::Applied { .. })
         | (TypeExpr::Concrete(_), TypeExpr::Applied { .. })
         | (TypeExpr::Applied { .. }, TypeExpr::Concrete(_)) => false,
     }
 }
 
+fn resolve_json_literal_type(
+    raw: &serde_json::Value,
+    pattern: &TypeExpr,
+    nominal: &impl TypeValidationContext,
+) -> Option<TypeExpr> {
+    match pattern {
+        TypeExpr::Concrete(_) => {
+            let value = json_literal_to_protocol_value(raw, pattern).ok()?;
+            protocol_value_matches_type(&value, pattern, nominal).then(|| pattern.clone())
+        }
+        TypeExpr::Class(class) => {
+            let TypeExpr::Concrete(actual) = infer_unconstrained_literal_type(raw)? else {
+                return None;
+            };
+            nominal
+                .type_implements_class(&actual, class)
+                .unwrap_or(false)
+                .then_some(TypeExpr::Concrete(actual))
+        }
+        TypeExpr::Generic(_) | TypeExpr::Unknown => infer_unconstrained_literal_type(raw),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => {
+            let [argument] = arguments.as_slice() else {
+                return None;
+            };
+            let values = raw.as_array()?;
+            let mut element_types = values
+                .iter()
+                .map(|value| resolve_json_literal_type(value, argument, nominal))
+                .collect::<Option<Vec<_>>>()?;
+            element_types.sort_by_key(super::types::type_expr_sort_key);
+            element_types.dedup();
+            let element = match element_types.as_slice() {
+                [element] => element.clone(),
+                [first, second] if is_int_float_pair(first, second) => {
+                    TypeExpr::Concrete(TypeId::new("core.float64").ok()?)
+                }
+                _ => return None,
+            };
+            Some(TypeExpr::Applied {
+                constructor: constructor.clone(),
+                arguments: vec![element],
+            })
+        }
+        TypeExpr::Union(patterns) => {
+            let candidates = patterns
+                .iter()
+                .filter_map(|pattern| resolve_json_literal_type(raw, pattern, nominal))
+                .collect::<Vec<_>>();
+            let inferred = infer_unconstrained_literal_type(raw);
+            candidates
+                .iter()
+                .find(|candidate| Some(*candidate) == inferred.as_ref())
+                .cloned()
+                .or_else(|| candidates.into_iter().next())
+        }
+    }
+}
+
+fn infer_unconstrained_literal_type(raw: &serde_json::Value) -> Option<TypeExpr> {
+    let concrete = |id| TypeId::new(id).ok().map(TypeExpr::Concrete);
+    match raw {
+        serde_json::Value::Bool(_) => concrete("core.bool"),
+        serde_json::Value::Number(value) if value.as_i64().is_some() => concrete("core.int64"),
+        serde_json::Value::Number(value) if value.is_u64() => None,
+        serde_json::Value::Number(_) => concrete("core.float64"),
+        serde_json::Value::String(_) => concrete("core.string"),
+        serde_json::Value::Array(values) => {
+            let mut element_types = values
+                .iter()
+                .map(infer_unconstrained_literal_type)
+                .collect::<Option<Vec<_>>>()?;
+            element_types.sort_by_key(super::types::type_expr_sort_key);
+            element_types.dedup();
+            let [element] = element_types.as_slice() else {
+                return None;
+            };
+            Some(TypeExpr::Applied {
+                constructor: TypeConstructorId::new("core.array").ok()?,
+                arguments: vec![element.clone()],
+            })
+        }
+        serde_json::Value::Object(_) => concrete("core.object"),
+        serde_json::Value::Null => None,
+    }
+}
+
+fn is_int_float_pair(first: &TypeExpr, second: &TypeExpr) -> bool {
+    matches!(
+        (first, second),
+        (TypeExpr::Concrete(first), TypeExpr::Concrete(second))
+            if first.as_str() == "core.float64" && second.as_str() == "core.int64"
+                || first.as_str() == "core.int64" && second.as_str() == "core.float64"
+    )
+}
+
 fn protocol_value_matches_type(
     value: &Value,
     value_type: &TypeExpr,
-    nominal: &impl NominalParameterValidator,
+    nominal: &impl TypeValidationContext,
 ) -> bool {
     match value_type {
         TypeExpr::Concrete(type_id) => match type_id.as_str() {
@@ -192,7 +294,7 @@ fn protocol_value_matches_type(
         TypeExpr::Union(options) => options
             .iter()
             .any(|option| protocol_value_matches_type(value, option, nominal)),
-        TypeExpr::Unknown | TypeExpr::Generic(_) => false,
+        TypeExpr::Class(_) | TypeExpr::Unknown | TypeExpr::Generic(_) => false,
     }
 }
 
@@ -218,15 +320,19 @@ pub fn protocol_value_to_json(value: &Value) -> serde_json::Value {
     }
 }
 
-pub trait NominalParameterValidator {
+pub trait TypeValidationContext {
     fn validate_nominal_parameter(
         &self,
         type_id: &TypeId,
         value: &serde_json::Value,
     ) -> Option<Result<(), String>>;
+
+    fn type_implements_class(&self, _type_id: &TypeId, _class: &TypeClassId) -> Option<bool> {
+        None
+    }
 }
 
-impl<F> NominalParameterValidator for F
+impl<F> TypeValidationContext for F
 where
     F: for<'a, 'b> Fn(&'a TypeId, &'b serde_json::Value) -> Option<Result<(), String>>,
 {
@@ -248,7 +354,7 @@ pub struct ParameterValidation<T> {
 pub fn validate_parameter_values(
     protocol: &NodeProtocol,
     values: &ParameterValues,
-    nominal: &impl NominalParameterValidator,
+    nominal: &impl TypeValidationContext,
 ) -> Vec<LocatedParameterIssue> {
     validate_and_prepare_parameter_values(protocol, values, |type_id, value| {
         nominal.validate_nominal_parameter(type_id, value)
@@ -346,7 +452,10 @@ fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) 
         TypeExpr::Union(options) => options
             .iter()
             .any(|option| parameter_value_matches_type(value, option)),
-        TypeExpr::Generic(_) | TypeExpr::Applied { .. } | TypeExpr::Unknown => true,
+        TypeExpr::Class(_)
+        | TypeExpr::Generic(_)
+        | TypeExpr::Applied { .. }
+        | TypeExpr::Unknown => true,
     }
 }
 
@@ -419,7 +528,7 @@ mod tests {
 
     struct NoNominalValidator;
 
-    impl NominalParameterValidator for NoNominalValidator {
+    impl TypeValidationContext for NoNominalValidator {
         fn validate_nominal_parameter(
             &self,
             _: &TypeId,
@@ -427,6 +536,54 @@ mod tests {
         ) -> Option<Result<(), String>> {
             None
         }
+    }
+
+    struct NumericClassValidator;
+
+    impl TypeValidationContext for NumericClassValidator {
+        fn validate_nominal_parameter(
+            &self,
+            _: &TypeId,
+            _: &serde_json::Value,
+        ) -> Option<Result<(), String>> {
+            None
+        }
+
+        fn type_implements_class(&self, type_id: &TypeId, class: &TypeClassId) -> Option<bool> {
+            Some(
+                class.as_str() == "core.numeric"
+                    && matches!(type_id.as_str(), "core.int64" | "core.float64"),
+            )
+        }
+    }
+
+    #[test]
+    fn numeric_class_literals_are_normalized_to_exact_scalar_and_series_types() {
+        let numeric = TypeExpr::Class(TypeClassId::new("core.numeric").unwrap());
+        let scalar =
+            normalize_json_literal(&serde_json::json!(1), &numeric, &NumericClassValidator)
+                .expect("numeric class accepts an integer literal");
+        assert_eq!(
+            scalar.value_type,
+            TypeExpr::Concrete(TypeId::new("core.int64").unwrap())
+        );
+        let series_pattern = TypeExpr::Applied {
+            constructor: TypeConstructorId::new("core.data_series").unwrap(),
+            arguments: vec![numeric],
+        };
+        let series = normalize_json_literal(
+            &serde_json::json!([1, 2.5]),
+            &series_pattern,
+            &NumericClassValidator,
+        )
+        .expect("numeric class promotes a mixed numeric series literal");
+        assert_eq!(
+            series.value_type,
+            TypeExpr::Applied {
+                constructor: TypeConstructorId::new("core.data_series").unwrap(),
+                arguments: vec![TypeExpr::Concrete(TypeId::new("core.float64").unwrap())],
+            }
+        );
     }
 
     #[test]
@@ -539,7 +696,7 @@ mod tests {
     #[test]
     fn typed_literal_accepts_registered_nominal_value() {
         struct AcceptNominal;
-        impl NominalParameterValidator for AcceptNominal {
+        impl TypeValidationContext for AcceptNominal {
             fn validate_nominal_parameter(
                 &self,
                 type_id: &TypeId,
@@ -585,6 +742,14 @@ mod tests {
             .unwrap();
             assert!(validate_typed_literal(&wire, &value_type, &NoNominalValidator).is_err());
         }
+
+        let generic = TypeExpr::Generic(TypeParameterId::new("item").unwrap());
+        let concrete_wire = serde_json::to_value(TypedValue {
+            value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            value: Value::Integer(1),
+        })
+        .unwrap();
+        assert!(validate_typed_literal(&concrete_wire, &generic, &NoNominalValidator).is_ok());
     }
 
     #[test]

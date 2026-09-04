@@ -1,5 +1,5 @@
 use super::{
-    TypeExpr, TypeId, TypeNormalizationError, TypeParameterId, data_series_type,
+    TypeClassId, TypeExpr, TypeId, TypeNormalizationError, TypeParameterId, data_series_type,
     normalize_type_expr, numeric_data_series_type,
 };
 
@@ -35,8 +35,9 @@ fn empty_type_union_is_rejected() {
 }
 
 #[test]
-fn type_normalization_preserves_unknown_and_generic_arguments() {
+fn type_normalization_preserves_unknown_generic_and_class_patterns() {
     let generic = TypeExpr::Generic(TypeParameterId::new("element").unwrap());
+    let class = TypeExpr::Class(TypeClassId::new("core.numeric").unwrap());
 
     assert_eq!(
         normalize_type_expr(TypeExpr::Unknown).unwrap(),
@@ -46,4 +47,5 @@ fn type_normalization_preserves_unknown_and_generic_arguments() {
         normalize_type_expr(data_series_type(generic.clone())).unwrap(),
         data_series_type(generic)
     );
+    assert_eq!(normalize_type_expr(class.clone()).unwrap(), class);
 }

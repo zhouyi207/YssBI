@@ -48,6 +48,7 @@ yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-graph-registry = { path = "../yss-graph-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-graph-runtime = { path = "../yss-graph-runtime" }
+yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 yss-math = { path = "../yss-math" }
 yss-path-display = { path = "../yss-path-display" }
 yss-project = { path = "../yss-project" }

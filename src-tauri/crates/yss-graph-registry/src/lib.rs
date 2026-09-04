@@ -15,7 +15,7 @@ pub use validation::RegistryValidationError;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use yss_canonical_hash::CanonicalEncodingError;
-use yss_graph_protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
+use yss_graph_protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeClassId, TypeId};
 
 type NominalValidatorFn = dyn Fn(&serde_json::Value) -> Result<(), String> + Send + Sync;
 
@@ -54,13 +54,19 @@ impl std::fmt::Debug for NominalParameterValidator {
     }
 }
 
-impl yss_graph_protocol::NominalParameterValidator for NodeRegistry {
+impl yss_graph_protocol::TypeValidationContext for NodeRegistry {
     fn validate_nominal_parameter(
         &self,
         type_id: &TypeId,
         value: &serde_json::Value,
     ) -> Option<Result<(), String>> {
         NodeRegistry::validate_nominal_parameter(self, type_id, value)
+    }
+
+    fn type_implements_class(&self, type_id: &TypeId, class: &TypeClassId) -> Option<bool> {
+        self.types()
+            .get(type_id)
+            .map(|_| self.types().implements(type_id, class))
     }
 }
 

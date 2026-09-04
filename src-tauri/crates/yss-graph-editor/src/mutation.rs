@@ -2,16 +2,16 @@ use yss_graph_catalog::reroute_node_type;
 use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    GraphDocument, GraphResourceKind, GraphResourcePath, InputState, NodeId, NodePosition,
-    OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue,
+    GraphDocument, GraphResourceKind, GraphResourcePath, InputState, JsonValue, NodeId,
+    NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef,
 };
 use yss_graph_document_edit::{
     DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
     port_member_group_state, user_created_port_instance_count,
 };
 use yss_graph_protocol::{
-    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
-    PortInstances, PortKey, PortMemberGroupSpec, PortSpec,
+    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortCardinality,
+    PortDirection, PortKey, PortMemberGroupSpec, PortSpec,
 };
 use yss_graph_registry::NodeRegistry;
 
@@ -39,7 +39,6 @@ pub enum EditorMutationErrorCode {
     GraphConnectionDirectionMismatch,
     GraphConnectionTypeMismatch,
     GraphConnectionTypeUnavailable,
-    GraphConnectionTypeUnresolved,
     GraphConnectionLimitReached,
     GraphConnectionOrderRequired,
     GraphConnectionOrderForbidden,
@@ -61,7 +60,6 @@ impl EditorMutationErrorCode {
             Self::GraphConnectionDirectionMismatch => "graph_connection_direction_mismatch",
             Self::GraphConnectionTypeMismatch => "graph_connection_type_mismatch",
             Self::GraphConnectionTypeUnavailable => "graph_connection_type_unavailable",
-            Self::GraphConnectionTypeUnresolved => "graph_connection_type_unresolved",
             Self::GraphConnectionLimitReached => "graph_connection_limit_reached",
             Self::GraphConnectionOrderRequired => "graph_connection_order_required",
             Self::GraphConnectionOrderForbidden => "graph_connection_order_forbidden",
@@ -173,7 +171,7 @@ pub enum EditorGraphMutation {
     },
     SetLiteral {
         address: PortAddress,
-        literal: Option<TypedValue>,
+        literal: Option<JsonValue>,
     },
     AddPortInstance {
         node_id: NodeId,
@@ -877,7 +875,7 @@ pub(super) fn create_node_operations(
         {
             continue;
         }
-        let PortInstances::UserCreated { min, .. } = spec.instances else {
+        let PortCardinality::UserCreated { min, .. } = spec.cardinality else {
             continue;
         };
         for index in 0..min {
@@ -915,7 +913,7 @@ pub(super) fn validate_parameters_with_registry(
 fn validate_shared_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
-    nominal: &impl yss_graph_protocol::validation::NominalParameterValidator,
+    nominal: &impl yss_graph_protocol::validation::TypeValidationContext,
 ) -> Result<(), MutationConflict> {
     let Some(issue) = yss_graph_protocol::validate_parameter_values(protocol, parameters, nominal)
         .into_iter()
@@ -1001,7 +999,7 @@ fn add_port_instance_operations(
         let state = port_member_group_state(node_id, group, document.port_bindings.iter());
         (group.templates.as_ref(), state.complete_count(), group.max)
     } else {
-        let PortInstances::UserCreated { max, .. } = contract.spec.instances else {
+        let PortCardinality::UserCreated { max, .. } = contract.spec.cardinality else {
             unreachable!("user_created_port_contract guarantees the instance policy")
         };
         (
@@ -1079,7 +1077,7 @@ fn remove_port_instance_operations(
             state.is_complete(instance_id),
         )
     } else {
-        let PortInstances::UserCreated { min, .. } = contract.spec.instances else {
+        let PortCardinality::UserCreated { min, .. } = contract.spec.cardinality else {
             unreachable!("user_created_port_contract guarantees the instance policy")
         };
         (
@@ -1162,7 +1160,7 @@ fn user_created_port_contract<'a>(
                 format!("node '{node_id}' does not own port template '{template}'"),
             )
         })?;
-    if !matches!(spec.instances, PortInstances::UserCreated { .. }) {
+    if !matches!(spec.cardinality, PortCardinality::UserCreated { .. }) {
         return Err(invalid_editor_mutation(format!(
             "port template '{template}' is not user-created"
         )));

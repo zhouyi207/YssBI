@@ -460,13 +460,14 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
             style_id: style_id("builtin.value")?,
             hidden: false,
         },
-        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        interface: assembled_interface(spec.id, ports, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, vec![])?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
             cache: CachePolicy::Disabled,
         },
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -483,7 +484,7 @@ fn data_port(
         title: title.into(),
         direction,
         value_type,
-        instances: PortInstances::Declared,
+        cardinality: PortCardinality::Declared,
         connections: if direction == PortDirection::Input {
             ConnectionsPerPort::Single
         } else {

@@ -88,7 +88,6 @@ pub(crate) fn protocol(
     category: &'static str,
     ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
-    type_constraints: Vec<TypeConstraint>,
     parameters: Vec<ParameterSpec>,
     execution: ExecutionSemantics,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
@@ -104,10 +103,11 @@ pub(crate) fn protocol(
             style_id: semantic("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(id, ports, type_parameters, type_constraints, vec![])?,
+        interface: assembled_interface(id, ports, type_parameters, vec![])?,
         parameters: assembled_parameters(id, parameters)?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution,
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -119,22 +119,22 @@ pub(crate) fn data_port(
     direction: PortDirection,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port_with_instances(key, title, direction, value_type, PortInstances::Declared)
+    data_port_with_cardinality(key, title, direction, value_type, PortCardinality::Declared)
 }
 
-pub(crate) fn data_port_with_instances(
+pub(crate) fn data_port_with_cardinality(
     key: &'static str,
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-    instances: PortInstances,
+    cardinality: PortCardinality,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
         title: title.into(),
         direction,
         value_type,
-        instances,
+        cardinality,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,

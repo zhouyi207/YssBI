@@ -143,21 +143,22 @@ fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), Builti
         ParameterEditorSpec::Select,
     )?;
     let scalar_types = scalar_conversion_types()?;
-    fragment.nodes.push(leaf(
-        protocol(
-            ID,
-            "conversion",
-            vec![
-                data_port("input", "Input", PortDirection::Input, scalar_types.clone())?,
-                data_port("output", "Output", PortDirection::Output, scalar_types)?,
-            ],
-            vec![],
-            vec![],
-            vec![target],
-            pure(),
-        )?,
+    let mut protocol = protocol(
         ID,
-    ));
+        "conversion",
+        vec![
+            data_port("input", "Input", PortDirection::Input, scalar_types.clone())?,
+            data_port("output", "Output", PortDirection::Output, scalar_types)?,
+        ],
+        vec![],
+        vec![target],
+        pure(),
+    )?;
+    protocol.typing = NodeTypingSpec::ParameterOutput {
+        parameter: semantic("target_type", ParameterKey::new)?,
+        output: semantic("output", PortKey::new)?,
+    };
+    fragment.nodes.push(leaf(protocol, ID));
     Ok(())
 }
 
@@ -207,7 +208,6 @@ fn register_series_convert(
                     data_series(core_type(spec.target)?)?,
                 )?,
             ],
-            vec![],
             vec![],
             vec![],
             pure(),

@@ -15,3 +15,4 @@ yss-graph-registry = { path = "../yss-graph-registry" }
 
 [dev-dependencies]
 yss-graph-catalog = { path = "../yss-graph-catalog" }
+yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }

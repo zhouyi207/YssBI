@@ -5,8 +5,8 @@ mod resource_path;
 pub use identity::{ConnectionId, GraphRevision, NodeId, PortInstanceId, RevisionExhausted};
 pub use model::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, GraphDocument, InputState, LastKnownPortMetadata, NodePosition, OrderKey,
-    ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
+    FunctionParameterId, GraphDocument, InputState, JsonValue, LastKnownPortMetadata, NodePosition,
+    OrderKey, ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
 };
 pub use resource_path::{
     GraphResourceKind, GraphResourcePath, GraphResourcePathError, normalize_graph_resource_path,
@@ -15,16 +15,18 @@ pub use resource_path::{
 #[cfg(test)]
 mod tests {
     use super::{
-        DocumentNode, GraphDocument, GraphResourcePath, GraphResourcePathError, NodeId,
-        NodePosition, ParameterValues, TypedValue,
+        DocumentNode, GraphDocument, GraphResourcePath, GraphResourcePathError, InputState,
+        JsonValue, NodeId, NodePosition, ParameterValues, PortAddress,
     };
     use serde_json::json;
-    use yss_graph_protocol::{NodeTypeId, ParameterKey};
+    use yss_graph_protocol::{
+        NodeTypeId, ParameterKey, PortKey, TypeExpr, TypeId, TypedValue, Value,
+    };
 
     #[test]
-    fn typed_value_wire_remains_untagged_json() {
+    fn parameter_json_and_typed_input_literal_keep_distinct_wire_contracts() {
         let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(1));
-        let literal: TypedValue = json!({
+        let literal: JsonValue = json!({
             "null": null,
             "bool": true,
             "number": 42.5,
@@ -46,6 +48,16 @@ mod tests {
                 user_label: None,
             },
         );
+        let input = PortAddress::declared(node_id, PortKey::new("input").unwrap());
+        document.input_states.insert(
+            input,
+            InputState {
+                literal_override: Some(TypedValue {
+                    value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+                    value: Value::Integer(7),
+                }),
+            },
+        );
 
         let encoded = serde_json::to_value(&document).unwrap();
         assert_eq!(
@@ -62,7 +74,18 @@ mod tests {
                 },
                 "port_bindings": [],
                 "connections": {},
-                "input_states": []
+                "input_states": [[
+                    {
+                        "node_id": "00000000-0000-0000-0000-000000000001",
+                        "port": { "kind": "declared", "key": "input" }
+                    },
+                    {
+                        "literal_override": {
+                            "value_type": { "Concrete": "core.int64" },
+                            "value": { "Integer": 7 }
+                        }
+                    }
+                ]]
             })
         );
         assert_eq!(

@@ -2,7 +2,7 @@ use crate::schema::graph_mutation::PortAddressDto;
 use serde::{Deserialize, Serialize};
 use yss_data_contract::DataType;
 use yss_graph_analysis_contract::ResourceVersionSet;
-use yss_graph_protocol::{ParameterPresentation, TypeExpr};
+use yss_graph_protocol::ParameterPresentation;
 use yss_graph_registry::RegistryFingerprint;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,7 +158,8 @@ pub struct EditorPortDto {
     pub can_remove: bool,
     pub connections: PortConnectionCapabilityDto,
     pub input: Option<EditorInputBindingDto>,
-    pub resolved_type: Option<TypeSummaryDto>,
+    pub accepted_type: AcceptedTypeDto,
+    pub type_state: PortTypeStateDto,
     pub resolved_schema: Option<SchemaSummaryDto>,
     pub status: ResolvedPortStatusDto,
 }
@@ -216,12 +217,33 @@ pub enum EffectiveInputBindingKindDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TypeSummaryDto {
+pub struct AcceptedTypeDto {
     pub display: Box<str>,
-    pub resolved: bool,
-    pub data_type: Option<DataType>,
-    #[serde(skip)]
-    pub(crate) internal_type_expr: Option<TypeExpr>,
+    pub domain: Option<Vec<DataType>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum PortTypeStateDto {
+    Exact {
+        display: Box<str>,
+        data_type: Option<DataType>,
+    },
+    Constrained {
+        display: Box<str>,
+        domain: Vec<DataType>,
+    },
+    Unknown {
+        reason_code: Box<str>,
+    },
+    Conflict {
+        diagnostic_code: Box<str>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

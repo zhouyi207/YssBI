@@ -48,7 +48,7 @@ mod tests {
         CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
         build_builtin_node_system,
     };
-    use yss_graph_protocol::NodeTypeId;
+    use yss_graph_protocol::{NodeTypeId, PortCardinality};
 
     #[test]
     fn numeric_type_class_contains_only_int64_and_float64() {
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_catalog_excludes_retired_flow_nodes() {
+    fn analysis_catalog_excludes_retired_flow_and_split_numeric_nodes() {
         let registry = build_builtin_node_system()
             .expect("production built-ins must assemble")
             .registry;
@@ -108,7 +108,15 @@ mod tests {
             .map(|(node_type, _)| node_type.as_str())
             .collect::<BTreeSet<_>>();
 
-        assert!(registered.contains("yssbi.core.reroute"));
+        for current in [
+            "yssbi.core.reroute",
+            "yssbi.numeric.add",
+            "yssbi.numeric.subtract",
+            "yssbi.numeric.multiply",
+            "yssbi.numeric.divide",
+        ] {
+            assert!(registered.contains(current), "current node '{current}'");
+        }
         for removed in [
             "yssbi.project.event.begin",
             "yssbi.project.variable.set",
@@ -122,11 +130,28 @@ mod tests {
             "yssbi.reroute.control",
             "yssbi.reroute.effect",
             "yssbi.reroute.data",
+            "yssbi.numeric.add.int64",
+            "yssbi.numeric.add.float64",
+            "yssbi.numeric.series.add",
+            "yssbi.numeric.subtract.int64",
+            "yssbi.numeric.subtract.float64",
+            "yssbi.numeric.series.subtract",
+            "yssbi.numeric.multiply.int64",
+            "yssbi.numeric.multiply.float64",
+            "yssbi.numeric.series.multiply",
+            "yssbi.numeric.divide.int64",
+            "yssbi.numeric.divide.float64",
+            "yssbi.numeric.series.divide",
         ] {
-            assert!(
-                !registered.contains(removed),
-                "removed flow node '{removed}'"
-            );
+            assert!(!registered.contains(removed), "retired node '{removed}'");
         }
+
+        let add = registry
+            .protocol(&NodeTypeId::new("yssbi.numeric.add").unwrap())
+            .expect("unified Add protocol exists");
+        assert!(matches!(
+            add.interface.ports[0].cardinality,
+            PortCardinality::UserCreated { min: 2, max: None }
+        ));
     }
 }

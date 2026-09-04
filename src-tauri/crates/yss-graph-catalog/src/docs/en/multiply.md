@@ -6,7 +6,7 @@ $$
 \text{Result} = A \times B
 $$
 
-When either input is a `DataSeries`, both are promoted to `DataSeries<Float64>`; a scalar broadcasts to the series length. Two scalars yield `Float64`.
+When either input is a `DataSeries`, a scalar broadcasts to the series length and the result is a `DataSeries`. `Int64` is preserved unless either input is `Float64`; two scalar inputs produce a scalar.
 
 ## Usage
 

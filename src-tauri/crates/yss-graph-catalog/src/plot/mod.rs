@@ -135,7 +135,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 "X",
                 PortDirection::Input,
                 numeric_data_series_type(),
-                PortInstances::Declared,
+                PortCardinality::Declared,
                 None,
             )?);
             ports.push(data_port(
@@ -143,7 +143,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 "Y",
                 PortDirection::Input,
                 numeric_data_series_type(),
-                PortInstances::Declared,
+                PortCardinality::Declared,
                 None,
             )?);
         }
@@ -152,7 +152,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             "Values",
             PortDirection::Input,
             numeric_data_series_type(),
-            PortInstances::Declared,
+            PortCardinality::Declared,
             None,
         )?),
         PlotInputs::CorrelationSeries => ports.push(data_port(
@@ -160,7 +160,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             "DataSeries",
             PortDirection::Input,
             numeric_data_series_type(),
-            PortInstances::UserCreated { min: 2, max: None },
+            PortCardinality::UserCreated { min: 2, max: None },
             None,
         )?),
         PlotInputs::Correlogram => {
@@ -169,7 +169,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 "DataSeries",
                 PortDirection::Input,
                 numeric_data_series_type(),
-                PortInstances::Declared,
+                PortCardinality::Declared,
                 None,
             )?);
             ports.push(data_port(
@@ -177,7 +177,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 "Lags",
                 PortDirection::Input,
                 concrete("core.int64")?,
-                PortInstances::Declared,
+                PortCardinality::Declared,
                 Some(TypedValue {
                     value_type: concrete("core.int64")?,
                     value: Value::Integer(20),
@@ -190,7 +190,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         "Result",
         PortDirection::Output,
         concrete("core.string")?,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         None,
     )?);
     Ok(NodeProtocol {
@@ -204,13 +204,14 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             style_id: style_id("builtin.plot")?,
             hidden: false,
         },
-        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        interface: assembled_interface(spec.id, ports, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, vec![])?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             cache: CachePolicy::PerRun,
         },
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -221,7 +222,7 @@ fn data_port(
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-    instances: PortInstances,
+    cardinality: PortCardinality,
     default_value: Option<TypedValue>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
@@ -229,7 +230,7 @@ fn data_port(
         title: title.into(),
         direction,
         value_type,
-        instances,
+        cardinality,
         connections: if direction == PortDirection::Input {
             ConnectionsPerPort::Single
         } else {

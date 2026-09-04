@@ -76,7 +76,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             style_id: sid("builtin.dataframe", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(spec.id, ports, type_parameters, vec![], vec![])?,
+        interface: assembled_interface(spec.id, ports, type_parameters, vec![])?,
         parameters: assembled_parameters(spec.id, parameters)?,
         instance_display: match spec.interface {
             InterfaceKind::DataframeSource => NodeInstanceDisplaySpec::ResourceParameter {
@@ -89,6 +89,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             determinism: Determinism::Deterministic,
             cache: CachePolicy::PerRun,
         },
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -381,7 +382,7 @@ fn data_input(
         title,
         PortDirection::Input,
         value_type,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         schema,
     )
 }
@@ -416,7 +417,7 @@ fn user_input(
         title,
         PortDirection::Input,
         value_type,
-        PortInstances::UserCreated { min, max: None },
+        PortCardinality::UserCreated { min, max: None },
         None,
     )
 }
@@ -432,7 +433,7 @@ fn data_output(
         title,
         PortDirection::Output,
         value_type,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         schema,
     )
 }
@@ -459,7 +460,7 @@ fn derived_output(
         title,
         PortDirection::Output,
         value_type,
-        PortInstances::Derived {
+        PortCardinality::Derived {
             resolver: sid(resolver, InterfaceResolverId::new)?,
         },
         None,
@@ -471,7 +472,7 @@ fn port(
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-    instances: PortInstances,
+    cardinality: PortCardinality,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
@@ -479,7 +480,7 @@ fn port(
         title: title.into(),
         direction,
         value_type,
-        instances,
+        cardinality,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Forbidden,

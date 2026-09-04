@@ -47,10 +47,11 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             style_id: sid("builtin.dataframe", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![], vec![])?,
+        interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters(spec)?)?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: execution(spec.stage),
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -283,7 +284,7 @@ fn data_input(
         title,
         PortDirection::Input,
         value_type,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         false,
     )
 }
@@ -297,7 +298,7 @@ fn optional_data_input(
         title,
         PortDirection::Input,
         value_type,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         true,
     )
 }
@@ -321,7 +322,7 @@ fn bounded_user_data_input(
         title,
         PortDirection::Input,
         value_type,
-        PortInstances::UserCreated { min, max },
+        PortCardinality::UserCreated { min, max },
         false,
     )
 }
@@ -335,7 +336,7 @@ fn data_output(
         title,
         PortDirection::Output,
         value_type,
-        PortInstances::Declared,
+        PortCardinality::Declared,
         false,
     )
 }
@@ -344,7 +345,7 @@ fn data_port(
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-    instances: PortInstances,
+    cardinality: PortCardinality,
     optional: bool,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
@@ -352,7 +353,7 @@ fn data_port(
         title: title.into(),
         direction,
         value_type: value_type.clone(),
-        instances,
+        cardinality,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: if optional {

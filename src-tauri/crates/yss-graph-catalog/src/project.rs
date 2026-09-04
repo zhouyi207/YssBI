@@ -139,21 +139,26 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
 
 fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     let generic = sid("value", TypeParameterId::new)?;
-    protocol(
+    let mut protocol = protocol(
         "yssbi.project.variable.get",
         vec![data_port(
             "value",
             "Value",
             PortDirection::Output,
             TypeExpr::Generic(generic.clone()),
-            PortInstances::Declared,
+            PortCardinality::Declared,
         )?],
         vec![generic],
         vec![resource_parameter("variable")?],
         NodeScope::Any,
         None,
         pure(),
-    )
+    )?;
+    protocol.typing = NodeTypingSpec::VariableOutput {
+        parameter: sid("variable", ParameterKey::new)?,
+        output: sid("value", PortKey::new)?,
+    };
+    Ok(protocol)
 }
 
 fn protocol(
@@ -176,7 +181,7 @@ fn protocol(
             style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(id, ports, type_parameters, vec![], vec![])?,
+        interface: assembled_interface(id, ports, type_parameters, vec![])?,
         parameters: assembled_parameters(id, parameters)?,
         instance_display: match id {
             "yssbi.project.function.call" => NodeInstanceDisplaySpec::ResourceParameter {
@@ -190,6 +195,7 @@ fn protocol(
             _ => NodeInstanceDisplaySpec::Static,
         },
         execution,
+        typing: NodeTypingSpec::Fixed,
         scope,
         managed_role,
     })
@@ -206,7 +212,7 @@ fn derived_data_port(
         title,
         direction,
         TypeExpr::Unknown,
-        PortInstances::Derived {
+        PortCardinality::Derived {
             resolver: sid(resolver, InterfaceResolverId::new)?,
         },
     )
@@ -217,14 +223,14 @@ fn data_port(
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-    instances: PortInstances,
+    cardinality: PortCardinality,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: sid(key, PortKey::new)?,
         title: title.into(),
         direction,
         value_type,
-        instances,
+        cardinality,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Forbidden,

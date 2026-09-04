@@ -1,6 +1,6 @@
 use crate::{
     CatalogMutationResource, CatalogMutationValidationSnapshot, EditorGraphMutation,
-    EditorMutationErrorCode, MutationConflict,
+    EditorMutationErrorCode,
 };
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
@@ -72,7 +72,7 @@ fn function_node_scope_remains_restricted_without_an_event_scope_variant() {
 }
 
 #[test]
-fn connect_rejects_incompatible_data_types() {
+fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
     let registry = build_builtin_node_system()
         .expect("built-in registry must assemble")
         .registry;
@@ -80,24 +80,43 @@ fn connect_rejects_incompatible_data_types() {
     let source = insert_node(&mut document, document_node("yssbi.constant.string", 0.0));
     let target = insert_node(
         &mut document,
-        document_node("yssbi.numeric.add.int64", 100.0),
+        document_node("yssbi.numeric.subtract", 100.0),
     );
 
-    let error = EditorGraphMutation::Connect {
+    let patch = EditorGraphMutation::Connect {
         output: declared(source, "value"),
         input: declared(target, "left"),
         order: None,
     }
     .into_patch(&graph_path(), &document, registry.as_ref())
-    .expect_err("String must not connect to Int64");
+    .expect("structural editing must leave authoritative type diagnostics to graph analysis");
+    apply_graph_document_patch(&mut document, &patch).expect("planned connection must be valid");
 
-    let MutationConflict::Editor(error) = error else {
-        panic!("expected an editor validation error");
-    };
-    assert_eq!(
-        error.code,
-        EditorMutationErrorCode::GraphConnectionTypeMismatch
+    assert_eq!(document.connections.len(), 1);
+}
+
+#[test]
+fn polymorphic_output_preflight_does_not_reject_a_possible_exact_target() {
+    let registry = build_builtin_node_system()
+        .expect("built-in registry must assemble")
+        .registry;
+    let mut document = GraphDocument::default();
+    let source = insert_node(&mut document, document_node("yssbi.numeric.add", 0.0));
+    let target = insert_node(
+        &mut document,
+        document_node("yssbi.distribution.normal.sample", 100.0),
     );
+
+    let patch = EditorGraphMutation::Connect {
+        output: declared(source, "result"),
+        input: declared(target, "mean"),
+        order: None,
+    }
+    .into_patch(&graph_path(), &document, registry.as_ref())
+    .expect("a polymorphic output that can resolve to Float64 must pass cheap preflight");
+    apply_graph_document_patch(&mut document, &patch).expect("planned connection must be valid");
+
+    assert_eq!(document.connections.len(), 1);
 }
 
 #[test]
@@ -109,7 +128,7 @@ fn move_connections_uses_current_document_authority() {
     let source = insert_node(&mut document, document_node("yssbi.constant.int64", 0.0));
     let target = insert_node(
         &mut document,
-        document_node("yssbi.numeric.add.int64", 100.0),
+        document_node("yssbi.numeric.subtract", 100.0),
     );
     let output = declared(source, "value");
     let left = declared(target, "left");
@@ -158,7 +177,7 @@ fn create_and_connect_plans_one_atomic_patch() {
     };
 
     let patch = EditorGraphMutation::CreateNode {
-        descriptor: static_descriptor(registry.as_ref(), "yssbi.numeric.add.int64"),
+        descriptor: static_descriptor(registry.as_ref(), "yssbi.numeric.add"),
         position: NodePosition { x: 100.0, y: 0.0 },
         user_label: Some("sum".into()),
         connect_from: Some(source_output.clone()),
@@ -176,7 +195,7 @@ fn create_and_connect_plans_one_atomic_patch() {
         .expect("created node must be connected");
     assert_eq!(connection.output, source_output);
     let created = &document.nodes[&connection.input.node_id];
-    assert_eq!(created.node_type.as_str(), "yssbi.numeric.add.int64");
+    assert_eq!(created.node_type.as_str(), "yssbi.numeric.add");
     assert_eq!(created.user_label.as_deref(), Some("sum"));
 }
 
@@ -186,10 +205,7 @@ fn port_resolution_rejects_binding_kind_drift() {
         .expect("built-in registry must assemble")
         .registry;
     let mut document = GraphDocument::default();
-    let node = insert_node(
-        &mut document,
-        document_node("yssbi.numeric.series.add", 0.0),
-    );
+    let node = insert_node(&mut document, document_node("yssbi.numeric.add", 0.0));
     let address = PortAddress::instance(
         node,
         PortKey::new("operands").expect("fixture port key must be valid"),

@@ -289,6 +289,7 @@ pub(crate) fn open_graph_in_session(
     );
     let graph_basis = graph_compilation_basis(&basis);
     let analysis = captured.graph().analyze(
+        request.graph_path(),
         &candidate_document,
         &graph_basis,
         &graph_catalog,

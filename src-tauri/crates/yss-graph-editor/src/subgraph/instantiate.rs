@@ -100,15 +100,15 @@ fn validate_insert_budget(snapshot: &ClipboardSubgraph) -> Result<(), MutationCo
     )?;
     let mut parameter_bytes = 0usize;
     for state in &snapshot.input_states {
-        if state
-            .state
-            .literal_override
-            .as_ref()
-            .is_some_and(|value| json_depth(value) > MAX_CLIPBOARD_VALUE_DEPTH)
-        {
-            return Err(invalid_clipboard(
-                "clipboard input literal exceeds depth limit",
-            ));
+        if let Some(value) = state.state.literal_override.as_ref() {
+            let value = serde_json::to_value(value).map_err(|error| {
+                invalid_clipboard(format!("clipboard input literal is invalid: {error}"))
+            })?;
+            if json_depth(&value) > MAX_CLIPBOARD_VALUE_DEPTH {
+                return Err(invalid_clipboard(
+                    "clipboard input literal exceeds depth limit",
+                ));
+            }
         }
     }
     for node in &snapshot.nodes {
@@ -309,12 +309,12 @@ fn validate_portable_references(
         }
         let spec = portable_port_spec(&entry.address, node_types, registry)?;
         let compatible = matches!(
-            (&spec.instances, &entry.binding),
+            (&spec.cardinality, &entry.binding),
             (
-                PortInstances::UserCreated { .. },
+                PortCardinality::UserCreated { .. },
                 ClipboardDynamicPortBinding::UserCreated { .. }
             ) | (
-                PortInstances::Derived { .. },
+                PortCardinality::Derived { .. },
                 ClipboardDynamicPortBinding::Resolved { .. }
                     | ClipboardDynamicPortBinding::Orphan { .. }
             )
@@ -398,7 +398,9 @@ fn validate_endpoint(
 ) -> Result<(), MutationConflict> {
     let spec = portable_port_spec(address, node_types, registry)?;
     match &address.port {
-        ClipboardPortRef::Declared { .. } if matches!(spec.instances, PortInstances::Declared) => {
+        ClipboardPortRef::Declared { .. }
+            if matches!(spec.cardinality, PortCardinality::Declared) =>
+        {
             Ok(())
         }
         ClipboardPortRef::Instance {
@@ -466,7 +468,7 @@ fn validate_instance_cardinality(
             {
                 continue;
             }
-            let PortInstances::UserCreated { min, max } = spec.instances else {
+            let PortCardinality::UserCreated { min, max } = spec.cardinality else {
                 continue;
             };
             let count = snapshot

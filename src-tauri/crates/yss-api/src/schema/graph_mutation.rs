@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use yss_graph_document::{
-    ConnectionId, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
-    TypedValue,
+    ConnectionId, JsonValue, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress,
+    PortInstanceId,
 };
 use yss_graph_protocol::PortKey;
 
@@ -141,7 +141,7 @@ pub enum EditorGraphMutationDto {
     },
     SetLiteral {
         address: PortAddressDto,
-        literal: Option<TypedValue>,
+        literal: Option<JsonValue>,
     },
     AddPortInstance {
         node_id: NodeId,

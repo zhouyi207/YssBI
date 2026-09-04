@@ -1,19 +1,20 @@
 use super::*;
 use std::collections::BTreeMap;
 use yss_graph_analysis::{
-    GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeProjectionFacts, GraphPortBacking,
-    GraphPortConnectionFacts, GraphPortEditorFact, GraphProjectionFacts,
+    GraphCompilationOutcome, GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact,
+    GraphPortBacking, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortSemanticFact,
+    GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticCode, DiagnosticSeverity, ResourceKey, ResourceVersion,
 };
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
-    GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
+    GraphRevision, InputState, NodeId, NodePosition, ParameterValues, PortAddress,
 };
 use yss_graph_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
-    TypeExpr, TypeId,
+    ResolvedType, TypeDomain, TypeExpr, TypeId, TypeState, TypedValue, Value,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -41,8 +42,8 @@ fn port(
     label: &str,
     direction: PortDirection,
     current: u32,
-) -> yss_graph_analysis::GraphPortFact {
-    yss_graph_analysis::GraphPortFact {
+) -> GraphPortSemanticFact {
+    GraphPortSemanticFact {
         address,
         label: label.into(),
         instance_label: None,
@@ -57,7 +58,13 @@ fn port(
         },
         editor: GraphPortEditorFact::Default,
         protocol_default: None,
-        value_type: bool_type(),
+        accepted_type: bool_type(),
+        accepted_domain: Some(TypeDomain::singleton(ResolvedType::Nominal(
+            TypeId::new("core.bool").expect("test type id is valid"),
+        ))),
+        type_state: TypeState::Exact(ResolvedType::Nominal(
+            TypeId::new("core.bool").expect("test type id is valid"),
+        )),
         schema: None,
         resolved_schema: None,
     }
@@ -66,9 +73,9 @@ fn port(
 fn node_facts(
     node_id: NodeId,
     node_type: NodeTypeId,
-    ports: Box<[yss_graph_analysis::GraphPortFact]>,
-) -> GraphNodeProjectionFacts {
-    GraphNodeProjectionFacts {
+    ports: Box<[GraphPortSemanticFact]>,
+) -> GraphNodeSemanticFact {
+    GraphNodeSemanticFact {
         node_id,
         node_type,
         instance_title: None,
@@ -90,13 +97,15 @@ fn node_facts(
         }]),
         ports,
         port_instance_additions: Box::new([]),
+        specialization: None,
+        semantic_fingerprint: [0; 32],
     }
 }
 
 fn analysis_with_facts(
     document: &GraphDocument,
     _path: &GraphResourcePath,
-    facts: GraphProjectionFacts,
+    facts: GraphSemanticSnapshot,
 ) -> yss_graph_analysis::GraphAnalysis {
     let basis = CompilationBasis {
         graph_revision: GraphRevision::new(document.revision.get()),
@@ -107,11 +116,7 @@ fn analysis_with_facts(
         )]),
         resource_observations: BTreeMap::new(),
     };
-    yss_graph_analysis::analyze(yss_graph_analysis::GraphAnalysisInput {
-        document,
-        basis: &basis,
-    })
-    .with_editor_projection_facts(facts)
+    yss_graph_analysis::analyze(&basis, facts)
 }
 
 #[test]
@@ -141,7 +146,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             position: NodePosition { x: 120.5, y: -32.0 },
             parameters: ParameterValues::from([(
                 ParameterKey::new("value").expect("test parameter key is valid"),
-                yss_graph_document::TypedValue::Bool(true),
+                serde_json::Value::Bool(true),
             )]),
             user_label: Some("Contract Boolean".to_owned()),
         },
@@ -165,9 +170,18 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             order: None,
         },
     );
+    document.input_states.insert(
+        input.clone(),
+        InputState {
+            literal_override: Some(TypedValue {
+                value_type: bool_type(),
+                value: Value::Bool(true),
+            }),
+        },
+    );
     let path =
         GraphResourcePath::new("events/contract.yssbi-event").expect("test graph path is valid");
-    let facts = GraphProjectionFacts::new(
+    let facts = GraphSemanticSnapshot::new(
         [
             node_facts(
                 source,
@@ -203,7 +217,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(
         model.nodes[0].parameters[0].value,
-        Some(yss_graph_document::TypedValue::Bool(true))
+        Some(serde_json::Value::Bool(true))
     );
     assert_eq!(
         model.nodes[0].display.user_label.as_deref(),
@@ -215,6 +229,13 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             .as_ref()
             .map(|input| input.effective),
         Some(EditorEffectiveInputBinding::Connections)
+    );
+    assert_eq!(
+        model.nodes[1].ports[0]
+            .input
+            .as_ref()
+            .and_then(|input| input.literal_override.as_ref()),
+        Some(&serde_json::Value::Bool(true))
     );
     assert_eq!(model.connections[0].output, output);
     assert_eq!(model.connections[0].input, input);
@@ -293,7 +314,7 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
             },
         ),
     ];
-    let facts = GraphProjectionFacts::new(
+    let facts = GraphSemanticSnapshot::new(
         [
             node_facts(
                 source,
@@ -373,10 +394,10 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
-    let analysis = yss_graph_analysis::analyze(yss_graph_analysis::GraphAnalysisInput {
-        document: &document,
-        basis: &basis,
-    });
+    let analysis = yss_graph_analysis::analyze(
+        &basis,
+        GraphSemanticSnapshot::new([], [], GraphCompilationOutcome::Complete),
+    );
 
     assert!(matches!(
         build_editor_projection(EditorProjectionInput {
@@ -385,6 +406,6 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
             analysis: &analysis,
             registry_fingerprint: [9; 32],
         }),
-        Err(EditorProjectionError::ProjectionFactsMismatch)
+        Err(EditorProjectionError::SemanticSnapshotMismatch)
     ));
 }

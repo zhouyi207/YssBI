@@ -473,7 +473,7 @@ where
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Wire<'a> {
-        literal_override: &'a Option<serde_json::Value>,
+        literal_override: &'a Option<yss_graph_protocol::TypedValue>,
     }
 
     Wire {
@@ -495,7 +495,10 @@ where
 
     let wire = Wire::deserialize(deserializer)?;
     Ok(InputState {
-        literal_override: wire.literal_override,
+        literal_override: wire
+            .literal_override
+            .map(|value| serde_json::from_value(value).map_err(serde::de::Error::custom))
+            .transpose()?,
     })
 }
 

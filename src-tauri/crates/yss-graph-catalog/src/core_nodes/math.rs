@@ -10,34 +10,34 @@ struct MathSpec {
     zh_aliases: &'static [&'static str],
 }
 
-const SERIES_OPERATORS: &[MathSpec] = &[
+const ARITHMETIC_OPERATORS: &[MathSpec] = &[
     MathSpec {
         operation: "add",
-        title: "Add DataSeries",
-        zh_title: "数据序列加法",
-        aliases: &["series add", "element-wise addition", "+"],
-        zh_aliases: &["序列相加", "逐元素加法", "+"],
+        title: "Add",
+        zh_title: "加法",
+        aliases: &["add", "plus", "sum", "series add", "+"],
+        zh_aliases: &["加法", "相加", "求和", "序列相加", "+"],
     },
     MathSpec {
         operation: "subtract",
-        title: "Subtract DataSeries",
-        zh_title: "数据序列减法",
-        aliases: &["series subtract", "element-wise subtraction", "-"],
-        zh_aliases: &["序列相减", "逐元素减法", "-"],
+        title: "Subtract",
+        zh_title: "减法",
+        aliases: &["subtract", "minus", "difference", "series subtract", "-"],
+        zh_aliases: &["减法", "相减", "差", "序列相减", "-"],
     },
     MathSpec {
         operation: "multiply",
-        title: "Multiply DataSeries",
-        zh_title: "数据序列乘法",
-        aliases: &["series multiply", "element-wise multiplication", "*"],
-        zh_aliases: &["序列相乘", "逐元素乘法", "*"],
+        title: "Multiply",
+        zh_title: "乘法",
+        aliases: &["multiply", "times", "product", "series multiply", "*"],
+        zh_aliases: &["乘法", "相乘", "积", "序列相乘", "*"],
     },
     MathSpec {
         operation: "divide",
-        title: "Divide DataSeries",
-        zh_title: "数据序列除法",
-        aliases: &["series divide", "element-wise division", "/"],
-        zh_aliases: &["序列相除", "逐元素除法", "/"],
+        title: "Divide",
+        zh_title: "除法",
+        aliases: &["divide", "quotient", "series divide", "/"],
+        zh_aliases: &["除法", "相除", "商", "序列相除", "/"],
     },
 ];
 
@@ -87,8 +87,8 @@ const UNARY_FUNCTIONS: &[MathSpec] = &[
 ];
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for spec in SERIES_OPERATORS {
-        register_series_operator(fragment, *spec)?;
+    for spec in ARITHMETIC_OPERATORS {
+        register_arithmetic_operator(fragment, *spec)?;
     }
     for spec in UNARY_FUNCTIONS {
         register_unary(fragment, *spec)?;
@@ -96,28 +96,28 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
     Ok(())
 }
 
-fn register_series_operator(
+fn register_arithmetic_operator(
     fragment: &mut ProviderFragment,
     spec: MathSpec,
 ) -> Result<(), BuiltinAssemblyError> {
-    let id = leak(format!("yssbi.numeric.series.{}", spec.operation));
+    let id = leak(format!("yssbi.numeric.{}", spec.operation));
     fragment.add_node_messages(&NodeTextSpec {
         id,
         title: spec.title,
         zh_title: spec.zh_title,
-        documentation: "Scalar inputs are broadcast to the DataSeries length. DataSeries operands must have equal lengths.",
-        zh_documentation: "标量输入会广播到 DataSeries 长度；多个 DataSeries 操作数的长度必须一致。",
+        documentation: "Scalar-only inputs produce a scalar. If any input is a DataSeries, scalar inputs are broadcast and the result is a DataSeries. Int64 widens to Float64 when required.",
+        zh_documentation: "输入全为标量时输出标量；任一输入为 DataSeries 时，标量会广播且结果为 DataSeries。需要时 Int64 会提升为 Float64。",
         aliases: spec.aliases,
         zh_aliases: spec.zh_aliases,
     })?;
     let numeric = numeric_value_type()?;
     let operands = if spec.operation == "add" {
-        data_port_with_instances(
+        data_port_with_cardinality(
             "operands",
             "Operands",
             PortDirection::Input,
             numeric.clone(),
-            PortInstances::UserCreated { min: 2, max: None },
+            PortCardinality::UserCreated { min: 2, max: None },
         )?
     } else {
         data_port("left", "Left", PortDirection::Input, numeric.clone())?
@@ -127,9 +127,9 @@ fn register_series_operator(
         ports.push(data_port("right", "Right", PortDirection::Input, numeric)?);
     }
     let result_type = if spec.operation == "divide" {
-        data_series("core.float64")?
+        float_value_type()?
     } else {
-        numeric_data_series_type()
+        numeric_value_type()?
     };
     ports.push(data_port(
         "result",
@@ -137,10 +137,28 @@ fn register_series_operator(
         PortDirection::Output,
         result_type,
     )?);
-    fragment.nodes.push(leaf(
-        protocol(id, "numeric", ports, vec![], vec![], vec![], pure())?,
-        id,
-    ));
+    let mut protocol = protocol(id, "numeric", ports, vec![], vec![], pure())?;
+    protocol.typing = NodeTypingSpec::NumericFold {
+        inputs: if spec.operation == "add" {
+            Box::new([PortSelector::AllInstances(semantic(
+                "operands",
+                PortKey::new,
+            )?)])
+        } else {
+            Box::new([
+                PortSelector::Declared(semantic("left", PortKey::new)?),
+                PortSelector::Declared(semantic("right", PortKey::new)?),
+            ])
+        },
+        output: semantic("result", PortKey::new)?,
+        promotion: if spec.operation == "divide" {
+            NumericPromotionRule::Float64
+        } else {
+            NumericPromotionRule::Widen
+        },
+        shape: ShapeRule::AnySeriesElseScalar,
+    };
+    fragment.nodes.push(leaf(protocol, id));
     Ok(())
 }
 
@@ -163,29 +181,39 @@ fn register_unary(
         concrete("core.float64")?,
         data_series("core.float64")?,
     ]);
-    fragment.nodes.push(leaf(
-        protocol(
-            id,
-            "numeric",
-            vec![
-                data_port("input", "Input", PortDirection::Input, numeric)?,
-                data_port("result", "Result", PortDirection::Output, output)?,
-            ],
-            vec![],
-            vec![],
-            vec![],
-            pure(),
-        )?,
+    let mut protocol = protocol(
         id,
-    ));
+        "numeric",
+        vec![
+            data_port("input", "Input", PortDirection::Input, numeric)?,
+            data_port("result", "Result", PortDirection::Output, output)?,
+        ],
+        vec![],
+        vec![],
+        pure(),
+    )?;
+    protocol.typing = NodeTypingSpec::ShapePreservingFloat {
+        input: semantic("input", PortKey::new)?,
+        output: semantic("result", PortKey::new)?,
+    };
+    fragment.nodes.push(leaf(protocol, id));
     Ok(())
 }
 
 fn numeric_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    let numeric = TypeExpr::Class(semantic(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?);
     Ok(TypeExpr::Union(vec![
-        concrete("core.int64")?,
+        numeric.clone(),
+        TypeExpr::Applied {
+            constructor: semantic(DATA_SERIES_CONSTRUCTOR_ID, TypeConstructorId::new)?,
+            arguments: vec![numeric],
+        },
+    ]))
+}
+
+fn float_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![
         concrete("core.float64")?,
-        data_series("core.int64")?,
         data_series("core.float64")?,
     ]))
 }

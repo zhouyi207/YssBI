@@ -20,7 +20,7 @@ use yss_graph_document::{
 };
 use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_protocol::{
-    NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortInstances, PortKey, TypeExpr,
+    NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortCardinality, PortKey, TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
 

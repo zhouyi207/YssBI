@@ -9472,6 +9472,7 @@ dependencies = [
  "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-runtime",
+ "yss-graph-type-mapping",
  "yss-math",
  "yss-path-display",
  "yss-project",
@@ -9774,6 +9775,7 @@ dependencies = [
  "yss-graph-document",
  "yss-graph-protocol",
  "yss-graph-registry",
+ "yss-graph-resource-contract",
 ]
 
 [[package]]

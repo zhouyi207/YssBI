@@ -9,6 +9,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypeExpr {
     Concrete(TypeId),
+    Class(TypeClassId),
     Generic(TypeParameterId),
     Applied {
         constructor: TypeConstructorId,
@@ -52,6 +53,7 @@ pub fn type_exprs_compatibility(
 enum CompatibilityValue {
     Variable(usize),
     Concrete(TypeId),
+    Class(TypeClassId),
     Applied {
         constructor: TypeConstructorId,
         arguments: Vec<CompatibilityValue>,
@@ -64,6 +66,7 @@ impl CompatibilityValue {
     fn instantiate(expr: &TypeExpr, generics: &BTreeMap<TypeParameterId, usize>) -> Self {
         match expr {
             TypeExpr::Concrete(id) => Self::Concrete(id.clone()),
+            TypeExpr::Class(id) => Self::Class(id.clone()),
             TypeExpr::Generic(id) => generics
                 .get(id)
                 .copied()
@@ -100,8 +103,18 @@ fn compatibility(source: &CompatibilityValue, target: &CompatibilityValue) -> Ty
         (source, CompatibilityValue::Union(targets)) => {
             combine_any(targets.iter().map(|target| compatibility(source, target)))
         }
-        (CompatibilityValue::Unknown | CompatibilityValue::Variable(_), _)
-        | (_, CompatibilityValue::Unknown | CompatibilityValue::Variable(_)) => Indeterminate,
+        (
+            CompatibilityValue::Unknown
+            | CompatibilityValue::Variable(_)
+            | CompatibilityValue::Class(_),
+            _,
+        )
+        | (
+            _,
+            CompatibilityValue::Unknown
+            | CompatibilityValue::Variable(_)
+            | CompatibilityValue::Class(_),
+        ) => Indeterminate,
         (CompatibilityValue::Concrete(source), CompatibilityValue::Concrete(target)) => {
             if source == target {
                 Compatible
@@ -210,15 +223,16 @@ fn normalize_union(members: Vec<TypeExpr>) -> Result<TypeExpr, TypeNormalization
     }
 }
 
-fn type_expr_sort_key(value: &TypeExpr) -> String {
+pub(crate) fn type_expr_sort_key(value: &TypeExpr) -> String {
     match value {
         TypeExpr::Concrete(id) => format!("0:{}", id.as_str()),
-        TypeExpr::Generic(id) => format!("1:{}", id.as_str()),
+        TypeExpr::Class(id) => format!("1:{}", id.as_str()),
+        TypeExpr::Generic(id) => format!("2:{}", id.as_str()),
         TypeExpr::Applied {
             constructor,
             arguments,
         } => format!(
-            "2:{}<{}>",
+            "3:{}<{}>",
             constructor.as_str(),
             arguments
                 .iter()
@@ -227,31 +241,15 @@ fn type_expr_sort_key(value: &TypeExpr) -> String {
                 .join(",")
         ),
         TypeExpr::Union(members) => format!(
-            "3:{}",
+            "4:{}",
             members
                 .iter()
                 .map(type_expr_sort_key)
                 .collect::<Vec<_>>()
                 .join("|")
         ),
-        TypeExpr::Unknown => "4".to_string(),
+        TypeExpr::Unknown => "5".to_string(),
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TypeTerm {
-    Expr(TypeExpr),
-    Port(PortKey),
-    Parameter(ParameterKey),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TypeConstraint {
-    Equal(TypeTerm, TypeTerm),
-    Assignable(TypeTerm, TypeTerm),
-    Implements(TypeTerm, TypeClassId),
-    ElementOf(TypeTerm, TypeTerm),
-    OneOf(TypeTerm, Vec<TypeTerm>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -175,7 +175,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
     origin: &DynamicMemberLocator,
     catalog: &crate::compatibility::CatalogMutationValidationSnapshot,
 ) -> Result<yss_graph_protocol::TypeExpr, MutationConflict> {
-    let PortInstances::Derived { resolver } = &spec.instances else {
+    let PortCardinality::Derived { resolver } = &spec.cardinality else {
         return Err(invalid_editor_mutation(
             "resolved dynamic binding requires a derived port template",
         ));
@@ -544,11 +544,11 @@ pub(crate) fn validate_literal_target(
     document: &GraphDocument,
     registry: &NodeRegistry,
     address: &PortAddress,
-    literal: Option<&TypedValue>,
+    literal: Option<&yss_graph_protocol::TypedValue>,
 ) -> Result<(), MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     if let Some(literal) = literal {
-        yss_graph_protocol::validate_typed_literal(literal, &port.spec.value_type, registry)
+        yss_graph_protocol::validate_typed_value(literal.clone(), &port.spec.value_type, registry)
             .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
@@ -558,15 +558,12 @@ pub(crate) fn normalize_editor_literal_target(
     document: &GraphDocument,
     registry: &NodeRegistry,
     address: &PortAddress,
-    literal: Option<&TypedValue>,
-) -> Result<Option<TypedValue>, MutationConflict> {
+    literal: Option<&JsonValue>,
+) -> Result<Option<yss_graph_protocol::TypedValue>, MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     literal
         .map(|raw| {
             yss_graph_protocol::normalize_json_literal(raw, &port.spec.value_type, registry)
-                .map(|literal| {
-                    serde_json::to_value(literal).expect("protocol typed values must serialize")
-                })
                 .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))
         })
         .transpose()

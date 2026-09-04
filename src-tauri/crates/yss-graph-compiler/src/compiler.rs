@@ -6,14 +6,15 @@ use crate::package::{
     GraphParameterScalar, GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
 use crate::{GraphCompileError, GraphCompileErrorCode};
-use yss_graph_analysis::{contains_value_dependency_cycle, result_category_for_node};
+use yss_graph_analysis::{
+    GraphPortSemanticFact, GraphSemanticSnapshot, contains_value_dependency_cycle,
+    result_category_for_node,
+};
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{
-    DocumentConnection, DynamicPortBinding, GraphDocument, GraphResourcePath, GraphRevision,
-    NodeId, OrderKey, PortAddress, PortRef, TypedValue,
+    DocumentConnection, GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress,
 };
-use yss_graph_protocol::{PortDirection, PortInstances, PortSpec, protocol_value_to_json};
-use yss_graph_registry::NodeRegistry;
+use yss_graph_protocol::{PortDirection, TypedValue, Value};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
@@ -25,7 +26,7 @@ struct ResolvedInputContracts {
 
 pub struct GraphCompilationInput<'a> {
     document: &'a GraphDocument,
-    registry: &'a NodeRegistry,
+    semantics: &'a GraphSemanticSnapshot,
     expected_revision: GraphRevision,
     graph: GraphResourcePath,
     compile_id: CompileId,
@@ -34,14 +35,14 @@ pub struct GraphCompilationInput<'a> {
 impl<'a> GraphCompilationInput<'a> {
     pub fn new(
         document: &'a GraphDocument,
-        registry: &'a NodeRegistry,
+        semantics: &'a GraphSemanticSnapshot,
         expected_revision: GraphRevision,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Self {
         Self {
             document,
-            registry,
+            semantics,
             expected_revision,
             graph,
             compile_id,
@@ -58,11 +59,19 @@ pub fn compile(
             code: GraphCompileErrorCode::InvalidDocument,
         });
     }
+    if input.semantics.diagnostics().iter().any(|diagnostic| {
+        diagnostic.severity.is_blocking() && diagnostic.code.as_str().starts_with("compiler.type.")
+    }) {
+        return Err(GraphCompileError::InvalidGraph {
+            graph: input.graph,
+            code: GraphCompileErrorCode::SemanticTypeUnresolved,
+        });
+    }
     validate_data_dag(input.document, &input.graph)?;
 
     lower_package(
         input.document,
-        input.registry,
+        input.semantics,
         input.graph,
         input.compile_id,
     )
@@ -90,17 +99,26 @@ fn validate_data_dag(
 
 fn lower_package(
     document: &GraphDocument,
-    registry: &NodeRegistry,
+    semantics: &GraphSemanticSnapshot,
     graph: GraphResourcePath,
     compile_id: CompileId,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
-    let output_contracts = resolve_output_contracts(document, registry, &graph)?;
-    let input_contracts = resolve_input_contracts(document, registry, &graph)?;
+    let output_contracts = resolve_output_contracts(semantics, &graph)?;
+    let input_contracts = resolve_input_contracts(document, semantics, &graph)?;
     let connections = connections_by_input(document);
     let operations = document
         .nodes
         .values()
         .map(|node| {
+            let semantic_node = semantics
+                .node(node.id)
+                .ok_or_else(|| lowering_error(&graph))?;
+            let specialization = semantic_node.specialization.clone().ok_or_else(|| {
+                GraphCompileError::InvalidGraph {
+                    graph: graph.clone(),
+                    code: GraphCompileErrorCode::SemanticTypeUnresolved,
+                }
+            })?;
             let result_category = result_category_for_node(node.node_type.as_str());
             let parameter_handles = node
                 .parameters
@@ -144,12 +162,12 @@ fn lower_package(
                 .into_boxed_slice();
             Ok(GraphOperation::new(
                 GraphSourceIdentity::new(graph.clone(), Some(node.id), None),
-                node.node_type.as_str(),
                 result_category,
                 parameter_handles,
                 inputs,
                 observation_intents,
                 outputs,
+                specialization,
             ))
         })
         .collect::<Result<Vec<_>, GraphCompileError>>()?;
@@ -181,7 +199,7 @@ fn lower_parameters(
         let port = port.to_string();
         let handle = input_parameter_handle(&port);
         let schema = format!("input/{port}");
-        let value = lower_parameter_value(value).map_err(|_| lowering_error(graph_path))?;
+        let value = lower_protocol_value(&value.value).map_err(|_| lowering_error(graph_path))?;
         parameters.insert(handle, GraphParameterPayload::new(schema, value));
     }
     Ok(parameters)
@@ -193,51 +211,20 @@ struct ResolvedOutputContracts {
 }
 
 fn resolve_output_contracts(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
+    semantics: &GraphSemanticSnapshot,
     graph_path: &GraphResourcePath,
 ) -> Result<ResolvedOutputContracts, GraphCompileError> {
     let mut ordered_by_node = BTreeMap::new();
     let mut ordered_outputs = Vec::new();
-    for node in document.nodes.values() {
-        let protocol = registry
-            .protocol(&node.node_type)
-            .ok_or_else(|| lowering_error(graph_path))?;
-        let mut addresses = Vec::new();
-        for spec in protocol
-            .interface
+    for node in semantics.nodes() {
+        let addresses = node
             .ports
             .iter()
-            .filter(|spec| spec.direction == PortDirection::Output)
-        {
-            match &spec.instances {
-                PortInstances::Declared => {
-                    addresses.push(PortAddress::declared(node.id, spec.key.clone()));
-                }
-                PortInstances::UserCreated { .. } | PortInstances::Derived { .. } => {
-                    let mut instances = document
-                        .port_bindings
-                        .iter()
-                        .filter(|(address, binding)| {
-                            address.node_id == node.id
-                                && matches!(
-                                    &address.port,
-                                    PortRef::Instance { template, .. } if template == &spec.key
-                                )
-                                && binding_matches_instances(binding, &spec.instances)
-                        })
-                        .collect::<Vec<_>>();
-                    instances.sort_by(|(left_address, left), (right_address, right)| {
-                        dynamic_port_order(left)
-                            .cmp(dynamic_port_order(right))
-                            .then_with(|| left_address.cmp(right_address))
-                    });
-                    addresses.extend(instances.into_iter().map(|(address, _)| address.clone()));
-                }
-            }
-        }
+            .filter(|port| port.direction == PortDirection::Output && !port.orphan)
+            .map(|port| port.address.clone())
+            .collect::<Vec<_>>();
         ordered_outputs.extend(addresses.iter().cloned());
-        ordered_by_node.insert(node.id, addresses.into_boxed_slice());
+        ordered_by_node.insert(node.node_id, addresses.into_boxed_slice());
     }
     let value_refs = ordered_outputs
         .into_iter()
@@ -294,7 +281,7 @@ fn lower_input_bindings(
 
 fn resolve_input_contracts(
     document: &GraphDocument,
-    registry: &NodeRegistry,
+    semantics: &GraphSemanticSnapshot,
     graph_path: &GraphResourcePath,
 ) -> Result<ResolvedInputContracts, GraphCompileError> {
     let connected_inputs = document
@@ -306,21 +293,16 @@ fn resolve_input_contracts(
     let mut known_inputs = BTreeSet::new();
     let mut values = BTreeMap::new();
 
-    for node in document.nodes.values() {
-        let protocol = registry
-            .protocol(&node.node_type)
-            .ok_or_else(|| lowering_error(graph_path))?;
+    for node in semantics.nodes() {
         let mut ordered = Vec::new();
-        for spec in protocol
-            .interface
+        for port in node
             .ports
             .iter()
-            .filter(|spec| spec.direction == PortDirection::Input)
+            .filter(|port| port.direction == PortDirection::Input && !port.orphan)
         {
-            let declared = PortAddress::declared(node.id, spec.key.clone());
             resolve_input_port(
-                &declared,
-                spec,
+                &port.address,
+                port,
                 document,
                 &connected_inputs,
                 &mut ordered,
@@ -328,37 +310,8 @@ fn resolve_input_contracts(
                 &mut values,
                 graph_path,
             )?;
-
-            let mut instances = document
-                .port_bindings
-                .iter()
-                .filter(|(address, _)| {
-                    address.node_id == node.id
-                        && matches!(
-                            &address.port,
-                            PortRef::Instance { template, .. } if template == &spec.key
-                        )
-                })
-                .collect::<Vec<_>>();
-            instances.sort_by(|(left_address, left), (right_address, right)| {
-                dynamic_port_order(left)
-                    .cmp(dynamic_port_order(right))
-                    .then_with(|| left_address.cmp(right_address))
-            });
-            for (address, _) in instances {
-                resolve_input_port(
-                    address,
-                    spec,
-                    document,
-                    &connected_inputs,
-                    &mut ordered,
-                    &mut known_inputs,
-                    &mut values,
-                    graph_path,
-                )?;
-            }
         }
-        ordered_by_node.insert(node.id, ordered.into_boxed_slice());
+        ordered_by_node.insert(node.node_id, ordered.into_boxed_slice());
     }
 
     if document
@@ -383,7 +336,7 @@ fn resolve_input_contracts(
 #[allow(clippy::too_many_arguments)]
 fn resolve_input_port(
     address: &PortAddress,
-    spec: &PortSpec,
+    port: &GraphPortSemanticFact,
     document: &GraphDocument,
     connected_inputs: &std::collections::BTreeSet<PortAddress>,
     ordered: &mut Vec<PortAddress>,
@@ -402,37 +355,11 @@ fn resolve_input_port(
         .input_states
         .get(address)
         .and_then(|state| state.literal_override.clone())
-        .or_else(|| {
-            spec.input_binding
-                .as_ref()
-                .and_then(|binding| binding.default_value.as_ref())
-                .map(|default| protocol_value_to_json(&default.value))
-        });
+        .or_else(|| port.protocol_default.clone());
     if let Some(value) = value {
         values.insert(address.clone(), value);
     }
     Ok(())
-}
-
-fn dynamic_port_order(binding: &DynamicPortBinding) -> &OrderKey {
-    match binding {
-        DynamicPortBinding::UserCreated { order }
-        | DynamicPortBinding::Resolved { order, .. }
-        | DynamicPortBinding::Orphan { order, .. } => order,
-    }
-}
-
-fn binding_matches_instances(binding: &DynamicPortBinding, instances: &PortInstances) -> bool {
-    matches!(
-        (binding, instances),
-        (
-            DynamicPortBinding::UserCreated { .. },
-            PortInstances::UserCreated { .. }
-        ) | (
-            DynamicPortBinding::Resolved { .. },
-            PortInstances::Derived { .. }
-        )
-    )
 }
 
 fn connections_by_input(
@@ -472,8 +399,54 @@ enum ParameterLoweringError {
     UnsupportedValue,
 }
 
+fn lower_protocol_value(value: &Value) -> Result<GraphParameterValue, ParameterLoweringError> {
+    Ok(match value {
+        Value::Null => GraphParameterValue::Scalar(GraphParameterScalar::Null),
+        Value::Bool(value) => GraphParameterValue::Scalar(GraphParameterScalar::Bool(*value)),
+        Value::Integer(value) => GraphParameterValue::Scalar(GraphParameterScalar::Integer(*value)),
+        Value::Unsigned(value) => {
+            GraphParameterValue::Scalar(GraphParameterScalar::Unsigned(*value))
+        }
+        Value::Decimal(value) => {
+            let value = value
+                .as_str()
+                .parse::<f64>()
+                .map_err(|_| ParameterLoweringError::NonFiniteDecimal)?;
+            if !value.is_finite() {
+                return Err(ParameterLoweringError::NonFiniteDecimal);
+            }
+            GraphParameterValue::Scalar(GraphParameterScalar::Decimal(value))
+        }
+        Value::String(value) => {
+            GraphParameterValue::Scalar(GraphParameterScalar::String(value.clone()))
+        }
+        Value::Bytes(values) => GraphParameterValue::List(
+            values
+                .iter()
+                .map(|value| {
+                    GraphParameterValue::Scalar(GraphParameterScalar::Unsigned(u64::from(*value)))
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        ),
+        Value::List(values) => GraphParameterValue::List(
+            values
+                .iter()
+                .map(lower_protocol_value)
+                .collect::<Result<Vec<_>, _>>()?
+                .into_boxed_slice(),
+        ),
+        Value::Object(values) => GraphParameterValue::Record(
+            values
+                .iter()
+                .map(|(field, value)| Ok((field.clone(), lower_protocol_value(value)?)))
+                .collect::<Result<_, ParameterLoweringError>>()?,
+        ),
+    })
+}
+
 fn lower_parameter_value(
-    value: &yss_graph_document::TypedValue,
+    value: &yss_graph_document::JsonValue,
 ) -> Result<GraphParameterValue, ParameterLoweringError> {
     if value.is_null() {
         return Ok(GraphParameterValue::Scalar(GraphParameterScalar::Null));
@@ -548,11 +521,32 @@ fn lowering_error(graph: &GraphResourcePath) -> GraphCompileError {
 mod tests {
     use super::*;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
+    use yss_graph_document::{
+        DocumentConnection, DocumentNode, DynamicPortBinding, InputState, NodePosition, OrderKey,
+        ParameterValues, PortInstanceId,
+    };
+    use yss_graph_protocol::{InputCoercionKind, PortKey, TypeState};
     use yss_graph_registry::NodeRegistryBuilder;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn graph_path() -> GraphResourcePath {
         GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
+    }
+
+    fn semantics(
+        document: &GraphDocument,
+        registry: &yss_graph_registry::NodeRegistry,
+    ) -> GraphSemanticSnapshot {
+        yss_graph_analysis::resolve_graph_semantics(
+            document,
+            registry,
+            &ResourceCatalogSnapshot::new(
+                BTreeMap::new(),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                ResourceCatalogFingerprint::from_bytes([0; 32]),
+            ),
+        )
     }
 
     #[test]
@@ -563,10 +557,11 @@ mod tests {
             .expect("an empty test registry is valid");
         let graph = graph_path();
         let compile_id = CompileId::new(7);
+        let semantics = semantics(&document, &registry);
 
         let package = compile(GraphCompilationInput::new(
             &document,
-            &registry,
+            &semantics,
             document.revision,
             graph.clone(),
             compile_id,
@@ -587,10 +582,11 @@ mod tests {
             .expect("an empty test registry is valid");
         let graph = graph_path();
         let stale_revision = GraphRevision::new(document.revision.get().saturating_add(1));
+        let semantics = semantics(&document, &registry);
 
         let error = compile(GraphCompilationInput::new(
             &document,
-            &registry,
+            &semantics,
             stale_revision,
             graph.clone(),
             CompileId::new(1),
@@ -655,9 +651,10 @@ mod tests {
             },
         );
 
+        let semantics = semantics(&document, &builtin.registry);
         let package = compile(GraphCompilationInput::new(
             &document,
-            &builtin.registry,
+            &semantics,
             document.revision,
             graph_path(),
             CompileId::new(9),
@@ -685,6 +682,194 @@ mod tests {
             GraphInputSource::Value(value) if *value == fitted_value
         ));
         assert_eq!(producer_operation.outputs().len(), 3);
+    }
+
+    #[test]
+    fn compiler_consumes_the_same_add_type_and_coercion_plan_as_analysis() {
+        let builtin = build_builtin_node_system().expect("built-in graph system is valid");
+        let integer = NodeId::new();
+        let float = NodeId::new();
+        let add = NodeId::new();
+        let mut document = GraphDocument::default();
+        for (node_id, node_type) in [
+            (integer, "yssbi.constant.int64"),
+            (float, "yssbi.constant.float64"),
+            (add, "yssbi.numeric.add"),
+        ] {
+            document.nodes.insert(
+                node_id,
+                DocumentNode {
+                    id: node_id,
+                    node_type: node_type.parse().unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        let mut operands = Vec::new();
+        for (index, source) in [integer, float].into_iter().enumerate() {
+            let operand = PortAddress::instance(
+                add,
+                PortKey::new("operands").unwrap(),
+                PortInstanceId::new(),
+            );
+            document.port_bindings.insert(
+                operand.clone(),
+                DynamicPortBinding::UserCreated {
+                    order: OrderKey::new(format!("{index:05}")),
+                },
+            );
+            let connection_id = yss_graph_document::ConnectionId::new();
+            document.connections.insert(
+                connection_id,
+                DocumentConnection {
+                    id: connection_id,
+                    output: PortAddress::declared(source, PortKey::new("value").unwrap()),
+                    input: operand.clone(),
+                    order: None,
+                },
+            );
+            operands.push(operand);
+        }
+
+        let semantics = semantics(&document, &builtin.registry);
+        let semantic_node = semantics.node(add).expect("Add semantics are available");
+        let semantic_output = semantic_node
+            .ports
+            .iter()
+            .find(|port| {
+                port.address == PortAddress::declared(add, PortKey::new("result").unwrap())
+            })
+            .and_then(|port| port.type_state.exact())
+            .cloned()
+            .expect("Add output is exact");
+        assert!(matches!(
+            semantic_node
+                .ports
+                .iter()
+                .find(|port| port.address == operands[0])
+                .map(|port| &port.type_state),
+            Some(TypeState::Exact(_))
+        ));
+
+        let package = compile(GraphCompilationInput::new(
+            &document,
+            &semantics,
+            document.revision,
+            graph_path(),
+            CompileId::new(11),
+        ))
+        .expect("the fully solved Add graph compiles");
+        let operation = package
+            .operations()
+            .iter()
+            .find(|operation| operation.source().node() == Some(add))
+            .expect("Add operation is lowered");
+
+        assert_eq!(operation.kind(), "yssbi.numeric.add");
+        assert_eq!(
+            operation.specialization().output_types[0].value_type,
+            semantic_output
+        );
+        assert_eq!(
+            operation.specialization().coercions.as_ref(),
+            [yss_graph_analysis::GraphInputCoercion {
+                address: operands[0].clone(),
+                kind: InputCoercionKind::WidenInt64ToFloat64,
+            }]
+        );
+    }
+
+    #[test]
+    fn normalized_add_literals_resolve_and_lower_as_typed_scalars() {
+        let builtin = build_builtin_node_system().expect("built-in graph system is valid");
+        let add = NodeId::new();
+        let node_type = yss_graph_protocol::NodeTypeId::new("yssbi.numeric.add").unwrap();
+        let protocol = builtin.registry.protocol(&node_type).unwrap();
+        let operand_pattern = &protocol
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == "operands")
+            .unwrap()
+            .value_type;
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            add,
+            DocumentNode {
+                id: add,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        for (index, raw) in [
+            yss_graph_document::JsonValue::from(1),
+            yss_graph_document::JsonValue::from(2.5),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let address = PortAddress::instance(
+                add,
+                PortKey::new("operands").unwrap(),
+                PortInstanceId::new(),
+            );
+            document.port_bindings.insert(
+                address.clone(),
+                DynamicPortBinding::UserCreated {
+                    order: OrderKey::new(format!("{index:05}")),
+                },
+            );
+            document.input_states.insert(
+                address,
+                InputState {
+                    literal_override: Some(
+                        yss_graph_protocol::normalize_json_literal(
+                            &raw,
+                            operand_pattern,
+                            builtin.registry.as_ref(),
+                        )
+                        .expect("numeric literal is normalized to an exact type"),
+                    ),
+                },
+            );
+        }
+
+        let semantics = semantics(&document, &builtin.registry);
+        let package = compile(GraphCompilationInput::new(
+            &document,
+            &semantics,
+            document.revision,
+            graph_path(),
+            CompileId::new(12),
+        ))
+        .expect("the literal Add graph compiles");
+        let output_type = semantics
+            .node(add)
+            .and_then(|node| node.specialization.as_ref())
+            .and_then(|specialization| specialization.output_types.first())
+            .map(|binding| &binding.value_type);
+        let lowered_values = package
+            .parameters()
+            .values()
+            .map(GraphParameterPayload::value)
+            .collect::<Vec<_>>();
+
+        assert!(matches!(
+            output_type,
+            Some(yss_graph_protocol::ResolvedType::Nominal(id)) if id.as_str() == "core.float64"
+        ));
+        assert!(lowered_values.iter().any(|value| matches!(
+            value,
+            GraphParameterValue::Scalar(GraphParameterScalar::Integer(1))
+        )));
+        assert!(lowered_values.iter().any(|value| matches!(
+            value,
+            GraphParameterValue::Scalar(GraphParameterScalar::Decimal(value)) if *value == 2.5
+        )));
     }
 
     #[test]
@@ -726,9 +911,10 @@ mod tests {
             );
         }
 
+        let semantics = semantics(&document, &builtin.registry);
         let error = compile(GraphCompilationInput::new(
             &document,
-            &builtin.registry,
+            &semantics,
             document.revision,
             graph_path(),
             CompileId::new(10),

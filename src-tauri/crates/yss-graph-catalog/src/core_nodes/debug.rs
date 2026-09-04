@@ -35,7 +35,6 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             )?],
             vec![value_type],
             vec![],
-            vec![],
             pure(),
         )?,
         ID,

@@ -108,8 +108,8 @@ pub(super) enum SemanticGuardViolationReason {
         dependency_kind: RustDependencyKind,
         canonical_origin_target: String,
     },
-    MissingExactTypedValueAlias,
-    InvalidTypedValueAlias,
+    MissingExactJsonValueAlias,
+    InvalidJsonValueAlias,
     ModelSourceUnreadable,
     ModelSourceUnparseable,
 }
@@ -173,25 +173,25 @@ pub(super) fn pure_leaf_graph_document_json_violations(
             return violations;
         }
     };
-    let typed_value_aliases = syntax
+    let json_value_aliases = syntax
         .items
         .iter()
         .filter_map(|item| match item {
-            syn::Item::Type(alias) if alias.ident == "TypedValue" => Some(alias),
+            syn::Item::Type(alias) if alias.ident == "JsonValue" => Some(alias),
             _ => None,
         })
         .collect::<Vec<_>>();
-    if typed_value_aliases.is_empty() || graph_document_allowed_dependencies != 1 {
+    if json_value_aliases.is_empty() || graph_document_allowed_dependencies != 1 {
         violations.push(SemanticGuardViolation {
             rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
             source_file: GRAPH_DOCUMENT_MODEL.to_owned(),
-            reason: SemanticGuardViolationReason::MissingExactTypedValueAlias,
+            reason: SemanticGuardViolationReason::MissingExactJsonValueAlias,
         });
-    } else if typed_value_aliases.len() != 1 || !exact_typed_value_alias(typed_value_aliases[0]) {
+    } else if json_value_aliases.len() != 1 || !exact_json_value_alias(json_value_aliases[0]) {
         violations.push(SemanticGuardViolation {
             rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
             source_file: GRAPH_DOCUMENT_MODEL.to_owned(),
-            reason: SemanticGuardViolationReason::InvalidTypedValueAlias,
+            reason: SemanticGuardViolationReason::InvalidJsonValueAlias,
         });
     }
     violations
@@ -262,7 +262,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
     violations
 }
 
-fn exact_typed_value_alias(alias: &syn::ItemType) -> bool {
+fn exact_json_value_alias(alias: &syn::ItemType) -> bool {
     if !matches!(alias.vis, syn::Visibility::Public(_)) || !alias.generics.params.is_empty() {
         return false;
     }

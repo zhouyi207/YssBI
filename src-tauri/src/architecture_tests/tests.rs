@@ -1826,7 +1826,7 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
     .expect("fixture graph_document lib must be written");
     std::fs::write(
         graph_document.join("model.rs"),
-        "pub type TypedValue = serde_json::Value;\n",
+        "pub type JsonValue = serde_json::Value;\n",
     )
     .expect("fixture graph_document model must be written");
     let roots = vec![ProductionRoot {
@@ -3762,6 +3762,7 @@ fn graph_analysis_has_one_behavior_owner_without_noop_context_inputs() {
         "src-tauri/crates/yss-graph-analysis/src/lib.rs",
         "src-tauri/crates/yss-graph-analysis/src/result_category.rs",
         "src-tauri/crates/yss-graph-analysis/src/schema_resolution.rs",
+        "src-tauri/crates/yss-graph-analysis/src/type_resolution.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -3790,8 +3791,9 @@ fn graph_analysis_has_one_behavior_owner_without_noop_context_inputs() {
     }
     assert!(
         source.contains("resources: &ResourceCatalogSnapshot")
-            && source.contains("resolve_editor_schemas(document, registry, resources)"),
-        "graph analysis must consume the resource catalog only for concrete schema facts"
+            && source.contains("resolve_graph_schemas(document, registry, resources)")
+            && source.contains("type_resolution::resolve_node_types"),
+        "graph analysis must resolve schema and node types from one coherent resource snapshot"
     );
 }
 
@@ -3848,6 +3850,11 @@ fn graph_compiler_has_one_owner_without_optional_or_mirrored_compile_state() {
         !root.join("src-tauri/src/graph/error.rs").exists(),
         "the root crate must not restore a second graph error owner"
     );
+    assert!(
+        compiler_sources.contains("GraphSemanticSnapshot")
+            && compiler_sources.contains("semantics: &'a GraphSemanticSnapshot"),
+        "graph compiler must consume the authoritative graph semantic snapshot"
+    );
     let run_graph = std::fs::read_to_string(
         root.join("src-tauri/crates/yss-application/src/execution/run_graph.rs"),
     )
@@ -3867,8 +3874,6 @@ fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_modul
         "src-tauri/crates/yss-graph-analysis-contract/src/diagnostic.rs",
         "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
         "src-tauri/crates/yss-graph-analysis-contract/src/provenance.rs",
-        "src-tauri/crates/yss-graph-analysis-contract/src/semantic.rs",
-        "src-tauri/crates/yss-graph-analysis-contract/src/snapshot.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -3879,14 +3884,21 @@ fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_modul
         !root.join("src-tauri/src/graph/analysis/contracts").exists(),
         "the root crate must not retain a graph analysis contract compatibility module"
     );
+    for removed in [
+        "src-tauri/crates/yss-graph-analysis-contract/src/semantic.rs",
+        "src-tauri/crates/yss-graph-analysis-contract/src/snapshot.rs",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "unused parallel semantic model must stay removed at {removed}"
+        );
+    }
 
     let sources = [
         "src-tauri/crates/yss-graph-analysis-contract/src/basis.rs",
         "src-tauri/crates/yss-graph-analysis-contract/src/diagnostic.rs",
         "src-tauri/crates/yss-graph-analysis-contract/src/lib.rs",
         "src-tauri/crates/yss-graph-analysis-contract/src/provenance.rs",
-        "src-tauri/crates/yss-graph-analysis-contract/src/semantic.rs",
-        "src-tauri/crates/yss-graph-analysis-contract/src/snapshot.rs",
     ]
     .into_iter()
     .map(|relative| {
@@ -3902,6 +3914,8 @@ fn graph_analysis_contract_has_one_graph_crate_owner_without_compatibility_modul
         "pub type Location",
         "fn unknown(",
         "has_blocking_errors",
+        "AnalysisSnapshot",
+        "ValidatedSemanticGraph",
     ] {
         assert!(
             !sources.contains(removed),

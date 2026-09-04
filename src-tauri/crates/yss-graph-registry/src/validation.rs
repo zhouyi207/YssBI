@@ -377,7 +377,6 @@ fn validate_node(
     NodeInterfaceProtocol::new(
         protocol.interface.ports.to_vec(),
         protocol.interface.type_parameters.to_vec(),
-        protocol.interface.type_constraints.to_vec(),
     )
     .and_then(|interface| interface.with_member_groups(protocol.interface.member_groups.to_vec()))
     .map_err(|source| RegistryValidationError::InvalidNodeProtocol {
@@ -396,14 +395,14 @@ fn validate_node(
         .iter()
         .map(|parameter| (&parameter.key, parameter))
         .collect();
-    let parameters = parameter_specs.keys().copied().collect::<BTreeSet<_>>();
     if parameter_specs.len() != protocol.parameters.parameters.len() {
         return Err(fail("duplicate parameter key".into()));
     }
+    validate_typing(&protocol.typing, &ports, &parameter_specs).map_err(&fail)?;
     for port in &protocol.interface.ports {
         validate_type_expr(&port.value_type, types, &protocol.interface.type_parameters)
             .map_err(&fail)?;
-        if let PortInstances::Derived { resolver } = &port.instances
+        if let PortCardinality::Derived { resolver } = &port.cardinality
             && !interface_resolvers.contains(resolver)
         {
             return Err(fail(format!("unknown interface resolver '{resolver}'")));
@@ -467,17 +466,95 @@ fn validate_node(
             }
         }
     }
-    for constraint in &protocol.interface.type_constraints {
-        validate_constraint(
-            constraint,
-            &ports,
-            &parameters,
-            types,
-            &protocol.interface.type_parameters,
-        )
-        .map_err(&fail)?;
-    }
     Ok(())
+}
+
+fn validate_typing(
+    typing: &NodeTypingSpec,
+    ports: &BTreeMap<&PortKey, &PortSpec>,
+    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+) -> Result<(), String> {
+    let input = |selector: &PortSelector| {
+        let (key, requires_instances) = match selector {
+            PortSelector::Declared(key) => (key, false),
+            PortSelector::AllInstances(key) => (key, true),
+        };
+        let Some(port) = ports.get(key) else {
+            return Err(format!("typing rule references unknown input port '{key}'"));
+        };
+        if port.direction != PortDirection::Input {
+            return Err(format!("typing rule port '{key}' is not an input"));
+        }
+        if requires_instances && !matches!(port.cardinality, PortCardinality::UserCreated { .. }) {
+            return Err(format!(
+                "typing rule port '{key}' does not own user-created instances"
+            ));
+        }
+        Ok(())
+    };
+    let output = |key: &PortKey| match ports.get(key) {
+        Some(port) if port.direction == PortDirection::Output => Ok(()),
+        Some(_) => Err(format!("typing rule port '{key}' is not an output")),
+        None => Err(format!(
+            "typing rule references unknown output port '{key}'"
+        )),
+    };
+
+    match typing {
+        NodeTypingSpec::Fixed => Ok(()),
+        NodeTypingSpec::Identity {
+            input: input_key,
+            output: output_key,
+        }
+        | NodeTypingSpec::ShapePreservingFloat {
+            input: input_key,
+            output: output_key,
+        } => {
+            input(&PortSelector::Declared(input_key.clone()))?;
+            output(output_key)
+        }
+        NodeTypingSpec::NumericFold {
+            inputs,
+            output: output_key,
+            ..
+        } => {
+            if inputs.is_empty() {
+                return Err("numeric typing rule requires at least one input selector".into());
+            }
+            for selector in inputs {
+                input(selector)?;
+            }
+            output(output_key)
+        }
+        NodeTypingSpec::ParameterOutput {
+            parameter,
+            output: output_key,
+        } => {
+            if !parameters.contains_key(parameter) {
+                return Err(format!(
+                    "typing rule references unknown parameter '{parameter}'"
+                ));
+            }
+            output(output_key)
+        }
+        NodeTypingSpec::VariableOutput {
+            parameter,
+            output: output_key,
+        } => {
+            let Some(parameter) = parameters.get(parameter) else {
+                return Err("variable typing rule references an unknown parameter".into());
+            };
+            if !matches!(
+                parameter.editor,
+                ParameterEditorSpec::Resource {
+                    kind: ResourceDisplayKind::Variable
+                }
+            ) {
+                return Err("variable typing rule parameter is not a variable resource".into());
+            }
+            output(output_key)
+        }
+    }
 }
 
 fn require_i18n(manifest: &I18nManifest, key: &I18nKey) -> Result<(), String> {
@@ -501,6 +578,9 @@ fn validate_type_expr(
     match expr {
         TypeExpr::Concrete(id) if !types.types.contains_key(id) => {
             Err(format!("unknown type '{id}'"))
+        }
+        TypeExpr::Class(id) if !types.classes.contains(id) => {
+            Err(format!("unknown type class '{id}'"))
         }
         TypeExpr::Generic(id) if !parameters.contains(id) => {
             Err(format!("unknown type parameter '{id}'"))
@@ -534,49 +614,6 @@ fn validate_type_expr(
         }
         _ => Ok(()),
     }
-}
-
-fn validate_term(
-    term: &TypeTerm,
-    ports: &BTreeMap<&PortKey, &PortSpec>,
-    parameters: &BTreeSet<&ParameterKey>,
-    types: &TypeRegistry,
-    type_parameters: &[TypeParameterId],
-) -> Result<(), String> {
-    match term {
-        TypeTerm::Expr(expr) => validate_type_expr(expr, types, type_parameters),
-        TypeTerm::Port(key) if !ports.contains_key(key) => {
-            Err(format!("constraint references unknown port '{key}'"))
-        }
-        TypeTerm::Parameter(key) if !parameters.contains(key) => {
-            Err(format!("constraint references unknown parameter '{key}'"))
-        }
-        _ => Ok(()),
-    }
-}
-fn validate_constraint(
-    c: &TypeConstraint,
-    ports: &BTreeMap<&PortKey, &PortSpec>,
-    parameters: &BTreeSet<&ParameterKey>,
-    types: &TypeRegistry,
-    type_parameters: &[TypeParameterId],
-) -> Result<(), String> {
-    let terms: Vec<&TypeTerm> = match c {
-        TypeConstraint::Equal(a, b)
-        | TypeConstraint::Assignable(a, b)
-        | TypeConstraint::ElementOf(a, b) => vec![a, b],
-        TypeConstraint::Implements(a, class) => {
-            if !types.classes.contains(class) {
-                return Err(format!("unknown type class '{class}'"));
-            }
-            vec![a]
-        }
-        TypeConstraint::OneOf(a, choices) => std::iter::once(a).chain(choices).collect(),
-    };
-    for term in terms {
-        validate_term(term, ports, parameters, types, type_parameters)?;
-    }
-    Ok(())
 }
 
 fn validate_schema_parameter(
@@ -790,7 +827,7 @@ mod nominal_schema_tests {
             title: "Source".into(),
             direction: PortDirection::Input,
             value_type: TypeExpr::Unknown,
-            instances: PortInstances::Declared,
+            cardinality: PortCardinality::Declared,
             connections: ConnectionsPerPort::Single,
             input_binding: None,
             consumption: Some(InputConsumption::Streaming),

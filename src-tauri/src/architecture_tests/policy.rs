@@ -1185,6 +1185,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::editor_projection::model::EditorPortInstanceAdditionModel",
             "yss_application::editor_projection::model::EditorPortModel",
             "yss_application::editor_projection::model::EditorPortStatus",
+            "yss_application::editor_projection::model::EditorPortTypeState",
             "yss_application::editor_projection::model::EditorProjectionModel",
             "yss_application::editor_projection::model::EditorSchemaSummary",
             "yss_application::editor_projection::model::EditorSchemaSummaryKind",

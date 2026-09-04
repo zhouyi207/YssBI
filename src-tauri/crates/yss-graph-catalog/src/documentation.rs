@@ -27,18 +27,10 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.constant.float64" => markdown!("float64_const"),
         "yssbi.constant.string" => markdown!("string_const"),
 
-        "yssbi.numeric.add.int64" | "yssbi.numeric.add.float64" | "yssbi.numeric.series.add" => {
-            markdown!("add")
-        }
-        "yssbi.numeric.subtract.int64"
-        | "yssbi.numeric.subtract.float64"
-        | "yssbi.numeric.series.subtract" => markdown!("subtract"),
-        "yssbi.numeric.multiply.int64"
-        | "yssbi.numeric.multiply.float64"
-        | "yssbi.numeric.series.multiply" => markdown!("multiply"),
-        "yssbi.numeric.divide.int64"
-        | "yssbi.numeric.divide.float64"
-        | "yssbi.numeric.series.divide" => markdown!("divide"),
+        "yssbi.numeric.add" => markdown!("add"),
+        "yssbi.numeric.subtract" => markdown!("subtract"),
+        "yssbi.numeric.multiply" => markdown!("multiply"),
+        "yssbi.numeric.divide" => markdown!("divide"),
         "yssbi.numeric.ln" => markdown!("ln"),
         "yssbi.numeric.log2" => markdown!("log2"),
         "yssbi.numeric.log10" => markdown!("log10"),

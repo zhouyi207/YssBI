@@ -240,18 +240,25 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
             let inputs = operation
                 .inputs()
                 .iter()
-                .map(|binding| match binding.source() {
-                    crate::plan::PlanInputSource::Value(reference) => values
-                        .get(reference.index() as usize)
-                        .and_then(Option::as_ref)
-                        .cloned()
-                        .ok_or(KernelExecutionError::Failed),
-                    crate::plan::PlanInputSource::Parameter(handle) => {
-                        let Some(payload) = package.parameters().entries().get(handle) else {
-                            return Err(KernelExecutionError::Failed);
-                        };
-                        parameter_value(payload.value(), resources)
-                    }
+                .map(|binding| {
+                    let value = match binding.source() {
+                        crate::plan::PlanInputSource::Value(reference) => values
+                            .get(reference.index() as usize)
+                            .and_then(Option::as_ref)
+                            .cloned()
+                            .ok_or(KernelExecutionError::Failed),
+                        crate::plan::PlanInputSource::Parameter(handle) => {
+                            let Some(payload) = package.parameters().entries().get(handle) else {
+                                return Err(KernelExecutionError::Failed);
+                            };
+                            parameter_value(payload.value(), resources)
+                        }
+                    }?;
+                    apply_input_coercions(
+                        value,
+                        binding.port(),
+                        operation.specialization().coercions(),
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -265,6 +272,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     .map(|payload| payload.value()),
                 resources,
                 operation.outputs(),
+                operation.specialization(),
             )?;
             for output in operation.outputs() {
                 let value = output_values
@@ -502,12 +510,32 @@ fn parameter_value(
     }
 }
 
+fn apply_input_coercions(
+    mut value: RuntimeValue,
+    port: &crate::plan::PlanPortAddress,
+    coercions: &[crate::plan::PlanInputCoercion],
+) -> Result<RuntimeValue, KernelExecutionError> {
+    for coercion in coercions.iter().filter(|coercion| coercion.port() == port) {
+        value = match coercion.kind() {
+            crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => value
+                .coerce_to(&yss_data_contract::DataType::Float64)
+                .map_err(|_| KernelExecutionError::Failed)?,
+            // Broadcast is a kernel-owned shape operation. Keeping the scalar
+            // value here makes the coercion explicit without fabricating a
+            // DataSeries length in the scheduler.
+            crate::plan::PlanInputCoercionKind::BroadcastScalarToSeries => value,
+        };
+    }
+    Ok(value)
+}
+
 fn execute_node(
     kind: &str,
     inputs: &[RuntimeValue],
     parameter: Option<&crate::plan::PlanParameterValue>,
     resources: &PreparedRunResources,
     outputs: &[crate::plan::PlanOutputBinding],
+    specialization: &crate::plan::PlanKernelSpecialization,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let value = match kind {
         "yssbi.constant.bool"
@@ -526,17 +554,15 @@ fn execute_node(
                 .cloned()
                 .ok_or(KernelExecutionError::Failed)
         }
-        "yssbi.numeric.add.int64" | "yssbi.numeric.add.float64" => {
-            binary_numeric(inputs, |left, right| left + right)
+        "yssbi.numeric.add" => numeric_fold(inputs, specialization, |left, right| left + right),
+        "yssbi.numeric.subtract" => {
+            binary_numeric(inputs, specialization, |left, right| left - right)
         }
-        "yssbi.numeric.subtract.int64" | "yssbi.numeric.subtract.float64" => {
-            binary_numeric(inputs, |left, right| left - right)
+        "yssbi.numeric.multiply" => {
+            binary_numeric(inputs, specialization, |left, right| left * right)
         }
-        "yssbi.numeric.multiply.int64" | "yssbi.numeric.multiply.float64" => {
-            binary_numeric(inputs, |left, right| left * right)
-        }
-        "yssbi.numeric.divide.int64" | "yssbi.numeric.divide.float64" => {
-            binary_numeric(inputs, |left, right| left / right)
+        "yssbi.numeric.divide" => {
+            binary_numeric(inputs, specialization, |left, right| left / right)
         }
         "yssbi.logic.and" => binary_bool(inputs, |left, right| left && right),
         "yssbi.logic.or" => binary_bool(inputs, |left, right| left || right),
@@ -547,7 +573,19 @@ fn execute_node(
         | "yssbi.compare.less_equal"
         | "yssbi.compare.greater"
         | "yssbi.compare.greater_equal" => compare_numeric(kind, inputs),
-        "yssbi.value.convert" => inputs.first().cloned().ok_or(KernelExecutionError::Failed),
+        "yssbi.value.convert" => {
+            let target = specialization
+                .output_types()
+                .first()
+                .map(crate::plan::PlanTypeBinding::data_type)
+                .ok_or(KernelExecutionError::Failed)?;
+            inputs
+                .first()
+                .cloned()
+                .ok_or(KernelExecutionError::Failed)?
+                .coerce_to(target)
+                .map_err(|_| KernelExecutionError::Failed)
+        }
         "yssbi.debug.view"
         | "yssbi.project.function.entry"
         | "yssbi.project.function.return"
@@ -572,16 +610,65 @@ fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionErr
 
 fn binary_numeric(
     inputs: &[RuntimeValue],
+    specialization: &crate::plan::PlanKernelSpecialization,
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     let value = operation(
         numeric_input(inputs.first())?,
         numeric_input(inputs.get(1))?,
     );
-    value
-        .is_finite()
-        .then_some(RuntimeValue::Decimal(value))
-        .ok_or(KernelExecutionError::Failed)
+    numeric_result(value, specialization)
+}
+
+fn numeric_fold(
+    inputs: &[RuntimeValue],
+    specialization: &crate::plan::PlanKernelSpecialization,
+    operation: impl Fn(f64, f64) -> f64,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    let mut values = inputs.iter();
+    let mut result = numeric_input(values.next())?;
+    for value in values {
+        result = operation(result, numeric_input(Some(value))?);
+    }
+    numeric_result(result, specialization)
+}
+
+fn numeric_result(
+    value: f64,
+    specialization: &crate::plan::PlanKernelSpecialization,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    if !value.is_finite() {
+        return Err(KernelExecutionError::Failed);
+    }
+    match specialization
+        .output_types()
+        .first()
+        .map(crate::plan::PlanTypeBinding::data_type)
+    {
+        Some(yss_data_contract::DataType::Int64)
+            if value.fract() == 0.0 && value >= i64::MIN as f64 && value <= i64::MAX as f64 =>
+        {
+            Ok(RuntimeValue::Integer(value as i64))
+        }
+        Some(yss_data_contract::DataType::Float64) => Ok(RuntimeValue::Decimal(value)),
+        Some(
+            yss_data_contract::DataType::DataSeries(_)
+            | yss_data_contract::DataType::Int64
+            | yss_data_contract::DataType::Boolean
+            | yss_data_contract::DataType::String
+            | yss_data_contract::DataType::Date
+            | yss_data_contract::DataType::Datetime
+            | yss_data_contract::DataType::Time
+            | yss_data_contract::DataType::Categorical
+            | yss_data_contract::DataType::Array(_)
+            | yss_data_contract::DataType::Object
+            | yss_data_contract::DataType::DataFrame
+            | yss_data_contract::DataType::Struct(_)
+            | yss_data_contract::DataType::OneOf(_)
+            | yss_data_contract::DataType::Any,
+        )
+        | None => Err(KernelExecutionError::Failed),
+    }
 }
 
 fn binary_bool(
@@ -1378,6 +1465,18 @@ mod tests {
         )
     }
 
+    fn operation_specialization(kind: &str, node: &str) -> crate::plan::PlanKernelSpecialization {
+        crate::plan::PlanKernelSpecialization::new(
+            PlanOperationKind::from_existing(kind.into()),
+            Box::new([]),
+            Box::new([crate::plan::PlanTypeBinding::new(
+                PlanPortAddress::from_existing(format!("{node}:result").into_boxed_str()),
+                yss_data_contract::DataType::Int64,
+            )]),
+            Box::new([]),
+        )
+    }
+
     struct TestExecutor;
 
     impl PreparedPlanExecutor for TestExecutor {
@@ -1467,7 +1566,6 @@ mod tests {
         let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
-            PlanOperationKind::from_existing("yssbi.value.convert".into()),
             crate::plan::ResultCategory::Value,
             Box::new([]),
             Box::new([PlanInputBinding::new(
@@ -1476,15 +1574,16 @@ mod tests {
             )]),
             Box::new([]),
             Box::new([operation_output("consumer", ValueRef::new(0))]),
+            operation_specialization("yssbi.value.convert", "consumer"),
         );
         let producer = PlanOperation::new(
             operation_source("producer"),
-            PlanOperationKind::from_existing("yssbi.constant.int64".into()),
             crate::plan::ResultCategory::Value,
             Box::new([parameter_handle.clone()]),
             Box::new([]),
             Box::new([]),
             Box::new([operation_output("producer", ValueRef::new(1))]),
+            operation_specialization("yssbi.constant.int64", "producer"),
         );
         let plan = prepared_operation_plan(
             &state,
@@ -1533,21 +1632,21 @@ mod tests {
         let requested = selected_output.output().clone();
         let selected = PlanOperation::new(
             operation_source("selected"),
-            PlanOperationKind::from_existing("yssbi.constant.int64".into()),
             crate::plan::ResultCategory::Value,
             Box::new([parameter_handle.clone()]),
             Box::new([]),
             Box::new([]),
             Box::new([selected_output]),
+            operation_specialization("yssbi.constant.int64", "selected"),
         );
         let unrelated = PlanOperation::new(
             operation_source("unrelated"),
-            PlanOperationKind::from_existing("yssbi.unsupported".into()),
             crate::plan::ResultCategory::Value,
             Box::new([]),
             Box::new([]),
             Box::new([]),
             Box::new([operation_output("unrelated", ValueRef::new(1))]),
+            operation_specialization("yssbi.unsupported", "unrelated"),
         );
         let plan = prepared_operation_plan(
             &state,

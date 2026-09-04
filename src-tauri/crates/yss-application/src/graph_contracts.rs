@@ -7,10 +7,11 @@ use yss_database_runtime::session_api::DatabaseCatalogSnapshot;
 use yss_execution::plan::{
     CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
     CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
-    PlanInputBinding, PlanInputSource, PlanNodeId, PlanObservationIntent, PlanOperation,
-    PlanOperationKind, PlanOutputBinding, PlanOutputRef, PlanParameterFieldId,
-    PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue,
-    PlanPortAddress, PlanProvenance, PlanSourceIdentity, ValueRef,
+    PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind, PlanInputSource,
+    PlanKernelSpecialization, PlanNodeId, PlanObservationIntent, PlanOperation, PlanOperationKind,
+    PlanOutputBinding, PlanOutputRef, PlanParameterFieldId, PlanParameterPayload,
+    PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue, PlanPortAddress,
+    PlanProvenance, PlanSourceIdentity, PlanTypeBinding, ValueRef,
 };
 use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_analysis_contract::{
@@ -212,6 +213,8 @@ pub enum GraphPackageMappingError {
     OperationKind(#[source] yss_execution::plan::InvalidPlanIdentity),
     #[error("graph package parameter handle is duplicated")]
     DuplicateParameter(#[source] yss_execution::plan::CompiledParameterBundleError),
+    #[error("graph package contains a resolved type unsupported by execution")]
+    UnsupportedResolvedType,
 }
 
 /// Map the Graph-owned lowered package into the Execution-owned immutable
@@ -225,8 +228,6 @@ pub fn execution_package_from_graph(
         .iter()
         .map(|operation| {
             let source = plan_source_identity(operation.source())?;
-            let kind = PlanOperationKind::new(operation.kind().to_owned().into_boxed_str())
-                .map_err(GraphPackageMappingError::OperationKind)?;
             let parameter_handles = operation
                 .parameter_handles()
                 .iter()
@@ -273,14 +274,15 @@ pub fn execution_package_from_graph(
                 })
                 .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
                 .into_boxed_slice();
+            let specialization = plan_specialization(operation.specialization())?;
             Ok(PlanOperation::new(
                 source,
-                kind,
                 map_result_category(operation.result_category()),
                 parameter_handles,
                 inputs,
                 observation_intents,
                 outputs,
+                specialization,
             ))
         })
         .collect::<Result<Vec<_>, GraphPackageMappingError>>()?;
@@ -308,6 +310,51 @@ pub fn execution_package_from_graph(
         std::sync::Arc::new(CompiledFunctionBundle::new(basis, Box::new([]), 0)),
         std::sync::Arc::new(parameters.freeze()),
         provenance,
+    ))
+}
+
+fn plan_specialization(
+    value: &yss_graph_analysis::GraphKernelSpecialization,
+) -> Result<PlanKernelSpecialization, GraphPackageMappingError> {
+    let implementation = PlanOperationKind::new(value.implementation.clone())
+        .map_err(GraphPackageMappingError::OperationKind)?;
+    let bindings = |values: &[yss_graph_analysis::GraphPortTypeBinding]| {
+        values
+            .iter()
+            .map(|binding| {
+                let port = PlanPortAddress::new(binding.address.to_string().into_boxed_str())
+                    .map_err(GraphPackageMappingError::Identity)?;
+                let data_type =
+                    yss_graph_type_mapping::data_type_from_resolved_type(&binding.value_type)
+                        .ok_or(GraphPackageMappingError::UnsupportedResolvedType)?;
+                Ok(PlanTypeBinding::new(port, data_type))
+            })
+            .collect::<Result<Vec<_>, GraphPackageMappingError>>()
+            .map(Vec::into_boxed_slice)
+    };
+    let coercions = value
+        .coercions
+        .iter()
+        .map(|coercion| {
+            let port = PlanPortAddress::new(coercion.address.to_string().into_boxed_str())
+                .map_err(GraphPackageMappingError::Identity)?;
+            let kind = match coercion.kind {
+                yss_graph_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
+                    PlanInputCoercionKind::WidenInt64ToFloat64
+                }
+                yss_graph_protocol::InputCoercionKind::BroadcastScalarToSeries => {
+                    PlanInputCoercionKind::BroadcastScalarToSeries
+                }
+            };
+            Ok(PlanInputCoercion::new(port, kind))
+        })
+        .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
+        .into_boxed_slice();
+    Ok(PlanKernelSpecialization::new(
+        implementation,
+        bindings(&value.input_types)?,
+        bindings(&value.output_types)?,
+        coercions,
     ))
 }
 

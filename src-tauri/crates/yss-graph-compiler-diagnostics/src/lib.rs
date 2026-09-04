@@ -24,7 +24,7 @@ pub struct CompilerDiagnosticDefinition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProjectionDiagnosticKind {
+pub enum GraphDiagnosticKind {
     DependencyValueCycle,
     InputUnbound,
     InterfaceSchemaDependencyUnresolved,
@@ -37,9 +37,13 @@ pub enum ProjectionDiagnosticKind {
     PortUnknown,
     ResourceResolutionFailed,
     SemanticInvalid,
+    TypeConnectionMismatch,
+    TypeGenericConflict,
+    TypeInputNotAccepted,
+    TypeResolutionIncomplete,
 }
 
-impl ProjectionDiagnosticKind {
+impl GraphDiagnosticKind {
     pub const fn code(self) -> &'static str {
         match self {
             Self::DependencyValueCycle => "compiler.dependency.value_cycle",
@@ -56,6 +60,10 @@ impl ProjectionDiagnosticKind {
             Self::PortUnknown => "compiler.port.unknown",
             Self::ResourceResolutionFailed => "compiler.resource.resolution_failed",
             Self::SemanticInvalid => "compiler.semantic.invalid",
+            Self::TypeConnectionMismatch => "compiler.type.connection_mismatch",
+            Self::TypeGenericConflict => "compiler.type.generic_conflict",
+            Self::TypeInputNotAccepted => "compiler.type.input_not_accepted",
+            Self::TypeResolutionIncomplete => "compiler.type.resolution_incomplete",
         }
     }
 
@@ -72,7 +80,11 @@ impl ProjectionDiagnosticKind {
             | Self::PortOrphan
             | Self::PortUnknown
             | Self::ResourceResolutionFailed
-            | Self::SemanticInvalid => DiagnosticSeverity::Error,
+            | Self::SemanticInvalid
+            | Self::TypeConnectionMismatch
+            | Self::TypeGenericConflict
+            | Self::TypeInputNotAccepted
+            | Self::TypeResolutionIncomplete => DiagnosticSeverity::Error,
         }
     }
 }
@@ -613,6 +625,34 @@ define_compiler_diagnostics! {
         en: "Semantic graph is invalid.",
         zh: "语义图无效。",
     },
+    TypeConnectionMismatch { output, input } => {
+        code: "compiler.type.connection_mismatch",
+        message_key: "diagnostics.compiler.type.connection_mismatch",
+        severity: Error,
+        en: "Resolved output type at {output} is not accepted by {input}.",
+        zh: "输出端口 {output} 的已解析类型不被输入端口 {input} 接受。",
+    },
+    TypeGenericConflict { type_parameter } => {
+        code: "compiler.type.generic_conflict",
+        message_key: "diagnostics.compiler.type.generic_conflict",
+        severity: Error,
+        en: "Type parameter {type_parameter} received incompatible input types.",
+        zh: "类型参数 {type_parameter} 收到了不兼容的输入类型。",
+    },
+    TypeInputNotAccepted { port } => {
+        code: "compiler.type.input_not_accepted",
+        message_key: "diagnostics.compiler.type.input_not_accepted",
+        severity: Error,
+        en: "Input value type is not accepted by port {port}.",
+        zh: "输入值类型不被端口 {port} 接受。",
+    },
+    TypeResolutionIncomplete { port } => {
+        code: "compiler.type.resolution_incomplete",
+        message_key: "diagnostics.compiler.type.resolution_incomplete",
+        severity: Error,
+        en: "Port {port} does not have one exact resolved type.",
+        zh: "端口 {port} 尚未求解为唯一确定类型。",
+    },
     TypeIncompatible { expected_type, actual_type } => {
         code: "compiler.type.incompatible",
         message_key: "diagnostics.compiler.type.incompatible",
@@ -824,7 +864,7 @@ mod tests {
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_template_safe_and_dataflow_only() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 73);
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 77);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
 
         assert!(COMPILER_DIAGNOSTIC_DEFINITIONS.iter().all(|definition| {
@@ -848,18 +888,22 @@ mod tests {
                 .any(|template| template.locale == "en-US")
         }));
         for kind in [
-            ProjectionDiagnosticKind::DependencyValueCycle,
-            ProjectionDiagnosticKind::InputUnbound,
-            ProjectionDiagnosticKind::InterfaceSchemaDependencyUnresolved,
-            ProjectionDiagnosticKind::NodeUnknown,
-            ProjectionDiagnosticKind::ParameterInvalid,
-            ProjectionDiagnosticKind::ParameterRequired,
-            ProjectionDiagnosticKind::ParameterUnknown,
-            ProjectionDiagnosticKind::PortBindingKindMismatch,
-            ProjectionDiagnosticKind::PortOrphan,
-            ProjectionDiagnosticKind::PortUnknown,
-            ProjectionDiagnosticKind::ResourceResolutionFailed,
-            ProjectionDiagnosticKind::SemanticInvalid,
+            GraphDiagnosticKind::DependencyValueCycle,
+            GraphDiagnosticKind::InputUnbound,
+            GraphDiagnosticKind::InterfaceSchemaDependencyUnresolved,
+            GraphDiagnosticKind::NodeUnknown,
+            GraphDiagnosticKind::ParameterInvalid,
+            GraphDiagnosticKind::ParameterRequired,
+            GraphDiagnosticKind::ParameterUnknown,
+            GraphDiagnosticKind::PortBindingKindMismatch,
+            GraphDiagnosticKind::PortOrphan,
+            GraphDiagnosticKind::PortUnknown,
+            GraphDiagnosticKind::ResourceResolutionFailed,
+            GraphDiagnosticKind::SemanticInvalid,
+            GraphDiagnosticKind::TypeConnectionMismatch,
+            GraphDiagnosticKind::TypeGenericConflict,
+            GraphDiagnosticKind::TypeInputNotAccepted,
+            GraphDiagnosticKind::TypeResolutionIncomplete,
         ] {
             let definition = COMPILER_DIAGNOSTIC_DEFINITIONS
                 .iter()

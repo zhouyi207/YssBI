@@ -1,4 +1,4 @@
-//! Canonical conversion from persisted data types to Graph type expressions.
+//! Canonical conversion between data-contract types and Graph type representations.
 
 #![forbid(unsafe_code)]
 #![deny(unused_must_use)]
@@ -6,7 +6,7 @@
 use thiserror::Error;
 use yss_data_contract::{DataType, DataTypeParseError};
 use yss_graph_protocol::{
-    InvalidSemanticId, RelationalScalarType, TypeConstructorId, TypeExpr, TypeId,
+    InvalidSemanticId, RelationalScalarType, ResolvedType, TypeConstructorId, TypeExpr, TypeId,
 };
 
 #[derive(Debug, Error)]
@@ -61,6 +61,39 @@ pub fn relational_scalar_type_from_data_type(data_type: &DataType) -> Relational
         | DataType::Struct(_)
         | DataType::OneOf(_)
         | DataType::Any => RelationalScalarType::Unknown,
+    }
+}
+
+pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<DataType> {
+    match value {
+        ResolvedType::Nominal(id) => Some(match id.as_str() {
+            "core.bool" => DataType::Boolean,
+            "core.int64" => DataType::Int64,
+            "core.float64" => DataType::Float64,
+            "core.string" => DataType::String,
+            "core.date" => DataType::Date,
+            "core.datetime" => DataType::Datetime,
+            "core.time" => DataType::Time,
+            "core.categorical" => DataType::Categorical,
+            "core.object" => DataType::Object,
+            "tabular.dataframe" => DataType::DataFrame,
+            semantic_id => DataType::Struct(semantic_id.to_owned()),
+        }),
+        ResolvedType::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
+            data_type_from_resolved_type(&arguments[0])
+                .map(|element| DataType::DataSeries(Box::new(element)))
+        }
+        ResolvedType::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == "core.array" && arguments.len() == 1 => {
+            data_type_from_resolved_type(&arguments[0])
+                .map(|element| DataType::Array(Box::new(element)))
+        }
+        ResolvedType::Applied { .. } => None,
     }
 }
 

@@ -2,10 +2,11 @@ use yss_data_contract::DataType;
 use yss_graph_analysis::GraphDiagnosticLocation;
 use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
 use yss_graph_document::{
-    ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
+    ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
 };
 use yss_graph_protocol::{
-    ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType, TypeExpr,
+    ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType,
+    TypeConflict, TypeUnknownReason,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -55,7 +56,8 @@ pub struct EditorPortModel {
     pub can_remove: bool,
     pub connections: EditorPortConnectionCapabilities,
     pub input: Option<EditorInputBinding>,
-    pub resolved_type: Option<EditorTypeSummary>,
+    pub accepted_type: EditorAcceptedType,
+    pub type_state: EditorPortTypeState,
     pub resolved_schema: Option<EditorSchemaSummary>,
     pub status: EditorPortStatus,
 }
@@ -86,8 +88,8 @@ pub struct EditorPortConnectionCapabilities {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorInputBinding {
-    pub literal_override: Option<TypedValue>,
-    pub protocol_default: Option<TypedValue>,
+    pub literal_override: Option<serde_json::Value>,
+    pub protocol_default: Option<serde_json::Value>,
     pub effective: EditorEffectiveInputBinding,
 }
 
@@ -100,11 +102,27 @@ pub enum EditorEffectiveInputBinding {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct EditorTypeSummary {
+pub struct EditorAcceptedType {
     pub display: Box<str>,
-    pub resolved: bool,
-    pub data_type: Option<DataType>,
-    pub internal_type_expr: TypeExpr,
+    pub domain: Option<Box<[DataType]>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EditorPortTypeState {
+    Exact {
+        display: Box<str>,
+        data_type: Option<DataType>,
+    },
+    Constrained {
+        display: Box<str>,
+        domain: Box<[DataType]>,
+    },
+    Unknown {
+        reason: TypeUnknownReason,
+    },
+    Conflict {
+        conflict: TypeConflict,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -143,9 +161,9 @@ pub struct EditorParameterModel {
     pub presentation: ParameterPresentation,
     pub value_type: Option<DataType>,
     pub multiline: bool,
-    pub value: Option<TypedValue>,
+    pub value: Option<serde_json::Value>,
     pub configuration: Option<EditorParameterConfiguration>,
-    pub inherited_value: Option<TypedValue>,
+    pub inherited_value: Option<serde_json::Value>,
     pub value_source: Option<EditorParameterValueSource>,
     pub options: Option<Box<[Box<str>]>>,
 }
@@ -184,7 +202,7 @@ pub enum EditorParameterConfiguration {
         available: bool,
         unavailable_reason: Option<Box<str>>,
         columns: Box<[EditorFilterColumnOption]>,
-        value: Option<TypedValue>,
+        value: Option<serde_json::Value>,
     },
 }
 
@@ -271,10 +289,8 @@ pub enum EditorProjectionError {
     },
     #[error("analysis and catalog registry fingerprints do not match")]
     RegistryMismatch,
-    #[error("projection facts are unavailable")]
-    MissingProjectionFacts,
-    #[error("projection facts do not match the graph document")]
-    ProjectionFactsMismatch,
+    #[error("semantic snapshot does not match the graph document")]
+    SemanticSnapshotMismatch,
     #[error("projection basis is stale")]
     StaleProjectionBasis,
     #[error("projection graphs are incompatible")]

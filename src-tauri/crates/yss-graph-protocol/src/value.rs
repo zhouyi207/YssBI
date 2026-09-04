@@ -58,12 +58,14 @@ impl std::fmt::Display for InvalidDecimal {
 impl std::error::Error for InvalidDecimal {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TypedValue {
     pub value_type: TypeExpr,
     pub value: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ParameterValue {
     pub value_type: TypeExpr,
     pub value: Value,

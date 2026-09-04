@@ -10,8 +10,8 @@ use yss_graph_document::{
     GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
 };
 use yss_graph_protocol::{
-    ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortDirection,
-    PortInstances, PortKey, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
+    ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortCardinality,
+    PortDirection, PortKey, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
@@ -156,21 +156,6 @@ fn mutation_validation_error(
     }
 }
 
-fn type_expr_is_unresolved(expression: &TypeExpr, parameters: &[TypeParameterId]) -> bool {
-    let declared = parameters.iter().collect::<BTreeSet<_>>();
-    fn visit(expression: &TypeExpr, declared: &BTreeSet<&TypeParameterId>) -> bool {
-        match expression {
-            TypeExpr::Concrete(_) => false,
-            TypeExpr::Generic(id) => !declared.contains(id),
-            TypeExpr::Applied { arguments, .. } | TypeExpr::Union(arguments) => {
-                arguments.iter().any(|argument| visit(argument, declared))
-            }
-            TypeExpr::Unknown => true,
-        }
-    }
-    visit(expression, &declared)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourcePort {
     pub address: PortAddress,
@@ -219,7 +204,7 @@ pub(crate) fn resolve_editor_port<'a>(
             )
         })?;
     let binding = match &address.port {
-        PortRef::Declared { .. } if matches!(spec.instances, PortInstances::Declared) => None,
+        PortRef::Declared { .. } if matches!(spec.cardinality, PortCardinality::Declared) => None,
         PortRef::Declared { .. } => {
             return Err(mutation_validation_error(
                 EditorMutationErrorCode::GraphPortNotFound,
@@ -234,12 +219,12 @@ pub(crate) fn resolve_editor_port<'a>(
                 )
             })?;
             let compatible = matches!(
-                (&spec.instances, binding),
+                (&spec.cardinality, binding),
                 (
-                    PortInstances::UserCreated { .. },
+                    PortCardinality::UserCreated { .. },
                     DynamicPortBinding::UserCreated { .. }
                 ) | (
-                    PortInstances::Derived { .. },
+                    PortCardinality::Derived { .. },
                     DynamicPortBinding::Resolved { .. } | DynamicPortBinding::Orphan { .. }
                 )
             );
@@ -283,13 +268,8 @@ pub(crate) fn validate_connection_types(
             "connection endpoints have invalid directions",
         ));
     }
-    if type_expr_is_unresolved(&output.value_type, &output.type_parameters)
-        || type_expr_is_unresolved(&input.value_type, &input.type_parameters)
-    {
-        return Err(mutation_validation_error(
-            EditorMutationErrorCode::GraphConnectionTypeUnresolved,
-            "connection endpoint type expression is unresolved",
-        ));
+    if !type_pattern_is_exact(&output.value_type) {
+        return Ok(());
     }
     if yss_graph_protocol::type_exprs_compatibility(
         &output.value_type,
@@ -304,6 +284,14 @@ pub(crate) fn validate_connection_types(
             EditorMutationErrorCode::GraphConnectionTypeMismatch,
             "connection endpoint types are not assignable",
         ))
+    }
+}
+
+fn type_pattern_is_exact(value: &TypeExpr) -> bool {
+    match value {
+        TypeExpr::Concrete(_) => true,
+        TypeExpr::Applied { arguments, .. } => arguments.iter().all(type_pattern_is_exact),
+        TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Union(_) | TypeExpr::Unknown => false,
     }
 }
 
@@ -328,12 +316,7 @@ fn source_port_with_optional_catalog(
     let mut source = SourcePort {
         address,
         direction: spec.direction,
-        value_type: binding
-            .and_then(|binding| match binding {
-                DynamicPortBinding::Resolved { last_known, .. } => last_known.value_type.clone(),
-                DynamicPortBinding::UserCreated { .. } | DynamicPortBinding::Orphan { .. } => None,
-            })
-            .unwrap_or_else(|| spec.value_type.clone()),
+        value_type: spec.value_type.clone(),
         type_parameters: protocol.interface.type_parameters.clone(),
     };
     if let Some(resources) = resources {
@@ -538,22 +521,13 @@ pub(crate) fn catalog_query_source_port(
     if matches!(resolved.binding, Some(DynamicPortBinding::Orphan { .. })) {
         return Err(CatalogCompatibilityError::SourceInvalid);
     }
-    let mut value_type = resolved
-        .binding
-        .and_then(|binding| match binding {
-            DynamicPortBinding::Resolved { last_known, .. } => last_known.value_type.clone(),
-            DynamicPortBinding::UserCreated { .. } | DynamicPortBinding::Orphan { .. } => None,
-        })
-        .unwrap_or_else(|| resolved.spec.value_type.clone());
+    let mut value_type = resolved.spec.value_type.clone();
     refine_catalog_query_resource_type(
         &mut value_type,
         &document.nodes[&address.node_id],
         resolved.protocol,
         catalog,
     )?;
-    if type_expr_is_unresolved(&value_type, &resolved.protocol.interface.type_parameters) {
-        return Err(CatalogCompatibilityError::SourceInvalid);
-    }
     Ok(SourcePort {
         address: address.clone(),
         direction: resolved.spec.direction,
@@ -611,10 +585,10 @@ fn catalog_query_candidate_ports(
         .interface
         .ports
         .iter()
-        .filter(|port| match port.instances {
-            PortInstances::Declared => true,
-            PortInstances::UserCreated { min, .. } => min > 0,
-            PortInstances::Derived { .. } => false,
+        .filter(|port| match port.cardinality {
+            PortCardinality::Declared => true,
+            PortCardinality::UserCreated { min, .. } => min > 0,
+            PortCardinality::Derived { .. } => false,
         })
         .map(|port| CandidatePort {
             template: port.key.clone(),
@@ -764,10 +738,10 @@ fn candidate_ports(
         .interface
         .ports
         .iter()
-        .filter(|spec| match spec.instances {
-            PortInstances::Declared => true,
-            PortInstances::UserCreated { min, .. } => min > 0,
-            PortInstances::Derived { .. } => false,
+        .filter(|spec| match spec.cardinality {
+            PortCardinality::Declared => true,
+            PortCardinality::UserCreated { min, .. } => min > 0,
+            PortCardinality::Derived { .. } => false,
         })
         .map(|spec| {
             Ok(CandidatePort {
@@ -924,11 +898,6 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
     if source.direction == candidate.direction {
         return false;
     }
-    if type_expr_is_unresolved(&source.value_type, &source.type_parameters)
-        || type_expr_is_unresolved(&candidate.value_type, &candidate.type_parameters)
-    {
-        return false;
-    }
     let compatibility = match source.direction {
         PortDirection::Output => yss_graph_protocol::type_exprs_compatibility(
             &source.value_type,
@@ -944,4 +913,8 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
         ),
     };
     compatibility != yss_graph_protocol::TypeCompatibility::Incompatible
+        || match source.direction {
+            PortDirection::Output => !type_pattern_is_exact(&source.value_type),
+            PortDirection::Input => !type_pattern_is_exact(&candidate.value_type),
+        }
 }

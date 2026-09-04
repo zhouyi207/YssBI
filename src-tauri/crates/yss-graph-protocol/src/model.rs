@@ -1,6 +1,6 @@
 use super::{
     I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
-    NodeTypeId, ParameterKey, ParameterSchema, PortKey, SchemaExpr, TypeConstraint, TypeExpr,
+    NodeTypeId, NodeTypingSpec, ParameterKey, ParameterSchema, PortKey, SchemaExpr, TypeExpr,
     TypeParameterId, TypedValue,
 };
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,8 @@ pub struct NodeProtocol {
     #[serde(default)]
     pub instance_display: NodeInstanceDisplaySpec,
     pub execution: ExecutionSemantics,
+    #[serde(default)]
+    pub typing: NodeTypingSpec,
     pub scope: NodeScope,
     pub managed_role: Option<ManagedNodeRole>,
 }
@@ -51,7 +53,6 @@ pub struct NodeCatalogProtocol {
 pub struct NodeInterfaceProtocol {
     pub ports: Box<[PortSpec]>,
     pub type_parameters: Box<[TypeParameterId]>,
-    pub type_constraints: Box<[TypeConstraint]>,
     #[serde(default)]
     pub member_groups: Box<[PortMemberGroupSpec]>,
 }
@@ -60,7 +61,6 @@ impl NodeInterfaceProtocol {
     pub fn new(
         ports: Vec<PortSpec>,
         type_parameters: Vec<TypeParameterId>,
-        type_constraints: Vec<TypeConstraint>,
     ) -> Result<Self, ProtocolError> {
         let mut port_keys = BTreeSet::new();
         for port in &ports {
@@ -78,7 +78,6 @@ impl NodeInterfaceProtocol {
         Ok(Self {
             ports: ports.into_boxed_slice(),
             type_parameters: type_parameters.into_boxed_slice(),
-            type_constraints: type_constraints.into_boxed_slice(),
             member_groups: Box::new([]),
         })
     }
@@ -115,7 +114,7 @@ pub struct PortSpec {
     pub title: Box<str>,
     pub direction: PortDirection,
     pub value_type: TypeExpr,
-    pub instances: PortInstances,
+    pub cardinality: PortCardinality,
     pub connections: ConnectionsPerPort,
     pub input_binding: Option<InputBindingSpec>,
     pub consumption: Option<InputConsumption>,
@@ -131,7 +130,7 @@ pub enum PortDirection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PortInstances {
+pub enum PortCardinality {
     Declared,
     UserCreated { min: u16, max: Option<u16> },
     Derived { resolver: InterfaceResolverId },
@@ -295,8 +294,8 @@ fn validate_member_groups(
                 ));
             };
             if !matches!(
-                port.instances,
-                PortInstances::UserCreated { min: 0, max: None }
+                port.cardinality,
+                PortCardinality::UserCreated { min: 0, max: None }
             ) {
                 return Err(ProtocolError::InvalidPortMemberGroup(
                     "group templates must be unbounded user-created ports with zero per-template minimum",
@@ -308,10 +307,10 @@ fn validate_member_groups(
 }
 
 fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
-    if let PortInstances::UserCreated {
+    if let PortCardinality::UserCreated {
         min,
         max: Some(max),
-    } = port.instances
+    } = port.cardinality
         && min > max
     {
         return Err(invalid_port(
@@ -398,7 +397,7 @@ mod tests {
             title: "Value".into(),
             direction: PortDirection::Input,
             value_type: value_type.clone(),
-            instances: PortInstances::Declared,
+            cardinality: PortCardinality::Declared,
             connections: ConnectionsPerPort::Single,
             input_binding: Some(InputBindingSpec {
                 literal_policy: LiteralPolicy::Allowed,
@@ -418,7 +417,7 @@ mod tests {
     fn interface_rejects_duplicate_port_keys() {
         let port = data_input();
         assert!(matches!(
-            NodeInterfaceProtocol::new(vec![port.clone(), port], vec![], vec![]),
+            NodeInterfaceProtocol::new(vec![port.clone(), port], vec![]),
             Err(ProtocolError::DuplicatePortKey(_))
         ));
     }
@@ -428,7 +427,7 @@ mod tests {
         let mut port = data_input();
         port.direction = PortDirection::Output;
         assert!(matches!(
-            NodeInterfaceProtocol::new(vec![port], vec![], vec![]),
+            NodeInterfaceProtocol::new(vec![port], vec![]),
             Err(ProtocolError::InvalidPortContract { .. })
         ));
     }
@@ -444,7 +443,7 @@ mod tests {
             .unwrap()
             .value_type = TypeExpr::Concrete(TypeId::new("core.string").unwrap());
         assert!(matches!(
-            NodeInterfaceProtocol::new(vec![port], vec![], vec![]),
+            NodeInterfaceProtocol::new(vec![port], vec![]),
             Err(ProtocolError::InvalidPortContract { .. })
         ));
     }
@@ -452,18 +451,18 @@ mod tests {
     #[test]
     fn rejects_invalid_instance_and_connection_bounds() {
         let mut port = data_input();
-        port.instances = PortInstances::UserCreated {
+        port.cardinality = PortCardinality::UserCreated {
             min: 2,
             max: Some(1),
         };
-        assert!(NodeInterfaceProtocol::new(vec![port], vec![], vec![]).is_err());
+        assert!(NodeInterfaceProtocol::new(vec![port], vec![]).is_err());
 
         let mut port = data_input();
         port.connections = ConnectionsPerPort::Multiple {
             max: Some(0),
             ordered: true,
         };
-        assert!(NodeInterfaceProtocol::new(vec![port], vec![], vec![]).is_err());
+        assert!(NodeInterfaceProtocol::new(vec![port], vec![]).is_err());
     }
 
     #[test]

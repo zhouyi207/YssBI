@@ -102,12 +102,11 @@ pub fn compile_graph_draft(
     let graph_basis = graph_compilation_basis(&basis);
     let compilation = captured
         .graph()
-        .compile_draft(&document, graph_path.clone(), &graph_catalog)
+        .compile_draft(&document, graph_path.clone(), &graph_catalog, &graph_basis)
         .map_err(CompileGraphDraftError::Compilation)?;
-    let analysis = captured.graph().analyze(
+    let analysis = captured.graph().localize_analysis(
         &document,
-        &graph_basis,
-        &graph_catalog,
+        compilation.analysis().clone(),
         project.resources().entries(),
         locale,
     );

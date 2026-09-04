@@ -2,6 +2,7 @@ use super::identity::{PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanSou
 use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::CompiledParameterHandle;
 use super::result_category::ResultCategory;
+use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanInputSource {
@@ -32,12 +33,98 @@ impl PlanInputBinding {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanOperation {
     source: PlanSourceIdentity,
-    kind: PlanOperationKind,
     result_category: ResultCategory,
     parameter_handles: Box<[CompiledParameterHandle]>,
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
     outputs: Box<[PlanOutputBinding]>,
+    specialization: PlanKernelSpecialization,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanKernelSpecialization {
+    implementation: PlanOperationKind,
+    input_types: Box<[PlanTypeBinding]>,
+    output_types: Box<[PlanTypeBinding]>,
+    coercions: Box<[PlanInputCoercion]>,
+}
+
+impl PlanKernelSpecialization {
+    pub fn new(
+        implementation: PlanOperationKind,
+        input_types: Box<[PlanTypeBinding]>,
+        output_types: Box<[PlanTypeBinding]>,
+        coercions: Box<[PlanInputCoercion]>,
+    ) -> Self {
+        Self {
+            implementation,
+            input_types,
+            output_types,
+            coercions,
+        }
+    }
+
+    pub fn implementation(&self) -> &PlanOperationKind {
+        &self.implementation
+    }
+
+    pub fn input_types(&self) -> &[PlanTypeBinding] {
+        &self.input_types
+    }
+
+    pub fn output_types(&self) -> &[PlanTypeBinding] {
+        &self.output_types
+    }
+
+    pub fn coercions(&self) -> &[PlanInputCoercion] {
+        &self.coercions
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanTypeBinding {
+    port: PlanPortAddress,
+    data_type: DataType,
+}
+
+impl PlanTypeBinding {
+    pub fn new(port: PlanPortAddress, data_type: DataType) -> Self {
+        Self { port, data_type }
+    }
+
+    pub fn port(&self) -> &PlanPortAddress {
+        &self.port
+    }
+
+    pub fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlanInputCoercionKind {
+    WidenInt64ToFloat64,
+    BroadcastScalarToSeries,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanInputCoercion {
+    port: PlanPortAddress,
+    kind: PlanInputCoercionKind,
+}
+
+impl PlanInputCoercion {
+    pub fn new(port: PlanPortAddress, kind: PlanInputCoercionKind) -> Self {
+        Self { port, kind }
+    }
+
+    pub fn port(&self) -> &PlanPortAddress {
+        &self.port
+    }
+
+    pub const fn kind(&self) -> PlanInputCoercionKind {
+        self.kind
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,21 +150,21 @@ impl PlanOutputBinding {
 impl PlanOperation {
     pub fn new(
         source: PlanSourceIdentity,
-        kind: PlanOperationKind,
         result_category: ResultCategory,
         parameter_handles: Box<[CompiledParameterHandle]>,
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
         outputs: Box<[PlanOutputBinding]>,
+        specialization: PlanKernelSpecialization,
     ) -> Self {
         Self {
             source,
-            kind,
             result_category,
             parameter_handles,
             inputs,
             observation_intents,
             outputs,
+            specialization,
         }
     }
 
@@ -86,7 +173,7 @@ impl PlanOperation {
     }
 
     pub fn kind(&self) -> &PlanOperationKind {
-        &self.kind
+        self.specialization.implementation()
     }
 
     pub const fn result_category(&self) -> ResultCategory {
@@ -107,6 +194,10 @@ impl PlanOperation {
 
     pub fn outputs(&self) -> &[PlanOutputBinding] {
         &self.outputs
+    }
+
+    pub fn specialization(&self) -> &PlanKernelSpecialization {
+        &self.specialization
     }
 }
 

@@ -4,8 +4,8 @@ use super::support::{
 use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_graph_protocol::{
     ConnectionsPerPort, InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId,
-    OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortSpec, SchemaExpr,
-    TypeExpr, TypeParameterId,
+    NodeTypingSpec, OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortKey,
+    PortSpec, SchemaExpr, TypeExpr, TypeParameterId,
 };
 use yss_graph_registry::{RegisteredNode, TransparentNodeRole};
 
@@ -52,6 +52,7 @@ pub fn validate_reroute_protocol_contract(
 fn build_protocol() -> Result<yss_graph_registry::RegisteredNode, BuiltinAssemblyError> {
     let node_type = REROUTE_NODE_TYPE;
     let input_key = semantic(REROUTE_INPUT_PORT, PortKey::new)?;
+    let output_key = semantic(REROUTE_OUTPUT_PORT, PortKey::new)?;
     let generic = semantic("t", TypeParameterId::new)?;
     let value_type = TypeExpr::Generic(generic.clone());
     let mut reroute = protocol(
@@ -73,12 +74,15 @@ fn build_protocol() -> Result<yss_graph_registry::RegisteredNode, BuiltinAssembl
         ],
         vec![generic],
         vec![],
-        vec![],
         pure(),
     )?;
     reroute.catalog.hidden = true;
     reroute.catalog.style_id = semantic("builtin.reroute", NodeStyleId::new)?;
-    reroute.interface.ports[1].schema = Some(SchemaExpr::Input(input_key));
+    reroute.interface.ports[1].schema = Some(SchemaExpr::Input(input_key.clone()));
+    reroute.typing = NodeTypingSpec::Identity {
+        input: input_key,
+        output: output_key,
+    };
     Ok(transparent(reroute, TransparentNodeRole::Reroute))
 }
 
@@ -93,7 +97,7 @@ fn port(
         title: title.into(),
         direction,
         value_type,
-        instances: PortInstances::Declared,
+        cardinality: PortCardinality::Declared,
         connections: if direction == PortDirection::Input {
             ConnectionsPerPort::Single
         } else {

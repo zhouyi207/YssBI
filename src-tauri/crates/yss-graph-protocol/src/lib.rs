@@ -6,6 +6,7 @@ mod identity;
 mod model;
 mod parameter;
 mod types;
+mod typing;
 pub mod validation;
 
 #[cfg(test)]
@@ -23,8 +24,8 @@ pub use identity::{
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InputBindingSpec,
     InputConsumption, LiteralPolicy, ManagedNodeRole, NodeCatalogProtocol, NodeInstanceDisplaySpec,
-    NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction, PortDirection,
-    PortEditorSpec, PortInstances, PortMemberGroupSpec, PortSpec, ProtocolError,
+    NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction, PortCardinality,
+    PortDirection, PortEditorSpec, PortMemberGroupSpec, PortSpec, ProtocolError,
     ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{
@@ -34,12 +35,17 @@ pub use parameter::{
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
     SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage,
-    TypeCompatibility, TypeConstraint, TypeExpr, TypeNormalizationError, TypeTerm,
-    normalize_type_expr, type_exprs_compatibility,
+    TypeCompatibility, TypeExpr, TypeNormalizationError, normalize_type_expr,
+    type_exprs_compatibility,
+};
+pub use typing::{
+    InputCoercionKind, NodeTypingSpec, NumericPromotionRule, PortSelector, ResolvedType, ShapeRule,
+    TypeConflict, TypeDomain, TypeState, TypeUnknownReason,
 };
 pub use validation::{
-    LiteralValidationIssue, LocatedParameterIssue, NominalParameterValidator, ParameterIssueKind,
-    ParameterValidation, normalize_json_literal, protocol_value_to_json,
+    LiteralValidationIssue, LocatedParameterIssue, ParameterIssueKind, ParameterValidation,
+    TypeValidationContext, normalize_json_literal, protocol_value_to_json,
     validate_and_prepare_parameter_values, validate_parameter_values, validate_typed_literal,
+    validate_typed_value,
 };
 pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};

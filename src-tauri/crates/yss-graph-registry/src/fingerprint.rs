@@ -53,6 +53,7 @@ pub(crate) fn canonical_semantic_protocol(protocol: &NodeProtocol) -> serde_json
         "managedRole": &protocol.managed_role,
         "parameters": &protocol.parameters,
         "scope": &protocol.scope,
+        "typing": &protocol.typing,
         "typeId": &protocol.type_id,
     })
 }

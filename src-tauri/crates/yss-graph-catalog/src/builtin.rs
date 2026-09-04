@@ -166,10 +166,9 @@ pub(crate) fn assembled_interface(
     node_type: &str,
     ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
-    type_constraints: Vec<TypeConstraint>,
     member_groups: Vec<PortMemberGroupSpec>,
 ) -> Result<NodeInterfaceProtocol, BuiltinAssemblyError> {
-    NodeInterfaceProtocol::new(ports, type_parameters, type_constraints)
+    NodeInterfaceProtocol::new(ports, type_parameters)
         .and_then(|interface| interface.with_member_groups(member_groups))
         .map_err(|source| match &source {
             ProtocolError::InvalidPortContract { reason, .. } if reason.contains("default") => {
@@ -277,41 +276,6 @@ struct FamilySpec {
     zh_aliases: &'static [&'static str],
     kernel: &'static str,
 }
-
-const NUMERIC: &[FamilySpec] = &[
-    FamilySpec {
-        id: "add",
-        title: "Add",
-        zh_title: "加法",
-        aliases: &["plus", "sum", "+"],
-        zh_aliases: &["相加", "求和", "+"],
-        kernel: "numeric.add",
-    },
-    FamilySpec {
-        id: "subtract",
-        title: "Subtract",
-        zh_title: "减法",
-        aliases: &["minus", "difference", "-"],
-        zh_aliases: &["相减", "差", "-"],
-        kernel: "numeric.subtract",
-    },
-    FamilySpec {
-        id: "multiply",
-        title: "Multiply",
-        zh_title: "乘法",
-        aliases: &["times", "product", "*"],
-        zh_aliases: &["相乘", "积", "*"],
-        kernel: "numeric.multiply",
-    },
-    FamilySpec {
-        id: "divide",
-        title: "Divide",
-        zh_title: "除法",
-        aliases: &["quotient", "/"],
-        zh_aliases: &["相除", "商", "/"],
-        kernel: "numeric.divide",
-    },
-];
 
 const COMPARISONS: &[FamilySpec] = &[
     FamilySpec {
@@ -497,28 +461,6 @@ fn assemble_builtin_parts()
         ));
     }
 
-    for ty in ["int64", "float64"] {
-        for spec in NUMERIC {
-            let id = leak(format!("yssbi.numeric.{}.{}", spec.id, ty));
-            add_node_messages(
-                messages,
-                id,
-                spec.title,
-                spec.zh_title,
-                spec.aliases,
-                spec.zh_aliases,
-            );
-            nodes.push(leaf(
-                binary_protocol(
-                    id,
-                    "numeric",
-                    leak(format!("core.{ty}")),
-                    leak(format!("core.{ty}")),
-                )?,
-                leak(format!("{}.{}", spec.kernel, ty)),
-            ));
-        }
-    }
     for spec in COMPARISONS {
         let id = leak(format!("yssbi.logic.{}", spec.id));
         add_node_messages(
@@ -722,7 +664,6 @@ fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyEr
         ],
         vec![value],
         vec![],
-        vec![],
     )?;
     Ok(protocol)
 }
@@ -763,10 +704,11 @@ fn protocol(
             style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(id, ports, vec![], vec![], vec![])?,
+        interface: assembled_interface(id, ports, vec![], vec![])?,
         parameters: assembled_parameters(id, parameters)?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution,
+        typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -792,7 +734,7 @@ fn data_port_expr(
         title: title.into(),
         direction,
         value_type,
-        instances: PortInstances::Declared,
+        cardinality: PortCardinality::Declared,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,
