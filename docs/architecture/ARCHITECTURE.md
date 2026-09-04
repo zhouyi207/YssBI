@@ -4,7 +4,7 @@
 
 专项文档：
 
-- [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
+- [Graph Problems、诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Tauri API transport 说明](../../src-tauri/crates/yss-api/README.md)
 - [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
@@ -118,6 +118,10 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | 路径                                               | 当前职责                                                                                                                                                                                                                                                                                                     |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/`                                             | React views、application hooks、Zustand 投影、IPC adapter 和 UI                                                                                                                                                                                                                                              |
+| `src/modules/logs/`                                | Operational Logs UI：`LogDomainDockviewHost`、`LogWindow` 与 log-domain topology；不拥有 Graph Problems 或 Run Output                                                                                                                                                                                        |
+| `src/modules/problems/`                            | Graph Problems UI：`GraphProblemsPanel` 从 `GraphProjectionStore` 的完整 canonical diagnostics 派生列表                                                                                                                                                                                                      |
+| `src/modules/output/`                              | Run Output UI：`RunOutputPanel` 读取 Execution 的有界 output projection                                                                                                                                                                                                                                      |
+| `src/features/application/graphProjection/`        | Graph Projection request lifecycle、hydration、subscription、snapshot recovery、project/session/generation freshness 与原子 publication 协调；生命周期独立于 Problems panel                                                                                                                                  |
 | `src-tauri/crates/yss-api/src/`                    | 唯一 Tauri transport owner：私有 command handlers、wire DTO mapping、稳定 transport error、event/channel 交付与 canonical command registry；公开面仅为 `invoke_handler`                                                                                                                                      |
 | `src-tauri/crates/yss-application/src/`            | 独立 Application 层：跨 Project、Execution、Database、Graph、SCI 与 Bayes authority 的用例编排；不依赖根包、Tauri、Commands 或 IPC schema                                                                                                                                                                    |
 | `src-tauri/src/lib.rs`                             | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters，并调用 `yss_api::invoke_handler()`；不声明 command/schema/error/event module 或 command registry                                                                                                               |
@@ -181,7 +185,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-sci-contract/`               | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现                                                                                                                         |
 | `src-tauri/crates/yss-tracing/`                    | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL                                                                                                                                                                                                                      |
 | `src-tauri/julia/`                                 | Julia worker assets 与 Bayes operation                                                                                                                                                                                                                                                                       |
-| `src-tauri/crates/yss-diagnostics/`                | 独立 Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing`                                                                                                                                                                                 |
+| `src-tauri/crates/yss-diagnostics/`                | 独立 Operational Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing`，不承载 Graph compiler problems                                                                                                                                     |
 | `src-tauri/crates/yss-window-state/`               | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner                                                                                                                                                                                                                          |
 
 Rust 与 React 的职责单向流动：Rust 是已提交业务状态的唯一事实源；React 只保存 Rust
@@ -221,14 +225,14 @@ contribution 和 integrations 组装多个业务模块。`WorkbenchWindow` 本�
 capabilities；顶部是 `WorkbenchMenuBar`，中部只有一个 root `DockviewReact`，底部是 `StatusBar`，
 Settings 与 node documentation 由 `WorkbenchOverlayHost` 承载。
 
-`RootDockviewHost` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Diagnostics 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
+`RootDockviewHost` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Problems 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 operational log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
 
 - Zustand 只保存 modal 等非 placement UI 状态，不镜像任何 panel placement、visibility 或 Activity active tab。
 - `Details` 是常驻的 permanent root singleton，固定在 canonical right edge，不能移动、split、关闭，也不能通过拖动包含它的整个 group 绕过限制。
 - `Assistant` 是 layout-persisted 的普通 root singleton：新默认布局和 Reset Layout 将它放在 Details 后面，但它可以独立移动、split、关闭，并可从 View 菜单重新打开；已有 panel 的 reveal 保留其实际位置。
 - `Inspect` 是按需创建的 contextual root singleton，从当前 editor session context 解析 resource/detail target、active editor group 和 node selection。
 - Result 是 root Dockview 中可并存的 multi-panel：`resultKey` 标识并 upsert logical result panel，opaque `resultId` 标识该 panel 当前从 Rust `ResultStore` 读取的 payload。
-- `Logs`、`Output` 与 `Diagnostics` 默认位于 root 的 native bottom edge group；该 group 使用 bottom header position，因此 content 在上、tabs 在下，尺寸与 collapse 仍由 root Dockview 原生管理。
+- `Logs`、`Output` 与 `Problems` 默认位于 root 的 native bottom edge group；Problems 只使用 `viewId: "problems"` 与 `component: "Problems"`。Layout persistence 只接受当前 exact envelope 和 canonical panel identity，不提供旧身份转换或 alternate reader。
 - root layout 只在启动 hydration 时恢复；当前按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`），payload 只有 `root` 与 `nested.logs`，不含版本字段、preferences、迁移或旧 reader。Project replacement 不会再次从该 key 恢复 root topology。
 - persisted Assistant 若存在则恢复其保存的 group/position；若用户已关闭 Assistant 且 snapshot 中缺失，startup restore 不会 additive ensure。Project replacement 保留 Details 与 Assistant topology，仅清理 project-scoped editor、Inspect 与 Result panels。
 
@@ -264,6 +268,22 @@ Load Graph → Frontend Draft ──→ Compile All ──→ in-memory Compiled
   生命周期操作，不命名为或实现为双状态 reconcile。
 - Canvas node/port display、capability、type、literal 和 diagnostic facts 均直接来自 Rust editor
   projection；Frontend 不保留 NodeDefinition/PinSlot registry 或 Call Function 引用诊断副本。
+- 完整 `EditorGraphProjectionDto` 原子包含 basis、graph path、source revision、nodes、connections、
+  顶层 diagnostics、compilation outcome 与 `hasBlockingDiagnostics`。`projection.diagnostics` 是
+  graph/resource/connection/node/port/parameter Problems 的 canonical 完整集合；node diagnostics
+  只作为 Canvas、Node、Pin 与参数内联展示的局部索引。
+- Graph Analysis 从 `yss-graph-compiler-diagnostics` 的稳定 vocabulary 生成未知节点、参数、资源、
+  unbound input、dynamic port、Schema 与 dependency-cycle Problems；cycle 判定同时供 compiler 使用，
+  不复制第二套 DAG 规则，也不把普通编辑状态写入 tracing。
+- `GraphProjectionStore` 在同一个 `GraphEntityBucket` commit 中采用 Node、Pin、Schema、parameter、
+  diagnostics、outcome 与 `hasBlockingDiagnostics`，不建立第二个 `ProblemsStore`。Canvas、Details、
+  Run Gate 和 `GraphProblemsPanel` 都从这份 projection 派生；Run Gate 直接检查 outcome 与
+  `hasBlockingDiagnostics`，不依赖 Problems panel 是否打开或它渲染了多少行。
+- Graph Draft mutation command 返回 document/patch 与 project/session/generation/operation 接受身份；
+  bounded resolver worker 在后台计算完整 projection，并通过 `GraphProjectionChannel` 发布。Frontend
+  application coordinator 校验身份、拒绝 stale result、原子采用 batch，并在超时或重连后通过 snapshot
+  恢复。队列按 Graph coalesce 为 latest-wins；显式 Save/Compile 的事务性 command replacement 继续走
+  同一 store freshness gate。不存在逐条传递问题的 `ProblemsChannel`。
 - Editor node projection 的 `ports` 只包含具有 canonical `PortAddress` 的真实可交互 Pin；declared、
   user-created 与 derived Pin 共用同一实体集合和节点 `pinIds` 索引。节点另行投影可序列化的
   `portInstanceAdditions` capability，Details 在 Inputs/Outputs 区域据此新增实例，不把动态模板伪装成
@@ -578,11 +598,24 @@ Execution 在一次运行成功后，按编译后的精确 output address 保存
 
 Execution publishes a sealed finalization handoff; Project commits variable/resource effects only after its final authority gate. Commands only adapt the ordered channel and map the typed error/result wire.
 
-## 7. Results、Run Output、logging 与 diagnostics
+## 7. Graph Problems、Results、Run Output、logging 与 operational diagnostics
 
-这四条数据流语义不同，不能互相替代。
+这五条数据流语义不同，不能互相替代。
 
-### 7.1 Results
+### 7.1 Graph Problems
+
+Resolver/compiler 产生的 Graph Problems 是完整 `EditorGraphProjectionDto` 的领域事实。Frontend
+`GraphProjectionStore` 是唯一 projection authority，`GraphProblemsPanel` 只从 focused graph bucket
+的顶层 `diagnostics` 派生完整列表；node diagnostics 只服务局部 Canvas/Details 展示。普通编辑状态下的
+unbound input、missing column、type mismatch、invalid parameter 与 orphan pin 等问题不进入
+`tracing`、`yss-diagnostics` recent ring 或 Logs UI。
+
+Graph Draft command 接受 mutation 后快速返回带 document/patch 的 typed ACK，后台 resolver 通过独立
+`GraphProjectionChannel` 发布带 project/session/path/generation/revision identity 的完整 Projection。
+同一 Graph 的 pending resolve 采用 bounded latest-wins coalescing；subscriber 过慢时断开并通过最新
+snapshot 恢复。传输单元始终是完整 Projection，而不是 `problemAdded`/`problemRemoved` 事件。
+
+### 7.2 Results
 
 `ExecutionRuntimeState` 中的 `ResultStore` 是 session-scoped logical execution result 与 Pin history 的 authority。它提供：
 
@@ -596,7 +629,7 @@ Frontend 通过 `ResultService` 调用 typed `get_result_descriptor`、`get_resu
 
 Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段是 `projectSessionId`、opaque `graphPath` 和 positive decimal-string `runId`。最小 lifecycle `kind.type` 是 `runStarted`、`runCompleted`、`runErrored` 和 `runCancelled`；`pinPreviewResultReady` 只公告 `output`、`generation` 与 `resultId`，结果检查请求使用 `resultInspectionRequested`。这些 event 是交付通知，不是 result authority；ordinary result publication 不发送 `resultGroupChanged` 或 `outputResultChanged` public stream event。
 
-### 7.2 Run Output
+### 7.3 Run Output
 
 未来 Workflow/tool 的用户 stdout/stderr 使用独立 typed `RunOutputMessage`，与 `RunEvent` 共用有序 Tauri channel transport，但 wire shape 和前端 projection 分离；Analysis Graph 不提供 Print 节点。每条记录保留：
 
@@ -604,19 +637,19 @@ Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段�
 - stdout/stderr stream；
 - opaque `sourceGraphPath`、`sourceNodeId` 与 `sourcePort`。
 
-Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend Output panel 维护有界投影并检测 sequence gap。Run Output 不进入 diagnostics。
+Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend execution projection 保持有界并检测 sequence gap，`src/modules/output/internal/ui/RunOutputPanel.tsx` 的 rows、status 与 source identity 只读取并展示该 projection，不读取 Graph Projection。Run Output 不进入 operational diagnostics。
 
-### 7.3 Logging
+### 7.4 Logging
 
 Rust `tracing` 是唯一 logging 入口。`src-tauri/crates/yss-tracing/` 安装 process-wide subscriber，拥有 `RUST_LOG` 过滤、`log` bridge、统一脱敏、bounded console worker 与 `app_log_dir()/yssbi.log.jsonl` rolling file worker。日志是 lossy、sanitized、non-authoritative 的观察数据，不驱动 workflow、domain state 或用户反馈。
 
 `yss-tracing::LogLimits` 是 log collection 与 frontend diagnostic validation 共用的 per-record limit source of truth。Rust 事件先形成已清理的 `LogRecord`；console、JSONL 和可选 diagnostics projection 都只能消费该记录，不能建立 raw formatter 旁路。
 
-### 7.4 Diagnostics
+### 7.5 Operational diagnostics
 
-`src-tauri/crates/yss-diagnostics/` 不安装 production tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。
+`src-tauri/crates/yss-diagnostics/` 不安装 production tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。Frontend `src/modules/logs/` 只展示这些 operational logs，不拥有 Graph Problems 或 Run Output。
 
-Logging 与 Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。详细 contract 见专项文档。
+Logging 与 Operational Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。Graph Problems 则属于权威的 resolved projection，不得从这些观察数据重建。详细 contract 见专项文档。
 
 ## 8. Database runtime crates
 
@@ -761,7 +794,7 @@ Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sy
 - catalog/registry 声明 trusted descriptor 和 implementation；
 - compiler lowerer 将 document/config 转成 immutable plan；
 - runtime kernel 只消费 plan-local parameters/resources；
-- logical output 进入 `ResultStore`，未来 Workflow/tool stdout 进入 Run Output，内部观察使用 Rust `tracing` diagnostics。
+- compiler problems 进入完整 Graph Projection，logical output 进入 `ResultStore`，未来 Workflow/tool stdout 进入 Run Output，内部技术观察使用 Rust `tracing` 与 operational diagnostics。
 
 ### 新 scientific operation
 

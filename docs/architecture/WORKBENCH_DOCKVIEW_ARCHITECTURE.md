@@ -19,17 +19,21 @@ WorkbenchWindow
 │     ├─ grid groups：editor、Result 与 tool panels 可混排和分割
 │     ├─ native right edge group：Details（fixed）、Assistant、Inspect、Result 的 home
 │     └─ native bottom edge group
-│        ├─ 上方 content：Logs、Output 或 Diagnostics
-│        └─ 下方 tabs：Logs、Output、Diagnostics
+│        ├─ 上方 content：Logs、Output 或 Problems
+│        └─ 下方 tabs：Logs、Output、Problems
 ├─ StatusBar slot
 └─ WorkbenchOverlayHost
 ```
 
-Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Diagnostics。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
 `editorRendererRegistry.ts` 是唯一把 event/function/chart 映射到具体 editor 的位置。Workbench module
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
+当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
+`src/modules/problems/public.ts` 组合 `LogDomainDockviewHost`、`RunOutputPanel` 与
+`GraphProblemsPanel`。Logs 只拥有 operational logs；Output 只拥有 execution output；Problems 只读取
+完整 Graph Projection，三个 panel 不通过 `modules/logs` 聚合。
 
 root Dockview 是以下物理事实的唯一 authority：
 
@@ -47,32 +51,35 @@ root Dockview 是以下物理事实的唯一 authority：
 
 root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
 
-| 角色               | 内容                         | deterministic home                  |
-| ------------------ | ---------------------------- | ----------------------------------- |
-| `editor`           | Graph/Function/Chart editor  | 当前 central grid group             |
-| `view:project`     | Project activity panel       | left Activity edge                  |
-| `view:nodes`       | Nodes activity panel         | left Activity edge                  |
-| `view:data`        | Data activity panel          | left Activity edge                  |
-| `view:commands`    | Commands activity panel      | left Activity edge                  |
-| `view:details`     | permanent fixed Details      | right edge index 0                  |
-| `view:assistant`   | movable/closable Assistant   | right edge index 1 on default/reset |
-| `view:inspect`     | contextual Inspect           | right edge                          |
-| `result`           | 一个可检查结果               | right edge                          |
-| `view:logs`        | Logs workspace               | bottom edge                         |
-| `view:output`      | Run Output                   | bottom edge                         |
-| `view:diagnostics` | Compiler/runtime diagnostics | bottom edge                         |
+| 角色             | 内容                        | deterministic home                  |
+| ---------------- | --------------------------- | ----------------------------------- |
+| `editor`         | Graph/Function/Chart editor | 当前 central grid group             |
+| `view:project`   | Project activity panel      | left Activity edge                  |
+| `view:nodes`     | Nodes activity panel        | left Activity edge                  |
+| `view:data`      | Data activity panel         | left Activity edge                  |
+| `view:commands`  | Commands activity panel     | left Activity edge                  |
+| `view:details`   | permanent fixed Details     | right edge index 0                  |
+| `view:assistant` | movable/closable Assistant  | right edge index 1 on default/reset |
+| `view:inspect`   | contextual Inspect          | right edge                          |
+| `result`         | 一个可检查结果              | right edge                          |
+| `view:logs`      | Logs workspace              | bottom edge                         |
+| `view:output`    | Run Output                  | bottom edge                         |
+| `view:problems`  | Graph Problems              | bottom edge                         |
 
 默认空布局建立 central grid group，并放置：
 
 - Project、Nodes、Data、Commands：同一个 left Activity edge group，宽度 `292`，默认顺序为 Project → Nodes → Data → Commands；
-- Logs、Output、Diagnostics：bottom edge，高度 `200`，顺序为 Logs → Output → Diagnostics；
+- Logs、Output、Problems：bottom edge，高度 `200`，顺序为 Logs → Output → Problems；
 - bottom edge header 位于底部，因此 content 在上、tabs 在下。
 
 right edge 默认宽度 `320`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。
 
+Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
+exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
+
 ## 3. 唯一有界 nested Dockview：Logs
 
-Logs panel 内包含工作台唯一的 bounded nested Dockview。它只拥有七个 diagnostic domain panels：
+Logs panel 内包含工作台唯一的 bounded nested Dockview。它只拥有七个 operational log domain panels：
 
 1. `all`
 2. `application`
@@ -115,7 +122,7 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Data、Commands、Details、Assistant、Inspect、Logs、Output、Diagnostics 由 `viewId` 保证 singleton；
+- Project、Nodes、Data、Commands、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
 - Project、Nodes、Data、Commands 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
@@ -202,7 +209,7 @@ Reset 使用一个 runtime shadow layout transaction，并保留既有 editor、
 - Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
-- Logs、Output、Diagnostics 回到 bottom edge，恢复 Logs → Output → Diagnostics 顺序与 bottom tabs；
+- Logs、Output、Problems 回到 bottom edge，恢复 Logs → Output → Problems 顺序与 bottom tabs；
 - left/right/bottom 恢复 `292/320/200`，相关 edge 展开；
 - main Logs nested Dockview 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
@@ -215,7 +222,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 Result；
 - Inspect。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Details、Assistant、Logs、Output、Diagnostics 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -225,7 +232,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 yssbi-workbench-layout:<window-label>
 ```
 
-value 是 exact envelope；不包含版本字段：
+value 是不含版本字段的 exact envelope：
 
 ```text
 {
@@ -238,14 +245,14 @@ value 是 exact envelope；不包含版本字段：
 
 Persistence invariant：
 
-- payload 没有 `version` field，也不使用 versioned key；当前格式不做迁移、不兼容旧 envelope，也不保留旧 reader；
+- payload 不包含 `version` field，storage key 保持 window-scoped semantic key；
 - top-level 只接受 `root` 与 `nested`，`nested` 只接受 `logs`；
 - root 与 `nested.logs` 独立验证；某一 snapshot 非法时只把该部分恢复为默认布局；
 - 任一 root 或 main Logs 变化都会调度完整 payload 写入；window close 在当前 hydration 与 FIFO idle 后直接 flush；
 - Result 与 Inspect 是 transient/project-scoped panels，写入前从 `root` snapshot 及其空 topology 中剔除；editor 也随 project-scoped scrub 移除；Details 与 Assistant 是持久化 root topology，Activity panels 作为固定 left edge 成员保留；用户关闭 Assistant 后，缺失状态会随 snapshot 保留，startup restore 不会自动重建；
 - main Logs nested snapshot 持久化，ephemeral standalone Logs 不持久化。
 
-若未来需要 breaking persistence format，必须直接使用新的 semantic storage key；当前 key 下不增加版本字段、迁移逻辑或 alternate reader。
+非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
 
 ## 9. 视觉尺寸层级
 

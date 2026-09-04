@@ -1069,3 +1069,19 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       diagnostics，使 Analysis Graph 协议、projection、catalog wire 和前端 Pin 模型不再保留 exec 分支痕迹。
 - [ ] 将唯一 Reroute 节点从多种端口时代的 `yssbi.reroute.data` 收敛为 `yssbi.core.reroute`，同步 compiler
       kernel、editor insertion、i18n inventory 与前端 fixture，不保留旧 node type 兼容别名。
+- [ ] 将 Graph Problems 与 Run Output 从 Logs UI 模块拆分为独立 `problems`/`output` 模块，显示名改为
+      Problems/问题，同时保留 `diagnostics`/`Diagnostics` Workbench 布局兼容标识。
+- [ ] 让 Graph Problems 面板只消费 projection 顶层 canonical diagnostics，并由同一原子 projection 的
+      `outcome` 与 `hasBlockingDiagnostics` 共同控制所有执行入口。
+- [ ] 增加 Graph Problems 完整位置覆盖、projection 原子提交、运行阻断及与 operational diagnostics
+      双向隔离的聚焦回归与架构契约。
+- [ ] 将 Graph Draft resolve 后台化：command 返回带 document/patch 的接受回执，Rust 使用 bounded
+      latest-wins resolver queue，经完整 `GraphProjectionChannel` 发布并提供 snapshot recovery。
+- [ ] 增加 application-owned Graph Projection subscription/coordinator，按 project、Graph session、generation
+      和 source revision 拒绝 stale publication，并在 ACK/Channel 竞态下保持 draft 与 projection 一致。
+- [ ] 将 Workbench layout 升级为 version 2，runtime 正式使用 `problems`/`Problems`，并在 persistence
+      boundary 一次性迁移与重写旧 `diagnostics`/`Diagnostics` snapshot。
+- [ ] 补齐 Graph Analysis canonical Problems producer：覆盖 node/parameter/resource/input/dynamic port/Schema
+      与 value cycle，并让 compiler 与 editor projection 复用唯一 dependency-cycle 判定而不污染 tracing。
+- [ ] 清除 Graph Problems 改造后的兼容残留：Workbench 恢复严格的无版本 exact layout contract，不再迁移
+      旧 panel identity；Run Output 仅消费 Execution projection，并将 Projection 生命周期逻辑归并到统一目录。
