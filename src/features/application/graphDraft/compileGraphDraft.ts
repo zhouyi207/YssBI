@@ -31,11 +31,9 @@ export async function compileGraphDraft(graphPath: string): Promise<boolean> {
       useGraphDraftStore.getState().failCompile(graphPath);
       return false;
     }
-    const generation =
-      useGraphProjectionStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
     const applied = useGraphProjectionStore
       .getState()
-      .replaceProjection(graphPath, result.projection, generation + 1);
+      .replaceProjection(graphPath, result.projection);
     if (!applied.applied) {
       useGraphDraftStore.getState().failCompile(graphPath);
       throw new Error("Compiled Graph projection could not be installed");

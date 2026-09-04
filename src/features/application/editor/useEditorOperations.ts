@@ -20,7 +20,6 @@ import {
 } from "@/features/application/graphDraft/historyCoordinator";
 import { executeSafeGraphDraftEdit } from "@/features/application/graphDraft/safeGraphDraftEdit";
 import { exportEditorSubgraph } from "@/features/application/graphDraft/subgraphExportCoordinator";
-import { insertedNodeIdsFromPatch } from "@/features/application/graphDraft/insertedNodeIdsFromPatch";
 import { readGraphClipboard, writeGraphClipboard } from "@/services/clipboard";
 import { disconnectConnectionsById } from "./edgeOperations";
 import {
@@ -196,7 +195,7 @@ export function useEditorOperations() {
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
-        const insertedNodeIds = insertedNodeIdsFromPatch(outcome.result.patch);
+        const insertedNodeIds = outcome.insertedNodeIds;
         if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
           setSelectedNodeIds(insertedNodeIds, context.groupId);
         }
@@ -287,7 +286,7 @@ export function useEditorOperations() {
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
-        const insertedNodeIds = insertedNodeIdsFromPatch(outcome.result.patch);
+        const insertedNodeIds = outcome.insertedNodeIds;
         if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
           setSelectedNodeIds(insertedNodeIds, context.groupId);
         }

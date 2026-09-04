@@ -11,7 +11,7 @@ describe("setNodeParameters", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("forwards one exact atomic parameter edit through the Graph draft coordinator", async () => {
-    const outcome = { status: "applied" as const, result: {} as never };
+    const outcome = { status: "applied" as const, result: {} as never, insertedNodeIds: [] };
     vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     const parameters = {
       predicate: {
@@ -42,7 +42,7 @@ describe("setNodeParameters", () => {
   });
 
   it("removes a null override while preserving the complete atomic parameter map", async () => {
-    const outcome = { status: "applied" as const, result: {} as never };
+    const outcome = { status: "applied" as const, result: {} as never, insertedNodeIds: [] };
     vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
     vi.spyOn(useGraphProjectionStore, "getState").mockReturnValue({
       getGraphNode: () => ({

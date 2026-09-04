@@ -6,7 +6,6 @@ import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface EditorProjectionFixtureOptions {
   graphPath: string;
-  sourceRevision?: number;
   nodeId?: string;
   nodeTypeId?: string;
   title?: string;
@@ -83,7 +82,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
 } {
   const {
     graphPath,
-    sourceRevision = 1,
     nodeId = "local-node",
     nodeTypeId = "tests.projected-node",
     title = "Projected node",
@@ -114,7 +112,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
         resourceVersions: {},
       },
       graphPath,
-      sourceRevision,
       nodes: [
         {
           graphPath,

@@ -22,7 +22,6 @@ function history(
         resultId,
         runId: `run-${resultId}`,
         activationId: `activation-${resultId}`,
-        graphRevision: "1",
         createdAtMs: "1000",
         usage: { kind: "produced" },
         state: { kind: state },

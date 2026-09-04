@@ -40,7 +40,6 @@ export function toProjectionEntities(
   return {
     basis: projection.basis,
     graphPath: projection.graphPath,
-    sourceRevision: projection.sourceRevision,
     nodes,
     ports,
     connections,

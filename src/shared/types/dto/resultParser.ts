@@ -172,7 +172,6 @@ function parseResultProvenance(value: unknown): ResultProvenance {
       "runId",
       "activationId",
       "graphPath",
-      "graphRevision",
       "nodeId",
       "output",
       "createdAtMs",
@@ -180,7 +179,6 @@ function parseResultProvenance(value: unknown): ResultProvenance {
     !isDecimalId(value.runId) ||
     !isDecimalId(value.activationId) ||
     !isGraphResourcePath(value.graphPath) ||
-    !isDecimalId(value.graphRevision) ||
     !isUuid(value.nodeId) ||
     !isDecimalId(value.createdAtMs)
   )
@@ -189,7 +187,6 @@ function parseResultProvenance(value: unknown): ResultProvenance {
     runId: value.runId,
     activationId: value.activationId,
     graphPath: value.graphPath,
-    graphRevision: value.graphRevision,
     nodeId: value.nodeId,
     output: value.output === null ? null : parseGraphOutput(value.output),
     createdAtMs: value.createdAtMs,
@@ -317,19 +314,10 @@ function parseUsage(value: unknown): ResultUsage {
 export function parsePinResultEntry(value: unknown): PinResultEntry {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, [
-      "resultId",
-      "runId",
-      "activationId",
-      "graphRevision",
-      "createdAtMs",
-      "usage",
-      "state",
-    ]) ||
+    !hasExactKeys(value, ["resultId", "runId", "activationId", "createdAtMs", "usage", "state"]) ||
     !isDecimalId(value.resultId) ||
     !isDecimalId(value.runId) ||
     !isDecimalId(value.activationId) ||
-    !isDecimalId(value.graphRevision) ||
     !isDecimalId(value.createdAtMs)
   )
     return fail("pin result entry");
@@ -337,7 +325,6 @@ export function parsePinResultEntry(value: unknown): PinResultEntry {
     resultId: value.resultId,
     runId: value.runId,
     activationId: value.activationId,
-    graphRevision: value.graphRevision,
     createdAtMs: value.createdAtMs,
     usage: parseUsage(value.usage),
     state: parseResultState(value.state),

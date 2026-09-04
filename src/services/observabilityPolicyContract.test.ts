@@ -58,7 +58,7 @@ describe("observability policy contract", () => {
     const operationalLogImports =
       /(?:features\/(?:application|core)\/log|services\/log)(?:\/|["'])/;
     const operationalDiagnosticIdentifiers =
-      /\b(?:DiagnosticRecordDto|DiagnosticBatchDto|DiagnosticSubscriptionDto|GraphProjectionChannel|ProblemsChannel|useDiagnosticSubscription|useLiveLogs|useProblemsStore|logBuffer|submit_frontend_diagnostics|subscribe_diagnostics|unsubscribe_diagnostics)\b/;
+      /\b(?:DiagnosticRecordDto|DiagnosticBatchDto|DiagnosticSubscriptionDto|ProblemsChannel|useDiagnosticSubscription|useLiveLogs|useProblemsStore|logBuffer|submit_frontend_diagnostics|subscribe_diagnostics|unsubscribe_diagnostics)\b/;
     const tauriChannelImports = /@tauri-apps\/api\/(?:core|event)/;
     const graphProjectionImports =
       /@\/features\/(?:core\/(?:graph|dataStore\/graphProjectionStore)|domain\/editorProjection)(?:\/|["'])/;

@@ -35,7 +35,7 @@ function deferred<T>() {
 const graphPath = "events/main.yssbi-event";
 
 function installProjection() {
-  const fixture = makeEditorProjectionFixture({ graphPath, sourceRevision: 3 });
+  const fixture = makeEditorProjectionFixture({ graphPath });
   fixture.projection.nodes[0].ports[1] = {
     ...fixture.projection.nodes[0].ports[1],
     address: {
@@ -52,7 +52,7 @@ function installProjection() {
   };
   const inputAddress = fixture.projection.nodes[0].ports[1].address;
   if (inputAddress.kind !== "instance") throw new Error("fixture input must be an instance port");
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
   return {
     outputKey: portAddressKey(fixture.projection.nodes[0].ports[0].address),
     inputKey: portAddressKey(fixture.projection.nodes[0].ports[1].address),
@@ -203,21 +203,21 @@ describe("forward-only editor commands", () => {
       installProjection();
       const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
       const result = {
-        projectInstanceId: "project-a",
-        graphSessionId: "graph-session-a",
-        graphPath,
-        acceptedRevision: 1,
-        requestGeneration: 2,
-        operationId: "00000000-0000-0000-0000-000000000001",
+        changed: true,
         document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-        patch: { operations: [] },
+        projection: makeEditorProjectionFixture({ graphPath }).projection,
       };
-      applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied", result });
+      applyGraphDraftMutation.mockResolvedValueOnce({
+        status: "applied",
+        result,
+        insertedNodeIds: [],
+      });
       const randomId = vi.spyOn(crypto, "randomUUID");
 
       await expect(executeCommandWithResult(graphPath, type, args)).resolves.toEqual({
         status: "applied",
         result,
+        insertedNodeIds: [],
       });
 
       expect(applyGraphDraftMutation).toHaveBeenCalledOnce();

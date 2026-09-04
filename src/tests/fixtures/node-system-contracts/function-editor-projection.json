@@ -109,8 +109,7 @@
       "nodes": [],
       "outcome": {
         "type": "analysisBlocked"
-      },
-      "sourceRevision": 1
+      }
     }
   }
 }

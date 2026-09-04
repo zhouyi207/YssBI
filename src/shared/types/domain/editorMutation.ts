@@ -267,20 +267,16 @@ export interface CompileGraphDraftDto {
   projection: EditorGraphProjectionDto;
 }
 
-export interface GraphDraftAcceptedDto {
-  projectInstanceId: string;
-  graphSessionId: string;
-  graphPath: string;
-  acceptedRevision: number;
-  requestGeneration: number;
-  operationId: string;
+export interface GraphDraftTransformDto {
+  changed: boolean;
   document: GraphDocumentDto;
-  patch: GraphDocumentPatchDto;
+  projection: EditorGraphProjectionDto;
 }
 
 export interface GraphDraftSaveDto {
   projectInstanceId: string;
   operationId: string;
+  resourceRevision: number;
   document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;
   history: HistoryStatusDto;

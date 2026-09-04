@@ -1,9 +1,9 @@
-import type { GraphDraftAcceptedDto } from "@/shared/types/domain/editorMutation";
+import type { GraphDraftTransformDto } from "@/shared/types/domain/editorMutation";
 
 export type GraphDraftCommandResult =
-  | { status: "applied"; result: GraphDraftAcceptedDto }
-  | { status: "noop"; result: GraphDraftAcceptedDto }
-  | { status: "stale"; result?: GraphDraftAcceptedDto }
+  | { status: "applied"; result: GraphDraftTransformDto; insertedNodeIds: string[] }
+  | { status: "noop"; result: GraphDraftTransformDto }
+  | { status: "stale"; result?: GraphDraftTransformDto }
   | { status: "saving" }
   | { status: "rejected"; code: string }
   | false;

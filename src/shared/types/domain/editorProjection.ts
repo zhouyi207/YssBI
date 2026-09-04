@@ -28,10 +28,9 @@ export type CompilationOutcomeDto =
 export interface EditorGraphProjectionDto {
   basis: ProjectionBasisDto;
   graphPath: string;
-  sourceRevision: number;
   nodes: EditorNodeProjectionDto[];
   connections: EditorConnectionProjectionDto[];
-  /** Complete canonical problem set for this graph projection revision. */
+  /** Complete canonical problem set for this graph projection. */
   diagnostics: DiagnosticDto[];
   outcome: CompilationOutcomeDto;
   hasBlockingDiagnostics: boolean;

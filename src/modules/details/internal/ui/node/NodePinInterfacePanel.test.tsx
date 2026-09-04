@@ -117,8 +117,6 @@ function graphBucket(): GraphEntityBucket {
       registryFingerprint: "fingerprint",
       resourceVersions: {},
     },
-    sourceRevision: 1,
-    requestGeneration: 1,
     diagnostics: [],
     outcome: { type: "success" },
     hasBlockingDiagnostics: false,

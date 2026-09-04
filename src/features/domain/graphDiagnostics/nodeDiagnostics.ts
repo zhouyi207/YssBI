@@ -26,13 +26,11 @@ export interface GraphNodeDiagnosticsBucket {
 }
 
 export interface GraphProblemsBucket extends GraphNodeDiagnosticsBucket {
-  readonly sourceRevision: number;
   readonly diagnostics: readonly DeepReadonly<DiagnosticDto>[];
 }
 
 export interface GraphProblem {
   readonly graphPath: string;
-  readonly sourceRevision: number;
   readonly nodeId: string | null;
   readonly locationLabel: string;
   readonly diagnostic: DeepReadonly<DiagnosticDto>;
@@ -118,7 +116,6 @@ export function collectGraphProblems(
     const nodeId = nodeIdFromDiagnosticLocation(diagnostic.location);
     return {
       graphPath,
-      sourceRevision: bucket.sourceRevision,
       nodeId,
       locationLabel:
         formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId) ?? graphPath,

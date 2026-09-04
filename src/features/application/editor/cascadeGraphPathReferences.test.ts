@@ -39,7 +39,7 @@ describe("remapGraphNonViewportUiState", () => {
     });
     useGraphProjectionStore
       .getState()
-      .replaceProjection("events/Caller.yssbi-event", fixture.projection, 1);
+      .replaceProjection("events/Caller.yssbi-event", fixture.projection);
   });
 
   it("remaps editor focus and selection without mutating domain projections", () => {

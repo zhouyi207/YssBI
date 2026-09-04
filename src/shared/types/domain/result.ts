@@ -68,7 +68,6 @@ export interface ResultProvenance {
   runId: string;
   activationId: string;
   graphPath: string;
-  graphRevision: string;
   nodeId: string;
   output: GraphOutputRefDto | null;
   createdAtMs: string;
@@ -127,7 +126,6 @@ export interface PinResultEntry {
   resultId: ResultId;
   runId: string;
   activationId: string;
-  graphRevision: string;
   createdAtMs: string;
   usage: ResultUsage;
   state: ResultState;

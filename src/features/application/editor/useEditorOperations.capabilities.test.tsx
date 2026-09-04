@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
 import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { useEditorOperations } from "./useEditorOperations";
 import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 
@@ -132,31 +133,27 @@ const snapshot: ClipboardSubgraphDto = {
 function appliedWithInserted(...nodeIds: string[]): GraphDraftCommandResult {
   return {
     status: "applied",
+    insertedNodeIds: nodeIds,
     result: {
+      changed: true,
       document: {
-        nodes: {},
+        nodes: Object.fromEntries(
+          nodeIds.map((id) => [
+            id,
+            {
+              id,
+              node_type: "tests.node",
+              position: { x: 0, y: 0 },
+              parameters: {},
+              user_label: null,
+            },
+          ]),
+        ),
         port_bindings: [],
         connections: {},
         input_states: [],
       },
-      patch: {
-        operations: nodeIds.map((id) => ({
-          operation: "insert_node" as const,
-          node: {
-            id,
-            node_type: "tests.node",
-            position: { x: 0, y: 0 },
-            parameters: {},
-            user_label: null,
-          },
-        })),
-      },
-      projectInstanceId: "project-a",
-      graphSessionId: "graph-session-a",
-      graphPath,
-      acceptedRevision: 1,
-      requestGeneration: 1,
-      operationId: "00000000-0000-0000-0000-000000000001",
+      projection: makeEditorProjectionFixture({ graphPath }).projection,
     },
   };
 }

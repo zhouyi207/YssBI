@@ -24,7 +24,6 @@ const descriptor: ResultDescriptor = {
     runId: "7",
     activationId: "9",
     graphPath: "events/main.yssbi-event",
-    graphRevision: "3",
     nodeId: "ols-node",
     output: {
       graphPath: "events/main.yssbi-event",

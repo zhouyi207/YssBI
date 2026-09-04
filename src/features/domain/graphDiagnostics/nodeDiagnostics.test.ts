@@ -22,7 +22,6 @@ const diagnostic = (
 });
 
 const bucket = {
-  sourceRevision: 12,
   graphNodes: ["node-a", "node-b"],
   nodes: {
     "node-a": {
@@ -47,25 +46,22 @@ const bucket = {
 } as unknown as GraphProblemsBucket;
 
 describe("collectGraphProblems", () => {
-  it("collects the canonical graph diagnostics with their projection revision", () => {
+  it("collects canonical graph diagnostics with their resolved locations", () => {
     expect(collectGraphProblems("events/Main.yssbi-event", bucket)).toEqual([
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 12,
         nodeId: "node-a",
         locationLabel: "Node A",
         diagnostic: diagnostic("error", "A failed", "node-a"),
       },
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 12,
         nodeId: "node-a",
         locationLabel: "Node A",
         diagnostic: diagnostic("warning", "A needs review", "node-a"),
       },
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 12,
         nodeId: "node-b",
         locationLabel: "Node B",
         diagnostic: diagnostic("warning", "B needs review", "node-b"),
@@ -85,7 +81,6 @@ describe("collectGraphProblems", () => {
     };
     const pinId = portAddressKey(address);
     const portBucket = {
-      sourceRevision: 13,
       graphNodes: ["node-a"],
       nodes: {
         "node-a": {
@@ -109,7 +104,6 @@ describe("collectGraphProblems", () => {
     expect(collectGraphProblems("events/Main.yssbi-event", portBucket)).toEqual([
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 13,
         nodeId: "node-a",
         locationLabel: "Node A · Value",
         diagnostic: portDiagnostic,
@@ -137,7 +131,6 @@ describe("collectGraphProblems", () => {
       location: { kind: "parameter", nodeId: "node-a", key: "threshold" },
     };
     const completeBucket = {
-      sourceRevision: 14,
       graphNodes: ["node-a", "node-b"],
       nodes: {
         "node-a": {
@@ -158,28 +151,24 @@ describe("collectGraphProblems", () => {
     expect(collectGraphProblems("events/Main.yssbi-event", completeBucket)).toEqual([
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 14,
         nodeId: null,
         locationLabel: "events/Main.yssbi-event",
         diagnostic: graphProblem,
       },
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 14,
         nodeId: null,
         locationLabel: "events/Main.yssbi-event",
         diagnostic: resourceProblem,
       },
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 14,
         nodeId: null,
         locationLabel: "Node A · Value → Node B · Input",
         diagnostic: connectionProblem,
       },
       {
         graphPath: "events/Main.yssbi-event",
-        sourceRevision: 14,
         nodeId: "node-a",
         locationLabel: "Node A · Threshold",
         diagnostic: parameterProblem,

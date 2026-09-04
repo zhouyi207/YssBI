@@ -101,8 +101,7 @@ describe("Pin preview production path", () => {
   it("emits cloneable Pin data without component callbacks on pointer down", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
-        .applied,
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
     ).toBe(true);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
@@ -149,8 +148,7 @@ describe("Pin preview production path", () => {
   it("routes output View through authoritative structured Pin history", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
-        .applied,
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
     ).toBe(true);
     markResourceLoaded({ id: graphPath, kind: "event" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
@@ -196,8 +194,7 @@ describe("Pin preview production path", () => {
   it("opens an exact historical occurrence from the compact Pin context menu", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1)
-        .applied,
+      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
     ).toBe(true);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
@@ -206,7 +203,6 @@ describe("Pin preview production path", () => {
         resultId: "17",
         runId: "7",
         activationId: "70",
-        graphRevision: "1",
         createdAtMs: "1000",
         usage: { kind: "produced" },
         state: { kind: "ready" },
@@ -215,7 +211,6 @@ describe("Pin preview production path", () => {
         resultId: "18",
         runId: "8",
         activationId: "80",
-        graphRevision: "1",
         createdAtMs: "2000",
         usage: { kind: "produced" },
         state: { kind: "cancelled" },
@@ -274,7 +269,7 @@ describe("Pin preview production path", () => {
     const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
     expect(
-      useGraphProjectionStore.getState().replaceProjection(functionPath, fixture.projection, 1)
+      useGraphProjectionStore.getState().replaceProjection(functionPath, fixture.projection)
         .applied,
     ).toBe(true);
     markResourceLoaded({ id: functionPath, kind: "function" });

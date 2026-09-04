@@ -35,7 +35,6 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
 import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
 import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
-import { resetGraphProjectionCoordinator } from "@/features/application/graphProjection/graphProjectionCoordinator";
 import {
   beginGraphLoadLifecycle,
   loadGraphProjection,
@@ -341,7 +340,6 @@ export async function commitPreparedAuthoritativeProjectLoad(
     prepared.index.publicationRevision,
   );
   commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
-  commitProjectLoadStep("graph projection channel coordinator", resetGraphProjectionCoordinator);
   commitProjectLoadStep("graph draft coordinator", resetGraphDraftCoordinator);
   loadGraphInFlight.clear();
   commitProjectLoadStep("graph load status", () =>
@@ -518,7 +516,6 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     };
 
     if (!commitOwnedClear(resetGraphProjectionLifecycle)) return;
-    if (!commitOwnedClear(resetGraphProjectionCoordinator)) return;
     if (!commitOwnedClear(resetGraphDraftCoordinator)) return;
     if (!commitOwnedClear(() => loadGraphInFlight.clear())) return;
     if (!commitOwnedClear(() => set({ graphLoadStatus: {} }))) return;

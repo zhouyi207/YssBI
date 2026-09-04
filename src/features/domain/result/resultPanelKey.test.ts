@@ -21,7 +21,6 @@ function descriptor(resultId: string, output: GraphOutputRefDto | null): ResultD
       runId: `run-${resultId}`,
       activationId: `activation-${resultId}`,
       graphPath: output?.graphPath ?? "events/Main.yssbi-event",
-      graphRevision: "7",
       nodeId: output?.port.nodeId ?? "node-without-output",
       output,
       createdAtMs: "1787270400000",

@@ -39,7 +39,6 @@ function entry(
     resultId,
     runId: `run-${resultId}`,
     activationId: `activation-${resultId}`,
-    graphRevision: "3",
     createdAtMs,
     usage: { kind: "produced" },
     state,

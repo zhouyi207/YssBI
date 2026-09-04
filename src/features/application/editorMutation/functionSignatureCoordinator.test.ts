@@ -3,7 +3,7 @@ import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjecti
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useHistoryStore } from "@/features/core/history";
-import { buildGraphResourceMeta, resourceKey, useResourceStore } from "@/features/core/resource";
+import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import type {
   FunctionSignatureDto,
   ResourceMutationResultDto,
@@ -71,10 +71,8 @@ function installState(): void {
     functionPath,
     makeEditorProjectionFixture({
       graphPath: functionPath,
-      sourceRevision: 7,
       title: "Current graph projection",
     }).projection,
-    1,
   );
   useGraphMetaStore.setState({
     graphs: {
@@ -118,7 +116,6 @@ function result(
             graphPath: functionPath,
             projection: makeEditorProjectionFixture({
               graphPath: functionPath,
-              sourceRevision: 7,
               title: "Committed signature projection",
             }).projection,
             functionEditorProjection: authoritativeFunctionProjection,
@@ -150,9 +147,7 @@ describe("executeFunctionSignatureMutation", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.mocked(GraphProjectionService.loadGraph).mockImplementation(async (graphPath) =>
-      makeGraphEditorSession(
-        makeEditorProjectionFixture({ graphPath, sourceRevision: 7 }).projection,
-      ),
+      makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection),
     );
     resetPendingBackendMutations();
     resetFunctionSignatureCoordinator();
@@ -284,7 +279,6 @@ describe("executeFunctionSignatureMutation", () => {
     expect(signatureRevisionDuringInvoke).toBe(2);
     expect(outcome).toEqual({ status: "applied", result: committed });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
-      sourceRevision: 7,
       nodes: { "local-node": { display: { title: "Committed signature projection" } } },
     });
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
@@ -293,10 +287,6 @@ describe("executeFunctionSignatureMutation", () => {
       functionInputs: authoritativeFunctionProjection.inputs,
       functionOutputs: authoritativeFunctionProjection.outputs,
     });
-    expect(
-      useResourceStore.getState().resources[resourceKey({ id: functionPath, kind: "function" })]
-        ?.revision,
-    ).toBe(7);
     expect(useHistoryStore.getState()).toEqual({
       canUndo: true,
       canRedo: false,
@@ -364,7 +354,6 @@ describe("executeFunctionSignatureMutation", () => {
 
     expect(outcome).toEqual({ status: "applied", result: committed });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
-      sourceRevision: 7,
       nodes: { "local-node": { display: { title: "Projected node" } } },
     });
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
@@ -460,10 +449,8 @@ describe("executeFunctionSignatureMutation", () => {
       functionPath,
       makeEditorProjectionFixture({
         graphPath: functionPath,
-        sourceRevision: 7,
         title: "New project",
       }).projection,
-      1,
     );
     useGraphMetaStore.getState().updateGraph(functionPath, {
       functionRevision: 20,

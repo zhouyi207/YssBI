@@ -39,18 +39,13 @@ export async function saveGraphDraft(
     }
 
     useGraphDraftStore.getState().completeSave(graphPath, saved);
-    const currentGeneration =
-      useGraphProjectionStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
     const applied = useGraphProjectionStore
       .getState()
-      .replaceProjection(graphPath, saved.projectionReplacement.projection, currentGeneration + 1);
+      .replaceProjection(graphPath, saved.projectionReplacement.projection);
     if (!applied.applied) throw new Error("Saved Graph projection could not be installed");
     useResourceStore
       .getState()
-      .patchResource(
-        { id: graphPath, kind: graphKind },
-        { revision: saved.projectionReplacement.projection.sourceRevision },
-      );
+      .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });
     markResourceDirty({ id: graphPath, kind: graphKind }, false);
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false });
     completed = true;

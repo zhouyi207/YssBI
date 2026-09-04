@@ -4,12 +4,12 @@ import type {
   EditorGraphMutationDto,
   GraphDocumentDto,
   GraphDraftSaveDto,
-  GraphDraftAcceptedDto,
+  GraphDraftTransformDto,
 } from "@/shared/types/dto/editorMutation";
 import {
   parseCompileGraphDraftDto,
   parseGraphDraftSaveDto,
-  parseGraphDraftAcceptedDto,
+  parseGraphDraftTransformDto,
 } from "@/shared/types/dto/editorMutationWireParser";
 
 export class GraphDraftService {
@@ -30,29 +30,19 @@ export class GraphDraftService {
 
   static async transform(
     projectInstanceId: string,
-    graphSessionId: string,
     graphPath: string,
     locale: string,
-    acceptedRevision: number,
-    requestGeneration: number,
-    operationId: string,
     document: GraphDocumentDto,
     mutation: EditorGraphMutationDto,
-  ): Promise<GraphDraftAcceptedDto> {
+  ): Promise<GraphDraftTransformDto> {
     const response: unknown = await invokeCommand("transform_graph_draft", {
       projectInstanceId,
+      graphPath,
       locale,
-      projectionRequest: {
-        graphSessionId,
-        graphPath,
-        acceptedRevision,
-        requestGeneration,
-        operationId,
-      },
       document,
       mutation,
     });
-    return parseGraphDraftAcceptedDto(response);
+    return parseGraphDraftTransformDto(response);
   }
 
   static async save(

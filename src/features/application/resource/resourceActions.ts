@@ -1,7 +1,5 @@
 import { useResourceStore, type ResourceRef } from "@/features/core/resource";
 import { commitAfterCommand } from "./resourceIndexCoordinator";
-import { getGraphSourceRevision } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
@@ -9,7 +7,6 @@ import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from "@/shared/constants/de
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
 import { beginGraphRenameLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { cancelGraphProjectionRequests } from "@/features/application/graphProjection/graphProjectionCoordinator";
 import {
   beginChartRenameLifecycle,
   isChartLifecycleCurrent,
@@ -26,9 +23,6 @@ import { executeDatabaseMutation } from "@/features/application/dataManagement/d
 export type { GraphResourceKind };
 
 function graphAuthorityRevision(graphPath: string): number {
-  const projected = getGraphSourceRevision(useGraphProjectionStore.getState(), graphPath);
-  if (projected !== undefined) return projected;
-
   const resource = Object.values(useResourceStore.getState().resources).find(
     (candidate) =>
       candidate.id === graphPath && (candidate.kind === "event" || candidate.kind === "function"),
@@ -85,7 +79,6 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
     const context = captureProjectCommandContext();
     const expectedRevision = graphAuthorityRevision(ref.id);
     const lifecycleToken = beginGraphRenameLifecycle(ref.id);
-    cancelGraphProjectionRequests(ref.id);
     const result = await GraphService.renameGraphResource(
       context.projectInstanceId,
       ref.id,

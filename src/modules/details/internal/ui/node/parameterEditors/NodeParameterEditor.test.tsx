@@ -21,6 +21,7 @@ const nodeId = "constant-node";
 const appliedOutcome: ApplyGraphDraftMutationOutcome = {
   status: "applied",
   result: {} as never,
+  insertedNodeIds: [],
 };
 let container: HTMLDivElement;
 let root: Root;

@@ -15,7 +15,6 @@ export type EditorProjectionConnectionEntity = EditorConnectionProjectionDto;
 export interface EditorProjectionEntities {
   basis: ProjectionBasisDto;
   graphPath: string;
-  sourceRevision: number;
   nodes: Record<string, EditorProjectionNodeEntity>;
   ports: Record<string, EditorProjectionPortEntity>;
   connections: Record<string, EditorProjectionConnectionEntity>;

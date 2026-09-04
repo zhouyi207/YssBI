@@ -11,7 +11,6 @@ import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { deleteResource, renameResource } from "./resourceActions";
 
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
@@ -245,28 +244,6 @@ describe("renameResource project ownership", () => {
     expect(projectPublicationCoordinator.submit).toHaveBeenNthCalledWith(2, {
       result: deleted.mutation,
     });
-  });
-
-  it("uses the loaded graph projection revision instead of stale sidebar metadata for delete", async () => {
-    const committed = deleteResult("project-instance-current");
-    vi.spyOn(GraphService, "removeGraph").mockResolvedValue(committed);
-    useGraphProjectionStore.getState().replaceProjection(
-      "events/Old.yssbi-event",
-      makeEditorProjectionFixture({
-        graphPath: "events/Old.yssbi-event",
-        sourceRevision: 3,
-      }).projection,
-      1,
-    );
-
-    await deleteResource({ id: "events/Old.yssbi-event", kind: "event" });
-
-    expect(GraphService.removeGraph).toHaveBeenCalledWith(
-      "project-instance-current",
-      "events/Old.yssbi-event",
-      3,
-      expect.any(String),
-    );
   });
 
   it("submits the authoritative delete publication", async () => {

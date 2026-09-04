@@ -21,8 +21,6 @@ export interface GraphEntityBucket {
   graphNodes: NodeId[];
   pinConnections: Record<PinId, ConnectionId[]>;
   basis: ProjectionBasisDto;
-  sourceRevision: number;
-  requestGeneration: number;
   /** Complete canonical problem set copied from the same projection as the entities. */
   diagnostics: DiagnosticDto[];
   outcome: CompilationOutcomeDto;
@@ -101,20 +99,6 @@ export function getGraphProjectionBasis(
   graphPath: GraphPath,
 ): ProjectionBasisDto | undefined {
   return state.graphEntities[graphPath]?.basis;
-}
-
-export function getGraphSourceRevision(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): number | undefined {
-  return state.graphEntities[graphPath]?.sourceRevision;
-}
-
-export function getGraphRequestGeneration(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): number | undefined {
-  return state.graphEntities[graphPath]?.requestGeneration;
 }
 
 export function getGraphDiagnostics(

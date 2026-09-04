@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EditorGraphMutationDto } from "./editorMutation";
 import {
   parseEditorGraphMutationDto,
-  parseGraphDraftAcceptedDto,
+  parseGraphDraftTransformDto,
   parseGraphProjectionReplacementDto,
 } from "./editorMutationWireParser";
 
@@ -21,7 +21,7 @@ const phase1Mutations = [
     payload: { source: projectedDeclaredAddress, target: projectedDeclaredAddress },
   },
 ] satisfies EditorGraphMutationDto[];
-function projection(path: string, revision: number) {
+function projection(path: string) {
   return {
     basis: {
       graphPath: path,
@@ -29,7 +29,6 @@ function projection(path: string, revision: number) {
       resourceVersions: {},
     },
     graphPath: path,
-    sourceRevision: revision,
     nodes: [],
     connections: [],
     diagnostics: [],
@@ -63,7 +62,7 @@ function projectionWithParameterEditor(): Record<string, unknown> {
 }
 
 function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
-  const value: Record<string, unknown> = projection(graphPath, 5);
+  const value: Record<string, unknown> = projection(graphPath);
   value.nodes = [
     {
       graphPath,
@@ -129,24 +128,16 @@ function functionEditorProjection(revision = 5) {
 }
 
 describe("editor mutation wire parser", () => {
-  it("parses the exact asynchronous Graph draft acceptance identity", () => {
-    const accepted = {
-      projectInstanceId: "project-a",
-      graphSessionId: "graph-session-a",
-      graphPath,
-      acceptedRevision: 3,
-      requestGeneration: 7,
-      operationId: "00000000-0000-0000-0000-000000000001",
+  it("parses the atomic Graph draft transform result", () => {
+    const transformed = {
+      changed: true,
       document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-      patch: { operations: [] },
+      projection: projection(graphPath),
     };
 
-    expect(parseGraphDraftAcceptedDto(accepted)).toEqual(accepted);
-    expect(() => parseGraphDraftAcceptedDto({ ...accepted, requestGeneration: 0 })).toThrow(
-      "Graph draft acceptance",
-    );
-    expect(() => parseGraphDraftAcceptedDto({ ...accepted, graphSessionId: "" })).toThrow(
-      "Graph draft acceptance",
+    expect(parseGraphDraftTransformDto(transformed)).toEqual(transformed);
+    expect(() => parseGraphDraftTransformDto({ ...transformed, changed: "yes" })).toThrow(
+      "Graph draft transform result",
     );
   });
 
@@ -368,10 +359,10 @@ describe("editor mutation wire parser", () => {
   });
 
   it("strictly branches event and function projection replacement wire shapes", () => {
-    const eventReplacement = { graphPath, projection: projection(graphPath, 5) };
+    const eventReplacement = { graphPath, projection: projection(graphPath) };
     const functionReplacement = {
       graphPath: functionPath,
-      projection: projection(functionPath, 5),
+      projection: projection(functionPath),
       functionEditorProjection: functionEditorProjection(),
     };
 
@@ -386,7 +377,7 @@ describe("editor mutation wire parser", () => {
     expect(() =>
       parseGraphProjectionReplacementDto({
         graphPath: functionPath,
-        projection: projection(functionPath, 5),
+        projection: projection(functionPath),
       }),
     ).toThrow("projection replacement");
   });
@@ -397,10 +388,10 @@ describe("editor mutation wire parser", () => {
       const replacement = path.startsWith("functions/")
         ? {
             graphPath: path,
-            projection: projection(path, 5),
+            projection: projection(path),
             functionEditorProjection: functionEditorProjection(),
           }
-        : { graphPath: path, projection: projection(path, 5) };
+        : { graphPath: path, projection: projection(path) };
       expect(parseGraphProjectionReplacementDto(replacement)).toEqual(replacement);
     },
   );
@@ -409,7 +400,7 @@ describe("editor mutation wire parser", () => {
     for (const inner of ["", "   "]) {
       const malformed = {
         graphPath: functionPath,
-        projection: projection(functionPath, 5),
+        projection: projection(functionPath),
         functionEditorProjection: {
           ...functionEditorProjection(),
           outputs: [{ id: "return", name: "Model", dataType: { kind: "Struct", inner } }],

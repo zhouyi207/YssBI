@@ -19,7 +19,6 @@ import {
   type ProjectEventStream,
 } from "@/services/project/projectEventStream";
 import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { resetGraphProjectionCoordinator } from "@/features/application/graphProjection/graphProjectionCoordinator";
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
@@ -47,7 +46,6 @@ function hydrationDependencies(): ProjectEventConsumerDependencies["hydration"] 
         : { status: "failed" as const },
     replaceProject: () => {
       resetGraphProjectionLifecycle();
-      resetGraphProjectionCoordinator();
     },
   };
 }

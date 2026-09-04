@@ -20,7 +20,6 @@ const provenance = {
   runId: "1",
   activationId: "2",
   graphPath: "events/Main.yssbi-event",
-  graphRevision: "7",
   nodeId: "00000000-0000-0000-0000-000000000002",
   output: null,
   createdAtMs: "1755072000000",

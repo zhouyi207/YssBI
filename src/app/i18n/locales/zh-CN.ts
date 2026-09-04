@@ -897,7 +897,6 @@ export const zhCN = {
         graph_mutation_empty_targets: "请至少选择一个图元素",
         graph_mutation_duplicate_target: "选择中包含重复的图元素",
         graph_managed_node_delete_forbidden: "无法删除受管理的节点",
-        graph_revision_conflict: "图已发生变化，请检查最新版本后重试",
       },
     },
     pinResultSearch: {

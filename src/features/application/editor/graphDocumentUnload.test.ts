@@ -104,7 +104,7 @@ describe("graph document lifecycle ownership", () => {
   it("does not let an old unload completion overwrite a newer successful load", async () => {
     const current = makeEditorProjectionFixture({ graphPath, title: "Current" });
     const reopened = makeEditorProjectionFixture({ graphPath, title: "Reopened" });
-    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection);
     markResourceLoaded({ id: graphPath, kind: "event" });
     const pendingUnload = deferred<void>();
     vi.mocked(GraphService.unloadProjectGraph).mockReturnValue(pendingUnload.promise);

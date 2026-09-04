@@ -428,7 +428,6 @@ export function isEditorGraphProjectionDto(value: unknown): value is EditorGraph
     hasExactKeys(value, [
       "basis",
       "graphPath",
-      "sourceRevision",
       "nodes",
       "connections",
       "diagnostics",
@@ -437,7 +436,6 @@ export function isEditorGraphProjectionDto(value: unknown): value is EditorGraph
     ]) &&
     isProjectionBasis(value.basis) &&
     isGraphResourcePath(value.graphPath) &&
-    isNonNegativeSafeInteger(value.sourceRevision) &&
     Array.isArray(value.nodes) &&
     value.nodes.every(isNode) &&
     Array.isArray(value.connections) &&

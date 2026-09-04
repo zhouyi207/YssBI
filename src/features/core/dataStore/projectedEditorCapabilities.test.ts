@@ -17,7 +17,7 @@ function installClipboardNode(canCopy: boolean | undefined, managed: boolean) {
     delete (capabilities as { canCopy?: boolean }).canCopy;
   }
   fixture.projection.nodes[0].capabilities = capabilities;
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
 }
 
 function installProjectedCapabilities() {
@@ -29,7 +29,7 @@ function installProjectedCapabilities() {
     canCopy: false,
     canDelete: false,
   };
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
 }
 
 describe("projected active-editor capabilities", () => {

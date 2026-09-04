@@ -38,7 +38,6 @@ const canonicalDiagnostics = [
 ];
 
 const bucket = {
-  sourceRevision: 7,
   diagnostics: canonicalDiagnostics,
   graphNodes: ["node-a", "node-b"],
   nodes: {

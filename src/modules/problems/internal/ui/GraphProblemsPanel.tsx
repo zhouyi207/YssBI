@@ -73,7 +73,7 @@ export function GraphProblemsPanel() {
               const locatable = problem.nodeId !== null;
               return (
                 <button
-                  key={`${problem.sourceRevision}:${problem.diagnostic.code}:${index}`}
+                  key={`${problem.diagnostic.code}:${problem.locationLabel}:${index}`}
                   type="button"
                   data-graph-problem-row
                   disabled={!locatable}

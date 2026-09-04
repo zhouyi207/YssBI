@@ -27,7 +27,7 @@ function installCallProjection(nodeTypeId: string): void {
     nodeTypeId,
     title: "Calculate Sales",
   });
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
 }
 
 describe("useNodeView Call Function title projection", () => {

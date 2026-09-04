@@ -18,14 +18,12 @@ import {
   beginGraphUnloadLifecycle,
   isGraphLifecycleCurrent,
 } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { cancelGraphProjectionRequests } from "@/features/application/graphProjection/graphProjectionCoordinator";
 
 /** Unload frontend/backend graph cache when retention guards no longer apply. */
 export async function unloadGraphDocument(graphPath: string): Promise<void> {
   if (shouldRetainGraphDocument(graphPath)) return;
 
   const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
-  cancelGraphProjectionRequests(graphPath);
   invalidateGraphLoadOwnership(graphPath);
   useGraphProjectionStore.getState().clearGraph(graphPath);
   useGraphDraftStore.getState().clearGraph(graphPath);

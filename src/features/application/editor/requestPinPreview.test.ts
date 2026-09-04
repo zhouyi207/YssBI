@@ -49,7 +49,7 @@ function installGraph(
   }
   const applied = useGraphProjectionStore
     .getState()
-    .replaceProjection(graphPath, fixture.projection, 1);
+    .replaceProjection(graphPath, fixture.projection);
   expect(applied.applied).toBe(true);
   const editorSession = makeGraphEditorSession(fixture.projection);
   useGraphDraftStore.getState().install(graphPath, editorSession);

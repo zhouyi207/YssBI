@@ -34,11 +34,7 @@ function installHistoryProjection(graphPath: string, direction: HistoryDirection
   if (isGraphDraftSaving(graphPath)) return false;
   const projection = useGraphDraftStore.getState()[direction](graphPath);
   if (!projection) return false;
-  const currentGeneration =
-    useGraphProjectionStore.getState().graphEntities[graphPath]?.requestGeneration ?? 0;
-  const applied = useGraphProjectionStore
-    .getState()
-    .replaceProjection(graphPath, projection, currentGeneration + 1);
+  const applied = useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
   if (!applied.applied)
     throw new Error(`Graph draft ${direction} projection could not be installed`);
   const kind = inferGraphResourceKind(graphPath);

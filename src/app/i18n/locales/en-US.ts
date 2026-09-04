@@ -945,7 +945,6 @@ export const enUS = {
         graph_mutation_empty_targets: "Select at least one graph item",
         graph_mutation_duplicate_target: "The selection contains duplicate graph items",
         graph_managed_node_delete_forbidden: "This managed node cannot be deleted",
-        graph_revision_conflict: "The graph changed; review the latest version and try again",
       },
     },
     pinResultSearch: {

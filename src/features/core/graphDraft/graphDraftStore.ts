@@ -5,7 +5,7 @@ import type {
   GraphDocumentDto,
   CompileGraphDraftDto,
   GraphDraftSaveDto,
-  GraphDraftAcceptedDto,
+  GraphDraftTransformDto,
   GraphEditorSessionDto,
 } from "@/shared/types/domain/editorMutation";
 
@@ -15,7 +15,6 @@ interface GraphDraftVersion {
 }
 
 export interface GraphDraftSession extends GraphDraftVersion {
-  readonly draftRevision: number;
   readonly saving: boolean;
   readonly compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
   readonly compiledSourceHash: string | null;
@@ -28,12 +27,7 @@ export interface GraphDraftSession extends GraphDraftVersion {
 interface GraphDraftStore {
   readonly sessions: Readonly<Record<string, GraphDraftSession>>;
   install(graphPath: string, session: GraphEditorSessionDto): void;
-  applyAcceptedUpdate(
-    graphPath: string,
-    update: GraphDraftAcceptedDto,
-    projection: EditorGraphProjectionDto,
-  ): void;
-  acceptNoop(graphPath: string, acceptedRevision: number): void;
+  applyTransform(graphPath: string, update: GraphDraftTransformDto): void;
   beginCompile(graphPath: string): boolean;
   completeCompile(graphPath: string, result: CompileGraphDraftDto): void;
   failCompile(graphPath: string): void;
@@ -63,7 +57,6 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         [graphPath]: {
           document: structuredClone(session.document),
           projection: structuredClone(session.projection),
-          draftRevision: 0,
           saving: false,
           compileStatus: "uncompiled",
           compiledSourceHash: null,
@@ -75,20 +68,16 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
       },
     })),
 
-  applyAcceptedUpdate: (graphPath, update, projection) =>
+  applyTransform: (graphPath, update) =>
     set((state) => {
       const current = state.sessions[graphPath];
       if (!current) throw new Error(`Graph draft '${graphPath}' is not loaded`);
-      if (update.acceptedRevision !== current.draftRevision + 1) {
-        throw new Error(`Graph draft '${graphPath}' acceptance revision is not monotonic`);
-      }
       return {
         sessions: {
           ...state.sessions,
           [graphPath]: {
             document: structuredClone(update.document),
-            projection: structuredClone(projection),
-            draftRevision: update.acceptedRevision,
+            projection: structuredClone(update.projection),
             saving: current.saving,
             compileStatus: "uncompiled",
             compiledSourceHash: null,
@@ -97,21 +86,6 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
             undoStack: [...current.undoStack, cloneVersion(current)],
             redoStack: [],
           },
-        },
-      };
-    }),
-
-  acceptNoop: (graphPath, acceptedRevision) =>
-    set((state) => {
-      const current = state.sessions[graphPath];
-      if (!current) throw new Error(`Graph draft '${graphPath}' is not loaded`);
-      if (acceptedRevision !== current.draftRevision + 1) {
-        throw new Error(`Graph draft '${graphPath}' acceptance revision is not monotonic`);
-      }
-      return {
-        sessions: {
-          ...state.sessions,
-          [graphPath]: { ...current, draftRevision: acceptedRevision },
         },
       };
     }),
@@ -186,7 +160,6 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
           [graphPath]: {
             document: structuredClone(saved.document),
             projection: structuredClone(saved.projectionReplacement.projection),
-            draftRevision: current.draftRevision,
             saving: false,
             compileStatus: current.compileStatus,
             compiledSourceHash: current.compiledSourceHash,
@@ -221,7 +194,6 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         ...state.sessions,
         [graphPath]: {
           ...cloneVersion(previous),
-          draftRevision: current.draftRevision + 1,
           saving: false,
           compileStatus: "uncompiled",
           compiledSourceHash: null,
@@ -245,7 +217,6 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         ...state.sessions,
         [graphPath]: {
           ...cloneVersion(next),
-          draftRevision: current.draftRevision + 1,
           saving: false,
           compileStatus: "uncompiled",
           compiledSourceHash: null,

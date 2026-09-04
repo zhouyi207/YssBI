@@ -105,7 +105,7 @@ describe("useProjectOperations execution demand", () => {
     vi.spyOn(ProjectService, "executeGraphDocument").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
-    useGraphProjectionStore.getState().replaceProjection(graphPath, projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
     useGraphDraftStore.getState().install(graphPath, session);
     expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
     useGraphDraftStore.getState().completeCompile(graphPath, {
@@ -147,7 +147,7 @@ describe("useProjectOperations execution demand", () => {
   });
 
   it("rejects execution when the current projection has blocking problems", async () => {
-    const blocked = makeEditorProjectionFixture({ graphPath, sourceRevision: 2 }).projection;
+    const blocked = makeEditorProjectionFixture({ graphPath }).projection;
     blocked.diagnostics.push({
       code: "compiler.input.unbound",
       message: "compiler.input.unbound",
@@ -158,7 +158,7 @@ describe("useProjectOperations execution demand", () => {
     });
     blocked.outcome = { type: "analysisBlocked" };
     blocked.hasBlockingDiagnostics = true;
-    useGraphProjectionStore.getState().replaceProjection(graphPath, blocked, 2);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, blocked);
 
     await act(async () => {
       await operations.executeGraph();

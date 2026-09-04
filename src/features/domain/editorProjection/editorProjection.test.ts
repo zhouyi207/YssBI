@@ -26,7 +26,6 @@ function validProjection(): EditorGraphProjectionDto {
       resourceVersions: { "functions/helper": "3" },
     },
     graphPath: "functions/main",
-    sourceRevision: 7,
     nodes: [
       {
         graphPath: "functions/main",
@@ -403,7 +402,6 @@ describe("toProjectionEntities", () => {
 
     expect(entities.basis).toEqual(projection.basis);
     expect(entities.graphPath).toBe("functions/main");
-    expect(entities.sourceRevision).toBe(7);
     expect(entities.nodes["node-1"]).toMatchObject({
       nodeTypeId: "statistics.linear-regression",
       position: { x: 120.5, y: -32 },

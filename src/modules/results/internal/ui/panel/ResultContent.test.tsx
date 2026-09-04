@@ -82,7 +82,6 @@ const descriptor: ResultDescriptor = {
     runId: "run-1",
     activationId: "activation-1",
     graphPath: "events/Main.yssbi-event",
-    graphRevision: "1",
     nodeId: "plot-node",
     output: {
       graphPath: "events/Main.yssbi-event",

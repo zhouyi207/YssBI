@@ -47,14 +47,14 @@ describe("useGraphDiagnosticCounts", () => {
     });
 
     act(() => {
-      useGraphProjectionStore.getState().replaceProjection(graphPath, withDiagnostic.projection, 1);
+      useGraphProjectionStore.getState().replaceProjection(graphPath, withDiagnostic.projection);
       root.render(<Probe />);
     });
     expect(observed.current).toEqual({ [graphPath]: 1 });
 
-    const clean = makeEditorProjectionFixture({ graphPath, sourceRevision: 2 });
+    const clean = makeEditorProjectionFixture({ graphPath });
     act(() => {
-      useGraphProjectionStore.getState().replaceProjection(graphPath, clean.projection, 2);
+      useGraphProjectionStore.getState().replaceProjection(graphPath, clean.projection);
     });
     expect(observed.current).toEqual({});
   });

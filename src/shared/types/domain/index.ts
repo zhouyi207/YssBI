@@ -36,7 +36,6 @@ export * from "./dataframe";
 export * from "./chart";
 export type * from "./editorProjection";
 export type * from "./editorMutation";
-export type * from "./graphProjectionChannel";
 export * from "./nodeCreationDescriptor";
 export type * from "./localizedCatalog";
 export { isLocalizedCatalogDto, isLocalizedCatalogItemDto } from "./localizedCatalog";

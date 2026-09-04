@@ -87,28 +87,22 @@ describe("useProjectionLocaleSync", () => {
     const unloadedPath = "events/Closed.yssbi-event";
     const currentEvent = makeEditorProjectionFixture({
       graphPath: eventPath,
-      sourceRevision: 4,
       title: "当前事件",
     });
     const currentFunction = makeEditorProjectionFixture({
       graphPath: functionPath,
-      sourceRevision: 7,
       title: "当前函数",
     });
     const localizedEvent = makeEditorProjectionFixture({
       graphPath: eventPath,
-      sourceRevision: 4,
       title: "Localized event",
     });
     const localizedFunction = makeEditorProjectionFixture({
       graphPath: functionPath,
-      sourceRevision: 7,
       title: "Localized function",
     });
-    useGraphProjectionStore.getState().replaceProjection(eventPath, currentEvent.projection, 1);
-    useGraphProjectionStore
-      .getState()
-      .replaceProjection(functionPath, currentFunction.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(eventPath, currentEvent.projection);
+    useGraphProjectionStore.getState().replaceProjection(functionPath, currentFunction.projection);
     useResourceStore.getState().setSnapshot({
       resources: [
         buildGraphResourceMeta("event", eventPath, "Main"),
@@ -155,11 +149,9 @@ describe("useProjectionLocaleSync", () => {
       "en-US",
     );
     expect(useGraphProjectionStore.getState().graphEntities[eventPath]).toMatchObject({
-      sourceRevision: 4,
       nodes: { "local-node": { display: { title: "Localized event" } } },
     });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
-      sourceRevision: 7,
       nodes: { "local-node": { display: { title: "Localized function" } } },
     });
     expect(useViewportStore.getState().viewports[viewportScopeKey(viewportScope)]).toEqual({
@@ -171,19 +163,17 @@ describe("useProjectionLocaleSync", () => {
 
   it("ignores an older locale response after a newer language request starts", async () => {
     const graphPath = "events/Main.yssbi-event";
-    const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 5, title: "当前" });
+    const current = makeEditorProjectionFixture({ graphPath, title: "当前" });
     const olderLocale = makeEditorProjectionFixture({
       graphPath,
-      sourceRevision: 5,
       title: "English",
     });
     const latestLocale = makeEditorProjectionFixture({
       graphPath,
-      sourceRevision: 5,
       title: "中文",
     });
     const pendingEnglish = deferred<ReturnType<typeof makeGraphEditorSession>>();
-    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection);
     useResourceStore.getState().setSnapshot({
       resources: [buildGraphResourceMeta("event", graphPath, "Main")],
     });
@@ -223,7 +213,6 @@ describe("useProjectionLocaleSync", () => {
     );
     expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toMatchObject({
       nodes: { "local-node": { display: { title: "中文" } } },
-      requestGeneration: 3,
     });
   });
 });

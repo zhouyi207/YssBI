@@ -29,7 +29,6 @@ function entry(resultId: string, state: PinResultEntry["state"]): PinResultEntry
     resultId,
     runId: `run-${resultId}`,
     activationId: `activation-${resultId}`,
-    graphRevision: "7",
     createdAtMs: resultId,
     usage: { kind: "produced" },
     state,

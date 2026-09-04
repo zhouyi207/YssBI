@@ -3,9 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useEditorKeyboard, useWorkbenchWindowCloseGuard } from "@/features/application/editor";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
-import { useGraphProjectionSubscription } from "@/features/application/graphProjection";
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
-import { useProjectProjection } from "@/features/application/project/projectProjection";
 import { WatermarkView } from "@/modules/graph-editor/public";
 import { NodeDocumentationModal } from "@/modules/node-catalog/public";
 import { PluginActivityActions } from "@/modules/plugins/public";
@@ -33,11 +31,9 @@ function WorkbenchReadyComposition() {
   const dndCoordinator = useActivityEditorDndCoordinator();
   const commands = useWorkbenchCommandCoordinator();
   const themeMode = useApplicationThemeMode();
-  const { projectInstanceId } = useProjectProjection();
   const watermarkComponent = useCallback(() => <WatermarkView commands={commands} />, [commands]);
 
   useProjectSync();
-  useGraphProjectionSubscription(projectInstanceId);
   useProjectionLocaleSync();
   useEditorKeyboard(commands);
 

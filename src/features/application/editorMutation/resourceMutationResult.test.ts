@@ -90,7 +90,7 @@ describe("resource mutation projection replacement protocol", () => {
       nodeTypeId: "yssbi.project.function.call",
       title: "Loaded caller",
     }).projection;
-    useGraphProjectionStore.getState().replaceProjection(caller, projection, 1);
+    useGraphProjectionStore.getState().replaceProjection(caller, projection);
   });
 
   it("rejects complete status missing a caller replacement without locally patching the caller", () => {
@@ -119,11 +119,10 @@ describe("resource mutation projection replacement protocol", () => {
   });
 
   it("does not replace a dirty Graph draft with a Rust projection publication", () => {
-    const replacement = makeEditorProjectionFixture({ graphPath: caller, sourceRevision: 2 });
+    const replacement = makeEditorProjectionFixture({ graphPath: caller });
     useGraphDraftStore.setState({
       sessions: {
         [caller]: {
-          draftRevision: 0,
           document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
           savedDocument: {
             nodes: {
@@ -169,7 +168,6 @@ describe("resource mutation projection replacement protocol", () => {
     });
 
     expect(plan.projectionReplacements).toEqual([]);
-    expect(plan.graphProjectionPlan?.graphEntities[caller].sourceRevision).toBe(1);
   });
 });
 

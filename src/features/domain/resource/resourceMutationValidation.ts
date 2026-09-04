@@ -81,18 +81,9 @@ function validateReplacement(
     !isGraphResourcePath(replacement.graphPath) ||
     !isRecord(replacement.projection) ||
     replacement.projection.graphPath !== replacement.graphPath ||
-    replacement.projection.basis?.graphPath !== replacement.graphPath ||
-    !Number.isSafeInteger(replacement.projection.sourceRevision) ||
-    replacement.projection.sourceRevision < 0
+    replacement.projection.basis?.graphPath !== replacement.graphPath
   ) {
     return "projection replacement path identity is malformed";
-  }
-  const graphDelta = deltas.find(
-    (candidate) =>
-      candidate.resource.kind === "graph" && candidate.resource.key === replacement.graphPath,
-  );
-  if (graphDelta && replacement.projection.sourceRevision !== graphDelta.toRevision) {
-    return `replacement for '${replacement.graphPath}' disagrees with its graph delta`;
   }
   const functionDelta = deltas.find(
     (candidate) =>

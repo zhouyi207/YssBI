@@ -462,9 +462,7 @@ function applyResourceLifecycleDeltasToAggregate(
       graphMeta[state.path] = { path: state.path, name: state.name, type: state.kind };
       continue;
     }
-    const projectionRevision = graphEntities[before.path]?.sourceRevision;
-    const authoritativeRevision = projectionRevision ?? current?.revision;
-    if (!current || authoritativeRevision !== before.revision || current.kind !== before.kind) {
+    if (!current || current.revision !== before.revision || current.kind !== before.kind) {
       throw new Error(`graph lifecycle remove source '${before.path}' is inconsistent`);
     }
     delete aggregate.resources[key];
@@ -717,11 +715,6 @@ export function prepareSynchronousPublicationCommit(
     | undefined;
   if (graphOwned) {
     const baseGraphEntities = useGraphProjectionStore.getState().graphEntities;
-    const projectedRevisions = new Map(
-      Object.entries(baseGraphEntities).map(
-        ([path, bucket]) => [path, bucket.sourceRevision] as const,
-      ),
-    );
     for (const replacement of applicableProjectionReplacements) {
       const entities = toProjectionEntities(replacement.projection);
       if (entities.graphPath !== replacement.graphPath) {
@@ -729,13 +722,6 @@ export function prepareSynchronousPublicationCommit(
           `replacement for '${replacement.graphPath}' has invalid projection identity`,
         );
       }
-      const currentRevision = projectedRevisions.get(replacement.graphPath);
-      if (currentRevision != null && replacement.projection.sourceRevision < currentRevision) {
-        throw new Error(
-          `replacement for '${replacement.graphPath}' is older than prepared authority`,
-        );
-      }
-      projectedRevisions.set(replacement.graphPath, replacement.projection.sourceRevision);
     }
     const preparedGraph = prepareGraphProjectionReplacements(
       applicableProjectionReplacements,
@@ -752,15 +738,17 @@ export function prepareSynchronousPublicationCommit(
   }
   const aggregate = createPublicationAggregate(graphProjectionPlan);
   applyMovesToAggregate(aggregate, context.moves, result.deltas);
-  for (const replacement of result.projectionReplacements) {
-    const kind = inferGraphResourceKind(replacement.graphPath);
+  for (const delta of result.deltas) {
+    if (delta.resource.kind !== "graph") continue;
+    const graphPath = delta.resource.key;
+    const kind = inferGraphResourceKind(graphPath);
     if (!kind) continue;
-    const key = resourceKey({ id: replacement.graphPath, kind });
+    const key = resourceKey({ id: graphPath, kind });
     const resource = aggregate.resources[key];
     if (resource) {
       aggregate.resources[key] = {
         ...resource,
-        revision: replacement.projection.sourceRevision,
+        revision: delta.toRevision,
       };
     }
   }

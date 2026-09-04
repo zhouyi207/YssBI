@@ -51,7 +51,6 @@ const descriptor: ResultDescriptor = {
     runId: "run-1",
     activationId: "activation-1",
     graphPath: "events/Main.yssbi-event",
-    graphRevision: "1",
     nodeId: "node-1",
     output: {
       graphPath: "events/Main.yssbi-event",
@@ -156,7 +155,6 @@ describe("openInspectableResult", () => {
         resultId: "17",
         runId: "run-1",
         activationId: "activation-1",
-        graphRevision: "1",
         createdAtMs: "1787270400000",
         usage: { kind: "produced" },
         state: { kind: "ready" },
