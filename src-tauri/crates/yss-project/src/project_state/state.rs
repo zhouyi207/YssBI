@@ -14,8 +14,10 @@ pub struct ProjectState {
     pub(crate) recovery_marker: yss_project_filesystem::ProjectRecoveryMarker,
     pub(crate) activation_generation: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) activation_identity: Arc<RwLock<ProjectAuthorityExpectation>>,
-    pub(crate) graph_revisions: Arc<
-        RwLock<std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>>,
+    pub(crate) graph_resource_revisions: Arc<
+        RwLock<
+            std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
+        >,
     >,
     pub(crate) variable_revisions: Arc<
         RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,
@@ -75,7 +77,7 @@ impl ProjectState {
             recovery_marker: yss_project_filesystem::ProjectRecoveryMarker::default(),
             activation_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activation_identity: Arc::new(RwLock::new(activation_identity)),
-            graph_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            graph_resource_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             variable_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             chart_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             database_authority_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),

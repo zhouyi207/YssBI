@@ -35,12 +35,9 @@ pub struct GlobalVariablesDocument {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphDocument {
-    pub schema_version: u32,
+pub struct GraphResourceFile {
     pub kind: GraphResourceKind,
     pub name: String,
-    #[serde(default)]
-    pub revision: yss_project_identity::ResourceRevision,
     pub document: NodeGraphDocument,
     pub function: Option<yss_project_history::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
@@ -185,7 +182,7 @@ pub fn serialize_graph_document(
 pub(crate) fn snapshot_graph_document(
     data: &ProjectData,
     graph_path: &GraphResourcePath,
-) -> Result<GraphDocument, ProjectError> {
+) -> Result<GraphResourceFile, ProjectError> {
     let graph = data.graphs.get(graph_path).ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
     })?;
@@ -212,14 +209,10 @@ pub(crate) fn serialize_graph_resource_document(
 fn graph_document_from_resource(
     graph: &GraphResourceDocument,
     local_variables: HashMap<VariableId, VariableInstance>,
-) -> GraphDocument {
-    GraphDocument {
-        schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
+) -> GraphResourceFile {
+    GraphResourceFile {
         kind: graph.kind,
         name: graph.name.clone(),
-        revision: yss_project_identity::ResourceRevision::from_graph_revision(
-            graph.document.revision,
-        ),
         document: graph.document.clone(),
         function: graph.function.clone(),
         local_variables,
@@ -245,13 +238,9 @@ fn write_loaded_graph_document(
         graph_relative_path_for_save(root, dir, extension, &graph.name, graph_path)?;
     write_json(
         root.join(&relative_path).as_path(),
-        &GraphDocument {
-            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
+        &GraphResourceFile {
             kind: graph.kind,
             name: graph.name.clone(),
-            revision: yss_project_identity::ResourceRevision::from_graph_revision(
-                graph.document.revision,
-            ),
             document: graph.document.clone(),
             function: graph.function.clone(),
             local_variables,
@@ -365,7 +354,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
 pub(crate) fn load_project_graph_document_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
-) -> Result<GraphDocument, ProjectError> {
+) -> Result<GraphResourceFile, ProjectError> {
     let root = project_root_from_path(path);
     let graph_resources = load_graph_resource_index(root.as_path())?;
     if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
@@ -389,12 +378,10 @@ pub fn load_project_graph_from_file(
     graph_path: &GraphResourcePath,
 ) -> Result<yss_project_model::GraphResourceDocument, ProjectError> {
     let document = load_project_graph_document_from_file(path, graph_path)?;
-    let mut graph = document.document;
-    graph.revision = document.revision.to_graph_revision();
     Ok(yss_project_model::GraphResourceDocument {
         name: document.name,
         kind: document.kind,
-        document: graph,
+        document: document.document,
         function: document.function,
     })
 }
@@ -438,17 +425,9 @@ pub(crate) fn parse_graph_resource_document(
     contents: &[u8],
     path: &Path,
     expected_kind: GraphResourceKind,
-) -> Result<GraphDocument, ProjectError> {
-    let document: GraphDocument =
+) -> Result<GraphResourceFile, ProjectError> {
+    let document: GraphResourceFile =
         serde_json::from_slice(contents).map_err(ProjectError::Deserialize)?;
-    if document.schema_version != CURRENT_PROJECT_SCHEMA_VERSION {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "graph file '{}' uses unsupported schema version {}; expected {}",
-            path.display(),
-            document.schema_version,
-            CURRENT_PROJECT_SCHEMA_VERSION
-        )));
-    }
     if document.kind != expected_kind {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph file '{}' kind does not match manifest",
@@ -462,7 +441,7 @@ pub(crate) fn parse_graph_resource_document(
 fn read_graph_document(
     path: &Path,
     expected_kind: GraphResourceKind,
-) -> Result<GraphDocument, ProjectError> {
+) -> Result<GraphResourceFile, ProjectError> {
     let contents = std::fs::read(path)?;
     let mut document = parse_graph_resource_document(&contents, path, expected_kind)?;
     if let Some(name) = graph_name_from_file_path(path) {
@@ -475,7 +454,7 @@ fn read_graph_document_for_resource(
     root: &Path,
     path: &Path,
     expected_kind: GraphResourceKind,
-) -> Result<GraphDocument, ProjectError> {
+) -> Result<GraphResourceFile, ProjectError> {
     let document = read_graph_document(path, expected_kind)?;
     let graph_resources = load_graph_resource_index(root)?;
     let relative_path = path_to_slash_string(
@@ -496,10 +475,10 @@ fn read_graph_document_for_resource(
 }
 
 fn bind_graph_document_scope_by_path(
-    mut document: GraphDocument,
+    mut document: GraphResourceFile,
     kind: GraphResourceKind,
     resource_path: &str,
-) -> GraphDocument {
+) -> GraphResourceFile {
     let scope = scoped_variable_scope(kind, resource_path);
     for variable in document.local_variables.values_mut() {
         variable.scope = scope.clone();
@@ -510,11 +489,8 @@ fn bind_graph_document_scope_by_path(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphFileHeader {
-    schema_version: u32,
     kind: GraphResourceKind,
     name: String,
-    #[serde(default)]
-    revision: yss_project_identity::ResourceRevision,
     function: Option<yss_project_history::FunctionDocument>,
 }
 
@@ -566,14 +542,6 @@ fn read_graph_index_entries(
         let Some(resource) = graph_resources.get_by_path(&relative_path) else {
             continue;
         };
-        if header.schema_version != CURRENT_PROJECT_SCHEMA_VERSION {
-            return Err(ProjectError::InvalidProjectFormat(format!(
-                "graph file '{}' uses unsupported schema version {}; expected {}",
-                path.display(),
-                header.schema_version,
-                CURRENT_PROJECT_SCHEMA_VERSION
-            )));
-        }
         if header.kind != expected_kind {
             return Err(ProjectError::InvalidProjectFormat(format!(
                 "graph file '{}' kind does not match its resource directory",
@@ -600,7 +568,7 @@ fn read_graph_index_entries(
             path: resource.path.as_str().to_string(),
             name,
             graph_type: expected_kind,
-            revision: header.revision,
+            revision: yss_project_identity::ResourceRevision::INITIAL,
             function_revision,
             function_signature,
             function_editor_projection,
@@ -769,7 +737,7 @@ fn find_graph_file_path(
 pub(crate) fn find_graph_document_path(
     root: &Path,
     graph_path: &GraphResourcePath,
-) -> Result<Option<(PathBuf, GraphResourceKind, GraphDocument)>, ProjectError> {
+) -> Result<Option<(PathBuf, GraphResourceKind, GraphResourceFile)>, ProjectError> {
     if let Some(resource) = load_graph_resource_index(root)?.get_by_path(graph_path.as_str()) {
         let path = root.join(resource.path.as_str());
         let document = bind_graph_document_scope_by_path(

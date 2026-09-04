@@ -430,7 +430,7 @@ fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String
     }
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("yssbi-event" | "yssbi-function") => {
-            serde_json::from_slice::<crate::GraphDocument>(contents)
+            serde_json::from_slice::<crate::GraphResourceFile>(contents)
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }

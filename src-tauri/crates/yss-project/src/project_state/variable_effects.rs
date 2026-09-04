@@ -158,7 +158,7 @@ pub(crate) fn validate_variable_effect_document(
             .map(|_| ())
             .map_err(|error| error.to_string())
     } else {
-        serde_json::from_slice::<crate::project_io::GraphDocument>(contents)
+        serde_json::from_slice::<crate::project_io::GraphResourceFile>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string())
     }

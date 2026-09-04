@@ -321,10 +321,10 @@ mod tests {
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
-        ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanGraphRevision,
-        PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
-        PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-        PlanSourceIdentity, ResourceAccess, ResourceKind,
+        ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanProjectSessionId,
+        PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+        PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
+        ResourceKind,
     };
     use crate::state::ExecutionRuntimeState;
     use std::collections::BTreeMap;
@@ -335,7 +335,6 @@ mod tests {
         let version = PlanResourceVersion::from_existing("v1".into());
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
-            PlanGraphRevision::INITIAL,
             PlanRegistryFingerprint::from_bytes([3; 32]),
             BTreeMap::from([(resource, version)]),
             BTreeMap::from([(

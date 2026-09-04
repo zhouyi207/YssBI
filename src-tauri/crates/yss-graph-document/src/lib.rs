@@ -2,7 +2,7 @@ mod identity;
 mod model;
 mod resource_path;
 
-pub use identity::{ConnectionId, GraphRevision, NodeId, PortInstanceId, RevisionExhausted};
+pub use identity::{ConnectionId, NodeId, PortInstanceId};
 pub use model::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     FunctionParameterId, GraphDocument, InputState, JsonValue, LastKnownPortMetadata, NodePosition,

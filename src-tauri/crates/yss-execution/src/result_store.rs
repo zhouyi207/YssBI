@@ -101,7 +101,7 @@ impl Default for ResultStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{PlanGraphId, PlanGraphRevision, PlanOutputRef, PlanPortAddress};
+    use crate::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
     use crate::result::{ActivationId, PinResultEntry};
     use crate::run_registry::RunId;
 
@@ -122,7 +122,6 @@ mod tests {
                 ResultId::from_existing(1),
                 RunId::from_existing(7),
                 ActivationId::from_existing(1),
-                PlanGraphRevision::INITIAL,
                 10,
             ),
             StoredResult::Scalar(1.0),
@@ -133,7 +132,6 @@ mod tests {
                 ResultId::from_existing(2),
                 RunId::from_existing(8),
                 ActivationId::from_existing(2),
-                PlanGraphRevision::from_existing(1),
                 20,
             ),
             StoredResult::Scalar(2.0),

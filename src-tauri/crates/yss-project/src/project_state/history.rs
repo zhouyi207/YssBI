@@ -129,7 +129,7 @@ impl ProjectState {
             .prepare_resource_revision()
             .map_err(|error| ProjectHistoryMutationError::Projection(error.to_string().into()))?;
         let from_revision = function.revision;
-        let mut graph_revisions = self.graph_revisions.write().unwrap();
+        let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         let mut documents = project_documents(&data, &revisions)?;
         let transaction = yss_project_history::ProjectHistoryTransaction::new(
@@ -157,19 +157,14 @@ impl ProjectState {
             .revision;
         let mut next_data = data.clone();
         let mut next_revisions = revisions.clone();
-        let mut next_graph_revisions = graph_revisions.clone();
+        let mut next_graph_resource_revisions = graph_resource_revisions.clone();
         replace_project_documents(&mut next_data, &mut next_revisions, documents)?;
-        next_data
-            .graphs
-            .get_mut(graph_path)
-            .ok_or_else(|| {
-                ProjectHistoryMutationError::History(
-                    format!("Function owner graph '{graph_path}' is not loaded").into(),
-                )
-            })?
-            .document
-            .revision = to_revision.to_graph_revision();
-        next_graph_revisions.insert(graph_path.clone(), to_revision.to_graph_revision());
+        next_data.graphs.get(graph_path).ok_or_else(|| {
+            ProjectHistoryMutationError::History(
+                format!("Function owner graph '{graph_path}' is not loaded").into(),
+            )
+        })?;
+        next_graph_resource_revisions.insert(graph_path.clone(), to_revision);
         let deltas = vec![yss_project_history::ResourceDeltaEvent {
             resource: expected_resource,
             from_revision,
@@ -181,7 +176,7 @@ impl ProjectState {
         let history_status = next_history.status();
         *data = next_data;
         *revisions = next_revisions;
-        *graph_revisions = next_graph_revisions;
+        *graph_resource_revisions = next_graph_resource_revisions;
         *history = next_history;
         let publication_revision = publication.commit_prepared(publication_advance);
         Ok(CommittedResourceMutation {
@@ -250,7 +245,7 @@ impl ProjectState {
                 ));
             }
             let data = self.project_data.read().unwrap().clone();
-            let graph_revisions = self.graph_revisions.read().unwrap().clone();
+            let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
             let variable_revisions = self.variable_revisions.read().unwrap().clone();
             let chart_revisions = self.chart_revisions.read().unwrap().clone();
             let history = self.history.read().unwrap().clone();
@@ -286,7 +281,7 @@ impl ProjectState {
                 transaction,
                 &request.resource,
                 data,
-                graph_revisions,
+                graph_resource_revisions,
                 variable_revisions,
                 chart_revisions,
                 history,
@@ -302,8 +297,8 @@ impl ProjectState {
         undo: bool,
     ) -> Result<bool, ProjectHistoryMutationError> {
         let data = self.project_data.read().unwrap();
-        let graph_revisions = self.graph_revisions.read().unwrap();
-        let known_graphs = graph_revisions.keys().cloned().collect();
+        let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
+        let known_graphs = graph_resource_revisions.keys().cloned().collect();
         let touched = crate::history_hydration::discover_touched_resources(
             transaction,
             undo,
@@ -431,7 +426,7 @@ impl ProjectState {
             ));
         }
         let mut data = self.project_data.write().unwrap();
-        let mut graph_revisions = self.graph_revisions.write().unwrap();
+        let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_mutation_operational()?;
         let mut documents = project_documents(&data, &revisions)?;
@@ -498,20 +493,22 @@ impl ProjectState {
             .collect::<Result<Vec<_>, ProjectHistoryMutationError>>()?;
         let mut next_data = data.clone();
         let mut next_revisions = revisions.clone();
-        let mut next_graph_revisions = graph_revisions.clone();
+        let mut next_graph_resource_revisions = graph_resource_revisions.clone();
         replace_project_documents(&mut next_data, &mut next_revisions, documents)?;
         crate::history_hydration::synchronize_function_owner_revisions(
             &mut next_data,
             &transaction,
         )?;
         for (path, graph) in &next_data.graphs {
-            next_graph_revisions.insert(path.clone(), graph.document.revision);
+            if let Some(function) = &graph.function {
+                next_graph_resource_revisions.insert(path.clone(), function.revision);
+            }
         }
         let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
         let history_status = next_history.status();
         *data = next_data;
         *revisions = next_revisions;
-        *graph_revisions = next_graph_revisions;
+        *graph_resource_revisions = next_graph_resource_revisions;
         *history = next_history;
         let publication_revision = publication.commit_prepared(publication_advance);
         Ok(CommittedResourceMutation {
@@ -543,20 +540,23 @@ impl ProjectState {
             ));
         }
         let mutations = crate::history_hydration::durable_filesystem_mutations(&prepared)?;
-        let graph_revision_updates = prepared
+        let graph_resource_revision_updates = prepared
             .touched_graphs
             .iter()
             .map(|path| {
-                prepared
-                    .after_data
-                    .graphs
+                let retained = prepared
+                    .basis
+                    .expected_graph_resource_revisions
                     .get(path)
-                    .map(|graph| (path.clone(), graph.document.revision))
+                    .copied()
                     .ok_or_else(|| {
                         ProjectHistoryMutationError::History(
-                            format!("prepared graph '{path}' is missing from durable state").into(),
+                            format!("prepared graph '{path}' has no resource revision").into(),
                         )
-                    })
+                    })?;
+                checked_resource_revision(path.as_str(), retained)
+                    .map(|revision| (path.clone(), revision))
+                    .map_err(history_project_error)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let mut deltas = prepared
@@ -682,7 +682,7 @@ impl ProjectState {
             drop(identity);
             self.ensure_mutation_operational()?;
             let mut data = self.project_data.write().unwrap();
-            let mut graph_revisions = self.graph_revisions.write().unwrap();
+            let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
             let mut variable_revisions = self.variable_revisions.write().unwrap();
             let mut chart_revisions = self.chart_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
@@ -711,8 +711,8 @@ impl ProjectState {
                     ));
                 }
             }
-            for (path, expected) in &prepared.basis.expected_graph_revisions {
-                if graph_revisions.get(path).copied() != Some(*expected) {
+            for (path, expected) in &prepared.basis.expected_graph_resource_revisions {
+                if graph_resource_revisions.get(path).copied() != Some(*expected) {
                     return Err(ProjectHistoryMutationError::History(
                         format!("owning Graph '{path}' changed before durable History commit")
                             .into(),
@@ -723,8 +723,7 @@ impl ProjectState {
                 let actual = match resource {
                     ResourceKey::Graph(path) => GraphResourcePath::new(path.as_str())
                         .ok()
-                        .and_then(|path| graph_revisions.get(&path).copied())
-                        .map(ResourceRevision::from_graph_revision),
+                        .and_then(|path| graph_resource_revisions.get(&path).copied()),
                     ResourceKey::Function(key) => GraphResourcePath::new(key.0.as_ref())
                         .ok()
                         .and_then(|path| {
@@ -800,8 +799,8 @@ impl ProjectState {
                 .prepare_resource_revision()
                 .map_err(history_project_error)?;
             *data = prepared.loaded_after_data;
-            for (path, revision) in graph_revision_updates {
-                graph_revisions.insert(path, revision);
+            for (path, revision) in graph_resource_revision_updates {
+                graph_resource_revisions.insert(path, revision);
             }
             *variable_revisions = prepared.after_variable_revisions;
             *chart_revisions = prepared.after_chart_revisions;
@@ -915,10 +914,7 @@ pub(super) fn try_project_document_revision(
     resource: &ResourceKey,
 ) -> Option<yss_project_identity::ResourceRevision> {
     match resource {
-        ResourceKey::Graph(path) => documents
-            .graphs
-            .get(path)
-            .map(|document| ResourceRevision::from_graph_revision(document.revision)),
+        ResourceKey::Graph(_) => None,
         ResourceKey::Function(key) => documents
             .functions
             .get(key)

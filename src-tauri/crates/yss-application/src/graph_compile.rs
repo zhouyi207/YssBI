@@ -12,9 +12,7 @@ use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use yss_execution::plan::{
-    PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
-};
+use yss_execution::plan::{PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_runtime::GraphDraftCompilationError;
@@ -94,7 +92,6 @@ pub fn compile_graph_draft(
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        PlanGraphRevision::from_existing(document.revision.get()),
         PlanRegistryFingerprint::from_bytes(registry_fingerprint),
         Default::default(),
         Default::default(),

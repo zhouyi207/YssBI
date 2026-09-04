@@ -62,21 +62,6 @@ plan_id!(PlanResourceVersion);
 plan_id!(PlanOperationKind);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PlanGraphRevision(u64);
-
-impl PlanGraphRevision {
-    pub const INITIAL: Self = Self(0);
-
-    pub const fn from_existing(value: u64) -> Self {
-        Self(value)
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlanCompileId(u64);
 
 impl PlanCompileId {

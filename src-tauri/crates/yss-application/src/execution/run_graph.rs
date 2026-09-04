@@ -330,11 +330,7 @@ where
     {
         return Err(ExecutionApplicationError::CompiledDraftUnavailable);
     }
-    let basis = plan_basis(
-        &captured,
-        prepared_project.authority().graph_revision(),
-        prepared_project.resources().grants(),
-    )?;
+    let basis = plan_basis(&captured, prepared_project.resources().grants())?;
     let graph_package = compiled_draft.package().clone();
     let package = execution_package_from_graph(graph_package, basis)
         .map_err(ExecutionApplicationError::GraphPackage)?;
@@ -678,7 +674,6 @@ fn collect_resource_requirements(
 
 fn plan_basis(
     captured: &ApplicationSession,
-    graph_revision: yss_graph_document::GraphRevision,
     grants: &[ProjectResourceGrant],
 ) -> Result<yss_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
     let mut versions = BTreeMap::new();
@@ -714,7 +709,6 @@ fn plan_basis(
     }
     Ok(yss_execution::plan::PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        yss_execution::plan::PlanGraphRevision::from_existing(graph_revision.get()),
         PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
         versions,
         observations,

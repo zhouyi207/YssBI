@@ -69,13 +69,4 @@ mod tests {
             u64::MAX
         );
     }
-
-    #[test]
-    fn graph_revision_conversion_remains_explicit() {
-        let graph_revision = yss_graph_document::GraphRevision::new(9);
-        let resource_revision = ResourceRevision::from_graph_revision(graph_revision);
-
-        assert_eq!(resource_revision.get(), 9);
-        assert_eq!(resource_revision.to_graph_revision(), graph_revision);
-    }
 }

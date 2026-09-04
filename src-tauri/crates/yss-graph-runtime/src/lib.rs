@@ -16,7 +16,7 @@ use yss_graph_analysis_contract::{
 };
 use yss_graph_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_graph_compiler::{GraphCompilationInput, GraphCompileError, GraphCompiledPackage, compile};
-use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress};
+use yss_graph_document::{GraphDocument, GraphResourcePath, NodeId, PortAddress};
 use yss_graph_document_edit::{GraphDocumentPatch, validate_graph_document};
 use yss_graph_editor::{
     CatalogCompatibilityError, CatalogMutationValidationSnapshot, ClipboardSubgraph,
@@ -249,16 +249,11 @@ impl GraphRuntimeState {
         &self,
         document: &GraphDocument,
         semantics: &GraphSemanticSnapshot,
-        expected_revision: GraphRevision,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Result<GraphCompiledPackage, GraphCompileError> {
         compile(GraphCompilationInput::new(
-            document,
-            semantics,
-            expected_revision,
-            graph,
-            compile_id,
+            document, semantics, graph, compile_id,
         ))
     }
 
@@ -267,7 +262,7 @@ impl GraphRuntimeState {
         document: &GraphDocument,
         graph: GraphResourcePath,
         resource_catalog: &ResourceCatalogSnapshot,
-        basis: &CompilationBasis<GraphRevision>,
+        basis: &CompilationBasis,
     ) -> Result<GraphDraftCompilation, GraphDraftCompilationError> {
         let source_hash = graph_draft_source_hash(
             document,
@@ -296,13 +291,7 @@ impl GraphRuntimeState {
                 .expect("SHA-256 prefix has exactly eight bytes"),
         ));
         let package = self
-            .compile_graph(
-                document,
-                semantics,
-                document.revision,
-                graph.clone(),
-                compile_id,
-            )
+            .compile_graph(document, semantics, graph.clone(), compile_id)
             .map_err(GraphDraftCompilationError::Compile)?;
         self.compiled_drafts
             .lock()
@@ -376,7 +365,7 @@ impl GraphRuntimeState {
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
-        basis: &CompilationBasis<yss_graph_document::GraphRevision>,
+        basis: &CompilationBasis,
         resource_catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
         locale: &str,
@@ -389,7 +378,7 @@ impl GraphRuntimeState {
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
-        basis: &CompilationBasis<GraphRevision>,
+        basis: &CompilationBasis,
         resource_catalog: &ResourceCatalogSnapshot,
     ) -> GraphAnalysis {
         let mut cache = self
@@ -528,13 +517,15 @@ fn graph_draft_source_hash(
         .map(|connection| (&connection.output, &connection.input, &connection.order))
         .collect::<Vec<_>>();
     connections.sort();
+    let port_bindings = document.port_bindings.iter().collect::<Vec<_>>();
+    let input_states = document.input_states.iter().collect::<Vec<_>>();
     yss_canonical_hash::hash_canonical(
         "yssbi.graph-draft-compilation.v1",
         &(
             nodes,
-            &document.port_bindings,
+            port_bindings,
             connections,
-            &document.input_states,
+            input_states,
             registry_fingerprint,
             resource_catalog_fingerprint,
         ),
@@ -633,7 +624,7 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
     use yss_graph_catalog::build_builtin_node_system;
-    use yss_graph_document::{DocumentNode, GraphRevision, NodePosition, ParameterValues};
+    use yss_graph_document::{DocumentNode, NodePosition, ParameterValues};
     use yss_graph_registry::RegistryFingerprint;
 
     fn components() -> GraphRuntimeComponents {
@@ -653,12 +644,8 @@ mod tests {
         )
     }
 
-    fn basis(
-        runtime: &GraphRuntimeState,
-        document: &GraphDocument,
-    ) -> CompilationBasis<GraphRevision> {
+    fn basis(runtime: &GraphRuntimeState) -> CompilationBasis {
         CompilationBasis {
-            graph_revision: document.revision,
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
@@ -727,7 +714,6 @@ mod tests {
             },
         );
         let basis = CompilationBasis {
-            graph_revision: GraphRevision::INITIAL,
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
@@ -831,7 +817,6 @@ mod tests {
             ResourceCatalogFingerprint::from_bytes([7; 32]),
         );
         let basis = CompilationBasis {
-            graph_revision: GraphRevision::INITIAL,
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
@@ -1018,7 +1003,7 @@ mod tests {
             },
         );
         let resources = empty_resource_catalog();
-        let compile_basis = basis(&runtime, &document);
+        let compile_basis = basis(&runtime);
 
         let first = runtime
             .compile_draft(&document, graph.clone(), &resources, &compile_basis)

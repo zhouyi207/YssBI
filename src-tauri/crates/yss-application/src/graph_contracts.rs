@@ -22,7 +22,7 @@ use yss_graph_compiler::{
     GraphCompiledPackage, GraphInputSource, GraphObservationIntent, GraphParameterScalar,
     GraphParameterValue, GraphSourceIdentity,
 };
-use yss_graph_document::{GraphResourcePath, GraphRevision};
+use yss_graph_document::GraphResourcePath;
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
     ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
@@ -163,9 +163,8 @@ fn catalog_fingerprint(
 /// Application: neither Graph nor Execution imports the other's package model.
 pub fn graph_compilation_basis(
     basis: &yss_execution::plan::PlanCompilationBasis,
-) -> CompilationBasis<GraphRevision> {
+) -> CompilationBasis {
     CompilationBasis {
-        graph_revision: GraphRevision::new(basis.graph_revision().get()),
         registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
             basis.registry_fingerprint().as_bytes(),
         ),

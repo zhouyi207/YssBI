@@ -6,8 +6,8 @@ struct ActivationGarbage {
     _lifecycle: yss_resource_lifecycle::ResourceLifecycleState,
     _data: ProjectData,
     _store: ProjectStore,
-    _graph_revisions:
-        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
+    _graph_resource_revisions:
+        std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
     _variable_revisions:
         std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     _chart_revisions:
@@ -92,7 +92,7 @@ impl ProjectState {
             session_root: project_root,
             data,
             store,
-            graph_revisions,
+            graph_resource_revisions,
             variable_revisions,
             chart_revisions,
             authority_basis,
@@ -142,8 +142,8 @@ impl ProjectState {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
-            let (mut current_graph_revisions, graph_revisions_recovered) =
-                match self.graph_revisions.write() {
+            let (mut current_graph_resource_revisions, graph_resource_revisions_recovered) =
+                match self.graph_resource_revisions.write() {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
@@ -196,7 +196,10 @@ impl ProjectState {
                     &mut *current_database_authority_revisions,
                     database_authority_revisions,
                 ),
-                _graph_revisions: std::mem::replace(&mut *current_graph_revisions, graph_revisions),
+                _graph_resource_revisions: std::mem::replace(
+                    &mut *current_graph_resource_revisions,
+                    graph_resource_revisions,
+                ),
                 _variable_revisions: std::mem::replace(
                     &mut *current_variable_revisions,
                     variable_revisions,
@@ -232,8 +235,8 @@ impl ProjectState {
             if database_authority_revisions_recovered {
                 self.database_authority_revisions.clear_poison();
             }
-            if graph_revisions_recovered {
-                self.graph_revisions.clear_poison();
+            if graph_resource_revisions_recovered {
+                self.graph_resource_revisions.clear_poison();
             }
             if variable_revisions_recovered {
                 self.variable_revisions.clear_poison();

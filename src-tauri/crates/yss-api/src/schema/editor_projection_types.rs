@@ -57,7 +57,6 @@ where
 pub struct EditorGraphProjectionDto {
     pub basis: ProjectionBasis,
     pub graph_path: Box<str>,
-    pub source_revision: u64,
     pub nodes: Vec<EditorNodeProjectionDto>,
     pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,

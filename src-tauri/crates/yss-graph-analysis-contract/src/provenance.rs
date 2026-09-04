@@ -1,6 +1,6 @@
 use super::{CompilationBasis, CompileId};
 use serde::{Deserialize, Serialize};
-use yss_graph_document::{GraphResourcePath, GraphRevision};
+use yss_graph_document::GraphResourcePath;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -26,6 +26,6 @@ impl AsRef<str> for GraphSessionId {
 pub struct CompileProvenance {
     pub project_session_id: GraphSessionId,
     pub graph_path: GraphResourcePath,
-    pub basis: CompilationBasis<GraphRevision>,
+    pub basis: CompilationBasis,
     pub compile_id: CompileId,
 }

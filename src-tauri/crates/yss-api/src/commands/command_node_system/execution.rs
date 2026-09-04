@@ -118,7 +118,6 @@ fn project_preparation_command_code(
     match error {
         ProjectExecutionPreparationError::Unavailable
         | ProjectExecutionPreparationError::ProjectIdentityMismatch { .. }
-        | ProjectExecutionPreparationError::GraphRevisionUnavailable { .. }
         | ProjectExecutionPreparationError::ResourceRevisionUnavailable { .. } => {
             "stale_project_lifecycle"
         }

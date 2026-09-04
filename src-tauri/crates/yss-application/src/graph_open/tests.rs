@@ -184,7 +184,6 @@ fn materialization_failure_preserves_loaded_residency_and_skips_projection() {
     ));
     let data = session.session.project().get_data().unwrap();
     assert!(data.graphs.contains_key(&path));
-    assert_eq!(data.graphs[&path].document.revision, GraphRevision::INITIAL);
     assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
 }
 

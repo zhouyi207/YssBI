@@ -69,6 +69,8 @@ struct ProjectIndexAuthorityCapture {
     authority_generation: u64,
     history: yss_project_history::HistoryStatusDto,
     data: ProjectData,
+    graph_resource_revisions:
+        std::collections::HashMap<yss_graph_document::GraphResourcePath, ResourceRevision>,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
         crate::project_state::VariableRevisionEntry,
@@ -89,6 +91,7 @@ fn read_project_index_with(
     let capture = capture_project_index_authority(state, &session)?;
     overlay_authoritative_project_index(
         &capture.data,
+        &capture.graph_resource_revisions,
         &capture.variable_revisions,
         &capture.database_revisions,
         &mut index,
@@ -120,6 +123,7 @@ fn capture_project_index_authority_with(
         ));
     }
     let data = state.project_data.read().unwrap().clone();
+    let graph_resource_revisions = state.graph_resource_revisions.read().unwrap().clone();
     after_declaration_capture();
     let variable_revisions = state.variable_revisions.read().unwrap().clone();
     let database_revisions = state.database_authority_revisions.read().unwrap().clone();
@@ -147,6 +151,7 @@ fn capture_project_index_authority_with(
         authority_generation: publication.authority_generation(),
         history: state.history.read().unwrap().status(),
         data,
+        graph_resource_revisions,
         variable_revisions,
         database_revisions,
     })
@@ -190,6 +195,10 @@ fn variable_owner_graph_path(
 
 fn overlay_authoritative_project_index(
     data: &ProjectData,
+    graph_resource_revisions: &std::collections::HashMap<
+        yss_graph_document::GraphResourcePath,
+        ResourceRevision,
+    >,
     variable_revisions: &std::collections::HashMap<
         yss_variable_contract::VariableId,
         crate::project_state::VariableRevisionEntry,
@@ -281,7 +290,10 @@ fn overlay_authoritative_project_index(
         let Some(resource) = data.graphs.get(&path) else {
             continue;
         };
-        entry.revision = ResourceRevision::from_graph_revision(resource.document.revision);
+        entry.revision = graph_resource_revisions
+            .get(&path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
         if let Some(function) = resource.function.as_ref() {
             entry.function_revision = Some(function.revision);
             entry.function_signature = Some(function.signature.clone());

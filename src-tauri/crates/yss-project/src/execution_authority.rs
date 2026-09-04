@@ -10,7 +10,7 @@ use thiserror::Error;
 use crate::{MutationPublication, ProjectSession, ProjectState};
 use yss_project_filesystem::NormalizedProjectRoot;
 
-use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::ProjectData;
 use yss_variable_contract::{VariableId, VariableInstance};
@@ -107,10 +107,6 @@ impl ProjectResourceVersion {
     }
 
     pub const fn from_revision(revision: ResourceRevision) -> Self {
-        Self(revision.get())
-    }
-
-    pub const fn from_graph_revision(revision: GraphRevision) -> Self {
         Self(revision.get())
     }
 
@@ -264,7 +260,6 @@ impl ProjectExecutionResourceSnapshot {
 pub struct ProjectExecutionAuthority {
     session: ProjectSession,
     graph_path: GraphResourcePath,
-    graph_revision: GraphRevision,
     document: Arc<GraphDocument>,
     authority_generation: u64,
     resource_grants: Arc<[ProjectResourceGrant]>,
@@ -277,10 +272,6 @@ impl ProjectExecutionAuthority {
 
     pub fn graph_path(&self) -> &GraphResourcePath {
         &self.graph_path
-    }
-
-    pub fn graph_revision(&self) -> GraphRevision {
-        self.graph_revision
     }
 
     pub fn document(&self) -> &GraphDocument {
@@ -428,8 +419,6 @@ pub enum ProjectExecutionPreparationError {
     },
     #[error("requested graph is unavailable: {graph}")]
     GraphUnavailable { graph: GraphResourcePath },
-    #[error("requested graph has no matching revision authority: {graph}")]
-    GraphRevisionUnavailable { graph: GraphResourcePath },
     #[error("requested graph is invalid: {graph}")]
     InvalidGraph { graph: GraphResourcePath },
     #[error("resource requirement is duplicated: {resource}")]
@@ -461,13 +450,6 @@ pub enum ProjectEffectCommitError {
     StaleProjectSession,
     #[error("project graph document changed before effect commit")]
     GraphChanged,
-    #[error("project graph revision changed before effect commit")]
-    GraphRevisionChanged {
-        expected: GraphRevision,
-        current: GraphRevision,
-    },
-    #[error("project graph revision authority changed before effect commit")]
-    GraphRevisionAuthorityChanged,
     #[error("project effect dependency is unavailable")]
     ResourceUnavailable { resource: ProjectResourceId },
     #[error("project effect dependency has no revision authority")]
@@ -595,7 +577,7 @@ fn validate_requested_kind(
 fn resource_grant_from_requirement(
     requirement: &ProjectResourceRequirement,
     data: &ProjectData,
-    graph_revisions: &HashMap<GraphResourcePath, GraphRevision>,
+    graph_resource_revisions: &HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: &HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     database_revisions: &HashMap<String, u64>,
 ) -> Result<ProjectResourceGrant, ResourceResolutionFailure> {
@@ -620,10 +602,10 @@ fn resource_grant_from_requirement(
             }
         }
         ResourceIdentity::File(path) => {
-            let version = graph_revisions
+            let version = graph_resource_revisions
                 .get(&path)
                 .copied()
-                .map(ProjectResourceVersion::from_graph_revision);
+                .map(ProjectResourceVersion::from_revision);
             if data.graphs.contains_key(&path) {
                 let Some(version) = version else {
                     return Err(ResourceResolutionFailure::RevisionUnavailable);
@@ -878,7 +860,7 @@ struct CurrentAuthorityContents<'a> {
     project_path: &'a Option<String>,
     identity: &'a crate::project_state::ProjectAuthorityExpectation,
     data: &'a ProjectData,
-    graph_revisions: &'a HashMap<GraphResourcePath, GraphRevision>,
+    graph_resource_revisions: &'a HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: &'a HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     database_revisions: &'a HashMap<String, u64>,
 }
@@ -892,7 +874,7 @@ fn validate_current_authority_contents(
         project_path,
         identity,
         data,
-        graph_revisions,
+        graph_resource_revisions,
         variable_revisions,
         database_revisions,
     } = current;
@@ -911,17 +893,8 @@ fn validate_current_authority_contents(
         .graphs
         .get(&authority.graph_path)
         .ok_or(ProjectEffectCommitError::StaleProjectSession)?;
-    if graph.document.revision != authority.graph_revision {
-        return Err(ProjectEffectCommitError::GraphRevisionChanged {
-            expected: authority.graph_revision,
-            current: graph.document.revision,
-        });
-    }
     if graph.document != *authority.document {
         return Err(ProjectEffectCommitError::GraphChanged);
-    }
-    if graph_revisions.get(&authority.graph_path) != Some(&authority.graph_revision) {
-        return Err(ProjectEffectCommitError::GraphRevisionAuthorityChanged);
     }
     for expected in authority.resource_grants.iter() {
         let requirement = ProjectResourceRequirement::new(
@@ -933,7 +906,7 @@ fn validate_current_authority_contents(
         let current = resource_grant_from_requirement(
             &requirement,
             data,
-            graph_revisions,
+            graph_resource_revisions,
             variable_revisions,
             database_revisions,
         )
@@ -1017,16 +990,10 @@ impl ProjectState {
                 graph: request.graph_path.clone(),
             }
         })?;
-        let graph_revision = graph.document.revision;
-        let graph_revisions = self
-            .graph_revisions
+        let graph_resource_revisions = self
+            .graph_resource_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if graph_revisions.get(&request.graph_path) != Some(&graph_revision) {
-            return Err(ProjectExecutionPreparationError::GraphRevisionUnavailable {
-                graph: request.graph_path.clone(),
-            });
-        }
         let variable_revisions = self
             .variable_revisions
             .read()
@@ -1050,7 +1017,7 @@ impl ProjectState {
                 resource_grant_from_requirement(
                     requirement,
                     &data,
-                    &graph_revisions,
+                    &graph_resource_revisions,
                     &variable_revisions,
                     &database_revisions,
                 )
@@ -1065,7 +1032,6 @@ impl ProjectState {
         let authority = ProjectExecutionAuthority {
             session,
             graph_path: request.graph_path,
-            graph_revision,
             document: Arc::clone(&document),
             authority_generation: publication.authority_generation(),
             resource_grants: Arc::clone(&resource_grants),
@@ -1110,8 +1076,8 @@ impl ProjectState {
             .project_data
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let graph_revisions = self
-            .graph_revisions
+        let graph_resource_revisions = self
+            .graph_resource_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let variable_revisions = self
@@ -1129,7 +1095,7 @@ impl ProjectState {
                 project_path: &project_path,
                 identity: &identity,
                 data: &data,
-                graph_revisions: &graph_revisions,
+                graph_resource_revisions: &graph_resource_revisions,
                 variable_revisions: &variable_revisions,
                 database_revisions: &database_revisions,
             },
@@ -1176,8 +1142,8 @@ impl ProjectState {
             .project_data
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let graph_revisions = self
-            .graph_revisions
+        let graph_resource_revisions = self
+            .graph_resource_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut variable_revisions = self
@@ -1197,7 +1163,7 @@ impl ProjectState {
                 project_path: &project_path,
                 identity: &identity,
                 data: &data,
-                graph_revisions: &graph_revisions,
+                graph_resource_revisions: &graph_resource_revisions,
                 variable_revisions: &variable_revisions,
                 database_revisions: &database_revisions,
             },

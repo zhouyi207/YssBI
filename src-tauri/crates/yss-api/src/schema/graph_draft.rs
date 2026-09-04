@@ -13,25 +13,10 @@ pub struct GraphEditorSessionDto {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GraphDraftAcceptedDto {
-    pub project_instance_id: String,
-    pub graph_session_id: String,
-    pub graph_path: String,
-    pub accepted_revision: u64,
-    pub request_generation: u64,
-    pub operation_id: yss_project_identity::OperationId,
+pub struct GraphDraftTransformDto {
+    pub changed: bool,
     pub document: yss_graph_document::GraphDocument,
-    pub patch: yss_graph_document_edit::GraphDocumentPatch,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GraphProjectionRequestDto {
-    pub graph_session_id: String,
-    pub graph_path: String,
-    pub accepted_revision: u64,
-    pub request_generation: u64,
-    pub operation_id: yss_project_identity::OperationId,
+    pub projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,6 +24,7 @@ pub struct GraphProjectionRequestDto {
 pub struct GraphDraftSaveDto {
     pub project_instance_id: String,
     pub operation_id: yss_project_identity::OperationId,
+    pub resource_revision: yss_project_identity::ResourceRevision,
     pub document: yss_graph_document::GraphDocument,
     pub projection_replacement: GraphProjectionReplacementDto,
     pub history: yss_project_history::HistoryStatusDto,
@@ -79,24 +65,15 @@ pub(crate) fn graph_editor_session_to_transport(
     }
 }
 
-pub(crate) fn graph_draft_accepted_to_transport(
-    update: &yss_application::resource_mutation::GraphDraftAccepted,
-    project_instance_id: &yss_project_identity::ProjectInstanceId,
-    graph_session_id: String,
-    graph_path: &yss_graph_document::GraphResourcePath,
-    accepted_revision: u64,
-    request_generation: u64,
-    operation_id: yss_project_identity::OperationId,
-) -> GraphDraftAcceptedDto {
-    GraphDraftAcceptedDto {
-        project_instance_id: project_instance_id.to_string(),
-        graph_session_id,
-        graph_path: graph_path.as_str().to_owned(),
-        accepted_revision,
-        request_generation,
-        operation_id,
+pub(crate) fn graph_draft_transform_to_transport(
+    update: &yss_application::resource_mutation::GraphDraftTransform,
+) -> GraphDraftTransformDto {
+    GraphDraftTransformDto {
+        changed: update.changed,
         document: update.document.clone(),
-        patch: update.patch.clone(),
+        projection: crate::schema::editor_projection::map_editor_projection(
+            &update.projection_replacement.projection,
+        ),
     }
 }
 
@@ -106,6 +83,7 @@ pub(crate) fn graph_draft_save_to_transport(
     GraphDraftSaveDto {
         project_instance_id: saved.project_instance_id.to_string(),
         operation_id: saved.operation_id,
+        resource_revision: saved.resource_revision,
         document: saved.document.clone(),
         projection_replacement: graph_projection_replacement_to_transport(
             &saved.projection_replacement,

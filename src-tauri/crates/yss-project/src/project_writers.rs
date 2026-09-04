@@ -1,4 +1,4 @@
-use crate::{GraphDocument, ProjectSession, ProjectState, ProjectTransactionContext};
+use crate::{GraphResourceFile, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
@@ -278,6 +278,7 @@ fn chart_resource_delta(
 struct WriterSnapshot {
     session: ProjectSession,
     data: ProjectData,
+    graph_resource_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
         crate::project_state::VariableRevisionEntry,
@@ -434,9 +435,11 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 
 fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
     match path.extension().and_then(|extension| extension.to_str()) {
-        Some("yssbi-event" | "yssbi-function") => serde_json::from_slice::<GraphDocument>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
+        Some("yssbi-event" | "yssbi-function") => {
+            serde_json::from_slice::<GraphResourceFile>(contents)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
         Some("yssbi-vars") => serde_json::from_slice::<crate::GlobalVariablesDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
@@ -473,10 +476,12 @@ impl ProjectState {
             });
         }
         let data = self.project_data.read().unwrap().clone();
+        let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
         let variable_revisions = self.variable_revisions.read().unwrap().clone();
         let snapshot = WriterSnapshot {
             session,
             data,
+            graph_resource_revisions,
             variable_revisions,
             authority_generation: publication.authority_generation(),
         };
@@ -499,13 +504,13 @@ impl ProjectState {
             });
         }
         let data = self.project_data.read().unwrap();
-        let graph_revisions = self.graph_revisions.read().unwrap();
+        let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
         let variable_revisions = self.variable_revisions.read().unwrap();
         let chart_revisions = self.chart_revisions.read().unwrap();
         super::project_state::validate_context_revisions(
             context,
             &data,
-            &graph_revisions,
+            &graph_resource_revisions,
             &variable_revisions,
             &chart_revisions,
         )

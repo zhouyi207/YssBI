@@ -112,16 +112,6 @@ impl ProjectRevision {
     }
 }
 
-impl ResourceRevision {
-    pub const fn from_graph_revision(revision: yss_graph_document::GraphRevision) -> Self {
-        Self::new(revision.get())
-    }
-
-    pub const fn to_graph_revision(self) -> yss_graph_document::GraphRevision {
-        yss_graph_document::GraphRevision::new(self.get())
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RevisionExhausted {
     pub retained: u64,

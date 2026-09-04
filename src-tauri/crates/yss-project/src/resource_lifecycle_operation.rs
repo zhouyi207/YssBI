@@ -80,13 +80,7 @@ mod tests {
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
 
-        let mut project_b = project_a;
-        project_b
-            .graphs
-            .get_mut(&graph_path)
-            .unwrap()
-            .document
-            .revision = yss_graph_document::GraphRevision::new(42);
+        let project_b = project_a;
         let replacement_state = state.clone();
         state.set_graph_load_after_read_test_hook(Arc::new(move || {
             replacement_state.activate_project_fixture("project-b".into(), project_b.clone());
@@ -100,13 +94,6 @@ mod tests {
             error,
             ProjectFilesystemError::StaleProjectLifecycle { .. }
         ));
-        assert_eq!(
-            state.get_data().unwrap().graphs[&graph_path]
-                .document
-                .revision
-                .get(),
-            42
-        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }

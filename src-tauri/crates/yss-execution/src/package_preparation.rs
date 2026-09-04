@@ -251,15 +251,14 @@ mod tests {
     use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan,
         CompiledParameterBundleBuilder, ExecutionPlan, FunctionPlanAbi, PlanCompilationBasis,
-        PlanCompileId, PlanGraphRevision, PlanProjectSessionId, PlanProvenance,
-        PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+        PlanCompileId, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
+        PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
     };
     use std::collections::BTreeMap;
 
     fn package() -> CompiledExecutionPackage {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
-            PlanGraphRevision::INITIAL,
             PlanRegistryFingerprint::from_bytes([1; 32]),
             BTreeMap::new(),
             BTreeMap::new(),

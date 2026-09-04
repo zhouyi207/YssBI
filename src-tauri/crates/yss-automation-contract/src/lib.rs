@@ -585,7 +585,6 @@ pub struct GraphConnectionInspection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphInspection {
     pub graph_path: String,
-    pub graph_revision: u64,
     pub nodes: Vec<GraphNodeInspection>,
     pub connections: Vec<GraphConnectionInspection>,
 }

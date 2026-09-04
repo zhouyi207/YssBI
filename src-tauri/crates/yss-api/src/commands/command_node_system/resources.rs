@@ -200,7 +200,7 @@ fn emit_application_resource_result(
 fn map_resource_mutation_error(
     error: yss_application::resource_mutation::ResourceMutationApplicationError,
 ) -> CommandError {
-    super::common::resource_mutation_to_command_error(error, "graph_revision_conflict")
+    super::common::resource_mutation_to_command_error(error, "resource_revision_conflict")
 }
 
 fn map_graph_draft_save_error(

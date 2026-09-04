@@ -40,17 +40,13 @@ impl ProjectState {
             })?;
             expected.insert(
                 graph_key(&path),
-                ResourceRevision::from_graph_revision(resource.document.revision),
+                snapshot
+                    .graph_resource_revisions
+                    .get(&path)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL),
             );
             if let Some(function) = &resource.function {
-                if function.revision
-                    != ResourceRevision::from_graph_revision(resource.document.revision)
-                {
-                    return Err(prepare_error(format!(
-                        "function '{}' signature and graph revisions differ",
-                        path
-                    )));
-                }
                 expected.insert(function_key(&path), function.revision);
             }
             let (relative_path, contents) =
@@ -100,7 +96,7 @@ impl ProjectState {
             .graphs
             .get(graph_path)
             .ok_or_else(|| prepare_error(format!("graph '{}' is not loaded", graph_path)))?;
-        if resource.document.revision != expected_revision.to_graph_revision() {
+        if snapshot.graph_resource_revisions.get(graph_path).copied() != Some(expected_revision) {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });

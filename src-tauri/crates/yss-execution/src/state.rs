@@ -1102,7 +1102,6 @@ impl ExecutionRuntimeState {
             return result;
         }
 
-        let graph_revision = plan.package().provenance().basis().graph_revision();
         let mut results = Vec::with_capacity(output.results.len());
         let mut observation_intents = Vec::new();
         let mut result_ids_by_output = BTreeMap::new();
@@ -1122,7 +1121,6 @@ impl ExecutionRuntimeState {
                     result_id,
                     run_id,
                     ActivationId::from_existing(result_id.get()),
-                    graph_revision,
                     created_at_ms,
                 ),
             );
@@ -1335,8 +1333,8 @@ mod tests {
     use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
         CompiledParameterHandle, ExecutionPlan, PlanCompilationBasis, PlanCompileId,
-        PlanExecutionDemand, PlanGraphId, PlanGraphRevision, PlanInputBinding, PlanInputSource,
-        PlanOperation, PlanOperationKind, PlanOutputBinding, PlanOutputRef, PlanParameterPayload,
+        PlanExecutionDemand, PlanGraphId, PlanInputBinding, PlanInputSource, PlanOperation,
+        PlanOperationKind, PlanOutputBinding, PlanOutputRef, PlanParameterPayload,
         PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue, PlanPortAddress,
         PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
         PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
@@ -1353,7 +1351,6 @@ mod tests {
         let version = PlanResourceVersion::from_existing("v1".into());
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
-            PlanGraphRevision::INITIAL,
             PlanRegistryFingerprint::from_bytes([4; 32]),
             BTreeMap::from([(resource.clone(), version.clone())]),
             BTreeMap::from([(resource, PlanResourceObservedState::Present(version))]),
@@ -1412,7 +1409,6 @@ mod tests {
     ) -> PreparedExecutionPlan {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
-            PlanGraphRevision::INITIAL,
             PlanRegistryFingerprint::from_bytes([4; 32]),
             BTreeMap::new(),
             BTreeMap::new(),

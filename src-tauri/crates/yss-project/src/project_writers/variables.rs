@@ -304,14 +304,14 @@ impl ProjectState {
             });
         }
         let mut data = self.project_data.write().unwrap();
-        let graph_revisions = self.graph_revisions.read().unwrap();
+        let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
         let chart_revisions = self.chart_revisions.read().unwrap();
         let mut history = self.history.write().unwrap();
         crate::project_state::validate_context_revisions(
             context,
             &data,
-            &graph_revisions,
+            &graph_resource_revisions,
             &variable_revisions,
             &chart_revisions,
         )?;

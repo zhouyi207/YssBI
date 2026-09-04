@@ -19,10 +19,7 @@ pub(super) fn variable_scope_references_path(
 pub(crate) fn validate_context_revisions(
     context: &ProjectTransactionContext,
     data: &ProjectData,
-    graph_revisions: &std::collections::HashMap<
-        GraphResourcePath,
-        yss_graph_document::GraphRevision,
-    >,
+    graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: &std::collections::HashMap<
         yss_variable_contract::VariableId,
         VariableRevisionEntry,
@@ -42,16 +39,9 @@ pub(crate) fn validate_context_revisions(
             ResourceKey::Graph(path) => {
                 GraphResourcePath::new(path.as_str()).ok().and_then(|path| {
                     data.graphs
-                        .get(&path)
-                        .map(|resource| {
-                            ResourceRevision::from_graph_revision(resource.document.revision)
-                        })
-                        .or_else(|| {
-                            graph_revisions
-                                .get(&path)
-                                .copied()
-                                .map(ResourceRevision::from_graph_revision)
-                        })
+                        .contains_key(&path)
+                        .then(|| graph_resource_revisions.get(&path).copied())
+                        .flatten()
                 })
             }
             ResourceKey::Function(path) => GraphResourcePath::new(path.0.as_ref())
@@ -146,42 +136,34 @@ pub(crate) fn checked_resource_revision(
         })
 }
 
-pub(in crate::project_state) fn checked_graph_revision(
-    resource: &str,
-    retained: yss_graph_document::GraphRevision,
-) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
-    retained
-        .checked_next()
-        .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
-            resource: resource.into(),
-            retained: error.retained,
-        })
-}
-
 pub(super) fn authoritative_function_revision(
     path: &GraphResourcePath,
-    incoming: yss_graph_document::GraphRevision,
-    retained: Option<yss_graph_document::GraphRevision>,
-) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
+    incoming: ResourceRevision,
+    retained: Option<ResourceRevision>,
+) -> Result<ResourceRevision, ProjectFilesystemError> {
     let Some(retained) = retained else {
         return Ok(incoming);
     };
-    let next = checked_graph_revision(path.as_str(), retained)?;
+    let next = checked_resource_revision(path.as_str(), retained)?;
     Ok(std::cmp::max(incoming, next))
 }
 
 pub(crate) fn normalize_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
-    retained: Option<yss_graph_document::GraphRevision>,
-) -> Result<yss_graph_document::GraphRevision, ProjectFilesystemError> {
+    retained: Option<ResourceRevision>,
+) -> Result<ResourceRevision, ProjectFilesystemError> {
     if resource.kind != yss_graph_document::GraphResourceKind::Function {
-        return Ok(resource.document.revision);
+        return Ok(retained.unwrap_or(ResourceRevision::INITIAL));
     }
-    let revision = authoritative_function_revision(path, resource.document.revision, retained)?;
-    resource.document.revision = revision;
+    let incoming = resource
+        .function
+        .as_ref()
+        .map(|function| function.revision)
+        .unwrap_or(ResourceRevision::INITIAL);
+    let revision = authoritative_function_revision(path, incoming, retained)?;
     if let Some(function) = resource.function.as_mut() {
-        function.revision = ResourceRevision::from_graph_revision(revision);
+        function.revision = revision;
     }
     Ok(revision)
 }
@@ -189,27 +171,24 @@ pub(crate) fn normalize_function_resource_revision(
 pub(super) fn normalize_function_patch_revisions(
     patch: &mut ProjectDataPatch,
     data: &ProjectData,
-    graph_revisions: &std::collections::HashMap<
-        GraphResourcePath,
-        yss_graph_document::GraphRevision,
-    >,
+    graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
 ) -> Result<(), ProjectFilesystemError> {
     match patch {
         ProjectDataPatch::InsertGraph { path, resource } => {
             normalize_function_resource_revision(
                 path,
                 resource,
-                graph_revisions.get(path).copied(),
+                graph_resource_revisions.get(path).copied(),
             )?;
         }
         ProjectDataPatch::DeclareGraph { path, revision } => {
             if path.kind() == yss_graph_document::GraphResourceKind::Function {
                 let canonical = authoritative_function_revision(
                     path,
-                    revision.to_graph_revision(),
-                    graph_revisions.get(path).copied(),
+                    *revision,
+                    graph_resource_revisions.get(path).copied(),
                 )?;
-                if canonical != revision.to_graph_revision() {
+                if canonical != *revision {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
                             "declared function '{}' revision changed before publication",
@@ -225,8 +204,8 @@ pub(super) fn normalize_function_patch_revisions(
             }) {
                 authoritative_function_revision(
                     path,
-                    revision.to_graph_revision(),
-                    graph_revisions.get(path).copied(),
+                    *revision,
+                    graph_resource_revisions.get(path).copied(),
                 )?;
             }
         }
@@ -238,18 +217,27 @@ pub(super) fn normalize_function_patch_revisions(
             ..
         } => {
             if moved.kind == yss_graph_document::GraphResourceKind::Function {
+                let incoming = moved
+                    .function
+                    .as_ref()
+                    .map(|function| function.revision)
+                    .unwrap_or(ResourceRevision::INITIAL);
                 authoritative_function_revision(
                     from,
-                    moved.document.revision,
-                    graph_revisions.get(from).copied(),
+                    incoming,
+                    graph_resource_revisions.get(from).copied(),
                 )?;
             }
-            normalize_function_resource_revision(to, moved, graph_revisions.get(to).copied())?;
+            normalize_function_resource_revision(
+                to,
+                moved,
+                graph_resource_revisions.get(to).copied(),
+            )?;
             for (path, resource) in referenced_graphs {
                 normalize_function_resource_revision(
                     path,
                     resource,
-                    graph_revisions.get(path).copied(),
+                    graph_resource_revisions.get(path).copied(),
                 )?;
             }
         }
@@ -408,10 +396,7 @@ pub(super) fn chart_history_publication(
 pub(super) fn canonical_resource_lifecycle_events(
     context: &ProjectTransactionContext,
     patch: &ProjectDataPatch,
-    graph_revisions: &std::collections::HashMap<
-        GraphResourcePath,
-        yss_graph_document::GraphRevision,
-    >,
+    graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
 ) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectFilesystemError> {
     let graph_key = |path: &GraphResourcePath| ResourceKey::Graph(path.clone());
     let expected_revision = |resource: &ResourceKey| {
@@ -449,14 +434,16 @@ pub(super) fn canonical_resource_lifecycle_events(
         }
     };
     match patch {
-        ProjectDataPatch::InsertGraph { path, resource } => {
-            let revision = ResourceRevision::from_graph_revision(resource.document.revision);
+        ProjectDataPatch::InsertGraph { path, resource: _ } => {
+            let revision = graph_resource_revisions
+                .get(path)
+                .copied()
+                .unwrap_or(ResourceRevision::INITIAL);
             return Ok(vec![lifecycle_delta(
                 path,
-                graph_revisions
+                graph_resource_revisions
                     .get(path)
                     .copied()
-                    .map(ResourceRevision::from_graph_revision)
                     .unwrap_or(revision),
                 revision,
                 None,
@@ -466,10 +453,9 @@ pub(super) fn canonical_resource_lifecycle_events(
         ProjectDataPatch::DeclareGraph { path, revision } => {
             return Ok(vec![lifecycle_delta(
                 path,
-                graph_revisions
+                graph_resource_revisions
                     .get(path)
                     .copied()
-                    .map(ResourceRevision::from_graph_revision)
                     .unwrap_or(*revision),
                 *revision,
                 None,
@@ -505,7 +491,7 @@ pub(super) fn canonical_resource_lifecycle_events(
     let ProjectDataPatch::MoveGraph {
         from,
         to,
-        moved,
+        moved: _,
         referenced_graphs,
         referenced_variables,
         ..
@@ -522,20 +508,22 @@ pub(super) fn canonical_resource_lifecycle_events(
         )
     };
     let source_key = graph_key(from);
+    let source_revision = expected_revision(&source_key)?;
     let mut deltas = vec![yss_project_history::ResourceDeltaEvent {
         resource: graph_key(to),
-        from_revision: expected_revision(&source_key)?,
-        to_revision: ResourceRevision::from_graph_revision(moved.document.revision),
+        from_revision: source_revision,
+        to_revision: checked_resource_revision(from.as_str(), source_revision)?,
         caused_by: Some(context.operation_id),
         payload: graph_move_patch(),
     }];
     let referenced_graph_deltas = referenced_graphs
-        .iter()
-        .map(|(path, resource)| {
+        .keys()
+        .map(|path| {
             let key = graph_key(path);
+            let from_revision = expected_revision(&key)?;
             Ok(yss_project_history::ResourceDeltaEvent {
-                from_revision: expected_revision(&key)?,
-                to_revision: ResourceRevision::from_graph_revision(resource.document.revision),
+                from_revision,
+                to_revision: checked_resource_revision(path.as_str(), from_revision)?,
                 resource: key,
                 caused_by: Some(context.operation_id),
                 payload: graph_move_patch(),

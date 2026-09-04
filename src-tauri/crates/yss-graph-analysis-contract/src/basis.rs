@@ -55,8 +55,7 @@ impl CompileId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompilationBasis<GraphRevision> {
-    pub graph_revision: GraphRevision,
+pub struct CompilationBasis {
     pub registry_fingerprint: RegistryFingerprint,
     pub resource_versions: ResourceVersionSet,
     #[serde(default)]

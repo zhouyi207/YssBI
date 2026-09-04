@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::identity::{
-    PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId,
-    PlanResourceVersion,
+    PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -73,7 +72,6 @@ pub type PlanResourceObservationSet = BTreeMap<PlanResourceId, PlanResourceObser
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanCompilationBasis {
     project_session: PlanProjectSessionId,
-    graph_revision: PlanGraphRevision,
     registry_fingerprint: PlanRegistryFingerprint,
     resource_versions: PlanResourceVersionSet,
     resource_observations: PlanResourceObservationSet,
@@ -82,14 +80,12 @@ pub struct PlanCompilationBasis {
 impl PlanCompilationBasis {
     pub fn new(
         project_session: PlanProjectSessionId,
-        graph_revision: PlanGraphRevision,
         registry_fingerprint: PlanRegistryFingerprint,
         resource_versions: PlanResourceVersionSet,
         resource_observations: PlanResourceObservationSet,
     ) -> Self {
         Self {
             project_session,
-            graph_revision,
             registry_fingerprint,
             resource_versions,
             resource_observations,
@@ -98,10 +94,6 @@ impl PlanCompilationBasis {
 
     pub fn project_session(&self) -> &PlanProjectSessionId {
         &self.project_session
-    }
-
-    pub const fn graph_revision(&self) -> PlanGraphRevision {
-        self.graph_revision
     }
 
     pub const fn registry_fingerprint(&self) -> PlanRegistryFingerprint {

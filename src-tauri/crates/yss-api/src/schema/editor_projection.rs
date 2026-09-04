@@ -20,7 +20,6 @@ impl From<&EditorProjectionModel> for EditorGraphProjectionDto {
                 resource_versions: model.basis.resource_versions.clone(),
             },
             graph_path: model.graph_path.as_str().into(),
-            source_revision: model.source_revision.get(),
             nodes: model
                 .nodes
                 .iter()
@@ -396,9 +395,7 @@ mod tests {
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };
-    use yss_graph_document::{
-        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
-    };
+    use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
     use yss_graph_protocol::{
         NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
         RelationalScalarType,
@@ -431,7 +428,6 @@ mod tests {
                 )]),
             },
             graph_path: graph_path.clone(),
-            source_revision: GraphRevision::new(7),
             nodes: Box::new([EditorNodeModel {
                 node_id,
                 node_type,
@@ -525,13 +521,11 @@ mod tests {
         let wire = serde_json::to_value(EditorGraphProjectionDto::from(&model))
             .expect("editor wire should serialize");
         assert_eq!(wire["basis"]["graphPath"], "events/contract.yssbi-event");
-        assert!(wire["basis"].get("graphRevision").is_none());
         assert_eq!(
             wire["basis"]["resourceVersions"],
             json!({"database/source": "12"})
         );
         assert_eq!(wire["nodes"][0]["nodeId"], node_id.to_string());
-        assert!(wire["nodes"][0].get("sourceRevision").is_none());
         assert_eq!(wire["nodes"][0]["display"]["iconId"], "builtin.constants");
         assert!(wire["nodes"][0]["ports"][0].get("templateKey").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("origin").is_none());

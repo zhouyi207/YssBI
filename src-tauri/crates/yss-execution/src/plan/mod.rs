@@ -13,10 +13,9 @@ pub use basis::{
     PlanResourceRequirement, PlanResourceVersionSet, ResourceAccess, ResourceKind,
 };
 pub use identity::{
-    InvalidPlanIdentity, PlanCompileId, PlanFunctionParameterId, PlanGraphId, PlanGraphRevision,
-    PlanNodeId, PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanProjectSessionId,
-    PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
-    PlanSourceIdentity,
+    InvalidPlanIdentity, PlanCompileId, PlanFunctionParameterId, PlanGraphId, PlanNodeId,
+    PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanProjectSessionId, PlanProvenance,
+    PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
 };
 pub use model::{
     ExecutionPlan, FunctionPlanAbi, PlanExecutionDemand, PlanInputBinding, PlanInputCoercion,
@@ -42,7 +41,6 @@ mod tests {
     fn basis() -> PlanCompilationBasis {
         PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
-            PlanGraphRevision::from_existing(1),
             PlanRegistryFingerprint::from_bytes([1; 32]),
             BTreeMap::new(),
             BTreeMap::new(),

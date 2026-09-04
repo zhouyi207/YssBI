@@ -25,9 +25,8 @@ use super::policy::{
 };
 use super::semantic_guards::{
     PROJECT_WATCHER_BOUNDARY_RULE, PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE,
-    graph_project_revision_bridge_violations, project_to_graph_production_edges,
-    project_watcher_source_violations, pure_leaf_graph_document_json_violations,
-    tabular_contract_source_violations,
+    project_to_graph_production_edges, project_watcher_source_violations,
+    pure_leaf_graph_document_json_violations, tabular_contract_source_violations,
 };
 
 fn repository_root() -> PathBuf {
@@ -2050,14 +2049,6 @@ fn graph_type_mapping_has_one_pure_crate_owner_without_match_table_mirrors() {
     assert!(
         duplicate_match_tables.is_empty(),
         "DataType to TypeExpr mapping must have one owner: {duplicate_match_tables:#?}"
-    );
-}
-
-#[test]
-fn rust_graph_project_revision_conversions_are_explicit() {
-    assert_eq!(
-        graph_project_revision_bridge_violations(&repository_root()),
-        Vec::<String>::new()
     );
 }
 

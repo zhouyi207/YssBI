@@ -15,7 +15,7 @@ use yss_project_model::GraphResourceDocument;
 use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
-use super::{VariableRevisionEntry, checked_graph_revision};
+use super::VariableRevisionEntry;
 use crate::project_writers::{
     ProjectHistoryStatus, ProjectProjectionStatus, ProjectResourceMove,
     ProjectResourceMutationFacts,
@@ -54,7 +54,6 @@ impl ProjectState {
         )?;
         let mut resource = resource;
         resource.name = unique_name.clone();
-        resource.document.revision = yss_graph_document::GraphRevision::INITIAL;
         if let Some(function) = resource.function.as_mut() {
             function.revision = ResourceRevision::INITIAL;
         }
@@ -81,7 +80,7 @@ impl ProjectState {
                 contents,
             }],
             |_, staged| {
-                serde_json::from_slice::<crate::project_io::GraphDocument>(staged)
+                serde_json::from_slice::<crate::project_io::GraphResourceFile>(staged)
                     .map(|_| ())
                     .map_err(|error| error.to_string())
             },
@@ -141,19 +140,24 @@ impl ProjectState {
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
-            let mut document = persisted.document;
-            document.revision = persisted.revision.to_graph_revision();
             (
                 GraphResourceDocument {
                     name: persisted.name,
                     kind: persisted.kind,
-                    document,
+                    document: persisted.document,
                     function: persisted.function,
                 },
                 persisted.local_variables,
             )
         };
-        if source.document.revision != expected_revision.to_graph_revision() {
+        let source_revision = self
+            .graph_resource_revisions
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(source_path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        if source_revision != expected_revision {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", source_path),
             });
@@ -167,7 +171,6 @@ impl ProjectState {
         )?;
         let mut duplicate = source.clone();
         duplicate.name = unique_name;
-        duplicate.document.revision = yss_graph_document::GraphRevision::INITIAL;
         duplicate.document = duplicate_document(&duplicate.document, source_path, &target);
         if let Some(function) = duplicate.function.as_mut() {
             function.revision = ResourceRevision::INITIAL;
@@ -242,19 +245,12 @@ impl ProjectState {
         }
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let current = self.get_data()?;
-        let current_revision = current
-            .graphs
+        let current_revision = self
+            .graph_resource_revisions
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(graph_path)
-            .map(|resource| ResourceRevision::from_graph_revision(resource.document.revision))
-            .or_else(|| {
-                self.graph_revisions
-                    .read()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .get(graph_path)
-                    .copied()
-                    .map(ResourceRevision::from_graph_revision)
-            })
+            .copied()
             .ok_or_else(|| ProjectFilesystemError::StaleResourceLifecycle {
                 message: format!("graph '{}' is not known", graph_path),
             })?;
@@ -321,7 +317,14 @@ impl ProjectState {
                 message: format!("graph '{}' is not resident", graph_path),
             }
         })?;
-        if resource.document.revision != expected_revision.to_graph_revision() {
+        if self
+            .graph_resource_revisions
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(graph_path)
+            .copied()
+            != Some(expected_revision)
+        {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });
@@ -400,10 +403,10 @@ impl ProjectState {
             Self::install_validated_resident_graph(&mut data, path.clone(), resource.clone());
         }
         let mut revisions = self
-            .graph_revisions
+            .graph_resource_revisions
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        revisions.insert(path.clone(), resource.document.revision);
+        revisions.insert(path.clone(), ResourceRevision::INITIAL);
         publication.commit_prepared(advance);
         drop(revisions);
         drop(data);
@@ -505,12 +508,10 @@ impl ProjectState {
         self.run_graph_load_after_read_test_hook();
         self.validate_resource_lifecycle_operation(&operation)?;
 
-        let mut graph = loaded.document;
-        graph.revision = loaded.revision.to_graph_revision();
         let resource = GraphResourceDocument {
             name: loaded.name,
             kind: loaded.kind,
-            document: graph,
+            document: loaded.document,
             function: loaded.function,
         };
         let local_variables = loaded.local_variables;
@@ -529,8 +530,8 @@ impl ProjectState {
             .project_data
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut graph_revisions = self
-            .graph_revisions
+        let mut graph_resource_revisions = self
+            .graph_resource_revisions
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut variable_revisions = self
@@ -540,9 +541,8 @@ impl ProjectState {
 
         let publication_advance = publication.prepare_authority_generation()?;
         lifecycle.commit_guard(&mut lifecycle_guard, ResourceLifecycleIntent::Load)?;
-        let revision = resource.document.revision;
         Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
-        graph_revisions.insert(graph_path.clone(), revision);
+        graph_resource_revisions.insert(graph_path.clone(), ResourceRevision::INITIAL);
         for (id, variable) in local_variables {
             data.variables.insert(id, variable);
             variable_revisions
@@ -551,7 +551,7 @@ impl ProjectState {
         }
         publication.commit_prepared(publication_advance);
         drop(variable_revisions);
-        drop(graph_revisions);
+        drop(graph_resource_revisions);
         drop(data);
         drop(lifecycle);
         drop(publication);
@@ -799,16 +799,21 @@ impl ProjectState {
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
-            let mut document = persisted.document;
-            document.revision = persisted.revision.to_graph_revision();
             GraphResourceDocument {
                 name: persisted.name,
                 kind: persisted.kind,
-                document,
+                document: persisted.document,
                 function: persisted.function,
             }
         };
-        if source.document.revision != expected_revision.to_graph_revision() {
+        let current_revision = self
+            .graph_resource_revisions
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(graph_path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        if current_revision != expected_revision {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });
@@ -833,16 +838,15 @@ impl ProjectState {
             });
         }
 
-        let next_revision = source.document.revision.checked_next().map_err(|error| {
+        let next_revision = current_revision.checked_next().map_err(|error| {
             ProjectFilesystemError::ResourceRevisionOverflow {
                 resource: graph_path.as_str().to_owned(),
                 retained: error.retained,
             }
         })?;
         source.name = requested.as_str().to_owned();
-        source.document.revision = next_revision;
         if let Some(function) = source.function.as_mut() {
-            function.revision = ResourceRevision::from_graph_revision(next_revision);
+            function.revision = next_revision;
         }
 
         let source_variables = current_data
@@ -874,13 +878,6 @@ impl ProjectState {
             ) {
                 continue;
             }
-            changed.document.revision =
-                changed.document.revision.checked_next().map_err(|error| {
-                    ProjectFilesystemError::ResourceRevisionOverflow {
-                        resource: path.as_str().to_owned(),
-                        retained: error.retained,
-                    }
-                })?;
             let local_variables = current_data
                 .variables
                 .iter()
@@ -938,19 +935,25 @@ impl ProjectState {
                 .project_data
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if publication.project_instance_id != expected_project_instance_id.as_str()
-                || data.graphs.get(graph_path).is_some_and(|resource| {
-                    resource.document.revision != expected_revision.to_graph_revision()
-                })
+            if publication.project_instance_id != expected_project_instance_id.as_str() {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "graph changed before rename publication".into(),
+                });
+            }
+            let mut graph_resource_revisions = self
+                .graph_resource_revisions
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if graph_resource_revisions
+                .get(graph_path)
+                .copied()
+                .unwrap_or(ResourceRevision::INITIAL)
+                != expected_revision
             {
                 return Err(ProjectFilesystemError::StaleProjectLifecycle {
                     message: "graph changed before rename publication".into(),
                 });
             }
-            let mut graph_revisions = self
-                .graph_revisions
-                .write()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut variable_revisions = self
                 .variable_revisions
                 .write()
@@ -965,7 +968,17 @@ impl ProjectState {
             }
             for (path, changed, _) in &referenced {
                 data.graphs.insert(path.clone(), changed.clone());
-                graph_revisions.insert(path.clone(), changed.document.revision);
+                let retained = graph_resource_revisions
+                    .get(path)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL);
+                let revision = retained.checked_next().map_err(|error| {
+                    ProjectFilesystemError::ResourceRevisionOverflow {
+                        resource: path.as_str().to_owned(),
+                        retained: error.retained,
+                    }
+                })?;
+                graph_resource_revisions.insert(path.clone(), revision);
             }
             for (id, variable) in moved_variables {
                 data.variables.insert(id, variable);
@@ -973,8 +986,8 @@ impl ProjectState {
                     .entry(id)
                     .or_insert_with(|| VariableRevisionEntry::present(ResourceRevision::INITIAL));
             }
-            graph_revisions.remove(graph_path);
-            graph_revisions.insert(target.clone(), next_revision);
+            graph_resource_revisions.remove(graph_path);
+            graph_resource_revisions.insert(target.clone(), next_revision);
             publication.commit_prepared(advance);
             Ok(())
         })();
@@ -1048,10 +1061,6 @@ impl ProjectState {
             yss_variable_contract::VariableInstance,
         >,
         excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
-        known_revisions: &std::collections::HashMap<
-            GraphResourcePath,
-            yss_graph_document::GraphRevision,
-        >,
     ) -> Result<GraphRenameDiskPlan, ProjectFilesystemError> {
         let mut plan = GraphRenameDiskPlan {
             mutations: Vec::new(),
@@ -1068,7 +1077,7 @@ impl ProjectState {
             let relative_path = std::path::PathBuf::from(entry.path.as_str());
             let contents = yss_project_filesystem::read_secure_project_file(root, &relative_path)
                 .map_err(graph_rename_plan_error)?;
-            let before: crate::project_io::GraphDocument =
+            let before: crate::project_io::GraphResourceFile =
                 serde_json::from_slice(&contents).map_err(graph_rename_plan_error)?;
             let mut after = before.clone();
             let mut changed =
@@ -1080,19 +1089,12 @@ impl ProjectState {
             if !changed {
                 continue;
             }
-            let before_revision = known_revisions
-                .get(&entry.path)
-                .copied()
-                .unwrap_or(before.document.revision);
-            after.document.revision = checked_graph_revision(entry.path.as_str(), before_revision)?;
-            let mut before_document = before.document;
-            before_document.revision = before_revision;
             plan.referenced_graphs_before.insert(
                 entry.path.clone(),
                 GraphResourceDocument {
                     name: before.name,
                     kind: before.kind,
-                    document: before_document,
+                    document: before.document,
                     function: before.function,
                 },
             );
@@ -1508,7 +1510,6 @@ mod tests {
             &GraphResourceDocument::new("Target", GraphResourceKind::Event),
             HashMap::new(),
             &std::collections::BTreeSet::new(),
-            &HashMap::new(),
         )
         .unwrap();
 

@@ -24,12 +24,10 @@ use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
     PortRef,
 };
-use yss_graph_document_edit::{
-    GraphDocumentPatch, apply_graph_document_patch, apply_graph_document_patch_to_candidate,
-};
+use yss_graph_document_edit::{GraphDocumentPatch, apply_graph_document_patch};
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
 use yss_graph_protocol::PortKey;
-use yss_project_identity::OperationId;
+use yss_project_identity::{OperationId, ResourceRevision};
 
 use crate::catalog_query::{
     CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,
@@ -149,7 +147,7 @@ fn apply_graph_edit(
         .capture_graph_operation(
             captured.project_instance_id(),
             &graph_path,
-            yss_graph_document::GraphRevision::new(request.base_revision),
+            ResourceRevision::new(request.base_revision),
             operation_id,
         )
         .map_err(|_| {
@@ -169,7 +167,7 @@ fn apply_graph_edit(
                 CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
                     .with_detail("graphPath", graph_path.as_str())
             })?;
-        apply_graph_document_patch_to_candidate(&mut staged, &patch).map_err(|_| {
+        apply_graph_document_patch(&mut staged, &patch).map_err(|_| {
             CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
                 .with_detail("graphPath", graph_path.as_str())
         })?;
@@ -329,7 +327,7 @@ fn inspect_project(
                 kind: ProjectResourceKindInspection::Graph,
                 resource_id: path.as_str().to_owned(),
                 display_name: graph.name.clone(),
-                revision: Some(graph.document.revision.get()),
+                revision: None,
             }),
     );
     resources.extend(
@@ -425,7 +423,6 @@ fn inspect_graph(
 
     Ok(GraphInspection {
         graph_path: graph_path.into_string(),
-        graph_revision: graph.document.revision.get(),
         nodes,
         connections,
     })

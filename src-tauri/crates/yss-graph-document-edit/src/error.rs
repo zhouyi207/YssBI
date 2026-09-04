@@ -17,7 +17,6 @@ pub enum DocumentError {
     NodeIdentityMismatch { before: NodeId, after: NodeId },
     ConnectionContentMismatch(ConnectionId),
     PortBindingContentMismatch(PortAddress),
-    RevisionExhausted { retained: u64 },
 }
 
 impl fmt::Display for DocumentError {
@@ -70,9 +69,6 @@ impl fmt::Display for DocumentError {
                     formatter,
                     "port binding '{address}' does not match patch precondition"
                 )
-            }
-            Self::RevisionExhausted { retained } => {
-                write!(formatter, "document revision is exhausted at {retained}")
             }
         }
     }

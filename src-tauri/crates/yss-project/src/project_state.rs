@@ -47,7 +47,7 @@ use history::GraphMoveHistoryPayload;
 pub(super) use history::{project_documents, replace_project_documents};
 use resource_history::{
     affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, chart_history_publication, checked_graph_revision,
+    canonical_resource_lifecycle_events, chart_history_publication,
     normalize_function_patch_revisions, patch_projection_paths, preflight_resource_patch_graphs,
     validate_chart_path_insertion, variable_scope_references_path,
 };
@@ -274,7 +274,7 @@ impl ProjectState {
     pub fn revision_state_for_test(
         &self,
     ) -> (
-        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
+        std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
         std::collections::HashMap<
             yss_variable_contract::VariableId,
             yss_project_identity::ResourceRevision,
@@ -282,7 +282,7 @@ impl ProjectState {
         std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     ) {
         (
-            self.graph_revisions.read().unwrap().clone(),
+            self.graph_resource_revisions.read().unwrap().clone(),
             self.variable_revisions
                 .read()
                 .unwrap()

@@ -73,7 +73,7 @@ pub struct PreparedProjectActivation {
     pub data: ProjectData,
     pub store: ProjectStore,
     pub(crate) variable_revisions: HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
-    pub(crate) graph_revisions: HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
+    pub(crate) graph_resource_revisions: HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) chart_revisions: HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
@@ -95,10 +95,10 @@ impl PreparedProjectActivation {
                 }
             })?;
         }
-        let graph_revisions = data
+        let graph_resource_revisions = data
             .graphs
-            .iter()
-            .map(|(path, resource)| (path.clone(), resource.document.revision))
+            .keys()
+            .map(|path| (path.clone(), ResourceRevision::INITIAL))
             .collect();
         let variable_revisions = data
             .variables
@@ -121,7 +121,7 @@ impl PreparedProjectActivation {
             data,
             store,
             variable_revisions,
-            graph_revisions,
+            graph_resource_revisions,
             chart_revisions,
             authority_basis,
             requires_final_rebuild,

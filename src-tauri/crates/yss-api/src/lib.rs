@@ -3,11 +3,9 @@
 mod commands;
 mod error;
 mod event;
-mod graph_projection_runtime;
 mod schema;
 
 pub use commands::{HarnessChannelHub, HarnessRuntimeState};
-pub use graph_projection_runtime::GraphProjectionRuntime;
 
 /// Builds the single invoke handler consumed by the root composition crate.
 pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
@@ -28,9 +26,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         compile_graph_draft,
         export_graph_subgraph,
         transform_graph_draft,
-        subscribe_graph_projections,
-        get_graph_projection_snapshot,
-        unsubscribe_graph_projections,
         get_project_history_status,
         undo_graph_document,
         redo_graph_document,

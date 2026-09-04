@@ -127,7 +127,7 @@ pub(super) fn resource_mutation_to_command_error(
             }
             yss_project::ProjectGraphOperationError::RevisionConflict { .. } => {
                 let command = CommandError::expected(revision_conflict_code);
-                if revision_conflict_code == "graph_revision_conflict" {
+                if revision_conflict_code == "resource_revision_conflict" {
                     command.with_details(GraphMutationErrorDetailsDto::VALUE)
                 } else {
                     command
@@ -155,7 +155,7 @@ pub(super) fn resource_mutation_to_command_error(
         ResourceMutationApplicationError::GraphCommit(error) => match error {
             yss_project::ProjectGraphCommitError::StaleAuthority { .. } => {
                 let command = CommandError::expected(revision_conflict_code);
-                if revision_conflict_code == "graph_revision_conflict" {
+                if revision_conflict_code == "resource_revision_conflict" {
                     command.with_details(GraphMutationErrorDetailsDto::VALUE)
                 } else {
                     command

@@ -146,20 +146,20 @@ pub mod fixtures {
     > {
         let session = state.capture_project_session()?;
         let revision = state
-            .get_data()?
-            .graphs
+            .graph_resource_revisions
+            .read()
+            .unwrap()
             .get(graph_path)
+            .copied()
             .ok_or_else(|| {
                 yss_project_filesystem::ProjectFilesystemError::TransactionPrepareFailed {
-                    message: format!("graph '{}' is not loaded", graph_path),
+                    message: format!("graph '{}' has no resource revision", graph_path),
                 }
-            })?
-            .document
-            .revision;
+            })?;
         state.save_graph_document(
             &session.instance_id,
             graph_path,
-            yss_project_identity::ResourceRevision::from_graph_revision(revision),
+            revision,
             yss_project_identity::OperationId::new(),
         )
     }

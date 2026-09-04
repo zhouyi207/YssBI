@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::plan::{PlanGraphRevision, PlanOutputRef, ResultCategory};
+use crate::plan::{PlanOutputRef, ResultCategory};
 use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
@@ -85,7 +85,6 @@ pub struct PinResultEntry {
     result_id: ResultId,
     run_id: RunId,
     activation_id: ActivationId,
-    graph_revision: PlanGraphRevision,
     created_at_ms: u64,
     usage: ResultUsage,
 }
@@ -95,14 +94,12 @@ impl PinResultEntry {
         result_id: ResultId,
         run_id: RunId,
         activation_id: ActivationId,
-        graph_revision: PlanGraphRevision,
         created_at_ms: u64,
     ) -> Self {
         Self {
             result_id,
             run_id,
             activation_id,
-            graph_revision,
             created_at_ms,
             usage: ResultUsage::Produced,
         }
@@ -118,10 +115,6 @@ impl PinResultEntry {
 
     pub fn activation_id(&self) -> ActivationId {
         self.activation_id
-    }
-
-    pub fn graph_revision(&self) -> PlanGraphRevision {
-        self.graph_revision
     }
 
     pub const fn created_at_ms(&self) -> u64 {

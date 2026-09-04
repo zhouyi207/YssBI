@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use yss_chart_document::{ChartDocument, ChartEncodings};
-use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_document::{FunctionParameterId, GraphDocument, GraphResourcePath};
 use yss_project_identity::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
 
 fn checked_document_revision(revision: ResourceRevision) -> Result<ResourceRevision, u64> {
@@ -943,17 +943,7 @@ fn validate_graph_history_change(
     let resource = ResourceKey::Graph(change.graph_path.clone());
     let current = state.graphs.get(&change.graph_path);
     match (&change.before.residency, current) {
-        (ProjectGraphResidency::Loaded, Some(document)) => {
-            let actual = ResourceRevision::from_graph_revision(document.revision);
-            let expected = ResourceRevision::from_graph_revision(change.before.revision);
-            if actual != expected {
-                return Err(HistoryError::RevisionConflict {
-                    resource,
-                    expected,
-                    actual,
-                });
-            }
-        }
+        (ProjectGraphResidency::Loaded, Some(_)) => {}
         (ProjectGraphResidency::Unloaded, None) => {}
         (ProjectGraphResidency::Loaded, None) | (ProjectGraphResidency::Unloaded, Some(_)) => {
             return Err(HistoryError::ResourceNotFound(resource));
@@ -971,8 +961,8 @@ fn validate_graph_history_change(
     if change.after.revision != expected_after {
         return Err(HistoryError::NonMonotonicRevision {
             resource: ResourceKey::Graph(change.graph_path.clone()),
-            before: ResourceRevision::from_graph_revision(change.before.revision),
-            after: ResourceRevision::from_graph_revision(change.after.revision),
+            before: change.before.revision,
+            after: change.after.revision,
         });
     }
     Ok(())
@@ -1142,7 +1132,7 @@ fn resource_revision(
         ResourceKey::Graph(path) => state
             .graphs
             .get(path)
-            .map(|document| ResourceRevision::from_graph_revision(document.revision))
+            .map(|_| ResourceRevision::INITIAL)
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
         ResourceKey::Function(key) => state
             .functions
@@ -1173,7 +1163,7 @@ pub enum ProjectGraphResidency {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectGraphHistoryState {
     pub document: GraphDocument,
-    pub revision: GraphRevision,
+    pub revision: ResourceRevision,
     pub residency: ProjectGraphResidency,
 }
 

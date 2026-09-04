@@ -9,8 +9,8 @@ use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticCode, DiagnosticSeverity, ResourceKey, ResourceVersion,
 };
 use yss_graph_document::{
-    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
-    GraphRevision, InputState, NodeId, NodePosition, ParameterValues, PortAddress,
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, InputState,
+    NodeId, NodePosition, ParameterValues, PortAddress,
 };
 use yss_graph_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
@@ -103,12 +103,11 @@ fn node_facts(
 }
 
 fn analysis_with_facts(
-    document: &GraphDocument,
+    _document: &GraphDocument,
     _path: &GraphResourcePath,
     facts: GraphSemanticSnapshot,
 ) -> yss_graph_analysis::GraphAnalysis {
     let basis = CompilationBasis {
-        graph_revision: GraphRevision::new(document.revision.get()),
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
         resource_versions: BTreeMap::from([(
             ResourceKey::new("resource/source"),
@@ -134,10 +133,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
         PortKey::new("value").expect("test port key is valid"),
     );
     let connection = connection_id(4);
-    let mut document = GraphDocument {
-        revision: GraphRevision::new(7),
-        ..GraphDocument::default()
-    };
+    let mut document = GraphDocument::default();
     document.nodes.insert(
         source,
         DocumentNode {
@@ -389,7 +385,6 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
     let path = GraphResourcePath::new("events/missing-facts.yssbi-event")
         .expect("test graph path is valid");
     let basis = CompilationBasis {
-        graph_revision: GraphRevision::new(0),
         registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),

@@ -1,9 +1,7 @@
 use yss_data_contract::DataType;
 use yss_graph_analysis::GraphDiagnosticLocation;
 use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
-use yss_graph_document::{
-    ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
-};
+use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
 use yss_graph_protocol::{
     ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType,
     TypeConflict, TypeUnknownReason,
@@ -256,7 +254,6 @@ pub struct EditorConnectionModel {
 pub struct EditorProjectionModel {
     pub basis: EditorProjectionBasis,
     pub graph_path: GraphResourcePath,
-    pub source_revision: GraphRevision,
     pub nodes: Box<[EditorNodeModel]>,
     pub connections: Box<[EditorConnectionModel]>,
     pub diagnostics: Box<[EditorDiagnosticModel]>,
@@ -282,11 +279,6 @@ pub enum EditorCompilationStage {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditorProjectionError {
-    #[error("analysis and document revisions do not match")]
-    RevisionMismatch {
-        analysis: GraphRevision,
-        document: GraphRevision,
-    },
     #[error("analysis and catalog registry fingerprints do not match")]
     RegistryMismatch,
     #[error("semantic snapshot does not match the graph document")]

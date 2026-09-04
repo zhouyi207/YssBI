@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ProjectSession;
-use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_project_filesystem::{
     ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
     StagedFilesystemMutation,
@@ -11,7 +11,7 @@ use yss_project_history::{
     ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency,
     ProjectHistoryTransaction,
 };
-use yss_project_identity::ProjectInstanceId;
+use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_operation::ProjectOperationReservation;
 
 use super::state::ProjectState;
@@ -19,7 +19,7 @@ use super::state::ProjectState;
 pub struct GraphOperationCapture {
     pub graph_path: GraphResourcePath,
     pub document: Arc<GraphDocument>,
-    pub revision: GraphRevision,
+    pub revision: ResourceRevision,
     pub residency: ProjectGraphResidency,
     authority: GraphOperationAuthority,
 }
@@ -37,7 +37,7 @@ impl GraphOperationCapture {
 pub struct GraphOperationAuthority {
     session: ProjectSession,
     graph_path: GraphResourcePath,
-    revision: GraphRevision,
+    revision: ResourceRevision,
     authority_generation: u64,
     operation_id: yss_project_identity::OperationId,
     reservation: ProjectOperationReservation,
@@ -59,8 +59,8 @@ pub struct GraphInvalidationSet {
 pub struct GraphCommitReceipt {
     pub project_instance_id: ProjectInstanceId,
     pub operation_id: yss_project_identity::OperationId,
-    pub from_revision: GraphRevision,
-    pub to_revision: GraphRevision,
+    pub from_revision: ResourceRevision,
+    pub to_revision: ResourceRevision,
     pub history: ProjectHistoryStatus,
     pub history_change: Option<ProjectGraphHistoryChange>,
     pub invalidations: GraphInvalidationSet,
@@ -88,8 +88,8 @@ pub enum ProjectGraphOperationError {
     #[error("graph revision changed before planning")]
     RevisionConflict {
         graph: GraphResourcePath,
-        expected: GraphRevision,
-        current: GraphRevision,
+        expected: ResourceRevision,
+        current: ResourceRevision,
     },
     #[error("graph resource lifecycle changed before planning")]
     ResourceLifecycleChanged { graph: GraphResourcePath },
@@ -111,13 +111,13 @@ pub enum ProjectGraphCommitError {
     StaleAuthority {
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        expected_revision: GraphRevision,
-        current_revision: GraphRevision,
+        expected_revision: ResourceRevision,
+        current_revision: ResourceRevision,
     },
     #[error("graph revision is exhausted")]
     RevisionExhausted {
         graph_path: GraphResourcePath,
-        revision: GraphRevision,
+        revision: ResourceRevision,
     },
     #[error("graph lifecycle changed during the operation")]
     LifecycleChanged { graph_path: GraphResourcePath },
@@ -145,15 +145,25 @@ impl ProjectState {
         operation_id: yss_project_identity::OperationId,
     ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
         for attempt in 0..3 {
-            let revision = self
+            if !self
                 .get_data()
                 .map_err(|source| {
                     ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source))
                 })?
                 .graphs
+                .contains_key(graph_path)
+            {
+                return Err(ProjectGraphOperationError::GraphUnavailable {
+                    graph: graph_path.clone(),
+                });
+            }
+            let revision = self
+                .graph_resource_revisions
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .get(graph_path)
-                .map(|resource| resource.document.revision)
-                .ok_or_else(|| ProjectGraphOperationError::GraphUnavailable {
+                .copied()
+                .ok_or_else(|| ProjectGraphOperationError::ResourceLifecycleChanged {
                     graph: graph_path.clone(),
                 })?;
             match self.capture_graph_operation(
@@ -173,7 +183,7 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        expected_revision: GraphRevision,
+        expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
         self.ensure_project_operational()
@@ -206,21 +216,20 @@ impl ProjectState {
                     graph: graph_path.clone(),
                 }
             })?;
-            let revision = graph.document.revision;
+            let revisions = self
+                .graph_resource_revisions
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let revision = revisions.get(graph_path).copied().ok_or_else(|| {
+                ProjectGraphOperationError::ResourceLifecycleChanged {
+                    graph: graph_path.clone(),
+                }
+            })?;
             if revision != expected_revision {
                 return Err(ProjectGraphOperationError::RevisionConflict {
                     graph: graph_path.clone(),
                     expected: expected_revision,
                     current: revision,
-                });
-            }
-            let revisions = self
-                .graph_revisions
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if revisions.get(graph_path) != Some(&revision) {
-                return Err(ProjectGraphOperationError::ResourceLifecycleChanged {
-                    graph: graph_path.clone(),
                 });
             }
             (
@@ -340,25 +349,23 @@ impl ProjectState {
                     graph_path: graph_path.clone(),
                 }
             })?;
-            let current_revision = graph.document.revision;
+            let revisions = self
+                .graph_resource_revisions
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let current_revision = revisions.get(&graph_path).copied().ok_or_else(|| {
+                ProjectGraphCommitError::LifecycleChanged {
+                    graph_path: graph_path.clone(),
+                }
+            })?;
             if publication.authority_generation() != authority_generation
                 || current_revision != revision
-                || candidate_document.revision != revision
             {
                 return Err(ProjectGraphCommitError::StaleAuthority {
                     project_instance_id: session.instance_id.clone(),
                     graph_path: graph_path.clone(),
                     expected_revision: revision,
                     current_revision,
-                });
-            }
-            let revisions = self
-                .graph_revisions
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if revisions.get(&graph_path) != Some(&current_revision) {
-                return Err(ProjectGraphCommitError::LifecycleChanged {
-                    graph_path: graph_path.clone(),
                 });
             }
             drop(revisions);
@@ -406,8 +413,7 @@ impl ProjectState {
                 }
             })?;
             let before_document = graph.document.clone();
-            let mut after_document = candidate_document.as_ref().clone();
-            after_document.revision = next_revision;
+            let after_document = candidate_document.as_ref().clone();
             let history_change = ProjectGraphHistoryChange {
                 graph_path: graph_path.clone(),
                 before: ProjectGraphHistoryState {
@@ -425,12 +431,12 @@ impl ProjectState {
             resource.document = after_document;
             Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
 
-            let mut graph_revisions = self
-                .graph_revisions
+            let mut graph_resource_revisions = self
+                .graph_resource_revisions
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            graph_revisions.insert(graph_path.clone(), next_revision);
-            drop(graph_revisions);
+            graph_resource_revisions.insert(graph_path.clone(), next_revision);
+            drop(graph_resource_revisions);
 
             let mut history = self
                 .history
@@ -482,17 +488,6 @@ impl ProjectState {
     ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
         let graph_path = capture.graph_path.clone();
         let session = capture.authority.session.clone();
-        let changed = candidate_document.as_ref() != capture.document.as_ref();
-        let persisted_revision = if changed {
-            capture.revision.checked_next().map_err(|_| {
-                ProjectGraphSaveError::Commit(ProjectGraphCommitError::RevisionExhausted {
-                    graph_path: graph_path.clone(),
-                    revision: capture.revision,
-                })
-            })?
-        } else {
-            capture.revision
-        };
 
         let data = self.get_data()?;
         let mut resource = data.graphs.get(&graph_path).cloned().ok_or_else(|| {
@@ -500,9 +495,7 @@ impl ProjectState {
                 message: format!("graph '{graph_path}' is not resident"),
             }
         })?;
-        let mut persisted_document = candidate_document.as_ref().clone();
-        persisted_document.revision = persisted_revision;
-        resource.document = persisted_document;
+        resource.document = candidate_document.as_ref().clone();
         let local_variables = data
             .variables
             .iter()
@@ -578,7 +571,7 @@ mod tests {
     use yss_project_model::{GraphResourceDocument, ProjectData};
 
     #[test]
-    fn overwrite_save_captures_revision_internally_and_installs_complete_candidate() {
+    fn overwrite_save_installs_the_complete_candidate_atomically() {
         let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
         let node_id = NodeId::new();
         let mut resource =
@@ -605,13 +598,10 @@ mod tests {
         let mut candidate = capture.document.as_ref().clone();
         candidate.nodes.get_mut(&node_id).unwrap().position = NodePosition { x: 24.0, y: 36.0 };
 
-        let receipt = fixture
+        fixture
             .state()
             .save_graph_candidate(capture, operation_id, Arc::new(candidate))
             .unwrap();
-
-        assert_eq!(receipt.from_revision, GraphRevision::INITIAL);
-        assert_eq!(receipt.to_revision, GraphRevision::new(1));
         assert_eq!(
             fixture.state().get_data().unwrap().graphs[&graph_path]
                 .document

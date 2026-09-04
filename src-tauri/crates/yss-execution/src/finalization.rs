@@ -202,8 +202,7 @@ impl ExecutionFinalizationHandoff {
 pub mod test_support {
     use super::*;
     use crate::plan::{
-        PlanGraphId, PlanGraphRevision, PlanNodeId, PlanOutputRef, PlanPortAddress,
-        PlanSourceIdentity,
+        PlanGraphId, PlanNodeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
     };
     use crate::result::{ActivationId, PinResultEntry};
     use crate::run_registry::RunId;
@@ -242,7 +241,6 @@ pub mod test_support {
                 result_id,
                 RunId::from_existing(1),
                 ActivationId::from_existing(result_id.get()),
-                PlanGraphRevision::INITIAL,
                 0,
             ),
         );

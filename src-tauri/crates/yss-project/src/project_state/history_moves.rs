@@ -33,7 +33,7 @@ impl ProjectState {
         self.validate_project_session(&session)
             .map_err(history_project_error)?;
 
-        let (data_snapshot, graph_revisions, variable_revisions, history_snapshot) = {
+        let (data_snapshot, graph_resource_revisions, variable_revisions, history_snapshot) = {
             let publication = self.mutation_publication.lock().unwrap();
             let path = self.project_path.read().unwrap();
             if publication.project_instance_id != session.instance_id.as_str()
@@ -45,7 +45,7 @@ impl ProjectState {
             }
             (
                 self.project_data.read().unwrap().clone(),
-                self.graph_revisions.read().unwrap().clone(),
+                self.graph_resource_revisions.read().unwrap().clone(),
                 self.variable_revisions.read().unwrap().clone(),
                 self.history.read().unwrap().clone(),
             )
@@ -105,15 +105,15 @@ impl ProjectState {
             if let Some(graph_path) = variable_scope_graph_path(&scope)
                 .map_err(|error| ProjectHistoryMutationError::History(error.into()))?
             {
-                let revision = graph_revisions.get(&graph_path).copied().ok_or_else(|| {
-                    ProjectHistoryMutationError::History(
-                        format!("local variable graph '{graph_path}' is not loaded").into(),
-                    )
-                })?;
-                expected_revisions.insert(
-                    ResourceKey::Graph(graph_path.clone()),
-                    ResourceRevision::from_graph_revision(revision),
-                );
+                let revision = graph_resource_revisions
+                    .get(&graph_path)
+                    .copied()
+                    .ok_or_else(|| {
+                        ProjectHistoryMutationError::History(
+                            format!("local variable graph '{graph_path}' is not loaded").into(),
+                        )
+                    })?;
+                expected_revisions.insert(ResourceKey::Graph(graph_path.clone()), revision);
             }
         }
         let mutations =
@@ -152,12 +152,12 @@ impl ProjectState {
                 ));
             }
             let mut data = self.project_data.write().unwrap();
-            let graph_revisions = self.graph_revisions.read().unwrap();
+            let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
             let mut revisions = self.variable_revisions.write().unwrap();
             validate_context_revisions(
                 &context,
                 &data,
-                &graph_revisions,
+                &graph_resource_revisions,
                 &revisions,
                 &self.chart_revisions.read().unwrap(),
             )
@@ -435,7 +435,7 @@ impl ProjectState {
             move_patch.to.as_ref()
         })
         .map_err(|error| ProjectHistoryMutationError::History(error.to_string().into()))?;
-        let mut desired_moved = if undo {
+        let desired_moved = if undo {
             payload.moved_before.clone()
         } else {
             payload.moved_after.clone()
@@ -490,20 +490,19 @@ impl ProjectState {
                 store: source.as_str().into(),
             });
         }
-        let current_revision = loaded_source
-            .as_ref()
-            .map(|resource| resource.document.revision)
-            .or_else(|| self.graph_revisions.read().unwrap().get(&source).copied())
-            .unwrap_or(current_moved.document.revision);
-        if ResourceRevision::from_graph_revision(current_revision) != request.base_revision {
+        let current_revision = self
+            .graph_resource_revisions
+            .read()
+            .unwrap()
+            .get(&source)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        if current_revision != request.base_revision {
             return Err(ProjectHistoryMutationError::StaleRevision {
                 base_revision: request.base_revision.get(),
                 current_revision: current_revision.get(),
             });
         }
-        desired_moved.document.revision = checked_graph_revision(source.as_str(), current_revision)
-            .map_err(history_project_error)?;
-
         let mut referenced_graphs_before = BTreeMap::new();
         let mut referenced_graphs = BTreeMap::new();
         let mut referenced_variables_before = BTreeMap::new();
@@ -514,10 +513,7 @@ impl ProjectState {
         if loaded_source.is_some() {
             affected_resources.push(source_key.clone());
         }
-        expected_revisions.insert(
-            source_key,
-            ResourceRevision::from_graph_revision(current_revision),
-        );
+        expected_revisions.insert(source_key, current_revision);
         {
             let data = self.project_data.read().unwrap();
             let variable_revisions = self.variable_revisions.read().unwrap();
@@ -525,16 +521,17 @@ impl ProjectState {
                 let Some(current) = data.graphs.get(&path) else {
                     continue;
                 };
-                let mut next = desired;
-                next.document.revision =
-                    checked_graph_revision(path.as_str(), current.document.revision)
-                        .map_err(history_project_error)?;
+                let next = desired;
                 let key = ResourceKey::Graph(path.clone());
                 affected_resources.push(key.clone());
-                expected_revisions.insert(
-                    key,
-                    ResourceRevision::from_graph_revision(current.document.revision),
-                );
+                let revision = self
+                    .graph_resource_revisions
+                    .read()
+                    .unwrap()
+                    .get(&path)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL);
+                expected_revisions.insert(key, revision);
                 referenced_graphs_before.insert(path.clone(), current.clone());
                 referenced_graphs.insert(path, next);
             }
@@ -558,7 +555,6 @@ impl ProjectState {
             }
         }
         let loaded_referenced_graphs = referenced_graphs.keys().cloned().collect();
-        let known_graph_revisions = self.graph_revisions.read().unwrap().clone();
         let disk_plan = Self::graph_rename_mutations(
             session.root.as_path(),
             &source,
@@ -570,16 +566,12 @@ impl ProjectState {
                 .map(|variable| (variable.id, variable))
                 .collect(),
             &loaded_referenced_graphs,
-            &known_graph_revisions,
         )
         .map_err(history_project_error)?;
         for (path, before) in disk_plan.referenced_graphs_before {
             let key = ResourceKey::Graph(path.clone());
             affected_resources.push(key.clone());
-            expected_revisions.insert(
-                key,
-                ResourceRevision::from_graph_revision(before.document.revision),
-            );
+            expected_revisions.insert(key, ResourceRevision::INITIAL);
             referenced_graphs_before.insert(path, before);
         }
         referenced_graphs.extend(disk_plan.referenced_graphs_after);
@@ -602,7 +594,7 @@ impl ProjectState {
                         .map(|_| ())
                         .map_err(|error| error.to_string())
                 } else {
-                    serde_json::from_slice::<crate::project_io::GraphDocument>(contents)
+                    serde_json::from_slice::<crate::project_io::GraphResourceFile>(contents)
                         .map(|_| ())
                         .map_err(|error| error.to_string())
                 }

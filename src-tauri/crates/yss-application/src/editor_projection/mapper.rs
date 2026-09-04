@@ -7,7 +7,7 @@ use yss_graph_analysis::{
     GraphPortInstanceAdditionFact, GraphPortSemanticFact, GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
-use yss_graph_document::{GraphDocument, GraphRevision, NodeId, PortAddress, PortRef};
+use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
 use yss_graph_protocol::{
     ParameterEditorSpec, PortDirection, ResolvedType, TypeDomain, TypeExpr, TypeState,
 };
@@ -15,13 +15,6 @@ use yss_graph_protocol::{
 pub fn build_editor_projection(
     input: EditorProjectionInput<'_>,
 ) -> Result<EditorProjectionModel, EditorProjectionError> {
-    let analysis_revision = GraphRevision::new(input.analysis.graph_revision());
-    if analysis_revision != input.document.revision {
-        return Err(EditorProjectionError::RevisionMismatch {
-            analysis: analysis_revision,
-            document: input.document.revision,
-        });
-    }
     if input.analysis.registry_fingerprint() != &input.registry_fingerprint {
         return Err(EditorProjectionError::RegistryMismatch);
     }
@@ -69,7 +62,6 @@ pub fn build_editor_projection(
             resource_versions: input.analysis.resource_versions().clone(),
         },
         graph_path: input.graph_path.clone(),
-        source_revision: input.document.revision,
         nodes,
         connections,
         diagnostics,

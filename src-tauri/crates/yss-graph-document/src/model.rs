@@ -1,4 +1,4 @@
-use super::{ConnectionId, GraphResourcePath, GraphRevision, NodeId, PortInstanceId};
+use super::{ConnectionId, GraphResourcePath, NodeId, PortInstanceId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -167,10 +167,8 @@ pub struct InputState {
     pub literal_override: Option<TypedValue>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GraphDocument {
-    #[serde(skip)]
-    pub revision: GraphRevision,
     pub nodes: BTreeMap<NodeId, DocumentNode>,
     #[serde(with = "port_address_map")]
     pub port_bindings: BTreeMap<PortAddress, DynamicPortBinding>,
@@ -208,17 +206,5 @@ mod port_address_map {
             }
         }
         Ok(values)
-    }
-}
-
-impl Default for GraphDocument {
-    fn default() -> Self {
-        Self {
-            revision: GraphRevision::INITIAL,
-            nodes: BTreeMap::new(),
-            port_bindings: BTreeMap::new(),
-            connections: BTreeMap::new(),
-            input_states: BTreeMap::new(),
-        }
     }
 }

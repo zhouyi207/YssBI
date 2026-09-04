@@ -52,7 +52,7 @@ pub(crate) fn instantiate_subgraph(
         &connection_ids,
     )?;
     let mut staged = document.clone();
-    yss_graph_document_edit::apply_graph_document_patch_to_candidate(&mut staged, &patch)
+    yss_graph_document_edit::apply_graph_document_patch(&mut staged, &patch)
         .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
     Ok(patch)
 }
@@ -634,7 +634,7 @@ fn plan_instantiation(
     }
 
     let mut staged = document.clone();
-    yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+    yss_graph_document_edit::apply_graph_document_patch(
         &mut staged,
         &GraphDocumentPatch::new(operations.clone()),
     )
@@ -666,7 +666,7 @@ fn plan_instantiation(
             address,
             after: Some(entry.state.clone()),
         };
-        yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+        yss_graph_document_edit::apply_graph_document_patch(
             &mut staged,
             &GraphDocumentPatch::new(vec![operation.clone()]),
         )
@@ -689,7 +689,7 @@ fn plan_instantiation(
                 order: entry.order.clone(),
             },
         };
-        yss_graph_document_edit::apply_graph_document_patch_to_candidate(
+        yss_graph_document_edit::apply_graph_document_patch(
             &mut staged,
             &GraphDocumentPatch::new(vec![operation.clone()]),
         )

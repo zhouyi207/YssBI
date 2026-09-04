@@ -3,7 +3,6 @@
 pub mod database;
 pub mod graph_draft;
 pub mod graph_mutation;
-pub mod graph_projection_channel;
 pub mod harness;
 pub mod project;
 pub mod variables;

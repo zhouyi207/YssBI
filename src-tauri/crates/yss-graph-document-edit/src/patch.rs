@@ -256,32 +256,12 @@ fn set_input_state(
     Ok(())
 }
 
-/// Applies and validates a patch against a disposable candidate document.
-///
-/// This deliberately keeps the candidate's revision unchanged. The candidate
-/// may be partially modified when an operation fails, so callers must discard
-/// it on error.
-pub fn apply_graph_document_patch_to_candidate(
-    document: &mut GraphDocument,
-    patch: &GraphDocumentPatch,
-) -> Result<(), DocumentError> {
-    patch.apply_without_revision(document)
-}
-
 pub fn apply_graph_document_patch(
     document: &mut GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<(), DocumentError> {
-    let next_revision =
-        document
-            .revision
-            .checked_next()
-            .map_err(|error| DocumentError::RevisionExhausted {
-                retained: error.retained,
-            })?;
     let mut staged = document.clone();
     patch.apply_without_revision(&mut staged)?;
-    staged.revision = next_revision;
     *document = staged;
     Ok(())
 }
@@ -290,16 +270,15 @@ pub fn apply_graph_document_patch(
 mod tests {
     use super::{
         DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
-        apply_graph_document_patch_to_candidate,
     };
     use yss_graph_document::{
-        DocumentNode, DynamicPortBinding, GraphDocument, GraphRevision, NodeId, NodePosition,
-        OrderKey, ParameterValues, PortAddress,
+        DocumentNode, DynamicPortBinding, GraphDocument, NodeId, NodePosition, OrderKey,
+        ParameterValues, PortAddress,
     };
     use yss_graph_protocol::{NodeTypeId, PortKey};
 
     #[test]
-    fn revisioned_patch_commit_is_atomic() {
+    fn patch_commit_is_atomic() {
         let node_id = NodeId::new();
         let node = DocumentNode {
             id: node_id,
@@ -316,7 +295,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(document.revision, GraphRevision::new(1));
         assert!(document.nodes.contains_key(&node_id));
 
         let before_invalid_patch = document.clone();
@@ -334,30 +312,5 @@ mod tests {
 
         assert_eq!(error, DocumentError::UnexpectedPortBinding(declared_port));
         assert_eq!(document, before_invalid_patch);
-    }
-
-    #[test]
-    fn candidate_patch_preserves_revision() {
-        let node_id = NodeId::new();
-        let node = DocumentNode {
-            id: node_id,
-            node_type: NodeTypeId::new("yssbi.test.candidate_patch").unwrap(),
-            position: NodePosition { x: 3.0, y: 4.0 },
-            parameters: ParameterValues::new(),
-            user_label: None,
-        };
-        let mut document = GraphDocument {
-            revision: GraphRevision::new(7),
-            ..GraphDocument::default()
-        };
-
-        apply_graph_document_patch_to_candidate(
-            &mut document,
-            &GraphDocumentPatch::new([GraphDocumentOperation::InsertNode { node }]),
-        )
-        .unwrap();
-
-        assert_eq!(document.revision, GraphRevision::new(7));
-        assert!(document.nodes.contains_key(&node_id));
     }
 }

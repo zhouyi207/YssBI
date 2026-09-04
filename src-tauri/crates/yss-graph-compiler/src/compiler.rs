@@ -12,7 +12,7 @@ use yss_graph_analysis::{
 };
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{
-    DocumentConnection, GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress,
+    DocumentConnection, GraphDocument, GraphResourcePath, NodeId, PortAddress,
 };
 use yss_graph_protocol::{PortDirection, TypedValue, Value};
 
@@ -27,7 +27,6 @@ struct ResolvedInputContracts {
 pub struct GraphCompilationInput<'a> {
     document: &'a GraphDocument,
     semantics: &'a GraphSemanticSnapshot,
-    expected_revision: GraphRevision,
     graph: GraphResourcePath,
     compile_id: CompileId,
 }
@@ -36,14 +35,12 @@ impl<'a> GraphCompilationInput<'a> {
     pub fn new(
         document: &'a GraphDocument,
         semantics: &'a GraphSemanticSnapshot,
-        expected_revision: GraphRevision,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Self {
         Self {
             document,
             semantics,
-            expected_revision,
             graph,
             compile_id,
         }
@@ -53,12 +50,6 @@ impl<'a> GraphCompilationInput<'a> {
 pub fn compile(
     input: GraphCompilationInput<'_>,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
-    if input.expected_revision != input.document.revision {
-        return Err(GraphCompileError::InvalidGraph {
-            graph: input.graph,
-            code: GraphCompileErrorCode::InvalidDocument,
-        });
-    }
     if input.semantics.diagnostics().iter().any(|diagnostic| {
         diagnostic.severity.is_blocking() && diagnostic.code.as_str().starts_with("compiler.type.")
     }) {
@@ -562,7 +553,6 @@ mod tests {
         let package = compile(GraphCompilationInput::new(
             &document,
             &semantics,
-            document.revision,
             graph.clone(),
             compile_id,
         ))
@@ -572,34 +562,6 @@ mod tests {
         assert_eq!(package.compile_id(), compile_id);
         assert!(package.operations().is_empty());
         assert!(package.parameters().is_empty());
-    }
-
-    #[test]
-    fn stale_document_revision_is_rejected_before_lowering() {
-        let document = GraphDocument::default();
-        let registry = NodeRegistryBuilder::new()
-            .freeze()
-            .expect("an empty test registry is valid");
-        let graph = graph_path();
-        let stale_revision = GraphRevision::new(document.revision.get().saturating_add(1));
-        let semantics = semantics(&document, &registry);
-
-        let error = compile(GraphCompilationInput::new(
-            &document,
-            &semantics,
-            stale_revision,
-            graph.clone(),
-            CompileId::new(1),
-        ))
-        .expect_err("a stale document must not compile");
-
-        assert!(matches!(
-            error,
-            GraphCompileError::InvalidGraph {
-                graph: error_graph,
-                code: GraphCompileErrorCode::InvalidDocument,
-            } if error_graph == graph
-        ));
     }
 
     #[test]
@@ -655,7 +617,6 @@ mod tests {
         let package = compile(GraphCompilationInput::new(
             &document,
             &semantics,
-            document.revision,
             graph_path(),
             CompileId::new(9),
         ))
@@ -756,7 +717,6 @@ mod tests {
         let package = compile(GraphCompilationInput::new(
             &document,
             &semantics,
-            document.revision,
             graph_path(),
             CompileId::new(11),
         ))
@@ -842,7 +802,6 @@ mod tests {
         let package = compile(GraphCompilationInput::new(
             &document,
             &semantics,
-            document.revision,
             graph_path(),
             CompileId::new(12),
         ))
@@ -915,7 +874,6 @@ mod tests {
         let error = compile(GraphCompilationInput::new(
             &document,
             &semantics,
-            document.revision,
             graph_path(),
             CompileId::new(10),
         ))

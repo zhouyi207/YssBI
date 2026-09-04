@@ -10,7 +10,6 @@ use yss_graph_analysis_contract::{
     ResourceVersionSet,
 };
 use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
-use yss_graph_document::GraphRevision;
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
     NodeId, OrderKey, PortAddress, PortRef,
@@ -280,7 +279,6 @@ pub enum GraphCompilationStage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
-    graph_revision: u64,
     resource_versions: ResourceVersionSet,
     semantic_snapshot: GraphSemanticSnapshot,
 }
@@ -288,10 +286,6 @@ pub struct GraphAnalysis {
 impl GraphAnalysis {
     pub fn registry_fingerprint(&self) -> &[u8; 32] {
         &self.registry_fingerprint
-    }
-
-    pub const fn graph_revision(&self) -> u64 {
-        self.graph_revision
     }
 
     pub fn resource_versions(&self) -> &ResourceVersionSet {
@@ -309,12 +303,11 @@ impl GraphAnalysis {
 }
 
 pub fn analyze(
-    basis: &CompilationBasis<GraphRevision>,
+    basis: &CompilationBasis,
     semantic_snapshot: GraphSemanticSnapshot,
 ) -> GraphAnalysis {
     GraphAnalysis {
         registry_fingerprint: *basis.registry_fingerprint.as_bytes(),
-        graph_revision: basis.graph_revision.get(),
         resource_versions: basis.resource_versions.clone(),
         semantic_snapshot,
     }
@@ -1455,7 +1448,6 @@ mod tests {
     #[test]
     fn analysis_accepts_neutral_document_and_basis() {
         let basis = CompilationBasis {
-            graph_revision: GraphRevision::new(1),
             registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),

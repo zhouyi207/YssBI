@@ -303,26 +303,6 @@ pub(super) fn project_to_graph_production_edges(
         .collect()
 }
 
-pub(super) fn graph_project_revision_bridge_violations(repository_root: &Path) -> Vec<String> {
-    let identity_path = "src-tauri/crates/yss-project-identity/src/identity.rs";
-    let identity = std::fs::read_to_string(repository_root.join(identity_path))
-        .unwrap_or_else(|error| panic!("failed to read {identity_path}: {error}"));
-    let mut violations = Vec::new();
-    for forbidden in [
-        "impl From<yss_graph_document::GraphRevision> for ResourceRevision",
-        "impl From<ResourceRevision> for yss_graph_document::GraphRevision",
-        "impl PartialEq<yss_graph_document::GraphRevision> for ResourceRevision",
-        "impl PartialEq<ResourceRevision> for yss_graph_document::GraphRevision",
-    ] {
-        if identity.contains(forbidden) {
-            violations.push(format!(
-                "{identity_path}: implicit revision bridge `{forbidden}`"
-            ));
-        }
-    }
-    violations
-}
-
 const WORKER_FILE: &str = "src-tauri/crates/yss-bayes-worker/src/lib.rs";
 const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
     "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",

@@ -3,11 +3,9 @@ use std::sync::Arc;
 use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use yss_execution::plan::{
-    PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
-};
+use yss_execution::plan::{PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint};
 use yss_graph_analysis::GraphAnalysis;
-use yss_graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_runtime::GraphMaterializationError;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId};
@@ -124,7 +122,7 @@ pub enum OpenGraphProjectError {
     #[error("graph revision is exhausted")]
     RevisionExhausted {
         graph: GraphResourcePath,
-        revision: GraphRevision,
+        revision: yss_project_identity::ResourceRevision,
     },
     #[error("graph-open operation is duplicated")]
     DuplicateOperation { operation_id: OperationId },
@@ -282,7 +280,6 @@ pub(crate) fn open_graph_in_session(
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        PlanGraphRevision::from_existing(candidate_document.revision.get()),
         PlanRegistryFingerprint::from_bytes(registry_fingerprint),
         Default::default(),
         Default::default(),
@@ -392,7 +389,7 @@ fn map_project_open_error(
         ProjectFilesystemError::ResourceRevisionOverflow { retained, .. } => {
             OpenGraphProjectError::RevisionExhausted {
                 graph: graph.clone(),
-                revision: GraphRevision::new(*retained),
+                revision: yss_project_identity::ResourceRevision::new(*retained),
             }
             .into()
         }

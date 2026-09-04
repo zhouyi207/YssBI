@@ -28,7 +28,7 @@ pub(super) struct HistoryPreparationBasis {
     pub persistence: HistoryPersistencePolicy,
     pub undo: bool,
     pub expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
-    pub expected_graph_revisions: BTreeMap<GraphResourcePath, yss_graph_document::GraphRevision>,
+    pub expected_graph_resource_revisions: BTreeMap<GraphResourcePath, ResourceRevision>,
     pub residency: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
 }
 
@@ -55,8 +55,7 @@ pub(super) struct HistoryPreparationSnapshot {
     authority_generation: u64,
     undo: bool,
     transaction: ProjectHistoryTransaction,
-    graph_revisions:
-        std::collections::HashMap<GraphResourcePath, yss_graph_document::GraphRevision>,
+    graph_resource_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
@@ -167,10 +166,7 @@ pub(super) fn capture_history_preparation_snapshot(
     transaction: ProjectHistoryTransaction,
     anchor: &ResourceKey,
     data: ProjectData,
-    graph_revisions: std::collections::HashMap<
-        GraphResourcePath,
-        yss_graph_document::GraphRevision,
-    >,
+    graph_resource_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     variable_revisions: std::collections::HashMap<
         yss_variable_contract::VariableId,
         super::project_state::VariableRevisionEntry,
@@ -178,7 +174,7 @@ pub(super) fn capture_history_preparation_snapshot(
     chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     history: ProjectHistory,
 ) -> Result<HistoryPreparationSnapshot, ProjectHistoryMutationError> {
-    let known_graphs = graph_revisions.keys().cloned().collect();
+    let known_graphs = graph_resource_revisions.keys().cloned().collect();
     let touched = discover_touched_resources(&transaction, undo, &data, &known_graphs)
         .map_err(|error| ProjectHistoryMutationError::History(error.into()))?;
     let mut documents = super::project_state::project_documents(&data, &variable_revisions)?;
@@ -187,7 +183,7 @@ pub(super) fn capture_history_preparation_snapshot(
         .map(|(path, revision)| (ChartResourceKey(path.as_str().into()), *revision))
         .collect();
     retain_required_documents(&mut documents, &transaction, anchor, &touched.graphs);
-    let graph_revisions = graph_revisions
+    let graph_resource_revisions = graph_resource_revisions
         .into_iter()
         .filter(|(path, _)| touched.graphs.contains_key(path))
         .collect();
@@ -196,7 +192,7 @@ pub(super) fn capture_history_preparation_snapshot(
         authority_generation,
         undo,
         transaction,
-        graph_revisions,
+        graph_resource_revisions,
         variable_revisions,
         chart_revisions,
         history,
@@ -285,20 +281,18 @@ pub(super) fn hydrate_history_preparation(
     for graph_path in &unloaded {
         hydrate_graph_document(&mut snapshot, graph_path)?;
     }
-    validate_loaded_graph_revisions(&snapshot)?;
     install_touched_variable_tombstones(&mut snapshot)?;
     install_touched_chart_tombstone(&mut snapshot)?;
     let expected_revisions = expected_revisions(&snapshot)?;
-    let current_revision =
-        document_revision(&snapshot.documents, &request.resource).ok_or_else(|| {
-            ProjectHistoryMutationError::History(
-                format!(
-                    "history anchor resource {:?} was not found",
-                    request.resource
-                )
-                .into(),
+    let current_revision = resource_revision(&snapshot, &request.resource).ok_or_else(|| {
+        ProjectHistoryMutationError::History(
+            format!(
+                "history anchor resource {:?} was not found",
+                request.resource
             )
-        })?;
+            .into(),
+        )
+    })?;
     if current_revision != request.base_revision {
         return Err(ProjectHistoryMutationError::StaleRevision {
             base_revision: request.base_revision.get(),
@@ -381,7 +375,10 @@ pub(super) fn hydrate_history_preparation(
             persistence: snapshot.transaction.persistence,
             undo: snapshot.undo,
             expected_revisions,
-            expected_graph_revisions: snapshot.graph_revisions.into_iter().collect(),
+            expected_graph_resource_revisions: snapshot
+                .graph_resource_revisions
+                .into_iter()
+                .collect(),
             residency: snapshot.touched.graphs,
         },
         before,
@@ -415,16 +412,11 @@ pub(super) fn synchronize_function_owner_revisions(
                 format!("Function '{}' owner graph '{path}' is not loaded", key.0).into(),
             )
         })?;
-        let revision = graph
-            .function
-            .as_ref()
-            .ok_or_else(|| {
-                ProjectHistoryMutationError::History(
-                    format!("Function '{}' owner graph has no Function document", key.0).into(),
-                )
-            })?
-            .revision;
-        graph.document.revision = revision.to_graph_revision();
+        graph.function.as_ref().ok_or_else(|| {
+            ProjectHistoryMutationError::History(
+                format!("Function '{}' owner graph has no Function document", key.0).into(),
+            )
+        })?;
     }
     Ok(())
 }
@@ -436,30 +428,8 @@ fn hydrate_graph_document(
     let root = snapshot.session.root.as_path().to_string_lossy();
     let disk = super::project_io::load_project_graph_document_from_file(&root, graph_path)
         .map_err(history_conflict)?;
-    let expected_graph_revision = snapshot
-        .graph_revisions
-        .get(graph_path)
-        .copied()
-        .ok_or_else(|| {
-            ProjectHistoryMutationError::History(
-                format!("hydrated graph '{}' has no revision authority", graph_path).into(),
-            )
-        })?;
-    if disk.revision.to_graph_revision() != expected_graph_revision {
-        return Err(ProjectHistoryMutationError::History(
-            format!(
-                "hydrated graph '{}' revision mismatch: expected {}, found {}",
-                graph_path,
-                expected_graph_revision.get(),
-                disk.revision.get()
-            )
-            .into(),
-        ));
-    }
-
     let document_key = graph_path.clone();
-    let mut graph = disk.document;
-    graph.revision = disk.revision.to_graph_revision();
+    let graph = disk.document;
     snapshot
         .documents
         .graphs
@@ -550,38 +520,6 @@ fn hydrate_graph_document(
     Ok(())
 }
 
-fn validate_loaded_graph_revisions(
-    snapshot: &HistoryPreparationSnapshot,
-) -> Result<(), ProjectHistoryMutationError> {
-    for (path, residency) in &snapshot.touched.graphs {
-        if *residency != HistoryGraphResidency::Loaded {
-            continue;
-        }
-        let expected = snapshot.graph_revisions.get(path).copied().ok_or_else(|| {
-            ProjectHistoryMutationError::History(
-                format!("loaded graph '{}' has no revision authority", path).into(),
-            )
-        })?;
-        let key = path.clone();
-        let actual = snapshot
-            .documents
-            .graphs
-            .get(&key)
-            .map(|graph| graph.revision)
-            .ok_or_else(|| {
-                ProjectHistoryMutationError::History(
-                    format!("loaded graph '{}' is absent", path).into(),
-                )
-            })?;
-        if actual != expected {
-            return Err(ProjectHistoryMutationError::History(
-                format!("loaded graph '{}' revision authority mismatch", path).into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn install_touched_variable_tombstones(
     snapshot: &mut HistoryPreparationSnapshot,
 ) -> Result<(), ProjectHistoryMutationError> {
@@ -664,12 +602,11 @@ fn expected_revisions(
 ) -> Result<BTreeMap<ResourceKey, ResourceRevision>, ProjectHistoryMutationError> {
     let mut revisions = BTreeMap::new();
     for change in &snapshot.transaction.changes {
-        let revision =
-            document_revision(&snapshot.documents, &change.resource).ok_or_else(|| {
-                ProjectHistoryMutationError::History(
-                    format!("touched resource {:?} was not hydrated", change.resource).into(),
-                )
-            })?;
+        let revision = resource_revision(snapshot, &change.resource).ok_or_else(|| {
+            ProjectHistoryMutationError::History(
+                format!("touched resource {:?} was not hydrated", change.resource).into(),
+            )
+        })?;
         revisions.insert(change.resource.clone(), revision);
     }
     for key in &snapshot.touched.charts {
@@ -689,15 +626,22 @@ fn expected_revisions(
     Ok(revisions)
 }
 
+fn resource_revision(
+    snapshot: &HistoryPreparationSnapshot,
+    resource: &ResourceKey,
+) -> Option<ResourceRevision> {
+    match resource {
+        ResourceKey::Graph(path) => snapshot.graph_resource_revisions.get(path).copied(),
+        _ => document_revision(&snapshot.documents, resource),
+    }
+}
+
 fn document_revision(
     documents: &ProjectDocumentState,
     resource: &ResourceKey,
 ) -> Option<ResourceRevision> {
     match resource {
-        ResourceKey::Graph(path) => documents
-            .graphs
-            .get(path)
-            .map(|document| ResourceRevision::from_graph_revision(document.revision)),
+        ResourceKey::Graph(_) => None,
         ResourceKey::Function(key) => documents
             .functions
             .get(key)
