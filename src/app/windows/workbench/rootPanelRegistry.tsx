@@ -5,12 +5,14 @@ import { DetailsPane, InspectPane } from "@/modules/details/public";
 import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/public";
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
 import { ResultPanel } from "@/modules/results/public";
+import { GraphProblemsPanel } from "@/modules/problems/public";
+import { RunOutputPanel } from "@/modules/output/public";
 import {
   EditorResourceDockPanel,
   type RootDockviewPanelComponent,
   type RootPanelRegistry,
 } from "@/modules/workbench/public";
-import { DiagnosticsPanel, LogDomainDockviewHost, OutputPanel } from "@/modules/logs/public";
+import { LogDomainDockviewHost } from "@/modules/logs/public";
 import { editorRendererRegistry } from "./editorRendererRegistry";
 
 const EditorResourcePanel: RootDockviewPanelComponent = (props) => {
@@ -37,6 +39,6 @@ export const rootPanelRegistry = {
   Inspect: InspectPane,
   Result: ResultDockPanel,
   Logs: MainLogsDockPanel,
-  Output: OutputPanel,
-  Diagnostics: DiagnosticsPanel,
+  Output: RunOutputPanel,
+  Problems: GraphProblemsPanel,
 } satisfies RootPanelRegistry;

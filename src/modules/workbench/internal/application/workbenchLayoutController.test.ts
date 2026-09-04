@@ -64,7 +64,7 @@ function rootLayout(
     inspect: "Inspect",
     logs: "Logs",
     output: "Output",
-    diagnostics: "Diagnostics",
+    problems: "Problems",
   };
   const activityPanels = {
     "project-stable": {
@@ -296,7 +296,7 @@ function panelInfo(viewId: WorkbenchViewId): WorkbenchPanelInfo {
     inspect: "Inspect",
     logs: "Logs",
     output: "Output",
-    diagnostics: "Diagnostics",
+    problems: "Problems",
   } as const satisfies Record<WorkbenchViewId, WorkbenchComponentId>;
   const component = components[viewId];
   return {
@@ -388,7 +388,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
         "assistant",
         "logs",
         "output",
-        "diagnostics",
+        "problems",
       ].includes(viewId)
     ) {
       throw new Error(`unexpected default view ${viewId}`);
@@ -470,7 +470,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
         "assistant",
         "logs",
         "output",
-        "diagnostics",
+        "problems",
       ].includes(viewId)
     ) {
       throw new Error(`unexpected default view ${viewId}`);
@@ -713,7 +713,7 @@ describe("WorkbenchLayoutController hydration", () => {
         "assistant",
         "logs",
         "output",
-        "diagnostics",
+        "problems",
       ],
     );
   });
@@ -756,7 +756,7 @@ describe("WorkbenchLayoutController hydration", () => {
         "assistant",
         "logs",
         "output",
-        "diagnostics",
+        "problems",
       ],
     );
     expect(harness.fakePort.layoutConfigureEdge.mock.calls.map(([request]) => request)).toEqual([
@@ -773,7 +773,7 @@ describe("WorkbenchLayoutController hydration", () => {
       { panelInstanceId: "view:assistant", groupId: "edge-right", index: 1, activate: false },
       { panelInstanceId: "view:logs", groupId: "edge-bottom", index: 0 },
       { panelInstanceId: "view:output", groupId: "edge-bottom", index: 1 },
-      { panelInstanceId: "view:diagnostics", groupId: "edge-bottom", index: 2 },
+      { panelInstanceId: "view:problems", groupId: "edge-bottom", index: 2 },
     ]);
     expect(harness.order.indexOf("layout.move:view:output")).toBeLessThan(
       harness.order.indexOf("internal.installHydrationLayout:applied"),
@@ -832,7 +832,7 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.logsController.getLatestSnapshot()).toEqual(createDefaultLogsDockviewLayout());
   });
 
-  it("installs the permanent Details sidebar while restoring an older root layout", async () => {
+  it("installs the permanent Details sidebar when a valid root omits it", async () => {
     const savedRoot = rootLayout("saved-logs", "logs");
     const harness = createHarness({ raw: storedPayload(savedRoot) });
 
@@ -972,6 +972,7 @@ describe("WorkbenchLayoutController persistence", () => {
       "layout.ensureView:details",
       "layout.configureEdge:right",
       "layout.move:view:details",
+      "internal.installHydrationLayout:applied",
       "internal.completeHydration",
       "port.subscribe",
       "internal.whenIdle",

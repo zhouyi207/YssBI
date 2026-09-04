@@ -25,10 +25,15 @@ export interface GraphNodeDiagnosticsBucket {
   readonly connections?: Readonly<Record<string, Pick<ConnectionData, "output" | "input">>>;
 }
 
-export interface GraphNodeDiagnostic {
+export interface GraphProblemsBucket extends GraphNodeDiagnosticsBucket {
+  readonly sourceRevision: number;
+  readonly diagnostics: readonly DeepReadonly<DiagnosticDto>[];
+}
+
+export interface GraphProblem {
   readonly graphPath: string;
-  readonly nodeId: string;
-  readonly nodeTitle: string;
+  readonly sourceRevision: number;
+  readonly nodeId: string | null;
   readonly locationLabel: string;
   readonly diagnostic: DeepReadonly<DiagnosticDto>;
 }
@@ -57,9 +62,9 @@ export function isUnboundInputDiagnostic(
 export function formatDiagnosticLocationLabel(
   location: DiagnosticLocationDto,
   bucket: GraphNodeDiagnosticsBucket | undefined,
-  ownerNodeId: string,
+  ownerNodeId: string | null,
 ): string | null {
-  const ownerTitle = nodeDisplayTitle(bucket?.nodes[ownerNodeId]);
+  const ownerTitle = ownerNodeId ? (nodeDisplayTitle(bucket?.nodes[ownerNodeId]) ?? null) : null;
 
   switch (location.kind) {
     case "graph":
@@ -89,25 +94,35 @@ export function formatDiagnosticLocationLabel(
   }
 }
 
-export function collectNodeDiagnostics(
+function nodeIdFromDiagnosticLocation(location: DiagnosticLocationDto): string | null {
+  switch (location.kind) {
+    case "node":
+    case "parameter":
+      return location.nodeId;
+    case "port":
+      return location.address.nodeId;
+    case "graph":
+    case "resource":
+    case "connection":
+      return null;
+  }
+}
+
+export function collectGraphProblems(
   graphPath: string,
-  bucket: GraphNodeDiagnosticsBucket | undefined,
-): GraphNodeDiagnostic[] {
+  bucket: GraphProblemsBucket | undefined,
+): GraphProblem[] {
   if (!bucket) return [];
 
-  return bucket.graphNodes.flatMap((nodeId) => {
-    const node = bucket.nodes[nodeId];
-    if (!node) return [];
-
-    return node.diagnostics.map((diagnostic) => ({
+  return bucket.diagnostics.map((diagnostic) => {
+    const nodeId = nodeIdFromDiagnosticLocation(diagnostic.location);
+    return {
       graphPath,
+      sourceRevision: bucket.sourceRevision,
       nodeId,
-      nodeTitle: nodeDisplayTitle(node) ?? "",
       locationLabel:
-        formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId) ??
-        nodeDisplayTitle(node) ??
-        "",
+        formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId) ?? graphPath,
       diagnostic,
-    }));
+    };
   });
 }

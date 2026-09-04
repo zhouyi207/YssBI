@@ -31,6 +31,7 @@ export interface EditorGraphProjectionDto {
   sourceRevision: number;
   nodes: EditorNodeProjectionDto[];
   connections: EditorConnectionProjectionDto[];
+  /** Complete canonical problem set for this graph projection revision. */
   diagnostics: DiagnosticDto[];
   outcome: CompilationOutcomeDto;
   hasBlockingDiagnostics: boolean;
@@ -62,6 +63,7 @@ export interface EditorNodeProjectionDto {
   portInstanceAdditions: PortInstanceAdditionDto[];
   parameterEditors: ParameterEditorDto[];
   capabilities: NodeCapabilitiesDto;
+  /** Node-local index for Canvas, Pin, and Details rendering. */
   diagnostics: DiagnosticDto[];
 }
 

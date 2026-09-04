@@ -332,7 +332,7 @@ function viewPanel(
     inspect: "Inspect",
     logs: "Logs",
     output: "Output",
-    diagnostics: "Diagnostics",
+    problems: "Problems",
   } as const;
   return {
     panelInstanceId,
@@ -381,12 +381,12 @@ describe("workbench panel close coordinator", () => {
     seedPanels([
       viewPanel("logs-a", "logs", "group-a"),
       viewPanel("output-a", "output", "group-a"),
-      viewPanel("diagnostics-b", "diagnostics", "group-b"),
+      viewPanel("problems-b", "problems", "group-b"),
     ]);
 
     await expect(requestCloseWorkbenchGroup("group-a")).resolves.toBe(true);
 
-    expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["diagnostics-b"]);
+    expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["problems-b"]);
   });
 
   it("removes nothing when a dirty editor cancels a mixed Close Group", async () => {

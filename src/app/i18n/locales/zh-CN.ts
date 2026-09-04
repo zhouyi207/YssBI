@@ -60,6 +60,7 @@ export const zhCN = {
       saveFailed: "保存失败：{{error}}",
       compileFailed: "编译图失败：{{error}}",
       compileRequired: "请先编译当前图再运行",
+      problemsBlockExecution: "请先解决图中的阻断问题再运行",
       loadFailed: "加载项目失败",
     },
     chart: {
@@ -133,18 +134,17 @@ export const zhCN = {
     inspect: "检查",
     logs: "日志",
     output: "输出",
-    diagnostics: "诊断",
+    problems: "问题",
     outputNoGraph: "请打开图以查看程序输出",
     outputEmpty: "当前图暂无程序输出",
     outputClear: "清空输出",
     outputSource: "来源",
-    outputSourceUnknown: "未知节点 · 未知 Pin",
     outputTruncated: "单条输出已按运行时上限截断",
     outputDropped: "超出运行时上限的后续输出已丢弃",
-    diagnosticsNoGraph: "请打开图以查看诊断信息",
-    diagnosticsEmpty: "当前图没有诊断信息",
-    diagnosticsCount: "{{count}} 条诊断",
-    diagnosticsLocateNode: "定位节点",
+    problemsNoGraph: "请打开图以查看问题",
+    problemsEmpty: "当前图没有问题",
+    problemsCount: "{{count}} 个问题",
+    problemsLocateNode: "定位问题节点",
     outputProjectionDropped: "此窗口未能投影部分输出",
   },
   resultSource: {
@@ -866,7 +866,7 @@ export const zhCN = {
     },
   },
   graphDiagnostics: {
-    sidebarTooltip: "该图有 {{count}} 条诊断",
+    sidebarTooltip: "该图有 {{count}} 个问题",
   },
   canvas: {
     connection: {
@@ -927,6 +927,7 @@ export const zhCN = {
     compilingGraph: "正在编译图…",
     compileRequired: "请先编译图再运行",
     functionRunUnavailable: "函数图通过其调用方运行",
+    problemsBlockExecution: "请先解决图中的阻断问题再运行",
     executeCurrentGraph: "运行当前图",
     newEventGraph: "新建 Event",
     newFunction: "新建 Function",
@@ -1230,7 +1231,7 @@ export const zhCN = {
     parameters: "参数",
     sections: {
       capabilities: "能力",
-      diagnostics: "诊断",
+      diagnostics: "问题",
     },
     parameterEditor: {
       apply: "应用",

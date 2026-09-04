@@ -28,7 +28,7 @@ const VIEW_TITLE_KEYS = {
   inspect: "panel.inspect",
   logs: "panel.logs",
   output: "panel.output",
-  diagnostics: "panel.diagnostics",
+  problems: "panel.problems",
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefined {
@@ -188,7 +188,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const assistant = tx.ensureView(viewRequest("assistant"));
       const logs = tx.ensureView(viewRequest("logs"));
       const output = tx.ensureView(viewRequest("output"));
-      const diagnostics = tx.ensureView(viewRequest("diagnostics"));
+      const problems = tx.ensureView(viewRequest("problems"));
       const left = tx.configureEdge({
         position: "left",
         size: WORKBENCH_EDGE_SIZES.left,
@@ -248,7 +248,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
         index: 1,
       });
       tx.move({
-        panelInstanceId: diagnostics.panelInstanceId,
+        panelInstanceId: problems.panelInstanceId,
         groupId: bottom.groupId,
         index: 2,
       });

@@ -126,10 +126,6 @@ function rootIsEmpty(api: DockviewApi): boolean {
   return api.panels.length === 0;
 }
 
-function viewRequest(viewId: "diagnostics") {
-  return { viewId, title: "Diagnostics" } as const;
-}
-
 const DETAILS_VIEW_REQUEST = {
   viewId: "details",
   title: "Details",
@@ -174,36 +170,6 @@ function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction):
   }
 }
 
-function ensureDiagnosticsViewAfterRestore(transaction: WorkbenchLayoutTransaction): void {
-  const existing = transaction
-    .listPanels()
-    .find((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "diagnostics");
-  if (existing) return;
-
-  const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
-  const diagnostics = transaction.ensureView(viewRequest("diagnostics"));
-  const output = transaction
-    .listPanels()
-    .find((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "output");
-  if (output) {
-    const outputGroupPanels = transaction.listGroupPanels(output.groupId);
-    const outputIndex = outputGroupPanels.findIndex(
-      (panel) => panel.panelInstanceId === output.panelInstanceId,
-    );
-    if (outputIndex >= 0) {
-      transaction.move({
-        panelInstanceId: diagnostics.panelInstanceId,
-        groupId: output.groupId,
-        index: outputIndex + 1,
-        activate: false,
-      });
-    }
-  }
-  if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
-    transaction.activate(activePanelInstanceId);
-  }
-}
-
 function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void {
   transaction.ensureCentralGroup();
   const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
@@ -213,7 +179,7 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
   const assistant = transaction.ensureView(ASSISTANT_VIEW_REQUEST);
   const logs = transaction.ensureView({ viewId: "logs", title: "Logs" });
   const output = transaction.ensureView({ viewId: "output", title: "Output" });
-  const diagnostics = transaction.ensureView(viewRequest("diagnostics"));
+  const problems = transaction.ensureView({ viewId: "problems", title: "Problems" });
   const left = transaction.configureEdge({
     position: "left",
     size: WORKBENCH_EDGE_SIZES.left,
@@ -251,7 +217,7 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     index: 1,
   });
   transaction.move({
-    panelInstanceId: diagnostics.panelInstanceId,
+    panelInstanceId: problems.panelInstanceId,
     groupId: bottom.groupId,
     index: 2,
   });
@@ -529,10 +495,9 @@ export function createWorkbenchLayoutController(
     try {
       internal.installHydrationLayout(cycle.internalHydrationEpoch, (transaction) => {
         ensurePermanentDetailsSidebar(transaction);
-        ensureDiagnosticsViewAfterRestore(transaction);
       });
     } catch {
-      // A restored root remains usable if additive view migrations fail.
+      // A restored root remains usable if permanent-sidebar enforcement fails.
     }
     openHydrationGateAndFinish(cycle, false);
   };

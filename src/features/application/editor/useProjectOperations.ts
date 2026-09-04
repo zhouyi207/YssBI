@@ -20,6 +20,8 @@ import {
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
+import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEntityAccess";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { getExecutionEventTarget, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
 import type { RecordedEvent } from "@/features/core/execution/executionTypes";
@@ -280,6 +282,11 @@ export function useProjectOperations() {
         const draft = useGraphDraftStore.getState().sessions[graphPath];
         if (draft?.compileStatus !== "compiled" || !draft.compiledSourceHash) {
           showBlockingMessage(t("notifications.project.compileRequired"));
+          return;
+        }
+        const projection = useGraphProjectionStore.getState().graphEntities[graphPath];
+        if (!isGraphProjectionExecutable(projection)) {
+          showBlockingMessage(t("notifications.project.problemsBlockExecution"));
           return;
         }
         logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);

@@ -1,8 +1,9 @@
 export {
-  collectNodeDiagnostics,
+  collectGraphProblems,
   findPrimaryPortDiagnostic,
   formatDiagnosticLocationLabel,
   isUnboundInputDiagnostic,
-  type GraphNodeDiagnostic,
   type GraphNodeDiagnosticsBucket,
+  type GraphProblem,
+  type GraphProblemsBucket,
 } from "./nodeDiagnostics";

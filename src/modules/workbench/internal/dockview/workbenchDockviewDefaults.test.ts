@@ -121,7 +121,7 @@ describe("workbench Dockview defaults", () => {
       inspect: "right",
       logs: "bottom",
       output: "bottom",
-      diagnostics: "bottom",
+      problems: "bottom",
       result: "right",
     });
     expect(WORKBENCH_RESET_BUCKET_ORDER).toEqual(["left", "top", "grid", "right", "bottom"]);

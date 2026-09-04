@@ -60,6 +60,7 @@ export const enUS = {
       saveFailed: "Could not save: {{error}}",
       compileFailed: "Could not compile graph: {{error}}",
       compileRequired: "Compile the current graph before running it",
+      problemsBlockExecution: "Resolve the graph's blocking problems before running it",
       loadFailed: "Could not load project",
     },
     chart: {
@@ -134,18 +135,17 @@ export const enUS = {
     inspect: "Inspect",
     logs: "Logs",
     output: "Output",
-    diagnostics: "Diagnostics",
+    problems: "Problems",
     outputNoGraph: "Open a graph to view its program output",
     outputEmpty: "The current graph has no program output",
     outputClear: "Clear output",
     outputSource: "Source",
-    outputSourceUnknown: "Unknown node · unknown pin",
     outputTruncated: "One output value was truncated by the runtime limit",
     outputDropped: "Additional output was dropped by the runtime limit",
-    diagnosticsNoGraph: "Open a graph to view its diagnostics",
-    diagnosticsEmpty: "No diagnostics were reported for the current graph",
-    diagnosticsCount: "{{count}} diagnostics",
-    diagnosticsLocateNode: "Locate node",
+    problemsNoGraph: "Open a graph to view its problems",
+    problemsEmpty: "No problems were reported for the current graph",
+    problemsCount: "{{count}} problems",
+    problemsLocateNode: "Locate problem node",
     outputProjectionDropped: "Some output could not be projected in this window",
   },
   resultSource: {
@@ -914,7 +914,7 @@ export const enUS = {
     },
   },
   graphDiagnostics: {
-    sidebarTooltip: "{{count}} diagnostic(s) in this graph",
+    sidebarTooltip: "{{count}} problem(s) in this graph",
   },
   canvas: {
     connection: {
@@ -975,6 +975,7 @@ export const enUS = {
     compilingGraph: "Compiling graph...",
     compileRequired: "Compile the graph before running",
     functionRunUnavailable: "Function graphs run through their consumers",
+    problemsBlockExecution: "Resolve blocking graph problems before running",
     executeCurrentGraph: "Run current graph",
     newEventGraph: "New Event Graph",
     newFunction: "New Function",
@@ -1279,7 +1280,7 @@ export const enUS = {
     parameters: "Parameters",
     sections: {
       capabilities: "Capabilities",
-      diagnostics: "Diagnostics",
+      diagnostics: "Problems",
     },
     parameterEditor: {
       apply: "Apply",

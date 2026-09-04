@@ -29,6 +29,7 @@ export type CanvasExecutionOverlayModel =
       kind: "graph";
       graphPath: string;
       canExecute: boolean;
+      executeUnavailableReason: "functionGraph" | "blockingProblems" | null;
       compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
       onCompile: () => void;
       onExecute: () => void;
@@ -63,6 +64,7 @@ export default function CanvasOverlays({
         <CanvasExecutionToolbar
           graphPath={execution.graphPath}
           canExecute={execution.canExecute}
+          executeUnavailableReason={execution.executeUnavailableReason}
           compileStatus={execution.compileStatus}
           onCompile={execution.onCompile}
           onExecute={execution.onExecute}

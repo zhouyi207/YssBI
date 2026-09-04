@@ -172,7 +172,7 @@ function missingLogsDomainLayout(): SerializedDockview {
 }
 
 describe("workbench layout persistence", () => {
-  it("uses the current semantic key and exact unversioned envelope", () => {
+  it("uses the current semantic key and exact envelope", () => {
     const root = rootLayout();
     const logs = createDefaultLogsDockviewLayout();
 
@@ -182,14 +182,18 @@ describe("workbench layout persistence", () => {
       root,
       nested: { logs },
     });
-    expect(createPersistedWorkbenchLayout(root, logs)).not.toHaveProperty("version");
     expect(
       parsePersistedWorkbenchLayout({
-        ...(payload(root, logs) as Record<string, unknown>),
-        version: 1,
+        ...(createPersistedWorkbenchLayout(root, logs) as unknown as Record<string, unknown>),
+        version: 2,
       }),
     ).toBeNull();
-    expect(parsePersistedWorkbenchLayout({ root, nested: { logs } })).not.toBeNull();
+    expect(parsePersistedWorkbenchLayout(createPersistedWorkbenchLayout(root, logs))).toMatchObject(
+      {
+        root: { status: "valid" },
+        logs: { status: "valid" },
+      },
+    );
   });
 
   it("defines one deterministic default Logs group with all seven domains", () => {

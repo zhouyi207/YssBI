@@ -90,7 +90,7 @@ const fixedViewCases = [
   { viewId: "inspect", component: "Inspect", titleKey: "panel.inspect" },
   { viewId: "logs", component: "Logs", titleKey: "panel.logs" },
   { viewId: "output", component: "Output", titleKey: "panel.output" },
-  { viewId: "diagnostics", component: "Diagnostics", titleKey: "panel.diagnostics" },
+  { viewId: "problems", component: "Problems", titleKey: "panel.problems" },
 ] as const;
 
 function resultParams(): WorkbenchPanelParams {
@@ -146,7 +146,7 @@ describe("RootPanelTabRenderer", () => {
               Inspect: TestPanel,
               Logs: TestPanel,
               Output: TestPanel,
-              Diagnostics: TestPanel,
+              Problems: TestPanel,
               Result: TestPanel,
             }}
             defaultTabComponent={rootPanelTabRenderer}
@@ -381,10 +381,10 @@ describe("RootPanelTabRenderer", () => {
         position: { referenceGroup: bottomGroup, direction: "within" },
       });
       readyApi.addPanel<WorkbenchPanelParams>({
-        id: "diagnostics-a",
+        id: "problems-a",
         component: "Logs",
-        title: "Diagnostics",
-        params: { metadata: { role: "view", viewId: "diagnostics" } },
+        title: "Problems",
+        params: { metadata: { role: "view", viewId: "problems" } },
         inactive: true,
         position: { referenceGroup: bottomGroup, direction: "within" },
       });
@@ -397,10 +397,10 @@ describe("RootPanelTabRenderer", () => {
 
     expect(host.querySelectorAll('[data-workbench-tab-edge-collapsed="true"]')).toHaveLength(2);
 
-    act(() => tabShell("diagnostics-a").click());
+    act(() => tabShell("problems-a").click());
 
     expect(bottomGroup.isCollapsed()).toBe(false);
-    expect(api?.activePanel?.id).toBe("diagnostics-a");
+    expect(api?.activePanel?.id).toBe("problems-a");
     expect(host.querySelectorAll('[data-workbench-tab-edge-collapsed="true"]')).toHaveLength(0);
   });
 
@@ -460,23 +460,23 @@ describe("RootPanelTabRenderer", () => {
         position: { referenceGroup: bottomGroup, direction: "within" },
       });
       readyApi.addPanel<WorkbenchPanelParams>({
-        id: "diagnostics-a",
+        id: "problems-a",
         component: "Logs",
-        title: "Diagnostics",
-        params: { metadata: { role: "view", viewId: "diagnostics" } },
+        title: "Problems",
+        params: { metadata: { role: "view", viewId: "problems" } },
         inactive: true,
         position: { referenceGroup: bottomGroup, direction: "within" },
       });
     });
 
     const outputTab = tabShell("output-a");
-    const diagnosticsTab = tabShell("diagnostics-a");
+    const problemsTab = tabShell("problems-a");
 
-    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(diagnosticsTab).margin);
+    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(problemsTab).margin);
 
-    act(() => diagnosticsTab.click());
+    act(() => problemsTab.click());
 
-    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(diagnosticsTab).margin);
+    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(problemsTab).margin);
   });
 
   it("collapses the left Activity edge when its active tab is clicked again", () => {

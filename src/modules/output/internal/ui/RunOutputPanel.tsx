@@ -3,9 +3,7 @@ import { FiTrash2 } from "react-icons/fi";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { executionResultUi } from "@/features/core/execution";
 import { useExecutionRead } from "@/features/core/execution/read";
-import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
-import { resolveNodePinDisplayLabel } from "@/features/domain/editorProjection";
 import type { RunOutputProjection } from "@/features/core/execution/executionTypes";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 
@@ -15,13 +13,20 @@ const EMPTY_RUN_OUTPUT: RunOutputProjection = {
   projectionDropped: false,
 };
 
-export function OutputPanel() {
+function formatRunOutputSource(entry: RunOutputProjection["entries"][number]): string {
+  const port =
+    entry.sourcePort.kind === "declared"
+      ? entry.sourcePort.portKey
+      : `${entry.sourcePort.templateKey}[${entry.sourcePort.instanceId}]`;
+  return `${entry.sourceGraphPath} · ${entry.sourceNodeId} · ${port}`;
+}
+
+export function RunOutputPanel() {
   const { t } = useTranslation();
   const graphPath = useGraphSessionUi((snapshot) => snapshot.focusedSession?.graphPath ?? null);
   const output = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT) : EMPTY_RUN_OUTPUT,
   );
-  const graphEntities = useGraphRead((snapshot) => snapshot.graphEntities);
   const clearRunOutput = executionResultUi.clearRunOutput;
   const hasOutput = output.entries.length > 0 || output.projectionDropped;
 
@@ -29,7 +34,7 @@ export function OutputPanel() {
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div
         data-output-panel-header
-        className="flex h-(--logs-tab-height) shrink-0 items-center justify-between gap-1 border-b border-border/20 bg-background px-1"
+        className="flex h-(--panel-toolbar-height) shrink-0 items-center justify-between gap-1 border-b border-border/20 bg-background px-1"
       >
         <span className="min-w-0 truncate px-1 text-xs font-medium text-foreground">
           {t("panel.output")}
@@ -64,11 +69,7 @@ export function OutputPanel() {
               <div className="px-3 py-1.5 text-amber-500">{t("panel.outputProjectionDropped")}</div>
             ) : null}
             {output.entries.map((entry) => {
-              const sourceLabel =
-                resolveNodePinDisplayLabel(
-                  graphEntities[entry.sourceGraphPath],
-                  entry.sourcePort,
-                ) ?? t("panel.outputSourceUnknown");
+              const sourceLabel = formatRunOutputSource(entry);
 
               return (
                 <div

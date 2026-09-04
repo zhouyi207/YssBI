@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
 import {
-  collectNodeDiagnostics,
+  collectGraphProblems,
   findPrimaryPortDiagnostic,
   isUnboundInputDiagnostic,
-  type GraphNodeDiagnosticsBucket,
+  type GraphProblemsBucket,
 } from "./nodeDiagnostics";
 
 const diagnostic = (
@@ -22,6 +22,7 @@ const diagnostic = (
 });
 
 const bucket = {
+  sourceRevision: 12,
   graphNodes: ["node-a", "node-b"],
   nodes: {
     "node-a": {
@@ -38,29 +39,34 @@ const bucket = {
       diagnostics: [diagnostic("warning", "B needs review", "node-b")],
     },
   },
-} as unknown as GraphNodeDiagnosticsBucket;
+  diagnostics: [
+    diagnostic("error", "A failed", "node-a"),
+    diagnostic("warning", "A needs review", "node-a"),
+    diagnostic("warning", "B needs review", "node-b"),
+  ],
+} as unknown as GraphProblemsBucket;
 
-describe("collectNodeDiagnostics", () => {
-  it("flattens every node diagnostic in graph order with projected node titles", () => {
-    expect(collectNodeDiagnostics("events/Main.yssbi-event", bucket)).toEqual([
+describe("collectGraphProblems", () => {
+  it("collects the canonical graph diagnostics with their projection revision", () => {
+    expect(collectGraphProblems("events/Main.yssbi-event", bucket)).toEqual([
       {
         graphPath: "events/Main.yssbi-event",
+        sourceRevision: 12,
         nodeId: "node-a",
-        nodeTitle: "Node A",
         locationLabel: "Node A",
         diagnostic: diagnostic("error", "A failed", "node-a"),
       },
       {
         graphPath: "events/Main.yssbi-event",
+        sourceRevision: 12,
         nodeId: "node-a",
-        nodeTitle: "Node A",
         locationLabel: "Node A",
         diagnostic: diagnostic("warning", "A needs review", "node-a"),
       },
       {
         graphPath: "events/Main.yssbi-event",
+        sourceRevision: 12,
         nodeId: "node-b",
-        nodeTitle: "Node B",
         locationLabel: "Node B",
         diagnostic: diagnostic("warning", "B needs review", "node-b"),
       },
@@ -68,7 +74,7 @@ describe("collectNodeDiagnostics", () => {
   });
 
   it("returns no rows when the graph projection is unavailable", () => {
-    expect(collectNodeDiagnostics("events/Main.yssbi-event", undefined)).toEqual([]);
+    expect(collectGraphProblems("events/Main.yssbi-event", undefined)).toEqual([]);
   });
 
   it("formats port locations with projected node and pin titles", () => {
@@ -79,6 +85,7 @@ describe("collectNodeDiagnostics", () => {
     };
     const pinId = portAddressKey(address);
     const portBucket = {
+      sourceRevision: 13,
       graphNodes: ["node-a"],
       nodes: {
         "node-a": {
@@ -96,15 +103,86 @@ describe("collectNodeDiagnostics", () => {
           address,
         },
       },
-    } as unknown as GraphNodeDiagnosticsBucket;
+      diagnostics: [portDiagnostic],
+    } as unknown as GraphProblemsBucket;
 
-    expect(collectNodeDiagnostics("events/Main.yssbi-event", portBucket)).toEqual([
+    expect(collectGraphProblems("events/Main.yssbi-event", portBucket)).toEqual([
       {
         graphPath: "events/Main.yssbi-event",
+        sourceRevision: 13,
         nodeId: "node-a",
-        nodeTitle: "Node A",
         locationLabel: "Node A · Value",
         diagnostic: portDiagnostic,
+      },
+    ]);
+  });
+
+  it("includes graph, resource, connection, and parameter problems absent from node indexes", () => {
+    const output = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
+    const input = { kind: "declared" as const, nodeId: "node-b", portKey: "input" };
+    const graphProblem: DiagnosticDto = {
+      ...diagnostic("warning", "Graph needs review"),
+      location: { kind: "graph" },
+    };
+    const resourceProblem: DiagnosticDto = {
+      ...diagnostic("warning", "Resource is unavailable"),
+      location: { kind: "resource", identity: "database/source" },
+    };
+    const connectionProblem: DiagnosticDto = {
+      ...diagnostic("error", "Connection is invalid"),
+      location: { kind: "connection", connectionId: "connection-1" },
+    };
+    const parameterProblem: DiagnosticDto = {
+      ...diagnostic("error", "Parameter is invalid", "node-a"),
+      location: { kind: "parameter", nodeId: "node-a", key: "threshold" },
+    };
+    const completeBucket = {
+      sourceRevision: 14,
+      graphNodes: ["node-a", "node-b"],
+      nodes: {
+        "node-a": {
+          display: { title: "Node A" },
+          diagnostics: [],
+          parameterEditors: [{ key: "threshold", display: { title: "Threshold" } }],
+        },
+        "node-b": { display: { title: "Node B" }, diagnostics: [], parameterEditors: [] },
+      },
+      pins: {
+        [portAddressKey(output)]: { name: "value", display: { label: "Value" } },
+        [portAddressKey(input)]: { name: "input", display: { label: "Input" } },
+      },
+      connections: { "connection-1": { output, input } },
+      diagnostics: [graphProblem, resourceProblem, connectionProblem, parameterProblem],
+    } as unknown as GraphProblemsBucket;
+
+    expect(collectGraphProblems("events/Main.yssbi-event", completeBucket)).toEqual([
+      {
+        graphPath: "events/Main.yssbi-event",
+        sourceRevision: 14,
+        nodeId: null,
+        locationLabel: "events/Main.yssbi-event",
+        diagnostic: graphProblem,
+      },
+      {
+        graphPath: "events/Main.yssbi-event",
+        sourceRevision: 14,
+        nodeId: null,
+        locationLabel: "events/Main.yssbi-event",
+        diagnostic: resourceProblem,
+      },
+      {
+        graphPath: "events/Main.yssbi-event",
+        sourceRevision: 14,
+        nodeId: null,
+        locationLabel: "Node A · Value → Node B · Input",
+        diagnostic: connectionProblem,
+      },
+      {
+        graphPath: "events/Main.yssbi-event",
+        sourceRevision: 14,
+        nodeId: "node-a",
+        locationLabel: "Node A · Threshold",
+        diagnostic: parameterProblem,
       },
     ]);
   });

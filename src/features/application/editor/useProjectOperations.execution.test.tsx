@@ -11,6 +11,7 @@ import {
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   makeEditorProjectionFixture,
   makeGraphEditorSession,
@@ -66,6 +67,10 @@ vi.mock("./resolveExecutionGraphPath", () => ({
 vi.mock("@/features/application/execution/openInspectableResult", () => ({
   openInspectableResult: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("./blockingErrorDialog", () => ({
+  showBlockingIpcError: vi.fn(),
+  showBlockingMessage: vi.fn(),
+}));
 vi.mock("@/features/core/dataStore", () => ({
   loadActivatedProject: vi.fn(),
   resolveActiveProjectPath: vi.fn(),
@@ -100,6 +105,7 @@ describe("useProjectOperations execution demand", () => {
     vi.spyOn(ProjectService, "executeGraphDocument").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
+    useGraphProjectionStore.getState().replaceProjection(graphPath, projection, 1);
     useGraphDraftStore.getState().install(graphPath, session);
     expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
     useGraphDraftStore.getState().completeCompile(graphPath, {
@@ -121,6 +127,7 @@ describe("useProjectOperations execution demand", () => {
     container.remove();
     vi.restoreAllMocks();
     useGraphDraftStore.getState().clear();
+    useGraphProjectionStore.setState({ graphEntities: {} });
     clearProjectLifecycle();
   });
 
@@ -137,6 +144,27 @@ describe("useProjectOperations execution demand", () => {
       onEvent: expect.any(Function),
       onOutput: expect.any(Function),
     });
+  });
+
+  it("rejects execution when the current projection has blocking problems", async () => {
+    const blocked = makeEditorProjectionFixture({ graphPath, sourceRevision: 2 }).projection;
+    blocked.diagnostics.push({
+      code: "compiler.input.unbound",
+      message: "compiler.input.unbound",
+      severity: "error",
+      blocking: true,
+      location: { kind: "graph" },
+      related: [],
+    });
+    blocked.outcome = { type: "analysisBlocked" };
+    blocked.hasBlockingDiagnostics = true;
+    useGraphProjectionStore.getState().replaceProjection(graphPath, blocked, 2);
+
+    await act(async () => {
+      await operations.executeGraph();
+    });
+
+    expect(ProjectService.executeGraphDocument).not.toHaveBeenCalled();
   });
 
   it("opens only the backend-requested result window", async () => {

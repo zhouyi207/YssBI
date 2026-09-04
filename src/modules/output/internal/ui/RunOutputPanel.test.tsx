@@ -4,12 +4,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useExecutionStore } from "@/features/core/execution";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { portAddressKey } from "@/features/domain/editorProjection";
-import { OutputPanel } from "./OutputPanel";
+import { RunOutputPanel } from "./RunOutputPanel";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -23,32 +20,12 @@ const sourceGraphPath = "functions/Nested.yssbi-function";
 const sourceNodeId = "00000000-0000-0000-0000-000000000002";
 const sourcePort = { kind: "declared" as const, nodeId: sourceNodeId, portKey: "message" };
 
-const sourceBucket = {
-  nodes: {
-    [sourceNodeId]: {
-      id: sourceNodeId,
-      title: "Print",
-      display: { title: "Print" },
-    },
-  },
-  pins: {
-    [portAddressKey(sourcePort)]: {
-      id: portAddressKey(sourcePort),
-      nodeId: sourceNodeId,
-      name: "raw-message",
-      display: { label: "Message", instanceLabel: null },
-      address: sourcePort,
-    },
-  },
-} as unknown as GraphEntityBucket;
-
-describe("OutputPanel", () => {
+describe("RunOutputPanel", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     useExecutionStore.setState({ graphs: {}, playbackGraphPath: null, isPlaying: false });
-    useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -60,10 +37,9 @@ describe("OutputPanel", () => {
     host.remove();
   });
 
-  it("renders ordered program output with semantic source labels", () => {
+  it("renders ordered program output from the execution event identity", () => {
     const execution = useExecutionStore.getState();
     act(() => {
-      useGraphProjectionStore.setState({ graphEntities: { [sourceGraphPath]: sourceBucket } });
       useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
       execution.startExecution(graphPath);
       execution.setActiveRunId(graphPath, "41");
@@ -88,15 +64,13 @@ describe("OutputPanel", () => {
       execution.completeExecution(graphPath);
       root.render(
         <TooltipProvider>
-          <OutputPanel />
+          <RunOutputPanel />
         </TooltipProvider>,
       );
     });
 
     expect(host.textContent).toContain("hello from nested graph");
-    expect(host.textContent).toContain("Print · Message");
-    expect(host.textContent).not.toContain(sourceGraphPath);
-    expect(host.textContent).not.toContain(sourceNodeId);
+    expect(host.textContent).toContain(`${sourceGraphPath} · ${sourceNodeId} · message`);
     expect(host.textContent).toContain("panel.outputTruncated");
   });
 
@@ -105,7 +79,7 @@ describe("OutputPanel", () => {
       useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
       root.render(
         <TooltipProvider>
-          <OutputPanel />
+          <RunOutputPanel />
         </TooltipProvider>,
       );
     });
@@ -133,7 +107,7 @@ describe("OutputPanel", () => {
       execution.completeExecution(graphPath);
       root.render(
         <TooltipProvider>
-          <OutputPanel />
+          <RunOutputPanel />
         </TooltipProvider>,
       );
     });

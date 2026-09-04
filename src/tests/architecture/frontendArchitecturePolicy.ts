@@ -117,7 +117,10 @@ const VIEW_CORE_CAPABILITIES = [
     "useSelectionBoxPreview",
   ]),
   viewCoreCapability("src/features/core/database/read.ts", ["useDatabaseRead"]),
-  viewCoreCapability("src/features/core/dataStore/graphEntityAccess.ts", ["GraphEntitiesState"]),
+  viewCoreCapability("src/features/core/dataStore/graphEntityAccess.ts", [
+    "GraphEntitiesState",
+    "isGraphProjectionExecutable",
+  ]),
   viewCoreCapability("src/features/core/dataStore/nodeView.ts", ["UINode", "isRerouteNodeView"]),
   viewCoreCapability("src/features/core/dataStore/pinLinks.ts", ["derivePinConnectionView"]),
   viewCoreCapability("src/features/core/dataStore/useNodeView.ts", ["useNodeView"]),
@@ -316,10 +319,10 @@ const VIEW_DOMAIN_CAPABILITIES = [
   ]),
   viewCoreCapability("src/features/domain/canvas/edgeData.ts", ["EdgeData"]),
   viewCoreCapability("src/features/domain/graphDiagnostics/nodeDiagnostics.ts", [
-    "collectNodeDiagnostics",
+    "collectGraphProblems",
     "findPrimaryPortDiagnostic",
     "formatDiagnosticLocationLabel",
-    "GraphNodeDiagnostic",
+    "GraphProblem",
     "isUnboundInputDiagnostic",
   ]),
   viewCoreCapability("src/features/domain/editorProjection/displayLabels.ts", [

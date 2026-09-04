@@ -55,7 +55,7 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
   inspect: VscInspect,
   logs: VscTerminal,
   output: VscOutput,
-  diagnostics: VscError,
+  problems: VscError,
 };
 
 const VIEW_TITLE_KEYS = {
@@ -68,7 +68,7 @@ const VIEW_TITLE_KEYS = {
   inspect: "panel.inspect",
   logs: "panel.logs",
   output: "panel.output",
-  diagnostics: "panel.diagnostics",
+  problems: "panel.problems",
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function iconForMetadata(metadata: WorkbenchPanelMetadata): {

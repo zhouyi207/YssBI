@@ -32,6 +32,7 @@ function CanvasToolbarButton({
 export function CanvasExecutionToolbar({
   graphPath,
   canExecute,
+  executeUnavailableReason,
   compileStatus,
   onCompile,
   onExecute,
@@ -40,6 +41,7 @@ export function CanvasExecutionToolbar({
 }: {
   graphPath: string;
   canExecute: boolean;
+  executeUnavailableReason: "functionGraph" | "blockingProblems" | null;
   compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
   onCompile: () => void;
   onExecute: () => void;
@@ -175,11 +177,13 @@ export function CanvasExecutionToolbar({
         tooltip={
           isLiveRunning
             ? t("canvas.executing")
-            : !canExecute
+            : executeUnavailableReason === "functionGraph"
               ? t("canvas.functionRunUnavailable")
-              : compileStatus !== "compiled"
-                ? t("canvas.compileRequired")
-                : t("canvas.executeCurrentGraph")
+              : executeUnavailableReason === "blockingProblems"
+                ? t("canvas.problemsBlockExecution")
+                : compileStatus !== "compiled"
+                  ? t("canvas.compileRequired")
+                  : t("canvas.executeCurrentGraph")
         }
       >
         <VscRunAll size={14} />

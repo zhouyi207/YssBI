@@ -93,7 +93,7 @@ function panel(
               inspect: "Inspect",
               logs: "Logs",
               output: "Output",
-              diagnostics: "Diagnostics",
+              problems: "Problems",
             } as const
           )[metadata.viewId];
   return {

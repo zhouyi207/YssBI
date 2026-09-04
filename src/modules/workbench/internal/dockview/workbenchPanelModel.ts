@@ -15,7 +15,7 @@ export const WORKBENCH_VIEW_IDS = [
   "inspect",
   "logs",
   "output",
-  "diagnostics",
+  "problems",
 ] as const;
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
@@ -38,7 +38,7 @@ export type WorkbenchComponentId =
   | "Result"
   | "Logs"
   | "Output"
-  | "Diagnostics";
+  | "Problems";
 
 export type EditorPanelMetadata = EditorResourceTarget & {
   readonly role: "editor";
@@ -95,7 +95,7 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   inspect: "Inspect",
   logs: "Logs",
   output: "Output",
-  diagnostics: "Diagnostics",
+  problems: "Problems",
 };
 
 type UnknownRecord = Record<string, unknown>;

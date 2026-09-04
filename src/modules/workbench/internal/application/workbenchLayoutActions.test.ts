@@ -147,7 +147,7 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
       inspect: "Inspect",
       logs: "Logs",
       output: "Output",
-      diagnostics: "Diagnostics",
+      problems: "Problems",
     } as const
   )[metadata.viewId];
 }
@@ -182,7 +182,7 @@ function viewPanel(
   location: WorkbenchPanelInfo["location"] = edgeLocation(
     ["project", "nodes", "data", "commands"].includes(viewId)
       ? "left"
-      : viewId === "logs" || viewId === "output" || viewId === "diagnostics"
+      : viewId === "logs" || viewId === "output" || viewId === "problems"
         ? "bottom"
         : "right",
   ),
@@ -390,7 +390,7 @@ function createTransactionHarness(
 
     const position = ["project", "nodes", "data", "commands"].includes(request.viewId)
       ? "left"
-      : request.viewId === "logs" || request.viewId === "output" || request.viewId === "diagnostics"
+      : request.viewId === "logs" || request.viewId === "output" || request.viewId === "problems"
         ? "bottom"
         : "right";
     const group = ensureEdge(position);
@@ -837,7 +837,7 @@ describe("resetWorkbenchLayout", () => {
     await resetWorkbenchLayout();
 
     expect(harness.panelIds().sort()).toEqual(
-      [...beforeIds, "created:assistant:1", "created:diagnostics:2"].sort(),
+      [...beforeIds, "created:assistant:1", "created:problems:2"].sort(),
     );
     expect(harness.groupPanelIds("grid-a")).toEqual([
       "editor-left-a",
@@ -851,11 +851,7 @@ describe("resetWorkbenchLayout", () => {
       "editor-bottom-b",
     ]);
     expect(harness.groupPanelIds("edge-left")).toEqual(["project", "data", "nodes", "commands"]);
-    expect(harness.groupPanelIds("edge-bottom")).toEqual([
-      "logs",
-      "output",
-      "created:diagnostics:2",
-    ]);
+    expect(harness.groupPanelIds("edge-bottom")).toEqual(["logs", "output", "created:problems:2"]);
     expect(harness.groupPanelIds("edge-right")).toEqual([
       "details",
       "created:assistant:1",

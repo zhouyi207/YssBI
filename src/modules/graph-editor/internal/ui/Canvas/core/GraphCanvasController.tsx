@@ -9,6 +9,7 @@ import {
   type GraphContextMenuActions,
 } from "@/features/application/editor";
 import { useNodeDragPreview, useSelectionBoxPreview } from "@/features/core/canvas";
+import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEntityAccess";
 import { useExecutionVisualBinder } from "@/features/core/execution";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
@@ -119,6 +120,11 @@ export function GraphCanvasController({
       ? (snapshot.graphEntities[activeResourceRef]?.graphNodes ?? EMPTY_NODE_IDS)
       : EMPTY_NODE_IDS,
   );
+  const projectionAllowsExecution = useGraphRead((snapshot) =>
+    activeResourceRef
+      ? isGraphProjectionExecutable(snapshot.graphEntities[activeResourceRef])
+      : false,
+  );
   const { getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
     groupId,
@@ -191,7 +197,13 @@ export function GraphCanvasController({
         ? {
             kind: "graph",
             graphPath: activeGraph.graphPath,
-            canExecute: activeGraph.kind === "event",
+            canExecute: activeGraph.kind === "event" && projectionAllowsExecution,
+            executeUnavailableReason:
+              activeGraph.kind === "function"
+                ? "functionGraph"
+                : projectionAllowsExecution
+                  ? null
+                  : "blockingProblems",
             compileStatus,
             onCompile: () => {
               void compileGraph(activeGraph.graphPath);
@@ -218,6 +230,7 @@ export function GraphCanvasController({
       contextMenu,
       executeGraph,
       handlePaletteSelect,
+      projectionAllowsExecution,
       sourcePort,
       compileStatus,
     ],

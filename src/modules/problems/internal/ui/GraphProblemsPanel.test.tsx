@@ -10,7 +10,7 @@ import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
-import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { GraphProblemsPanel } from "./GraphProblemsPanel";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -32,23 +32,30 @@ function diagnostic(nodeId: string, code: string, message: string): DiagnosticDt
   };
 }
 
+const canonicalDiagnostics = [
+  diagnostic("node-a", "node.error", "A is invalid"),
+  diagnostic("node-b", "node.warning", "B needs review"),
+];
+
 const bucket = {
+  sourceRevision: 7,
+  diagnostics: canonicalDiagnostics,
   graphNodes: ["node-a", "node-b"],
   nodes: {
     "node-a": {
       id: "node-a",
       display: { title: "Node A" },
-      diagnostics: [diagnostic("node-a", "node.error", "A is invalid")],
+      diagnostics: [],
     },
     "node-b": {
       id: "node-b",
       display: { title: "Node B" },
-      diagnostics: [diagnostic("node-b", "node.warning", "B needs review")],
+      diagnostics: [],
     },
   },
 } as unknown as GraphEntityBucket;
 
-describe("DiagnosticsPanel", () => {
+describe("GraphProblemsPanel", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -66,25 +73,25 @@ describe("DiagnosticsPanel", () => {
     host.remove();
   });
 
-  it("lists diagnostics for every node in the focused graph", () => {
+  it("lists canonical problems for the focused graph and locates node-owned rows", () => {
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
       root.render(
         <TooltipProvider>
-          <DiagnosticsPanel />
+          <GraphProblemsPanel />
         </TooltipProvider>,
       );
     });
 
-    expect(host.querySelectorAll("[data-diagnostics-row]")).toHaveLength(2);
+    expect(host.querySelectorAll("[data-graph-problem-row]")).toHaveLength(2);
     expect(host.textContent).toContain("Node A");
     expect(host.textContent).toContain("A is invalid");
     expect(host.textContent).toContain("Node B");
     expect(host.textContent).toContain("B needs review");
 
-    const firstRow = host.querySelector<HTMLButtonElement>("[data-diagnostics-row]");
+    const firstRow = host.querySelector<HTMLButtonElement>("[data-graph-problem-row]");
     expect(firstRow).not.toBeNull();
     act(() => firstRow?.click());
     expect(useEditorStore.getState().detailFocus).toEqual({
@@ -100,61 +107,46 @@ describe("DiagnosticsPanel", () => {
     act(() => {
       root.render(
         <TooltipProvider>
-          <DiagnosticsPanel />
+          <GraphProblemsPanel />
         </TooltipProvider>,
       );
     });
 
-    const header = host.querySelector("[data-diagnostics-panel-header]");
-    expect(header?.textContent).toContain("panel.diagnostics");
-    expect(header?.textContent).toContain("panel.diagnosticsCount");
+    const header = host.querySelector("[data-graph-problems-panel-header]");
+    expect(header?.textContent).toContain("panel.problems");
+    expect(header?.textContent).toContain("panel.problemsCount");
     expect(header?.textContent).not.toContain(graphPath);
   });
 
-  it("shows an empty state when the focused graph has no node diagnostics", () => {
+  it("shows an empty state when the canonical projection has no problems", () => {
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
     useGraphProjectionStore.setState({
-      graphEntities: {
-        [graphPath]: {
-          ...bucket,
-          nodes: {
-            "node-a": { ...bucket.nodes["node-a"], diagnostics: [] },
-            "node-b": { ...bucket.nodes["node-b"], diagnostics: [] },
-          },
-        },
-      },
+      graphEntities: { [graphPath]: { ...bucket, diagnostics: [] } },
     });
 
     act(() => {
       root.render(
         <TooltipProvider>
-          <DiagnosticsPanel />
+          <GraphProblemsPanel />
         </TooltipProvider>,
       );
     });
 
-    expect(host.querySelectorAll("[data-diagnostics-row]")).toHaveLength(0);
-    expect(host.textContent).toContain("panel.diagnosticsEmpty");
+    expect(host.querySelectorAll("[data-graph-problem-row]")).toHaveLength(0);
+    expect(host.textContent).toContain("panel.problemsEmpty");
   });
 
   it("shows semantic port locations without exposing node or pin identities", () => {
     const address = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
     const pinId = portAddressKey(address);
+    const portProblem: DiagnosticDto = {
+      ...diagnostic("node-a", "node.error", "Value is invalid"),
+      location: { kind: "port", address },
+    };
     const portBucket = {
       ...bucket,
       graphNodes: ["node-a"],
-      nodes: {
-        ...bucket.nodes,
-        "node-a": {
-          ...bucket.nodes["node-a"],
-          diagnostics: [
-            {
-              ...diagnostic("node-a", "node.error", "Value is invalid"),
-              location: { kind: "port" as const, address },
-            },
-          ],
-        },
-      },
+      diagnostics: [portProblem],
       pins: {
         [pinId]: {
           id: pinId,
@@ -171,7 +163,7 @@ describe("DiagnosticsPanel", () => {
     act(() => {
       root.render(
         <TooltipProvider>
-          <DiagnosticsPanel />
+          <GraphProblemsPanel />
         </TooltipProvider>,
       );
     });
