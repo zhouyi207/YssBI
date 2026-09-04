@@ -154,7 +154,6 @@ pub struct EditorPortDto {
     pub address: PortAddressDto,
     pub display: PortDisplayDto,
     pub direction: PortDirectionDto,
-    pub kind: PortKindDto,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: PortConnectionCapabilityDto,
@@ -176,12 +175,6 @@ pub struct PortDisplayDto {
 pub enum PortDirectionDto {
     Input,
     Output,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PortKindDto {
-    Data,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

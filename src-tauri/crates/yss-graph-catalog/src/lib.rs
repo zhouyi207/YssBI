@@ -17,7 +17,7 @@ pub use builtin::{
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use builtin::{builtin_bundle_parts_for_test, validate_builtin_bundle_for_test};
-pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
+pub(crate) const REROUTE_NODE_TYPE: &str = "yssbi.core.reroute";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
@@ -28,9 +28,9 @@ pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
 };
-pub fn data_reroute_node_type() -> yss_graph_protocol::NodeTypeId {
-    yss_graph_protocol::NodeTypeId::new(DATA_REROUTE_NODE_TYPE)
-        .expect("built-in data reroute identifier is valid")
+pub fn reroute_node_type() -> yss_graph_protocol::NodeTypeId {
+    yss_graph_protocol::NodeTypeId::new(REROUTE_NODE_TYPE)
+        .expect("built-in reroute identifier is valid")
 }
 
 pub(crate) use localization::{Aliases, Message, Text};
@@ -48,7 +48,7 @@ mod tests {
         CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
         build_builtin_node_system,
     };
-    use yss_graph_protocol::{NodeTypeId, PortKind};
+    use yss_graph_protocol::NodeTypeId;
 
     #[test]
     fn numeric_type_class_contains_only_int64_and_float64() {
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_catalog_contains_only_dataflow_nodes_and_ports() {
+    fn analysis_catalog_excludes_retired_flow_nodes() {
         let registry = build_builtin_node_system()
             .expect("production built-ins must assemble")
             .registry;
@@ -108,6 +108,7 @@ mod tests {
             .map(|(node_type, _)| node_type.as_str())
             .collect::<BTreeSet<_>>();
 
+        assert!(registered.contains("yssbi.core.reroute"));
         for removed in [
             "yssbi.project.event.begin",
             "yssbi.project.variable.set",
@@ -120,21 +121,11 @@ mod tests {
             "yssbi.control.sleep",
             "yssbi.reroute.control",
             "yssbi.reroute.effect",
+            "yssbi.reroute.data",
         ] {
             assert!(
                 !registered.contains(removed),
                 "removed flow node '{removed}'"
-            );
-        }
-        for (_, node) in registry.iter() {
-            assert!(
-                node.protocol()
-                    .interface
-                    .ports
-                    .iter()
-                    .all(|port| port.kind == PortKind::Data),
-                "analysis node '{}' exposes a non-data port",
-                node.protocol().type_id
             );
         }
     }

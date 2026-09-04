@@ -11,14 +11,14 @@
 | IPC error      | Rust `CommandError`                                          | command rejection                                              | 不单独保留；内部错误关联 incident              | React 按 `code` 本地化并选择反馈表面         |
 | User feedback  | React application/view                                       | Zustand UI state / component state                             | 仅按交互需要                                   | `Alert`、`Dialog`、字段内错误、状态变化      |
 | Results        | Rust `ResultStore`                                           | typed query commands；run events 仅公告 Preview/Open result ID | project-session logical results 与 Pin history | Result/Inspect/Preview/presentation surfaces |
-| Program Output | Rust graph runtime                                           | ordered execution Channel                                      | 单次运行有界前端投影                           | 独立 Output 面板                             |
+| Program Output | Rust Workflow/tool runtime                                   | ordered execution Channel                                      | 单次运行有界前端投影                           | 独立 Output 面板                             |
 
 核心规则：
 
 - 日志不是业务事实，不得通过读取日志决定保存、执行、选择或恢复流程。
 - IPC error 不携带后端用户文案。
 - `ResultStore` 是 result state、payload、history、provenance 与 presentation 的 authority；run event 只公告 Preview/Open result ID。
-- Print/用户程序输出不写入 diagnostics。
+- Workflow/tool stdout/stderr 不写入 diagnostics。
 - React 是应用错误文案、本地化和反馈表面的唯一所有者；可扩展 Rust 节点目录仅拥有确定性的节点元数据与编译器诊断模板，模板不得插入内部错误文本。
 
 ```mermaid
@@ -40,7 +40,7 @@ flowchart TD
     ResultQueries --> ResultUi[Result consumers]
     ResultNotice[Non-authoritative Preview or Open result ID] --> ResultUi
 
-    RuntimePrint[Print node] --> RunOutput[RunOutputEvent]
+    WorkflowToolOutput[Workflow or tool stdout/stderr] --> RunOutput[RunOutputEvent]
     RunOutput --> OutputPanel[Output panel]
 ```
 
@@ -260,7 +260,8 @@ Project replacement 会构造新的 project-session `ProjectStore` 与 `ResultSt
 
 ## 6. Program Output
 
-Print 等用户程序输出使用 `RunOutputEvent`，不进入 `tracing`：
+Workflow/tool 等用户程序输出使用 `RunOutputEvent`，不进入 `tracing`；Analysis Graph 不提供
+Print 节点：
 
 ```ts
 interface RunOutputEvent {
@@ -302,6 +303,6 @@ Output 面板位于 `src/modules/logs/internal/ui/OutputPanel.tsx`，并通过 `
 7. sequence gap、drop、truncate 是否显式可见？
 8. result state、payload、history、provenance 与 presentation 是否仍以 Rust `ResultStore` 为 authority、仅通过 typed queries 读取，并在 project replacement 时失效旧 ID？
 9. Preview/Open run event 是否只公告 `ResultId`，而不承载 result authority？
-10. Print/output 是否完全绕开 logging 与 diagnostics？
+10. Workflow/tool output 是否完全绕开 logging 与 diagnostics？
 11. Frontend diagnostics 是否仍只进入 recent/live 流，而没有反向写入日志文件？
 12. 是否增加了兼容 shim，而不是直接迁移 0.x contract？

@@ -791,7 +791,6 @@ fn data_port_expr(
         key: sid(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances: PortInstances::Declared,
         connections: ConnectionsPerPort::Single,

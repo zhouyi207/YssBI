@@ -91,7 +91,6 @@ function catalog(
             key: "result",
             label: locale === "zh-CN" ? "结果" : "Result",
             direction: "output",
-            kind: "data",
           },
         ],
         parameters: [

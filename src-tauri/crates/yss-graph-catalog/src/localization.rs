@@ -70,7 +70,6 @@ pub struct LocalizedPort {
     pub key: Box<str>,
     pub label: Box<str>,
     pub direction: Box<str>,
-    pub kind: Box<str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -485,9 +484,6 @@ impl BuiltinCatalog {
                 direction: match port.direction {
                     yss_graph_protocol::PortDirection::Input => "input".into(),
                     yss_graph_protocol::PortDirection::Output => "output".into(),
-                },
-                kind: match port.kind {
-                    yss_graph_protocol::PortKind::Data => "data".into(),
                 },
             })
             .collect()

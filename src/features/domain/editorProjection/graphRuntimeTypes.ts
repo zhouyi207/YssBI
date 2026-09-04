@@ -20,7 +20,6 @@ import type {
   PortAddressDto,
   PortConnectionCapabilityDto,
   PortDisplayDto,
-  PortKindDto,
   ResolvedPortStatusDto,
   SchemaSummaryDto,
   TypeSummaryDto,
@@ -53,7 +52,6 @@ export interface PinData {
   /** Stable structured address; projected pins use its local key as `id`. */
   address: PortAddressDto;
   display: PortDisplayDto;
-  kind: PortKindDto;
   orphan: boolean;
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;

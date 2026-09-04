@@ -278,13 +278,6 @@ define_compiler_diagnostics! {
         en: "Interface resolver {resolver_id} is missing.",
         zh: "缺少接口解析器 {resolver_id}。",
     },
-    LoweringEffectContract {} => {
-        code: "compiler.lowering.effect_contract",
-        message_key: "diagnostics.compiler.lowering.effect_contract",
-        severity: Error,
-        en: "Lowered operation violates its effect contract.",
-        zh: "降低后的操作违反其效果契约。",
-    },
     LoweringDeadlineExceeded { node_type } => {
         code: "compiler.lowering.deadline_exceeded",
         message_key: "diagnostics.compiler.lowering.deadline_exceeded",
@@ -390,20 +383,6 @@ define_compiler_diagnostics! {
         severity: Error,
         en: "Parameter {parameter_key} is unknown.",
         zh: "参数 {parameter_key} 未知。",
-    },
-    PlanEffectConsumerMissing { port } => {
-        code: "compiler.plan.effect_consumer_missing",
-        message_key: "diagnostics.compiler.plan.effect_consumer_missing",
-        severity: Error,
-        en: "Effect consumer for {port} is missing.",
-        zh: "缺少端口 {port} 的效果消费者。",
-    },
-    PlanEffectProducerMissing { port } => {
-        code: "compiler.plan.effect_producer_missing",
-        message_key: "diagnostics.compiler.plan.effect_producer_missing",
-        severity: Error,
-        en: "Effect producer for {port} is missing.",
-        zh: "缺少端口 {port} 的效果生产者。",
     },
     PlanInvalid {} => {
         code: "compiler.plan.invalid",
@@ -790,9 +769,13 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 76);
+    fn compiler_diagnostic_definitions_are_unique_template_safe_and_dataflow_only() {
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 73);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
+
+        assert!(COMPILER_DIAGNOSTIC_DEFINITIONS.iter().all(|definition| {
+            !definition.code.contains(".control") && !definition.code.contains(".effect")
+        }));
 
         let codes = COMPILER_DIAGNOSTIC_DEFINITIONS
             .iter()

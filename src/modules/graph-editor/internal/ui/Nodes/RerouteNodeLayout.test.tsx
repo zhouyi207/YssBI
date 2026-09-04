@@ -42,9 +42,7 @@ function projectedPin(nodeId: string, direction: "input" | "output"): PinView {
       name: direction === "input" ? "Input" : "Output",
       direction,
       dataType: { kind: "Float64" },
-      kind: "data",
     }),
-    kind: "data",
     address: { kind: "declared", nodeId, portKey: direction },
     resolvedType: { display: "Float64", resolved: true, dataType: { kind: "Float64" } },
     connected: true,
@@ -54,10 +52,10 @@ function projectedPin(nodeId: string, direction: "input" | "output"): PinView {
 }
 
 function projectedReroute(): UINode {
-  const id = "reroute-data";
+  const id = "reroute-node";
   return {
     id,
-    nodeType: "yssbi.reroute.data",
+    nodeType: "yssbi.core.reroute",
     title: "Forbidden reroute title",
     styleId: "builtin.reroute",
     position: { x: 135, y: 246 },
@@ -120,7 +118,6 @@ describe("RerouteNodeLayout", () => {
     expect(onPinPointerDown).toHaveBeenCalledOnce();
     expect(onPinPointerDown.mock.calls[0][1]).toMatchObject({
       id: `${node.id}:input`,
-      kind: "data",
       address: { kind: "declared", nodeId: node.id, portKey: "input" },
     });
   });

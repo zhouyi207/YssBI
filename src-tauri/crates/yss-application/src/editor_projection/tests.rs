@@ -11,7 +11,7 @@ use yss_graph_document::{
 };
 use yss_graph_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
-    PortKind, TypeExpr, TypeId,
+    TypeExpr, TypeId,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -38,7 +38,6 @@ fn port(
         label: label.into(),
         instance_label: None,
         direction,
-        kind: PortKind::Data,
         backing: GraphPortBacking::Declared,
         orphan: false,
         can_remove: false,

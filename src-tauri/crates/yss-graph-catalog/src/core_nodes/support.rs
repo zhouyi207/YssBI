@@ -133,7 +133,6 @@ pub(crate) fn data_port_with_instances(
         key: semantic(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances,
         connections: ConnectionsPerPort::Single,

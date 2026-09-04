@@ -99,7 +99,6 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
                 <span className="min-w-0 flex-1">{port.label}</span>
                 <code className="text-xs text-muted-foreground">{port.key}</code>
                 <Badge variant="secondary">{port.direction}</Badge>
-                <Badge variant="outline">{port.kind}</Badge>
               </div>
             ))}
           </div>

@@ -97,7 +97,6 @@ export interface EditorPortDto {
   address: PortAddressDto;
   display: PortDisplayDto;
   direction: PortDirectionDto;
-  kind: PortKindDto;
   orphan: boolean;
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
@@ -116,7 +115,6 @@ export interface PortDisplayDto {
   instanceLabel: string | null;
 }
 export type PortDirectionDto = "input" | "output";
-export type PortKindDto = "data";
 export interface PortInstanceAdditionDto {
   templateKey: string;
   label: string;

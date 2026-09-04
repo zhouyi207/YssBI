@@ -17,8 +17,8 @@ use yss_graph_document::{
 use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
 use yss_graph_protocol::{
     ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
-    PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
-    SchemaExpr, TypeExpr,
+    PortEditorSpec, PortInstances, PortKey, RelationalScalarType, ResolvedSchemaFact, SchemaExpr,
+    TypeExpr,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
@@ -152,7 +152,6 @@ pub struct GraphPortFact {
     pub label: Box<str>,
     pub instance_label: Option<Box<str>>,
     pub direction: PortDirection,
-    pub kind: PortKind,
     pub backing: GraphPortBacking,
     pub orphan: bool,
     pub can_remove: bool,
@@ -596,7 +595,6 @@ fn project_concrete_port(
         label: instance_label.clone().unwrap_or_else(|| spec.title.clone()),
         instance_label,
         direction: spec.direction,
-        kind: spec.kind,
         backing,
         orphan,
         can_remove,

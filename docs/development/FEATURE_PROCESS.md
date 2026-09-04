@@ -62,7 +62,7 @@
 - [ ] 应用错误由 React 根据 stable code/details 本地化，并选择页面/区块 `Alert`、
       字段内反馈或单按钮 `MessageDialog`；破坏性确认才使用 `AlertDialog`。
 - [ ] 内部诊断只走 Rust `tracing`，保持有界、可丢弃、脱敏且不参与领域决策。
-- [ ] 科学计算产物进入 Results；用户控制的 Print/stdout/stderr 进入有序有界的
+- [ ] 科学计算产物进入 Results；用户控制的 Workflow/tool stdout/stderr 进入有序有界的
       Run Output channel 和 Output panel；两者都不能改走 diagnostic logs。
 - [ ] 日志和错误 details 不包含表格行/单元格、文档、剪贴板、SQL、连接字符串、
       token 或其他秘密；输出事件保留 opaque graph/node 来源身份。

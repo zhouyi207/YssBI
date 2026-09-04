@@ -478,7 +478,6 @@ fn port(
         key: port_key(key)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances,
         connections: ConnectionsPerPort::Single,

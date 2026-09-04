@@ -102,7 +102,6 @@ fn map_port(port: &EditorPortModel) -> EditorPortDto {
             instance_label: port.display.instance_label.clone(),
         },
         direction: map_port_direction(port.direction),
-        kind: map_port_kind(port.kind),
         orphan: port.orphan,
         can_remove: port.can_remove,
         connections: PortConnectionCapabilityDto {
@@ -145,12 +144,6 @@ fn map_port_direction(direction: yss_graph_protocol::PortDirection) -> PortDirec
     match direction {
         yss_graph_protocol::PortDirection::Input => PortDirectionDto::Input,
         yss_graph_protocol::PortDirection::Output => PortDirectionDto::Output,
-    }
-}
-
-fn map_port_kind(kind: yss_graph_protocol::PortKind) -> PortKindDto {
-    match kind {
-        yss_graph_protocol::PortKind::Data => PortKindDto::Data,
     }
 }
 
@@ -365,7 +358,7 @@ mod tests {
         ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
     };
     use yss_graph_protocol::{
-        NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind,
+        NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
         RelationalScalarType, TypeExpr, TypeId,
     };
 
@@ -414,7 +407,6 @@ mod tests {
                         instance_label: None,
                     },
                     direction: PortDirection::Output,
-                    kind: PortKind::Data,
                     orphan: false,
                     can_remove: false,
                     connections: EditorPortConnectionCapabilities {
@@ -502,6 +494,7 @@ mod tests {
         assert!(wire["nodes"][0]["ports"][0].get("templateKey").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("origin").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("instanceKind").is_none());
+        assert!(wire["nodes"][0]["ports"][0].get("kind").is_none());
         assert_eq!(
             wire["nodes"][0]["ports"][0]["resolvedSchema"],
             json!({

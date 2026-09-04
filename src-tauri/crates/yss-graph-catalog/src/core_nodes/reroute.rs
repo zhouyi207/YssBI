@@ -1,17 +1,17 @@
 use super::support::{
     BuiltinAssemblyError, NodeTextSpec, ProviderFragment, protocol, pure, semantic, transparent,
 };
-use crate::{DATA_REROUTE_NODE_TYPE, REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT};
+use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_graph_protocol::{
     ConnectionsPerPort, InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId,
-    OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec,
-    SchemaExpr, TypeExpr, TypeParameterId,
+    OutputProduction, PortDirection, PortEditorSpec, PortInstances, PortKey, PortSpec, SchemaExpr,
+    TypeExpr, TypeParameterId,
 };
 use yss_graph_registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     fragment.add_node_messages(&NodeTextSpec {
-        id: DATA_REROUTE_NODE_TYPE,
+        id: REROUTE_NODE_TYPE,
         title: "Reroute",
         zh_title: "重路由",
         documentation: "Persistent compiler-transparent data routing point.",
@@ -50,7 +50,7 @@ pub fn validate_reroute_protocol_contract(
 }
 
 fn build_protocol() -> Result<yss_graph_registry::RegisteredNode, BuiltinAssemblyError> {
-    let node_type = DATA_REROUTE_NODE_TYPE;
+    let node_type = REROUTE_NODE_TYPE;
     let input_key = semantic(REROUTE_INPUT_PORT, PortKey::new)?;
     let generic = semantic("t", TypeParameterId::new)?;
     let value_type = TypeExpr::Generic(generic.clone());
@@ -92,7 +92,6 @@ fn port(
         key: semantic(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances: PortInstances::Declared,
         connections: if direction == PortDirection::Input {

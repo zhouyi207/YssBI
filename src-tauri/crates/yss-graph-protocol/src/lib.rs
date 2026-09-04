@@ -24,7 +24,7 @@ pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InputBindingSpec,
     InputConsumption, LiteralPolicy, ManagedNodeRole, NodeCatalogProtocol, NodeInstanceDisplaySpec,
     NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction, PortDirection,
-    PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec, PortSpec, ProtocolError,
+    PortEditorSpec, PortInstances, PortMemberGroupSpec, PortSpec, ProtocolError,
     ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{

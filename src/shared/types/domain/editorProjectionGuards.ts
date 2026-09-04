@@ -11,7 +11,6 @@ import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath"
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(["input", "output"]);
-const portKinds = new Set(["data"]);
 const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbound"]);
 const scalarTypes = new Set([
   "boolean",
@@ -224,7 +223,6 @@ function isPort(value: unknown): boolean {
       "address",
       "display",
       "direction",
-      "kind",
       "orphan",
       "canRemove",
       "connections",
@@ -236,7 +234,6 @@ function isPort(value: unknown): boolean {
     !isPortAddressDto(value.address) ||
     !isPortDisplay(value.display) ||
     !portDirections.has(value.direction as string) ||
-    !portKinds.has(value.kind as string) ||
     typeof value.orphan !== "boolean" ||
     typeof value.canRemove !== "boolean" ||
     !isConnectionCapability(value.connections) ||

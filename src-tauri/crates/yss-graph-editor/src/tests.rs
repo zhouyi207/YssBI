@@ -57,6 +57,21 @@ fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_graph_cata
 }
 
 #[test]
+fn function_node_scope_remains_restricted_without_an_event_scope_variant() {
+    let registry = build_builtin_node_system()
+        .expect("built-in registry must assemble")
+        .registry;
+    let function_entry = registry
+        .protocol(&NodeTypeId::new("yssbi.project.function.entry").unwrap())
+        .expect("function entry protocol must exist");
+    let function_path = GraphResourcePath::new("functions/Main.yssbi-function")
+        .expect("fixture function path must be valid");
+
+    assert!(crate::mutation::validate_node_scope(&graph_path(), function_entry).is_err());
+    assert!(crate::mutation::validate_node_scope(&function_path, function_entry).is_ok());
+}
+
+#[test]
 fn connect_rejects_incompatible_data_types() {
     let registry = build_builtin_node_system()
         .expect("built-in registry must assemble")

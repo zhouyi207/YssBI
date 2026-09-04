@@ -143,7 +143,6 @@
         {
           "direction": "output",
           "key": "value",
-          "kind": "data",
           "label": "Value"
         }
       ],
@@ -175,13 +174,11 @@
         {
           "direction": "input",
           "key": "source",
-          "kind": "data",
           "label": "Source"
         },
         {
           "direction": "output",
           "key": "result",
-          "kind": "data",
           "label": "Result"
         }
       ],
@@ -217,7 +214,6 @@
         {
           "direction": "output",
           "key": "dataframe",
-          "kind": "data",
           "label": "DataFrame"
         }
       ],
@@ -255,13 +251,11 @@
         {
           "direction": "input",
           "key": "arguments",
-          "kind": "data",
           "label": "Arguments"
         },
         {
           "direction": "output",
           "key": "results",
-          "kind": "data",
           "label": "Results"
         }
       ],
@@ -299,7 +293,6 @@
         {
           "direction": "output",
           "key": "value",
-          "kind": "data",
           "label": "Value"
         }
       ],

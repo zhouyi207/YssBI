@@ -166,6 +166,14 @@ describe("Rust-generated node-system golden contracts", () => {
         catalog.registryFingerprint = localizedCatalog.registryFingerprint.slice(1);
       },
     ],
+    [
+      "legacy port kind",
+      (catalog: Record<string, unknown>) => {
+        const items = catalog.items as Array<Record<string, unknown>>;
+        const ports = items[0].ports as Array<Record<string, unknown>>;
+        ports[0].kind = "data";
+      },
+    ],
   ])("rejects Catalog %s", (_label, mutate) => {
     const catalog = clone(localizedCatalog) as unknown as Record<string, unknown>;
     mutate(catalog);
@@ -415,6 +423,13 @@ describe("Rust-generated node-system golden contracts", () => {
       (projection: Record<string, unknown>) => {
         const node = (projection.nodes as Array<Record<string, unknown>>)[0];
         deleteKey((node.ports as Array<Record<string, unknown>>)[0], "status");
+      },
+    ],
+    [
+      "legacy port kind",
+      (projection: Record<string, unknown>) => {
+        const node = (projection.nodes as Array<Record<string, unknown>>)[0];
+        (node.ports as Array<Record<string, unknown>>)[0].kind = "data";
       },
     ],
     [

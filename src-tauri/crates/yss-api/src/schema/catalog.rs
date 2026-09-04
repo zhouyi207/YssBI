@@ -59,7 +59,6 @@ pub struct LocalizedPortDto {
     pub key: Box<str>,
     pub label: Box<str>,
     pub direction: Box<str>,
-    pub kind: Box<str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -185,7 +184,6 @@ impl From<DomainPort> for LocalizedPortDto {
             key: port.key,
             label: port.label,
             direction: port.direction,
-            kind: port.kind,
         }
     }
 }
@@ -425,6 +423,11 @@ mod tests {
         assert_eq!(item["resourceRevision"], 0);
         assert_eq!(item["creation"]["kind"], "resourceBound");
         assert_eq!(item["creation"]["createArgs"]["kind"], "function");
+        assert!(
+            item["ports"]
+                .as_array()
+                .is_some_and(|ports| ports.iter().all(|port| port.get("kind").is_none()))
+        );
         assert!(wire.get("project_instance_id").is_none());
         assert!(wire.get("registry_fingerprint").is_none());
         assert!(wire.get("resource_publication_revision").is_none());

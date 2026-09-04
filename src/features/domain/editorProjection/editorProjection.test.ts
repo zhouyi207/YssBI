@@ -44,7 +44,6 @@ function validProjection(): EditorGraphProjectionDto {
             address: declaredOutput,
             display: { label: "结果", instanceLabel: null },
             direction: "output",
-            kind: "data",
             orphan: false,
             canRemove: false,
             connections: {
@@ -68,7 +67,6 @@ function validProjection(): EditorGraphProjectionDto {
             address: instanceInput,
             display: { label: "变量", instanceLabel: "变量 1" },
             direction: "input",
-            kind: "data",
             orphan: false,
             canRemove: true,
             connections: {

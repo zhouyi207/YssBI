@@ -55,7 +55,6 @@ function projection(
             address: graphOutput,
             display: { label: "Output", instanceLabel: null },
             direction: "output",
-            kind: "data",
             orphan: false,
             canRemove: false,
             connections: {
@@ -75,7 +74,6 @@ function projection(
             address: graphInput,
             display: { label: "Input", instanceLabel: "Input 1" },
             direction: "input",
-            kind: "data",
             orphan: false,
             canRemove: true,
             connections: {
@@ -183,7 +181,7 @@ describe("graphProjectionStore projection replacement", () => {
     store.replaceProjection("functions/main", projection(), 1);
     const previous = useGraphProjectionStore.getState().graphEntities["functions/main"];
     const malformed = projection("functions/main", 5);
-    Object.defineProperty(malformed.nodes[0].ports[0], "kind", {
+    Object.defineProperty(malformed.nodes[0].ports[0], "resolvedType", {
       get: () => {
         throw new Error("candidate conversion failed");
       },

@@ -7,7 +7,7 @@ use yss_graph_catalog::{
 };
 use yss_graph_document::{
     DocumentNode, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
-    GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
+    GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
 };
 use yss_graph_protocol::{
     ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortDirection,
@@ -906,17 +906,11 @@ fn editor_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
 }
 
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {
-    let scope = if graph_path.as_str().starts_with("events/") {
-        yss_graph_protocol::NodeScope::Event
-    } else if graph_path.as_str().starts_with("functions/") {
-        yss_graph_protocol::NodeScope::Function
-    } else {
-        yss_graph_protocol::NodeScope::Any
+    let allowed = match protocol.scope {
+        yss_graph_protocol::NodeScope::Any => true,
+        yss_graph_protocol::NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
     };
-    if protocol.scope != yss_graph_protocol::NodeScope::Any
-        && scope != yss_graph_protocol::NodeScope::Any
-        && protocol.scope != scope
-    {
+    if !allowed {
         Err(format!(
             "node type '{}' is out of graph scope",
             protocol.type_id

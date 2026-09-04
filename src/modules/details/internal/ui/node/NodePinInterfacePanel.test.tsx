@@ -71,7 +71,6 @@ function makePin(id: string, nodeId: string, name: string, direction: "input" | 
     name,
     direction,
     dataType: { kind: "Float64" as const },
-    kind: "data",
     connections: {
       current: 0,
       maximum: null,

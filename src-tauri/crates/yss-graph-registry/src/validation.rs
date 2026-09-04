@@ -613,8 +613,8 @@ fn validate_schema(
     nominal_type_ids: &BuiltinNominalTypeIds,
 ) -> Result<(), String> {
     let input = |key: &PortKey| match ports.get(key) {
-        Some(p) if p.direction == PortDirection::Input && p.kind == PortKind::Data => Ok(()),
-        Some(_) => Err(format!("schema source port '{key}' is not a data input")),
+        Some(p) if p.direction == PortDirection::Input => Ok(()),
+        Some(_) => Err(format!("schema source port '{key}' is not an input")),
         None => Err(format!("schema references unknown port '{key}'")),
     };
     match expr {
@@ -789,7 +789,6 @@ mod nominal_schema_tests {
             key: key.clone(),
             title: "Source".into(),
             direction: PortDirection::Input,
-            kind: PortKind::Data,
             value_type: TypeExpr::Unknown,
             instances: PortInstances::Declared,
             connections: ConnectionsPerPort::Single,

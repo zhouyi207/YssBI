@@ -14,7 +14,6 @@ export function toInteractionPinData(pin: DeepReadonly<PinData>): PinData {
     dataType: pin.dataType,
     address: pin.address,
     display: pin.display,
-    kind: pin.kind,
     orphan: pin.orphan,
     canRemove: pin.canRemove,
     connections: pin.connections,

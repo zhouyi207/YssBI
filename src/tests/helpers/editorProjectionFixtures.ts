@@ -16,9 +16,7 @@ export interface EditorProjectionFixtureOptions {
 export function makeProjectedPinData(
   overrides: Partial<PinData> & Pick<PinData, "id" | "nodeId" | "direction">,
 ): PinData {
-  const kind = overrides.kind ?? "data";
-  const dataType: DataType | undefined =
-    kind === "data" ? (overrides.dataType ?? { kind: "Float64" }) : undefined;
+  const dataType: DataType | undefined = overrides.dataType ?? { kind: "Float64" };
   const label = overrides.name ?? overrides.id;
   const base: PinData = {
     id: overrides.id,
@@ -32,7 +30,6 @@ export function makeProjectedPinData(
       portKey: overrides.id,
     },
     display: { label, instanceLabel: null },
-    kind,
     orphan: false,
     canRemove: false,
     connections: {
@@ -126,7 +123,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               address: outputAddress,
               display: { label: "Output", instanceLabel: null },
               direction: "output",
-              kind: "data",
               orphan: false,
               canRemove: false,
               connections: {
@@ -146,7 +142,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               address: inputAddress,
               display: { label: "Input", instanceLabel: null },
               direction: "input",
-              kind: "data",
               orphan: false,
               canRemove: false,
               connections: {

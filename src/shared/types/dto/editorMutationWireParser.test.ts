@@ -77,7 +77,6 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
           address: { kind: "declared", nodeId, portKey: "value" },
           display: { label: "Value", instanceLabel: null },
           direction: "output",
-          kind: "data",
           orphan: false,
           canRemove: false,
           connections: {

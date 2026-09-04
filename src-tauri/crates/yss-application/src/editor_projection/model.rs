@@ -5,8 +5,7 @@ use yss_graph_document::{
     ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress, TypedValue,
 };
 use yss_graph_protocol::{
-    ParameterKey, ParameterPresentation, PortDirection, PortKey, PortKind, RelationalScalarType,
-    TypeExpr,
+    ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType, TypeExpr,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,7 +51,6 @@ pub struct EditorPortModel {
     pub address: PortAddress,
     pub display: EditorPortDisplay,
     pub direction: PortDirection,
-    pub kind: PortKind,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: EditorPortConnectionCapabilities,

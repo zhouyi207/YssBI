@@ -114,7 +114,6 @@ pub struct PortSpec {
     /// title manually and is not parsed as a runtime source.
     pub title: Box<str>,
     pub direction: PortDirection,
-    pub kind: PortKind,
     pub value_type: TypeExpr,
     pub instances: PortInstances,
     pub connections: ConnectionsPerPort,
@@ -129,11 +128,6 @@ pub struct PortSpec {
 pub enum PortDirection {
     Input,
     Output,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PortKind {
-    Data,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,7 +203,6 @@ pub enum CachePolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeScope {
     Any,
-    Event,
     Function,
 }
 
@@ -338,25 +331,25 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
     if port.input_binding.is_some() && !is_input {
         return Err(invalid_port(
             &port.key,
-            "only data inputs may declare literal/default bindings",
+            "only input ports may declare literal/default bindings",
         ));
     }
     if port.consumption.is_some() && !is_input {
         return Err(invalid_port(
             &port.key,
-            "only data inputs may declare consumption",
+            "only input ports may declare consumption",
         ));
     }
     if port.production.is_some() && !is_output {
         return Err(invalid_port(
             &port.key,
-            "only data outputs may declare production",
+            "only output ports may declare production",
         ));
     }
     if port.schema.is_some() && !is_output {
         return Err(invalid_port(
             &port.key,
-            "only data outputs may declare a schema expression",
+            "only output ports may declare a schema expression",
         ));
     }
     if let Some(binding) = &port.input_binding {
@@ -404,7 +397,6 @@ mod tests {
             key: key("value"),
             title: "Value".into(),
             direction: PortDirection::Input,
-            kind: PortKind::Data,
             value_type: value_type.clone(),
             instances: PortInstances::Declared,
             connections: ConnectionsPerPort::Single,

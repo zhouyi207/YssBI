@@ -223,7 +223,6 @@ fn data_port(
         key: sid(key, PortKey::new)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances,
         connections: ConnectionsPerPort::Single,

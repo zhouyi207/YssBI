@@ -1,9 +1,9 @@
-use yss_graph_catalog::data_reroute_node_type;
+use yss_graph_catalog::reroute_node_type;
 use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    GraphDocument, GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, ParameterValues,
-    PortAddress, PortInstanceId, PortRef, TypedValue,
+    GraphDocument, GraphResourceKind, GraphResourcePath, InputState, NodeId, NodePosition,
+    OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef, TypedValue,
 };
 use yss_graph_document_edit::{
     DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
@@ -671,9 +671,9 @@ fn insert_reroute_operations_with_allocators(
             "reroute connection endpoints have invalid directions",
         ));
     }
-    let reroute_node_type = data_reroute_node_type();
-    let registered = registry.get(&reroute_node_type).ok_or_else(|| {
-        invalid_editor_mutation(format!("unknown reroute node type '{reroute_node_type}'"))
+    let reroute_type = reroute_node_type();
+    let registered = registry.get(&reroute_type).ok_or_else(|| {
+        invalid_editor_mutation(format!("unknown reroute node type '{reroute_type}'"))
     })?;
     let contract = yss_graph_catalog::validate_reroute_protocol_contract(registered)
         .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
@@ -688,7 +688,7 @@ fn insert_reroute_operations_with_allocators(
         GraphDocumentOperation::InsertNode {
             node: DocumentNode {
                 id: reroute_id,
-                node_type: reroute_node_type,
+                node_type: reroute_type,
                 position,
                 parameters: ParameterValues::new(),
                 user_label: None,
@@ -746,17 +746,11 @@ pub(super) fn validate_node_scope(
     graph_path: &GraphResourcePath,
     protocol: &NodeProtocol,
 ) -> Result<(), MutationConflict> {
-    let graph_scope = if graph_path.as_str().starts_with("events/") {
-        NodeScope::Event
-    } else if graph_path.as_str().starts_with("functions/") {
-        NodeScope::Function
-    } else {
-        NodeScope::Any
+    let allowed = match protocol.scope {
+        NodeScope::Any => true,
+        NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
     };
-    if protocol.scope != NodeScope::Any
-        && graph_scope != NodeScope::Any
-        && protocol.scope != graph_scope
-    {
+    if !allowed {
         Err(invalid_editor_mutation(format!(
             "node scope {:?} is invalid for graph '{}'",
             protocol.scope,

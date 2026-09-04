@@ -1062,3 +1062,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       节点 Kernel 返回按 output address 命名的输出集合，Pin Preview 不再误取首个结果。
 - [ ] 从 Analysis Graph 协议与前端签名编辑器中彻底移除 Control/Effect/exec pin 能力、结构化流程角色、
       控制流 diagnostics、主题颜色和 stale golden；所有函数参数、结果、Reroute 与 catalog port 均为数据端口。
+
+## 2026.09.04
+
+- [ ] 删除退化为单值 `Data` 的 PortKind 全链路字段、未使用的 Event node scope 与 Effect compiler
+      diagnostics，使 Analysis Graph 协议、projection、catalog wire 和前端 Pin 模型不再保留 exec 分支痕迹。
+- [ ] 将唯一 Reroute 节点从多种端口时代的 `yssbi.reroute.data` 收敛为 `yssbi.core.reroute`，同步 compiler
+      kernel、editor insertion、i18n inventory 与前端 fixture，不保留旧 node type 兼容别名。

@@ -1,7 +1,7 @@
 use super::{CompilationBasis, NodeDiagnostic, ValidatedSemanticGraph};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use yss_graph_protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr};
+use yss_graph_protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, TypeExpr};
 use yss_graph_registry::ProtocolFingerprint;
 
 pub type TypeFacts<PortAddress, TypeFact> = BTreeMap<PortAddress, TypeFact>;
@@ -63,7 +63,6 @@ pub struct ResolvedPort<PortAddress> {
     pub address: PortAddress,
     pub template: PortKey,
     pub direction: PortDirection,
-    pub kind: PortKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance_label: Option<Box<str>>,
     pub value_type: TypeExpr,

@@ -71,7 +71,6 @@
             "label": "Value"
           },
           "input": null,
-          "kind": "data",
           "orphan": false,
           "resolvedSchema": null,
           "resolvedType": {

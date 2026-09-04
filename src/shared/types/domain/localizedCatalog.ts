@@ -12,13 +12,11 @@ export interface LocalizedCategoryDto {
 }
 
 export type LocalizedPortDirectionDto = "input" | "output";
-export type LocalizedPortKindDto = "data";
 
 export interface LocalizedPortDto {
   key: string;
   label: string;
   direction: LocalizedPortDirectionDto;
-  kind: LocalizedPortKindDto;
 }
 
 export interface LocalizedParameterDto {
@@ -91,11 +89,10 @@ function isLocalizedPort(value: unknown): value is LocalizedPortDto {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    hasExactKeys(candidate, ["key", "label", "direction", "kind"]) &&
+    hasExactKeys(candidate, ["key", "label", "direction"]) &&
     typeof candidate.key === "string" &&
     typeof candidate.label === "string" &&
-    (candidate.direction === "input" || candidate.direction === "output") &&
-    candidate.kind === "data"
+    (candidate.direction === "input" || candidate.direction === "output")
   );
 }
 

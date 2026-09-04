@@ -228,7 +228,6 @@ fn data_port(
         key: port_key(key)?,
         title: title.into(),
         direction,
-        kind: PortKind::Data,
         value_type,
         instances,
         connections: if direction == PortDirection::Input {

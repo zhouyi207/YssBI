@@ -32,19 +32,16 @@
         {
           "direction": "input",
           "key": "left",
-          "kind": "data",
           "label": "Left"
         },
         {
           "direction": "input",
           "key": "right",
-          "kind": "data",
           "label": "Right"
         },
         {
           "direction": "output",
           "key": "result",
-          "kind": "data",
           "label": "Result"
         }
       ],
@@ -80,13 +77,11 @@
         {
           "direction": "input",
           "key": "arguments",
-          "kind": "data",
           "label": "Arguments"
         },
         {
           "direction": "output",
           "key": "results",
-          "kind": "data",
           "label": "Results"
         }
       ],

@@ -552,7 +552,7 @@ fn execute_node(
         | "yssbi.project.function.entry"
         | "yssbi.project.function.return"
         | "yssbi.project.function.call"
-        | "yssbi.reroute.data" => Ok(inputs.first().cloned().unwrap_or(RuntimeValue::Null)),
+        | "yssbi.core.reroute" => Ok(inputs.first().cloned().unwrap_or(RuntimeValue::Null)),
         _ => Err(KernelExecutionError::Failed),
     }?;
     let [output] = outputs else {

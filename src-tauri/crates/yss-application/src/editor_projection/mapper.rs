@@ -243,7 +243,6 @@ fn project_port(
             instance_label: port.instance_label.clone(),
         },
         direction: port.direction,
-        kind: port.kind,
         orphan: port.orphan,
         can_remove: port.can_remove,
         connections,
