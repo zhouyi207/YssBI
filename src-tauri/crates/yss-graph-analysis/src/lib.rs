@@ -9,19 +9,21 @@ use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
 };
+use yss_graph_compiler_diagnostics::ProjectionDiagnosticKind;
 use yss_graph_document::GraphRevision;
 use yss_graph_document::{
-    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, NodeId, OrderKey,
-    PortAddress, PortRef, TypedValue,
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
+    NodeId, OrderKey, PortAddress, PortRef, TypedValue,
 };
 use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
 use yss_graph_protocol::{
-    ConnectionsPerPort, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection,
-    PortEditorSpec, PortInstances, PortKey, RelationalScalarType, ResolvedSchemaFact, SchemaExpr,
-    TypeExpr,
+    ConnectionsPerPort, NominalParameterValidator, ParameterEditorSpec, ParameterIssueKind,
+    ParameterKey, ParameterPresentation, PortDirection, PortEditorSpec, PortInstances, PortKey,
+    RelationalScalarType, ResolvedSchemaFact, ResourceDisplayKind, SchemaExpr, TypeExpr, TypeId,
+    validate_parameter_values,
 };
 use yss_graph_registry::NodeRegistry;
-use yss_graph_resource_contract::ResourceCatalogSnapshot;
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
 mod derived_ports;
 mod result_category;
 mod schema_resolution;
@@ -204,6 +206,35 @@ pub struct GraphDiagnosticFact {
     pub related: Box<[GraphDiagnosticLocation]>,
 }
 
+fn graph_problem(
+    kind: ProjectionDiagnosticKind,
+    primary: GraphDiagnosticLocation,
+    arguments: impl IntoIterator<Item = (&'static str, Box<str>)>,
+) -> GraphDiagnosticFact {
+    GraphDiagnosticFact {
+        code: DiagnosticCode::new(kind.code()),
+        severity: kind.default_severity(),
+        arguments: arguments
+            .into_iter()
+            .map(|(key, value)| (Box::<str>::from(key), value))
+            .collect(),
+        primary,
+        related: Box::new([]),
+    }
+}
+
+struct SkipNominalParameterValidation;
+
+impl NominalParameterValidator for SkipNominalParameterValidation {
+    fn validate_nominal_parameter(
+        &self,
+        _type_id: &TypeId,
+        _value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        None
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphCompilationOutcome {
     Complete,
@@ -288,6 +319,7 @@ pub fn editor_projection_facts(
     resources: &ResourceCatalogSnapshot,
 ) -> GraphProjectionFacts {
     let mut complete = true;
+    let mut diagnostics = Vec::new();
     let resolved_schemas = resolve_editor_schemas(document, registry, resources);
     let nodes = document
         .nodes
@@ -295,6 +327,11 @@ pub fn editor_projection_facts(
         .map(|node| {
             let Some(protocol) = registry.protocol(&node.node_type) else {
                 complete = false;
+                diagnostics.push(graph_problem(
+                    ProjectionDiagnosticKind::NodeUnknown,
+                    GraphDiagnosticLocation::Node(node.id),
+                    [("node_type", node.node_type.as_str().into())],
+                ));
                 return GraphNodeProjectionFacts {
                     node_id: node.id,
                     node_type: node.node_type.clone(),
@@ -308,6 +345,53 @@ pub fn editor_projection_facts(
                     port_instance_additions: Box::new([]),
                 };
             };
+
+            for issue in validate_parameter_values(
+                protocol,
+                &node.parameters,
+                &SkipNominalParameterValidation,
+            ) {
+                complete = false;
+                let kind = match issue.kind {
+                    ParameterIssueKind::Unknown => ProjectionDiagnosticKind::ParameterUnknown,
+                    ParameterIssueKind::Required => ProjectionDiagnosticKind::ParameterRequired,
+                    ParameterIssueKind::InvalidType
+                    | ParameterIssueKind::Constraint
+                    | ParameterIssueKind::InvalidNominal(_)
+                    | ParameterIssueKind::InvalidResourceId => {
+                        ProjectionDiagnosticKind::ParameterInvalid
+                    }
+                };
+                diagnostics.push(graph_problem(
+                    kind,
+                    GraphDiagnosticLocation::Parameter {
+                        node_id: node.id,
+                        key: issue.key.clone(),
+                    },
+                    [("parameter_key", issue.key.as_str().into())],
+                ));
+            }
+            for parameter in protocol.parameters.parameters.iter() {
+                let ParameterEditorSpec::Resource { kind } = &parameter.editor else {
+                    continue;
+                };
+                let Some(identity) = node
+                    .parameters
+                    .get(&parameter.key)
+                    .and_then(serde_json::Value::as_str)
+                else {
+                    continue;
+                };
+                if resource_exists(resources, *kind, identity) {
+                    continue;
+                }
+                complete = false;
+                diagnostics.push(graph_problem(
+                    ProjectionDiagnosticKind::ResourceResolutionFailed,
+                    GraphDiagnosticLocation::Resource(identity.into()),
+                    [("resource_key", identity.into())],
+                ));
+            }
 
             let node_bindings = document
                 .port_bindings
@@ -347,9 +431,17 @@ pub fn editor_projection_facts(
                 for (address, binding) in bindings {
                     if !binding_matches_policy(binding, &spec.instances) {
                         complete = false;
+                        diagnostics.push(graph_problem(
+                            ProjectionDiagnosticKind::PortBindingKindMismatch,
+                            GraphDiagnosticLocation::Port(address.clone()),
+                            [
+                                ("expected_kind", port_instances_kind(&spec.instances).into()),
+                                ("actual_kind", binding_kind(binding).into()),
+                            ],
+                        ));
                         continue;
                     }
-                    ports.push(project_bound_port(
+                    let projected = project_bound_port(
                         document,
                         protocol,
                         spec,
@@ -357,7 +449,16 @@ pub fn editor_projection_facts(
                         binding,
                         &node_bindings,
                         resolved_schemas.get(address),
-                    ));
+                    );
+                    if projected.orphan {
+                        complete = false;
+                        diagnostics.push(graph_problem(
+                            ProjectionDiagnosticKind::PortOrphan,
+                            GraphDiagnosticLocation::Port(address.clone()),
+                            [("port", address.to_string().into())],
+                        ));
+                    }
+                    ports.push(projected);
                 }
                 if let PortInstances::Derived { resolver } = &spec.instances {
                     for member in derived_port_members(
@@ -392,20 +493,55 @@ pub fn editor_projection_facts(
                     }
                 }
             }
-            if node_bindings
+            for (address, _) in node_bindings
                 .iter()
-                .any(|(address, _)| match &address.port {
+                .filter(|(address, _)| match &address.port {
                     PortRef::Declared { key } | PortRef::Instance { template: key, .. } => {
                         !protocol.interface.ports.iter().any(|spec| &spec.key == key)
                     }
                 })
             {
                 complete = false;
+                diagnostics.push(graph_problem(
+                    ProjectionDiagnosticKind::PortUnknown,
+                    GraphDiagnosticLocation::Port((*address).clone()),
+                    [("port", address.to_string().into())],
+                ));
             }
             let (port_instance_additions, minimum_instances_present) =
                 project_port_instance_additions(node.id, protocol, &node_bindings);
             if !minimum_instances_present {
                 complete = false;
+                diagnostics.push(graph_problem(
+                    ProjectionDiagnosticKind::SemanticInvalid,
+                    GraphDiagnosticLocation::Node(node.id),
+                    std::iter::empty(),
+                ));
+            }
+            for port in &ports {
+                if port.direction == PortDirection::Input
+                    && port.connections.current == 0
+                    && port.protocol_default.is_none()
+                    && document
+                        .input_states
+                        .get(&port.address)
+                        .is_none_or(|state| state.literal_override.is_none())
+                {
+                    complete = false;
+                    diagnostics.push(graph_problem(
+                        ProjectionDiagnosticKind::InputUnbound,
+                        GraphDiagnosticLocation::Port(port.address.clone()),
+                        [("port", port.address.to_string().into())],
+                    ));
+                }
+                if port.schema.is_some() && port.resolved_schema.is_none() {
+                    complete = false;
+                    diagnostics.push(graph_problem(
+                        ProjectionDiagnosticKind::InterfaceSchemaDependencyUnresolved,
+                        GraphDiagnosticLocation::Port(port.address.clone()),
+                        std::iter::empty(),
+                    ));
+                }
             }
 
             GraphNodeProjectionFacts {
@@ -444,9 +580,17 @@ pub fn editor_projection_facts(
             }
         })
         .collect::<Vec<_>>();
+    if contains_value_dependency_cycle(document) {
+        complete = false;
+        diagnostics.push(graph_problem(
+            ProjectionDiagnosticKind::DependencyValueCycle,
+            GraphDiagnosticLocation::Graph,
+            std::iter::empty(),
+        ));
+    }
     GraphProjectionFacts::new(
         nodes,
-        [],
+        diagnostics,
         if complete {
             GraphCompilationOutcome::Complete
         } else {
@@ -461,6 +605,70 @@ fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
         | DynamicPortBinding::Resolved { order, .. }
         | DynamicPortBinding::Orphan { order, .. } => order,
     }
+}
+
+fn resource_exists(
+    resources: &ResourceCatalogSnapshot,
+    kind: ResourceDisplayKind,
+    identity: &str,
+) -> bool {
+    match kind {
+        ResourceDisplayKind::Function => GraphResourcePath::new(identity)
+            .ok()
+            .is_some_and(|path| resources.function_signature(&path).is_some()),
+        ResourceDisplayKind::Variable => resources
+            .variable_contract(&GraphResourceId::new(identity))
+            .is_some(),
+        ResourceDisplayKind::Database => resources
+            .database_schema(&GraphResourceId::new(identity))
+            .is_some(),
+    }
+}
+
+pub fn contains_value_dependency_cycle(document: &GraphDocument) -> bool {
+    let mut remaining = document
+        .nodes
+        .keys()
+        .map(|node_id| (*node_id, 0_usize))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut dependents = std::collections::BTreeMap::<NodeId, Vec<NodeId>>::new();
+    for connection in document.connections.values() {
+        let Some(input) = remaining.get_mut(&connection.input.node_id) else {
+            continue;
+        };
+        let Some(next) = input.checked_add(1) else {
+            return true;
+        };
+        *input = next;
+        dependents
+            .entry(connection.output.node_id)
+            .or_default()
+            .push(connection.input.node_id);
+    }
+    let mut ready = remaining
+        .iter()
+        .filter_map(|(node_id, count)| (*count == 0).then_some(*node_id))
+        .collect::<std::collections::VecDeque<_>>();
+    let mut visited = 0_usize;
+    while let Some(node_id) = ready.pop_front() {
+        let Some(next_visited) = visited.checked_add(1) else {
+            return true;
+        };
+        visited = next_visited;
+        for dependent in dependents.get(&node_id).into_iter().flatten() {
+            let Some(count) = remaining.get_mut(dependent) else {
+                continue;
+            };
+            let Some(next) = count.checked_sub(1) else {
+                return true;
+            };
+            *count = next;
+            if *count == 0 {
+                ready.push_back(*dependent);
+            }
+        }
+    }
+    visited != document.nodes.len()
 }
 
 fn binding_origin(binding: &DynamicPortBinding) -> Option<&DynamicMemberLocator> {
@@ -483,6 +691,22 @@ fn binding_matches_policy(binding: &DynamicPortBinding, policy: &PortInstances) 
             PortInstances::Derived { .. }
         )
     )
+}
+
+fn binding_kind(binding: &DynamicPortBinding) -> &'static str {
+    match binding {
+        DynamicPortBinding::UserCreated { .. } => "user_created",
+        DynamicPortBinding::Resolved { .. } => "resolved",
+        DynamicPortBinding::Orphan { .. } => "orphan",
+    }
+}
+
+fn port_instances_kind(instances: &PortInstances) -> &'static str {
+    match instances {
+        PortInstances::Declared => "declared",
+        PortInstances::UserCreated { .. } => "user_created",
+        PortInstances::Derived { .. } => "derived",
+    }
 }
 
 fn project_declared_port(
@@ -702,7 +926,20 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
+    use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
+    use yss_graph_protocol::{NodeTypeId, ParameterConstraint};
     use yss_graph_registry::RegistryFingerprint;
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+
+    fn empty_resources() -> ResourceCatalogSnapshot {
+        ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            ResourceCatalogFingerprint::from_bytes([0; 32]),
+        )
+    }
 
     #[test]
     fn analysis_accepts_neutral_document_and_basis() {
@@ -719,5 +956,178 @@ mod tests {
         });
         assert!(analysis.nodes().is_empty());
         assert_eq!(analysis.registry_fingerprint(), &[4; 32]);
+    }
+
+    #[test]
+    fn editor_projection_reports_an_unbound_required_input() {
+        let builtin = build_builtin_node_system().expect("built-in node system is valid");
+        let node_id = NodeId::new();
+        let node_type = NodeTypeId::new("yssbi.debug.view").expect("built-in node type is valid");
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+
+        let facts = editor_projection_facts(&document, &builtin.registry, &empty_resources());
+
+        assert_eq!(facts.outcome(), &GraphCompilationOutcome::Incomplete);
+        assert!(facts.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code.as_str() == ProjectionDiagnosticKind::InputUnbound.code()
+                && matches!(
+                    &diagnostic.primary,
+                    GraphDiagnosticLocation::Port(address) if address.node_id == node_id
+                )
+        }));
+    }
+
+    #[test]
+    fn editor_projection_reports_required_parameters_from_the_protocol() {
+        let builtin = build_builtin_node_system().expect("built-in node system is valid");
+        let (node_type, parameter_key) = builtin
+            .registry
+            .iter()
+            .find_map(|(node_type, _)| {
+                builtin
+                    .registry
+                    .protocol(node_type)
+                    .into_iter()
+                    .flat_map(|protocol| protocol.parameters.parameters.iter())
+                    .find(|parameter| {
+                        parameter.default_value.is_none()
+                            && parameter
+                                .constraints
+                                .contains(&ParameterConstraint::Required)
+                    })
+                    .map(|parameter| (node_type.clone(), parameter.key.clone()))
+            })
+            .expect("built-ins include a required parameter");
+        let node_id = NodeId::new();
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+
+        let facts = editor_projection_facts(&document, &builtin.registry, &empty_resources());
+
+        assert!(facts.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code.as_str() == ProjectionDiagnosticKind::ParameterRequired.code()
+                && matches!(
+                    &diagnostic.primary,
+                    GraphDiagnosticLocation::Parameter { node_id: owner, key }
+                        if *owner == node_id && key == &parameter_key
+                )
+        }));
+    }
+
+    #[test]
+    fn editor_projection_reports_missing_resources_at_resource_location() {
+        let builtin = build_builtin_node_system().expect("built-in node system is valid");
+        let (node_type, parameter_key, resource_kind) = builtin
+            .registry
+            .iter()
+            .find_map(|(node_type, _)| {
+                builtin
+                    .registry
+                    .protocol(node_type)
+                    .into_iter()
+                    .flat_map(|protocol| protocol.parameters.parameters.iter())
+                    .find_map(|parameter| match &parameter.editor {
+                        ParameterEditorSpec::Resource { kind } => {
+                            Some((node_type.clone(), parameter.key.clone(), *kind))
+                        }
+                        _ => None,
+                    })
+            })
+            .expect("built-ins include a resource parameter");
+        let identity = match resource_kind {
+            ResourceDisplayKind::Function => "functions/missing.yssbi-function",
+            ResourceDisplayKind::Variable => "variables/missing",
+            ResourceDisplayKind::Database => "databases/missing",
+        };
+        let node_id = NodeId::new();
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::from([(
+                    parameter_key,
+                    serde_json::Value::String(identity.to_owned()),
+                )]),
+                user_label: None,
+            },
+        );
+
+        let facts = editor_projection_facts(&document, &builtin.registry, &empty_resources());
+
+        assert!(facts.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code.as_str() == ProjectionDiagnosticKind::ResourceResolutionFailed.code()
+                && matches!(
+                    &diagnostic.primary,
+                    GraphDiagnosticLocation::Resource(resource) if resource.as_ref() == identity
+                )
+        }));
+    }
+
+    #[test]
+    fn editor_projection_reports_a_graph_level_value_cycle() {
+        let builtin = build_builtin_node_system().expect("built-in node system is valid");
+        let left = NodeId::new();
+        let right = NodeId::new();
+        let mut document = GraphDocument::default();
+        for (node_id, x) in [(left, 0.0), (right, 200.0)] {
+            document.nodes.insert(
+                node_id,
+                DocumentNode {
+                    id: node_id,
+                    node_type: NodeTypeId::new("yssbi.value.convert")
+                        .expect("built-in node type is valid"),
+                    position: NodePosition { x, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        for (source, target) in [(left, right), (right, left)] {
+            let connection_id = ConnectionId::new();
+            document.connections.insert(
+                connection_id,
+                DocumentConnection {
+                    id: connection_id,
+                    output: PortAddress::declared(
+                        source,
+                        PortKey::new("output").expect("built-in port key is valid"),
+                    ),
+                    input: PortAddress::declared(
+                        target,
+                        PortKey::new("input").expect("built-in port key is valid"),
+                    ),
+                    order: None,
+                },
+            );
+        }
+
+        let facts = editor_projection_facts(&document, &builtin.registry, &empty_resources());
+
+        assert!(facts.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code.as_str() == ProjectionDiagnosticKind::DependencyValueCycle.code()
+                && diagnostic.primary == GraphDiagnosticLocation::Graph
+        }));
     }
 }

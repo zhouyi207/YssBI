@@ -9725,9 +9725,12 @@ name = "yss-graph-analysis"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "yss-canonical-hash",
  "yss-data-contract",
  "yss-graph-analysis-contract",
+ "yss-graph-catalog",
+ "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-protocol",
@@ -10294,7 +10297,7 @@ dependencies = [
 
 [[package]]
 name = "yssbi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "duckdb",
  "polars",

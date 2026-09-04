@@ -23,6 +23,60 @@ pub struct CompilerDiagnosticDefinition {
     pub templates: &'static [DiagnosticTemplate],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectionDiagnosticKind {
+    DependencyValueCycle,
+    InputUnbound,
+    InterfaceSchemaDependencyUnresolved,
+    NodeUnknown,
+    ParameterInvalid,
+    ParameterRequired,
+    ParameterUnknown,
+    PortBindingKindMismatch,
+    PortOrphan,
+    PortUnknown,
+    ResourceResolutionFailed,
+    SemanticInvalid,
+}
+
+impl ProjectionDiagnosticKind {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::DependencyValueCycle => "compiler.dependency.value_cycle",
+            Self::InputUnbound => "compiler.input.unbound",
+            Self::InterfaceSchemaDependencyUnresolved => {
+                "compiler.interface.schema_dependency_unresolved"
+            }
+            Self::NodeUnknown => "compiler.node.unknown",
+            Self::ParameterInvalid => "compiler.parameter.invalid",
+            Self::ParameterRequired => "compiler.parameter.required",
+            Self::ParameterUnknown => "compiler.parameter.unknown",
+            Self::PortBindingKindMismatch => "compiler.port.binding_kind_mismatch",
+            Self::PortOrphan => "compiler.port.orphan",
+            Self::PortUnknown => "compiler.port.unknown",
+            Self::ResourceResolutionFailed => "compiler.resource.resolution_failed",
+            Self::SemanticInvalid => "compiler.semantic.invalid",
+        }
+    }
+
+    pub const fn default_severity(self) -> DiagnosticSeverity {
+        match self {
+            Self::InputUnbound => DiagnosticSeverity::Warning,
+            Self::DependencyValueCycle
+            | Self::InterfaceSchemaDependencyUnresolved
+            | Self::NodeUnknown
+            | Self::ParameterInvalid
+            | Self::ParameterRequired
+            | Self::ParameterUnknown
+            | Self::PortBindingKindMismatch
+            | Self::PortOrphan
+            | Self::PortUnknown
+            | Self::ResourceResolutionFailed
+            | Self::SemanticInvalid => DiagnosticSeverity::Error,
+        }
+    }
+}
+
 macro_rules! define_compiler_diagnostics {
     (
         $(
@@ -793,6 +847,26 @@ mod tests {
                 .iter()
                 .any(|template| template.locale == "en-US")
         }));
+        for kind in [
+            ProjectionDiagnosticKind::DependencyValueCycle,
+            ProjectionDiagnosticKind::InputUnbound,
+            ProjectionDiagnosticKind::InterfaceSchemaDependencyUnresolved,
+            ProjectionDiagnosticKind::NodeUnknown,
+            ProjectionDiagnosticKind::ParameterInvalid,
+            ProjectionDiagnosticKind::ParameterRequired,
+            ProjectionDiagnosticKind::ParameterUnknown,
+            ProjectionDiagnosticKind::PortBindingKindMismatch,
+            ProjectionDiagnosticKind::PortOrphan,
+            ProjectionDiagnosticKind::PortUnknown,
+            ProjectionDiagnosticKind::ResourceResolutionFailed,
+            ProjectionDiagnosticKind::SemanticInvalid,
+        ] {
+            let definition = COMPILER_DIAGNOSTIC_DEFINITIONS
+                .iter()
+                .find(|definition| definition.code == kind.code())
+                .expect("projection diagnostic kind has one authoritative definition");
+            assert_eq!(definition.default_severity, kind.default_severity());
+        }
     }
 
     fn test_definition(templates: &'static [DiagnosticTemplate]) -> CompilerDiagnosticDefinition {

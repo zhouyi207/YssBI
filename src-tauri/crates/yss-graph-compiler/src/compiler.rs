@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::package::{
     GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
@@ -6,7 +6,7 @@ use crate::package::{
     GraphParameterScalar, GraphParameterValue, GraphSourceIdentity, GraphValueRef,
 };
 use crate::{GraphCompileError, GraphCompileErrorCode};
-use yss_graph_analysis::result_category_for_node;
+use yss_graph_analysis::{contains_value_dependency_cycle, result_category_for_node};
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{
     DocumentConnection, DynamicPortBinding, GraphDocument, GraphResourcePath, GraphRevision,
@@ -72,46 +72,14 @@ fn validate_data_dag(
     document: &GraphDocument,
     graph: &GraphResourcePath,
 ) -> Result<(), GraphCompileError> {
-    let mut remaining_dependencies = document
-        .nodes
-        .keys()
-        .map(|node_id| (*node_id, 0_usize))
-        .collect::<BTreeMap<_, _>>();
-    let mut dependents = BTreeMap::<NodeId, Vec<NodeId>>::new();
     for connection in document.connections.values() {
-        let Some(remaining) = remaining_dependencies.get_mut(&connection.input.node_id) else {
+        if !document.nodes.contains_key(&connection.input.node_id)
+            || !document.nodes.contains_key(&connection.output.node_id)
+        {
             return Err(lowering_error(graph));
-        };
-        *remaining = remaining
-            .checked_add(1)
-            .ok_or_else(|| lowering_error(graph))?;
-        dependents
-            .entry(connection.output.node_id)
-            .or_default()
-            .push(connection.input.node_id);
-    }
-    let mut ready = remaining_dependencies
-        .iter()
-        .filter_map(|(node_id, remaining)| (*remaining == 0).then_some(*node_id))
-        .collect::<VecDeque<_>>();
-    let mut visited = 0_usize;
-    while let Some(node_id) = ready.pop_front() {
-        visited = visited
-            .checked_add(1)
-            .ok_or_else(|| lowering_error(graph))?;
-        for dependent in dependents.get(&node_id).into_iter().flatten() {
-            let Some(remaining) = remaining_dependencies.get_mut(dependent) else {
-                return Err(lowering_error(graph));
-            };
-            *remaining = remaining
-                .checked_sub(1)
-                .ok_or_else(|| lowering_error(graph))?;
-            if *remaining == 0 {
-                ready.push_back(*dependent);
-            }
         }
     }
-    if visited != document.nodes.len() {
+    if contains_value_dependency_cycle(document) {
         return Err(GraphCompileError::InvalidGraph {
             graph: graph.clone(),
             code: GraphCompileErrorCode::CyclicDataDependency,

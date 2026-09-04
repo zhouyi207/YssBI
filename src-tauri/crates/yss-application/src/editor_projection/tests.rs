@@ -1,10 +1,12 @@
 use super::*;
 use std::collections::BTreeMap;
 use yss_graph_analysis::{
-    GraphNodeProjectionFacts, GraphPortBacking, GraphPortConnectionFacts, GraphPortEditorFact,
-    GraphProjectionFacts,
+    GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeProjectionFacts, GraphPortBacking,
+    GraphPortConnectionFacts, GraphPortEditorFact, GraphProjectionFacts,
 };
-use yss_graph_analysis_contract::{CompilationBasis, ResourceKey, ResourceVersion};
+use yss_graph_analysis_contract::{
+    CompilationBasis, DiagnosticCode, DiagnosticSeverity, ResourceKey, ResourceVersion,
+};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
@@ -25,6 +27,13 @@ fn connection_id(value: u128) -> ConnectionId {
 
 fn bool_type() -> TypeExpr {
     TypeExpr::Concrete(TypeId::new("core.bool").expect("test type id is valid"))
+}
+
+fn diagnostic_codes(diagnostics: &[EditorDiagnosticModel]) -> Vec<&str> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_ref())
+        .collect()
 }
 
 fn port(
@@ -209,6 +218,136 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
     );
     assert_eq!(model.connections[0].output, output);
     assert_eq!(model.connections[0].input, input);
+}
+
+#[test]
+fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
+    let source = node_id(12);
+    let target = node_id(13);
+    let source_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+    let target_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+    let output = PortAddress::declared(
+        source,
+        PortKey::new("value").expect("test port key is valid"),
+    );
+    let input = PortAddress::declared(
+        target,
+        PortKey::new("value").expect("test port key is valid"),
+    );
+    let connection = connection_id(14);
+    let mut document = GraphDocument::default();
+    document.nodes.insert(
+        source,
+        DocumentNode {
+            id: source,
+            node_type: source_type.clone(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        },
+    );
+    document.nodes.insert(
+        target,
+        DocumentNode {
+            id: target,
+            node_type: target_type.clone(),
+            position: NodePosition { x: 100.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        },
+    );
+    document.connections.insert(
+        connection,
+        DocumentConnection {
+            id: connection,
+            output: output.clone(),
+            input: input.clone(),
+            order: None,
+        },
+    );
+    let problem = |code: &str, primary: GraphDiagnosticLocation| GraphDiagnosticFact {
+        code: DiagnosticCode::new(code),
+        severity: DiagnosticSeverity::Error,
+        arguments: BTreeMap::new(),
+        primary,
+        related: Box::new([]),
+    };
+    let diagnostics = [
+        problem(
+            "compiler.dependency.value_cycle",
+            GraphDiagnosticLocation::Graph,
+        ),
+        problem(
+            "compiler.resource.resolution_failed",
+            GraphDiagnosticLocation::Resource("database/source".into()),
+        ),
+        problem(
+            "compiler.connection.limit",
+            GraphDiagnosticLocation::Connection(connection),
+        ),
+        problem(
+            "compiler.parameter.invalid",
+            GraphDiagnosticLocation::Parameter {
+                node_id: source,
+                key: ParameterKey::new("value").expect("test parameter key is valid"),
+            },
+        ),
+    ];
+    let facts = GraphProjectionFacts::new(
+        [
+            node_facts(
+                source,
+                source_type,
+                Box::new([port(output, "Value", PortDirection::Output, 1)]),
+            ),
+            node_facts(
+                target,
+                target_type,
+                Box::new([port(input, "Value", PortDirection::Input, 1)]),
+            ),
+        ],
+        diagnostics,
+        yss_graph_analysis::GraphCompilationOutcome::Incomplete,
+    );
+    let path =
+        GraphResourcePath::new("events/problems.yssbi-event").expect("test graph path is valid");
+    let analysis = analysis_with_facts(&document, &path, facts);
+
+    let model = build_editor_projection(EditorProjectionInput {
+        graph_path: &path,
+        document: &document,
+        analysis: &analysis,
+        registry_fingerprint: [6; 32],
+    })
+    .expect("diagnostic facts should produce an application model");
+
+    assert_eq!(
+        diagnostic_codes(&model.diagnostics),
+        [
+            "compiler.dependency.value_cycle",
+            "compiler.resource.resolution_failed",
+            "compiler.connection.limit",
+            "compiler.parameter.invalid",
+        ]
+    );
+    let source_node = model
+        .nodes
+        .iter()
+        .find(|node| node.node_id == source)
+        .expect("source node is projected");
+    assert_eq!(
+        diagnostic_codes(&source_node.diagnostics),
+        ["compiler.connection.limit", "compiler.parameter.invalid"]
+    );
+    let target_node = model
+        .nodes
+        .iter()
+        .find(|node| node.node_id == target)
+        .expect("target node is projected");
+    assert_eq!(
+        diagnostic_codes(&target_node.diagnostics),
+        ["compiler.connection.limit"]
+    );
 }
 
 #[test]
