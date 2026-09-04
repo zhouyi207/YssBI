@@ -1,5 +1,10 @@
 # Workbench Dockview 当前架构
 
+> Status: Current
+> Scope: root/nested Dockview authority、panel identity、布局操作、生命周期和持久化
+> Canonical owners: Workbench 源码与测试拥有布局默认值；本文拥有稳定的布局和 identity contract
+> Update when: root topology、panel role、close/reset/replacement 或 persistence contract 改变时
+
 本文描述主编辑窗口当前的布局 authority、panel identity、应用 seam、生命周期与持久化 contract。Dockview live instance 保存物理布局事实；React application modules 只通过语义 interface 协调用例。
 
 ## 1. 渲染层级与 authority
@@ -31,9 +36,9 @@ Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作�
 `editorRendererRegistry.ts` 是唯一把 event/function/chart 映射到具体 editor 的位置。Workbench module
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
 当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
-`src/modules/problems/public.ts` 组合 `LogDomainDockviewHost`、`RunOutputPanel` 与
-`GraphProblemsPanel`。Logs 只拥有 operational logs；Output 只拥有 execution output；Problems 只读取
-完整 Graph Projection，三个 panel 不通过 `modules/logs` 聚合。
+`src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
+生命周期。Problems、Results 与 Run Output 的业务语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)，
+Logs 的业务语义见 [Runtime Signals](RUNTIME_SIGNALS.md)。
 
 root Dockview 是以下物理事实的唯一 authority：
 
@@ -68,11 +73,11 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 
 默认空布局建立 central grid group，并放置：
 
-- Project、Nodes、Data、Commands：同一个 left Activity edge group，宽度 `292`，默认顺序为 Project → Nodes → Data → Commands；
-- Logs、Output、Problems：bottom edge，高度 `200`，顺序为 Logs → Output → Problems；
+- Project、Nodes、Data、Commands：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands；
+- Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Logs → Output → Problems；
 - bottom edge header 位于底部，因此 content 在上、tabs 在下。
 
-right edge 默认宽度 `320`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。
+right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
@@ -210,7 +215,7 @@ Reset 使用一个 runtime shadow layout transaction，并保留既有 editor、
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Logs → Output → Problems 顺序与 bottom tabs；
-- left/right/bottom 恢复 `292/320/200`，相关 edge 展开；
+- left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，相关 edge 展开；
 - main Logs nested Dockview 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
 
@@ -256,15 +261,15 @@ Persistence invariant：
 
 ## 9. 视觉尺寸层级
 
-工作台 chrome 使用以下紧凑层级：
+工作台 chrome 使用以下 token 层级。下表像素值只是 `src/app/App.css` 中的 current default，CSS token 才是调用方 contract：
 
-|   高度 | 用途                             | Token                                                             |
-| -----: | -------------------------------- | ----------------------------------------------------------------- |
-| `36px` | Menubar/titlebar chrome          | `--titlebar-height`                                               |
-| `32px` | root tabs 与 collapsed root edge | `--workbench-tab-height` / `DockviewTheme.edgeGroupCollapsedSize` |
-| `30px` | Logs nested domain tabs          | `--logs-tab-height`                                               |
-| `28px` | panel toolbar                    | `--panel-toolbar-height`                                          |
-| `26px` | Status Bar                       | `--statusbar-height`                                              |
+| Token                    | Current default | 用途                                                 |
+| ------------------------ | --------------: | ---------------------------------------------------- |
+| `--titlebar-height`      |          `36px` | Menubar/titlebar chrome                              |
+| `--workbench-tab-height` |          `32px` | root tabs；collapsed edge 同步由 Dockview theme 配置 |
+| `--logs-tab-height`      |          `30px` | Logs nested domain tabs                              |
+| `--panel-toolbar-height` |          `28px` | panel toolbar                                        |
+| `--statusbar-height`     |          `26px` | Status Bar                                           |
 
 ## 10. Verification
 

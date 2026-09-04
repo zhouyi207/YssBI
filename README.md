@@ -7,11 +7,10 @@
 以**节点图编辑器**为核心交互形态，通过拖拽和连接节点构建统计分析与计量经济学工作流。
 
 <p>
-  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
-  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Rust-2024-000000?logo=rust&logoColor=white" alt="Rust" />
-  <img src="https://img.shields.io/badge/version-0.2-blue" alt="version" />
+  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri" alt="Tauri 2" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript" alt="TypeScript 7.0" />
+  <img src="https://img.shields.io/badge/Rust-2024-000000?logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/status-开发中-orange" alt="status" />
 </p>
 
@@ -22,6 +21,8 @@
 </div>
 
 ---
+
+项目架构、开发流程和路线图从 [文档索引](docs/README.md) 进入。
 
 ## 功能模块
 

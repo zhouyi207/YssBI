@@ -1,369 +1,139 @@
 # YssBI Agent Rules
 
 This file is the repository-level source of truth for coding-agent behavior.
+Tool-specific instruction files must reference this file instead of duplicating
+its contents. Keep it limited to recurring guardrails; current implementation
+maps and command inventories belong in maintained documentation.
 
-Tool-specific instruction files must reference this source instead of
-duplicating repository rules.
+## Scope and precedence
 
-Keep this file high-signal. It documents recurring traps, architectural
-invariants, and delivery policy. Current implementation maps, command matrices,
-and detailed subsystem documentation belong in maintained project docs.
+Use repository knowledge in this order:
 
-YssBI is a Tauri 2 desktop data-analysis IDE. Rust is the single source of
-truth for committed application state and business logic. React is only the
-view and interaction layer over Rust projections, plus explicitly local UI
-state and unsaved editor drafts.
+1. Code, tests, and manifests own executable facts such as versions, paths,
+   dependencies, constants, and command registration.
+2. `docs/architecture/` owns the current architecture model and stable contracts.
+3. `.rules` owns coding-agent behavior and cross-system guardrails.
+4. `docs/development/` owns change, validation, and delivery workflows.
+5. `docs/decisions/` explains accepted design choices.
+6. `docs/roadmap/` contains work that is not yet current behavior.
+7. `docs/version/` is historical context only.
 
-## Sources of truth
+When maintained documentation and code disagree, inspect the implementation and
+tests, then update the stale canonical document in the same change. Never infer
+current behavior from a roadmap or version note.
 
-* `.rules` owns repository-level agent rules and delivery policy.
-* `docs/architecture/ARCHITECTURE.md` owns the current implementation map.
-* `docs/development/LOCAL_WORKFLOW.md` owns toolchain setup, command details,
-  and the validation matrix.
-* `docs/development/FEATURE_PROCESS.md` owns the feature design and delivery
-  process.
-* `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns the detailed
-  diagnostics, IPC error, result, and program-output contracts.
-* `docs/superpowers/` contains temporary agent-local planning and design output.
-  Do not add or commit its files unless explicitly requested. Long-lived
-  documentation belongs under `docs/architecture/`, `docs/development/`, or
-  `docs/version/`.
-* Treat `docs/version/` as historical documentation, not current implementation
-  authority.
-* When maintained documentation and code disagree, verify actual behavior before
-  editing and update stale maintained documentation as part of the same change.
+Files under `docs/superpowers/` are temporary agent-local planning output. Do not
+add or commit them unless explicitly requested.
 
 ## Change discipline
 
-* Prioritize correctness and clarity over premature optimization.
-* Keep changes scoped to the requested task.
-* Do not introduce unrelated refactors, abstractions, dependencies, features,
-  compatibility layers, or architectural changes.
-* Preserve existing behavior during refactors unless the task explicitly changes
-  behavior.
-* This is a 0.x project. Remove obsolete internal paths directly instead of
-  adding migration layers or compatibility shims unless compatibility is an
-  explicit requirement.
-* Prefer modifying an existing module when the responsibility already belongs
-  there.
-* Create a new module only when it introduces a distinct responsibility or
-  materially improves a real architectural boundary.
-* Do not split code merely to satisfy line-count targets. Treat large functions
-  or files as review signals, not automatic reasons to fragment cohesive code.
-* Comments should explain non-obvious reasoning, invariants, constraints, or
-  trade-offs. Do not add comments that merely restate the code.
-* Avoid creative additions that were not requested.
+* Keep work scoped to the requested outcome and preserve unrelated user changes.
+* Prefer changing the existing owner of a responsibility. Add a module only for
+  a distinct responsibility or a real boundary.
+* Preserve observable behavior during refactors unless the request changes it.
+* This is a 0.x project: remove obsolete internal paths directly unless
+  compatibility is an explicit requirement.
+* Do not add parallel models, compatibility facades, speculative abstractions,
+  dependencies, or features merely to make a local edit easier.
+* Comments should explain non-obvious reasoning, invariants, or trade-offs, not
+  restate the code.
+* `TODO.md` contains open work only. Do not append completed change summaries;
+  Git and `docs/version/` retain implementation history.
+* When a change alters current architecture, a public contract, or the
+  development workflow, update its canonical document in the same change.
 
 ## Architecture invariants
 
-* Rust owns authoritative project state, persistence, graph
+* Rust is the authority for committed project state, persistence, graph
   compilation/execution, databases, results, and scientific orchestration.
-* React stores are read-only Rust projections, unsaved editor drafts, or
-  UI/runtime state. Do not create a second frontend authority for committed
-  backend-owned state.
-* Do not reconcile or merge parallel committed Rust and React models. Apply or
-  replace Rust projections in one direction; keep local drafts separate until
-  an explicit save command succeeds.
-* Keep dependencies flowing toward domain/application logic rather than toward
-  UI or framework layers.
-* Avoid duplicate sources of truth, compatibility paths, mirrored state models,
-  god modules, and circular dependencies.
-* Preserve the frontend dependency direction documented in
-  `docs/architecture/ARCHITECTURE.md`.
-* Domain code must not depend on UI, services, or framework state.
-* Services must not depend on views or presentation-layer feature code.
-
-## Rust
-
-* Use typed errors at domain, application, and infrastructure seams.
-* Prefer `thiserror` error enums for project-owned error contracts.
-* Do not use bare `String` or formatted prose as an error contract.
-* Avoid `unwrap()`, `expect()`, and `panic!()` in production paths unless a
-  clear invariant makes failure impossible.
-* Never silently discard a fallible operation with `let _ =`. Propagate, log,
-  or handle the failure intentionally.
-* Avoid unchecked indexing when bounds depend on runtime or external input.
-* Do not hold synchronous or asynchronous locks across `.await`, filesystem I/O,
-  sleeps, model loading, inference, database work, or other long-running
-  operations unless the locking semantics explicitly require it.
-* Snapshot the minimum state needed under a lock, release the lock, then perform
-  expensive work.
-* Prefer descriptive names over ambiguous abbreviations. Established ecosystem
-  and domain abbreviations are acceptable when their meaning is clear.
-* Prefer `foo.rs` with `foo/...` submodules over introducing new `foo/mod.rs`
-  module roots.
-* Prefer `?` when the caller can meaningfully handle or map an error.
-* Do not convert meaningful failures into `None`, `false`, empty collections,
-  or generic success-like values merely to simplify call sites.
-* Move CPU-bound or blocking work off the async runtime, using
-  `spawn_blocking` or the project's established equivalent when appropriate.
-
-## Tauri and IPC
-
-* `ProjectState.project_data` is the authoritative project, graph, and pin state.
-* `ProjectState::install_validated_resident_graph` is the only primitive for
-  installing a live resident graph document. Any load or patch operation that
-  makes a graph resident must delegate to it.
-* Graph creation and duplication write disk resources and publish exactly one
-  unloaded `DeclareGraph`. They must not transiently load the newly created
-  graph.
-* Tauri commands under `src-tauri/src/commands/` stay thin. Commands parse and
-  validate input, call domain/application code, map results to DTOs, and emit
-  application events.
-* Do not put long workflows, filesystem operations, duplicated business
-  validation, or domain orchestration in Tauri command handlers.
-* Use explicit serializable DTOs at IPC boundaries. Do not expose internal
-  implementation types merely because they are serializable.
-* Frontend IPC calls belong behind `src/services/`. Views must not call Tauri
-  `invoke` directly.
-* Ordinary frontend command invocation goes through
-  `src/services/ipc/invokeCommand.ts`.
-* Use commands for request/response work, events for low-rate state changes,
-  and channels/workers for ordered or high-frequency streams.
-* Do not transfer large datasets through IPC when the same computation or state
-  can remain authoritative on the Rust side.
-
-## IPC errors
-
+* React stores only Rust projections, explicit unsaved drafts, and UI/runtime
+  state. Do not create a second frontend authority for backend-owned state.
+* Do not merge or reconcile parallel committed Rust and React models. Replace
+  projections in one direction and keep drafts separate until Save succeeds.
+* Dependencies flow toward domain and application logic, never from domain code
+  toward UI, Tauri, services, or concrete infrastructure adapters.
+* `yss-api` is the only Tauri transport seam. Commands remain thin adapters;
+  business workflows belong to application or domain owners.
 * Command failures use the exact Rust-owned `{ code, details, incidentId }`
-  `CommandError` wire.
-* Do not add backend-owned user-facing `message` fields.
-* Do not encode error identity into formatted strings or parse string prefixes.
-* Backend typed errors are mapped once, at the command/IPC seam, into
-  `CommandError`.
-* Successful responses and asynchronous status DTOs must not smuggle backend
-  prose through nested `message`, `detail`, `hint`, or equivalent fields.
-* Use stable codes, safe structured data, and incident IDs for machine-readable
-  cross-boundary communication.
-* React owns application error localization and presentation.
+  wire. Rust does not send user-facing error prose; React localizes stable codes.
+* `GraphSemanticSnapshot` is the only authority for resolved graph types,
+  schemas, lineage, diagnostics, coercions, and kernel specialization.
+* Analysis Graphs model data ports and data dependencies only. Control flow,
+  effects, sequencing, and user-program side effects belong to Workflow owners.
+* Graph Draft, Compile, Save, and Execute are independent operations. Compile
+  does not commit, Save does not compile, and Execute requires the matching
+  compiled artifact.
+* The root Dockview instance is the sole authority for workbench topology,
+  placement, ordering, active panels/groups, edge sizes, and collapse state.
+* Graph Problems, operational Logs, Results, and Run Output are distinct data
+  flows. None may be used to reconstruct or substitute for another.
 
-## Diagnostics and program output
+## Boundary and security rules
 
-* Rust `tracing` is the single logging entry point. The `yss-tracing` crate owns
-  filtering, sanitization, and bounded console/rolling-file log outputs.
-* Diagnostics is a separate bounded, lossy, non-authoritative projection. It
-  owns the recent ring, frontend diagnostic ingestion, sequencing, and live
-  delivery, and consumes only sanitized Rust log records from `yss-tracing`.
-* Explicit frontend diagnostics never flow backward into persistent log files.
-* Logs must never drive domain state, application workflows, or user feedback.
-* Never log secrets or user payload content, including DataFrame rows or cells,
-  document contents, clipboard contents, SQL text, connection strings, tokens,
-  or comparable sensitive payloads.
-* User-controlled Workflow/tool stdout/stderr belongs to the ordered bounded
-  Run Output channel and Output panel, never diagnostic logs.
-* Preserve opaque source graph and node identities on output events.
-* React owns user-facing application-error presentation.
-* Use stable error codes and safe structured details for UI feedback.
-* Do not add toaster/Sonner, `logger.notify`, browser `alert`, `prompt`,
-  `confirm`, native message dialogs, disk-log pagination commands, or
-  compatibility logging paths.
-* Use persistent `Alert` surfaces for page/section errors, inline feedback for
-  field errors, and the application `MessageDialog` for blocking
-  acknowledgement.
-* Reserve `AlertDialog` for destructive confirmation.
-* Detailed capacities and diagnostic contracts live in
-  `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md`.
+* Tauri commands validate input, map explicit DTOs, call an application/domain
+  interface, and deliver events or channels. They do not own filesystem
+  transactions, long workflows, or duplicated business validation.
+* Ordinary frontend invocation goes through
+  `src/services/ipc/invokeCommand.ts`; views do not call Tauri `invoke` directly.
+* Use commands for request/response, events for low-rate state changes, and
+  channels/workers for ordered or high-frequency streams. Define bounds,
+  ordering, gap recovery, and terminal semantics for every stream.
+* Treat graph and resource paths as opaque identities. Keep resource, graph,
+  node, pin, connection, session, panel, group, result, and run identities
+  distinct.
+* Do not transfer whole datasets through IPC when computation or state can remain
+  authoritative in Rust. Large reads must be paged, projected, or batched.
+* Use typed errors at domain, application, infrastructure, and transport seams.
+  Do not use formatted prose or bare `String` as a cross-boundary error contract.
+* Do not hold locks across `.await`, filesystem or database I/O, model work,
+  sleeps, or other long-running operations. Snapshot under the lock, release it,
+  perform the work, then revalidate at commit.
+* Rust `tracing` is the sole logging entry point. Logs and operational
+  diagnostics are bounded, lossy, sanitized, and non-authoritative.
+* Never log secrets or user payloads, including table rows/cells, document or
+  clipboard contents, SQL text, connection strings, prompts, transcripts,
+  tokens, or model/tool payloads.
+* User-controlled program stdout/stderr belongs to the ordered bounded Run
+  Output flow, never to logging or operational diagnostics.
+* React owns user-facing feedback and localization. Stable machine fields may
+  cross IPC; raw backend, parser, provider, or infrastructure prose may not.
 
-## React
-
-* Keep backend-owned domain state backend-authoritative.
-* Keep frontend stores domain-scoped and subscribe to Zustand stores with narrow
-  selectors.
-* Put multi-step application workflows in application hooks/services rather than
-  presentation components or generic stores.
-* Persist cross-session preferences in `localStorage`.
-* Keep temporary UI/runtime state in Zustand.
-* Use React Router for navigable pages and route state instead of introducing
-  parallel active-page flags.
-* Route global `window` and `document` listeners through
-  `src/shared/utils/globalEvent.ts`.
-* Use shadcn/ui primitives for ordinary interactive controls.
-* Prefer composing existing shadcn/ui components over implementing equivalent
-  interaction primitives locally.
-* Do not introduce another general-purpose component library.
-* Prefer the existing `react-icons` dependency, primarily `react-icons/vsc`,
-  rather than adding a second icon package solely for generated glyphs.
-* User-facing scrolling uses `src/components/ui/scroll-area.tsx`. Preserve its
-  surrounding `flex`, `min-h-0`, and `flex-1` layout contract.
-* Centralize drag/drop constants, payload types, and guards under
-  `src/features/core/dnd/`. Drop targets and visual zones should remain thin.
-* Do not use `any` to bypass type errors. Prefer explicit types, `unknown` with
-  narrowing, or project-owned boundary types.
-
-## Workbench invariants
-
-* The root `DockviewReact` is the sole authority for root workbench/editor
-  topology.
-* Do not mirror panel placement, ordering, active group/panel, edge sizing,
-  collapse state, or serialized Dockview layout into Zustand or another layout
-  model.
-* Do not introduce a second root layout authority, compatibility layout facade,
-  or mirrored layout representation.
-* The Logs workspace is the only permitted nested Dockview and owns only
-  log-domain topology.
-* Application stores may keep non-placement panel metadata and pane-local state
-  keyed by `panelInstanceId`.
-* Panel, group, resource, graph, and node identities are distinct. Do not infer
-  one identity from another.
-* Route panel closes through application dirty/save confirmation before removing
-  the Dockview panel.
-* Browser popouts and floating Dockview groups remain disabled. Tauri owns
-  application windows.
-* Detailed current workbench composition belongs in architecture documentation,
-  not this file.
-
-## Graph invariants
-
-* Graph resources use opaque `graphPath` values across IPC and frontend
-  application state.
-* Resource paths such as `events/...`, `functions/...`, `variables/...`, and
-  `databases/...` are opaque identifiers. Frontend code must not derive domain
-  meaning from their string structure.
-* UUIDs identify nodes, pins, connections, and UUID-backed variable resources;
-  do not conflate them with resource paths.
-* `panelInstanceId` identifies a Dockview panel instance, not a graph resource.
-  One resource may be open in multiple panel instances.
-* Do not infer backend graph-loaded state from `graphEntities` alone. Use the
-  graph session and resource loaded state.
-* On project load, clear backend state before hydrating the new project.
-* On graph open, load the graph, bind runtime services, materialize dynamic pins,
-  then hydrate the frontend projection.
-* Graph Canvas edits update only the frontend-owned unsaved draft. They must not
-  mutate authoritative Rust project state or emit authoritative project events
-  before Save.
-* Analysis Graphs contain only data ports and data-dependency edges. Control,
-  effect, execution-sequence, and side-effect nodes belong to a separate
-  Workflow system; do not reintroduce them as Analysis Graph compatibility paths.
-* Graph Compile consumes the complete draft and compiles every node. Schema,
-  type, and lineage are facts propagated over the same data edges, never a
-  second schema-edge topology or frontend-owned inference model. Incremental
-  reuse may optimize unchanged nodes but must still produce a complete-graph
-  artifact.
-* `GraphSemanticSnapshot` is the sole authority for resolved port types,
-  schemas, lineage, diagnostics, coercions, and kernel specialization. Editor
-  Projection and Graph Compiler must consume that same complete snapshot;
-  protocol `TypeExpr` values describe accepted patterns, not current resolved
-  types, and React must never infer or mutate semantic port facts.
-* Resolve each node as one pure function of its complete input facts,
-  parameters, concrete port set, protocol, and relevant resource facts. Type
-  propagation is forward-only; connection order, Pin iteration order, UI state,
-  and downstream consumers must not influence an upstream result.
-* Persist Graph input overrides as protocol-validated `TypedValue` values and
-  keep untyped `JsonValue` limited to heterogeneous node parameters. Analysis
-  and Compiler consume the stored exact literal type; Editor Projection may
-  expose the raw payload for controls but must not infer its type again.
-* Connection checks before resolution are conservative preflight only: reject
-  a type pair only when incompatibility is definite. Preserve structurally
-  valid Draft connections and publish authoritative mismatch diagnostics from
-  Graph analysis. Active derived ports read current resource/schema facts;
-  `last_known` metadata is display-only recovery data for orphan ports.
-* Compile and Save are independent commands. Compile installs a content-addressed
-  in-memory artifact and projection without committing Project state; Execute
-  requires the exact current artifact hash. Save alone persists the draft.
-* A node evaluation is the computation and cache-invalidating unit. Its outputs
-  are addressed individually for downstream dependencies and inspection, but
-  must come from the same complete node evaluation rather than independent
-  per-pin mutation lifecycles.
-* Editor projections expose only concrete, addressable ports. User-created port
-  templates are node-owned serializable addition capabilities; never represent a
-  dynamic template as a synthetic declared port or a frontend callback.
-* Graph Save is an atomic full-document overwrite command. It has no
-  frontend-supplied revision precondition: Rust validates the submitted draft,
-  persists it, replaces authoritative project state, and returns the canonical
-  projection. A failure leaves the frontend draft dirty.
-* Lock the Graph editor before Save starts and reject Canvas, keyboard, Details,
-  clipboard, undo/redo, and other Graph draft mutations until Save settles.
-  Editing must not continue concurrently with an in-flight Save.
-* Do not automatically merge or rebase a dirty Graph draft with backend state.
-  External changes may invalidate a clean projection; a later explicit Save of
-  a dirty draft uses the documented overwrite semantics.
-* Save and close flows use application confirmation.
-* Secondary windows remain read-only with respect to authoritative project
-  state.
-
-## Test discipline
+## Testing and validation
 
 * Add the smallest focused regression test that proves the requested behavior or
-  reproduces the reported bug.
-* Prefer one representative test per distinct project-owned contract or failure
-  mode.
-* Test through stable public seams rather than private implementation details.
-* Do not add tests at unrelated or unconfirmed seams.
-* Do not add speculative edge-case tests, exhaustive matrices, duplicate
-  coverage, or tests for unchanged behavior unless acceptance criteria or a
-  demonstrated regression risk require them.
-* Before adding more than two new tests, identify the distinct regression each
-  additional test catches. Omit cases without a unique failure mode.
-* For behavior-preserving refactors, rely on existing coverage unless current
-  coverage cannot establish the preserved contract.
-* Do not test behavior owned by the language, framework, type system, or
-  third-party dependencies. Test contracts owned by YssBI.
-* When changing behavior, add or update a focused regression test before the
-  implementation change when practical.
+  distinct failure mode. Prefer stable public seams over private implementation.
+* Do not add speculative matrices, duplicate coverage, tests for unchanged
+  framework behavior, or tests that only prove a historical refactor occurred.
+* Before adding more than two tests, identify the distinct regression each
+  additional test catches and omit cases without one.
+* Use repository-root `pnpm` scripts as stable task entry points. The canonical
+  command matrix is `docs/development/LOCAL_WORKFLOW.md`.
+* During iteration run the narrowest relevant check; broaden validation in
+  proportion to the change. Do not repeatedly run the full Rust suite for small
+  edits.
+* Run `git diff --check` before delivery. Do not claim a check passed without
+  fresh command output, and record any relevant check that was not run.
+* Do not perform unrelated repository-wide formatting or hardcode global Cargo
+  build-job/test-thread limits.
 
-## Validation
+## Documentation routing
 
-* Use repository-root `pnpm` scripts as stable task entry points.
-* The exact command matrix and canonical local workflow live in
-  `docs/development/LOCAL_WORKFLOW.md`.
-* Use `docs/development/FEATURE_PROCESS.md` before adding features or changing
-  externally observable behavior.
-* During iteration, run the smallest focused validation that can establish the
-  current change.
-* Backend Rust tests are expensive. Do not repeatedly run the full Rust test
-  suite during incremental work.
-* After a coherent Rust change, run the relevant formatting/check tasks and
-  focused Rust test coverage.
-* After a coherent frontend change, run the relevant formatting, typecheck,
-  lint, and focused frontend test coverage.
-* Run the repository CI task before cross-stack delivery or when the change is
-  broad enough to require full validation.
-* Run `git diff --check` before reporting completion.
-* Do not introduce CI as a substitute for local validation unless explicitly
-  requested.
-* Do not claim checks or tests succeeded without fresh command output.
-* Preserve unrelated user changes in the working tree.
-* Do not hardcode repository-wide Cargo build-job or test-thread limits.
-* Do not perform unrelated repository-wide formatting.
+Before changing a subsystem, read its canonical owner:
 
-## Change log
+* Graph, projection, compile, execution, Results, and Run Output:
+  `docs/architecture/GRAPH_AND_EXECUTION.md`
+* Workbench layout and panel lifecycle:
+  `docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md`
+* Logging, operational diagnostics, feedback, and signal boundaries:
+  `docs/architecture/RUNTIME_SIGNALS.md`
+* Statistical Harness current implementation:
+  `docs/architecture/STATISTICAL_HARNESS.md`
+* Tauri/IPC transport contracts: `src-tauri/crates/yss-api/README.md`
+* Architecture enforcement: `docs/development/ARCHITECTURE_GATES.md`
+* Commands and validation: `docs/development/LOCAL_WORKFLOW.md`
+* Feature, fix, refactor, and behavior changes:
+  `docs/development/CHANGE_PROCESS.md`
 
-* For substantive feature, fix, refactor, architecture, or behavior changes,
-  append concise `- [ ] ...` change-summary entries under the current
-  `## YYYY.MM.DD` heading in `TODO.md`.
-* Create the current-date heading when it does not exist.
-* Never delete or rewrite existing `TODO.md` entries.
-* Formatting-only, typo-only, and similarly mechanical changes do not require a
-  `TODO.md` entry unless explicitly requested.
-
-## Rules hygiene
-
-These rules are read by coding agents repeatedly. Keep them high-signal.
-
-Rules should document traps to avoid, not maps to follow.
-
-Do not add architecture descriptions, directory inventories, current UI
-composition, command matrices, or other information that can be reliably found
-in maintained documentation or by inspecting the codebase.
-
-A new repository rule should normally satisfy all three criteria:
-
-1. **Non-obvious** — a competent contributor could reasonably get it wrong
-   without an explicit rule.
-2. **Repeated or proven** — the issue has occurred more than once, or represents
-   a validated recurring failure mode with meaningful consequences.
-3. **Actionable** — the rule gives a concrete instruction, invariant, or
-   prohibited pattern.
-
-Do not add rules merely because something was observed once.
-
-When an agent discovers a candidate recurring rule during unrelated work, report
-it separately instead of editing `.rules` opportunistically.
-
-Rules that apply only to a narrow subsystem should live near that subsystem when
-local rules become necessary, rather than continually expanding the repository
-root rules.
-
-If a rule becomes ordinary architecture documentation, implementation detail, or
-historical context, move it to the appropriate maintained document instead of
-leaving stale information here.
+Do not create generic language/framework manuals such as `ts.md`, `rust.md`, or
+`tauri.md`. Add a focused document only when one stable responsibility lacks a
+canonical owner; otherwise link to the existing owner.

@@ -1,4 +1,4 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": []
+  "ignorePatterns": ["docs/reference/MODULE_MAP.md", "docs/version/legacy-todo-2026-09-04.md"]
 }

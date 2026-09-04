@@ -1,849 +1,205 @@
 # YssBI 当前架构
 
-本文档描述当前工作树中的实现，而不是目标蓝图。YssBI 是基于 Tauri 的桌面数据分析 IDE：React 负责交互与投影，Rust 负责项目 authority、图编译与运行、数据库语义和科学计算编排。
+> Status: Current
+> Scope: 系统上下文、authority、依赖方向和主要运行链路
+> Canonical owners: 本文拥有系统级心智模型；专项 contract 由文末索引中的文档和源码拥有
+> Update when: 顶层 authority、依赖方向、composition root 或跨子系统主链路改变时
 
-专项文档：
+YssBI 是基于 Tauri 2 的桌面数据分析 IDE。用户在 React 工作台中管理项目、数据库、Analysis Graph、统计结果和 Assistant；Rust 负责所有已提交业务状态、持久化、编译执行和科学计算。本文只提供进入系统所需的总览，不维护完整 crate 清单、命令矩阵、门禁实现或重构历史。
 
-- [Graph Problems、诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
-- [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
-- [Tauri API transport 说明](../../src-tauri/crates/yss-api/README.md)
-- [Bayes model 说明](../../src-tauri/crates/yss-bayes-model/README.md)
-- [Bayes result 说明](../../src-tauri/crates/yss-bayes-result/README.md)
-- [Bayes worker 契约说明](../../src-tauri/crates/yss-bayes-worker/README.md)
-- [Julia Bayes worker 适配器说明](../../src-tauri/crates/yss-bayes-worker-julia/README.md)
-- [Database runtime 实现说明](../../src-tauri/crates/yss-database-runtime/README.md)
-- [SCI 中立契约说明](../../src-tauri/crates/yss-sci-contract/README.md)
-- [SCI 同步运行时说明](../../src-tauri/crates/yss-sci-runtime/README.md)
-- [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
-
-## 1. 架构语言与方向
-
-本文使用以下术语：
-
-- **module**：具有 interface 与 implementation 的代码单元。
-- **interface**：调用方必须知道的类型、顺序约束、错误模式和性能特征。
-- **seam**：module interface 所在的位置，可在此替换行为而不修改调用方。
-- **adapter**：在 seam 上满足 interface 的具体实现。
-- **depth**：一个较小 interface 隐藏并提供多少行为。
-- **leverage**：调用方从深 module 获得的能力复用。
-- **locality**：复杂度、修改和验证集中在一个 implementation 内。
-
-当前后端的主要依赖方向是：
+## 1. System context
 
 ```mermaid
-flowchart TD
-  UI[React views and application hooks] --> FE[Frontend services]
-  FE --> CMD[yss-api Tauri transport]
-  CMD --> APP[Application use-case modules]
+flowchart LR
+  USER[User] --> UI[React workbench]
+  UI --> SERVICES[Frontend services]
+  SERVICES --> API[yss-api transport]
+  API --> APP[yss-application use cases]
   APP --> PROJECT[Project authority]
   APP --> GRAPH[Graph semantics]
-  APP --> EXEC[Execution runtime]
-  APP --> DB[Database runtime crate]
-  APP --> SCI[Execution scientific port]
-  APP --> BAYESWORKER[yss-bayes-worker]
-  PROJECT --> PURE[Pure persisted contracts]
-  GRAPH --> PURE
-  EXEC --> PORTS[typed backend ports]
-  SCI --> SCIRUNTIME[yss-sci-runtime]
-  SCIRUNTIME --> RUSTSCI[yss-sci Rust algorithms]
-  BAYESWORKER --> JULIA[Julia Bayes adapter]
-  APP --> SCICONTRACT[yss-sci-contract]
-  SCI --> SCICONTRACT
-  SCIRUNTIME --> SCICONTRACT
-  JULIA --> SCICONTRACT
-  CMD --> BAYESRESULT[yss-bayes-result]
-  APP --> BAYESRESULT
-  BAYESWORKER --> BAYESRESULT
-  JULIA --> BAYESRESULT
-  CMD --> CHANNEL[Events and ordered channels]
-  CHANNEL --> UI
+  APP --> DATABASE[Database runtime]
+  APP --> EXECUTION[Execution and Results]
+  APP --> SCI[SCI and Bayes]
+  UI --> HARNESSUI[Assistant projection]
+  HARNESSUI --> API
+  API --> HARNESS[Statistical Harness]
+  HARNESS --> GATEWAY[Application capability gateway]
+  GATEWAY --> APP
+  PROJECT --> STORAGE[Project files and project DuckDB]
+  API --> STREAMS[Events and ordered channels]
+  STREAMS --> UI
 ```
 
-`yss-api` 是唯一 Tauri transport seam，不是业务 workflow 的归属。它私有持有 commands、wire schema、transport error 与 event delivery，并公开单一 `invoke_handler` 给 composition root。复杂行为进入 application、project、graph、execution、database 或 sci crate，以提高 depth、leverage 和 locality。
+`src-tauri/src/lib.rs` 是桌面 composition root：构造 Project、Application、Execution、Diagnostics、Harness 和 platform adapters，并把它们注入 Tauri。`yss-api` 是唯一 Tauri transport seam，只向 composition root 暴露 canonical invoke handler；业务 workflow 不属于 transport。
 
-`yss-application` 拥有跨 module 的 database use-case orchestration，并直接组合 `yss-database-runtime` 的 session/query/mutation primitives；`yss-project` 独立拥有 project/session authority、resource revision、commit 与 coherent snapshot。生产代码中的 `yss-project` 不依赖 database runtime、`yss-application` 或 `yss-api`；该约束由 Rust production-module architecture audit 执行。
+## 2. Authority model
 
-### 1.1 Production architecture fitness gates
+| 状态或事实                                                                   | 唯一 authority                                   | 非 authority 投影                           |
+| ---------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------- |
+| 已提交 Project、资源、revision、history                                      | Rust Project crates                              | React Project stores、Workbench panels      |
+| Graph document 的已保存版本                                                  | Rust Project / Graph document owners             | `GraphDraftSession` 中未保存 draft          |
+| resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection           |
+| Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection          |
+| Execution、result state、payload 和 Pin history                              | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI               |
+| Statistical algorithms 与 Bayes worker result                                | SCI/Bayes owners                                 | report/chart presentation models            |
+| Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection       |
+| Root workbench topology、placement、active group/panel 和 edge state         | live root Dockview instance                      | pane-local metadata keyed by panel identity |
+| 应用级 computation settings                                                  | Rust settings service                            | Settings UI draft/projection                |
+| 本地偏好和临时交互状态                                                       | React `localStorage`、Zustand 或 component state | —                                           |
 
-Rust 与 Frontend 各有一条 test-owned production architecture audit；production module 不依赖
-policy、classifier 或 debt 数据。Rust audit 从 Cargo metadata 发现 workspace 中全部 library、
-binary、runnable example 与 custom-build roots，排除 test/bench target，再沿每个 root 的真实
-`mod` graph 发现 production source。它从 Rust AST 收集 use、re-export、path、macro、include、
-attribute、`#[path]` 与 cfg reachability facts。Frontend audit 盘点完整 `src/**` production tree，
-排除 `src/tests/**`、test files、generated declarations 与明确 fixtures，并把 TypeScript module
-dependencies 和递归 repository stylesheet dependencies 纳入同一审计。
+Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
 
-分类使用闭合集合而不是 rule priority。每个发现的 source 必须命中且只命中一层，zero/multiple
-membership 都是 hard failure：
+身份必须按语义分离。Project instance/session、resource path、Graph session、node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...`、`variables/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
-- Rust 共 16 层：Composition Root、Build Script、Commands、Platform Adapter、Application、
-  Project、Graph、Execution、SCI Core、Database Core、Backend Adapter、Built-in Composition、
-  Transport、Logging、Diagnostics、Pure Leaf。Custom-build root 及其 local modules 只属于 Build Script。
-- Frontend 共 10 层：App Composition、Views、Application、Core、Domain、Services、
-  Components/shared UI、Wire Schema、Diagnostics、Pure Shared。Stateful/framework-bearing shared
-  files 使用 literal membership 归到真实 owner；repository assets 不伪装成 source layer。
+## 3. Layer and dependency direction
 
-依赖在应用 layer policy 前解析到 canonical origin。Rust origin 只有 repository declaration、
-repository asset、language builtin 或 external Cargo dependency；Include/Attribute 的 repository
-file fact 解析为 repository asset。Workspace-member alias 必须先进入 member library 与 re-export
-graph，不能回退为 external。Frontend origin 只有 repository declaration、repository asset 或
-external package；alias/barrel/re-export 解析到声明 symbol，written external package authority
-则保留原 package。Canonical external target 使用 `external:<package>` 或
-`external:<package>::<subpath>`；两端 canonical repository-asset target 都使用
-`repository-asset:<repository-relative-path>`，repository path 统一使用 `/`。
+后端依赖从 framework/transport 指向 application，再指向 domain contract 和注入的 adapter：
 
-Cargo policy 对 workspace member、declared alias、actual package、runtime/build/development scope
-与 target condition 做 exact declaration check，再按 source layer、runtime/build mode、canonical
-subpath 或 literal symbol capability 检查每个 production use。Build Script 当前只允许其 exact
-build-mode declaration 与 `external:tauri-build::build` call。Frontend policy 双向核对 production
-dependencies，并按 source layer、runtime/type-only/build-style mode、module/stylesheet resource
-kind、package/subpath 与 stylesheet consumer 匹配 literal rows；development dependency 不授权
-production import，唯一 build-only declaration 只通过其 exact build-style row 使用。Relative CSS、
-CSS `@import` 与 `url(...)` 解析成 existing repository asset 或 exact external style target；missing、
-escaping、remote、nonliteral、cyclic 与未登记 target 都 fail closed。
+```text
+Tauri composition root
+  → yss-api transport
+      → yss-application use cases
+          → Project / Graph / Database / Execution / SCI contracts
+              → pure persisted contracts
+          → injected backend adapters
+```
 
-两端 finding 使用稳定 identity：`ruleId`、repository-relative source file、fully-qualified
-owner、dependency kind 与 canonical origin target；line/column 只用于诊断。当前 production
-architecture 不保留债务豁免清单，任何 finding 都直接使架构门禁失败。
-
-Import direction 之外，semantic fitness checks 还守卫 resolved command/application symbols、Tauri
-command/error shape、framework/DTO leakage、Execution plan closed parameter family、Build Script
-call surface、SCI/Database/backend-adapter purpose limits、Frontend raw invoke/dialog consumers、
-View-to-Core exact read capabilities、projection write ownership与 root/nested Dockview constructor
-位置。稳定 type/variant/symbol contract 用 AST 和 type resolution 检查；只有无法在该层表达的
-窄 contract 才使用 source-token guard。
-
-## 2. 顶层目录与 authority
-
-| 路径                                               | 当前职责                                                                                                                                                                                                                                                                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/`                                             | React views、application hooks、Zustand 投影、IPC adapter 和 UI                                                                                                                                                                                                                                              |
-| `src/modules/logs/`                                | Operational Logs UI：`LogDomainDockviewHost`、`LogWindow` 与 log-domain topology；不拥有 Graph Problems 或 Run Output                                                                                                                                                                                        |
-| `src/modules/problems/`                            | Graph Problems UI：`GraphProblemsPanel` 从 `GraphProjectionStore` 的完整 canonical diagnostics 派生列表                                                                                                                                                                                                      |
-| `src/modules/output/`                              | Run Output UI：`RunOutputPanel` 读取 Execution 的有界 output projection                                                                                                                                                                                                                                      |
-| `src/features/application/graphProjection/`        | Graph Projection request lifecycle、hydration、subscription、snapshot recovery、project/session/generation freshness 与原子 publication 协调；生命周期独立于 Problems panel                                                                                                                                  |
-| `src-tauri/crates/yss-api/src/`                    | 唯一 Tauri transport owner：私有 command handlers、wire DTO mapping、稳定 transport error、event/channel 交付与 canonical command registry；公开面仅为 `invoke_handler`                                                                                                                                      |
-| `src-tauri/crates/yss-application/src/`            | 独立 Application 层：跨 Project、Execution、Database、Graph、SCI 与 Bayes authority 的用例编排；不依赖根包、Tauri、Commands 或 IPC schema                                                                                                                                                                    |
-| `src-tauri/src/lib.rs`                             | Tauri composition root：构造并注入各 crate authority、Application state 与 platform adapters，并调用 `yss_api::invoke_handler()`；不声明 command/schema/error/event module 或 command registry                                                                                                               |
-| `src-tauri/crates/yss-execution/`                  | 独立 Execution 层：immutable plan、session runtime、resource preparation、run/result/finalization 与 backend ports 的唯一 owner                                                                                                                                                                              |
-| `src-tauri/crates/yss-execution-sci-adapter/`      | 独立 Backend Adapter：Execution live ACF/PACF port 到 `yss-sci-runtime` 的 request/result/control/typed-error 穷尽映射唯一 owner；不依赖 Tauri、Application、Project 或 Database state                                                                                                                       |
-| `src-tauri/crates/yss-function-editor-projection/` | 独立 Project 层：函数文档到强类型 editor pin/projection、函数类型解析与共享 camelCase wire 的唯一 owner；不持有 Project I/O、editor state 或 event delivery                                                                                                                                                  |
-| `src-tauri/crates/yss-settings/`                   | 独立 Application service：应用级后端 settings、全局 computation settings、revisioned persistence 与校验的唯一 owner；不持有 React UI、ProjectData 或 Tauri transport                                                                                                                                         |
-| `src-tauri/crates/yss-data-contract/`              | 独立 Pure Leaf：持久化 `DataType`、`DataValue` 与关联 metadata 的唯一 canonical owner                                                                                                                                                                                                                        |
-| `src-tauri/crates/yss-database-contract/`          | 独立 Pure Leaf：persisted database declaration、engine/session identity、observation、fingerprint 与 CSV/Parquet export format 的唯一 canonical owner                                                                                                                                                        |
-| `src-tauri/crates/yss-database-edit/`              | 独立 Database Core：共享 `EditOperation`、undo/redo `EditHistory` 与 `EditState` projection 的唯一 owner；不依赖 Polars、DuckDB、root database、Application 或 Tauri                                                                                                                                         |
-| `src-tauri/crates/yss-database-runtime/`           | 独立 Database Core：`DatabaseInstance`、session-scoped declaration observation/revision authority、admission/drain/recovery、cross-engine physical routing 与 typed query/edit handoff 的唯一 owner；不持有 Project publication、Application workflow、Commands、Transport 或 Tauri                          |
-| `src-tauri/crates/yss-database-schema/`            | 独立 Database Core：runtime schema facts、runtime/schema revision projection，以及 Polars/DuckDB physical metadata 到 canonical `DataType` normalization 的唯一 owner；不持有 session、Application 或 Tauri authority                                                                                        |
-| `src-tauri/crates/yss-dataset-profile/`            | 独立 Database Core：dataset profile DTO、内存 Polars column stats/distribution/overview 与稳定分类、排序语义的唯一 owner；不依赖 DuckDB、root database、Application 或 Tauri                                                                                                                                 |
-| `src-tauri/crates/yss-display-naming/`             | 独立 Pure Leaf：数据库/变量宽松显示名的大小写敏感冲突分配与 `N`/`_N` 持久化兼容语义的唯一 owner                                                                                                                                                                                                              |
-| `src-tauri/crates/yss-duckdb/`                     | 独立 Database Core engine crate：DuckDB table lifecycle、ingest/Arrow bridge、catalog/display metadata、paged/column query、transactional cell/row/column edit、bounded reversible column snapshot、identifier/literal quoting、dataset-profile physical SQL 与 typed CSV/Parquet `COPY` export 的唯一 owner |
-| `src-tauri/crates/yss-graph-document/`             | 独立 Pure Leaf：persisted graph document、entity identity 与 graph resource path 的唯一 canonical owner；资源名规则由 `yss-resource-naming` 提供，磁盘目录/扩展名由 `yss-project-layout` 提供                                                                                                                |
-| `src-tauri/crates/yss-graph-document-edit/`        | 独立 Graph 层：document invariant validation、atomic patch、candidate staging 与 edit error 的唯一 owner                                                                                                                                                                                                     |
-| `src-tauri/crates/yss-graph-protocol/`             | 独立 Pure Leaf：稳定 node/port/type/schema/value protocol、wire validation 与 dataframe nominal literals 的唯一 canonical owner                                                                                                                                                                              |
-| `src-tauri/crates/yss-graph-resource-contract/`    | 独立 Pure Leaf：Graph 编译资源标识、数据 schema 与 immutable resource snapshot 的唯一 canonical owner；不拥有 built-in node catalog                                                                                                                                                                          |
-| `src-tauri/crates/yss-graph-runtime/`              | 独立 Graph 层：session-scoped registry/catalog 组合、analysis、open candidate materialization 与 catalog query 的唯一 owner；不持有 Project/session authority                                                                                                                                                |
-| `src-tauri/crates/yss-graph-type-mapping/`         | 独立 Pure Leaf：persisted `DataType` 到 Graph `TypeExpr` 的唯一 typed conversion owner                                                                                                                                                                                                                       |
-| `src-tauri/crates/yss-julia-runtime/`              | 独立 Backend Adapter：系统 Julia executable discovery、版本探测、Windows Juliaup 安装与 background command policy 的唯一 owner；公开 typed status/error，不持有 worker、SCI、Tauri 或 Bayes behavior                                                                                                         |
-| `src-tauri/crates/yss-julia-worker/`               | 独立 Backend Adapter：reusable Julia process、embedded assets、JSON-RPC、progress/cancel/restart、typed worker error 与 app-owned task-directory lifecycle 的唯一 owner；单向依赖 `yss-julia-runtime`，不依赖 SCI、Bayes、Polars 或 Tauri                                                                    |
-| `src-tauri/crates/yss-graph-analysis/`             | 独立 Graph 层：concrete interface、Type/Schema/Lineage 求解、`GraphSemanticSnapshot`、增量语义缓存与 result category 判定的唯一 behavior owner                                                                                                                                                               |
-| `src-tauri/crates/yss-graph-compiler/`             | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner                                                                                                                                                                                                        |
-| `src-tauri/crates/yss-math/`                       | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner                                                                                                                                                                                                                          |
-| `src-tauri/crates/yss-path-display/`               | 独立且无依赖的 Pure Leaf：用户可见路径中 Windows extended-length prefix 移除语义的唯一 owner；不执行路径校验、规范化或 I/O                                                                                                                                                                                   |
-| `src-tauri/crates/yss-project-change/`             | 独立 Pure Leaf：安全 project-relative path、文件变更/重扫事实、index 相关性判断与强类型失效结果的唯一 owner；不持有 notify、ProjectState、I/O 或 event delivery                                                                                                                                              |
-| `src-tauri/crates/yss-project-watcher/`            | 独立 Application service：watcher epoch、delivery admission、session/drain protocol、超时 ownership 与 project replacement 状态机的唯一 owner；不依赖 notify、ProjectState、Tauri、Commands 或 Transport                                                                                                     |
-| `src-tauri/crates/yss-project-watcher-notify/`     | 独立 Platform Adapter：native recursive observation、notify event 映射、bounded debounce、worker lifetime 与 drain completion 的唯一 owner；不依赖 Tauri、Application/Project state、Commands 或 Transport                                                                                                   |
-| `src-tauri/crates/yss-project-identity/`           | 独立 Pure Leaf：project instance/registration/session/root/operation/history identity 与 project/resource revision 的唯一 canonical owner；不持有 project state 或 persistence behavior                                                                                                                      |
-| `src-tauri/crates/yss-project-discovery/`          | 独立 Project 层：可取消的 project metadata 扫描、目录跳过策略与项目名规范化的唯一 owner；不进入 symlink/reparse point，也不拥有 registry persistence、registration workflow 或 transport DTO                                                                                                                 |
-| `src-tauri/crates/yss-project-filesystem/`         | 独立 Stateful Project 层：native project-root identity、caller binding/revalidation、root lease/lifecycle admission、原子文件事务、rollback/recovery marker 与 filesystem typed error 的唯一 owner；不持有 `ProjectState`、完整 `ProjectSession`、resource revision 或 publication                           |
-| `src-tauri/crates/yss-project-history/`            | 独立 Project 层：mutation envelope、resource/document patch、undo/redo transaction 与内存 document state machine 的唯一 owner；不持有 filesystem、publication、transport 或 Graph edit adapter                                                                                                               |
-| `src-tauri/crates/yss-project-layout/`             | 独立且无依赖的 Pure Leaf：project 磁盘目录、文件名、扩展名与 index-input 相对路径分类的唯一 canonical owner；不持有 I/O、schema、watcher 或 workflow                                                                                                                                                         |
-| `src-tauri/crates/yss-project-manifest/`           | 独立 Pure Leaf：`metadata.yssbi` 当前 schema version 与严格 manifest wire 的唯一 owner；不持有 ProjectData、应用 settings、时钟、I/O 或 lifecycle                                                                                                                                                            |
-| `src-tauri/crates/yss-project/`                    | 独立 Stateful Project 层：`ProjectState`、运行期 session/instance、resource revision、history hydration、持久化事务编排与 commit 后 publication 的唯一 owner；组合专职 Project crates，但不依赖 Tauri、Commands、IPC schema、Application workflow 或 Database runtime                                        |
-| `src-tauri/crates/yss-project-model/`              | 独立 Project 层：内存 `ProjectData`、`ProjectMetadata`、Graph resource aggregate 与 `ProjectDataPatch` 的唯一 owner；不持有文件 I/O、时钟、publication 或整包 project JSON wire                                                                                                                              |
-| `src-tauri/crates/yss-project-operation/`          | 独立 Stateful Project 层：project/session 绑定的 operation admission、in-flight/completed replay protection 与 RAII reservation lifecycle 的唯一 owner；不持有 ProjectState、publication、I/O 或 transport                                                                                                   |
-| `src-tauri/crates/yss-project-progress/`           | 独立 Pure Leaf：project discovery/cleanup 进度事件、输出 port 与任务取消 capability/registry 的唯一 owner；Tauri queue、Channel 与 wire DTO 留在 command adapter                                                                                                                                             |
-| `src-tauri/crates/yss-project-registry-contract/`  | 独立 Pure Leaf：project registration record、root identity state 与异步 persistence port/error 的唯一 canonical owner；不持有 workflow 或具体存储实现                                                                                                                                                        |
-| `src-tauri/crates/yss-project-registry/`           | 独立 Stateful Project 层：registration、favorite、cleanup、scan、路径规范化/校验及 typed workflow error 的唯一 owner；SQLite 实现留在 Backend Adapter，不持有 ProjectState、Tauri 或 SQLx                                                                                                                    |
-| `src-tauri/crates/yss-project-registry-sqlite/`    | 独立 Backend Adapter：`ProjectRegistryStore` 的 SQLx/SQLite schema、CRUD 与 strict row mapping 唯一 owner；不依赖 registry workflow、ProjectState 或 Tauri                                                                                                                                                   |
-| `src-tauri/crates/yss-resource-lifecycle/`         | 独立 Stateful Project 层：project instance/resource 绑定的 load/unload/rename token admission、ownership predecessor chain 与 RAII guard lifecycle 的唯一 owner；不持有 ProjectSession、filesystem publication、root error 或 transport                                                                      |
-| `src-tauri/crates/yss-resource-naming/`            | 独立 Pure Leaf：graph/chart 严格文件资源名、Unicode portable key 与冲突分配的唯一 canonical owner                                                                                                                                                                                                            |
-| `src-tauri/crates/yss-sql-source/`                 | 独立 Database Core：SQLite/PostgreSQL/MySQL read-only table discovery、连接配置、identifier quoting、strict SQLx value decoding 与 typed Polars materialization 的唯一 owner；不持有 Project/Application/Tauri 状态或导入 publication                                                                        |
-| `src-tauri/crates/yss-tabular-contract/`           | 独立 Pure Leaf：有序 tabular snapshot、finite scalar 与 column identity 的唯一 canonical owner；变量值归一化由 `yss-variable-value` 负责                                                                                                                                                                     |
-| `src-tauri/crates/yss-tabular-io/`                 | 独立 Database Core：Polars-backed typed IPC/CSV/Parquet filesystem I/O、Excel workbook sheet inspection/CSV bridge 与错误分类的唯一 owner；支持当前目录相对输出，替代 root `database/tabular_io`、`database/excel_reader` owner，且不依赖 root database、Application 或 Tauri                                |
-| `src-tauri/crates/yss-tabular-polars/`             | 独立 Backend Adapter：canonical tabular scalar/column/snapshot 的 Polars materialization、双向 JSON value projection，以及 `yss-database-edit` operation 的 DataFrame apply/reverse/cast 唯一 owner；完整保留 `u64` 与 1970 年前时间戳，且不依赖 root database、Application 或 Tauri                         |
-| `src-tauri/crates/yss-variable-contract/`          | 独立 Pure Leaf：持久化 `VariableId`、`VariableScope` 与 `VariableInstance` 的唯一 canonical owner；变量 mutation 与 authority 留在 application/project                                                                                                                                                       |
-| `src-tauri/crates/yss-variable-value/`             | 独立 Pure Leaf：变量类型默认值、稳定 tabular handle、literal/snapshot 归一化及 typed error 的唯一 owner；不持有 Project 状态、I/O、事务或 Polars materialization                                                                                                                                             |
-| `src-tauri/crates/yss-chart-document/`             | 独立 Pure Leaf：chart 持久化文档、格式版本与资源路径的唯一 canonical owner；磁盘布局由 `yss-project-layout` 提供，安全扫描与事务 I/O 留在 Project                                                                                                                                                            |
-| `src-tauri/crates/yss-bayes-artifact-contract/`    | 独立 Pure Leaf：Bayes artifact reader port 与 read/validation/export typed failure category 的唯一 owner；只依赖 canonical result projection，不依赖 Polars、Tauri、Application 或具体 I/O                                                                                                                   |
-| `src-tauri/crates/yss-bayes-artifact-polars/`      | 独立 Backend Adapter：Arrow IPC artifact materialization、CSV export、sample paging 与 trace/density/autocorrelation/posterior-predictive projection 的唯一 owner；malformed/partial rows fail closed，不依赖 Tauri 或 Application                                                                           |
-| `src-tauri/crates/yss-bayes-model/`                | 独立 Pure Leaf：Bayes draft、表达式解析、structured validation 与 validated immutable spec 构造的唯一 owner；不持有 dataset、result/task state、worker capability、Julia、Polars 或 Tauri                                                                                                                    |
-| `src-tauri/crates/yss-bayes-result/`               | 独立 Pure Leaf：Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 的唯一 owner；不持有 model 构造、worker/process capability、filesystem lease、Julia、Polars、Application state 或 Tauri                                                                                        |
-| `src-tauri/crates/yss-bayes-worker/`               | 独立 Pure Leaf：validated Bayes task、opaque task/artifact handle、terminal/error contract、`BayesWorkerPort` 与 capability-gated `BayesWorkerClient` 的唯一 owner；不持有 Julia process、filesystem artifact、Polars、Application state 或 Tauri                                                            |
-| `src-tauri/crates/yss-bayes-worker-julia/`         | 独立 Backend Adapter：`BayesWorkerPort` 的 Julia 实现、Julia model kernel 生成、typed exchange files、worker task 状态与安全 artifact materialization 的唯一 owner；组合 `yss-bayes-worker` 和 `yss-julia-worker`，不依赖 Tauri、Application、Commands、Project 或 Database                                  |
-| `src-tauri/crates/yss-sci-runtime/`                | 独立 SCI Core：面向 Application 的同步 density、regression、panel、time-series、hypothesis API/report models 与 Rust algorithm adapters 的唯一 owner；组合 `yss-sci` 与 `yss-sci-contract`，不依赖 Tauri、Project、Database、Execution 或 Julia                                                              |
-| `src-tauri/crates/yss-sci/`                        | 独立 SCI Core：Rust 数值、回归、面板、时间序列与统计算法，不拥有 Application-facing runtime API                                                                                                                                                                                                              |
-| `src-tauri/crates/yss-sci-contract/`               | 独立 Pure Leaf：backend-neutral statistical input/settings、单调执行控制、取消 capability 与稳定 SCI error code 的唯一 owner；不依赖 Data Contract、Project、Julia、Tauri 或算法实现                                                                                                                         |
-| `src-tauri/crates/yss-tracing/`                    | 独立 Logging 层：`tracing` subscriber、过滤、统一脱敏、bounded console 与 rolling JSONL                                                                                                                                                                                                                      |
-| `src-tauri/julia/`                                 | Julia worker assets 与 Bayes operation                                                                                                                                                                                                                                                                       |
-| `src-tauri/crates/yss-diagnostics/`                | 独立 Operational Diagnostics 层：Rust log projection、frontend ingestion、recent ring、sequence 与 live delivery；单向依赖 `yss-tracing`，不承载 Graph compiler problems                                                                                                                                     |
-| `src-tauri/crates/yss-window-state/`               | 独立 Platform Adapter：后端权威窗口几何状态、typed failure 与原子持久化的唯一 owner                                                                                                                                                                                                                          |
-
-Rust 与 React 的职责单向流动：Rust 是已提交业务状态的唯一事实源；React 只保存 Rust
-只读投影、显式的未保存 editor draft 与 UI/runtime 状态，不维护第二份 committed model。
-资源路径是 opaque identity；graph 使用 `events/...` 或 `functions/...`，database 使用
-`databases/{database-id}`，variable 使用 `variables/{VariableId}`。
-
-## 3. 前端组织与 IPC
+- command 只解析和校验输入、映射 DTO/error、调用 use case，并在 commit 后交付事件或 channel；
+- Application 组合跨 owner 用例和 currentness gate，不重新实现 Project、Graph、Database 或 SCI 规则；
+- domain crate 不依赖 Tauri、React、command schema 或具体基础设施；
+- adapter 实现窄 port，不反向拥有 session、approval、project 或 workflow authority。
 
 前端依赖方向是：
 
 ```text
-app composition / routing / providers
+app composition / routing
   → modules/*/public
-      → module internal UI / controllers
-          → features/application
-          → audited features/core and features/domain contracts
   → features/application
-      → features/core
-      → features/domain
+      → features/core and features/domain
       → services
-components/ui and shared presentation
+  → components/ui and shared presentation
 ```
 
-- `app/` 负责路由、provider 和跨业务模块组合；主窗口的唯一组合根位于
-  `src/app/windows/workbench/`。
-- `modules/` 拥有窗口、panel、editor 与业务 UI。模块外只能导入根 `public.ts`；不同业务模块
-  不直接导入，通用 Workbench contract 是唯一框架例外。
-- `features/application/` 编排用户用例与生命周期。
-- `features/core/` 保存 domain-scoped Zustand 投影和共享基础设施。
-- `features/domain/` 保存无 UI/runtime 依赖的前端 domain 规则。
-- `services/` 是普通 Tauri invoke 的 adapter；统一经 `src/services/ipc/invokeCommand.ts` 解析 `{ code, details, incidentId }`。
-- `components/ui/` 使用 shadcn primitives；用户可见滚动使用 `ScrollArea`。
+`app/` 组合窗口、路由和跨业务 contribution；`modules/` 拥有 panel/window/editor UI，并通过根 `public.ts` 暴露；`features/application/` 编排用户用例；`features/core/` 保存领域投影和共享运行态；`features/domain/` 保存无 UI/framework 依赖的规则；`services/` 适配 IPC。普通 invoke 统一经过 `src/services/ipc/invokeCommand.ts`。
 
-`WorkbenchComposition` 通过 app-owned `rootPanelRegistry`、`editorRendererRegistry`、menu/status
-contribution 和 integrations 组装多个业务模块。`WorkbenchWindow` 本身只接收显式 slots 与 typed
-capabilities；顶部是 `WorkbenchMenuBar`，中部只有一个 root `DockviewReact`，底部是 `StatusBar`，
-Settings 与 node documentation 由 `WorkbenchOverlayHost` 承载。
+这些方向由可执行架构门禁维护，分类算法和 policy 见[架构门禁](../development/ARCHITECTURE_GATES.md)，完整 workspace 索引见[生成的 Module Map](../reference/MODULE_MAP.md)。
 
-`RootDockviewHost` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Problems 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 operational log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
+## 4. Project lifecycle
 
-- Zustand 只保存 modal 等非 placement UI 状态，不镜像任何 panel placement、visibility 或 Activity active tab。
-- `Details` 是常驻的 permanent root singleton，固定在 canonical right edge，不能移动、split、关闭，也不能通过拖动包含它的整个 group 绕过限制。
-- `Assistant` 是 layout-persisted 的普通 root singleton：新默认布局和 Reset Layout 将它放在 Details 后面，但它可以独立移动、split、关闭，并可从 View 菜单重新打开；已有 panel 的 reveal 保留其实际位置。
-- `Inspect` 是按需创建的 contextual root singleton，从当前 editor session context 解析 resource/detail target、active editor group 和 node selection。
-- Result 是 root Dockview 中可并存的 multi-panel：`resultKey` 标识并 upsert logical result panel，opaque `resultId` 标识该 panel 当前从 Rust `ResultStore` 读取的 payload。
-- `Logs`、`Output` 与 `Problems` 默认位于 root 的 native bottom edge group；Problems 只使用 `viewId: "problems"` 与 `component: "Problems"`。Layout persistence 只接受当前 exact envelope 和 canonical panel identity，不提供旧身份转换或 alternate reader。
-- root layout 只在启动 hydration 时恢复；当前按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`），payload 只有 `root` 与 `nested.logs`，不含版本字段、preferences、迁移或旧 reader。Project replacement 不会再次从该 key 恢复 root topology。
-- persisted Assistant 若存在则恢复其保存的 group/position；若用户已关闭 Assistant 且 snapshot 中缺失，startup restore 不会 additive ensure。Project replacement 保留 Details 与 Assistant topology，仅清理 project-scoped editor、Inspect 与 Result panels。
-
-### 3.1 Graph Draft 与覆盖保存
-
-Graph Editor 使用 document-style CQRS 边界：打开 Graph 时，Rust 返回 canonical document 与
-editor projection；Canvas 操作只推进前端 `GraphDraftSession`，不会修改 `ProjectState`，也不会
-发送 authoritative project event。Rust 可以作为无状态 domain transformer 校验一次 draft
-操作并返回新的 document/projection，但该调用不安装或持久化任何 Rust 状态。
+活动项目以一个 application session 为边界：
 
 ```text
-Load Graph → Frontend Draft ──→ Compile All ──→ in-memory CompiledGraph ──→ Execute
-                         └────→ Locked Save ──→ Rust atomic overwrite
+Application session
+├─ Project authority and project session
+├─ Database runtime session
+├─ Graph registry/runtime facts
+├─ Execution runtime and ResultStore
+└─ session generation / admission state
 ```
 
-- Analysis Graph 只包含 Data Port 和 Data Edge；执行顺序、Control/Effect Port、Print 等副作用节点
-  不属于该模型，未来由独立 Workflow owner 承担。
-- Compile 消费完整 Draft 并覆盖所有节点，构造完整数据依赖 DAG、解析全部动态接口、传播
-  DataContract/Schema/lineage、检测环路和降低 immutable execution plan。增量缓存可以复用未变化
-  节点的事实，但最终 artifact 必须描述整张 Graph，不能按某个 output 局部编译。
-- Schema 只是沿现有 Data Edge 传播的编译事实；不存在第二套 Schema Edge、Schema Pin 或 React
-  schema authority。数据库 schema 与函数签名来自同一次 coherent Rust resource snapshot。
-- Compile 使用语义 document、registry fingerprint 与 resource catalog fingerprint 生成
-  content-addressed source hash；布局位置不参与该 hash。Execute 必须携带当前 hash，并只消费匹配的
-  Rust compile cache，不能隐式 Save 或回退到已保存 Graph 重新编译。
-- Compile 与 Save 语义独立：Compile 不提交 `ProjectState` 或文件，Save 不替代 Compile。
-- Draft 保存期间 Graph Canvas、快捷键、Details、clipboard 和 undo/redo 全部不可写。
-- Save 提交完整 document，不携带 frontend `expectedRevision`；覆盖语义是 last write wins。
-- Rust 在文件事务中校验并持久化 candidate，再安装到 `ProjectState`；authority 安装失败会回滚文件。
-- Save 成功返回 canonical document/projection，前端整体采用并清除 dirty/history；失败保留原 draft。
-- dirty draft 不与 Rust snapshot 自动 merge/rebase。干净 projection 可因 watcher/event 被重新 hydrate。
-- Graph projection application、cache invalidation 和 Dockview stale-panel pruning 是单向投影/UI
-  生命周期操作，不命名为或实现为双状态 reconcile。
-- Canvas node/port display、capability、type、literal 和 diagnostic facts 均直接来自 Rust editor
-  projection；Frontend 不保留 NodeDefinition/PinSlot registry 或 Call Function 引用诊断副本。
-- 完整 `EditorGraphProjectionDto` 原子包含 basis、graph path、source revision、nodes、connections、
-  顶层 diagnostics、compilation outcome 与 `hasBlockingDiagnostics`。`projection.diagnostics` 是
-  graph/resource/connection/node/port/parameter Problems 的 canonical 完整集合；node diagnostics
-  只作为 Canvas、Node、Pin 与参数内联展示的局部索引。
-- Graph Analysis 从 `yss-graph-compiler-diagnostics` 的稳定 vocabulary 生成未知节点、参数、资源、
-  unbound input、dynamic port、Schema 与 dependency-cycle Problems；cycle 判定同时供 compiler 使用，
-  不复制第二套 DAG 规则，也不把普通编辑状态写入 tracing。
-- `GraphProjectionStore` 在同一个 `GraphEntityBucket` commit 中采用 Node、Pin、Schema、parameter、
-  diagnostics、outcome 与 `hasBlockingDiagnostics`，不建立第二个 `ProblemsStore`。Canvas、Details、
-  Run Gate 和 `GraphProblemsPanel` 都从这份 projection 派生；Run Gate 直接检查 outcome 与
-  `hasBlockingDiagnostics`，不依赖 Problems panel 是否打开或它渲染了多少行。
-- Graph Draft mutation command 返回 document/patch 与 project/session/generation/operation 接受身份；
-  bounded resolver worker 在后台计算完整 projection，并通过 `GraphProjectionChannel` 发布。Frontend
-  application coordinator 校验身份、拒绝 stale result、原子采用 batch，并在超时或重连后通过 snapshot
-  恢复。队列按 Graph coalesce 为 latest-wins；显式 Save/Compile 的事务性 command replacement 继续走
-  同一 store freshness gate。不存在逐条传递问题的 `ProblemsChannel`。
-- Editor node projection 的 `ports` 只包含具有 canonical `PortAddress` 的真实可交互 Pin；declared、
-  user-created 与 derived Pin 共用同一实体集合和节点 `pinIds` 索引。节点另行投影可序列化的
-  `portInstanceAdditions` capability，Details 在 Inputs/Outputs 区域据此新增实例，不把动态模板伪装成
-  declared Pin，也不在 Canvas 或 React 中推导协议数量规则。
-- Pin-drop compatible catalog 查询随请求提交当前 Draft document，由 Rust 使用同一 Graph
-  compatibility domain logic 无状态计算；它不读取 committed Graph document，也不设置 revision
-  precondition，因此新建但未保存的节点可以立即参与后续编辑。
-- Editor projection wire 只在根部携带一个 `sourceRevision`；basis 和 node 不重复版本字段。
-  该版本仅用于拒绝倒退的 Rust projection 和提供资源事务 authority，不作为 Graph Draft、Save
-  或 compatible catalog 的前端提交前置条件。
-- Canvas 按 canonical `display.styleId` 选择布局；`builtin.reroute` 使用紧凑 Reroute layout，
-  其余当前 style ID 使用统一 Default layout。
+Project replacement 先关闭旧 session 的新任务准入并 drain 或取消活动工作，再构造和验证 candidate session，最后原子替换。旧 session 的 late event、result、database handle 和 Graph projection 因身份或 generation 不匹配而被拒绝；前端在 hydrate 新项目之前先清理旧的 backend-owned projection。
 
-### 3.2 Plot / Visualization
+Project 文件、resource revision、history 和提交事务由 Project owner 管理。Graph resource 可以存在于磁盘和 revision index 中但保持 unloaded；create/duplicate 只声明新资源，不为了发布事件而临时加载。需要 resident document 的 load/patch/move 路径统一经过 Project 的受验证安装边界。
 
-Rust scientific modules 与 result payloads 拥有统计计算、canonical ordering、confidence fields 和其他科学决策。React 不成为第二套 scientific authority：Result 与 Chart source adapters 将 authoritative DTOs 转换为 source-independent discriminated `ChartModel` union；renderers 不感知 Rust、IPC、stores、report workflows 或 Bayes workflows。
-
-- `src/shared/charts/ChartRenderer.tsx` 是唯一的 generic `ChartModel` dispatcher。其 registry 将 model kinds 映射到 final leaf renderers；已有窄 presentation contract 的 specialized report composition 可以直接导入 leaf renderer。
-- `src/shared/charts/core/` 拥有共享 sizing、theme、geometry、stable SVG layers 与 tooltip behavior。`cartesian/` 拥有 generic Cartesian marks/axes；`statistical/` 拥有 domain-specific statistical visual grammars。两个 renderer categories 不互相依赖，category/core modules 也不导入 root public barrel。
-- 当前 D3/SVG renderers 通过 keyed incremental joins 更新 stable named layers，不清空整个 SVG；`core/useChartContainerSize.ts` 是 chart production modules 中唯一创建 `ResizeObserver` 的位置。
-- `src/modules/results/internal/ui/plot/PlotWindow.tsx` 是 standalone plot window；app router 只通过
-  `modules/results/public.ts` 懒加载它。Reusable renderers 不位于 window module，obsolete
-  compatibility paths 直接删除而不包装。
-- Canvas 与 ECharts 是需要 profiling 和显式设计决策的未实现 future options；两者都不是当前 renderer 或 project dependency。
-
-## 4. yss-api Commands → application → domain
-
-### 4.1 Command interface
-
-`src-tauri/crates/yss-api/src/commands/` 中的 Tauri command 只负责：
-
-1. 解析和验证 IPC 输入。
-2. 将 DTO 转换为 application/domain 类型。
-3. 必要时把阻塞工作放入 blocking pool。
-4. 调用 application 或 authoritative domain interface。
-5. 映射为稳定 `CommandError` wire。
-6. 在 authority commit 后交付 project event，或通过有序 channel 交付运行流。
-
-Command 不拥有长 workflow、文件系统事务、graph compiler、database 编辑规则或统计实现。Event/channel 交付失败可以形成 transport error，但不会把已提交的 authority receipt 回滚成未发生。
-
-### 4.2 Application modules
-
-`src-tauri/crates/yss-application/src/` 当前提供以下主要深 module：
-
-| Module                               | Interface 提供的 leverage                                    | Implementation 所在 locality                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `project_lifecycle`                  | load/clear/create/save-as/delete 的用例结果                  | ProjectState、registry 与恢复状态编排                                                                           |
-| `catalog_query` / `graph_open`       | coherent localized/compatible catalog 与 graph projection    | Application session capture、Project/Graph/Database snapshot 与 schema mapper                                   |
-| `graph_commit` / `resource_mutation` | captured Graph candidate commit 与 Project resource mutation | Application session revalidation、`yss-graph-editor` planning、Project authority commit 与 neutral result facts |
-| `execution`                          | session capture、prepared plan、run/result/finalization      | ApplicationSessionSlot 与 Execution-owned runtime                                                               |
-| `database`                           | typed import/read/mutate/save/export 用例                    | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit                                      |
-| `bayes`                              | Bayes task、status、result/artifact 生命周期                 | `BayesWorkerPort`、Database snapshot、SCI inputs 与 injected artifact reader                                    |
-
-Project/Database durable facts 由 Application 组合为 query result；DuckDB runtime binding 与 storage metadata routing 属于 `yss-database-runtime`，`ColumnInfoDTO` conversion 属于 `yss-api` 的私有 transport schema mapper。
-
-`hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
-
-典型链路：
-
-```text
-yss-api/commands/command_project/lifecycle
-  → application/project_lifecycle
-  → project
-
-yss-api/commands/command_node_system
-  → application/catalog_query | graph_open | resource_mutation | graph_commit | execution
-  → Project / Graph / Execution
-
-yss-api/commands/command_dataframe
-  → application/database
-  → project + database
-
-command_bayes
-  → application/bayes
-  → SCI-facing StatisticalInput
-  → BayesWorkerPort
-  → yss-bayes-worker-julia::JuliaBayesWorkerAdapter
-```
-
-## 5. Project authority 与资源生命周期
-
-### 5.1 ProjectData 与 ProjectStore
-
-`ProjectState.project_data` 中的 `ProjectData` 仍是项目、resident graph document、node/pin/connection、variable、chart 和 database declaration 的 authoritative state；应用级 computation settings 由 `yss-settings` 统一负责。
-
-`ProjectStore` 只保留 Project session identity；随 project session 重建的运行时对象由
-`ApplicationSessionSlot` 持有：
-
-```text
-ApplicationSessionSlot
-├─ ProjectState / ProjectSession
-├─ DatabaseRuntimeSession
-├─ Graph catalog/runtime facts
-├─ ExecutionRuntimeState
-├─ ResultStore and RunRegistry
-└─ session epoch / generation
-```
-
-`ProjectStore` 不替代 `ProjectData`；它只记录 Project-owned session identity。切换 project session
-通过 ApplicationSessionSlot 关闭旧 Execution admission、drain 活动 work，再原子替换
-Project/Database/Execution session，隔离旧 result、run 与 database handles。
-
-`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。
-活动 session 中，`ProjectData.databases` 是 declaration authority；DatabaseRuntimeSession 保存
-session-bound runtime state。ProjectState 拥有 project identity、resource revision、commit/currentness
-validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
-
-Graph resource 文件位于 `events/...` 与 `functions/...`。对未驻留 graph，磁盘文件和 graph revision ledger/index 仍声明资源存在；`ProjectData.graphs` 中缺失表示 unloaded，而不是资源不存在。
-
-### 5.2 唯一 resident install primitive
-
-`ProjectState::install_validated_resident_graph` 是 private canonical resident-install primitive，也是 live graph document 的唯一 insertion implementation。它只接收已经完成路径、document、revision 和结构校验的资源。
-
-以下路径在需要使 graph resident 时委托给该 primitive：
-
-- 显式 `insert_graph` interface；
-- `InsertGraph` resource patch；
-- graph load commit；
-- loaded graph move，以及 move 时仍应 resident 的 referenced graphs。
-
-这样把实际 insertion 集中在一个 locality。Public interface、patch 和 load workflow 不是并行 installer。
-
-### 5.3 Create/duplicate 保持 unloaded
-
-Graph create 与 duplicate 的顺序是：
+典型打开链路：
 
 ```mermaid
 sequenceDiagram
-  participant C as Command
-  participant P as ProjectState transaction
-  participant D as Project disk
-  participant A as Authority publication
-  C->>P: create/duplicate request
-  P->>D: prepare, validate, commit graph file
-  P->>A: publish one DeclareGraph patch
-  A-->>C: committed resource mutation receipt
+  participant UI as React
+  participant API as yss-api
+  participant APP as Application
+  participant P as Project
+  participant G as Graph runtime
+  UI->>API: open opaque graphPath
+  API->>APP: graph-open use case
+  APP->>P: capture session and load candidate
+  P-->>APP: validated resident document
+  APP->>G: bind catalog/resource facts and analyze
+  G-->>APP: complete semantic snapshot
+  APP-->>UI: canonical document and editor projection
 ```
 
-关键 invariant：
+## 5. Graph compile and execute overview
 
-- create/duplicate 写入磁盘资源；
-- 成功后只发布一次 `DeclareGraph` authority mutation；
-- `DeclareGraph` 只登记 path/revision，不写入 `ProjectData.graphs`；
-- 新 graph 始终以 unloaded 状态发布，绝不 transiently load；
-- 若 authority publication 失败，已提交文件走 transaction rollback。
-
-Duplicate 对 loaded source 使用 coherent `ProjectData` snapshot，对 unloaded source 读取磁盘并核对 authoritative revision；两种 source path 都不会使 target 临时 resident。
-
-### 5.4 Load 与 coherent snapshots
-
-Graph load 由 Application graph-open use case 注册 resource lifecycle owner，在锁外读取/解析磁盘，再在 commit gate：
-
-1. 验证 project session、lifecycle token 与 Database catalog basis。
-2. 验证 graph resource 并规范 function revision。
-3. 通过 canonical resident installer 写入 `ProjectData`。
-4. 合并合法 local variables 并提交 lifecycle guard。
-5. 推进 authority generation，并由 Application 从同一 session basis 生成 Graph projection/result facts。
-
-ProjectState 只发布 Project-owned durable facts；Application 将 Project session、Database catalog
-snapshot、Graph document/catalog facts 与 Execution generation 组合为各 use case 的 coherent
-input，禁止把旧 Project runtime handle 混入新 session。
-
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`yss-api` 保持现有 `ColumnInfoDTO` transport conversion，Application 将结果组合进已有 query DTO。
-
-## 6. Graph 与 Execution
-
-### 6.1 Module 分层
-
-Graph 与 Execution 的依赖方向是：
+Analysis Graph 只表达数据端口和数据依赖。Canvas mutation 更新前端未保存 draft；Rust 以无状态 domain operation 校验 mutation，并在同一 command response 返回 candidate document 与完整 projection，但在 Save 前不改变 committed Project authority。
 
 ```text
-yss-data-contract + yss-graph-document
-  → yss-graph-resource-contract
-yss-data-contract + yss-graph-protocol
-  → yss-graph-type-mapping → Graph editor/runtime
-yss-graph-document + yss-graph-protocol
-  → yss-graph-document-edit
-yss-graph-document-edit + yss-graph-catalog + yss-graph-registry + yss-graph-resource-contract + yss-graph-type-mapping
-  → yss-graph-editor → Application resource mutation
-yss-graph-analysis + yss-graph-catalog + yss-graph-document-edit + yss-graph-editor + yss-graph-registry
-  → yss-graph-runtime → Application session use cases
-yss-graph-document + yss-graph-protocol + yss-canonical-hash
-  → yss-graph-registry → yss-graph-analysis-contract
-  → yss-graph-compiler-diagnostics
-  → yss-graph-catalog
-yss-graph-registry + yss-graph-analysis-contract
-  → yss-graph-analysis → yss-graph-compiler
-  → Application graph package mapping
-  → Execution immutable plan/runtime
-yss-graph-resource-contract
-  → yss-graph-editor compatible-catalog filtering + Graph compilation/runtime + Application catalog validation
-yss-julia-runtime
-  → yss-julia-worker + Julia Tauri commands
-yss-julia-worker + yss-bayes-worker
-  → yss-bayes-worker-julia → composition root
-yss-project-layout
-  → yss-graph-document + yss-chart-document + Project persistence/indexing + Platform watcher classification
-yss-path-display
-  → Project registry + Application project query
-yss-project-layout + yss-project-identity
-  → yss-project-change → yss-project-watcher → yss-project-watcher-notify / Application projection refresh → Commands
-yss-resource-naming
-  → yss-graph-document
-yss-project-identity
-  → yss-project-registry-contract → yss-project-registry/Application/Transport/Backend Adapter
-yss-project-identity + yss-project-registry-contract
-  → yss-project-registry-sqlite → Composition Root
-yss-project-identity + yss-graph-document + yss-chart-document + yss-database-contract
-  → yss-project-history → yss-project
-yss-data-contract + yss-project-history + yss-project-identity
-  → yss-function-editor-projection → Project index/Application events/Transport
-yss-project-layout + yss-project-progress
-  → yss-project-discovery → yss-project-registry → Application/Commands
-yss-settings
-  → Application/Commands/Composition Root
-yss-database-contract + yss-graph-document + yss-project-history + yss-variable-contract + yss-chart-document
-  → yss-project-model → yss-project
-yss-project-identity
-  → yss-project-operation → yss-project
-yss-project-identity + yss-project-layout + yss-resource-lifecycle + yss-resource-naming + yss-graph-document + yss-chart-document
-  → yss-project-filesystem → yss-project
-yss-project-identity + yss-graph-document + yss-chart-document
-  → yss-resource-lifecycle → yss-project
-yss-data-contract + yss-tabular-contract + yss-variable-contract
-  → yss-variable-value → yss-project
-yss-project-model + yss-project-history + yss-project-operation + yss-project-filesystem + yss-resource-lifecycle
-  → yss-project → Application workflows → Commands/API; composition root only constructs and injects authority
-yss-tabular-contract
-  → yss-tabular-polars → Database Polars editing
-Polars DataFrame
-  → yss-tabular-io → Database/Bayes filesystem I/O
-  → yss-dataset-profile → Database/Application/Commands
-yss-dataset-profile
-  → yss-duckdb physical profiling → Database/Application/Commands
-yss-database-contract + yss-database-edit + yss-database-schema + yss-dataset-profile + yss-duckdb + yss-tabular-io + yss-tabular-polars
-  → yss-database-runtime → Application/Commands/Transport
-yss-display-naming
-  → Project/Application database and variable display-name allocation
-yss-project-progress
-  → Project registry workflows → Commands Tauri queue/Channel projection
-yss-settings
-  → Application SCI/Execution mappings → Commands wire
-yss-resource-naming + yss-project-identity
-  → yss-chart-document → yss-project → Application/Commands
+Open → Frontend Draft ──→ Compile complete draft ──→ immutable cached artifact ──→ Execute
+                      └──→ locked atomic Save ──────→ committed Project state
 ```
 
-- `yss-canonical-hash`：域分隔 canonical JSON 编码与 SHA-256 的唯一 Pure Leaf 实现，供 registry、analysis 与 runtime 直接消费。
-- `yss-settings`：统一拥有应用级后端 settings、global numeric tolerance、missing-value policy、revisioned persistence 与校验。Project manifest 不再写入 computation settings；Application 只做 SCI/Execution 类型映射，不再镜像第二套同构 validation error。
-- `yss-display-naming`：数据库/变量显示名的大小写敏感冲突分配唯一 owner；以无正则单遍解析保留 `base N`、`base_N` 共享编号和从 `1` 开始的持久化兼容语义，不承担文件系统资源名校验；未被消费的前端 `getUniqueName` 副本已删除，避免形成漂移事实源。
-- `yss-project-layout`：统一拥有 project 根文件、内容目录、资源扩展名与 index-input 相对路径分类；它不执行文件系统访问，Graph/Chart 只消费布局名称，Project/Watcher 分别保留持久化和事件交付职责。
-- `yss-project-change`：统一拥有不可绕过的 project-relative path 不变量、文件 change kind、显式 `RescanRequired` 与 `ProjectIndexInvalidation`。Watcher 故障不再伪造为 `metadata.yssbi` 文件变更，无关路径以 `None` 表示无操作而不是错误；notify adapter 忽略普通 read/open access 事件以避免自激重读循环，同时保留 `Close(Write)`、rename 语义和跨边界事件中的安全根内路径。`ProjectState` 重读、watcher lifecycle 与 Tauri event delivery 分别留在各自 owner，根 `project` 不提供 contract facade。
-- `yss-project-watcher`：统一拥有 watcher epoch、旧 session delivery admission 封锁、typed factory/session/drain protocol、超时后可重试的 drain ownership 与替换状态机。Application 只把 canonical `ProjectChange` 交给当前 Project authority，Notify adapter 只实现 filesystem observation；从核心删除未被使用的 duplicate quiet-period 常量及生产不可构造的 `DeliveryFailed` 分支，避免两个 debounce 事实源和伪终态。
-- `yss-project-watcher-notify`：统一拥有 `notify` backend、相关 event 到 canonical `ProjectChange` 的安全映射、单一 250ms debounce 事实、bounded coalescing worker 与可超时重试的 join handoff。根 crate 删除空 `platform` facade 和直接 `notify` 依赖，只在 composition root 将该 adapter 注入 `yss-project-watcher`；普通 read/open access 继续被忽略，callback uncertainty 显式升级为 rescan。
-- `yss-path-display`：统一移除用户可见或稳定存储路径中的 Windows `\\?\` 与 `\\?\UNC\` extended-length prefix。该纯字符串语义在所有宿主平台一致，避免离线测试或跨平台处理产生漂移；路径存在性、canonicalization 与 project validation 仍由调用方拥有，根 `project` 不提供兼容 facade。
-- `yss-project-manifest`：统一拥有 `metadata.yssbi` 当前 schema version 与 manifest wire；schema 字段保持私有，Project I/O 只经受校验构造器生成当前版本并复用一个构造 seam。应用 settings、文件访问、`ProjectData`、export time 刷新与 lifecycle 不进入该 Pure Leaf。
-- `yss-project-discovery`：统一拥有可取消的 metadata 递归扫描、目录跳过策略与项目名规范化。扫描不会跟随 Unix symlink 或 Windows reparse point，避免逃出用户选择的根目录或形成循环；registry workflow 继续拥有注册、持久化与 `ScanProjectsResult`，Commands 继续拥有 Tauri progress projection。
-- `yss-project-history`：统一拥有 mutation envelope、resource keys/patches、history transaction、undo/redo 栈与内存 document state；它属于 Project 行为层而非 Pure Leaf。filesystem hydration、durable commit、authority publication 与 wire mapping 留在各自 owner，根 `project` 不提供兼容 facade；旧的 test-only Graph patch 因生产不可构造且不可应用而删除。
-- `yss-function-editor-projection`：统一从 `FunctionDocument` 构造带强类型 `ResourceRevision` 的 editor inputs/outputs，并拥有 Project index 与 mutation event 共用的严格 camelCase wire。三个调用方不再各自展开 parameter/signature，Transport 中字段完全相同的 DTO 镜像与复制转换已删除；Project I/O、Application event 编排和交付仍留在各自 owner。
-- `yss-project`：统一拥有 `ProjectState`、激活 session/instance、resource revision、history hydration、持久化事务编排与 commit 后 publication。原根 `src/project/` owner、兼容 facade、失效测试 hooks 和重复 resource-mutation 路径已删除；Graph move 的 undo/redo 现在复用可构造的真实磁盘重命名计划。该 crate 只返回 Project-owned typed facts，Application 负责工作流/事件投影，Commands/API 负责 wire，root 只负责构造与注入，因此无需也禁止 catch-all `yss-backend`。
-- `yss-project-model`：统一拥有运行期 `ProjectData`、`ProjectMetadata`、`GraphResourceDocument` 聚合与原子候选 `ProjectDataPatch`；默认值确定性地使用空 export time，由 lifecycle 在创建/导出边界显式读取时钟。运行期聚合 patch 不再与 `yss-project-history::ResourceDocumentPatch` 共用同名类型，根 `project/resource_patch.rs` 与 facade 已删除；ProjectState 继续独占锁、事务、I/O 与 publication。旧的整包 `ProjectData` JSON、`info` 与隐式 metadata 刷新 API 已删除，Graph kind 直接复用 `yss-graph-document::GraphResourceKind`。
-- `yss-project-operation`：统一拥有 project/session 绑定的 operation admission、进行中/已完成防重放集合与 reservation 的完成/Drop 状态机。旧 ledger 自建的 UUID session epoch 已删除，改为复用 canonical `ProjectSessionId`，从而避免第二会话事实源，并保证 project instance id 被复用时旧 reservation 不会污染新会话；`yss-project` 继续拥有 publication 线性化、锁顺序及 `ProjectFilesystemError` 映射。
-- `yss-project-filesystem`：统一拥有 native project-root identity、入口路径 binding/revalidation、root-scoped 有序租约、lifecycle admission 封锁、redirect-safe I/O、原子 mutation journal、rollback/recovery marker 与 `ProjectFilesystemError`。原根 `project/filesystem/` owner 和错误镜像已删除；事务 API 只接收 `NormalizedProjectRoot`、`OperationId` 与 recovery marker，避免反向依赖完整 `ProjectSession`，而 resource revision 校验、ProjectState publication 和 document serialization 继续留在 `yss-project`。错误码与 recovery 分类先投影为 Application-owned failure view，再由 Commands 映射成 wire error；通用 Transport error 不再直接依赖 Project 或 Application。
-- `yss-resource-lifecycle`：统一拥有 project instance/resource 绑定的 lifecycle token admission、load/unload/rename 排他规则、ownership predecessor chain、提交/放弃状态与 RAII guard。核心 API 只接收 canonical `ProjectInstanceId`，不再耦合完整 `ProjectSession`；原先被 `cfg(all(test, any()))` 永久关闭的 17 个状态机测试已恢复，零调用且可能 panic 的资源路径 getter 与根层测试探针已删除。跨状态 `ProjectSession` 校验和激活 publication 锁顺序继续留在 `yss-project`，typed filesystem 分类映射由 `yss-project-filesystem` 唯一拥有。
-- `yss-variable-value`：统一拥有变量类型变更后的 inert 默认值、`var:{id}` handle 与 tabular literal/snapshot 归一化。数组和对象默认值为空，避免伪造用户数据或违反元素类型；canonical handle 缺失 snapshot 时 fail closed，DataSeries 只替换 handle 并保留 element/dummy/time-series metadata。Project 激活不再吞掉归一化错误，状态、事务和持久化仍留在 Project。
-- `yss-resource-naming`：严格文件资源名校验、Unicode case-folded NFC portable key 与冲突分配的唯一 owner；宽松数据库/变量显示名分配不是同一 contract。
-- `yss-chart-document`：统一拥有 chart schema version、严格 document/encodings wire 与资源路径；`charts/*.yssbi-chart` 名称来自 `yss-project-layout`，Project 只负责 redirect-safe 扫描、事务 I/O、history 与 publication，不再导出 chart contract facade。
-- `yss-graph-document`：持久化 document、entity identity 与 graph resource path；名称校验直接依赖 `yss-resource-naming`，稳定 node/port/type/value contract 由 `yss-graph-protocol` 唯一拥有。
-- `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
-- `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
-- `yss-graph-type-mapping`：持久化 `DataType` 到 Graph `TypeExpr` 的唯一 Pure Leaf 映射；editor 与 runtime 不再各自维护分支表。
-- `yss-graph-analysis`：concrete interface、前向节点级 Type/Schema/Lineage 求解、完整 `GraphSemanticSnapshot`、Graph Problems、kernel specialization 与节点级增量缓存的唯一 behavior owner；缓存只优化纯求解，不能成为第二事实源。
-- `yss-graph-compiler`：revision 校验、`GraphSemanticSnapshot` 驱动的精确 input/output lowering、coercion plan、Graph-owned immutable package 与 compile error 的唯一 owner；不再从 protocol Union 或 Runtime value 重复猜测当前类型。
-- `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
-- `yss-graph-analysis-contract`：compilation basis、diagnostic identity/location 与 provenance 的唯一可序列化跨 Graph 阶段 contract owner；未接入生产的平行 `AnalysisSnapshot`/`ValidatedSemanticGraph` 模型已删除。
-- `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
-- `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
-- `yss-graph-editor`：editor mutation、保守连接预检、compatible-catalog filtering、portable subgraph codec 与实例化的唯一 Graph owner；预检只拒绝确定不兼容的 exact source，不把 protocol pattern 或 `last_known` 当作当前类型，也不拥有 Project/session/materialization/semantic authority。
-- `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 compilation、analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
-- `yss-project-identity`：统一拥有 `ProjectInstanceId`、`ProjectRegistrationId`、`ProjectSessionId`、`ProjectRootIdentity`、`OperationId`、`HistoryEntryId` 与 monotonic revision 值对象。registry registration、runtime instance 与 replaceable runtime session 保持不同强类型；Graph/Project revision 只允许显式命名转换，测试便利的 `next()` 仅通过 `test-support` feature 暴露。根 `project` 不做兼容 re-export。
-- `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件、`ProjectProgressSink` 输出 port 与封装过的任务取消 capability/registry。新任务会取消并替换旧 active task，避免产生不可再取消的孤儿扫描；Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection。Project 不再暴露原子标志或字符串取消 sentinel，扫描中途取消会保持 typed `Cancelled` 语义而不会误报为 `ScanFailed`。
-- `yss-project-registry-contract`：统一拥有 `ProjectRecord`、`ProjectRootIdentityState` 与 `ProjectRegistryStore` persistence port；SQLite adapter 与 Project workflow 直接消费同一记录，不再通过字段完全相同的 `ProjectRegistryRecord` 镜像转换。注册表 ID 使用 `ProjectRegistrationId`，不再错误复用每次激活都会变化的 `ProjectInstanceId`；JSON 字符串 wire 保持兼容。Application lifecycle 直接断言强类型 domain event，registry 写入失败的恢复动作保持 `RegisterDestination`，只在 transport boundary 映射为既有 `registerDestination` wire 值。
-- `yss-project-registry`：统一拥有 project registration、favorite、cleanup、scan、路径规范化/校验与 `ProjectRegistryError`；根 `project_registry` owner 和 facade 已删除，Commands/Application/Composition Root 直接消费 crate。SQLite 仍通过 `ProjectRegistryStore` 留在 Backend Adapter；行为 crate 不依赖 SQLx、Tauri 或 `ProjectState`。零调用的 validity wrapper 已删除，application lifecycle 通过测试侧失败 store 验证补偿语义，生产类型不再携带 remove-failure 测试开关。
-- `yss-project-registry-sqlite`：统一实现 `ProjectRegistryStore` 的 SQLite schema、连接策略、CRUD、diagnostic logging 与 strict row mapping；根 `backend_adapters/project_registry_sqlite` owner 和 module facade 已删除，Composition Root 直接构造并注入 store。非法 root identity state 和非 0/1 favorite 值均 fail closed；SQLx/Tokio 的版本与 feature 由 workspace manifest 统一声明。
-- `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
-- `yss-graph-analysis`、`yss-graph-compiler`：纯 semantic snapshot 与 neutral compiled package，不读取 Project authority；Projection 与 Compiler 消费同一次求解结果。
-- `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
-- `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。
-- `application/graph_contracts`：唯一 Project/Graph → Execution typed mapping seam。
+- Compile 对完整 draft 求解并产生 content-addressed artifact，不保存 Project；
+- Save 校验并原子覆盖完整 document，不隐式 Compile；
+- Execute 只接受与当前 draft/source hash 精确匹配的 artifact；
+- Projection 与 Compiler 消费同一个 `GraphSemanticSnapshot`；
+- execution result 进入 Rust `ResultStore`，用户程序输出进入独立 Run Output stream；
+- Graph Problems 是完整 projection 的领域事实，不进入 operational logs。
 
-Execution runtime 只消费 immutable plan、prepared resource grants 与 typed backend ports；它不会在运行中查询 Graph document、Project authority 或 concrete backend。
+完整的 Draft、Projection、Compile、Save、Execute、Problems、Results 和 Run Output contract 只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
 
-### 6.2 Graph semantic resolution
+## 6. Database and scientific computation
 
-`GraphDocument` 只保存用户意图与稳定结构：node、parameter、concrete Port identity/order、connection 与 input override。Protocol `TypeExpr` 是 accepted type pattern；它可以包含 `Class`、`Generic`、`Union` 与 `Unknown`，但不能充当当前 Pin 的 exact type。当前类型使用独立状态表达：
+Database 用例由 Application 组合 Project declaration authority 和 session-scoped Database runtime：
 
-`InputState.literal_override` 保存经过 protocol 校验的 `TypedValue`，而普通 node parameters 保持显式 `JsonValue`；Analysis 直接读取 literal 的 exact `value_type`，Compiler 从同一 typed value lowering，Editor Projection 只向输入控件投影其 raw value。三层不再分别从 JSON payload 猜测字面量类型。
+- typed import source 在 transport 边界解析；
+- project DuckDB 保存表内容、physical schema 和 display metadata；
+- 大表 query/edit/profile/export 保持在 Rust，使用分页、列投影、SQL aggregate 或批处理；
+- Polars materialization 只用于适合内存处理的路径；
+- mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
+
+科学计算保持 backend-neutral contract：
 
 ```text
-TypeState
-├─ Exact(ResolvedType)
-├─ Constrained(TypeDomain)
-├─ Unknown(reason)
-└─ Conflict(diagnostic)
+Application / Execution scientific port
+  → yss-sci-contract
+      → yss-sci-runtime → Rust algorithms
+      → Bayes worker port → Julia adapter
 ```
 
-完整求解链为：
+Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 各有独立 owner，Application 只编排它们，不让 worker detail 泄漏到 Graph kernel 或 IPC command。
 
-```mermaid
-flowchart TD
-  D[GraphDocument] --> I[Concrete Interface Resolution]
-  R[ResourceCatalogSnapshot] --> I
-  I --> S[Schema and derived interface facts]
-  S --> N[Topological node semantic resolution]
-  N --> G[GraphSemanticSnapshot]
-  G --> P[Editor Projection]
-  G --> C[Graph Compiler]
-  C --> E[Specialized immutable execution plan]
+## 7. Statistical Harness
+
+当前 Assistant 通过 Rust-authoritative Harness 工作：
+
+```text
+Assistant UI projection
+  → yss-api ordered Harness commands/channel
+  → yss-statistical-harness
+      → AgentDriverPort → yss-agent-rig
+      → CapabilityGatewayPort → yss-application
+      → persistence ports → SQLite adapter
 ```
 
-节点是唯一求解与缓存失效单位。Resolver 在调用节点规则前收集该节点全部输入 facts，再一次性发布全部 Port 的 type/schema/lineage、diagnostics、input coercions 与 kernel specialization；不会让 Pin 互相原地修改。传播只沿 data edge 前向进行，下游连接不能反向迫使上游选择类型。
-
-内置规则目前覆盖 fixed、identity、numeric fold、shape-preserving Float64、parameter-selected output 与 variable-resource output。统一数值节点 `yssbi.numeric.{add,subtract,multiply,divide}` 同时接受 scalar 与 `DataSeries`：全 scalar 输出 scalar，任一 Series 输出 Series；Add/Subtract/Multiply 使用 `Int64 < Float64` 的 widening join，Divide 固定 Float64 element。Scalar→Series broadcast 与 Int64→Float64 widening 会显式进入 compilation coercion plan。
-
-Compiled Graph/Execution operation 不再另存一份可能漂移的 kind；implementation identity 只存在于 kernel specialization，运行时从该 specialization 读取调度 identity、精确 input/output type 与 coercion。
-
-`GraphSemanticCache` 的 key 只包含 protocol fingerprint、semantic parameters、concrete Port identity/order、上游 facts、resolved schema 与相关 resource fingerprint，不包含位置、选择、缩放或显示标签。只有节点输出 fingerprint 改变时才继续使下游失效；增量结果必须与全量求解完全相同。
-
-Derived Port 的 active label/type 每次来自当前 Schema/Resource facts；document `last_known` 只用于成员消失后的 orphan 展示与恢复，orphan 始终是 `Unknown(OrphanedPort)`，不能参与新连接或成功编译。Graph Editor 与 React 的连接判断仅是低成本预检；结构合法的连接由 Draft 保留，最终 mismatch 由完整 snapshot 诊断并阻止执行。
-
-### 6.3 当前执行链
-
-前端调用 `execute_graph_document` 时必须携带显式 graph、`ExecutionDemand` 与当前
-`compiledSourceHash`；Application 只接受 GraphRuntime 中精确匹配的完整编译产物：
-
-```mermaid
-flowchart TD
-  FE[ProjectService.executeGraphDocument] --> CMD[execute_graph_document command]
-  CMD --> APP[application execution coordinator]
-  APP --> CAP[Capture ApplicationSession + Project basis]
-  CAP --> LOAD[Resolve content-addressed CompiledGraph]
-  LOAD --> PREP[Prepare generation-pinned Execution plan/resources]
-  PREP --> RUN[ExecutionRuntimeState]
-  RUN --> RESULTS[Execution ResultStore]
-  RUN --> OUTPUT[Run Output channel]
-```
-
-Application execution coordinates project identity、Graph package mapping、resource preparation 和 finalization。`ApplicationSessionSlot` owns the session generation；replacement 会先关闭 admission 并 drain 旧 work，再发布新 candidate。Graph 的默认 demand 从完整 plan 的全部终端输出反向选择依赖，因此一次合法全图运行会覆盖所有可达节点；Pin Preview/显式 Outputs demand 只改变执行调度范围，不改变编译范围。
-
-Execution 在一次运行成功后，按编译后的精确 output address 保存每个已执行节点产生的所有输出；下游输入、Pin Inspector、Pin history 与 Result UI 读取同一 `ResultStore` 值。多输出节点的 Kernel 返回按 output address 命名的完整集合，不把一个节点级值复制到所有 output，也不为每个 pin 建立独立失效生命周期。
-
-Execution publishes a sealed finalization handoff; Project commits variable/resource effects only after its final authority gate. Commands only adapt the ordered channel and map the typed error/result wire.
-
-## 7. Graph Problems、Results、Run Output、logging 与 operational diagnostics
-
-这五条数据流语义不同，不能互相替代。
-
-### 7.1 Graph Problems
-
-Resolver/compiler 产生的 Graph Problems 是完整 `EditorGraphProjectionDto` 的领域事实。Frontend
-`GraphProjectionStore` 是唯一 projection authority，`GraphProblemsPanel` 只从 focused graph bucket
-的顶层 `diagnostics` 派生完整列表；node diagnostics 只服务局部 Canvas/Details 展示。普通编辑状态下的
-unbound input、missing column、type mismatch、invalid parameter 与 orphan pin 等问题不进入
-`tracing`、`yss-diagnostics` recent ring 或 Logs UI。
-
-Graph Draft command 接受 mutation 后快速返回带 document/patch 的 typed ACK，后台 resolver 通过独立
-`GraphProjectionChannel` 发布带 project/session/path/generation/revision identity 的完整 Projection。
-同一 Graph 的 pending resolve 采用 bounded latest-wins coalescing；subscriber 过慢时断开并通过最新
-snapshot 恢复。传输单元始终是完整 Projection，而不是 `problemAdded`/`problemRemoved` 事件。
-
-### 7.2 Results
-
-`ExecutionRuntimeState` 中的 `ResultStore` 是 session-scoped logical execution result 与 Pin history 的 authority。它提供：
-
-- activation group 的原子 `Pending → Ready/Failed/Cancelled` transition；
-- opaque、单调分配的 `ResultId`；
-- result state、provenance、presentation、value contract 与 stored value；
-- 每个 graph output 的 produced/reused 历史链；
-- scalar inline read 与 sequence/data-series paging。
-
-Frontend 通过 `ResultService` 调用 typed `get_result_descriptor`、`get_result_value`、`get_result_page` 和 `get_pin_result_history` queries。Project replacement 会替换 session `ResultStore`，使旧 result 与 Pin history 失效；旧 `ResultId` 不会 alias 新 project 的 result。
-
-Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段是 `projectSessionId`、opaque `graphPath` 和 positive decimal-string `runId`。最小 lifecycle `kind.type` 是 `runStarted`、`runCompleted`、`runErrored` 和 `runCancelled`；`pinPreviewResultReady` 只公告 `output`、`generation` 与 `resultId`，结果检查请求使用 `resultInspectionRequested`。这些 event 是交付通知，不是 result authority；ordinary result publication 不发送 `resultGroupChanged` 或 `outputResultChanged` public stream event。
-
-### 7.3 Run Output
-
-未来 Workflow/tool 的用户 stdout/stderr 使用独立 typed `RunOutputMessage`，与 `RunEvent` 共用有序 Tauri channel transport，但 wire shape 和前端 projection 分离；Analysis Graph 不提供 Print 节点。每条记录保留：
-
-- `runId` 与严格递增 `sequence`；
-- stdout/stderr stream；
-- opaque `sourceGraphPath`、`sourceNodeId` 与 `sourcePort`。
-
-Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend execution projection 保持有界并检测 sequence gap，`src/modules/output/internal/ui/RunOutputPanel.tsx` 的 rows、status 与 source identity 只读取并展示该 projection，不读取 Graph Projection。Run Output 不进入 operational diagnostics。
-
-### 7.4 Logging
-
-Rust `tracing` 是唯一 logging 入口。`src-tauri/crates/yss-tracing/` 安装 process-wide subscriber，拥有 `RUST_LOG` 过滤、`log` bridge、统一脱敏、bounded console worker 与 `app_log_dir()/yssbi.log.jsonl` rolling file worker。日志是 lossy、sanitized、non-authoritative 的观察数据，不驱动 workflow、domain state 或用户反馈。
-
-`yss-tracing::LogLimits` 是 log collection 与 frontend diagnostic validation 共用的 per-record limit source of truth。Rust 事件先形成已清理的 `LogRecord`；console、JSONL 和可选 diagnostics projection 都只能消费该记录，不能建立 raw formatter 旁路。
-
-### 7.5 Operational diagnostics
-
-`src-tauri/crates/yss-diagnostics/` 不安装 production tracing subscriber，也不拥有 console 或文件输出。它拥有 5000 条 recent ring、1024 条 ingress、Rust 分配的 `streamId + sequence`、frontend diagnostic ingestion 和 bounded live Tauri Channel。Rust diagnostics 仅由 `yss-tracing` 的 sanitized `LogRecord` 单向投影而来；显式 frontend diagnostics 只进入 recent/live 流，不反向写入日志文件。Frontend `src/modules/logs/` 只展示这些 operational logs，不拥有 Graph Problems 或 Run Output。
-
-Logging 与 Operational Diagnostics 都是有损、非权威观察面；`diagnostic_skip_recent = true` 只抑制 diagnostics projection，不抑制日志记录。Graph Problems 则属于权威的 resolved projection，不得从这些观察数据重建。详细 contract 见专项文档。
-
-## 8. Database runtime crates
-
-### 8.1 Typed import 与 project DuckDB
-
-IPC 只接受 `DatabaseImportSourceDTO`：`Csv`、`Parquet`、`Excel` 或 typed `Sql` engine。它不接受 runtime-only `InMemory` 或项目内部 `DuckDb` source。Command 将 import source 转换为内部 engine，再交给 `application::database`。
-
-`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实；其 table lifecycle、ingest、metadata 与 query primitive 由 `yss-duckdb` 唯一拥有。活动 session 中，`ProjectData.databases` 是 declaration authority；`DatabaseRuntimeSession` 保存 session-bound physical/query state。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
-
-### 8.2 Query 与编辑
-
-DuckDB-backed instance 保持磁盘列存：
-
-- page query 使用 `LIMIT/OFFSET` 并返回 DuckDB `rowid`；
-- graph resource access 可以按列加载；
-- column statistics、distribution 与 dataset overview 使用 SQL aggregate；
-- DataView edit/undo/redo 使用增量 SQL，不先整表进入 Polars。
-
-`EditOperation`、`EditHistory` 与 `EditState` 由 `yss-database-edit` 统一定义；Loaded DataFrame 的正向/反向 mutation、checked JSON conversion 与 dtype cast 由 `yss-tabular-polars` 实现。DuckDB 的 cell/add-row/delete-rows operation 构造、SQL apply/reverse、bounded delete-column snapshot 与 transaction 由 `yss-duckdb` 实现；多行删除在同一事务内提交，并在排序前保持 `(index, rowid)` 配对。`yss-database-runtime` 只按当前 physical state 路由相同 operation、维护 session history 与提供事务交接，不复制 Polars 或 DuckDB mechanics。
-
-ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database declaration facts。`yss-database-runtime` 提供 DuckDB/Polars metadata primitives，`yss-api` 保持现有 `ColumnInfoDTO` transport conversion，Application 将结果组合进已有 query DTO。
-
-只有小表完整 materialization 才进入 `Loaded { dataframe, original, history }`；当前 in-memory edit threshold 为 50,000 rows。Ingest 以 50,000 rows 分批 append。
-
-DuckDB delete-column undo 需要在 mutation 前捕获 reversible snapshot，上限为 50,000 rows 和 16 MiB。Snapshot 保存原 storage dtype 的可精确恢复表示、row IDs、row fingerprints 和 values；不支持精确恢复的 dtype 或超限 snapshot 会在 drop column 前拒绝。Cast operation 同样记录 `old_dtype`。
-
-SQL path 将 identifier 与 string literal 分开引用；table/column identifier 使用 `quote_duckdb_identifier`，value/path literal 使用专用 quoting。JSON 到 Polars 的窄整数和 Float32 conversion 使用 `TryFrom`/range checks，避免静默截断。
-
-### 8.3 Export 与 overview
-
-CSV/Parquet format 由 `yss-database-contract` 唯一拥有。DuckDB table export 由 `yss-duckdb` 使用 typed `COPY (SELECT ...) TO ...`，大表不会先完整物化为 Polars；Loaded DataFrame 才直接调用 `yss-tabular-io` writer。`yss-database-runtime` 只按物理状态选择 typed adapter，不保留混合 export owner 或字符串错误 facade。Application module 先导出到 destination 的独占 sibling temp file，再在最终 project authority gate 下原子替换目标；失败时清理 temp。
-
-Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-backed overview 中 `estimatedDataframeMemoryBytes` 与 `duplicatedRows` 为 unavailable；row/column count、schema 分类和 null completeness 仍由缓存 metadata 与 SQL 计算。
-Profile DTO、逻辑类型分类、默认 histogram/category 限额与区间标签由 `yss-dataset-profile` 唯一拥有。Loaded DataFrame 的 stats/distribution/overview 在该 crate 内计算；`yss-duckdb` 持有 DuckDB physical SQL，并通过借用型列 metadata view 构造同一 DTO。两条路径均忽略统计量与直方图中的非有限数、使用稳定同频排序，且仅最后一个直方图区间闭合右边界。
-
-## 9. SCI 与 Julia
-
-### 9.1 六个独立职责
-
-科学计算与 Bayes 分为六个职责：
-
-1. `src-tauri/crates/yss-sci-contract/` 的 `yss-sci-contract` Pure Leaf：backend-neutral
-   statistical input/settings、执行控制、取消 capability 与稳定 SCI error code。
-2. `src-tauri/crates/yss-bayes-model/` 的 `yss-bayes-model` Pure Leaf：Bayes draft、
-   expression parser、structured validation 与 validated immutable spec 构造。
-3. `src-tauri/crates/yss-bayes-result/` 的 `yss-bayes-result` Pure Leaf：Bayes diagnostics、
-   task/result projection、artifact manifest 与 plot/page DTO。
-4. `src-tauri/crates/yss-bayes-worker/` 的 `yss-bayes-worker` Pure Leaf：validated task、
-   opaque handle、worker terminal/error contract、port 与 capability-gated client。
-5. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-6. `src-tauri/crates/yss-sci-runtime/` 的 `yss-sci-runtime` SCI Core：面向 Application 的同步
-   API、report models 与 Rust algorithm adapters；跨层调用通过 `execution::ports::scientific`，
-   runtime 不反向编排 Project、Database、Execution、Tauri 或 Julia。
-
-Final live Execution-facing ACF/PACF request/result/error/control 由
-`yss-execution/src/ports/scientific.rs` 拥有；backend-neutral SCI contract 则只由
-`yss-sci-contract` 拥有。`yss-execution-sci-adapter` 负责两侧的穷尽映射，并由 `lib.rs`
-注入到每个 Application execution session。未接入生产调用的 regression/KDE port families、
-整条 relational port 与永远返回 unavailable 的 adapter 已删除，不再由测试制造伪能力。
-
-Application statistics 通过 Execution scientific port 调用 typed backend，`yss-api` command adapters 只负责
-transport schema parse/map；Application Bayes 通过 `yss-bayes-worker::BayesWorkerClient` 调用注入的
-`BayesWorkerPort`，不直接依赖 Julia worker internals。两个 seam 分别集中输入规范化、错误类型和 backend choice。
-
-Application workflows、`yss-sci-runtime`、Execution adapter 与 Julia Bayes adapter 均直接消费
-`yss-sci-contract`，不经过根 facade。`StatisticalInput::try_new` 是唯一构造入口，会拒绝空白名称
-与非有限数值；原 Application `DataValue` 映射及其重复 contract owner 已删除。
-
-Commands、Application、Bayes worker validation、integration tests 与 Julia adapters 均直接消费
-`yss-bayes-model`。根 `sci::api::bayes` 不提供兼容 re-export。`ValidationReport.ok` 只由私有 error
-集合推导，不能与 errors 分别成为事实源；draft-to-spec conversion 使用内部 parts object，并在
-validation 漂移时返回 structured error，不保留生产 `expect` panic 分支；worker admission 复用同一个
-immutable-spec validator，不维护第二套 model 不变量。
-
-Commands、Application、Bayes worker 与 Julia adapter 直接消费 `yss-bayes-result`，根
-`sci::api::bayes` 不保留 result/diagnostics facade。Result DTO 不持有 filesystem owner；Application
-只清理由 worker materialization 明确登记的 artifact 路径，不根据客户端可见 manifest 删除外部文件。
-
-Application 与 Julia adapter 直接消费 `yss-bayes-worker`，根 `sci::api::bayes` 不保留 worker facade。
-`BayesWorkerAuthority` 字段私有且不能由下游构造；`BayesWorkerClient` 仅在 port 调用期间借出临时 authority，
-adapter 因而可以生成完整 generation-bound handle/result，而 Application、Commands 与 transport 只能读取
-已验证投影。Julia 进程、task directory 与 JSON-RPC 生命周期仍由 `yss-julia-worker` 独立拥有。
-
-`yss-sci-contract`、`yss-sci` 与 `yss-sci-runtime` 都不拥有 project data、DuckDB、编辑 history、DataFrame export、Tauri IPC 或 UI state；DataFrame/DuckDB export 分别由 `yss-tabular-io` 与 `yss-duckdb` 拥有，session routing 属于 `yss-database-runtime`，Project publication 与跨域编排仍分别属于 Project/Application。
-
-### 9.2 Production backend matrix
-
-| Operation                               | 当前 production adapter                                                          |
-| --------------------------------------- | -------------------------------------------------------------------------------- |
-| ACF/PACF                                | Rust：`backends::rust::time_series::acf_pacf`                                    |
-| Durbin-Watson/Ljung-Box/Breusch-Godfrey | Rust：`backends::rust::time_series::serial_tests`                                |
-| t/Wald hypothesis tests                 | Rust：`backends::rust::stats::hypothesis`                                        |
-| Node regression/time-series statistics  | Application/Execution scientific port → `yss-sci-runtime` → `yss-sci` algorithms |
-| Bayesian inference                      | Julia：`yss-bayes-worker-julia::JuliaBayesWorkerAdapter` 实现 `BayesWorkerPort`  |
-
-Time-series application interface 直接调度 Rust production implementation，没有 Julia time-series adapter。Julia 是 Bayes seam 上唯一真实 production adapter。
-
-Regression fit 不再把统计量仅当作松散 JSON。`RegressionFit.statistics` 使用 typed `RegressionStatistics` variants：`Linear`、`Binary`、`Prais`，并组合 typed coefficient/model statistics；系数统计同时保存权威 covariance matrix。Report JSON 从这些 typed statistics 显式投影 `betas`/`cov_beta` 与 binary model statistics，供 hypothesis UI 和展示 parser 使用。
-
-### 9.3 Julia Bayes worker
-
-系统 Julia executable discovery、1.10+ 版本校验、Windows Juliaup 安装与 hidden-window command policy 由 `yss-julia-runtime` Backend Adapter 唯一拥有。它以 `JuliaRuntimeError` 区分 missing、invalid、unsupported installation platform、command I/O 与非零退出，Commands 和 `yss-julia-worker` 直接消费 crate，不经根 `julia` facade；空 stderr/stdout 的失败仍保留 process status，而不是生成空诊断。
-
-`yss-julia-worker` Backend Adapter 管理单个可重启 worker process、序列化 JSON-RPC task request、progress/cancel、embedded assets 与 app-owned task directories。它只输出 typed worker error，不再提供 `Result<_, String>` compatibility 入口；worker environment preparation 复用 `yss-julia-runtime` 的 stderr→stdout→process-status 唯一诊断策略，startup 状态用完备 match 表达而不保留 `unreachable!()`。该 crate 不知道 SCI/Bayes/Polars/Tauri，当前 Julia operation registry 只包含 `bayes_fit`。
-
-`yss-bayes-worker-julia` Backend Adapter 组合 backend-neutral `yss-bayes-worker` port 与通用
-`yss-julia-worker` process host。根 package 不再保留 `julia` module facade；composition root 直接构造
-`yss_bayes_worker_julia::JuliaBayesWorkerAdapter`。
-
-`yss-bayes-worker-julia::JuliaBayesWorkerAdapter`：
-
-- 接收 Application 从 Project/Database snapshot 生成的 typed `StatisticalInput`；
-- 在 owned task directory 写 Arrow input、model/config、generated kernels 与 exchange manifest；
-- 读取 typed inference metadata/artifact manifest；
-- 在 adapter 内持有 worker task-directory，直到 Application 将 artifact materialize 到自己的结果目录；
-- 按 stable worker error code 映射 Bayes error，不解析 diagnostic prose。
-
-Worker assets 由 `yss-julia-worker` embed，并通过 exclusive temp file、`sync_all` 和 atomic replace 更新。Task directory 必须是 `<app-data>/julia-worker/tasks/<task-id>` 的 canonical direct child；RAII owner 只清理仍满足该 ownership invariant 的路径。
-
-## 10. Window state persistence
-
-`WindowStateStore` 是窗口 geometry 的后端 authority。`set` 在串行 set lock 下：
-
-1. clone 当前状态并产生 candidate snapshot；
-2. 将 JSON 写入独占 temp file 并 `sync_all`；
-3. 原子替换 `window_state.json`；
-4. 只有持久化成功后才提交内存 candidate。
-
-因此磁盘失败不会留下“内存已更新、磁盘仍旧”的半提交状态。主窗口在 Tauri setup 中先应用保存的 geometry，再显示，以避免默认尺寸闪烁。
-
-## 11. 扩展规则
-
-### 新 command
-
-- 先在 application/domain module 建立小 interface；
-- command 只在 `yss-api` 添加 transport adapter、DTO/error/event mapping，并登记到唯一 handler；
-- frontend 在 `src/services/` 添加 invoke adapter；
-- view 通过 application hook 使用，不直接 invoke。
-
-### 新 graph node
-
-- catalog/registry 声明 trusted descriptor 和 implementation；
-- compiler lowerer 将 document/config 转成 immutable plan；
-- runtime kernel 只消费 plan-local parameters/resources；
-- compiler problems 进入完整 Graph Projection，logical output 进入 `ResultStore`，未来 Workflow/tool stdout 进入 Run Output，内部技术观察使用 Rust `tracing` 与 operational diagnostics。
-
-### 新 scientific operation
-
-- 可跨 workflow/runtime/adapter 共享的 input、settings、control 与 error 放 `yss-sci-contract`；
-- Bayes draft、expression parsing、validation 与 immutable model spec 放 `yss-bayes-model`；
-- Bayes diagnostics、task/result projection、artifact manifest 与 plot/page DTO 放 `yss-bayes-result`；
-- 纯算法放 `yss-sci`；
-- 同步运行期 API、report models 与 Rust algorithm adapters 放 `yss-sci-runtime`；
-- 只有存在真实可替换 implementation 时才建立 backend seam；
-- adapter 隔离外部 runtime，不让 worker details 泄漏到 command 或 graph kernel。
-
-### 验证
-
-本地命令矩阵见 [LOCAL_WORKFLOW.md](../development/LOCAL_WORKFLOW.md)。架构修改应优先验证 touched module，再运行项目规则要求的 broader checks，并始终执行 `git diff --check`。
+Harness 拥有 session、turn、workflow、tool ledger、approval、memory、knowledge retrieval 和 ordered event sequence；它只通过 typed capability gateway 访问业务能力。React 根据 snapshot/event replay 重建界面，不拥有 conversation 或 workflow state。当前实现与未接入目标分别见 [Statistical Harness](STATISTICAL_HARNESS.md) 和 [Harness roadmap](../roadmap/STATISTICAL_HARNESS.md)。
+
+## 8. Runtime signals
+
+YssBI 不使用一条“万能日志”承载所有反馈：
+
+| 信号                    | 语义                                    | Canonical owner                                                          |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| Graph Problems          | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
+| Results / Pin history   | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
+| Run Output              | 有序的用户程序 stdout/stderr            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
+| Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
+| Operational diagnostics | Logs UI 的有界、可恢复观察投影          | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
+| IPC error               | 稳定 machine-readable command rejection | [`yss-api` transport contract](../../src-tauri/crates/yss-api/README.md) |
+| User feedback           | 本地化交互反馈                          | React application/view                                                   |
+
+日志和 diagnostics 都是 sanitized、bounded、lossy、non-authoritative；不得驱动业务状态。具体容量和阈值由源码常量及测试拥有，不在总架构中复制。
+
+## 9. Subsystem documentation index
+
+| 变更范围                         | 先阅读                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Graph、编译、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                             |
+| 工作台布局、面板身份或生命周期   | [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)                                                 |
+| 日志、diagnostics、错误或反馈    | [Runtime Signals](RUNTIME_SIGNALS.md) 与 [`yss-api` README](../../src-tauri/crates/yss-api/README.md)    |
+| Statistical Harness 或 Assistant | [Statistical Harness](STATISTICAL_HARNESS.md)                                                            |
+| command、event、channel 或 DTO   | [`yss-api` README](../../src-tauri/crates/yss-api/README.md)                                             |
+| Project、Database、SCI、Julia    | [文档入口](../README.md#focused-implementation-contracts)中的 owner README                               |
+| 架构 policy 或 source 分类       | [Architecture Gates](../development/ARCHITECTURE_GATES.md)                                               |
+| 本地命令和交付                   | [Local Workflow](../development/LOCAL_WORKFLOW.md) 与 [Change Process](../development/CHANGE_PROCESS.md) |
+
+历史重构说明放入 decision 或 version 文档；尚未完成的能力放入 roadmap。本文不记录“旧 owner 已删除”之类的时间性描述。

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "docs:module-map": "node scripts/generate-module-map.mjs",
+    "docs:module-map:check": "node scripts/generate-module-map.mjs --check",
     "preview": "vite preview",
     "check": "pnpm check:ts && pnpm check:rs",
     "check:ts": "tsc --noEmit",
@@ -17,7 +19,7 @@
     "test": "pnpm test:ts && pnpm test:rs",
     "test:ts": "vitest run",
     "test:rs": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
-    "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/observabilityPolicyContract.test.ts src/services/userFeedbackArchitectureContract.test.ts --maxWorkers=1",
+    "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/observabilityPolicyContract.test.ts src/services/userFeedbackArchitectureContract.test.ts",
     "format": "pnpm format:ts && pnpm format:rs",
     "format:ts": "oxfmt",
     "format:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
