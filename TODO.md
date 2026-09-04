@@ -1085,3 +1085,9 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       与 value cycle，并让 compiler 与 editor projection 复用唯一 dependency-cycle 判定而不污染 tracing。
 - [ ] 清除 Graph Problems 改造后的兼容残留：Workbench 恢复严格的无版本 exact layout contract，不再迁移
       旧 panel identity；Run Output 仅消费 Execution projection，并将 Projection 生命周期逻辑归并到统一目录。
+- [ ] 将 Graph 类型系统收敛为纯 Rust `GraphSemanticSnapshot`：以节点为单位沿 Data DAG 前向求解
+      Exact/Constrained/Unknown/Conflict、Schema/Lineage、诊断、coercion 与 kernel specialization，
+      Editor Projection 和 Compiler 消费同一结果，并以节点级 cache 保证增量结果等价于全量求解。
+- [ ] 将 scalar/series 数值节点统一为 `yssbi.numeric.{add,subtract,multiply,divide}`，采用独立 Shape join 与
+      `Int64 < Float64` widening；区分 Port cardinality、accepted pattern 和 resolved type，删除未执行的
+      type constraint/平行 semantic snapshot、Union-as-resolved、active derived `last_known` 等残留路径。

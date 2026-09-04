@@ -145,7 +145,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/crates/yss-graph-type-mapping/`         | 独立 Pure Leaf：persisted `DataType` 到 Graph `TypeExpr` 的唯一 typed conversion owner                                                                                                                                                                                                                       |
 | `src-tauri/crates/yss-julia-runtime/`              | 独立 Backend Adapter：系统 Julia executable discovery、版本探测、Windows Juliaup 安装与 background command policy 的唯一 owner；公开 typed status/error，不持有 worker、SCI、Tauri 或 Bayes behavior                                                                                                         |
 | `src-tauri/crates/yss-julia-worker/`               | 独立 Backend Adapter：reusable Julia process、embedded assets、JSON-RPC、progress/cancel/restart、typed worker error 与 app-owned task-directory lifecycle 的唯一 owner；单向依赖 `yss-julia-runtime`，不依赖 SCI、Bayes、Polars 或 Tauri                                                                    |
-| `src-tauri/crates/yss-graph-analysis/`             | 独立 Graph 层：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner                                                                                                                                                                                                       |
+| `src-tauri/crates/yss-graph-analysis/`             | 独立 Graph 层：concrete interface、Type/Schema/Lineage 求解、`GraphSemanticSnapshot`、增量语义缓存与 result category 判定的唯一 behavior owner                                                                                                                                                               |
 | `src-tauri/crates/yss-graph-compiler/`             | 独立 Graph 层：revision 校验、neutral lowering、不可变 compiled package 与 compile error 的唯一 owner                                                                                                                                                                                                        |
 | `src-tauri/crates/yss-math/`                       | 独立 Pure Leaf：受限数学表达式 IR、plain/LaTeX 解析、关系拆分与输入预算的唯一 owner                                                                                                                                                                                                                          |
 | `src-tauri/crates/yss-path-display/`               | 独立且无依赖的 Pure Leaf：用户可见路径中 Windows extended-length prefix 移除语义的唯一 owner；不执行路径校验、规范化或 I/O                                                                                                                                                                                   |
@@ -554,13 +554,13 @@ yss-resource-naming + yss-project-identity
 - `yss-graph-document-edit`：document invariant、atomic patch、候选态 staging 与 edit error 的唯一 Graph owner；正式提交与不推进 revision 的候选验证使用不同 API。
 - `yss-graph-resource-contract`：编译资源 ID、函数/变量 contract、数据库 schema 与 immutable resource catalog snapshot 的唯一 owner；与 built-in `yss-graph-catalog` 分离。
 - `yss-graph-type-mapping`：持久化 `DataType` 到 Graph `TypeExpr` 的唯一 Pure Leaf 映射；editor 与 runtime 不再各自维护分支表。
-- `yss-graph-analysis`：document analysis、editor projection facts 与 result category 判定的唯一 behavior owner；analysis input 只接收实际参与结果的 document 与 compilation basis，不保留无效 settings/catalog 参数。
-- `yss-graph-compiler`：revision 校验、registry 协议驱动的 input kind/default 解析、neutral document lowering、Graph-owned immutable package 与 compile error 的唯一 owner；成功直接返回 package，不保留恒为 `Some` 的 report、空 diagnostics 或重复 basis。
+- `yss-graph-analysis`：concrete interface、前向节点级 Type/Schema/Lineage 求解、完整 `GraphSemanticSnapshot`、Graph Problems、kernel specialization 与节点级增量缓存的唯一 behavior owner；缓存只优化纯求解，不能成为第二事实源。
+- `yss-graph-compiler`：revision 校验、`GraphSemanticSnapshot` 驱动的精确 input/output lowering、coercion plan、Graph-owned immutable package 与 compile error 的唯一 owner；不再从 protocol Union 或 Runtime value 重复猜测当前类型。
 - `yss-graph-registry`：provider/type/category/node 注册、验证与 fingerprint 的唯一 Graph owner；只依赖 Pure Leaf contracts。
-- `yss-graph-analysis-contract`：analysis snapshot、semantic graph、diagnostic、basis 与 provenance 的唯一可序列化 Graph contract owner。
+- `yss-graph-analysis-contract`：compilation basis、diagnostic identity/location 与 provenance 的唯一可序列化跨 Graph 阶段 contract owner；未接入生产的平行 `AnalysisSnapshot`/`ValidatedSemanticGraph` 模型已删除。
 - `yss-graph-compiler-diagnostics`：compiler diagnostic code、双语模板与定义校验的唯一 Graph owner；不承载零调用的 diagnostic 构造或排序 API。
 - `yss-graph-catalog`：built-in protocol/catalog composition、localized catalog 与内置节点文档的唯一 owner；测试故障注入仅通过 `test-support` feature 暴露。
-- `yss-graph-editor`：editor mutation、连接/compatible-catalog 兼容性、portable subgraph codec 与实例化的唯一 Graph owner；资源绑定参数与种类只读取 registry protocol，直接消费 document-edit、catalog、resource contract、registry 与 canonical type mapping，不拥有 Project/session/materialization authority，根 crate 不保留兼容 module 或端口推断副本。
+- `yss-graph-editor`：editor mutation、保守连接预检、compatible-catalog filtering、portable subgraph codec 与实例化的唯一 Graph owner；预检只拒绝确定不兼容的 exact source，不把 protocol pattern 或 `last_known` 当作当前类型，也不拥有 Project/session/materialization/semantic authority。
 - `yss-graph-runtime`：组合 session-scoped registry 与 built-in catalog，统一提供 compilation、analysis、editor planning facade、open candidate materialization 与 localized/compatible catalog 查询；Project/session capture、重校验和提交仍由 Application 拥有。资源 catalog 只作为每次 coherent 请求的显式输入，不再缓存第二份会漂移的 snapshot；测试暂停与故障注入仅通过 `test-support` feature 暴露。
 - `yss-project-identity`：统一拥有 `ProjectInstanceId`、`ProjectRegistrationId`、`ProjectSessionId`、`ProjectRootIdentity`、`OperationId`、`HistoryEntryId` 与 monotonic revision 值对象。registry registration、runtime instance 与 replaceable runtime session 保持不同强类型；Graph/Project revision 只允许显式命名转换，测试便利的 `next()` 仅通过 `test-support` feature 暴露。根 `project` 不做兼容 re-export。
 - `yss-project-progress`：统一拥有 project discovery/cleanup 的平台无关进度事件、`ProjectProgressSink` 输出 port 与封装过的任务取消 capability/registry。新任务会取消并替换旧 active task，避免产生不可再取消的孤儿扫描；Project registry 直接发布 domain progress，Commands 独立拥有有界 lossy queue、Tauri `Channel` 和 wire DTO projection。Project 不再暴露原子标志或字符串取消 sentinel，扫描中途取消会保持 typed `Cancelled` 语义而不会误报为 `ScanFailed`。
@@ -568,14 +568,52 @@ yss-resource-naming + yss-project-identity
 - `yss-project-registry`：统一拥有 project registration、favorite、cleanup、scan、路径规范化/校验与 `ProjectRegistryError`；根 `project_registry` owner 和 facade 已删除，Commands/Application/Composition Root 直接消费 crate。SQLite 仍通过 `ProjectRegistryStore` 留在 Backend Adapter；行为 crate 不依赖 SQLx、Tauri 或 `ProjectState`。零调用的 validity wrapper 已删除，application lifecycle 通过测试侧失败 store 验证补偿语义，生产类型不再携带 remove-failure 测试开关。
 - `yss-project-registry-sqlite`：统一实现 `ProjectRegistryStore` 的 SQLite schema、连接策略、CRUD、diagnostic logging 与 strict row mapping；根 `backend_adapters/project_registry_sqlite` owner 和 module facade 已删除，Composition Root 直接构造并注入 store。非法 root identity state 和非 0/1 favorite 值均 fail closed；SQLx/Tokio 的版本与 feature 由 workspace manifest 统一声明。
 - `application/resource_mutation` 与 `application/graph_commit`：前者捕获 coherent catalog/document authority 并调用 editor planning，后者只在 session 重校验后提交 candidate document；两者都不复制 editor 规则。
-- `yss-graph-analysis`、`yss-graph-compiler`：纯 analysis facts 与 neutral compiled package，不读取 Project authority。
+- `yss-graph-analysis`、`yss-graph-compiler`：纯 semantic snapshot 与 neutral compiled package，不读取 Project authority；Projection 与 Compiler 消费同一次求解结果。
 - `execution/plan`：immutable execution plan、demand selection 与 presentation category contract。
 - `execution/state`：session-local admission、cancellation、prepared run、result store 与 finalization。
 - `application/graph_contracts`：唯一 Project/Graph → Execution typed mapping seam。
 
 Execution runtime 只消费 immutable plan、prepared resource grants 与 typed backend ports；它不会在运行中查询 Graph document、Project authority 或 concrete backend。
 
-### 6.2 当前执行链
+### 6.2 Graph semantic resolution
+
+`GraphDocument` 只保存用户意图与稳定结构：node、parameter、concrete Port identity/order、connection 与 input override。Protocol `TypeExpr` 是 accepted type pattern；它可以包含 `Class`、`Generic`、`Union` 与 `Unknown`，但不能充当当前 Pin 的 exact type。当前类型使用独立状态表达：
+
+`InputState.literal_override` 保存经过 protocol 校验的 `TypedValue`，而普通 node parameters 保持显式 `JsonValue`；Analysis 直接读取 literal 的 exact `value_type`，Compiler 从同一 typed value lowering，Editor Projection 只向输入控件投影其 raw value。三层不再分别从 JSON payload 猜测字面量类型。
+
+```text
+TypeState
+├─ Exact(ResolvedType)
+├─ Constrained(TypeDomain)
+├─ Unknown(reason)
+└─ Conflict(diagnostic)
+```
+
+完整求解链为：
+
+```mermaid
+flowchart TD
+  D[GraphDocument] --> I[Concrete Interface Resolution]
+  R[ResourceCatalogSnapshot] --> I
+  I --> S[Schema and derived interface facts]
+  S --> N[Topological node semantic resolution]
+  N --> G[GraphSemanticSnapshot]
+  G --> P[Editor Projection]
+  G --> C[Graph Compiler]
+  C --> E[Specialized immutable execution plan]
+```
+
+节点是唯一求解与缓存失效单位。Resolver 在调用节点规则前收集该节点全部输入 facts，再一次性发布全部 Port 的 type/schema/lineage、diagnostics、input coercions 与 kernel specialization；不会让 Pin 互相原地修改。传播只沿 data edge 前向进行，下游连接不能反向迫使上游选择类型。
+
+内置规则目前覆盖 fixed、identity、numeric fold、shape-preserving Float64、parameter-selected output 与 variable-resource output。统一数值节点 `yssbi.numeric.{add,subtract,multiply,divide}` 同时接受 scalar 与 `DataSeries`：全 scalar 输出 scalar，任一 Series 输出 Series；Add/Subtract/Multiply 使用 `Int64 < Float64` 的 widening join，Divide 固定 Float64 element。Scalar→Series broadcast 与 Int64→Float64 widening 会显式进入 compilation coercion plan。
+
+Compiled Graph/Execution operation 不再另存一份可能漂移的 kind；implementation identity 只存在于 kernel specialization，运行时从该 specialization 读取调度 identity、精确 input/output type 与 coercion。
+
+`GraphSemanticCache` 的 key 只包含 protocol fingerprint、semantic parameters、concrete Port identity/order、上游 facts、resolved schema 与相关 resource fingerprint，不包含位置、选择、缩放或显示标签。只有节点输出 fingerprint 改变时才继续使下游失效；增量结果必须与全量求解完全相同。
+
+Derived Port 的 active label/type 每次来自当前 Schema/Resource facts；document `last_known` 只用于成员消失后的 orphan 展示与恢复，orphan 始终是 `Unknown(OrphanedPort)`，不能参与新连接或成功编译。Graph Editor 与 React 的连接判断仅是低成本预检；结构合法的连接由 Draft 保留，最终 mismatch 由完整 snapshot 诊断并阻止执行。
+
+### 6.3 当前执行链
 
 前端调用 `execute_graph_document` 时必须携带显式 graph、`ExecutionDemand` 与当前
 `compiledSourceHash`；Application 只接受 GraphRuntime 中精确匹配的完整编译产物：

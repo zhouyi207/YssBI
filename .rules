@@ -239,6 +239,24 @@ state and unsaved editor drafts.
   second schema-edge topology or frontend-owned inference model. Incremental
   reuse may optimize unchanged nodes but must still produce a complete-graph
   artifact.
+* `GraphSemanticSnapshot` is the sole authority for resolved port types,
+  schemas, lineage, diagnostics, coercions, and kernel specialization. Editor
+  Projection and Graph Compiler must consume that same complete snapshot;
+  protocol `TypeExpr` values describe accepted patterns, not current resolved
+  types, and React must never infer or mutate semantic port facts.
+* Resolve each node as one pure function of its complete input facts,
+  parameters, concrete port set, protocol, and relevant resource facts. Type
+  propagation is forward-only; connection order, Pin iteration order, UI state,
+  and downstream consumers must not influence an upstream result.
+* Persist Graph input overrides as protocol-validated `TypedValue` values and
+  keep untyped `JsonValue` limited to heterogeneous node parameters. Analysis
+  and Compiler consume the stored exact literal type; Editor Projection may
+  expose the raw payload for controls but must not infer its type again.
+* Connection checks before resolution are conservative preflight only: reject
+  a type pair only when incompatibility is definite. Preserve structurally
+  valid Draft connections and publish authoritative mismatch diagnostics from
+  Graph analysis. Active derived ports read current resource/schema facts;
+  `last_known` metadata is display-only recovery data for orphan ports.
 * Compile and Save are independent commands. Compile installs a content-addressed
   in-memory artifact and projection without committing Project state; Execute
   requires the exact current artifact hash. Save alone persists the draft.
