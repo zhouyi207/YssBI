@@ -13,6 +13,7 @@ import {
 import {
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
+  WORKBENCH_BOTTOM_DEFAULT_ORDER,
 } from "../dockview/workbenchDockviewDefaults";
 import {
   createWorkbenchDockviewRuntime,
@@ -206,21 +207,13 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     index: 1,
     activate: false,
   });
-  transaction.move({
-    panelInstanceId: logs.panelInstanceId,
-    groupId: bottom.groupId,
-    index: 0,
-  });
-  transaction.move({
-    panelInstanceId: output.panelInstanceId,
-    groupId: bottom.groupId,
-    index: 1,
-  });
-  transaction.move({
-    panelInstanceId: problems.panelInstanceId,
-    groupId: bottom.groupId,
-    index: 2,
-  });
+  for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
+    transaction.move({
+      panelInstanceId: { logs, output, problems }[viewId].panelInstanceId,
+      groupId: bottom.groupId,
+      index,
+    });
+  }
   const project = activityPanels.find(
     (panel) => panel.metadata.role === "view" && panel.metadata.viewId === "project",
   );

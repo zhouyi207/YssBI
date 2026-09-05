@@ -31,6 +31,7 @@ export const WORKBENCH_HOME_EDGE = {
 } as const;
 
 export const WORKBENCH_ACTIVITY_DEFAULT_ORDER = WORKBENCH_ACTIVITY_VIEW_IDS;
+export const WORKBENCH_BOTTOM_DEFAULT_ORDER = ["problems", "output", "logs"] as const;
 
 export const WORKBENCH_RESET_BUCKET_ORDER = ["left", "top", "grid", "right", "bottom"] as const;
 

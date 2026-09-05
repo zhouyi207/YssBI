@@ -851,7 +851,7 @@ describe("resetWorkbenchLayout", () => {
       "editor-bottom-b",
     ]);
     expect(harness.groupPanelIds("edge-left")).toEqual(["project", "data", "nodes", "commands"]);
-    expect(harness.groupPanelIds("edge-bottom")).toEqual(["logs", "output", "created:problems:2"]);
+    expect(harness.groupPanelIds("edge-bottom")).toEqual(["created:problems:2", "output", "logs"]);
     expect(harness.groupPanelIds("edge-right")).toEqual([
       "details",
       "created:assistant:1",

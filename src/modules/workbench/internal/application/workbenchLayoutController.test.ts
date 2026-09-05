@@ -771,9 +771,9 @@ describe("WorkbenchLayoutController hydration", () => {
       { panelInstanceId: "view:nodes", groupId: "edge-left", index: 2 },
       { panelInstanceId: "view:commands", groupId: "edge-left", index: 3 },
       { panelInstanceId: "view:assistant", groupId: "edge-right", index: 1, activate: false },
-      { panelInstanceId: "view:logs", groupId: "edge-bottom", index: 0 },
+      { panelInstanceId: "view:problems", groupId: "edge-bottom", index: 0 },
       { panelInstanceId: "view:output", groupId: "edge-bottom", index: 1 },
-      { panelInstanceId: "view:problems", groupId: "edge-bottom", index: 2 },
+      { panelInstanceId: "view:logs", groupId: "edge-bottom", index: 2 },
     ]);
     expect(harness.order.indexOf("layout.move:view:output")).toBeLessThan(
       harness.order.indexOf("internal.installHydrationLayout:applied"),

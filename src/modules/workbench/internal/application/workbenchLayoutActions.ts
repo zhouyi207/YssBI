@@ -5,6 +5,7 @@ import {
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
+  WORKBENCH_BOTTOM_DEFAULT_ORDER,
 } from "../dockview/workbenchDockviewDefaults";
 import { workbenchDockviewInternal } from "../dockview/workbenchDockviewInternal";
 import { workbenchDockviewRead, type WorkbenchPanelInfo } from "../dockview/workbenchRead";
@@ -237,21 +238,13 @@ export async function resetWorkbenchLayout(): Promise<void> {
         index: 1,
         activate: false,
       });
-      tx.move({
-        panelInstanceId: logs.panelInstanceId,
-        groupId: bottom.groupId,
-        index: 0,
-      });
-      tx.move({
-        panelInstanceId: output.panelInstanceId,
-        groupId: bottom.groupId,
-        index: 1,
-      });
-      tx.move({
-        panelInstanceId: problems.panelInstanceId,
-        groupId: bottom.groupId,
-        index: 2,
-      });
+      for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
+        tx.move({
+          panelInstanceId: { logs, output, problems }[viewId].panelInstanceId,
+          groupId: bottom.groupId,
+          index,
+        });
+      }
 
       for (const [offset, panel] of editors.slice(1).entries()) {
         tx.move({
