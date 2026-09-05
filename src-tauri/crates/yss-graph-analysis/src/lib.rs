@@ -5,6 +5,9 @@
 
 #![deny(unused_must_use)]
 
+#[cfg(test)]
+use yss_graph_protocol::TypeId;
+
 use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     ResourceVersionSet,
@@ -12,27 +15,34 @@ use yss_graph_analysis_contract::{
 use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
-    NodeId, OrderKey, PortAddress, PortRef,
+    NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
 use yss_graph_protocol::{
     ConnectionsPerPort, InputCoercionKind, ParameterEditorSpec, ParameterIssueKind, ParameterKey,
     ParameterPresentation, PortCardinality, PortDirection, PortEditorSpec, PortKey,
     RelationalScalarType, ResolvedSchemaFact, ResolvedType, ResourceDisplayKind, SchemaExpr,
-    TypeDomain, TypeExpr, TypeId, TypeState, TypeUnknownReason, TypeValidationContext, TypedValue,
-    validate_parameter_values,
+    TypeDomain, TypeExpr, TypeState, TypeUnknownReason, TypedValue, validate_parameter_values,
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
 mod derived_ports;
 mod result_category;
 mod schema_resolution;
+mod schema_state;
+pub use schema_state::{GraphSchemaIssue, GraphSchemaState};
+mod concrete_interface;
+mod function_validation;
+mod semantic_validation;
 mod type_resolution;
+pub use concrete_interface::ConcreteGraphInterface;
+use concrete_interface::sort_concrete_ports;
+pub use function_validation::{
+    GraphFunctionAbi, GraphFunctionParameter, GraphFunctionResult, GraphFunctionSemanticFact,
+};
 
 use derived_ports::{derived_port_address, derived_port_members};
 use schema_resolution::resolve_graph_schemas;
-
-pub use derived_ports::materialize_derived_port_bindings;
 
 pub use result_category::{
     GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind, result_category_for_node,
@@ -43,19 +53,66 @@ pub use type_resolution::GraphSemanticCache;
 pub struct GraphSemanticSnapshot {
     nodes: Box<[GraphNodeSemanticFact]>,
     diagnostics: Box<[GraphDiagnosticFact]>,
-    outcome: GraphCompilationOutcome,
+    outcome: GraphResolutionOutcome,
+    dependencies: yss_graph_resource_contract::GraphDependencyManifest,
+    functions: std::collections::BTreeMap<GraphResourcePath, GraphFunctionSemanticFact>,
 }
 
 impl GraphSemanticSnapshot {
+    pub fn ready(&self) -> Option<ReadyGraphSemanticSnapshot<'_>> {
+        (matches!(self.outcome, GraphResolutionOutcome::Complete)
+            && !self.has_blocking_diagnostics()
+            && self.nodes.iter().all(|node| {
+                node.specialization.is_some()
+                    && node
+                        .ports
+                        .iter()
+                        .all(|port| !port.orphan && port.type_state.exact().is_some())
+            })
+            && self
+                .functions
+                .values()
+                .all(|function| function.semantics.ready().is_some()))
+        .then_some(ReadyGraphSemanticSnapshot { snapshot: self })
+    }
+    pub fn dependencies(&self) -> &yss_graph_resource_contract::GraphDependencyManifest {
+        &self.dependencies
+    }
+
+    pub fn functions(
+        &self,
+    ) -> &std::collections::BTreeMap<GraphResourcePath, GraphFunctionSemanticFact> {
+        &self.functions
+    }
+
+    pub fn with_dependencies(
+        mut self,
+        dependencies: yss_graph_resource_contract::GraphDependencyManifest,
+    ) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
+    pub fn concrete_interface(&self) -> ConcreteGraphInterface<'_> {
+        ConcreteGraphInterface { nodes: &self.nodes }
+    }
+
+    pub fn has_blocking_diagnostics(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.blocking)
+    }
+
     pub fn new(
         nodes: impl IntoIterator<Item = GraphNodeSemanticFact>,
         diagnostics: impl IntoIterator<Item = GraphDiagnosticFact>,
-        outcome: GraphCompilationOutcome,
+        outcome: GraphResolutionOutcome,
     ) -> Self {
         Self {
             nodes: nodes.into_iter().collect(),
             diagnostics: diagnostics.into_iter().collect(),
             outcome,
+            dependencies: Default::default(),
+            functions: Default::default(),
         }
     }
 
@@ -63,17 +120,42 @@ impl GraphSemanticSnapshot {
         &self.nodes
     }
 
+    pub fn map_nodes(
+        mut self,
+        transform: impl FnMut(GraphNodeSemanticFact) -> GraphNodeSemanticFact,
+    ) -> Self {
+        self.nodes = self.nodes.into_vec().into_iter().map(transform).collect();
+        self
+    }
+
     pub fn diagnostics(&self) -> &[GraphDiagnosticFact] {
         &self.diagnostics
     }
 
-    pub const fn outcome(&self) -> &GraphCompilationOutcome {
+    pub const fn outcome(&self) -> &GraphResolutionOutcome {
         &self.outcome
     }
 
     pub fn node(&self, node_id: NodeId) -> Option<&GraphNodeSemanticFact> {
         self.nodes.iter().find(|node| node.node_id == node_id)
     }
+}
+
+#[derive(Clone, Copy)]
+pub struct ReadyGraphSemanticSnapshot<'a> {
+    snapshot: &'a GraphSemanticSnapshot,
+}
+
+impl<'a> ReadyGraphSemanticSnapshot<'a> {
+    pub const fn snapshot(self) -> &'a GraphSemanticSnapshot {
+        self.snapshot
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GraphResolvedParameterValue {
+    Literal(serde_json::Value),
+    Resource(GraphResourceId),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,10 +168,24 @@ pub struct GraphNodeSemanticFact {
     pub style_id: Option<Box<str>>,
     pub managed: bool,
     pub parameters: Box<[GraphParameterFact]>,
+    pub inputs: Box<[GraphResolvedInputBinding]>,
     pub ports: Box<[GraphPortSemanticFact]>,
     pub port_instance_additions: Box<[GraphPortInstanceAdditionFact]>,
     pub specialization: Option<GraphKernelSpecialization>,
     pub semantic_fingerprint: [u8; 32],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphResolvedInputBinding {
+    pub address: PortAddress,
+    pub group: Option<PortInstanceId>,
+    pub source: GraphResolvedInputSource,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GraphResolvedInputSource {
+    Output(PortAddress),
+    Literal(TypedValue),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,6 +196,7 @@ pub struct GraphParameterFact {
     pub editor: ParameterEditorSpec,
     pub presentation: ParameterPresentation,
     pub value_type: TypeExpr,
+    pub effective_value: Option<GraphResolvedParameterValue>,
     pub inherited_value: Option<serde_json::Value>,
     pub value_source: Option<GraphParameterValueSource>,
     pub options: Box<[Box<str>]>,
@@ -156,17 +253,19 @@ pub struct GraphPortSemanticFact {
     pub label: Box<str>,
     pub instance_label: Option<Box<str>>,
     pub direction: PortDirection,
+    pub result_category: GraphResultCategory,
     pub backing: GraphPortBacking,
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: GraphPortConnectionFacts,
     pub editor: GraphPortEditorFact,
     pub protocol_default: Option<TypedValue>,
+    pub literal_allowed: bool,
     pub accepted_type: TypeExpr,
     pub accepted_domain: Option<TypeDomain>,
     pub type_state: TypeState,
     pub schema: Option<SchemaExpr>,
-    pub resolved_schema: Option<ResolvedSchemaFact>,
+    pub schema_state: GraphSchemaState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -224,7 +323,9 @@ pub type GraphDiagnosticLocation = DiagnosticLocation<NodeId, PortAddress, Conne
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphDiagnosticFact {
     pub code: DiagnosticCode,
+    pub message_key: Box<str>,
     pub severity: DiagnosticSeverity,
+    pub blocking: bool,
     pub arguments: DiagnosticArguments,
     pub primary: GraphDiagnosticLocation,
     pub related: Box<[GraphDiagnosticLocation]>,
@@ -235,9 +336,12 @@ fn graph_problem(
     primary: GraphDiagnosticLocation,
     arguments: impl IntoIterator<Item = (&'static str, Box<str>)>,
 ) -> GraphDiagnosticFact {
+    let definition = kind.definition();
     GraphDiagnosticFact {
         code: DiagnosticCode::new(kind.code()),
+        message_key: definition.message_key.into(),
         severity: kind.default_severity(),
+        blocking: definition.blocking,
         arguments: arguments
             .into_iter()
             .map(|(key, value)| (Box::<str>::from(key), value))
@@ -247,20 +351,8 @@ fn graph_problem(
     }
 }
 
-struct SkipTypeValidation;
-
-impl TypeValidationContext for SkipTypeValidation {
-    fn validate_nominal_parameter(
-        &self,
-        _type_id: &TypeId,
-        _value: &serde_json::Value,
-    ) -> Option<Result<(), String>> {
-        None
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum GraphCompilationOutcome {
+pub enum GraphResolutionOutcome {
     Complete,
     Incomplete,
     InternalFailure {
@@ -280,10 +372,23 @@ pub enum GraphCompilationStage {
 pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
     resource_versions: ResourceVersionSet,
+    resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
     semantic_snapshot: GraphSemanticSnapshot,
+    semantic_input_hash: [u8; 32],
 }
 
 impl GraphAnalysis {
+    pub fn resource_observations(&self) -> &yss_graph_analysis_contract::ResourceObservationSet {
+        &self.resource_observations
+    }
+    pub const fn semantic_input_hash(&self) -> &[u8; 32] {
+        &self.semantic_input_hash
+    }
+
+    pub fn with_semantic_input_hash(mut self, hash: [u8; 32]) -> Self {
+        self.semantic_input_hash = hash;
+        self
+    }
     pub fn registry_fingerprint(&self) -> &[u8; 32] {
         &self.registry_fingerprint
     }
@@ -309,7 +414,9 @@ pub fn analyze(
     GraphAnalysis {
         registry_fingerprint: *basis.registry_fingerprint.as_bytes(),
         resource_versions: basis.resource_versions.clone(),
+        resource_observations: basis.resource_observations.clone(),
         semantic_snapshot,
+        semantic_input_hash: [0; 32],
     }
 }
 
@@ -332,7 +439,18 @@ pub fn resolve_graph_semantics_with_cache(
     resources: &ResourceCatalogSnapshot,
     cache: &mut GraphSemanticCache,
 ) -> GraphSemanticSnapshot {
+    resolve_graph_semantics_inner(document, registry, resources, cache, true)
+}
+
+fn resolve_graph_semantics_inner(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    resources: &ResourceCatalogSnapshot,
+    cache: &mut GraphSemanticCache,
+    validate_functions: bool,
+) -> GraphSemanticSnapshot {
     let mut complete = true;
+    let mut internal_interface_node = None;
     let mut diagnostics = Vec::new();
     let resolved_schemas = resolve_graph_schemas(document, registry, resources);
     let mut nodes = document
@@ -355,6 +473,7 @@ pub fn resolve_graph_semantics_with_cache(
                     style_id: None,
                     managed: false,
                     parameters: Box::new([]),
+                    inputs: Box::new([]),
                     ports: Box::new([]),
                     port_instance_additions: Box::new([]),
                     specialization: None,
@@ -362,8 +481,7 @@ pub fn resolve_graph_semantics_with_cache(
                 };
             };
 
-            for issue in validate_parameter_values(protocol, &node.parameters, &SkipTypeValidation)
-            {
+            for issue in validate_parameter_values(protocol, &node.parameters, registry) {
                 complete = false;
                 let kind = match issue.kind {
                     ParameterIssueKind::Unknown => GraphDiagnosticKind::ParameterUnknown,
@@ -412,7 +530,9 @@ pub fn resolve_graph_semantics_with_cache(
                 .filter(|(address, _)| address.node_id == node.id)
                 .collect::<Vec<_>>();
             let mut ports = Vec::new();
+            let mut derived_orders = std::collections::BTreeMap::new();
             for spec in protocol.interface.ports.iter() {
+                if matches!(&spec.cardinality, PortCardinality::Derived { resolver } if !derived_ports::supports_resolver(resolver.as_str())) { internal_interface_node = Some(node.id); }
                 if matches!(spec.cardinality, PortCardinality::Declared) {
                     let address = PortAddress::declared(node.id, spec.key.clone());
                     ports.push(project_declared_port(
@@ -438,6 +558,9 @@ pub fn resolve_graph_semantics_with_cache(
                     .iter()
                     .map(|member| (&member.locator, member))
                     .collect::<std::collections::BTreeMap<_, _>>();
+                for (index, member) in derived_members.iter().enumerate() {
+                    derived_orders.insert((spec.key.clone(), member.locator.clone()), index);
+                }
 
                 let mut bindings = node_bindings
                     .iter()
@@ -457,6 +580,7 @@ pub fn resolve_graph_semantics_with_cache(
                     },
                 );
                 for (address, binding) in bindings {
+                    if binding_origin(binding).is_some_and(|origin| !derived_by_origin.contains_key(origin)) && !derived_ports::port_is_referenced(document, address) { continue; }
                     if !binding_matches_cardinality(binding, &spec.cardinality) {
                         complete = false;
                         diagnostics.push(graph_problem(
@@ -497,8 +621,8 @@ pub fn resolve_graph_semantics_with_cache(
                 }
                 if matches!(spec.cardinality, PortCardinality::Derived { .. }) {
                     for member in derived_members {
-                        if node_bindings.iter().any(|(_, binding)| {
-                            binding_origin(binding).is_some_and(|origin| origin == &member.locator)
+                        if node_bindings.iter().any(|(address, binding)| {
+                            matches!(&address.port, PortRef::Instance { template, .. } if template == &spec.key) && binding_origin(binding).is_some_and(|origin| origin == &member.locator)
                         }) {
                             continue;
                         }
@@ -520,6 +644,29 @@ pub fn resolve_graph_semantics_with_cache(
                             },
                         ));
                     }
+                }
+            }
+            sort_concrete_ports(protocol, document, &mut ports, &derived_orders);
+            for port in &mut ports {
+                port.schema_state = resolved_schemas
+                    .state(&port.address)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        if port.schema.is_some() {
+                            GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream)
+                        } else {
+                            port.schema_state.clone()
+                        }
+                    });
+                if matches!(port.schema_state, GraphSchemaState::NotApplicable)
+                    && port.schema.is_some()
+                {
+                    port.schema_state =
+                        GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
+                } else if port.schema.is_none()
+                    && matches!(port.schema_state, GraphSchemaState::Pending(_))
+                {
+                    port.schema_state = GraphSchemaState::NotApplicable;
                 }
             }
             for (address, _) in node_bindings
@@ -563,14 +710,6 @@ pub fn resolve_graph_semantics_with_cache(
                         [("port", port.address.to_string().into())],
                     ));
                 }
-                if port.schema.is_some() && port.resolved_schema.is_none() {
-                    complete = false;
-                    diagnostics.push(graph_problem(
-                        GraphDiagnosticKind::InterfaceSchemaDependencyUnresolved,
-                        GraphDiagnosticLocation::Port(port.address.clone()),
-                        std::iter::empty(),
-                    ));
-                }
             }
 
             GraphNodeSemanticFact {
@@ -595,7 +734,11 @@ pub fn resolve_graph_semantics_with_cache(
                         editor: parameter.editor.clone(),
                         presentation: parameter.presentation,
                         value_type: parameter.value_type.clone(),
-                        inherited_value: None,
+                        effective_value: effective_parameter_value(node, parameter).map(|value| match (&parameter.editor, value.as_str()) {
+                            (ParameterEditorSpec::Resource { .. }, Some(identity)) => GraphResolvedParameterValue::Resource(GraphResourceId::new(identity)),
+                            _ => GraphResolvedParameterValue::Literal(value),
+                        }),
+                        inherited_value: parameter.default_value.as_ref().map(|value| yss_graph_protocol::protocol_value_to_json(&value.value)),
                         value_source: node
                             .parameters
                             .contains_key(&parameter.key)
@@ -604,6 +747,7 @@ pub fn resolve_graph_semantics_with_cache(
                         configuration: None,
                     })
                     .collect(),
+                inputs: Box::new([]),
                 ports: ports.into_boxed_slice(),
                 port_instance_additions: port_instance_additions.into_boxed_slice(),
                 specialization: None,
@@ -611,15 +755,87 @@ pub fn resolve_graph_semantics_with_cache(
             }
         })
         .collect::<Vec<_>>();
+    include_referenced_orphan_ports(document, &mut nodes, &mut diagnostics);
     let type_diagnostics =
         type_resolution::resolve_node_types(document, registry, resources, &mut nodes, cache);
     if type_diagnostics
         .iter()
-        .any(|diagnostic| diagnostic.severity.is_blocking())
+        .any(|diagnostic| diagnostic.blocking)
     {
         complete = false;
     }
     diagnostics.extend(type_diagnostics);
+    for node in &mut nodes {
+        for port in &mut node.ports {
+            let requires_schema = port.schema.is_some()
+                || matches!(port.type_state.exact(), Some(ResolvedType::Nominal(id)) if id.as_str() == "tabular.dataframe");
+            if requires_schema && matches!(port.schema_state, GraphSchemaState::NotApplicable) {
+                port.schema_state = GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
+            }
+            if requires_schema
+                && port.schema_state.exact().is_none()
+                && !matches!(port.schema_state, GraphSchemaState::InternalFailure(_))
+            {
+                diagnostics.push(graph_problem(
+                    GraphDiagnosticKind::InterfaceSchemaDependencyUnresolved,
+                    GraphDiagnosticLocation::Port(port.address.clone()),
+                    std::iter::empty(),
+                ));
+            }
+        }
+        let mut inputs = Vec::new();
+        for port in node
+            .ports
+            .iter()
+            .filter(|port| port.direction == PortDirection::Input && !port.orphan)
+        {
+            let group = match &port.address.port {
+                PortRef::Instance { instance_id, .. } => Some(*instance_id),
+                PortRef::Declared { .. } => None,
+            };
+            let mut connections = document
+                .connections
+                .values()
+                .filter(|connection| connection.input == port.address)
+                .collect::<Vec<_>>();
+            connections.sort_by(|left, right| {
+                left.order
+                    .cmp(&right.order)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            if connections.is_empty() {
+                if let Some(value) = document
+                    .input_states
+                    .get(&port.address)
+                    .and_then(|state| state.literal_override.as_ref())
+                    .or(port.protocol_default.as_ref())
+                {
+                    inputs.push(GraphResolvedInputBinding {
+                        address: port.address.clone(),
+                        group,
+                        source: GraphResolvedInputSource::Literal(value.clone()),
+                    });
+                }
+            } else {
+                inputs.extend(connections.into_iter().map(|connection| {
+                    GraphResolvedInputBinding {
+                        address: port.address.clone(),
+                        group,
+                        source: GraphResolvedInputSource::Output(connection.output.clone()),
+                    }
+                }));
+            }
+        }
+        node.inputs = inputs.into_boxed_slice();
+    }
+    diagnostics.extend(semantic_validation::validate(document, registry, &nodes));
+    let function_resolution = if validate_functions {
+        function_validation::resolve(document, registry, resources)
+    } else {
+        Default::default()
+    };
+    diagnostics.extend(function_resolution.diagnostics);
+    complete &= !diagnostics.iter().any(|diagnostic| diagnostic.blocking);
     if contains_value_dependency_cycle(document) {
         complete = false;
         diagnostics.push(graph_problem(
@@ -628,15 +844,115 @@ pub fn resolve_graph_semantics_with_cache(
             std::iter::empty(),
         ));
     }
-    GraphSemanticSnapshot::new(
+    let mut snapshot = GraphSemanticSnapshot::new(
         nodes,
         diagnostics,
-        if complete {
-            GraphCompilationOutcome::Complete
+        if let Some(node_id) = internal_interface_node {
+            GraphResolutionOutcome::InternalFailure {
+                stage: GraphCompilationStage::Analysis,
+                code: "compiler.interface.unsupported_resolver".into(),
+                node_id: Some(node_id),
+            }
+        } else if resolved_schemas.internal_failure().is_some() {
+            GraphResolutionOutcome::InternalFailure {
+                stage: GraphCompilationStage::Analysis,
+                code: "compiler.schema.unsupported_resolver".into(),
+                node_id: resolved_schemas
+                    .internal_failure()
+                    .map(|address| address.node_id),
+            }
+        } else if let Some(failure) = function_resolution.internal_failure {
+            failure
+        } else if complete {
+            GraphResolutionOutcome::Complete
         } else {
-            GraphCompilationOutcome::Incomplete
+            GraphResolutionOutcome::Incomplete
         },
-    )
+    );
+    snapshot.functions = function_resolution.functions;
+    snapshot
+}
+
+fn include_referenced_orphan_ports(
+    document: &GraphDocument,
+    nodes: &mut [GraphNodeSemanticFact],
+    diagnostics: &mut Vec<GraphDiagnosticFact>,
+) {
+    let addresses = document
+        .connections
+        .values()
+        .flat_map(|connection| {
+            [
+                (&connection.output, PortDirection::Output),
+                (&connection.input, PortDirection::Input),
+            ]
+        })
+        .chain(
+            document
+                .input_states
+                .keys()
+                .map(|address| (address, PortDirection::Input)),
+        );
+    for (address, direction) in addresses {
+        let Some(node) = nodes
+            .iter_mut()
+            .find(|node| node.node_id == address.node_id)
+        else {
+            continue;
+        };
+        if node.ports.iter().any(|port| &port.address == address) {
+            continue;
+        }
+        let key = match &address.port {
+            PortRef::Declared { key } => key,
+            PortRef::Instance { template, .. } => template,
+        };
+        let mut ports = node.ports.to_vec();
+        ports.push(GraphPortSemanticFact {
+            address: address.clone(),
+            label: key.as_str().into(),
+            instance_label: None,
+            direction,
+            result_category: GraphResultCategory::Value,
+            backing: if address.is_instance() {
+                GraphPortBacking::DocumentInstance
+            } else {
+                GraphPortBacking::Declared
+            },
+            orphan: true,
+            can_remove: false,
+            connections: GraphPortConnectionFacts {
+                current: document
+                    .connections
+                    .values()
+                    .filter(|connection| {
+                        &connection.output == address || &connection.input == address
+                    })
+                    .count() as u32,
+                maximum: None,
+                ordered: false,
+            },
+            editor: GraphPortEditorFact::Hidden,
+            protocol_default: None,
+            literal_allowed: false,
+            accepted_type: TypeExpr::Unknown,
+            accepted_domain: None,
+            type_state: TypeState::Unknown(TypeUnknownReason::OrphanedPort),
+            schema: None,
+            schema_state: GraphSchemaState::NotApplicable,
+        });
+        node.ports = ports.into_boxed_slice();
+        if !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.primary == GraphDiagnosticLocation::Port(address.clone()))
+        {
+            diagnostics.push(graph_problem(
+                GraphDiagnosticKind::PortUnknown,
+                GraphDiagnosticLocation::Port(address.clone()),
+                [("port", address.to_string().into())],
+            ));
+        }
+    }
 }
 
 fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
@@ -645,6 +961,18 @@ fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
         | DynamicPortBinding::Resolved { order, .. }
         | DynamicPortBinding::Orphan { order, .. } => order,
     }
+}
+
+pub(crate) fn effective_parameter_value(
+    node: &yss_graph_document::DocumentNode,
+    parameter: &yss_graph_protocol::ParameterSpec,
+) -> Option<serde_json::Value> {
+    node.parameters.get(&parameter.key).cloned().or_else(|| {
+        parameter
+            .default_value
+            .as_ref()
+            .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value))
+    })
 }
 
 fn resource_exists(
@@ -794,7 +1122,8 @@ fn project_bound_port(
             None,
             spec.value_type.clone(),
         ),
-        DynamicPortBinding::Resolved { last_known, .. } => current_member.map_or_else(
+        DynamicPortBinding::Resolved { last_known, .. }
+        | DynamicPortBinding::Orphan { last_known, .. } => current_member.map_or_else(
             || {
                 (
                     true,
@@ -814,15 +1143,6 @@ fn project_bound_port(
                     member.value_type.clone(),
                 )
             },
-        ),
-        DynamicPortBinding::Orphan { last_known, .. } => (
-            true,
-            true,
-            Some(last_known.label.clone().into_boxed_str()),
-            last_known
-                .value_type
-                .clone()
-                .unwrap_or_else(|| spec.value_type.clone()),
         ),
     };
     project_concrete_port(
@@ -881,6 +1201,10 @@ fn project_concrete_port(
         ConnectionsPerPort::Multiple { max, ordered } => (max.map(u32::from), ordered),
     };
     GraphPortSemanticFact {
+        result_category: result_category::result_category_for_output(
+            document.nodes[&address.node_id].node_type.as_str(),
+            spec.key.as_str(),
+        ),
         address,
         label: instance_label.clone().unwrap_or_else(|| spec.title.clone()),
         instance_label,
@@ -898,11 +1222,15 @@ fn project_concrete_port(
             .input_binding
             .as_ref()
             .and_then(|binding| binding.default_value.clone()),
+        literal_allowed: spec.input_binding.as_ref().is_some_and(|binding| {
+            binding.literal_policy == yss_graph_protocol::LiteralPolicy::Allowed
+        }),
         accepted_type: value_type,
         accepted_domain: None,
         type_state: TypeState::Unknown(TypeUnknownReason::UnsupportedDeclaration),
         schema: spec.schema.clone(),
-        resolved_schema,
+        schema_state: resolved_schema
+            .map_or(GraphSchemaState::NotApplicable, GraphSchemaState::Exact),
     }
 }
 
@@ -1454,7 +1782,7 @@ mod tests {
         };
         let analysis = analyze(
             &basis,
-            GraphSemanticSnapshot::new([], [], GraphCompilationOutcome::Complete),
+            GraphSemanticSnapshot::new([], [], GraphResolutionOutcome::Complete),
         );
         assert!(analysis.semantic_snapshot().nodes().is_empty());
         assert_eq!(analysis.registry_fingerprint(), &[4; 32]);
@@ -1479,9 +1807,11 @@ mod tests {
 
         let facts = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
 
-        assert_eq!(facts.outcome(), &GraphCompilationOutcome::Incomplete);
+        assert_eq!(facts.outcome(), &GraphResolutionOutcome::Incomplete);
         assert!(facts.diagnostics().iter().any(|diagnostic| {
             diagnostic.code.as_str() == GraphDiagnosticKind::InputUnbound.code()
+                && diagnostic.blocking
+                && diagnostic.severity == DiagnosticSeverity::Warning
                 && matches!(
                     &diagnostic.primary,
                     GraphDiagnosticLocation::Port(address) if address.node_id == node_id

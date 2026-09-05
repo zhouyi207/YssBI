@@ -1,7 +1,8 @@
 use crate::DataSchema;
-use std::collections::BTreeMap;
+use crate::{GraphDependencyKey, GraphDependencyManifest};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use yss_data_contract::DataType;
 use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 
@@ -76,14 +77,18 @@ impl FunctionSignature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCatalogEntry {
     signature: FunctionSignature,
+    document: Option<Arc<yss_graph_document::GraphDocument>>,
 }
 
 impl FunctionCatalogEntry {
     pub fn new(signature: FunctionSignature) -> Self {
-        Self { signature }
+        Self {
+            signature,
+            document: None,
+        }
     }
 
     pub fn signature(&self) -> &FunctionSignature {
@@ -125,6 +130,7 @@ pub struct ResourceCatalogSnapshot {
     variables: Arc<BTreeMap<GraphResourceId, VariableValueContract>>,
     databases: Arc<BTreeMap<GraphResourceId, DataSchema>>,
     fingerprint: ResourceCatalogFingerprint,
+    reads: Option<Arc<Mutex<BTreeSet<GraphDependencyKey>>>>,
 }
 
 impl ResourceCatalogSnapshot {
@@ -139,25 +145,128 @@ impl ResourceCatalogSnapshot {
             variables: Arc::new(variables),
             databases: Arc::new(databases),
             fingerprint,
+            reads: None,
         }
     }
 
     pub fn function_signature(&self, path: &GraphResourcePath) -> Option<&FunctionSignature> {
+        self.record(GraphDependencyKey::Function(path.as_str().into()));
         self.functions
             .get(path)
             .map(FunctionCatalogEntry::signature)
     }
 
+    pub fn with_function_document(
+        mut self,
+        path: &GraphResourcePath,
+        document: yss_graph_document::GraphDocument,
+    ) -> Self {
+        if let Some(entry) = Arc::make_mut(&mut self.functions).get_mut(path) {
+            entry.document = Some(Arc::new(document));
+        }
+        self
+    }
+
+    pub fn function_document(
+        &self,
+        path: &GraphResourcePath,
+    ) -> Option<&yss_graph_document::GraphDocument> {
+        self.record(GraphDependencyKey::FunctionBody(path.as_str().into()));
+        self.functions.get(path)?.document.as_deref()
+    }
+
     pub fn variable_contract(&self, resource: &GraphResourceId) -> Option<&VariableValueContract> {
+        self.record(GraphDependencyKey::Variable(resource.as_str().into()));
         self.variables.get(resource)
     }
 
     pub fn database_schema(&self, resource: &GraphResourceId) -> Option<&DataSchema> {
+        self.record(GraphDependencyKey::Database(resource.as_str().into()));
         self.databases.get(resource)
     }
 
     pub fn fingerprint(&self) -> &ResourceCatalogFingerprint {
         &self.fingerprint
+    }
+
+    /// Tracking is private to one resolve attempt; resource facts remain immutable.
+    pub fn tracked(&self) -> Self {
+        Self {
+            reads: Some(Arc::new(Mutex::new(BTreeSet::new()))),
+            ..self.clone()
+        }
+    }
+
+    fn record(&self, key: GraphDependencyKey) {
+        if let Some(reads) = &self.reads {
+            reads
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(key);
+        }
+    }
+
+    fn observed_fingerprint(&self, key: &GraphDependencyKey) -> Option<[u8; 32]> {
+        let hash = match key {
+            GraphDependencyKey::FunctionBody(identity) => {
+                let document = self
+                    .functions
+                    .get(&GraphResourcePath::new(identity.as_ref()).ok()?)?
+                    .document
+                    .as_deref()?;
+                yss_graph_document::semantic_document_fingerprint(document)
+            }
+            GraphDependencyKey::Function(identity) => {
+                let entry = self
+                    .functions
+                    .get(&GraphResourcePath::new(identity.as_ref()).ok()?)?;
+                let parameters = entry
+                    .signature
+                    .parameters()
+                    .iter()
+                    .map(|parameter| (parameter.id(), parameter.data_type()))
+                    .collect::<Vec<_>>();
+                yss_canonical_hash::hash_canonical(
+                    "yssbi.function-contract.v1",
+                    &(parameters, entry.signature.result()),
+                )
+            }
+            GraphDependencyKey::Variable(identity) => yss_canonical_hash::hash_canonical(
+                "yssbi.variable-contract.v1",
+                self.variables
+                    .get(&GraphResourceId::new(identity.clone()))?
+                    .data_type(),
+            ),
+            GraphDependencyKey::Database(identity) => yss_canonical_hash::hash_canonical(
+                "yssbi.database-schema.v1",
+                self.databases
+                    .get(&GraphResourceId::new(identity.clone()))?,
+            ),
+        };
+        Some(hash.expect("resource contracts are canonically serializable"))
+    }
+
+    pub fn dependencies(&self) -> GraphDependencyManifest {
+        let keys = self
+            .reads
+            .as_ref()
+            .map(|reads| reads.lock().unwrap_or_else(PoisonError::into_inner).clone())
+            .unwrap_or_default();
+        GraphDependencyManifest(
+            keys.into_iter()
+                .map(|key| {
+                    let observed = self.observed_fingerprint(&key);
+                    (key, observed)
+                })
+                .collect(),
+        )
+    }
+
+    pub fn matches_dependencies(&self, manifest: &GraphDependencyManifest) -> bool {
+        manifest
+            .entries()
+            .iter()
+            .all(|(key, expected)| &self.observed_fingerprint(key) == expected)
     }
 }
 
@@ -171,6 +280,42 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_data_contract::DataType;
     use yss_graph_document::GraphResourcePath;
+
+    #[test]
+    fn dependency_observations_ignore_unread_resources_and_recheck_absence() {
+        let a = GraphResourceId::new("variables/a");
+        let b = GraphResourceId::new("variables/b");
+        let missing = GraphResourceId::new("variables/missing");
+        let catalog = |a_type, b_type, include_missing| {
+            let mut variables = BTreeMap::from([
+                (a.clone(), VariableValueContract::new(a_type)),
+                (b.clone(), VariableValueContract::new(b_type)),
+            ]);
+            if include_missing {
+                variables.insert(missing.clone(), VariableValueContract::new(DataType::Int64));
+            }
+            ResourceCatalogSnapshot::new(
+                BTreeMap::new(),
+                variables,
+                BTreeMap::new(),
+                ResourceCatalogFingerprint::from_bytes([9; 32]),
+            )
+        };
+        let tracked = catalog(DataType::Int64, DataType::Int64, false).tracked();
+        assert!(tracked.variable_contract(&a).is_some());
+        assert!(tracked.variable_contract(&missing).is_none());
+        let dependencies = tracked.dependencies();
+        assert_eq!(dependencies.entries().len(), 2);
+        assert!(
+            catalog(DataType::Int64, DataType::String, false).matches_dependencies(&dependencies)
+        );
+        assert!(
+            !catalog(DataType::String, DataType::Int64, false).matches_dependencies(&dependencies)
+        );
+        assert!(
+            !catalog(DataType::Int64, DataType::Int64, true).matches_dependencies(&dependencies)
+        );
+    }
 
     #[test]
     fn resource_catalog_exposes_only_graph_compile_contracts() {

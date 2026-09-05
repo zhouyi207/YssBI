@@ -1,6 +1,8 @@
 mod identity;
 mod model;
 mod resource_path;
+mod semantic_hash;
+pub use semantic_hash::semantic_document_fingerprint;
 
 pub use identity::{ConnectionId, NodeId, PortInstanceId};
 pub use model::{

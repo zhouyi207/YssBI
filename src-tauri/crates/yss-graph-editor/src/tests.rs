@@ -1,6 +1,6 @@
 use crate::{
     CatalogMutationResource, CatalogMutationValidationSnapshot, EditorGraphMutation,
-    EditorMutationErrorCode,
+    EditorMutationErrorCode, PortPlacement,
 };
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
@@ -15,6 +15,84 @@ use yss_graph_document::{
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use yss_graph_registry::NodeRegistry;
+
+#[test]
+fn port_placement_appends_moves_and_undoes_without_uuid_ordering() {
+    let system = build_builtin_node_system().unwrap();
+    let graph = "events/ports.yssbi-event".parse().unwrap();
+    let node_id = NodeId::new();
+    let template: PortKey = "operands".parse().unwrap();
+    let mut document = GraphDocument::default();
+    document.nodes.insert(
+        node_id,
+        DocumentNode {
+            id: node_id,
+            node_type: "yssbi.numeric.add".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    let mut created = Vec::new();
+    for _ in 0..3 {
+        let patch = EditorGraphMutation::AddPortInstance {
+            node_id,
+            template_key: template.clone(),
+            placement: PortPlacement::Append,
+        }
+        .into_patch(&graph, &document, &system.registry)
+        .unwrap();
+        let before = document
+            .port_bindings
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        apply_graph_document_patch(&mut document, &patch).unwrap();
+        created.push(
+            document
+                .port_bindings
+                .keys()
+                .find(|address| !before.contains(*address))
+                .unwrap()
+                .clone(),
+        );
+    }
+    let ordered = |document: &GraphDocument| {
+        let mut values = document
+            .port_bindings
+            .iter()
+            .map(|(address, binding)| {
+                let DynamicPortBinding::UserCreated { order } = binding else {
+                    panic!("user-created fixture")
+                };
+                (order.clone(), address.clone())
+            })
+            .collect::<Vec<_>>();
+        values.sort();
+        values
+            .into_iter()
+            .map(|(_, address)| address)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ordered(&document), created);
+    let yss_graph_document::PortRef::Instance { instance_id, .. } = created[0].port else {
+        panic!("instance fixture")
+    };
+    let before_move = document.clone();
+    let patch = EditorGraphMutation::MovePortInstance {
+        address: created[2].clone(),
+        placement: PortPlacement::Before(instance_id),
+    }
+    .into_patch(&graph, &document, &system.registry)
+    .unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(
+        ordered(&document),
+        [created[2].clone(), created[0].clone(), created[1].clone()]
+    );
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, before_move);
+}
 use yss_graph_resource_contract::{
     GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
 };

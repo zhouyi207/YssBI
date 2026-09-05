@@ -178,9 +178,7 @@ pub(crate) fn resolve_node_types(
         let unresolved_outputs = nodes[index]
             .ports
             .iter()
-            .filter(|port| {
-                port.direction == PortDirection::Output && port.type_state.exact().is_none()
-            })
+            .filter(|port| !port.orphan && port.type_state.exact().is_none())
             .map(|port| port.address.clone())
             .collect::<Vec<_>>();
         for address in unresolved_outputs {
@@ -267,7 +265,7 @@ fn initialize_node_ports(node: &mut GraphNodeSemanticFact, types: &TypeRegistry)
     node.semantic_fingerprint = semantic_fingerprint_without_document(node);
 }
 
-fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>> {
+pub(crate) fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>> {
     let mut remaining = document
         .nodes
         .keys()
@@ -990,7 +988,7 @@ fn node_input_fingerprint(
                 &port.accepted_type,
                 port.orphan,
                 states.get(&port.address),
-                &port.resolved_schema,
+                &port.schema_state,
             )
         })
         .collect::<Vec<_>>();
@@ -1019,7 +1017,7 @@ fn semantic_fingerprint(
                 &port.address,
                 &port.accepted_type,
                 &port.type_state,
-                &port.resolved_schema,
+                &port.schema_state,
             )
         })
         .collect::<Vec<_>>();

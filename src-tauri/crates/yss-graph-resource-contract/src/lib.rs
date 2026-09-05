@@ -6,7 +6,9 @@
 #![deny(unused_must_use)]
 
 mod catalog;
+mod dependencies;
 mod schema;
+pub use dependencies::{GraphDependencyKey, GraphDependencyManifest};
 
 pub use catalog::{
     FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,

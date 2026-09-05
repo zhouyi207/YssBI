@@ -1,12 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use yss_graph_document::{
-    DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
-    GraphResourcePath, LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId,
-    PortRef,
+    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, NodeId,
+    PortAddress, PortInstanceId,
 };
-use yss_graph_protocol::{PortCardinality, TypeExpr};
-use yss_graph_registry::NodeRegistry;
+use yss_graph_protocol::TypeExpr;
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 use crate::schema_resolution::{DerivedSchemaPortMember, derived_schema_port_members};
@@ -15,6 +11,17 @@ const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.argu
 const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
 const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.entry.parameters";
 const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
+
+pub(crate) fn supports_resolver(resolver: &str) -> bool {
+    matches!(
+        resolver,
+        FUNCTION_CALL_ARGUMENTS_RESOLVER
+            | FUNCTION_CALL_RESULTS_RESOLVER
+            | FUNCTION_ENTRY_PARAMETERS_RESOLVER
+            | FUNCTION_RETURN_RESULTS_RESOLVER
+            | "yssbi.dataframe.interface.columns"
+    )
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct DerivedPortMember {
@@ -37,7 +44,7 @@ pub(crate) fn derived_port_members(
     document: &GraphDocument,
     node_id: NodeId,
     resolver: &str,
-    schemas: &BTreeMap<PortAddress, yss_graph_protocol::ResolvedSchemaFact>,
+    schemas: &crate::schema_resolution::SchemaResolution,
     resources: &ResourceCatalogSnapshot,
 ) -> Vec<DerivedPortMember> {
     let schema_members = derived_schema_port_members(node_id, resolver, schemas);
@@ -99,110 +106,6 @@ fn function_port_members(
         .collect()
 }
 
-/// Materialize compile-derived interface members into a candidate draft.
-///
-/// The source Graph file remains untouched. Existing addresses are retained by
-/// member identity, removed members with live references become orphans, and
-/// newly discovered members receive deterministic addresses.
-pub fn materialize_derived_port_bindings(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    resources: &ResourceCatalogSnapshot,
-) -> GraphDocument {
-    let schemas = crate::schema_resolution::resolve_graph_schemas(document, registry, resources);
-    let mut candidate = document.clone();
-    let templates = document
-        .nodes
-        .values()
-        .flat_map(|node| {
-            registry
-                .protocol(&node.node_type)
-                .into_iter()
-                .flat_map(move |protocol| {
-                    protocol.interface.ports.iter().filter_map(move |spec| {
-                        let PortCardinality::Derived { resolver } = &spec.cardinality else {
-                            return None;
-                        };
-                        Some((node.id, spec.key.clone(), resolver.as_str().to_owned()))
-                    })
-                })
-        })
-        .collect::<Vec<_>>();
-
-    for (node_id, template, resolver) in templates {
-        let desired = derived_port_members(document, node_id, &resolver, &schemas, resources);
-        let mut existing_by_origin = candidate
-            .port_bindings
-            .iter()
-            .filter_map(|(address, binding)| {
-                if address.node_id != node_id
-                    || !matches!(
-                        &address.port,
-                        PortRef::Instance { template: current, .. } if current == &template
-                    )
-                {
-                    return None;
-                }
-                match binding {
-                    DynamicPortBinding::Resolved { origin, .. }
-                    | DynamicPortBinding::Orphan { origin, .. } => {
-                        Some((origin.clone(), address.clone()))
-                    }
-                    DynamicPortBinding::UserCreated { .. } => None,
-                }
-            })
-            .collect::<BTreeMap<_, _>>();
-        let mut retained = BTreeSet::new();
-
-        for (index, member) in desired.into_iter().enumerate() {
-            let address = existing_by_origin
-                .remove(&member.locator)
-                .unwrap_or_else(|| {
-                    derived_port_address(&candidate, node_id, &template, &member.locator)
-                });
-            retained.insert(address.clone());
-            candidate.port_bindings.insert(
-                address,
-                DynamicPortBinding::Resolved {
-                    origin: member.locator,
-                    order: OrderKey::new(format!("{index:05}")),
-                    last_known: LastKnownPortMetadata {
-                        label: member.label.into(),
-                        value_type: Some(member.value_type),
-                    },
-                },
-            );
-        }
-
-        for address in existing_by_origin.into_values() {
-            let Some(binding) = candidate.port_bindings.get(&address).cloned() else {
-                continue;
-            };
-            if port_is_referenced(&candidate, &address) {
-                if let DynamicPortBinding::Resolved {
-                    origin,
-                    order,
-                    last_known,
-                } = binding
-                {
-                    candidate.port_bindings.insert(
-                        address,
-                        DynamicPortBinding::Orphan {
-                            origin,
-                            order,
-                            last_known,
-                        },
-                    );
-                }
-            } else if !retained.contains(&address) {
-                candidate.port_bindings.remove(&address);
-            }
-        }
-    }
-
-    candidate
-}
-
 pub(crate) fn derived_port_address(
     document: &GraphDocument,
     node_id: NodeId,
@@ -228,8 +131,11 @@ pub(crate) fn derived_port_address(
     unreachable!("u32 derived port identity salt space is inexhaustible")
 }
 
-fn port_is_referenced(document: &GraphDocument, address: &PortAddress) -> bool {
-    document.input_states.contains_key(address)
+pub(crate) fn port_is_referenced(document: &GraphDocument, address: &PortAddress) -> bool {
+    document
+        .input_states
+        .get(address)
+        .is_some_and(|state| state.literal_override.is_some())
         || document
             .connections
             .values()

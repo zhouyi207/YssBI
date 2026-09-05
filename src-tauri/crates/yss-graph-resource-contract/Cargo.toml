@@ -7,5 +7,6 @@ publish = false
 
 [dependencies]
 serde.workspace = true
+yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-graph-document = { path = "../yss-graph-document" }

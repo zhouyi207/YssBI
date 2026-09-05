@@ -9769,6 +9769,7 @@ name = "yss-graph-compiler"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
+ "yss-data-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-catalog",
@@ -9792,6 +9793,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+ "yss-canonical-hash",
  "yss-graph-protocol",
  "yss-project-layout",
  "yss-resource-naming",
@@ -9847,6 +9849,7 @@ name = "yss-graph-resource-contract"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "yss-canonical-hash",
  "yss-data-contract",
  "yss-graph-document",
 ]

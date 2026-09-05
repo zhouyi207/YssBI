@@ -130,6 +130,13 @@ impl From<DocumentError> for MutationConflict {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PortPlacement {
+    Append,
+    Before(PortInstanceId),
+    After(PortInstanceId),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum EditorGraphMutation {
     CreateNode {
         descriptor: NodeCreation,
@@ -176,7 +183,11 @@ pub enum EditorGraphMutation {
     AddPortInstance {
         node_id: NodeId,
         template_key: PortKey,
-        order: Option<OrderKey>,
+        placement: PortPlacement,
+    },
+    MovePortInstance {
+        address: PortAddress,
+        placement: PortPlacement,
     },
     RemovePortInstance {
         address: PortAddress,
@@ -198,6 +209,22 @@ pub struct NodePositionMutation {
 }
 
 impl EditorGraphMutation {
+    pub fn referenced_ports(&self) -> Vec<&PortAddress> {
+        match self {
+            Self::Connect { output, input, .. } => vec![output, input],
+            Self::MoveConnections { target, .. } => vec![target],
+            Self::SetLiteral {
+                address,
+                literal: Some(_),
+            } => vec![address],
+            Self::CreateNode {
+                connect_from: Some(address),
+                ..
+            } => vec![address],
+            _ => Vec::new(),
+        }
+    }
+
     pub fn into_patch(
         self,
         graph_path: &GraphResourcePath,
@@ -418,8 +445,44 @@ impl EditorGraphMutation {
             Self::AddPortInstance {
                 node_id,
                 template_key,
-                order,
-            } => add_port_instance_operations(document, registry, node_id, template_key, order)?,
+                placement,
+            } => {
+                add_port_instance_operations(document, registry, node_id, template_key, placement)?
+            }
+            Self::MovePortInstance { address, placement } => {
+                let PortRef::Instance {
+                    template,
+                    instance_id,
+                } = &address.port
+                else {
+                    return Err(invalid_editor_mutation(
+                        "only port instances can be reordered",
+                    ));
+                };
+                if !matches!(
+                    document.port_bindings.get(&address),
+                    Some(DynamicPortBinding::UserCreated { .. })
+                ) {
+                    return Err(invalid_editor_mutation(
+                        "only user-created ports can be reordered",
+                    ));
+                }
+                let contract =
+                    user_created_port_contract(document, registry, address.node_id, template)?;
+                let templates = contract
+                    .group
+                    .map_or(std::slice::from_ref(template), |group| {
+                        group.templates.as_ref()
+                    });
+                place_port_member(
+                    document,
+                    address.node_id,
+                    templates,
+                    *instance_id,
+                    placement,
+                    false,
+                )?
+            }
             Self::RemovePortInstance { address } => {
                 remove_port_instance_operations(document, registry, address)?
             }
@@ -992,7 +1055,7 @@ fn add_port_instance_operations(
     registry: &NodeRegistry,
     node_id: NodeId,
     template_key: PortKey,
-    order: Option<OrderKey>,
+    placement: PortPlacement,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     let contract = user_created_port_contract(document, registry, node_id, &template_key)?;
     let (templates, count, max) = if let Some(group) = contract.group {
@@ -1014,16 +1077,83 @@ fn add_port_instance_operations(
         )));
     }
     let instance_id = PortInstanceId::new();
-    let order = order.unwrap_or_else(|| OrderKey::new(instance_id.to_string()));
-    Ok(templates
-        .iter()
-        .map(|template| GraphDocumentOperation::InsertPortBinding {
-            address: PortAddress::instance(node_id, template.clone(), instance_id),
-            binding: DynamicPortBinding::UserCreated {
-                order: order.clone(),
+    place_port_member(document, node_id, templates, instance_id, placement, true)
+}
+
+fn place_port_member(
+    document: &GraphDocument,
+    node_id: NodeId,
+    templates: &[PortKey],
+    member: PortInstanceId,
+    placement: PortPlacement,
+    create: bool,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    if matches!(placement, PortPlacement::Before(target) | PortPlacement::After(target) if target == member)
+    {
+        return Ok(Vec::new());
+    }
+    let mut orders = BTreeMap::new();
+    for (address, binding) in &document.port_bindings {
+        if address.node_id != node_id {
+            continue;
+        }
+        if let (
+            PortRef::Instance {
+                template,
+                instance_id,
             },
-        })
-        .collect())
+            DynamicPortBinding::UserCreated { order },
+        ) = (&address.port, binding)
+            && templates.contains(template)
+        {
+            orders.entry(*instance_id).or_insert_with(|| order.clone());
+        }
+    }
+    let mut sequence = orders
+        .into_iter()
+        .map(|(id, order)| (order, id))
+        .collect::<Vec<_>>();
+    sequence.sort();
+    let mut members = sequence
+        .into_iter()
+        .map(|(_, id)| id)
+        .filter(|id| id != &member)
+        .collect::<Vec<_>>();
+    let index = match placement {
+        PortPlacement::Append => members.len(),
+        PortPlacement::Before(target) | PortPlacement::After(target) => members
+            .iter()
+            .position(|id| *id == target)
+            .map(|index| index + usize::from(matches!(placement, PortPlacement::After(_))))
+            .ok_or_else(|| {
+                invalid_editor_mutation("port placement target is not in this member group")
+            })?,
+    };
+    members.insert(index, member);
+    let mut operations = Vec::new();
+    for (index, instance_id) in members.into_iter().enumerate() {
+        let order = OrderKey::new(format!("{index:010}"));
+        for template in templates {
+            let address = PortAddress::instance(node_id, template.clone(), instance_id);
+            let binding = DynamicPortBinding::UserCreated {
+                order: order.clone(),
+            };
+            match document.port_bindings.get(&address) {
+                Some(previous) if previous != &binding => {
+                    operations.push(GraphDocumentOperation::RemovePortBinding {
+                        address: address.clone(),
+                        binding: previous.clone(),
+                    });
+                    operations.push(GraphDocumentOperation::InsertPortBinding { address, binding });
+                }
+                None if create && instance_id == member => {
+                    operations.push(GraphDocumentOperation::InsertPortBinding { address, binding })
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(operations)
 }
 
 fn remove_port_instance_operations(
