@@ -1,7 +1,11 @@
-use super::identity::{PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanSourceIdentity};
+use super::identity::{
+    KernelId, PlanFunctionParameterId, PlanInputGroupId, PlanNodeTypeId, PlanOutputRef,
+    PlanPortAddress, PlanSourceIdentity,
+};
 use super::observation::{PlanObservationIntent, ValueRef};
-use super::parameter::CompiledParameterHandle;
+use super::parameter::{CompiledParameterHandle, PlanParameterFieldId};
 use super::result_category::ResultCategory;
+use std::collections::BTreeMap;
 use yss_data_contract::DataType;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,11 +18,27 @@ pub enum PlanInputSource {
 pub struct PlanInputBinding {
     port: PlanPortAddress,
     source: PlanInputSource,
+    contract: PlanInputContract,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanInputContract {
+    pub group: Option<PlanInputGroupId>,
+    pub expected_type: DataType,
+    pub coercions: Box<[PlanInputCoercionKind]>,
 }
 
 impl PlanInputBinding {
-    pub fn new(port: PlanPortAddress, source: PlanInputSource) -> Self {
-        Self { port, source }
+    pub fn new(
+        port: PlanPortAddress,
+        source: PlanInputSource,
+        contract: PlanInputContract,
+    ) -> Self {
+        Self {
+            port,
+            source,
+            contract,
+        }
     }
 
     pub fn port(&self) -> &PlanPortAddress {
@@ -28,13 +48,17 @@ impl PlanInputBinding {
     pub fn source(&self) -> &PlanInputSource {
         &self.source
     }
+
+    pub fn contract(&self) -> &PlanInputContract {
+        &self.contract
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanOperation {
     source: PlanSourceIdentity,
-    result_category: ResultCategory,
-    parameter_handles: Box<[CompiledParameterHandle]>,
+    node_type: PlanNodeTypeId,
+    parameters: BTreeMap<PlanParameterFieldId, CompiledParameterHandle>,
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
     outputs: Box<[PlanOutputBinding]>,
@@ -43,7 +67,7 @@ pub struct PlanOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanKernelSpecialization {
-    implementation: PlanOperationKind,
+    implementation: KernelId,
     input_types: Box<[PlanTypeBinding]>,
     output_types: Box<[PlanTypeBinding]>,
     coercions: Box<[PlanInputCoercion]>,
@@ -51,7 +75,7 @@ pub struct PlanKernelSpecialization {
 
 impl PlanKernelSpecialization {
     pub fn new(
-        implementation: PlanOperationKind,
+        implementation: KernelId,
         input_types: Box<[PlanTypeBinding]>,
         output_types: Box<[PlanTypeBinding]>,
         coercions: Box<[PlanInputCoercion]>,
@@ -64,7 +88,7 @@ impl PlanKernelSpecialization {
         }
     }
 
-    pub fn implementation(&self) -> &PlanOperationKind {
+    pub fn implementation(&self) -> &KernelId {
         &self.implementation
     }
 
@@ -131,11 +155,37 @@ impl PlanInputCoercion {
 pub struct PlanOutputBinding {
     output: PlanOutputRef,
     value: ValueRef,
+    contract: PlanOutputContract,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanOutputContract {
+    pub data_type: DataType,
+    pub schema: Option<Box<[PlanOutputField]>>,
+    pub category: ResultCategory,
+    pub source: PlanSourceIdentity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanOutputField {
+    pub name: Box<str>,
+    pub data_type: DataType,
+    pub lineage: Option<PlanFieldLineage>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanFieldLineage {
+    pub source_identity: Box<str>,
+    pub field_identity: Box<str>,
 }
 
 impl PlanOutputBinding {
-    pub fn new(output: PlanOutputRef, value: ValueRef) -> Self {
-        Self { output, value }
+    pub fn new(output: PlanOutputRef, value: ValueRef, contract: PlanOutputContract) -> Self {
+        Self {
+            output,
+            value,
+            contract,
+        }
     }
 
     pub fn output(&self) -> &PlanOutputRef {
@@ -145,13 +195,17 @@ impl PlanOutputBinding {
     pub const fn value(&self) -> ValueRef {
         self.value
     }
+
+    pub fn contract(&self) -> &PlanOutputContract {
+        &self.contract
+    }
 }
 
 impl PlanOperation {
     pub fn new(
         source: PlanSourceIdentity,
-        result_category: ResultCategory,
-        parameter_handles: Box<[CompiledParameterHandle]>,
+        node_type: PlanNodeTypeId,
+        parameters: BTreeMap<PlanParameterFieldId, CompiledParameterHandle>,
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
         outputs: Box<[PlanOutputBinding]>,
@@ -159,8 +213,8 @@ impl PlanOperation {
     ) -> Self {
         Self {
             source,
-            result_category,
-            parameter_handles,
+            node_type,
+            parameters,
             inputs,
             observation_intents,
             outputs,
@@ -172,16 +226,16 @@ impl PlanOperation {
         &self.source
     }
 
-    pub fn kind(&self) -> &PlanOperationKind {
+    pub fn node_type(&self) -> &PlanNodeTypeId {
+        &self.node_type
+    }
+
+    pub fn kernel_id(&self) -> &KernelId {
         self.specialization.implementation()
     }
 
-    pub const fn result_category(&self) -> ResultCategory {
-        self.result_category
-    }
-
-    pub fn parameter_handles(&self) -> &[CompiledParameterHandle] {
-        &self.parameter_handles
+    pub fn parameters(&self) -> &BTreeMap<PlanParameterFieldId, CompiledParameterHandle> {
+        &self.parameters
     }
 
     pub fn inputs(&self) -> &[PlanInputBinding] {
@@ -233,15 +287,37 @@ impl ExecutionPlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionPlanAbi {
-    signature: Box<str>,
+    parameters: Box<[FunctionPlanParameter]>,
+    result: Option<FunctionPlanResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionPlanParameter {
+    pub id: PlanFunctionParameterId,
+    pub entry_output: PlanOutputRef,
+    pub data_type: DataType,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionPlanResult {
+    pub id: PlanFunctionParameterId,
+    pub return_input: PlanPortAddress,
+    pub data_type: DataType,
 }
 
 impl FunctionPlanAbi {
-    pub fn new(signature: Box<str>) -> Self {
-        Self { signature }
+    pub fn new(
+        parameters: Box<[FunctionPlanParameter]>,
+        result: Option<FunctionPlanResult>,
+    ) -> Self {
+        Self { parameters, result }
     }
 
-    pub fn signature(&self) -> &str {
-        &self.signature
+    pub fn parameters(&self) -> &[FunctionPlanParameter] {
+        &self.parameters
+    }
+
+    pub fn result(&self) -> Option<&FunctionPlanResult> {
+        self.result.as_ref()
     }
 }

@@ -173,12 +173,22 @@ fn validate_functions(functions: &[CompiledFunctionPlan]) -> Result<(), PackageP
                 version: function.version().clone(),
             });
         }
-        function.plan().validate().map_err(|source| {
-            PackagePreparationError::FunctionPlan(FunctionPlanPreparationError::InvalidPlan {
-                resource: function.resource().clone(),
-                source,
+        function
+            .plan()
+            .validate_against_source_graph(&crate::plan::PlanGraphId::from_existing(
+                function.resource().as_str().into(),
+            ))
+            .and_then(|()| {
+                function
+                    .abi()
+                    .validate(function.plan(), function.resource())
             })
-        })?;
+            .map_err(|source| {
+                PackagePreparationError::FunctionPlan(FunctionPlanPreparationError::InvalidPlan {
+                    resource: function.resource().clone(),
+                    source,
+                })
+            })?;
     }
     Ok(())
 }
@@ -315,7 +325,7 @@ mod tests {
             resource.clone(),
             version.clone(),
             Arc::new(ExecutionPlan::empty()),
-            Arc::new(FunctionPlanAbi::new("example".into())),
+            Arc::new(FunctionPlanAbi::new(Box::new([]), None)),
         );
         let duplicate = CompiledExecutionPackage::new(
             Arc::new(ExecutionPlan::empty()),

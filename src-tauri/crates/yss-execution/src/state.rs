@@ -166,7 +166,9 @@ impl ScientificBackend for UnavailableScientificBackend {
 }
 
 #[derive(Default)]
-struct NeutralPlanExecutor;
+struct NeutralPlanExecutor {
+    kernels: KernelRegistry,
+}
 
 impl PreparedPlanExecutor for NeutralPlanExecutor {
     fn execute(
@@ -254,25 +256,32 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                             parameter_value(payload.value(), resources)
                         }
                     }?;
-                    apply_input_coercions(
-                        value,
-                        binding.port(),
-                        operation.specialization().coercions(),
-                    )
+                    apply_input_coercions(value, &binding.contract().coercions)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let mut output_values = execute_node(
-                operation.kind().as_str(),
-                &inputs,
-                operation
-                    .parameter_handles()
-                    .iter()
-                    .find_map(|handle| package.parameters().entries().get(handle))
-                    .map(|payload| payload.value()),
-                resources,
-                operation.outputs(),
-                operation.specialization(),
+            let mut output_values = self.kernels.execute(
+                operation.kernel_id(),
+                &PreparedKernelInvocation {
+                    inputs: &inputs,
+                    input_slots: operation.inputs(),
+                    parameters: operation
+                        .parameters()
+                        .iter()
+                        .map(|(key, handle)| {
+                            package
+                                .parameters()
+                                .entries()
+                                .get(handle)
+                                .map(|payload| (key.clone(), payload.value()))
+                                .ok_or(KernelExecutionError::Failed)
+                        })
+                        .collect::<Result<BTreeMap<_, _>, _>>()?,
+                    resources,
+                    outputs: operation.outputs(),
+                    specialization: operation.specialization(),
+                    control,
+                },
             )?;
             for output in operation.outputs() {
                 let value = output_values
@@ -286,7 +295,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 }
                 results.push(SchedulerResult {
                     value: StoredResult::Runtime(value.clone()),
-                    category: operation.result_category(),
+                    category: output.contract().category,
                     output: output.output().clone(),
                 });
             }
@@ -381,7 +390,7 @@ fn select_execution(
                 if !consumed.contains(&output.value()) {
                     selected.insert(
                         output.output().clone(),
-                        (output.value(), operation.result_category()),
+                        (output.value(), output.contract().category),
                     );
                 }
             }
@@ -394,7 +403,7 @@ fn select_execution(
                     .outputs()
                     .iter()
                     .find(|output| output.output() == requested)
-                    .map(|output| (output.value(), operation.result_category()))
+                    .map(|output| (output.value(), output.contract().category))
             }) else {
                 return Err(KernelExecutionError::DemandOutputUnavailable);
             };
@@ -512,11 +521,10 @@ fn parameter_value(
 
 fn apply_input_coercions(
     mut value: RuntimeValue,
-    port: &crate::plan::PlanPortAddress,
-    coercions: &[crate::plan::PlanInputCoercion],
+    coercions: &[crate::plan::PlanInputCoercionKind],
 ) -> Result<RuntimeValue, KernelExecutionError> {
-    for coercion in coercions.iter().filter(|coercion| coercion.port() == port) {
-        value = match coercion.kind() {
+    for coercion in coercions {
+        value = match coercion {
             crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => value
                 .coerce_to(&yss_data_contract::DataType::Float64)
                 .map_err(|_| KernelExecutionError::Failed)?,
@@ -529,24 +537,124 @@ fn apply_input_coercions(
     Ok(value)
 }
 
-fn execute_node(
-    kind: &str,
-    inputs: &[RuntimeValue],
-    parameter: Option<&crate::plan::PlanParameterValue>,
-    resources: &PreparedRunResources,
-    outputs: &[crate::plan::PlanOutputBinding],
-    specialization: &crate::plan::PlanKernelSpecialization,
+pub(crate) struct PreparedKernelInvocation<'a> {
+    pub inputs: &'a [RuntimeValue],
+    pub input_slots: &'a [crate::plan::PlanInputBinding],
+    pub parameters:
+        BTreeMap<crate::plan::PlanParameterFieldId, &'a crate::plan::PlanParameterValue>,
+    pub resources: &'a PreparedRunResources,
+    pub outputs: &'a [crate::plan::PlanOutputBinding],
+    pub specialization: &'a crate::plan::PlanKernelSpecialization,
+    pub control: &'a RunExecutionControl,
+}
+
+impl PreparedKernelInvocation<'_> {
+    pub fn parameter(&self, key: &str) -> Option<&crate::plan::PlanParameterValue> {
+        self.parameters
+            .iter()
+            .find(|(field, _)| field.as_str() == key)
+            .map(|(_, value)| *value)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum BuiltinKernel {
+    Constant,
+    Variable,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    And,
+    Or,
+    Not,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Convert,
+    Identity,
+}
+
+struct KernelRegistry {
+    kernels: BTreeMap<crate::plan::KernelId, BuiltinKernel>,
+}
+
+impl Default for KernelRegistry {
+    fn default() -> Self {
+        use BuiltinKernel::*;
+        Self {
+            kernels: [
+                ("yssbi.constant.bool", Constant),
+                ("yssbi.constant.int64", Constant),
+                ("yssbi.constant.float64", Constant),
+                ("yssbi.constant.string", Constant),
+                ("yssbi.project.variable.get", Variable),
+                ("yssbi.numeric.add", Add),
+                ("yssbi.numeric.subtract", Subtract),
+                ("yssbi.numeric.multiply", Multiply),
+                ("yssbi.numeric.divide", Divide),
+                ("yssbi.logic.and", And),
+                ("yssbi.logic.or", Or),
+                ("yssbi.logic.not", Not),
+                ("yssbi.compare.equal", Equal),
+                ("yssbi.compare.not_equal", NotEqual),
+                ("yssbi.compare.less", Less),
+                ("yssbi.compare.less_equal", LessEqual),
+                ("yssbi.compare.greater", Greater),
+                ("yssbi.compare.greater_equal", GreaterEqual),
+                ("yssbi.value.convert", Convert),
+                ("yssbi.debug.view", Identity),
+                ("yssbi.core.reroute", Identity),
+            ]
+            .into_iter()
+            .map(|(id, kernel)| (crate::plan::KernelId::from_existing(id.into()), kernel))
+            .collect(),
+        }
+    }
+}
+
+impl KernelRegistry {
+    fn execute(
+        &self,
+        id: &crate::plan::KernelId,
+        invocation: &PreparedKernelInvocation<'_>,
+    ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
+        execute_kernel(
+            *self.kernels.get(id).ok_or(KernelExecutionError::Failed)?,
+            invocation,
+        )
+    }
+}
+
+fn execute_kernel(
+    kind: BuiltinKernel,
+    invocation: &PreparedKernelInvocation<'_>,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
+    let PreparedKernelInvocation {
+        inputs,
+        resources,
+        outputs,
+        specialization,
+        control,
+        ..
+    } = invocation;
+    check_kernel_control(control)?;
+    if inputs.len() != invocation.input_slots.len() {
+        return Err(KernelExecutionError::Failed);
+    }
     let value = match kind {
-        "yssbi.constant.bool"
-        | "yssbi.constant.int64"
-        | "yssbi.constant.float64"
-        | "yssbi.constant.string" => parameter
+        BuiltinKernel::Constant => invocation
+            .parameter("value")
             .map(|value| parameter_value(value, resources))
             .transpose()?
             .ok_or(KernelExecutionError::Failed),
-        "yssbi.project.variable.get" => {
-            let Some(crate::plan::PlanParameterValue::Resource(resource)) = parameter else {
+        BuiltinKernel::Variable => {
+            let Some(crate::plan::PlanParameterValue::Resource(resource)) =
+                invocation.parameter("variable")
+            else {
                 return Err(KernelExecutionError::Failed);
             };
             resources
@@ -554,26 +662,24 @@ fn execute_node(
                 .cloned()
                 .ok_or(KernelExecutionError::Failed)
         }
-        "yssbi.numeric.add" => numeric_fold(inputs, specialization, |left, right| left + right),
-        "yssbi.numeric.subtract" => {
+        BuiltinKernel::Add => numeric_fold(inputs, specialization, |left, right| left + right),
+        BuiltinKernel::Subtract => {
             binary_numeric(inputs, specialization, |left, right| left - right)
         }
-        "yssbi.numeric.multiply" => {
+        BuiltinKernel::Multiply => {
             binary_numeric(inputs, specialization, |left, right| left * right)
         }
-        "yssbi.numeric.divide" => {
-            binary_numeric(inputs, specialization, |left, right| left / right)
-        }
-        "yssbi.logic.and" => binary_bool(inputs, |left, right| left && right),
-        "yssbi.logic.or" => binary_bool(inputs, |left, right| left || right),
-        "yssbi.logic.not" => unary_bool(inputs, |value| !value),
-        "yssbi.compare.equal" => Ok(RuntimeValue::Bool(inputs.first() == inputs.get(1))),
-        "yssbi.compare.not_equal" => Ok(RuntimeValue::Bool(inputs.first() != inputs.get(1))),
-        "yssbi.compare.less"
-        | "yssbi.compare.less_equal"
-        | "yssbi.compare.greater"
-        | "yssbi.compare.greater_equal" => compare_numeric(kind, inputs),
-        "yssbi.value.convert" => {
+        BuiltinKernel::Divide => binary_numeric(inputs, specialization, |left, right| left / right),
+        BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
+        BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
+        BuiltinKernel::Not => unary_bool(inputs, |value| !value),
+        BuiltinKernel::Equal => Ok(RuntimeValue::Bool(inputs.first() == inputs.get(1))),
+        BuiltinKernel::NotEqual => Ok(RuntimeValue::Bool(inputs.first() != inputs.get(1))),
+        BuiltinKernel::Less
+        | BuiltinKernel::LessEqual
+        | BuiltinKernel::Greater
+        | BuiltinKernel::GreaterEqual => compare_numeric(kind, inputs),
+        BuiltinKernel::Convert => {
             let target = specialization
                 .output_types()
                 .first()
@@ -586,12 +692,7 @@ fn execute_node(
                 .coerce_to(target)
                 .map_err(|_| KernelExecutionError::Failed)
         }
-        "yssbi.debug.view"
-        | "yssbi.project.function.entry"
-        | "yssbi.project.function.return"
-        | "yssbi.project.function.call"
-        | "yssbi.core.reroute" => Ok(inputs.first().cloned().unwrap_or(RuntimeValue::Null)),
-        _ => Err(KernelExecutionError::Failed),
+        BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelExecutionError::Failed),
     }?;
     let [output] = outputs else {
         return Err(KernelExecutionError::Failed);
@@ -695,16 +796,16 @@ fn unary_bool(
 }
 
 fn compare_numeric(
-    kind: &str,
+    kind: BuiltinKernel,
     inputs: &[RuntimeValue],
 ) -> Result<RuntimeValue, KernelExecutionError> {
     let left = numeric_input(inputs.first())?;
     let right = numeric_input(inputs.get(1))?;
     let value = match kind {
-        "yssbi.compare.less" => left < right,
-        "yssbi.compare.less_equal" => left <= right,
-        "yssbi.compare.greater" => left > right,
-        "yssbi.compare.greater_equal" => left >= right,
+        BuiltinKernel::Less => left < right,
+        BuiltinKernel::LessEqual => left <= right,
+        BuiltinKernel::Greater => left > right,
+        BuiltinKernel::GreaterEqual => left >= right,
         _ => return Err(KernelExecutionError::Failed),
     };
     Ok(RuntimeValue::Bool(value))
@@ -898,7 +999,7 @@ impl ExecutionRuntimeState {
             results: ResultStore::new(),
             runs: RunRegistry::new(),
             scientific_backend,
-            executor: Arc::new(NeutralPlanExecutor),
+            executor: Arc::new(NeutralPlanExecutor::default()),
             active_controls: Mutex::new(BTreeMap::new()),
             next_result_id: AtomicU64::new(1),
         }
@@ -1332,13 +1433,13 @@ mod tests {
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
         CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
-        CompiledParameterHandle, ExecutionPlan, PlanCompilationBasis, PlanCompileId,
+        CompiledParameterHandle, ExecutionPlan, KernelId, PlanCompilationBasis, PlanCompileId,
         PlanExecutionDemand, PlanGraphId, PlanInputBinding, PlanInputSource, PlanOperation,
-        PlanOperationKind, PlanOutputBinding, PlanOutputRef, PlanParameterPayload,
-        PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue, PlanPortAddress,
-        PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
-        PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-        PlanSourceIdentity, ResourceAccess, ResourceKind, ValueRef,
+        PlanOutputBinding, PlanOutputRef, PlanParameterPayload, PlanParameterScalar,
+        PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProjectSessionId,
+        PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+        PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
+        ResourceKind, ValueRef,
     };
     use crate::resource_preparation::{RunResourceBinding, RunResourceBindings};
     use crate::result_store::{ResultId, StoredResult};
@@ -1458,12 +1559,24 @@ mod tests {
                 PlanPortAddress::from_existing(format!("{node}:result").into_boxed_str()),
             ),
             value,
+            crate::plan::PlanOutputContract {
+                data_type: yss_data_contract::DataType::Int64,
+                schema: None,
+                category: crate::plan::ResultCategory::Value,
+                source: PlanSourceIdentity::new(
+                    PlanGraphId::from_existing("events/main".into()),
+                    Some(crate::plan::PlanNodeId::from_existing(node.into())),
+                    Some(PlanPortAddress::from_existing(
+                        format!("{node}:result").into_boxed_str(),
+                    )),
+                ),
+            },
         )
     }
 
     fn operation_specialization(kind: &str, node: &str) -> crate::plan::PlanKernelSpecialization {
         crate::plan::PlanKernelSpecialization::new(
-            PlanOperationKind::from_existing(kind.into()),
+            KernelId::from_existing(kind.into()),
             Box::new([]),
             Box::new([crate::plan::PlanTypeBinding::new(
                 PlanPortAddress::from_existing(format!("{node}:result").into_boxed_str()),
@@ -1562,20 +1675,38 @@ mod tests {
         let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
-            crate::plan::ResultCategory::Value,
-            Box::new([]),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.value.convert".into()),
+            BTreeMap::new(),
             Box::new([PlanInputBinding::new(
                 PlanPortAddress::from_existing("consumer:value".into()),
                 PlanInputSource::Value(ValueRef::new(1)),
+                crate::plan::PlanInputContract {
+                    group: None,
+                    expected_type: yss_data_contract::DataType::Int64,
+                    coercions: Box::new([]),
+                },
             )]),
             Box::new([]),
             Box::new([operation_output("consumer", ValueRef::new(0))]),
-            operation_specialization("yssbi.value.convert", "consumer"),
+            crate::plan::PlanKernelSpecialization::new(
+                KernelId::from_existing("yssbi.value.convert".into()),
+                Box::new([crate::plan::PlanTypeBinding::new(
+                    PlanPortAddress::from_existing("consumer:value".into()),
+                    yss_data_contract::DataType::Int64,
+                )]),
+                operation_specialization("yssbi.value.convert", "consumer")
+                    .output_types()
+                    .into(),
+                Box::new([]),
+            ),
         );
         let producer = PlanOperation::new(
             operation_source("producer"),
-            crate::plan::ResultCategory::Value,
-            Box::new([parameter_handle.clone()]),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            BTreeMap::from([(
+                crate::plan::PlanParameterFieldId::from_existing("value".into()),
+                parameter_handle.clone(),
+            )]),
             Box::new([]),
             Box::new([]),
             Box::new([operation_output("producer", ValueRef::new(1))]),
@@ -1628,8 +1759,11 @@ mod tests {
         let requested = selected_output.output().clone();
         let selected = PlanOperation::new(
             operation_source("selected"),
-            crate::plan::ResultCategory::Value,
-            Box::new([parameter_handle.clone()]),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            BTreeMap::from([(
+                crate::plan::PlanParameterFieldId::from_existing("value".into()),
+                parameter_handle.clone(),
+            )]),
             Box::new([]),
             Box::new([]),
             Box::new([selected_output]),
@@ -1637,8 +1771,8 @@ mod tests {
         );
         let unrelated = PlanOperation::new(
             operation_source("unrelated"),
-            crate::plan::ResultCategory::Value,
-            Box::new([]),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            BTreeMap::new(),
             Box::new([]),
             Box::new([]),
             Box::new([operation_output("unrelated", ValueRef::new(1))]),

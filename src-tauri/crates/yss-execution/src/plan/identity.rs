@@ -55,11 +55,13 @@ macro_rules! plan_id {
 plan_id!(PlanProjectSessionId);
 plan_id!(PlanGraphId);
 plan_id!(PlanNodeId);
+plan_id!(PlanNodeTypeId);
 plan_id!(PlanPortAddress);
+plan_id!(PlanInputGroupId);
 plan_id!(PlanFunctionParameterId);
 plan_id!(PlanResourceId);
 plan_id!(PlanResourceVersion);
-plan_id!(PlanOperationKind);
+plan_id!(KernelId);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlanCompileId(u64);

@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use yss_graph_analysis::{GraphKernelSpecialization, GraphResultCategory};
 use yss_graph_analysis_contract::CompileId;
-use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress, PortInstanceId};
+use yss_graph_protocol::{InputCoercionKind, NodeTypeId, ResolvedType};
 
 /// Graph-owned value reference used while lowering a document.  Application
 /// maps it to the execution package only after the Graph compilation result
@@ -28,24 +29,41 @@ pub enum GraphInputSource {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphInputBinding {
-    port: Box<str>,
+    address: PortAddress,
     source: GraphInputSource,
+    contract: GraphInputContract,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphInputContract {
+    pub group: Option<PortInstanceId>,
+    pub expected_type: ResolvedType,
+    pub coercions: Box<[InputCoercionKind]>,
 }
 
 impl GraphInputBinding {
-    pub fn new(port: impl Into<Box<str>>, source: GraphInputSource) -> Self {
+    pub fn new(
+        address: PortAddress,
+        source: GraphInputSource,
+        contract: GraphInputContract,
+    ) -> Self {
         Self {
-            port: port.into(),
+            address,
             source,
+            contract,
         }
     }
 
-    pub fn port(&self) -> &str {
-        &self.port
+    pub fn address(&self) -> &PortAddress {
+        &self.address
     }
 
     pub fn source(&self) -> &GraphInputSource {
         &self.source
+    }
+
+    pub fn contract(&self) -> &GraphInputContract {
+        &self.contract
     }
 }
 
@@ -103,7 +121,7 @@ impl GraphParameterPayload {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphSourceIdentity {
     graph: GraphResourcePath,
     node: Option<NodeId>,
@@ -137,13 +155,27 @@ pub enum GraphObservationIntent {
 pub struct GraphOutputBinding {
     port: Box<str>,
     value: GraphValueRef,
+    contract: GraphOutputContract,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphOutputContract {
+    pub value_type: yss_graph_protocol::ResolvedType,
+    pub schema: Option<yss_graph_protocol::ResolvedSchemaFact>,
+    pub category: GraphResultCategory,
+    pub source: GraphSourceIdentity,
 }
 
 impl GraphOutputBinding {
-    pub fn new(port: impl Into<Box<str>>, value: GraphValueRef) -> Self {
+    pub fn new(
+        port: impl Into<Box<str>>,
+        value: GraphValueRef,
+        contract: GraphOutputContract,
+    ) -> Self {
         Self {
             port: port.into(),
             value,
+            contract,
         }
     }
 
@@ -154,13 +186,17 @@ impl GraphOutputBinding {
     pub const fn value(&self) -> GraphValueRef {
         self.value
     }
+
+    pub fn contract(&self) -> &GraphOutputContract {
+        &self.contract
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphOperation {
     source: GraphSourceIdentity,
-    result_category: GraphResultCategory,
-    parameter_handles: Box<[GraphParameterHandle]>,
+    node_type: NodeTypeId,
+    parameters: BTreeMap<Box<str>, GraphParameterHandle>,
     inputs: Box<[GraphInputBinding]>,
     observation_intents: Box<[GraphObservationIntent]>,
     outputs: Box<[GraphOutputBinding]>,
@@ -170,8 +206,8 @@ pub struct GraphOperation {
 impl GraphOperation {
     pub fn new(
         source: GraphSourceIdentity,
-        result_category: GraphResultCategory,
-        parameter_handles: Box<[GraphParameterHandle]>,
+        node_type: NodeTypeId,
+        parameters: BTreeMap<Box<str>, GraphParameterHandle>,
         inputs: Box<[GraphInputBinding]>,
         observation_intents: Box<[GraphObservationIntent]>,
         outputs: Box<[GraphOutputBinding]>,
@@ -179,8 +215,8 @@ impl GraphOperation {
     ) -> Self {
         Self {
             source,
-            result_category,
-            parameter_handles,
+            node_type,
+            parameters,
             inputs,
             observation_intents,
             outputs,
@@ -192,16 +228,16 @@ impl GraphOperation {
         &self.source
     }
 
-    pub fn kind(&self) -> &str {
+    pub fn node_type(&self) -> &NodeTypeId {
+        &self.node_type
+    }
+
+    pub fn kernel_id(&self) -> &str {
         &self.specialization.implementation
     }
 
-    pub const fn result_category(&self) -> GraphResultCategory {
-        self.result_category
-    }
-
-    pub fn parameter_handles(&self) -> &[GraphParameterHandle] {
-        &self.parameter_handles
+    pub fn parameters(&self) -> &BTreeMap<Box<str>, GraphParameterHandle> {
+        &self.parameters
     }
 
     pub fn inputs(&self) -> &[GraphInputBinding] {

@@ -13,14 +13,16 @@ pub use basis::{
     PlanResourceRequirement, PlanResourceVersionSet, ResourceAccess, ResourceKind,
 };
 pub use identity::{
-    InvalidPlanIdentity, PlanCompileId, PlanFunctionParameterId, PlanGraphId, PlanNodeId,
-    PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanProjectSessionId, PlanProvenance,
-    PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+    InvalidPlanIdentity, KernelId, PlanCompileId, PlanFunctionParameterId, PlanGraphId,
+    PlanInputGroupId, PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress,
+    PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
+    PlanResourceVersion, PlanSourceIdentity,
 };
 pub use model::{
-    ExecutionPlan, FunctionPlanAbi, PlanExecutionDemand, PlanInputBinding, PlanInputCoercion,
-    PlanInputCoercionKind, PlanInputSource, PlanKernelSpecialization, PlanOperation,
-    PlanOutputBinding, PlanTypeBinding,
+    ExecutionPlan, FunctionPlanAbi, FunctionPlanParameter, FunctionPlanResult, PlanExecutionDemand,
+    PlanFieldLineage, PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind,
+    PlanInputContract, PlanInputSource, PlanKernelSpecialization, PlanOperation, PlanOutputBinding,
+    PlanOutputContract, PlanOutputField, PlanTypeBinding,
 };
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::{CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan};

@@ -1,31 +1,23 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::package::{
-    GraphCompiledPackage, GraphInputBinding, GraphInputSource, GraphObservationIntent,
-    GraphOperation, GraphOutputBinding, GraphParameterHandle, GraphParameterPayload,
-    GraphParameterScalar, GraphParameterValue, GraphSourceIdentity, GraphValueRef,
+    GraphCompiledPackage, GraphInputBinding, GraphInputContract, GraphInputSource,
+    GraphObservationIntent, GraphOperation, GraphOutputBinding, GraphOutputContract,
+    GraphParameterHandle, GraphParameterPayload, GraphParameterScalar, GraphParameterValue,
+    GraphSourceIdentity, GraphValueRef,
 };
 use crate::{GraphCompileError, GraphCompileErrorCode};
 use yss_graph_analysis::{
-    GraphPortSemanticFact, GraphSemanticSnapshot, contains_value_dependency_cycle,
-    result_category_for_node,
+    GraphResolvedInputSource, GraphResolvedParameterValue, GraphSemanticSnapshot,
+    ReadyGraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::CompileId;
-use yss_graph_document::{
-    DocumentConnection, GraphDocument, GraphResourcePath, NodeId, PortAddress,
-};
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
 use yss_graph_protocol::{PortDirection, TypedValue, Value};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
-struct ResolvedInputContracts {
-    ordered_by_node: BTreeMap<NodeId, Box<[PortAddress]>>,
-    known_inputs: BTreeSet<PortAddress>,
-    values: BTreeMap<PortAddress, TypedValue>,
-}
-
 pub struct GraphCompilationInput<'a> {
-    document: &'a GraphDocument,
     semantics: &'a GraphSemanticSnapshot,
     graph: GraphResourcePath,
     compile_id: CompileId,
@@ -33,14 +25,12 @@ pub struct GraphCompilationInput<'a> {
 
 impl<'a> GraphCompilationInput<'a> {
     pub fn new(
-        document: &'a GraphDocument,
-        semantics: &'a GraphSemanticSnapshot,
+        semantics: ReadyGraphSemanticSnapshot<'a>,
         graph: GraphResourcePath,
         compile_id: CompileId,
     ) -> Self {
         Self {
-            document,
-            semantics,
+            semantics: semantics.snapshot(),
             graph,
             compile_id,
         }
@@ -50,80 +40,53 @@ impl<'a> GraphCompilationInput<'a> {
 pub fn compile(
     input: GraphCompilationInput<'_>,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
-    if input.semantics.diagnostics().iter().any(|diagnostic| {
-        diagnostic.severity.is_blocking() && diagnostic.code.as_str().starts_with("compiler.type.")
-    }) {
-        return Err(GraphCompileError::InvalidGraph {
-            graph: input.graph,
-            code: GraphCompileErrorCode::SemanticTypeUnresolved,
-        });
+    if input.semantics.ready().is_none() {
+        return Err(lowering_error(&input.graph));
     }
-    validate_data_dag(input.document, &input.graph)?;
-
-    lower_package(
-        input.document,
-        input.semantics,
-        input.graph,
-        input.compile_id,
-    )
-}
-
-fn validate_data_dag(
-    document: &GraphDocument,
-    graph: &GraphResourcePath,
-) -> Result<(), GraphCompileError> {
-    for connection in document.connections.values() {
-        if !document.nodes.contains_key(&connection.input.node_id)
-            || !document.nodes.contains_key(&connection.output.node_id)
-        {
-            return Err(lowering_error(graph));
-        }
-    }
-    if contains_value_dependency_cycle(document) {
-        return Err(GraphCompileError::InvalidGraph {
-            graph: graph.clone(),
-            code: GraphCompileErrorCode::CyclicDataDependency,
-        });
-    }
-    Ok(())
+    lower_package(input.semantics, input.graph, input.compile_id)
 }
 
 fn lower_package(
-    document: &GraphDocument,
     semantics: &GraphSemanticSnapshot,
     graph: GraphResourcePath,
     compile_id: CompileId,
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
+    let input_values = semantics
+        .nodes()
+        .iter()
+        .flat_map(|node| node.inputs.iter())
+        .filter_map(|binding| match &binding.source {
+            GraphResolvedInputSource::Literal(value) => {
+                Some((binding.address.clone(), value.clone()))
+            }
+            _ => None,
+        })
+        .collect::<BTreeMap<_, _>>();
     let output_contracts = resolve_output_contracts(semantics, &graph)?;
-    let input_contracts = resolve_input_contracts(document, semantics, &graph)?;
-    let connections = connections_by_input(document);
-    let operations = document
-        .nodes
-        .values()
+
+    let operations = semantics
+        .nodes()
+        .iter()
         .map(|node| {
-            let semantic_node = semantics
-                .node(node.id)
-                .ok_or_else(|| lowering_error(&graph))?;
+            let semantic_node = node;
             let specialization = semantic_node.specialization.clone().ok_or_else(|| {
                 GraphCompileError::InvalidGraph {
                     graph: graph.clone(),
                     code: GraphCompileErrorCode::SemanticTypeUnresolved,
                 }
             })?;
-            let result_category = result_category_for_node(node.node_type.as_str());
-            let parameter_handles = node
+            let parameters = semantic_node
                 .parameters
-                .keys()
-                .map(|key| node_parameter_handle(node.id, key.as_str()))
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            let inputs = lower_input_bindings(
-                node.id,
-                &input_contracts,
-                &connections,
-                &output_contracts.value_refs,
-                &graph,
-            )?;
+                .iter()
+                .filter(|parameter| parameter.effective_value.is_some())
+                .map(|parameter| {
+                    (
+                        parameter.key.as_str().into(),
+                        node_parameter_handle(node.node_id, parameter.key.as_str()),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            let inputs = lower_input_bindings(node, &output_contracts.value_refs, &graph)?;
             let observation_intents: Box<[GraphObservationIntent]> =
                 if node.node_type.as_str() == DEBUG_VIEW_NODE_TYPE {
                     inputs
@@ -138,23 +101,47 @@ fn lower_package(
                 };
             let outputs = output_contracts
                 .ordered_by_node
-                .get(&node.id)
+                .get(&node.node_id)
                 .ok_or_else(|| lowering_error(&graph))?
                 .iter()
                 .map(|address| {
+                    let port = semantics
+                        .concrete_interface()
+                        .port(address)
+                        .ok_or_else(|| lowering_error(&graph))?;
+                    let value_type = port
+                        .type_state
+                        .exact()
+                        .cloned()
+                        .ok_or_else(|| lowering_error(&graph))?;
                     output_contracts
                         .value_refs
                         .get(address)
                         .copied()
-                        .map(|value| GraphOutputBinding::new(address.to_string(), value))
+                        .map(|value| {
+                            GraphOutputBinding::new(
+                                address.to_string(),
+                                value,
+                                GraphOutputContract {
+                                    value_type,
+                                    schema: port.schema_state.exact().cloned(),
+                                    category: port.result_category,
+                                    source: GraphSourceIdentity::new(
+                                        graph.clone(),
+                                        Some(node.node_id),
+                                        Some(address.clone()),
+                                    ),
+                                },
+                            )
+                        })
                         .ok_or_else(|| lowering_error(&graph))
                 })
                 .collect::<Result<Vec<_>, _>>()?
                 .into_boxed_slice();
             Ok(GraphOperation::new(
-                GraphSourceIdentity::new(graph.clone(), Some(node.id), None),
-                result_category,
-                parameter_handles,
+                GraphSourceIdentity::new(graph.clone(), Some(node.node_id), None),
+                node.node_type.clone(),
+                parameters,
                 inputs,
                 observation_intents,
                 outputs,
@@ -163,7 +150,7 @@ fn lower_package(
         })
         .collect::<Result<Vec<_>, GraphCompileError>>()?;
 
-    let parameters = lower_parameters(document, &input_contracts.values, &graph)?;
+    let parameters = lower_parameters(semantics, &input_values, &graph)?;
     Ok(GraphCompiledPackage::new(
         graph,
         compile_id,
@@ -173,16 +160,30 @@ fn lower_package(
 }
 
 fn lower_parameters(
-    document: &GraphDocument,
+    semantics: &GraphSemanticSnapshot,
     input_values: &BTreeMap<PortAddress, TypedValue>,
     graph_path: &GraphResourcePath,
 ) -> Result<BTreeMap<GraphParameterHandle, GraphParameterPayload>, GraphCompileError> {
     let mut parameters = BTreeMap::new();
-    for node in document.nodes.values() {
-        for (key, value) in &node.parameters {
-            let handle = node_parameter_handle(node.id, key.as_str());
-            let schema = format!("node/{}/{}", node.node_type.as_str(), key.as_str());
-            let value = lower_parameter_value(value).map_err(|_| lowering_error(graph_path))?;
+    for node in semantics.nodes() {
+        for parameter in &node.parameters {
+            let Some(value) = &parameter.effective_value else {
+                continue;
+            };
+            let handle = node_parameter_handle(node.node_id, parameter.key.as_str());
+            let schema = format!(
+                "node/{}/{}",
+                node.node_type.as_str(),
+                parameter.key.as_str()
+            );
+            let value = match value {
+                GraphResolvedParameterValue::Resource(identity) => {
+                    GraphParameterValue::Resource(identity.as_str().into())
+                }
+                GraphResolvedParameterValue::Literal(value) => {
+                    lower_parameter_value(value).map_err(|_| lowering_error(graph_path))?
+                }
+            };
             parameters.insert(handle, GraphParameterPayload::new(schema, value));
         }
     }
@@ -233,144 +234,53 @@ fn resolve_output_contracts(
 }
 
 fn lower_input_bindings(
-    node_id: NodeId,
-    input_contracts: &ResolvedInputContracts,
-    connections: &BTreeMap<PortAddress, Vec<&DocumentConnection>>,
+    node: &yss_graph_analysis::GraphNodeSemanticFact,
     value_refs: &BTreeMap<PortAddress, GraphValueRef>,
-    graph_path: &GraphResourcePath,
+    graph: &GraphResourcePath,
 ) -> Result<Box<[GraphInputBinding]>, GraphCompileError> {
-    let mut bindings = Vec::new();
-    let ports = input_contracts
-        .ordered_by_node
-        .get(&node_id)
-        .ok_or_else(|| lowering_error(graph_path))?;
-    for port in ports {
-        if !input_contracts.known_inputs.contains(port) {
-            return Err(lowering_error(graph_path));
-        }
-        if let Some(port_connections) = connections.get(port) {
-            for connection in port_connections {
-                let source = value_refs
-                    .get(&connection.output)
-                    .copied()
-                    .ok_or_else(|| lowering_error(graph_path))?;
-                bindings.push(GraphInputBinding::new(
-                    port.to_string(),
-                    GraphInputSource::Value(source),
-                ));
-            }
-        } else if input_contracts.values.contains_key(port) {
-            let port_text = port.to_string();
-            bindings.push(GraphInputBinding::new(
-                port_text.clone(),
-                GraphInputSource::Parameter(input_parameter_handle(&port_text)),
-            ));
-        }
-    }
-    Ok(bindings.into_boxed_slice())
-}
-
-fn resolve_input_contracts(
-    document: &GraphDocument,
-    semantics: &GraphSemanticSnapshot,
-    graph_path: &GraphResourcePath,
-) -> Result<ResolvedInputContracts, GraphCompileError> {
-    let connected_inputs = document
-        .connections
-        .values()
-        .map(|connection| connection.input.clone())
-        .collect::<std::collections::BTreeSet<_>>();
-    let mut ordered_by_node = BTreeMap::new();
-    let mut known_inputs = BTreeSet::new();
-    let mut values = BTreeMap::new();
-
-    for node in semantics.nodes() {
-        let mut ordered = Vec::new();
-        for port in node
-            .ports
-            .iter()
-            .filter(|port| port.direction == PortDirection::Input && !port.orphan)
-        {
-            resolve_input_port(
-                &port.address,
-                port,
-                document,
-                &connected_inputs,
-                &mut ordered,
-                &mut known_inputs,
-                &mut values,
-                graph_path,
-            )?;
-        }
-        ordered_by_node.insert(node.node_id, ordered.into_boxed_slice());
-    }
-
-    if document
-        .connections
-        .values()
-        .any(|connection| !known_inputs.contains(&connection.input))
-        || document
-            .input_states
-            .keys()
-            .any(|address| !known_inputs.contains(address))
-    {
-        return Err(lowering_error(graph_path));
-    }
-
-    Ok(ResolvedInputContracts {
-        ordered_by_node,
-        known_inputs,
-        values,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn resolve_input_port(
-    address: &PortAddress,
-    port: &GraphPortSemanticFact,
-    document: &GraphDocument,
-    connected_inputs: &std::collections::BTreeSet<PortAddress>,
-    ordered: &mut Vec<PortAddress>,
-    known_inputs: &mut BTreeSet<PortAddress>,
-    values: &mut BTreeMap<PortAddress, TypedValue>,
-    graph_path: &GraphResourcePath,
-) -> Result<(), GraphCompileError> {
-    if !known_inputs.insert(address.clone()) {
-        return Err(lowering_error(graph_path));
-    }
-    ordered.push(address.clone());
-    if connected_inputs.contains(address) {
-        return Ok(());
-    }
-    let value = document
-        .input_states
-        .get(address)
-        .and_then(|state| state.literal_override.clone())
-        .or_else(|| port.protocol_default.clone());
-    if let Some(value) = value {
-        values.insert(address.clone(), value);
-    }
-    Ok(())
-}
-
-fn connections_by_input(
-    document: &GraphDocument,
-) -> BTreeMap<PortAddress, Vec<&DocumentConnection>> {
-    let mut connections = BTreeMap::<_, Vec<_>>::new();
-    for connection in document.connections.values() {
-        connections
-            .entry(connection.input.clone())
-            .or_default()
-            .push(connection);
-    }
-    for entries in connections.values_mut() {
-        entries.sort_by(|left, right| {
-            left.order
-                .cmp(&right.order)
-                .then_with(|| left.id.cmp(&right.id))
-        });
-    }
-    connections
+    node.inputs
+        .iter()
+        .map(|binding| {
+            let port = binding.address.to_string();
+            let source = match &binding.source {
+                GraphResolvedInputSource::Output(address) => GraphInputSource::Value(
+                    *value_refs
+                        .get(address)
+                        .ok_or_else(|| lowering_error(graph))?,
+                ),
+                GraphResolvedInputSource::Literal(_) => {
+                    GraphInputSource::Parameter(input_parameter_handle(&port))
+                }
+            };
+            let fact = node
+                .ports
+                .iter()
+                .find(|port| port.address == binding.address)
+                .ok_or_else(|| lowering_error(graph))?;
+            let specialization = node
+                .specialization
+                .as_ref()
+                .ok_or_else(|| lowering_error(graph))?;
+            Ok(GraphInputBinding::new(
+                binding.address.clone(),
+                source,
+                GraphInputContract {
+                    group: binding.group,
+                    expected_type: fact
+                        .type_state
+                        .exact()
+                        .cloned()
+                        .ok_or_else(|| lowering_error(graph))?,
+                    coercions: specialization
+                        .coercions
+                        .iter()
+                        .filter(|coercion| coercion.address == binding.address)
+                        .map(|coercion| coercion.kind)
+                        .collect(),
+                },
+            ))
+        })
+        .collect()
 }
 
 fn node_parameter_handle(
@@ -466,18 +376,9 @@ fn lower_parameter_value(
         )));
     }
     if let Some(value) = value.as_str() {
-        return Ok(
-            if ["events/", "functions/", "variables/", "databases/"]
-                .into_iter()
-                .any(|prefix| value.starts_with(prefix))
-            {
-                GraphParameterValue::Resource(value.to_owned().into_boxed_str())
-            } else {
-                GraphParameterValue::Scalar(GraphParameterScalar::String(
-                    value.to_owned().into_boxed_str(),
-                ))
-            },
-        );
+        return Ok(GraphParameterValue::Scalar(GraphParameterScalar::String(
+            value.to_owned().into_boxed_str(),
+        )));
     }
     if let Some(values) = value.as_array() {
         return values
@@ -511,6 +412,19 @@ fn lowering_error(graph: &GraphResourcePath) -> GraphCompileError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yss_graph_document::GraphDocument;
+    fn compilation_input<'a>(
+        _document: &'a GraphDocument,
+        semantics: &'a GraphSemanticSnapshot,
+        graph: GraphResourcePath,
+        compile_id: CompileId,
+    ) -> GraphCompilationInput<'a> {
+        GraphCompilationInput {
+            semantics,
+            graph,
+            compile_id,
+        }
+    }
     use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_document::{
         DocumentConnection, DocumentNode, DynamicPortBinding, InputState, NodePosition, OrderKey,
@@ -550,7 +464,7 @@ mod tests {
         let compile_id = CompileId::new(7);
         let semantics = semantics(&document, &registry);
 
-        let package = compile(GraphCompilationInput::new(
+        let package = compile(compilation_input(
             &document,
             &semantics,
             graph.clone(),
@@ -613,8 +527,83 @@ mod tests {
             },
         );
 
-        let semantics = semantics(&document, &builtin.registry);
-        let package = compile(GraphCompilationInput::new(
+        let source = NodeId::new();
+        let resource_id = "variables/00000000-0000-0000-0000-000000000123";
+        document.nodes.insert(
+            source,
+            DocumentNode {
+                id: source,
+                node_type: "yssbi.project.variable.get".parse().unwrap(),
+                position: NodePosition { x: -200.0, y: 0.0 },
+                parameters: ParameterValues::from([(
+                    "variable".parse().unwrap(),
+                    yss_graph_document::JsonValue::String(resource_id.into()),
+                )]),
+                user_label: None,
+            },
+        );
+        let protocol = builtin
+            .registry
+            .protocol(&document.nodes[&producer].node_type)
+            .unwrap();
+        for spec in protocol.interface.ports.iter().filter(|spec| {
+            spec.direction == PortDirection::Input
+                && spec
+                    .input_binding
+                    .as_ref()
+                    .is_none_or(|binding| binding.default_value.is_none())
+        }) {
+            let input = match spec.cardinality {
+                yss_graph_protocol::PortCardinality::Declared => {
+                    PortAddress::declared(producer, spec.key.clone())
+                }
+                yss_graph_protocol::PortCardinality::UserCreated { .. } => {
+                    let address =
+                        PortAddress::instance(producer, spec.key.clone(), PortInstanceId::new());
+                    document.port_bindings.insert(
+                        address.clone(),
+                        DynamicPortBinding::UserCreated {
+                            order: OrderKey::new("00000"),
+                        },
+                    );
+                    address
+                }
+                _ => continue,
+            };
+            let id = yss_graph_document::ConnectionId::new();
+            let mut value_node = document.nodes[&source].clone();
+            value_node.id = NodeId::new();
+            let source_output =
+                PortAddress::declared(value_node.id, PortKey::new("value").unwrap());
+            document.nodes.insert(value_node.id, value_node);
+            document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output: source_output.clone(),
+                    input,
+                    order: None,
+                },
+            );
+        }
+        document.nodes.remove(&source);
+        let resources = ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::from([(
+                yss_graph_resource_contract::GraphResourceId::new(resource_id),
+                yss_graph_resource_contract::VariableValueContract::new(
+                    yss_data_contract::DataType::DataSeries(Box::new(
+                        yss_data_contract::DataType::Float64,
+                    )),
+                ),
+            )]),
+            BTreeMap::new(),
+            ResourceCatalogFingerprint::from_bytes([0; 32]),
+        );
+        let semantics =
+            yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources);
+        assert!(semantics.ready().is_some(), "{:?}", semantics.diagnostics());
+        let package = compile(compilation_input(
             &document,
             &semantics,
             graph_path(),
@@ -714,7 +703,7 @@ mod tests {
             Some(TypeState::Exact(_))
         ));
 
-        let package = compile(GraphCompilationInput::new(
+        let package = compile(compilation_input(
             &document,
             &semantics,
             graph_path(),
@@ -727,7 +716,34 @@ mod tests {
             .find(|operation| operation.source().node() == Some(add))
             .expect("Add operation is lowered");
 
-        assert_eq!(operation.kind(), "yssbi.numeric.add");
+        assert_eq!(operation.kernel_id(), "yssbi.numeric.add");
+        assert_eq!(operation.node_type(), &semantic_node.node_type);
+        assert_eq!(
+            operation
+                .inputs()
+                .iter()
+                .map(GraphInputBinding::address)
+                .collect::<Vec<_>>(),
+            operands.iter().collect::<Vec<_>>()
+        );
+        for (binding, semantic_binding) in
+            operation.inputs().iter().zip(semantic_node.inputs.iter())
+        {
+            assert_eq!(binding.contract().group, semantic_binding.group);
+            assert_eq!(
+                Some(&binding.contract().expected_type),
+                semantics
+                    .concrete_interface()
+                    .port(binding.address())
+                    .unwrap()
+                    .type_state
+                    .exact()
+            );
+        }
+        assert_eq!(
+            operation.inputs()[0].contract().coercions.as_ref(),
+            [InputCoercionKind::WidenInt64ToFloat64]
+        );
         assert_eq!(
             operation.specialization().output_types[0].value_type,
             semantic_output
@@ -799,7 +815,7 @@ mod tests {
         }
 
         let semantics = semantics(&document, &builtin.registry);
-        let package = compile(GraphCompilationInput::new(
+        let package = compile(compilation_input(
             &document,
             &semantics,
             graph_path(),
@@ -871,7 +887,7 @@ mod tests {
         }
 
         let semantics = semantics(&document, &builtin.registry);
-        let error = compile(GraphCompilationInput::new(
+        let error = compile(compilation_input(
             &document,
             &semantics,
             graph_path(),
@@ -882,7 +898,7 @@ mod tests {
         assert!(matches!(
             error,
             GraphCompileError::InvalidGraph {
-                code: GraphCompileErrorCode::CyclicDataDependency,
+                code: GraphCompileErrorCode::LoweringInvariant,
                 ..
             }
         ));
