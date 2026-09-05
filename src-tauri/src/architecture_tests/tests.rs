@@ -4413,11 +4413,6 @@ fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
         );
     }
     assert!(
-        runtime.contains("resource_catalog: &ResourceCatalogSnapshot")
-            && runtime.contains("graph_draft_source_hash"),
-        "graph runtime compilation must bind its cache to the explicit resource catalog"
-    );
-    assert!(
         runtime.contains("cfg(any(test, feature = \"test-support\"))"),
         "runtime fault injection must remain behind the explicit test-support boundary"
     );

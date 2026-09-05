@@ -1,9 +1,9 @@
 use yss_application::editor_projection::{
-    EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
-    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorFilterLiteralType,
-    EditorParameterConfiguration, EditorParameterModel, EditorParameterValueSource,
-    EditorPortModel, EditorPortStatus, EditorPortTypeState, EditorProjectionModel,
-    EditorSchemaSummary, EditorSchemaSummaryKind, ParameterEditorKind,
+    EditorCompilationStage, EditorDiagnosticModel, EditorDiagnosticSeverity,
+    EditorEffectiveInputBinding, EditorFilterLiteralType, EditorParameterConfiguration,
+    EditorParameterModel, EditorParameterValueSource, EditorPortModel, EditorPortStatus,
+    EditorPortTypeState, EditorProjectionModel, EditorResolutionOutcome, EditorSchemaSummary,
+    EditorSchemaSummaryKind, ParameterEditorKind,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -14,10 +14,18 @@ impl From<&EditorProjectionModel> for EditorGraphProjectionDto {
         Self {
             basis: ProjectionBasis {
                 graph_path: model.basis.graph_path.as_str().into(),
+                semantic_input_hash: model
+                    .basis
+                    .semantic_input_hash
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+                    .into(),
                 registry_fingerprint: RegistryFingerprint::from_bytes(
                     model.basis.registry_fingerprint,
                 ),
                 resource_versions: model.basis.resource_versions.clone(),
+                resource_observations: model.basis.resource_observations.clone(),
             },
             graph_path: model.graph_path.as_str().into(),
             nodes: model
@@ -40,8 +48,7 @@ impl From<&EditorProjectionModel> for EditorGraphProjectionDto {
             has_blocking_diagnostics: model
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.severity == EditorDiagnosticSeverity::Error)
-                || !matches!(model.outcome, EditorCompilationOutcome::Complete),
+                .any(|diagnostic| diagnostic.blocking),
         }
     }
 }
@@ -314,15 +321,14 @@ fn map_filter_literal_type(literal_type: EditorFilterLiteralType) -> FilterLiter
 fn map_diagnostic(diagnostic: &EditorDiagnosticModel) -> DiagnosticDto {
     DiagnosticDto {
         code: diagnostic.code.clone(),
-        // The current wire has no structured argument field. Keep this field a
-        // stable localization token rather than copying internal backend text.
-        message: diagnostic.code.clone(),
+        message_key: diagnostic.message_key.clone(),
+        arguments: diagnostic.arguments.clone(),
         severity: match diagnostic.severity {
             EditorDiagnosticSeverity::Error => DiagnosticSeverityDto::Error,
             EditorDiagnosticSeverity::Warning => DiagnosticSeverityDto::Warning,
             EditorDiagnosticSeverity::Information => DiagnosticSeverityDto::Information,
         },
-        blocking: diagnostic.severity == EditorDiagnosticSeverity::Error,
+        blocking: diagnostic.blocking,
         location: map_location(&diagnostic.location),
         related: diagnostic.related.iter().map(map_location).collect(),
     }
@@ -360,11 +366,11 @@ fn map_location(location: &yss_graph_analysis::GraphDiagnosticLocation) -> Diagn
     }
 }
 
-fn map_outcome(outcome: &EditorCompilationOutcome) -> CompilationOutcomeDto {
+fn map_outcome(outcome: &EditorResolutionOutcome) -> CompilationOutcomeDto {
     match outcome {
-        EditorCompilationOutcome::Complete => CompilationOutcomeDto::Success,
-        EditorCompilationOutcome::Incomplete => CompilationOutcomeDto::AnalysisBlocked,
-        EditorCompilationOutcome::InternalFailure {
+        EditorResolutionOutcome::Complete => CompilationOutcomeDto::Success,
+        EditorResolutionOutcome::Incomplete => CompilationOutcomeDto::AnalysisBlocked,
+        EditorResolutionOutcome::InternalFailure {
             stage,
             code,
             node_id,
@@ -413,7 +419,9 @@ mod tests {
         let node_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
         let diagnostic = EditorDiagnosticModel {
             code: "graph.invalid".into(),
+            message_key: "diagnostics.graph.invalid".into(),
             severity: EditorDiagnosticSeverity::Warning,
+            blocking: false,
             arguments: DiagnosticArguments::from([("field".into(), "value".into())]),
             location: DiagnosticLocation::Node(node_id),
             related: Box::new([]),
@@ -422,6 +430,8 @@ mod tests {
             basis: EditorProjectionBasis {
                 graph_path: graph_path.clone(),
                 registry_fingerprint: [0x6f; 32],
+                semantic_input_hash: [0; 32],
+                resource_observations: BTreeMap::new(),
                 resource_versions: BTreeMap::from([(
                     ResourceKey::new("database/source"),
                     ResourceVersion::new("12"),
@@ -515,7 +525,7 @@ mod tests {
                 order: Some("0".into()),
             }]),
             diagnostics: Box::new([diagnostic]),
-            outcome: EditorCompilationOutcome::Complete,
+            outcome: EditorResolutionOutcome::Complete,
         };
 
         let wire = serde_json::to_value(EditorGraphProjectionDto::from(&model))
@@ -555,8 +565,11 @@ mod tests {
         );
         assert_eq!(wire["connections"][0]["output"]["portKey"], "value");
         assert_eq!(wire["diagnostics"][0]["code"], "graph.invalid");
-        assert_eq!(wire["diagnostics"][0]["message"], "graph.invalid");
-        assert_ne!(wire["diagnostics"][0]["message"], "raw backend failure");
+        assert_eq!(
+            wire["diagnostics"][0]["messageKey"],
+            "diagnostics.graph.invalid"
+        );
+        assert_eq!(wire["diagnostics"][0]["arguments"]["field"], "value");
         assert!(wire["nodes"][0].get("node_id").is_none());
     }
 }

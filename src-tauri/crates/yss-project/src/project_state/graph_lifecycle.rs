@@ -30,6 +30,33 @@ pub(crate) struct GraphRenameDiskPlan {
 }
 
 impl ProjectState {
+    pub fn read_graph_resource_snapshot(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+    ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let session = self.capture_project_session()?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "graph read project instance is stale".into(),
+            });
+        }
+        let resident = self.get_data()?.graphs.get(graph_path).cloned();
+        let resource = match resident {
+            Some(resource) => resource,
+            None => crate::project_io::load_project_graph_from_file(
+                session.root.as_path().to_string_lossy().as_ref(),
+                graph_path,
+            )
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?,
+        };
+        self.validate_project_session(&session)?;
+        Ok(resource)
+    }
+
     pub fn create_graph_resource(
         &self,
         expected_project_instance_id: &ProjectInstanceId,

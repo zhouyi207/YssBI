@@ -25,6 +25,29 @@ pub enum PortAddressDto {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum PortPlacementDto {
+    Append,
+    Before { instance_id: PortInstanceId },
+    After { instance_id: PortInstanceId },
+}
+
+impl From<PortPlacementDto> for yss_graph_editor::PortPlacement {
+    fn from(value: PortPlacementDto) -> Self {
+        match value {
+            PortPlacementDto::Append => Self::Append,
+            PortPlacementDto::Before { instance_id } => Self::Before(instance_id),
+            PortPlacementDto::After { instance_id } => Self::After(instance_id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum PortAddressMappingError {
     #[error("port node identity is invalid")]
@@ -146,7 +169,11 @@ pub enum EditorGraphMutationDto {
     AddPortInstance {
         node_id: NodeId,
         template_key: PortKey,
-        order: Option<OrderKey>,
+        placement: PortPlacementDto,
+    },
+    MovePortInstance {
+        address: PortAddressDto,
+        placement: PortPlacementDto,
     },
     RemovePortInstance {
         address: PortAddressDto,
@@ -263,11 +290,18 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             EditorGraphMutationDto::AddPortInstance {
                 node_id,
                 template_key,
-                order,
+                placement,
             } => yss_graph_editor::EditorGraphMutation::AddPortInstance {
                 node_id,
                 template_key,
-                order,
+                placement: placement.into(),
+            },
+            EditorGraphMutationDto::MovePortInstance {
+                address: value,
+                placement,
+            } => yss_graph_editor::EditorGraphMutation::MovePortInstance {
+                address: address(value)?,
+                placement: placement.into(),
             },
             EditorGraphMutationDto::RemovePortInstance { address: value } => {
                 yss_graph_editor::EditorGraphMutation::RemovePortInstance {

@@ -62,14 +62,14 @@ pub struct RunGraphRequest {
     required_resources: Box<[ProjectResourceRequirement]>,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
-    compiled_source_hash: [u8; 32],
+    compiled_artifact_id: [u8; 32],
 }
 
 impl RunGraphRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        compiled_source_hash: [u8; 32],
+        compiled_artifact_id: [u8; 32],
     ) -> Self {
         Self {
             project_instance_id,
@@ -78,7 +78,7 @@ impl RunGraphRequest {
             required_resources: Box::new([]),
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline: Instant::now() + std::time::Duration::from_secs(60),
-            compiled_source_hash,
+            compiled_artifact_id,
         }
     }
 
@@ -291,7 +291,7 @@ where
         .map_err(ExecutionApplicationError::ProjectSnapshot)?;
     let compiled_draft = captured
         .graph()
-        .compiled_draft(&request.graph_path, &request.compiled_source_hash)
+        .compiled_draft(&request.graph_path, &request.compiled_artifact_id)
         .ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
     let required_resources = merge_resource_requirements(
         request.required_resources.iter().cloned(),
@@ -325,8 +325,14 @@ where
     let validated_graph_catalog =
         build_resource_catalog(project_facts.resources().graph(), &database_facts)
             .map_err(ExecutionApplicationError::GraphContract)?;
-    if compiled_draft.resource_catalog_fingerprint()
-        != validated_graph_catalog.fingerprint().as_bytes()
+    let validated_graph_catalog = crate::graph_contracts::capture_function_dependencies(
+        &captured,
+        compiled_draft.document(),
+        validated_graph_catalog,
+    )
+    .map_err(ExecutionApplicationError::GraphContract)?;
+    if !validated_graph_catalog
+        .matches_dependencies(compiled_draft.analysis().semantic_snapshot().dependencies())
     {
         return Err(ExecutionApplicationError::CompiledDraftUnavailable);
     }

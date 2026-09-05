@@ -9,12 +9,14 @@ use yss_graph_registry::RegistryFingerprint;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectionBasis {
     pub graph_path: Box<str>,
+    pub semantic_input_hash: Box<str>,
     #[serde(
         serialize_with = "serialize_registry_fingerprint",
         deserialize_with = "deserialize_registry_fingerprint"
     )]
     pub registry_fingerprint: RegistryFingerprint,
     pub resource_versions: ResourceVersionSet,
+    pub resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
 }
 
 fn serialize_registry_fingerprint<S>(
@@ -396,7 +398,8 @@ pub enum ParameterEditorKindDto {
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticDto {
     pub code: Box<str>,
-    pub message: Box<str>,
+    pub message_key: Box<str>,
+    pub arguments: std::collections::BTreeMap<Box<str>, Box<str>>,
     pub severity: DiagnosticSeverityDto,
     pub blocking: bool,
     pub location: DiagnosticLocationDto,

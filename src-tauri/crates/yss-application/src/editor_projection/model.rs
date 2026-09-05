@@ -11,7 +11,9 @@ use yss_graph_protocol::{
 pub struct EditorProjectionBasis {
     pub graph_path: GraphResourcePath,
     pub registry_fingerprint: [u8; 32],
+    pub semantic_input_hash: [u8; 32],
     pub resource_versions: ResourceVersionSet,
+    pub resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -229,7 +231,9 @@ pub enum EditorFilterLiteralType {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorDiagnosticModel {
     pub code: Box<str>,
+    pub message_key: Box<str>,
     pub severity: EditorDiagnosticSeverity,
+    pub blocking: bool,
     pub arguments: DiagnosticArguments,
     pub location: GraphDiagnosticLocation,
     pub related: Box<[GraphDiagnosticLocation]>,
@@ -257,11 +261,11 @@ pub struct EditorProjectionModel {
     pub nodes: Box<[EditorNodeModel]>,
     pub connections: Box<[EditorConnectionModel]>,
     pub diagnostics: Box<[EditorDiagnosticModel]>,
-    pub outcome: EditorCompilationOutcome,
+    pub outcome: EditorResolutionOutcome,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EditorCompilationOutcome {
+pub enum EditorResolutionOutcome {
     Complete,
     Incomplete,
     InternalFailure {
@@ -279,6 +283,8 @@ pub enum EditorCompilationStage {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditorProjectionError {
+    #[error("graph semantic resolution failed")]
+    ResolutionFailed,
     #[error("analysis and catalog registry fingerprints do not match")]
     RegistryMismatch,
     #[error("semantic snapshot does not match the graph document")]

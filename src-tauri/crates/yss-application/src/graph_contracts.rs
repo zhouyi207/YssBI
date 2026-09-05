@@ -6,12 +6,12 @@ use yss_database_contract::{DatabaseDecl, DatabaseId};
 use yss_database_runtime::session_api::DatabaseCatalogSnapshot;
 use yss_execution::plan::{
     CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
-    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, PlanGraphId,
+    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, KernelId, PlanGraphId,
     PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind, PlanInputSource,
-    PlanKernelSpecialization, PlanNodeId, PlanObservationIntent, PlanOperation, PlanOperationKind,
-    PlanOutputBinding, PlanOutputRef, PlanParameterFieldId, PlanParameterPayload,
-    PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue, PlanPortAddress,
-    PlanProvenance, PlanSourceIdentity, PlanTypeBinding, ValueRef,
+    PlanKernelSpecialization, PlanNodeId, PlanObservationIntent, PlanOperation, PlanOutputBinding,
+    PlanOutputRef, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
+    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
+    PlanTypeBinding, ValueRef,
 };
 use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_analysis_contract::{
@@ -65,10 +65,58 @@ impl ProjectGraphResourceSnapshot {
 
 #[derive(Debug, Error)]
 pub enum GraphContractMappingError {
+    #[error("function document could not be captured")]
+    FunctionDocument {
+        graph: GraphResourcePath,
+        #[source]
+        source: yss_project_filesystem::ProjectFilesystemError,
+    },
     #[error("database schema is missing from the catalog snapshot")]
     MissingDatabaseSchema { database: DatabaseId },
     #[error("catalog snapshot contains an undeclared database schema")]
     UnexpectedDatabaseSchema { database: DatabaseId },
+}
+
+pub(crate) fn capture_function_dependencies(
+    captured: &crate::execution::ApplicationSession,
+    document: &yss_graph_document::GraphDocument,
+    mut catalog: ResourceCatalogSnapshot,
+) -> Result<ResourceCatalogSnapshot, GraphContractMappingError> {
+    fn callees(document: &yss_graph_document::GraphDocument) -> Vec<GraphResourcePath> {
+        document
+            .nodes
+            .values()
+            .filter(|node| node.node_type.as_str() == "yssbi.project.function.call")
+            .filter_map(|node| {
+                node.parameters
+                    .iter()
+                    .find(|(key, _)| key.as_str() == "target")
+                    .and_then(|(_, value)| value.as_str())
+                    .and_then(|path| GraphResourcePath::new(path).ok())
+            })
+            .collect()
+    }
+    let mut pending = callees(document);
+    let mut seen = BTreeSet::new();
+    while let Some(path) = pending.pop() {
+        if !seen.insert(path.clone()) || catalog.function_signature(&path).is_none() {
+            continue;
+        }
+        if let Some(body) = catalog.function_document(&path) {
+            pending.extend(callees(body));
+            continue;
+        }
+        let resource = captured
+            .project()
+            .read_graph_resource_snapshot(captured.project_instance_id(), &path)
+            .map_err(|source| GraphContractMappingError::FunctionDocument {
+                graph: path.clone(),
+                source,
+            })?;
+        pending.extend(callees(&resource.document));
+        catalog = catalog.with_function_document(&path, resource.document);
+    }
+    Ok(catalog)
 }
 
 pub fn build_resource_catalog(
@@ -228,22 +276,50 @@ pub fn execution_package_from_graph(
         .map(|operation| {
             let source = plan_source_identity(operation.source())?;
             let parameter_handles = operation
-                .parameter_handles()
+                .parameters()
                 .iter()
-                .map(|handle| {
-                    CompiledParameterHandle::new(handle.as_str().to_owned().into_boxed_str())
-                        .map_err(GraphPackageMappingError::ParameterIdentity)
+                .map(|(key, handle)| {
+                    Ok((
+                        PlanParameterFieldId::new(key.clone())
+                            .map_err(GraphPackageMappingError::ParameterIdentity)?,
+                        CompiledParameterHandle::new(handle.as_str().to_owned().into_boxed_str())
+                            .map_err(GraphPackageMappingError::ParameterIdentity)?,
+                    ))
                 })
-                .collect::<Result<Vec<_>, _>>()?
-                .into_boxed_slice();
+                .collect::<Result<BTreeMap<_, _>, GraphPackageMappingError>>()?;
             let inputs = operation
                 .inputs()
                 .iter()
                 .map(|binding| {
-                    let port = PlanPortAddress::new(binding.port().to_owned().into_boxed_str())
+                    let port = PlanPortAddress::new(binding.address().to_string().into_boxed_str())
                         .map_err(GraphPackageMappingError::Identity)?;
                     let source = plan_input_source(binding.source())?;
-                    Ok(PlanInputBinding::new(port, source))
+                    let contract = binding.contract();
+                    Ok(PlanInputBinding::new(
+                        port,
+                        source,
+                        yss_execution::plan::PlanInputContract {
+                            group: contract
+                                .group
+                                .map(|group| {
+                                    yss_execution::plan::PlanInputGroupId::new(
+                                        group.to_string().into_boxed_str(),
+                                    )
+                                })
+                                .transpose()
+                                .map_err(GraphPackageMappingError::Identity)?,
+                            expected_type: yss_graph_type_mapping::data_type_from_resolved_type(
+                                &contract.expected_type,
+                            )
+                            .ok_or(GraphPackageMappingError::UnsupportedResolvedType)?,
+                            coercions: contract
+                                .coercions
+                                .iter()
+                                .copied()
+                                .map(plan_coercion_kind)
+                                .collect(),
+                        },
+                    ))
                 })
                 .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
                 .into_boxed_slice();
@@ -269,6 +345,7 @@ pub fn execution_package_from_graph(
                     Ok(PlanOutputBinding::new(
                         PlanOutputRef::new(output_graph.clone(), port),
                         ValueRef::new(binding.value().index()),
+                        map_output_contract(binding.contract())?,
                     ))
                 })
                 .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
@@ -276,7 +353,8 @@ pub fn execution_package_from_graph(
             let specialization = plan_specialization(operation.specialization())?;
             Ok(PlanOperation::new(
                 source,
-                map_result_category(operation.result_category()),
+                yss_execution::plan::PlanNodeTypeId::new(operation.node_type().as_str().into())
+                    .map_err(GraphPackageMappingError::Identity)?,
                 parameter_handles,
                 inputs,
                 observation_intents,
@@ -315,7 +393,7 @@ pub fn execution_package_from_graph(
 fn plan_specialization(
     value: &yss_graph_analysis::GraphKernelSpecialization,
 ) -> Result<PlanKernelSpecialization, GraphPackageMappingError> {
-    let implementation = PlanOperationKind::new(value.implementation.clone())
+    let implementation = KernelId::new(value.implementation.clone())
         .map_err(GraphPackageMappingError::OperationKind)?;
     let bindings = |values: &[yss_graph_analysis::GraphPortTypeBinding]| {
         values
@@ -337,14 +415,7 @@ fn plan_specialization(
         .map(|coercion| {
             let port = PlanPortAddress::new(coercion.address.to_string().into_boxed_str())
                 .map_err(GraphPackageMappingError::Identity)?;
-            let kind = match coercion.kind {
-                yss_graph_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
-                    PlanInputCoercionKind::WidenInt64ToFloat64
-                }
-                yss_graph_protocol::InputCoercionKind::BroadcastScalarToSeries => {
-                    PlanInputCoercionKind::BroadcastScalarToSeries
-                }
-            };
+            let kind = plan_coercion_kind(coercion.kind);
             Ok(PlanInputCoercion::new(port, kind))
         })
         .collect::<Result<Vec<_>, GraphPackageMappingError>>()?
@@ -355,6 +426,54 @@ fn plan_specialization(
         bindings(&value.output_types)?,
         coercions,
     ))
+}
+
+fn plan_coercion_kind(kind: yss_graph_protocol::InputCoercionKind) -> PlanInputCoercionKind {
+    match kind {
+        yss_graph_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
+            PlanInputCoercionKind::WidenInt64ToFloat64
+        }
+        yss_graph_protocol::InputCoercionKind::BroadcastScalarToSeries => {
+            PlanInputCoercionKind::BroadcastScalarToSeries
+        }
+    }
+}
+
+fn map_output_contract(
+    contract: &yss_graph_compiler::GraphOutputContract,
+) -> Result<yss_execution::plan::PlanOutputContract, GraphPackageMappingError> {
+    use yss_data_contract::DataType;
+    use yss_graph_protocol::RelationalScalarType;
+    Ok(yss_execution::plan::PlanOutputContract {
+        data_type: yss_graph_type_mapping::data_type_from_resolved_type(&contract.value_type)
+            .ok_or(GraphPackageMappingError::UnsupportedResolvedType)?,
+        schema: contract.schema.as_ref().map(|schema| {
+            schema
+                .fields
+                .iter()
+                .map(|field| yss_execution::plan::PlanOutputField {
+                    name: field.name.0.clone(),
+                    data_type: match field.scalar_type {
+                        RelationalScalarType::Boolean => DataType::Boolean,
+                        RelationalScalarType::Int64 => DataType::Int64,
+                        RelationalScalarType::Float64 => DataType::Float64,
+                        RelationalScalarType::String => DataType::String,
+                        RelationalScalarType::Date => DataType::Date,
+                        RelationalScalarType::DateTime => DataType::Datetime,
+                        RelationalScalarType::Unknown => DataType::Any,
+                    },
+                    lineage: field.lineage.as_ref().map(|lineage| {
+                        yss_execution::plan::PlanFieldLineage {
+                            source_identity: lineage.source.clone(),
+                            field_identity: lineage.field.clone(),
+                        }
+                    }),
+                })
+                .collect()
+        }),
+        category: map_result_category(contract.category),
+        source: plan_source_identity(&contract.source)?,
+    })
 }
 
 fn plan_input_source(
@@ -480,6 +599,162 @@ mod tests {
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_database_runtime::{DatabaseInstance, DatabaseState};
     use yss_graph_resource_contract::{FunctionParameterContract, VariableValueContract};
+
+    #[test]
+    fn package_mapping_preserves_named_parameters_group_order_and_each_output_contract() {
+        use yss_graph_compiler::{
+            GraphInputBinding, GraphInputContract, GraphOperation, GraphOutputBinding,
+            GraphOutputContract, GraphParameterHandle, GraphParameterPayload, GraphValueRef,
+        };
+        use yss_graph_document::{NodeId, PortAddress, PortInstanceId};
+        use yss_graph_protocol::{PortKey, ResolvedType, TypeId};
+        let graph = GraphResourcePath::new("events/Contract.yssbi-event").unwrap();
+        let node = NodeId::new();
+        let integer = ResolvedType::Nominal(TypeId::new("core.int64").unwrap());
+        let groups = [
+            PortInstanceId::from_bytes([9; 16]),
+            PortInstanceId::from_bytes([1; 16]),
+        ];
+        let inputs = groups
+            .iter()
+            .flat_map(|group| {
+                ["value", "weight"].map(|key| {
+                    GraphInputBinding::new(
+                        PortAddress::instance(node, PortKey::new(key).unwrap(), *group),
+                        GraphInputSource::Parameter(GraphParameterHandle::new("alpha")),
+                        GraphInputContract {
+                            group: Some(*group),
+                            expected_type: integer.clone(),
+                            coercions: Box::new([]),
+                        },
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let outputs = [
+            GraphResultCategory::Value,
+            GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::OlsSummary),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, category)| {
+            let address = PortAddress::declared(
+                node,
+                PortKey::new(if index == 0 { "value" } else { "report" }).unwrap(),
+            );
+            GraphOutputBinding::new(
+                address.to_string(),
+                GraphValueRef::new(index as u32),
+                GraphOutputContract {
+                    value_type: integer.clone(),
+                    schema: None,
+                    category,
+                    source: GraphSourceIdentity::new(graph.clone(), Some(node), Some(address)),
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+        let specialization = yss_graph_analysis::GraphKernelSpecialization {
+            implementation: "kernel.weighted-summary".into(),
+            input_types: inputs
+                .iter()
+                .map(|input| yss_graph_analysis::GraphPortTypeBinding {
+                    address: input.address().clone(),
+                    value_type: integer.clone(),
+                })
+                .collect(),
+            output_types: outputs
+                .iter()
+                .map(|output| yss_graph_analysis::GraphPortTypeBinding {
+                    address: output.contract().source.port().unwrap().clone(),
+                    value_type: integer.clone(),
+                })
+                .collect(),
+            coercions: Box::new([]),
+        };
+        let package = GraphCompiledPackage::new(
+            graph.clone(),
+            yss_graph_analysis_contract::CompileId::new(1),
+            Box::new([GraphOperation::new(
+                GraphSourceIdentity::new(graph.clone(), Some(node), None),
+                "test.custom.weighted_summary".parse().unwrap(),
+                BTreeMap::from([
+                    ("alpha".into(), GraphParameterHandle::new("alpha")),
+                    ("label".into(), GraphParameterHandle::new("label")),
+                ]),
+                inputs.into_boxed_slice(),
+                Box::new([]),
+                outputs.into_boxed_slice(),
+                specialization,
+            )]),
+            BTreeMap::from([
+                (
+                    GraphParameterHandle::new("alpha"),
+                    GraphParameterPayload::new(
+                        "int",
+                        GraphParameterValue::Scalar(GraphParameterScalar::Integer(3)),
+                    ),
+                ),
+                (
+                    GraphParameterHandle::new("label"),
+                    GraphParameterPayload::new(
+                        "string",
+                        GraphParameterValue::Scalar(GraphParameterScalar::String(
+                            "variables/plain-text".into(),
+                        )),
+                    ),
+                ),
+            ]),
+        );
+        let basis = yss_execution::plan::PlanCompilationBasis::new(
+            yss_execution::plan::PlanProjectSessionId::from_existing("session".into()),
+            yss_execution::plan::PlanRegistryFingerprint::from_bytes([0; 32]),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        );
+        let mapped = execution_package_from_graph(package, basis).unwrap();
+        let operation = &mapped.plan().operations()[0];
+        assert_eq!(
+            operation.node_type().as_str(),
+            "test.custom.weighted_summary"
+        );
+        assert_eq!(operation.kernel_id().as_str(), "kernel.weighted-summary");
+        assert_eq!(operation.parameters().len(), 2);
+        assert_eq!(
+            mapped.parameters().entries()[&CompiledParameterHandle::new("label".into()).unwrap()]
+                .value(),
+            &PlanParameterValue::Scalar(PlanParameterScalar::String("variables/plain-text".into()))
+        );
+        assert_eq!(
+            operation
+                .inputs()
+                .iter()
+                .map(|input| input.contract().group.as_ref().unwrap().as_str())
+                .collect::<Vec<_>>(),
+            [
+                groups[0].to_string(),
+                groups[0].to_string(),
+                groups[1].to_string(),
+                groups[1].to_string()
+            ]
+        );
+        assert_eq!(
+            operation.outputs()[0].contract().category,
+            yss_execution::plan::ResultCategory::Value
+        );
+        assert_eq!(
+            operation.outputs()[1].contract().category,
+            yss_execution::plan::ResultCategory::StatisticalReport(
+                yss_execution::plan::StatisticalReportKind::OlsSummary
+            )
+        );
+        yss_execution::state::ExecutionRuntimeState::new(
+            yss_execution::identity::ExecutionSessionId::new(uuid::Uuid::nil()),
+            yss_execution::identity::RuntimeGeneration::INITIAL,
+        )
+        .prepare_compiled_package(mapped, yss_execution::identity::RuntimeGeneration::INITIAL)
+        .unwrap();
+    }
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {

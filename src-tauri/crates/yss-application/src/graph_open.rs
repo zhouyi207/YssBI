@@ -267,16 +267,14 @@ pub(crate) fn open_graph_in_session(
         project.resources().database_observations(),
     )?;
     let graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
-    // Dynamic interface members are compile facts installed only in this
-    // frontend draft candidate. Loading the project above remains the sole
-    // authoritative Project mutation; Save is still the only persistence
-    // commit for the materialized draft.
-    let materialized_document = captured
-        .graph()
-        .materialize_draft(&loaded_document, &graph_catalog);
+    let graph_catalog = crate::graph_contracts::capture_function_dependencies(
+        captured,
+        &loaded_document,
+        graph_catalog,
+    )?;
     let candidate_document = captured
         .graph()
-        .materialize_open_candidate(&materialized_document)?;
+        .materialize_open_candidate(&loaded_document)?;
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
@@ -285,7 +283,7 @@ pub(crate) fn open_graph_in_session(
         Default::default(),
     );
     let graph_basis = graph_compilation_basis(&basis);
-    let analysis = captured.graph().analyze(
+    let analysis = captured.graph().resolve_graph_draft(
         request.graph_path(),
         &candidate_document,
         &graph_basis,

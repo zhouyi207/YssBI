@@ -20,11 +20,15 @@ use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompileGraphDraftReceipt {
-    pub source_hash: [u8; 32],
-    pub cache_hit: bool,
-    pub document: GraphDocument,
-    pub projection: EditorProjectionModel,
+pub enum CompileGraphDraftReceipt {
+    Ready {
+        artifact_id: [u8; 32],
+        cache_hit: bool,
+        projection: EditorProjectionModel,
+    },
+    Blocked {
+        projection: EditorProjectionModel,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -85,9 +89,9 @@ pub fn compile_graph_draft(
     .map_err(CompileGraphDraftError::Database)?;
     let graph_catalog = build_resource_catalog(project.resources().graph(), &database)
         .map_err(CompileGraphDraftError::Contract)?;
-    let document = captured
-        .graph()
-        .materialize_draft(&document, &graph_catalog);
+    let graph_catalog =
+        crate::graph_contracts::capture_function_dependencies(&captured, &document, graph_catalog)
+            .map_err(CompileGraphDraftError::Contract)?;
     validate_graph_document(&document).map_err(CompileGraphDraftError::InvalidDocument)?;
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
@@ -128,10 +132,12 @@ pub fn compile_graph_draft(
         .revalidate_captured_session(&captured)
         .map_err(CompileGraphDraftError::SessionChanged)?;
 
-    Ok(CompileGraphDraftReceipt {
-        source_hash: *compilation.source_hash(),
-        cache_hit: compilation.cache_hit(),
-        document,
-        projection,
+    Ok(match compilation.artifact_id() {
+        Some(artifact_id) => CompileGraphDraftReceipt::Ready {
+            artifact_id: *artifact_id,
+            cache_hit: compilation.cache_hit(),
+            projection,
+        },
+        None => CompileGraphDraftReceipt::Blocked { projection },
     })
 }

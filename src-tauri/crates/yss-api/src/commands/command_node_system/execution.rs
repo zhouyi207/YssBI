@@ -188,23 +188,23 @@ pub fn cancel_graph_run(
 }
 
 #[tauri::command]
-pub async fn execute_graph_document(
+pub async fn execute_compiled_graph(
     state: State<'_, yss_application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    compiled_source_hash: String,
+    compiled_artifact_id: String,
     demand: ExecutionDemandDto,
     on_event: Channel<ExecutionChannelEventDto>,
 ) -> Result<(), CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let demand = crate::commands::execution_dto::execution_demand_to_application(demand)
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
-    let compiled_source_hash = parse_compiled_source_hash(&compiled_source_hash)?;
+    let compiled_artifact_id = parse_compiled_artifact_id(&compiled_artifact_id)?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let channel = TauriExecutionChannelAdapter { channel: on_event };
         let mut delivery_failed = false;
-        let request = RunGraphRequest::new(project_instance_id, graph_path, compiled_source_hash)
+        let request = RunGraphRequest::new(project_instance_id, graph_path, compiled_artifact_id)
             .with_demand(demand);
         let execution = run_graph_with_sink(&state, request, |event| {
             let delivered = channel.deliver(event);
@@ -226,14 +226,14 @@ pub async fn execute_graph_document(
     .map_err(CommandError::internal)?
 }
 
-fn parse_compiled_source_hash(value: &str) -> Result<[u8; 32], CommandError> {
+fn parse_compiled_artifact_id(value: &str) -> Result<[u8; 32], CommandError> {
     if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(CommandError::expected("invalid_compiled_source_hash"));
+        return Err(CommandError::expected("invalid_compiled_artifact_id"));
     }
     let mut bytes = [0_u8; 32];
     for (index, byte) in bytes.iter_mut().enumerate() {
         *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
-            .map_err(|_| CommandError::expected("invalid_compiled_source_hash"))?;
+            .map_err(|_| CommandError::expected("invalid_compiled_artifact_id"))?;
     }
     Ok(bytes)
 }

@@ -156,13 +156,22 @@ fn apply_graph_edit(
                 .with_detail("baseRevision", request.base_revision.to_string())
         })?;
     let original = capture.document.as_ref().clone();
+    let resolution = crate::resource_mutation::DraftResolutionContext::capture(captured, &original)
+        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::MutationRejected))?;
     let mut staged = original.clone();
     let mut combined_operations = Vec::new();
     for operation in request.operations {
         let mutation = editor_mutation(operation, &localized.items)?;
+        let analysis = resolution.resolve(captured, &graph_path, &staged, &request.locale);
         let patch = captured
             .graph()
-            .plan_editor_mutation(&graph_path, &staged, mutation, &catalog)
+            .plan_editor_mutation(
+                &graph_path,
+                &staged,
+                mutation,
+                &catalog,
+                analysis.semantic_snapshot(),
+            )
             .map_err(|_| {
                 CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
                     .with_detail("graphPath", graph_path.as_str())
@@ -173,6 +182,9 @@ fn apply_graph_edit(
         })?;
         combined_operations.extend(patch.operations);
     }
+    resolution
+        .revalidate(captured)
+        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::RevisionConflict))?;
     let combined = GraphDocumentPatch::new(combined_operations);
     if combined.is_empty() {
         return Err(CapabilityFailure::new(

@@ -1,8 +1,8 @@
 use super::*;
 use std::collections::BTreeMap;
 use yss_graph_analysis::{
-    GraphCompilationOutcome, GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact,
-    GraphPortBacking, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortSemanticFact,
+    GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact, GraphPortBacking,
+    GraphPortConnectionFacts, GraphPortEditorFact, GraphPortSemanticFact, GraphResolutionOutcome,
     GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::{
@@ -48,6 +48,7 @@ fn port(
         label: label.into(),
         instance_label: None,
         direction,
+        result_category: yss_graph_analysis::GraphResultCategory::Value,
         backing: GraphPortBacking::Declared,
         orphan: false,
         can_remove: false,
@@ -58,6 +59,7 @@ fn port(
         },
         editor: GraphPortEditorFact::Default,
         protocol_default: None,
+        literal_allowed: false,
         accepted_type: bool_type(),
         accepted_domain: Some(TypeDomain::singleton(ResolvedType::Nominal(
             TypeId::new("core.bool").expect("test type id is valid"),
@@ -66,7 +68,7 @@ fn port(
             TypeId::new("core.bool").expect("test type id is valid"),
         )),
         schema: None,
-        resolved_schema: None,
+        schema_state: yss_graph_analysis::GraphSchemaState::NotApplicable,
     }
 }
 
@@ -83,6 +85,7 @@ fn node_facts(
         icon_id: Some("builtin.constants".into()),
         style_id: Some("builtin.default".into()),
         managed: false,
+        inputs: Box::new([]),
         parameters: Box::new([yss_graph_analysis::GraphParameterFact {
             key: ParameterKey::new("value").expect("test parameter key is valid"),
             title: "Value".into(),
@@ -90,6 +93,7 @@ fn node_facts(
             editor: ParameterEditorSpec::Toggle,
             presentation: ParameterPresentation::InlineAndDetail,
             value_type: bool_type(),
+            effective_value: None,
             inherited_value: None,
             value_source: None,
             options: Box::new([]),
@@ -191,7 +195,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             ),
         ],
         [],
-        yss_graph_analysis::GraphCompilationOutcome::Complete,
+        yss_graph_analysis::GraphResolutionOutcome::Complete,
     );
     let analysis = analysis_with_facts(&document, &path, facts);
 
@@ -284,7 +288,9 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
     );
     let problem = |code: &str, primary: GraphDiagnosticLocation| GraphDiagnosticFact {
         code: DiagnosticCode::new(code),
+        message_key: format!("diagnostics.{code}").into(),
         severity: DiagnosticSeverity::Error,
+        blocking: true,
         arguments: BTreeMap::new(),
         primary,
         related: Box::new([]),
@@ -324,7 +330,7 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
             ),
         ],
         diagnostics,
-        yss_graph_analysis::GraphCompilationOutcome::Incomplete,
+        yss_graph_analysis::GraphResolutionOutcome::Incomplete,
     );
     let path =
         GraphResourcePath::new("events/problems.yssbi-event").expect("test graph path is valid");
@@ -391,7 +397,7 @@ fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts()
     };
     let analysis = yss_graph_analysis::analyze(
         &basis,
-        GraphSemanticSnapshot::new([], [], GraphCompilationOutcome::Complete),
+        GraphSemanticSnapshot::new([], [], GraphResolutionOutcome::Complete),
     );
 
     assert!(matches!(

@@ -2,9 +2,9 @@ use super::model::*;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
 use yss_graph_analysis::{
-    GraphCompilationOutcome, GraphDiagnosticFact, GraphNodeSemanticFact,
-    GraphParameterConfigurationFact, GraphParameterFact, GraphPortBacking,
-    GraphPortInstanceAdditionFact, GraphPortSemanticFact, GraphSemanticSnapshot,
+    GraphDiagnosticFact, GraphNodeSemanticFact, GraphParameterConfigurationFact,
+    GraphParameterFact, GraphPortBacking, GraphPortInstanceAdditionFact, GraphPortSemanticFact,
+    GraphResolutionOutcome, GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
@@ -20,6 +20,12 @@ pub fn build_editor_projection(
     }
 
     let snapshot = input.analysis.semantic_snapshot();
+    if matches!(
+        snapshot.outcome(),
+        GraphResolutionOutcome::InternalFailure { .. }
+    ) {
+        return Err(EditorProjectionError::ResolutionFailed);
+    }
     validate_semantic_snapshot(input.document, snapshot)?;
 
     let nodes = input
@@ -59,7 +65,9 @@ pub fn build_editor_projection(
         basis: EditorProjectionBasis {
             graph_path: input.graph_path.clone(),
             registry_fingerprint: input.registry_fingerprint,
+            semantic_input_hash: *input.analysis.semantic_input_hash(),
             resource_versions: input.analysis.resource_versions().clone(),
+            resource_observations: input.analysis.resource_observations().clone(),
         },
         graph_path: input.graph_path.clone(),
         nodes,
@@ -232,9 +240,9 @@ fn project_port(
         accepted_type: project_accepted_type(&port.accepted_type, port.accepted_domain.as_ref()),
         type_state: project_type_state(&port.type_state),
         resolved_schema: port
-            .schema
-            .as_ref()
-            .map(|expression| project_schema_summary(expression, port.resolved_schema.as_ref())),
+            .schema_state
+            .exact()
+            .map(|fact| project_schema_summary(&fact.expression, Some(fact))),
         status: if port.orphan {
             EditorPortStatus::Orphan
         } else {
@@ -459,22 +467,24 @@ fn project_schema_summary(
 fn project_diagnostic(fact: &GraphDiagnosticFact) -> EditorDiagnosticModel {
     EditorDiagnosticModel {
         code: fact.code.as_str().into(),
+        message_key: fact.message_key.clone(),
         severity: fact.severity.into(),
+        blocking: fact.blocking,
         arguments: fact.arguments.clone(),
         location: fact.primary.clone(),
         related: fact.related.clone(),
     }
 }
 
-fn project_outcome(value: &GraphCompilationOutcome) -> EditorCompilationOutcome {
+fn project_outcome(value: &GraphResolutionOutcome) -> EditorResolutionOutcome {
     match value {
-        GraphCompilationOutcome::Complete => EditorCompilationOutcome::Complete,
-        GraphCompilationOutcome::Incomplete => EditorCompilationOutcome::Incomplete,
-        GraphCompilationOutcome::InternalFailure {
+        GraphResolutionOutcome::Complete => EditorResolutionOutcome::Complete,
+        GraphResolutionOutcome::Incomplete => EditorResolutionOutcome::Incomplete,
+        GraphResolutionOutcome::InternalFailure {
             stage,
             code,
             node_id,
-        } => EditorCompilationOutcome::InternalFailure {
+        } => EditorResolutionOutcome::InternalFailure {
             stage: match stage {
                 yss_graph_analysis::GraphCompilationStage::Analysis => {
                     EditorCompilationStage::Analysis

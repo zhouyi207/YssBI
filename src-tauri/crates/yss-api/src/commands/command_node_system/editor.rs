@@ -37,6 +37,25 @@ pub fn hydrate_editor_graph(
 }
 
 #[tauri::command]
+pub fn resolve_graph_draft(
+    application: State<'_, ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    document: yss_graph_document::GraphDocument,
+    locale: String,
+) -> Result<crate::schema::editor_projection_types::EditorGraphProjectionDto, CommandError> {
+    application
+        .resolve_graph_draft(
+            project_instance_id,
+            parse_graph_path(graph_path)?,
+            document,
+            locale,
+        )
+        .map(|projection| crate::schema::editor_projection::map_editor_projection(&projection))
+        .map_err(map_editor_resource_error)
+}
+
+#[tauri::command]
 pub fn compile_graph_draft(
     application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,

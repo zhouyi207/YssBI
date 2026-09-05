@@ -31,27 +31,44 @@ pub struct GraphDraftSaveDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CompileGraphDraftDto {
-    pub source_hash: Box<str>,
-    pub cache_hit: bool,
-    pub document: yss_graph_document::GraphDocument,
-    pub projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum CompileGraphDraftDto {
+    Ready {
+        artifact_id: Box<str>,
+        cache_hit: bool,
+        projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
+    },
+    Blocked {
+        projection: crate::schema::editor_projection_types::EditorGraphProjectionDto,
+    },
 }
 
 pub(crate) fn compile_graph_draft_to_transport(
     receipt: &yss_application::graph_compile::CompileGraphDraftReceipt,
 ) -> CompileGraphDraftDto {
-    CompileGraphDraftDto {
-        source_hash: receipt
-            .source_hash
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>()
-            .into(),
-        cache_hit: receipt.cache_hit,
-        document: receipt.document.clone(),
-        projection: crate::schema::editor_projection::map_editor_projection(&receipt.projection),
+    use yss_application::graph_compile::CompileGraphDraftReceipt;
+    match receipt {
+        CompileGraphDraftReceipt::Ready {
+            artifact_id,
+            cache_hit,
+            projection,
+        } => CompileGraphDraftDto::Ready {
+            artifact_id: artifact_id
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+                .into(),
+            cache_hit: *cache_hit,
+            projection: crate::schema::editor_projection::map_editor_projection(projection),
+        },
+        CompileGraphDraftReceipt::Blocked { projection } => CompileGraphDraftDto::Blocked {
+            projection: crate::schema::editor_projection::map_editor_projection(projection),
+        },
     }
 }
 
