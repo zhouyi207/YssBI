@@ -52,11 +52,15 @@ pnpm test:ts <test-file>
 pnpm test:ts <test-file> -t "test name"
 pnpm test:rs --lib <test-name>
 pnpm test:rs --test <integration-target> <test-name>
-pnpm test:rs -p <crate-name> <test-name>
+pnpm test:rs:package -p <crate-name> <test-name>
 pnpm test:architecture
 pnpm test:rs --lib architecture_tests
 julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 ```
+
+`test:rs` 固定带 `--workspace`，即使追加 `-p` 仍选择整个 workspace。需要按 crate 聚焦时使用 `test:rs:package`；不要通过全局限制 build jobs/test threads 替代正确的测试范围。
+
+Graph diagnostic 词汇或模板变更后运行 `pnpm generate:diagnostics`，只读校验为 `pnpm generate:diagnostics:check`。生成表由 Rust definitions 拥有，frontend regression 同时检查生成内容一致性。
 
 首次运行 Julia-backed operation/test 前初始化 manifest 环境：
 

@@ -16,8 +16,3 @@
 - [Statistical Harness](docs/roadmap/STATISTICAL_HARNESS.md)
 - [v0.3](docs/roadmap/v0_3.md)
 - [v1.0](docs/roadmap/v1_0.md)
-
-
-graph_resource_revisions 有什么影响，检查是否可以删除
-
-测试中不应该包含禁止出现这种反面的测试吧，不然需要做的太多了

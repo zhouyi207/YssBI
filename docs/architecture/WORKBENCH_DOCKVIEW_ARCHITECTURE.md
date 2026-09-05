@@ -74,13 +74,15 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 默认空布局建立 central grid group，并放置：
 
 - Project、Nodes、Data、Commands：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands；
-- Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Logs → Output → Problems；
+- Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom edge header 位于底部，因此 content 在上、tabs 在下。
 
 right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
+
+旧 `Diagnostics` identity 没有迁移路径；含非 canonical identity 的 root snapshot 会回退默认布局。这是当前 0.x 的直接替换行为，已有本地布局可能因此重置。默认与 reset 的顺序统一由 WORKBENCH_BOTTOM_DEFAULT_ORDER 定义；有效已保存布局保留用户排序。
 
 ## 3. 唯一有界 nested Dockview：Logs
 
@@ -214,7 +216,7 @@ Reset 使用一个 runtime shadow layout transaction，并保留既有 editor、
 - Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
-- Logs、Output、Problems 回到 bottom edge，恢复 Logs → Output → Problems 顺序与 bottom tabs；
+- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序与 bottom tabs；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，相关 edge 展开；
 - main Logs nested Dockview 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。

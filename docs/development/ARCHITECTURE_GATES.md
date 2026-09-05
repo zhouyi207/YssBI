@@ -31,6 +31,8 @@ AST discovery 覆盖 use/re-export/path/macro/include/attribute、`#[path]` 和 
 
 Frontend audit inventory 完整 `src/` production tree，排除 `src/tests/`、test files、generated declarations 和明确 fixture。TypeScript module dependencies 与 repository stylesheet dependencies 进入同一个 dependency graph；relative CSS、`@import` 和 `url(...)` target 必须解析为存在的 repository asset 或允许的 exact external style target。
 
+参与运行的 generated modules 与 JSON imports 同样进入 discovery/classification；只有 declaration/fixture 被排除，生成文件名不是绕过生产依赖审计的依据。
+
 Discovery 不能依赖一份手写“应该存在的文件”清单。新增 production source 若未被分类，门禁必须失败。
 
 ## 3. Exact layer classification

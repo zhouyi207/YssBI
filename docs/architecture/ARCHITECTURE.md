@@ -128,12 +128,12 @@ Open → Frontend Draft ──→ Compile complete draft ──→ immutable cac
                       └──→ locked atomic Save ──────→ committed Project state
 ```
 
-- Compile 对完整 draft 求解并产生 content-addressed artifact，不保存 Project；
+- Compile 对完整 draft 求解，成功时产生 content-addressed artifact，不保存 Project；
 - Save 校验并原子覆盖完整 document，不隐式 Compile；
-- Execute 只接受与当前 draft/source hash 精确匹配的 artifact；
+- Execute 使用 `compiledArtifactId` 精确匹配缓存 artifact，并重验 session 与实际依赖；
 - Projection 与 Compiler 消费同一个 `GraphSemanticSnapshot`；
-- execution result 进入 Rust `ResultStore`，用户程序输出进入独立 Run Output stream；
-- Graph Problems 是完整 projection 的领域事实，不进入 operational logs。
+- execution result 进入 Rust `ResultStore`；Run Output 已有独立通道与 UI，生产 producer 尚未接入；
+- Graph Problems 由完整 projection 交付，Compile 通过 Ready/Blocked 区分语义阻断与内部 command failure。
 
 完整的 Draft、Projection、Compile、Save、Execute、Problems、Results 和 Run Output contract 只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
 
@@ -181,9 +181,9 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 | ----------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
 | Graph Problems          | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
 | Results / Pin history   | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
-| Run Output              | 有序的用户程序 stdout/stderr            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
+| Run Output              | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
 | Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
-| Operational diagnostics | Logs UI 的有界、可恢复观察投影          | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
+| Operational diagnostics | Logs UI 的有界 recent/live 观察投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
 | IPC error               | 稳定 machine-readable command rejection | [`yss-api` transport contract](../../src-tauri/crates/yss-api/README.md) |
 | User feedback           | 本地化交互反馈                          | React application/view                                                   |
 

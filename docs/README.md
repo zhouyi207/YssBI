@@ -48,7 +48,8 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
 - [v0.3 roadmap](roadmap/v0_3.md)
 - [v1.0 roadmap](roadmap/v1_0.md)
-- [Open cross-domain backlog](../TODO.md)
+- [Graph Compile / Execute 准备计划](../plan.md)：统一 Resolve、动态 Pin、语义事实、精确依赖、Draft currentness 和编译/执行数据契约；同时承接 Problems、Logs、Output 的相关验收任务。
+- [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
 - [Generated module map](reference/MODULE_MAP.md)
 
 ## History
@@ -67,3 +68,5 @@ Update when: 什么变化要求更新本文
 ```
 
 `Current` 只描述当前生产实现；`Accepted Decision` 记录设计理由；`Planned` 不代表已实现；`Historical` 仅供追溯。容量、阈值、版本和完整模块列表等易变化事实应引用源码或由脚本生成，不手工复制到总架构文档。
+
+Current 文档应明确已确认的实现缺口，并链接到 Planned/TODO 中的修复目标。模块边界、DTO 或前端测试已具备，不能据此声称生产 producer、端到端恢复或全部语义覆盖已完成；旧提交的审查结论也必须先按当前实现重新核对。

@@ -15,6 +15,8 @@
 - [ ] 检查已有 capability/owner，避免第二事实源、临时 facade 和无必要 dependency。
 - [ ] 对高风险或不可逆动作说明失败恢复和用户控制。
 
+变量命名以所持有的事实为准：区分 document、serialized document、source hash、projection、receipt 和 projection update result；区分 Graph resource、editor lifecycle、run 与 panel identity。局部重命名优先复用现有测试验证行为保持；若改动 public symbol、DTO 字段或持久化 key，应按 contract migration 处理并同步所有使用方。
+
 ## 2. Authority, contract, and lifecycle
 
 - [ ] 为每项 durable/runtime/UI state 指定唯一 owner，并写清 projection 或 draft 如何恢复。
@@ -49,6 +51,8 @@
 - [ ] 更新唯一 canonical owner；不要把同一规则复制到 `.rules`、总架构、checklist 和专项文档。
 - [ ] Current、Accepted Decision、Planned、Historical 内容放入正确目录并更新 `docs/README.md` 索引。
 - [ ] 版本、路径、阈值、commands 和 module inventory 尽量引用 manifest/source 或 generated reference。
+
+失败场景测试是否必要取决于它保护的行为。例如过期 session 被拒绝、sequence gap 可见、Blocked 不触发技术事件，都有可观察的回归风险。不要为每次重构新增“旧变量名/文件名永远不能出现”的全仓字符串检查；已有 AST/依赖门禁能保护的边界也不再重复扫描。测试取舍和门禁实现见 [Architecture Gates](ARCHITECTURE_GATES.md#5-policy-and-semantic-checks)。
 
 ## 5. Delivery
 

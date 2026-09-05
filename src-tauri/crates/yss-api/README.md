@@ -49,6 +49,8 @@ Every ordered stream defines its source identity, ordering key, capacity/backpre
 
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 
+Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Diagnostics and Execution channels are separate contracts; diagnostics live-gap recovery is documented in [Runtime Signals](../../../docs/architecture/RUNTIME_SIGNALS.md#4-operational-diagnostics).
+
 ## Error contract
 
 Every command rejection serializes the Rust-owned `CommandError` with exactly three camelCase keys:
@@ -69,13 +71,17 @@ The wire never contains a backend-owned `message`. Do not encode identity in str
 
 Successful DTOs and asynchronous statuses may not bypass this rule with backend prose fields such as `message`, `detail`, `hint`, or `reason`. Domain diagnostics that are intentionally user-visible use a stable code, safe location/parameters, and their domain-owned deterministic template contract.
 
+Editor diagnostics carry code, messageKey, safe arguments, severity, explicit blocking, location and related locations. Rust owns definitions/templates; React uses the generated vocabulary for localization. This domain fact contract remains separate from CommandError.
+
+Compile returns Ready { artifactId, projection, cacheHit } or Blocked { projection }; neither branch returns a replacement document. Expected semantic failures remain Blocked without diagnostic incidents. Internal failures still reject with the error wire above. The read-only resolve_graph_draft command supplies current projections for dirty refresh and history validation; execute_compiled_graph accepts compiledArtifactId and explicit demand. See [Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
+
 Frontend application code localizes `code + safe details`; `IpcError.message` is a technical summary and must not be rendered directly.
 
 ## Frontend adapter
 
 Ordinary frontend invocation goes through `src/services/ipc/invokeCommand.ts`, which validates the common error wire. Domain services under `src/services/` own command-specific request/result parsing. Views and presentation modules do not call Tauri `invoke` directly.
 
-Channel adapters likewise parse strict wire DTOs before publishing to application projections. A malformed payload or sequence gap is handled as a transport/recovery failure, not silently accepted into domain/UI authority.
+Channel adapters parse strict wire DTOs before publishing to application projections. Malformed payloads and sequence gaps belong to each stream's recovery/status contract. Detection, UI visibility, and recovery are separate capabilities; their current coverage is documented by the stream owner, rather than guaranteed by DTO parsing alone.
 
 ## Data and security boundary
 
