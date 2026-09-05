@@ -3,7 +3,10 @@ import { parseDiagnosticBatchDto } from "@/shared/types/dto/diagnosticsParser";
 
 const MAX_PENDING_BATCHES = 64;
 
-export type DiagnosticStreamDiscontinuity = "preactivation-overflow" | "sequence-gap";
+export type DiagnosticStreamDiscontinuity =
+  | "preactivation-overflow"
+  | "sequence-gap"
+  | "invalid-batch";
 
 export class DiagnosticStreamDiscontinuityError extends Error {
   readonly reason: DiagnosticStreamDiscontinuity;
@@ -77,13 +80,16 @@ export function createDiagnosticBatchReceiver(
 
   const acceptPreparedBatch = (batch: DiagnosticBatchDto) => {
     const inspection = inspectSequence(batch, streamId, watermark);
-    streamId = inspection.streamId;
-    watermark = inspection.watermark;
     if (inspection.gap) {
+      discontinuity = "sequence-gap";
+      pending = [];
       const error = new DiagnosticStreamDiscontinuityError("sequence-gap");
       onError(error);
+      return true;
     }
-    return inspection.gap;
+    streamId = inspection.streamId;
+    watermark = inspection.watermark;
+    return false;
   };
 
   return {
@@ -92,8 +98,7 @@ export function createDiagnosticBatchReceiver(
       try {
         const batch = parseDiagnosticBatchDto(value);
         if (active) {
-          acceptPreparedBatch(batch);
-          deliver(batch);
+          if (!acceptPreparedBatch(batch)) deliver(batch);
           return;
         }
         if (pending.length >= maxPendingBatches) {
@@ -108,7 +113,13 @@ export function createDiagnosticBatchReceiver(
         }
         pending.push(batch);
       } catch (error) {
-        onError(error);
+        discontinuity = "invalid-batch";
+        pending = [];
+        onError(
+          error instanceof DiagnosticStreamDiscontinuityError
+            ? error
+            : new DiagnosticStreamDiscontinuityError("invalid-batch"),
+        );
       }
     },
     prepare: (snapshot) => {

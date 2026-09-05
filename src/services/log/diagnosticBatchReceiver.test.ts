@@ -54,7 +54,7 @@ describe("diagnosticBatchReceiver", () => {
     expect(receiver.prepare(snapshot(0))).toBe("sequence-gap");
   });
 
-  it("reports an active sequence gap and still forwards it for explicit truncation", () => {
+  it("stops an active receiver at a sequence gap until snapshot recovery", () => {
     const received = vi.fn();
     const onError = vi.fn();
     const receiver = createDiagnosticBatchReceiver(received, onError, 2);
@@ -63,7 +63,8 @@ describe("diagnosticBatchReceiver", () => {
 
     receiver.onmessage(batch(3));
 
-    expect(received).toHaveBeenCalledWith(batch(3));
+    receiver.onmessage(batch(4));
+    expect(received).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(
       expect.objectContaining({
         reason: "sequence-gap",

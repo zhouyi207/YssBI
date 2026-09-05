@@ -17,6 +17,7 @@ export interface DiagnosticLogBuffer {
   getSnapshot: () => LogSnapshot;
   setSubscription: (subscription: DiagnosticSubscriptionDto) => void;
   appendBatch: (batch: DiagnosticBatchDto) => void;
+  markTruncated: () => void;
   clear: () => void;
 }
 
@@ -67,6 +68,7 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
   let entries: DiagnosticRecordDto[] = [];
   let latestSequence: number | null = null;
   let truncated = false;
+  let replacedStream = false;
   let snapshot: LogSnapshot = { streamId, entries, latestSequence, truncated };
   const listeners = new Set<() => void>();
 
@@ -87,6 +89,7 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
     },
     getSnapshot: () => snapshot,
     setSubscription: (subscription) => {
+      replacedStream ||= streamId !== null && streamId !== subscription.streamId;
       const recent = recentDistinctEntries(subscription.entries, subscription.streamId, maxEntries);
       const snapshotGap = hasSequenceGap(
         recent.allSequences,
@@ -96,7 +99,7 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
       streamId = subscription.streamId;
       entries = recent.entries;
       latestSequence = subscription.latestSequence;
-      truncated = subscription.truncated || recent.truncated || snapshotGap;
+      truncated = replacedStream || subscription.truncated || recent.truncated || snapshotGap;
       publish();
     },
     appendBatch: (batch) => {
@@ -122,9 +125,14 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
       }
       publish();
     },
+    markTruncated: () => {
+      truncated = true;
+      publish();
+    },
     clear: () => {
-      if (entries.length === 0) return;
+      if (entries.length === 0 && !truncated) return;
       entries = [];
+      replacedStream = false;
       truncated = false;
       publish();
     },

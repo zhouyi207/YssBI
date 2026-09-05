@@ -38,9 +38,20 @@ export class LogService {
 
   static async subscribeDiagnostics(
     onRecords: (batch: DiagnosticBatchDto) => void,
+    onDiscontinuity: (error: unknown) => void = () => {},
   ): Promise<DiagnosticSubscription> {
     for (let attempt = 0; attempt < MAX_SUBSCRIPTION_ATTEMPTS; attempt += 1) {
-      const receiver = createDiagnosticBatchReceiver(onRecords);
+      let activated = false;
+      let unsubscribed = false;
+      const receiver = createDiagnosticBatchReceiver(onRecords, (error) => {
+        if (!activated) return;
+        cleanupChannel();
+        if (subscriptionId && !unsubscribed) {
+          unsubscribed = true;
+          void LogService.unsubscribeDiagnostics(subscriptionId).catch(() => {});
+        }
+        onDiscontinuity(error);
+      });
       let subscriptionId: string | null = null;
       let hmrDisposed = false;
       let cleaned = false;
@@ -87,7 +98,6 @@ export class LogService {
         throw new DiagnosticStreamDiscontinuityError(discontinuity);
       }
 
-      let unsubscribed = false;
       const unsubscribe = async () => {
         if (unsubscribed) return;
         unsubscribed = true;
@@ -98,6 +108,7 @@ export class LogService {
         snapshot,
         activate: () => {
           try {
+            activated = true;
             receiver.activate();
           } catch (error) {
             cleanupChannel();

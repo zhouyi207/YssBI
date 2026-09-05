@@ -19,6 +19,7 @@ export interface LogWorkspaceController {
   readonly loading: boolean;
   readonly isInitialLoad: boolean;
   readonly subscriptionStatus: DiagnosticSubscriptionStatus;
+  readonly continuity: "complete" | "truncated" | "disconnected";
   readonly refreshScrollToken: number;
   readonly toggleLevel: (level: DiagnosticLevel) => void;
   readonly setSearchText: (text: string) => void;
@@ -29,7 +30,7 @@ export interface LogWorkspaceController {
 }
 
 export function useLogWorkspaceController(): LogWorkspaceController {
-  const { entries: logs, streamId } = useLiveLogs();
+  const { entries: logs, streamId, truncated } = useLiveLogs();
   const { status: subscriptionStatus, reconnect } = useDiagnosticSubscription();
   const filter = useLogStore((state) => state.filter);
   const selectedLog = useLogStore((state) => state.selectedLog);
@@ -70,6 +71,14 @@ export function useLogWorkspaceController(): LogWorkspaceController {
   }, [autoScroll, reconnect]);
 
   const loading = subscriptionStatus === "connecting";
+  const continuity =
+    subscriptionStatus === "error"
+      ? "disconnected"
+      : truncated
+        ? "truncated"
+        : subscriptionStatus === "live"
+          ? "complete"
+          : "disconnected";
   const isInitialLoad = loading && streamId === null && logs.length === 0;
 
   return useMemo(
@@ -81,6 +90,7 @@ export function useLogWorkspaceController(): LogWorkspaceController {
       loading,
       isInitialLoad,
       subscriptionStatus,
+      continuity,
       refreshScrollToken,
       toggleLevel,
       setSearchText,
@@ -103,6 +113,7 @@ export function useLogWorkspaceController(): LogWorkspaceController {
       setAutoScroll,
       setSearchText,
       subscriptionStatus,
+      continuity,
       toggleLevel,
     ],
   );
