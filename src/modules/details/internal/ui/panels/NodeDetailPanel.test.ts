@@ -40,6 +40,10 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
     basis: {
       graphPath,
       registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
+
+      semanticInputHash: "0".repeat(64),
+
+      resourceObservations: {},
       resourceVersions: {},
     },
     diagnostics: [],
@@ -92,7 +96,7 @@ describe("NodeDetailPanel projection selection", () => {
     expect(selectNodeDetailNode(state, "second", "shared")?.display.title).toBe("Second");
   });
 
-  it("renders editable parameters only in NodeInspectPanel", () => {
+  it("renders the shared parameter editor in Details and Inspect", () => {
     const graphPath = "events/Main.yssbi-event";
     const graphBucket = bucket(graphPath, "Node");
     graphBucket.nodes.shared.parameterEditors = [
@@ -115,7 +119,7 @@ describe("NodeDetailPanel projection selection", () => {
     const root = createRoot(container);
 
     act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
-    expect(container.querySelector('[data-testid="parameter-editor"]')).toBeNull();
+    expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
 
     act(() => root.render(createElement(NodeInspectPanel, { graphPath, nodeId: "shared" })));
     expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
@@ -129,7 +133,8 @@ describe("NodeDetailPanel projection selection", () => {
     graphBucket.nodes.shared.diagnostics = [
       {
         code: "node.warning",
-        message: "Needs review",
+        messageKey: "diagnostics.node.warning",
+        arguments: { value: "Needs review" },
         severity: "warning",
         blocking: false,
         location: { kind: "node", nodeId: "shared" },
@@ -158,7 +163,8 @@ describe("NodeDetailPanel projection selection", () => {
     graphBucket.nodes.shared.diagnostics = [
       {
         code: "node.error",
-        message: "Value is invalid",
+        messageKey: "diagnostics.node.error",
+        arguments: { value: "Value is invalid" },
         severity: "error",
         blocking: true,
         location: { kind: "port", address },

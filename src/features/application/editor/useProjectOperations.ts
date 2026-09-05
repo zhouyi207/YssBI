@@ -280,7 +280,7 @@ export function useProjectOperations() {
 
       try {
         const draft = useGraphDraftStore.getState().sessions[graphPath];
-        if (draft?.compileStatus !== "compiled" || !draft.compiledSourceHash) {
+        if (draft?.compileStatus !== "compiled" || !draft.compiledArtifactId) {
           showBlockingMessage(t("notifications.project.compileRequired"));
           return;
         }
@@ -295,10 +295,10 @@ export function useProjectOperations() {
         const runState: GraphRunOutcomeState = { outcome: "success" };
         useExecutionStore.getState().startExecution(graphPath);
 
-        await ProjectService.executeGraphDocument({
+        await ProjectService.executeCompiledGraph({
           projectInstanceId: project.projectInstanceId,
           graphPath,
-          compiledSourceHash: draft.compiledSourceHash,
+          compiledArtifactId: draft.compiledArtifactId,
           demand: { type: "default" },
           onEvent: (event) => {
             if (!isCurrentProjectIdentity(project)) return;

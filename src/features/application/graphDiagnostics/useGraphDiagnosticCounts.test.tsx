@@ -39,7 +39,8 @@ describe("useGraphDiagnosticCounts", () => {
     const withDiagnostic = makeEditorProjectionFixture({ graphPath });
     withDiagnostic.projection.diagnostics.push({
       code: "compiler.dependency.value_cycle",
-      message: "Data dependencies contain a cycle",
+      messageKey: "diagnostics.compiler.dependency.value_cycle",
+      arguments: { value: "Data dependencies contain a cycle" },
       severity: "error",
       blocking: true,
       location: { kind: "node", nodeId: withDiagnostic.projection.nodes[0].nodeId },

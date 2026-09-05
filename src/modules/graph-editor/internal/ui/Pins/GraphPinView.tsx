@@ -193,6 +193,7 @@ export function GraphPinView({
           }`}
           style={dragStyle}
           data-pin-id={id}
+          tabIndex={-1}
           {...pinConnectionFeedbackAttributes(connectionFeedback)}
           data-diagnostic={diagnosticMessage ? "true" : undefined}
           onContextMenu={onContextMenu}

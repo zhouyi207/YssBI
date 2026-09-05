@@ -170,7 +170,14 @@ export function prepareGraphProjectionReplacements(
 export function commitPreparedGraphProjectionReplacements(
   plan: PreparedGraphProjectionReplacements,
 ): void {
-  useGraphProjectionStore.setState({ graphEntities: { ...plan.graphEntities } });
+  useGraphProjectionStore.setState((state) => ({
+    graphEntities: {
+      ...state.graphEntities,
+      ...Object.fromEntries(
+        plan.graphPaths.map((graphPath) => [graphPath, plan.graphEntities[graphPath]]),
+      ),
+    },
+  }));
 }
 
 interface GraphProjectionStore {

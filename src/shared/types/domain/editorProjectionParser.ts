@@ -41,9 +41,17 @@ export function validateEditorGraphProjection(
       );
     }
     if (outputDirection !== "output" || inputDirection !== "input") {
-      throw new Error(
-        `projection connection '${connection.connectionId}' endpoint direction is invalid`,
-      );
+      if (
+        !projection.diagnostics.some(
+          (diagnostic) =>
+            diagnostic.blocking &&
+            diagnostic.location.kind === "connection" &&
+            diagnostic.location.connectionId === connection.connectionId,
+        )
+      )
+        throw new Error(
+          `projection connection '${connection.connectionId}' endpoint direction is invalid`,
+        );
     }
   }
 

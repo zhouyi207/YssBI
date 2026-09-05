@@ -62,8 +62,9 @@ export type EditorGraphMutationDto =
   | { type: "setLiteral"; payload: { address: PortAddressDto; literal: unknown | null } }
   | {
       type: "addPortInstance";
-      payload: { nodeId: string; templateKey: string; order: string | null };
+      payload: { nodeId: string; templateKey: string; placement: PortPlacementDto };
     }
+  | { type: "movePortInstance"; payload: { address: PortAddressDto; placement: PortPlacementDto } }
   | { type: "removePortInstance"; payload: { address: PortAddressDto } }
   | {
       type: "duplicateSubgraph";
@@ -75,6 +76,10 @@ export type EditorGraphMutationDto =
     };
 
 export type HistoryMutationDto = Record<string, never>;
+
+export type PortPlacementDto =
+  | { kind: "append" }
+  | { kind: "before" | "after"; instanceId: string };
 
 export interface HistoryStatusDto {
   canUndo: boolean;
@@ -260,12 +265,9 @@ export interface GraphEditorSessionDto {
   projection: EditorGraphProjectionDto;
 }
 
-export interface CompileGraphDraftDto {
-  sourceHash: string;
-  cacheHit: boolean;
-  document: GraphDocumentDto;
-  projection: EditorGraphProjectionDto;
-}
+export type CompileGraphDraftDto =
+  | { type: "ready"; artifactId: string; cacheHit: boolean; projection: EditorGraphProjectionDto }
+  | { type: "blocked"; projection: EditorGraphProjectionDto };
 
 export interface GraphDraftTransformDto {
   changed: boolean;

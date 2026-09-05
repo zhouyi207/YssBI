@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,7 @@ export function NodeParameterEditor({
         diagnostic.location.nodeId === nodeId &&
         diagnostic.location.key === parameter.key,
     )
-    .map((diagnostic) => diagnostic.message);
+    .map((diagnostic) => formatGraphDiagnostic(diagnostic, locale));
   if (localError) errors.push(localError);
 
   const commit = async (value: unknown, callbacks: CommitCallbacks = {}) => {

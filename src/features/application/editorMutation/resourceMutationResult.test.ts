@@ -123,6 +123,13 @@ describe("resource mutation projection replacement protocol", () => {
     useGraphDraftStore.setState({
       sessions: {
         [caller]: {
+          sessionId: 1,
+          draftGeneration: 0,
+          semanticInputHash: "0".repeat(64),
+          compiledInputHash: null,
+          compileRequest: null,
+          saveDirty: true,
+          compileDirty: true,
           document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
           savedDocument: {
             nodes: {
@@ -141,7 +148,7 @@ describe("resource mutation projection replacement protocol", () => {
           projection: replacement.projection,
           saving: false,
           compileStatus: "uncompiled",
-          compiledSourceHash: null,
+          compiledArtifactId: null,
           compileCacheHit: false,
           undoStack: [],
           redoStack: [],

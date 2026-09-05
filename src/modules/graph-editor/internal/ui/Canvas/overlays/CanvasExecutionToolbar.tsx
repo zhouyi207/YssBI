@@ -42,7 +42,7 @@ export function CanvasExecutionToolbar({
   graphPath: string;
   canExecute: boolean;
   executeUnavailableReason: "functionGraph" | "blockingProblems" | null;
-  compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
+  compileStatus: "uncompiled" | "compiling" | "compiled" | "blocked" | "failed";
   onCompile: () => void;
   onExecute: () => void;
   onCancelExecution: () => void;

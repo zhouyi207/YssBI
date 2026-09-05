@@ -52,10 +52,10 @@ describe("invokeCommand", () => {
     vi.mocked(invoke).mockResolvedValue(undefined);
 
     await expect(
-      invokeCommand<void>("execute_graph_document", args, options),
+      invokeCommand<void>("execute_compiled_graph", args, options),
     ).resolves.toBeUndefined();
 
-    expect(invoke).toHaveBeenCalledWith("execute_graph_document", args, options);
+    expect(invoke).toHaveBeenCalledWith("execute_compiled_graph", args, options);
     expect(vi.mocked(invoke).mock.calls[0]?.[1]).toBe(args);
   });
 

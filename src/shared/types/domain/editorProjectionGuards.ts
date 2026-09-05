@@ -102,11 +102,30 @@ export function isGraphResourcePath(value: unknown): value is string {
 
 function isProjectionBasis(value: unknown): boolean {
   return (
-    hasExactKeys(value, ["graphPath", "registryFingerprint", "resourceVersions"]) &&
+    hasExactKeys(value, [
+      "graphPath",
+      "registryFingerprint",
+      "semanticInputHash",
+      "resourceVersions",
+      "resourceObservations",
+    ]) &&
+    typeof value.semanticInputHash === "string" &&
+    fingerprintPattern.test(value.semanticInputHash) &&
     isGraphResourcePath(value.graphPath) &&
     typeof value.registryFingerprint === "string" &&
     fingerprintPattern.test(value.registryFingerprint) &&
-    isStringRecord(value.resourceVersions)
+    isStringRecord(value.resourceVersions) &&
+    typeof value.resourceObservations === "object" &&
+    value.resourceObservations !== null &&
+    !Array.isArray(value.resourceObservations) &&
+    Object.values(value.resourceObservations).every(
+      (observation) =>
+        hasExactKeys(observation, ["kind", "version"]) &&
+        (observation.kind === "present"
+          ? typeof observation.version === "string"
+          : observation.kind === "absent" &&
+            (observation.version === null || typeof observation.version === "string")),
+    )
   );
 }
 
@@ -351,9 +370,21 @@ function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {
 
 function isDiagnostic(value: unknown): boolean {
   return (
-    hasExactKeys(value, ["code", "message", "severity", "blocking", "location", "related"]) &&
+    hasExactKeys(value, [
+      "code",
+      "messageKey",
+      "arguments",
+      "severity",
+      "blocking",
+      "location",
+      "related",
+    ]) &&
     typeof value.code === "string" &&
-    typeof value.message === "string" &&
+    typeof value.messageKey === "string" &&
+    typeof value.arguments === "object" &&
+    value.arguments !== null &&
+    !Array.isArray(value.arguments) &&
+    Object.values(value.arguments).every((argument) => typeof argument === "string") &&
     diagnosticSeverities.has(value.severity as string) &&
     typeof value.blocking === "boolean" &&
     isDiagnosticLocation(value.location) &&
@@ -444,8 +475,8 @@ export function isEditorGraphProjectionDto(value: unknown): value is EditorGraph
     value.diagnostics.every(isDiagnostic) &&
     isCompilationOutcome(value.outcome) &&
     typeof value.hasBlockingDiagnostics === "boolean" &&
-    ((value.outcome as { type: string }).type === "success"
-      ? value.hasBlockingDiagnostics === false
-      : value.hasBlockingDiagnostics === true)
+    value.hasBlockingDiagnostics ===
+      value.diagnostics.some((diagnostic: { blocking: boolean }) => diagnostic.blocking) &&
+    ((value.outcome as { type: string }).type !== "success" || !value.hasBlockingDiagnostics)
   );
 }

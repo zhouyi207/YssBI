@@ -19,6 +19,7 @@ import { useTheme } from "@/features/core/theme/useTheme";
 import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
   findPrimaryPortDiagnostic,
+  formatGraphDiagnostic,
   isUnboundInputDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { dataValueFromBackend, dataValueToRaw } from "@/shared/types/domain/dataValue";
@@ -87,7 +88,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const dataType = typeState.status === "exact" ? (typeState.dataType ?? undefined) : undefined;
   const defaultValue = input?.protocolDefault;
   const userValue = input?.literalOverride;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(() => ({ typeState }), [typeState]);
@@ -240,7 +241,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const tooltip =
     feedbackTooltip ??
     (pinDiagnostic
-      ? `${name} (${visualSpec.label}) — ${pinDiagnostic.message}`
+      ? `${name} (${visualSpec.label}) — ${formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage)}`
       : `${name} (${visualSpec.label})`);
 
   const inputSlot = showInput ? (
@@ -287,7 +288,9 @@ export function GraphPinController(props: GraphPinControllerProps) {
       direction={direction}
       isConnected={isConnected}
       contextMenuOpen={contextMenu != null}
-      diagnosticMessage={pinDiagnostic?.message}
+      diagnosticMessage={
+        pinDiagnostic ? formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage) : undefined
+      }
       dragStyle={dragStyle}
       connectionFeedback={connectionFeedbackModel}
       visualSpec={visualSpec}

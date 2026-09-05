@@ -23,6 +23,10 @@ function validProjection(): EditorGraphProjectionDto {
     basis: {
       graphPath: "functions/main",
       registryFingerprint: "0101010101010101010101010101010101010101010101010101010101010101",
+
+      semanticInputHash: "0".repeat(64),
+
+      resourceObservations: {},
       resourceVersions: { "functions/helper": "3" },
     },
     graphPath: "functions/main",
@@ -125,7 +129,8 @@ function validProjection(): EditorGraphProjectionDto {
         diagnostics: [
           {
             code: "node.warning",
-            message: "节点警告",
+            messageKey: "diagnostics.node.warning",
+            arguments: { value: "节点警告" },
             severity: "warning",
             blocking: false,
             location: { kind: "port", address: instanceInput },
@@ -145,7 +150,8 @@ function validProjection(): EditorGraphProjectionDto {
     diagnostics: [
       {
         code: "graph.info",
-        message: "图诊断",
+        messageKey: "diagnostics.graph.info",
+        arguments: { value: "图诊断" },
         severity: "information",
         blocking: false,
         location: { kind: "graph" },

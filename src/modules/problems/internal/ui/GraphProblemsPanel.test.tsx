@@ -11,6 +11,10 @@ import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionS
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
 import { GraphProblemsPanel } from "./GraphProblemsPanel";
+import {
+  startProjectLifecycle,
+  clearProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -23,8 +27,12 @@ const graphPath = "events/Main.yssbi-event";
 
 function diagnostic(nodeId: string, code: string, message: string): DiagnosticDto {
   return {
-    code,
-    message,
+    code: code === "node.error" ? "compiler.node.unknown" : "compiler.input.unbound",
+    messageKey:
+      code === "node.error"
+        ? "diagnostics.compiler.node.unknown"
+        : "diagnostics.compiler.input.unbound",
+    arguments: { node_type: message, port: message },
     severity: code === "node.error" ? "error" : "warning",
     blocking: code === "node.error",
     location: { kind: "node", nodeId },
@@ -59,6 +67,8 @@ describe("GraphProblemsPanel", () => {
   let root: Root;
 
   beforeEach(() => {
+    clearProjectLifecycle();
+    startProjectLifecycle("project-problems");
     useGraphProjectionStore.setState({ graphEntities: {} });
     useEditorStore.getState().clearDetailFocus();
     useGraphSessionStore.getState().reset();
@@ -68,6 +78,7 @@ describe("GraphProblemsPanel", () => {
   });
 
   afterEach(() => {
+    clearProjectLifecycle();
     act(() => root.unmount());
     host.remove();
   });

@@ -4,9 +4,14 @@ import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useL
 import type { GraphEntitiesState } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphRead } from "@/features/core/graph/read";
 import { derivePinConnectionView } from "@/features/core/dataStore/pinLinks";
-import { formatDiagnosticLocationLabel } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
+import {
+  formatDiagnosticLocationLabel,
+  formatGraphDiagnostic,
+} from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 
 import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
+import { NodeParameterEditor } from "../node/parameterEditors/NodeParameterEditor";
 
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
@@ -33,7 +38,7 @@ interface NodeDetailPanelProps {
 }
 
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const node = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
   const graphBucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
   const { catalog } = useLocalizedNodeCatalog(Boolean(node));
@@ -100,6 +105,33 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         </DetailReadonlyField>
       </DetailForm>
 
+      {node.parameterEditors?.length > 0 && (
+        <DetailCollapsibleSection title={t("detail.parameters")} defaultOpen>
+          <DetailForm>
+            {node.parameterEditors.map((parameter) => (
+              <div
+                key={parameter.key}
+                tabIndex={-1}
+                data-graph-path={graphPath}
+                data-node-id={nodeId}
+                data-graph-parameter-key={parameter.key}
+              >
+                <NodeParameterEditor
+                  graphPath={graphPath}
+                  nodeId={nodeId}
+                  locale={i18n?.resolvedLanguage ?? "en-US"}
+                  parameter={structuredClone(parameter) as ParameterEditorDto}
+                  diagnostics={structuredClone(node.diagnostics) as DiagnosticDto[]}
+                  formatFallback={(value) =>
+                    value == null ? "—" : typeof value === "string" ? value : JSON.stringify(value)
+                  }
+                />
+              </div>
+            ))}
+          </DetailForm>
+        </DetailCollapsibleSection>
+      )}
+
       <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
         <div className="flex flex-wrap gap-1.5 px-1 py-2">
           {Object.entries(node.capabilities)
@@ -129,7 +161,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
                       </DetailText>
                     ) : null}
                     <DetailText as="span" tone="muted">
-                      {diagnostic.message}
+                      {formatGraphDiagnostic(diagnostic, i18n?.resolvedLanguage)}
                     </DetailText>
                   </div>
                 </div>

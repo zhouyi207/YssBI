@@ -7,6 +7,7 @@ import { GraphSubgraphService } from "@/services/nodeSystem/graphSubgraphService
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { exportEditorSubgraph } from "./subgraphExportCoordinator";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 const snapshot: ClipboardSubgraphDto = {
   schemaVersion: 1,
@@ -31,7 +32,7 @@ describe("exportEditorSubgraph", () => {
     startProjectLifecycle("project-a");
     useGraphDraftStore.getState().install("events/main.yssbi-event", {
       document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-      projection: {} as never,
+      projection: makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,
     });
   });
 

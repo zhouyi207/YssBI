@@ -2,7 +2,9 @@
   "basis": {
     "graphPath": "events/contract.yssbi-event",
     "registryFingerprint": "f769f73df586cfffdcc1c12ac870c3086a529a0114e300ffdf9aa2589f72d9d3",
-    "resourceVersions": {}
+    "resourceVersions": {},
+    "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "resourceObservations": {}
   },
   "connections": [],
   "diagnostics": [],
@@ -93,7 +95,7 @@
       ],
       "position": {
         "x": 120.5,
-        "y": -32.0
+        "y": -32
       }
     }
   ],

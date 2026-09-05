@@ -67,7 +67,7 @@ export function isPinPreviewActionAvailable(
 
 type ValidPreviewRequest = {
   output: GraphOutputRefDto;
-  compiledSourceHash: string;
+  compiledArtifactId: string;
   authority: PreviewAuthority;
 };
 
@@ -109,13 +109,13 @@ function capturePreviewRequest(
   const invalid = validatePin(pin);
   if (invalid) return invalid;
   const draft = useGraphDraftStore.getState().sessions[graphPath];
-  if (draft?.compileStatus !== "compiled" || !draft.compiledSourceHash) {
+  if (draft?.compileStatus !== "compiled" || !draft.compiledArtifactId) {
     return "compile-required";
   }
 
   return {
     output: { graphPath, port: pin.address },
-    compiledSourceHash: draft.compiledSourceHash,
+    compiledArtifactId: draft.compiledArtifactId,
     authority: {
       project,
       projection: bucket,
@@ -174,10 +174,10 @@ export async function requestPinPreview(
   };
 
   try {
-    await ProjectService.executeGraphDocument({
+    await ProjectService.executeCompiledGraph({
       projectInstanceId: captured.authority.project.projectInstanceId,
       graphPath,
-      compiledSourceHash: captured.compiledSourceHash,
+      compiledArtifactId: captured.compiledArtifactId,
       demand: {
         type: "pinPreview",
         output: captured.output,
@@ -204,7 +204,7 @@ export async function requestPinPreview(
       captured.output.port,
     );
     if (current?.generation !== generation) return staleSettlement();
-    const ipcError = normalizeApplicationIpcError("execute_graph_document", error);
+    const ipcError = normalizeApplicationIpcError("execute_compiled_graph", error);
     const failure = { code: ipcError.code, incidentId: ipcError.incidentId };
     lease.fail(failure.code);
     return { status: "failed", generation, error: failure };

@@ -1,7 +1,7 @@
 /**
  * 开发期（Vite HMR）专用：Tauri IPC 清理。
  *
- * 长生命周期的 `Channel`（如 `execute_graph_document` 的运行事件流、项目扫描/清理进度流）
+ * 长生命周期的 `Channel`（如 `execute_compiled_graph` 的运行事件流、项目扫描/清理进度流）
  * 可能在模块被 Fast Refresh 替换、或页面整页重载时仍由 Rust 侧持续推送，导致
  * 控制台出现无害的 `[TAURI] Couldn't find callback id` 警告。
  *

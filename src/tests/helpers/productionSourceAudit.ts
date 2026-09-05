@@ -9,9 +9,12 @@ function repositorySourcePath(context: TypeScriptAuditProject, fileName: string)
   return relativePath.startsWith("src/") ? relativePath : null;
 }
 
-function isProductionTypeScriptPath(path: string): boolean {
+function isProductionModulePath(path: string): boolean {
   const lower = path.toLowerCase();
-  if ((!lower.endsWith(".ts") && !lower.endsWith(".tsx")) || lower.endsWith(".d.ts")) {
+  if (
+    (!lower.endsWith(".ts") && !lower.endsWith(".tsx") && !lower.endsWith(".json")) ||
+    lower.endsWith(".d.ts")
+  ) {
     return false;
   }
   const segments = lower.split("/");
@@ -24,8 +27,7 @@ function isProductionTypeScriptPath(path: string): boolean {
     fileName.includes(".spec.") ||
     fileName.includes(".fixture.") ||
     fileName.endsWith("fixture.ts") ||
-    fileName.endsWith("fixture.tsx") ||
-    fileName.includes(".generated.")
+    fileName.endsWith("fixture.tsx")
   )
     return false;
   return true;
@@ -37,7 +39,7 @@ export function productionTypeScriptSources(
   const sources = new Map<string, ArchitectureSource>();
   for (const fileName of context.project.program.getSourceFileNames()) {
     const path = repositorySourcePath(context, fileName);
-    if (path === null || !isProductionTypeScriptPath(path)) continue;
+    if (path === null || !isProductionModulePath(path)) continue;
     const sourceFile = context.project.program.getSourceFile(fileName);
     if (!sourceFile) throw new Error(`TypeScript program source disappeared: ${path}`);
     if (path.split("/").includes("..")) {

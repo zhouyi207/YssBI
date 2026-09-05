@@ -10,6 +10,7 @@ import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation
 import { getDocumentState } from "@/features/core/resource";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
+import { resolveCurrentGraphDraft } from "@/features/application/graphDraft/resolveGraphDraft";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -71,7 +72,9 @@ async function requestGraphProjection(
     );
     return false;
   }
-  useGraphDraftStore.getState().install(graphPath, session);
+  useGraphDraftStore
+    .getState()
+    [operation === "hydrate" ? "hydrate" : "install"](graphPath, session);
   setGraphProjectionStale(graphPath, false);
   return true;
 }
@@ -159,7 +162,19 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
   }
   const kind = inferGraphResourceKind(graphPath);
   if (kind && getDocumentState({ id: graphPath, kind })?.dirty) {
-    return Promise.resolve(false);
+    setGraphProjectionStale(graphPath, true);
+    return resolveCurrentGraphDraft(graphPath, locale)
+      .then((resolved) => {
+        if (resolved) setGraphProjectionStale(graphPath, false);
+        return resolved;
+      })
+      .catch((error) => {
+        logger.graph.error(
+          `Graph draft resolve failed: ${formatErrorMessage(error)}`,
+          "GraphProjectionLifecycle",
+        );
+        return false;
+      });
   }
   const identity = captureProjectIdentity();
   const lifecycleToken = startGraphLifecycle(graphPath);

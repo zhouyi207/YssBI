@@ -1,4 +1,14 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  prepareGraphProjectionReplacements,
+  commitPreparedGraphProjectionReplacements,
+} from "@/features/core/dataStore/graphProjectionStore";
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
+import { enqueueGraphDraftTask } from "./graphDraftCoordinator";
 import {
   isGraphDraftDirty,
   isGraphDraftSaving,
@@ -30,13 +40,44 @@ function publishDraftHistoryStatus(graphPath: string): void {
   });
 }
 
-function installHistoryProjection(graphPath: string, direction: HistoryDirection): boolean {
+async function installHistoryProjection(
+  graphPath: string,
+  direction: HistoryDirection,
+): Promise<boolean> {
   if (isGraphDraftSaving(graphPath)) return false;
-  const projection = useGraphDraftStore.getState()[direction](graphPath);
-  if (!projection) return false;
-  const applied = useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
-  if (!applied.applied)
+  const identity = captureProjectIdentity();
+  const session = useGraphDraftStore.getState().sessions[graphPath];
+  if (!session) return false;
+  const stack = direction === "undo" ? session.undoStack : session.redoStack;
+  const version = stack[stack.length - 1];
+  if (!version) return false;
+  const isCurrent = () => {
+    const current = useGraphDraftStore.getState().sessions[graphPath];
+    return (
+      isCurrentProjectIdentity(identity) &&
+      current?.sessionId === session.sessionId &&
+      current.draftGeneration === session.draftGeneration &&
+      !current.saving
+    );
+  };
+  let projection;
+  try {
+    projection = await GraphDraftService.resolve(
+      identity.projectInstanceId,
+      graphPath,
+      currentProjectionLocale(),
+      structuredClone(version.document),
+    );
+  } catch (error) {
+    if (!isCurrent()) return false;
+    throw error;
+  }
+  if (!isCurrent()) return false;
+  const prepared = prepareGraphProjectionReplacements([{ graphPath, projection }]);
+  if (!prepared.prepared)
     throw new Error(`Graph draft ${direction} projection could not be installed`);
+  if (!useGraphDraftStore.getState()[direction](graphPath, projection)) return false;
+  commitPreparedGraphProjectionReplacements(prepared.plan);
   const kind = inferGraphResourceKind(graphPath);
   if (kind) markResourceDirty({ id: graphPath, kind }, isGraphDraftDirty(graphPath));
   publishDraftHistoryStatus(graphPath);
@@ -56,9 +97,14 @@ export async function executeHistoryMutation(
   input: ExecuteHistoryMutationInput,
 ): Promise<ExecuteHistoryMutationOutcome> {
   if (isGraphDraftSaving(input.graphPath)) return { status: "saving" };
-  return installHistoryProjection(input.graphPath, input.direction)
-    ? { status: "applied" }
-    : { status: "stale" };
+  return enqueueGraphDraftTask(
+    input.graphPath,
+    async () =>
+      (await installHistoryProjection(input.graphPath, input.direction))
+        ? { status: "applied" as const }
+        : { status: "stale" as const },
+    { status: "stale" as const },
+  );
 }
 
 export function undoEditorHistory(graphPath: string): Promise<ExecuteHistoryMutationOutcome> {

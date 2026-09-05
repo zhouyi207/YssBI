@@ -20,7 +20,7 @@ import { useProjectOperations } from "./useProjectOperations";
 
 const projectInstanceId = "project-instance-1";
 const graphPath = "events/Main.yssbi-event";
-const compiledSourceHash = "2".repeat(64);
+const compiledArtifactId = "2".repeat(64);
 
 function runStartedEvent(): RunEvent {
   return {
@@ -102,18 +102,22 @@ describe("useProjectOperations execution demand", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    vi.spyOn(ProjectService, "executeGraphDocument").mockResolvedValue(undefined);
+    vi.spyOn(ProjectService, "executeCompiledGraph").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
     useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
     useGraphDraftStore.getState().install(graphPath, session);
     expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
-    useGraphDraftStore.getState().completeCompile(graphPath, {
-      sourceHash: compiledSourceHash,
-      cacheHit: false,
-      document: session.document,
-      projection,
-    });
+    useGraphDraftStore.getState().completeCompile(
+      graphPath,
+      {
+        type: "ready",
+        artifactId: compiledArtifactId,
+        cacheHit: false,
+        projection,
+      },
+      useGraphDraftStore.getState().sessions[graphPath].compileRequest!,
+    );
 
     function Harness() {
       operations = useProjectOperations();
@@ -136,10 +140,10 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(ProjectService.executeGraphDocument).toHaveBeenCalledWith({
+    expect(ProjectService.executeCompiledGraph).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      compiledSourceHash,
+      compiledArtifactId,
       demand: { type: "default" },
       onEvent: expect.any(Function),
       onOutput: expect.any(Function),
@@ -150,7 +154,8 @@ describe("useProjectOperations execution demand", () => {
     const blocked = makeEditorProjectionFixture({ graphPath }).projection;
     blocked.diagnostics.push({
       code: "compiler.input.unbound",
-      message: "compiler.input.unbound",
+      messageKey: "diagnostics.compiler.input.unbound",
+      arguments: { value: "compiler.input.unbound" },
       severity: "error",
       blocking: true,
       location: { kind: "graph" },
@@ -164,11 +169,11 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(ProjectService.executeGraphDocument).not.toHaveBeenCalled();
+    expect(ProjectService.executeCompiledGraph).not.toHaveBeenCalled();
   });
 
   it("opens only the backend-requested result window", async () => {
-    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(async ({ onEvent }) => {
+    vi.mocked(ProjectService.executeCompiledGraph).mockImplementation(async ({ onEvent }) => {
       onEvent?.({
         ...runStartedEvent(),
         kind: {
@@ -224,7 +229,7 @@ describe("useProjectOperations execution demand", () => {
   it("ignores delayed events and completion after project lifecycle replacement", async () => {
     let emit!: (event: RunEvent) => void;
     let resolveExecution!: () => void;
-    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
+    vi.mocked(ProjectService.executeCompiledGraph).mockImplementation(
       ({ onEvent }) =>
         new Promise<void>((resolve) => {
           emit = onEvent ?? (() => undefined);

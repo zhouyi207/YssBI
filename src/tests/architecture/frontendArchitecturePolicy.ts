@@ -322,6 +322,7 @@ const VIEW_DOMAIN_CAPABILITIES = [
     "collectGraphProblems",
     "findPrimaryPortDiagnostic",
     "formatDiagnosticLocationLabel",
+    "formatGraphDiagnostic",
     "GraphProblem",
     "isUnboundInputDiagnostic",
   ]),

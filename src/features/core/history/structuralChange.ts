@@ -12,6 +12,7 @@ const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   "InsertReroute",
   "MoveConnections",
   "AddPortInstance",
+  "MovePortInstance",
   "RemovePortInstance",
 ]);
 

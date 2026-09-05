@@ -1,0 +1,488 @@
+{
+  "diagnostics.compiler.dataframe.field_type_unsupported": {
+    "code": "compiler.dataframe.field_type_unsupported",
+    "parameters": ["column", "schema_type", "reason"],
+    "en-US": "Column {column} uses unsupported schema type {schema_type}: {reason}.",
+    "zh-CN": "列 {column} 使用了不支持的 Schema 类型 {schema_type}：{reason}。"
+  },
+  "diagnostics.compiler.connection.input_direction": {
+    "code": "compiler.connection.input_direction",
+    "parameters": ["port"],
+    "en-US": "Connection target {port} must be an input port.",
+    "zh-CN": "连接目标 {port} 必须是输入端口。"
+  },
+  "diagnostics.compiler.connection.limit": {
+    "code": "compiler.connection.limit",
+    "parameters": ["port"],
+    "en-US": "Connection limit exceeded for {port}.",
+    "zh-CN": "端口 {port} 超出连接数量限制。"
+  },
+  "diagnostics.compiler.connection.order_forbidden": {
+    "code": "compiler.connection.order_forbidden",
+    "parameters": ["port"],
+    "en-US": "Connection order is forbidden for {port}.",
+    "zh-CN": "端口 {port} 不允许连接顺序。"
+  },
+  "diagnostics.compiler.connection.order_required": {
+    "code": "compiler.connection.order_required",
+    "parameters": ["port"],
+    "en-US": "Connection order is required for {port}.",
+    "zh-CN": "端口 {port} 需要连接顺序。"
+  },
+  "diagnostics.compiler.connection.output_direction": {
+    "code": "compiler.connection.output_direction",
+    "parameters": ["port"],
+    "en-US": "Connection source {port} must be an output port.",
+    "zh-CN": "连接源 {port} 必须是输出端口。"
+  },
+  "diagnostics.compiler.dependency.value_cycle": {
+    "code": "compiler.dependency.value_cycle",
+    "parameters": [],
+    "en-US": "Value dependencies contain a cycle.",
+    "zh-CN": "值依赖包含循环。"
+  },
+  "diagnostics.compiler.document.connection_id_mismatch": {
+    "code": "compiler.document.connection_id_mismatch",
+    "parameters": ["expected_id", "actual_id"],
+    "en-US": "Connection ID {actual_id} does not match {expected_id}.",
+    "zh-CN": "连接 ID {actual_id} 与 {expected_id} 不匹配。"
+  },
+  "diagnostics.compiler.document.node_id_mismatch": {
+    "code": "compiler.document.node_id_mismatch",
+    "parameters": ["expected_id", "actual_id"],
+    "en-US": "Node ID {actual_id} does not match {expected_id}.",
+    "zh-CN": "节点 ID {actual_id} 与 {expected_id} 不匹配。"
+  },
+  "diagnostics.compiler.function.abi.endpoint_invalid": {
+    "code": "compiler.function.abi.endpoint_invalid",
+    "parameters": ["port"],
+    "en-US": "Function ABI endpoint {port} is invalid.",
+    "zh-CN": "函数 ABI 端点 {port} 无效。"
+  },
+  "diagnostics.compiler.function.abi.locator_invalid": {
+    "code": "compiler.function.abi.locator_invalid",
+    "parameters": ["port"],
+    "en-US": "Function ABI locator for {port} is invalid.",
+    "zh-CN": "端口 {port} 的函数 ABI 定位器无效。"
+  },
+  "diagnostics.compiler.function.abi.locator_target_mismatch": {
+    "code": "compiler.function.abi.locator_target_mismatch",
+    "parameters": ["function_path"],
+    "en-US": "Function ABI locator does not target {function_path}.",
+    "zh-CN": "函数 ABI 定位器未指向 {function_path}。"
+  },
+  "diagnostics.compiler.function.abi.managed_role_invalid": {
+    "code": "compiler.function.abi.managed_role_invalid",
+    "parameters": ["expected_role", "actual_count"],
+    "en-US": "Function ABI requires one {expected_role} node but found {actual_count}.",
+    "zh-CN": "函数 ABI 需要一个 {expected_role} 节点，但找到 {actual_count} 个。"
+  },
+  "diagnostics.compiler.function.abi.member_duplicate": {
+    "code": "compiler.function.abi.member_duplicate",
+    "parameters": ["field_name"],
+    "en-US": "Function ABI member {field_name} is duplicated.",
+    "zh-CN": "函数 ABI 成员 {field_name} 重复。"
+  },
+  "diagnostics.compiler.function.abi.member_missing": {
+    "code": "compiler.function.abi.member_missing",
+    "parameters": ["field_name"],
+    "en-US": "Function ABI member {field_name} is missing.",
+    "zh-CN": "缺少函数 ABI 成员 {field_name}。"
+  },
+  "diagnostics.compiler.function.abi.member_unexpected": {
+    "code": "compiler.function.abi.member_unexpected",
+    "parameters": ["field_name"],
+    "en-US": "Function ABI member {field_name} is unexpected.",
+    "zh-CN": "函数 ABI 成员 {field_name} 不符合预期。"
+  },
+  "diagnostics.compiler.resource.display_name_unavailable": {
+    "code": "compiler.resource.display_name_unavailable",
+    "parameters": ["resource_key", "reason"],
+    "en-US": "Resource {resource_key} uses the default node title: {reason}.",
+    "zh-CN": "资源 {resource_key} 使用默认节点标题：{reason}。"
+  },
+  "diagnostics.compiler.resource.resolution_failed": {
+    "code": "compiler.resource.resolution_failed",
+    "parameters": ["resource_key"],
+    "en-US": "Resource {resource_key} could not be resolved.",
+    "zh-CN": "无法解析资源 {resource_key}。"
+  },
+  "diagnostics.compiler.function.abi_target_mismatch": {
+    "code": "compiler.function.abi_target_mismatch",
+    "parameters": ["function_path"],
+    "en-US": "Function ABI target does not match {function_path}.",
+    "zh-CN": "函数 ABI 目标与 {function_path} 不匹配。"
+  },
+  "diagnostics.compiler.input.conflicting_bindings": {
+    "code": "compiler.input.conflicting_bindings",
+    "parameters": ["port"],
+    "en-US": "Input {port} has conflicting bindings.",
+    "zh-CN": "输入 {port} 存在冲突绑定。"
+  },
+  "diagnostics.compiler.input.literal_forbidden": {
+    "code": "compiler.input.literal_forbidden",
+    "parameters": ["port"],
+    "en-US": "Input {port} does not allow a literal binding.",
+    "zh-CN": "输入 {port} 不允许字面量绑定。"
+  },
+  "diagnostics.compiler.input.literal_invalid": {
+    "code": "compiler.input.literal_invalid",
+    "parameters": ["port"],
+    "en-US": "Input {port} has an invalid persisted literal.",
+    "zh-CN": "输入 {port} 的持久化字面量无效。"
+  },
+  "diagnostics.compiler.input.not_input": {
+    "code": "compiler.input.not_input",
+    "parameters": ["port"],
+    "en-US": "Port {port} is not an input.",
+    "zh-CN": "端口 {port} 不是输入端口。"
+  },
+  "diagnostics.compiler.input.unbound": {
+    "code": "compiler.input.unbound",
+    "parameters": ["port"],
+    "en-US": "Required input {port} is unbound.",
+    "zh-CN": "必需输入 {port} 尚未绑定。"
+  },
+  "diagnostics.compiler.input.unknown_port": {
+    "code": "compiler.input.unknown_port",
+    "parameters": ["port"],
+    "en-US": "Input port {port} is unknown.",
+    "zh-CN": "输入端口 {port} 未知。"
+  },
+  "diagnostics.compiler.interface.basis_mismatch": {
+    "code": "compiler.interface.basis_mismatch",
+    "parameters": ["expected_basis", "actual_basis"],
+    "en-US": "Interface basis {actual_basis} does not match {expected_basis}.",
+    "zh-CN": "接口基准 {actual_basis} 与 {expected_basis} 不匹配。"
+  },
+  "diagnostics.compiler.interface.duplicate_locator": {
+    "code": "compiler.interface.duplicate_locator",
+    "parameters": ["port_key", "locator"],
+    "en-US": "Interface locator {locator} for port {port_key} is duplicated.",
+    "zh-CN": "端口 {port_key} 的接口定位器 {locator} 重复。"
+  },
+  "diagnostics.compiler.interface.identity_none_connection": {
+    "code": "compiler.interface.identity_none_connection",
+    "parameters": ["port"],
+    "en-US": "Identity-free interface port {port} cannot have a connection.",
+    "zh-CN": "无标识接口端口 {port} 不能有连接。"
+  },
+  "diagnostics.compiler.interface.identity_none_override": {
+    "code": "compiler.interface.identity_none_override",
+    "parameters": ["port"],
+    "en-US": "Identity-free interface port {port} cannot have an override.",
+    "zh-CN": "无标识接口端口 {port} 不能有覆盖。"
+  },
+  "diagnostics.compiler.interface.schema_dependency_unresolved": {
+    "code": "compiler.interface.schema_dependency_unresolved",
+    "parameters": [],
+    "en-US": "Schema-dependent interface requirements could not be resolved.",
+    "zh-CN": "无法解析依赖架构的接口要求。"
+  },
+  "diagnostics.compiler.interface.resolver_failed": {
+    "code": "compiler.interface.resolver_failed",
+    "parameters": ["resolver_id"],
+    "en-US": "Interface resolver {resolver_id} failed.",
+    "zh-CN": "接口解析器 {resolver_id} 失败。"
+  },
+  "diagnostics.compiler.interface.resolver_missing": {
+    "code": "compiler.interface.resolver_missing",
+    "parameters": ["resolver_id"],
+    "en-US": "Interface resolver {resolver_id} is missing.",
+    "zh-CN": "缺少接口解析器 {resolver_id}。"
+  },
+  "diagnostics.compiler.lowering.deadline_exceeded": {
+    "code": "compiler.lowering.deadline_exceeded",
+    "parameters": ["node_type"],
+    "en-US": "Node lowering exceeded its deadline for {node_type}.",
+    "zh-CN": "节点类型 {node_type} 的降低超过截止时间。"
+  },
+  "diagnostics.compiler.lowering.internal_invariant": {
+    "code": "compiler.lowering.internal_invariant",
+    "parameters": ["node_type"],
+    "en-US": "Node lowering hit an internal invariant for {node_type}.",
+    "zh-CN": "节点类型 {node_type} 的降低触发内部不变量。"
+  },
+  "diagnostics.compiler.lowering.execution_identity": {
+    "code": "compiler.lowering.execution_identity",
+    "parameters": [],
+    "en-US": "Lowered operation has an invalid execution identity.",
+    "zh-CN": "降低后的操作具有无效的执行身份。"
+  },
+  "diagnostics.compiler.lowering.resource_exhausted": {
+    "code": "compiler.lowering.resource_exhausted",
+    "parameters": ["node_type"],
+    "en-US": "Node lowering exhausted resources for {node_type}.",
+    "zh-CN": "节点类型 {node_type} 的降低耗尽资源。"
+  },
+  "diagnostics.compiler.lowering.implementation_missing": {
+    "code": "compiler.lowering.implementation_missing",
+    "parameters": ["node_type"],
+    "en-US": "Lowering implementation is missing for {node_type}.",
+    "zh-CN": "节点类型 {node_type} 缺少降低实现。"
+  },
+  "diagnostics.compiler.lowering.resource_conflict": {
+    "code": "compiler.lowering.resource_conflict",
+    "parameters": ["resource_id"],
+    "en-US": "Lowered resource {resource_id} conflicts with another resource.",
+    "zh-CN": "降低后的资源 {resource_id} 与其他资源冲突。"
+  },
+  "diagnostics.compiler.lowering.result_duplicate": {
+    "code": "compiler.lowering.result_duplicate",
+    "parameters": ["result_name"],
+    "en-US": "Lowering result {result_name} is duplicated.",
+    "zh-CN": "降低结果 {result_name} 重复。"
+  },
+  "diagnostics.compiler.lowering.result_port": {
+    "code": "compiler.lowering.result_port",
+    "parameters": ["port"],
+    "en-US": "Lowering result port {port} is invalid.",
+    "zh-CN": "降低结果端口 {port} 无效。"
+  },
+  "diagnostics.compiler.node.disappeared": {
+    "code": "compiler.node.disappeared",
+    "parameters": ["node_type"],
+    "en-US": "Node type {node_type} disappeared during compilation.",
+    "zh-CN": "节点类型 {node_type} 在编译期间消失。"
+  },
+  "diagnostics.compiler.node.managed_singleton": {
+    "code": "compiler.node.managed_singleton",
+    "parameters": ["managed_role"],
+    "en-US": "Managed role {managed_role} must identify exactly one node.",
+    "zh-CN": "托管角色 {managed_role} 必须只标识一个节点。"
+  },
+  "diagnostics.compiler.node.scope_mismatch": {
+    "code": "compiler.node.scope_mismatch",
+    "parameters": ["expected_scope", "actual_scope"],
+    "en-US": "Node scope {actual_scope} does not match {expected_scope}.",
+    "zh-CN": "节点作用域 {actual_scope} 与 {expected_scope} 不匹配。"
+  },
+  "diagnostics.compiler.node.unknown": {
+    "code": "compiler.node.unknown",
+    "parameters": ["node_type"],
+    "en-US": "Node type {node_type} is unknown.",
+    "zh-CN": "节点类型 {node_type} 未知。"
+  },
+  "diagnostics.compiler.parameter.invalid": {
+    "code": "compiler.parameter.invalid",
+    "parameters": ["parameter_key"],
+    "en-US": "Parameter {parameter_key} is invalid.",
+    "zh-CN": "参数 {parameter_key} 无效。"
+  },
+  "diagnostics.compiler.parameter.required": {
+    "code": "compiler.parameter.required",
+    "parameters": ["parameter_key"],
+    "en-US": "Parameter {parameter_key} is required.",
+    "zh-CN": "参数 {parameter_key} 是必需的。"
+  },
+  "diagnostics.compiler.parameter.unknown": {
+    "code": "compiler.parameter.unknown",
+    "parameters": ["parameter_key"],
+    "en-US": "Parameter {parameter_key} is unknown.",
+    "zh-CN": "参数 {parameter_key} 未知。"
+  },
+  "diagnostics.compiler.plan.invalid": {
+    "code": "compiler.plan.invalid",
+    "parameters": [],
+    "en-US": "Execution plan is invalid.",
+    "zh-CN": "执行计划无效。"
+  },
+  "diagnostics.compiler.plan.value_consumer_missing": {
+    "code": "compiler.plan.value_consumer_missing",
+    "parameters": ["port"],
+    "en-US": "Value consumer for {port} is missing.",
+    "zh-CN": "缺少端口 {port} 的值消费者。"
+  },
+  "diagnostics.compiler.plan.value_producer_missing": {
+    "code": "compiler.plan.value_producer_missing",
+    "parameters": ["port"],
+    "en-US": "Value producer for {port} is missing.",
+    "zh-CN": "缺少端口 {port} 的值生产者。"
+  },
+  "diagnostics.compiler.port.binding_kind_mismatch": {
+    "code": "compiler.port.binding_kind_mismatch",
+    "parameters": ["expected_kind", "actual_kind"],
+    "en-US": "Port binding kind {actual_kind} does not match {expected_kind}.",
+    "zh-CN": "端口绑定类型 {actual_kind} 与 {expected_kind} 不匹配。"
+  },
+  "diagnostics.compiler.port.binding_not_instance": {
+    "code": "compiler.port.binding_not_instance",
+    "parameters": ["port"],
+    "en-US": "Port binding {port} does not identify an instance.",
+    "zh-CN": "端口绑定 {port} 未标识实例。"
+  },
+  "diagnostics.compiler.port.instance_not_allowed": {
+    "code": "compiler.port.instance_not_allowed",
+    "parameters": ["port"],
+    "en-US": "Port instance {port} is not allowed.",
+    "zh-CN": "不允许端口实例 {port}。"
+  },
+  "diagnostics.compiler.port.orphan": {
+    "code": "compiler.port.orphan",
+    "parameters": ["port"],
+    "en-US": "Port {port} is orphaned.",
+    "zh-CN": "端口 {port} 已孤立。"
+  },
+  "diagnostics.compiler.port.unknown": {
+    "code": "compiler.port.unknown",
+    "parameters": ["port"],
+    "en-US": "Port {port} is unknown.",
+    "zh-CN": "端口 {port} 未知。"
+  },
+  "diagnostics.compiler.registry.type_mismatch": {
+    "code": "compiler.registry.type_mismatch",
+    "parameters": ["expected_type", "actual_type"],
+    "en-US": "Registry type {actual_type} does not match {expected_type}.",
+    "zh-CN": "注册表类型 {actual_type} 与 {expected_type} 不匹配。"
+  },
+  "diagnostics.compiler.relational.filter_column_missing": {
+    "code": "compiler.relational.filter_column_missing",
+    "parameters": ["field_name"],
+    "en-US": "Filter column {field_name} is missing.",
+    "zh-CN": "缺少筛选列 {field_name}。"
+  },
+  "diagnostics.compiler.relational.filter_literal_forbidden": {
+    "code": "compiler.relational.filter_literal_forbidden",
+    "parameters": ["field_name"],
+    "en-US": "Filter field {field_name} forbids a literal.",
+    "zh-CN": "筛选字段 {field_name} 不允许字面量。"
+  },
+  "diagnostics.compiler.relational.filter_literal_missing": {
+    "code": "compiler.relational.filter_literal_missing",
+    "parameters": ["field_name"],
+    "en-US": "Filter field {field_name} requires a literal.",
+    "zh-CN": "筛选字段 {field_name} 需要字面量。"
+  },
+  "diagnostics.compiler.relational.filter_literal_type": {
+    "code": "compiler.relational.filter_literal_type",
+    "parameters": ["field_name"],
+    "en-US": "Filter literal type is invalid for {field_name}.",
+    "zh-CN": "筛选字段 {field_name} 的字面量类型无效。"
+  },
+  "diagnostics.compiler.relational.filter_operator_invalid": {
+    "code": "compiler.relational.filter_operator_invalid",
+    "parameters": ["field_name"],
+    "en-US": "Filter operator is invalid for {field_name}.",
+    "zh-CN": "筛选字段 {field_name} 的操作符无效。"
+  },
+  "diagnostics.compiler.relational.input_binding_missing": {
+    "code": "compiler.relational.input_binding_missing",
+    "parameters": ["port"],
+    "en-US": "Relational input binding for {port} is missing.",
+    "zh-CN": "缺少端口 {port} 的关系输入绑定。"
+  },
+  "diagnostics.compiler.schema.parameter_invalid": {
+    "code": "compiler.schema.parameter_invalid",
+    "parameters": ["parameter_key"],
+    "en-US": "Schema parameter {parameter_key} is invalid.",
+    "zh-CN": "架构参数 {parameter_key} 无效。"
+  },
+  "diagnostics.compiler.schema.project_empty": {
+    "code": "compiler.schema.project_empty",
+    "parameters": [],
+    "en-US": "Schema projection cannot be empty.",
+    "zh-CN": "架构投影不能为空。"
+  },
+  "diagnostics.compiler.schema.project_field_duplicate": {
+    "code": "compiler.schema.project_field_duplicate",
+    "parameters": ["field_name"],
+    "en-US": "Projected field {field_name} is duplicated.",
+    "zh-CN": "投影字段 {field_name} 重复。"
+  },
+  "diagnostics.compiler.schema.project_field_missing": {
+    "code": "compiler.schema.project_field_missing",
+    "parameters": ["field_name"],
+    "en-US": "Projected field {field_name} is missing.",
+    "zh-CN": "缺少投影字段 {field_name}。"
+  },
+  "diagnostics.compiler.schema.rename_field_missing": {
+    "code": "compiler.schema.rename_field_missing",
+    "parameters": ["source_name"],
+    "en-US": "Rename source field {source_name} is missing.",
+    "zh-CN": "缺少重命名源字段 {source_name}。"
+  },
+  "diagnostics.compiler.schema.rename_source_duplicate": {
+    "code": "compiler.schema.rename_source_duplicate",
+    "parameters": ["source_name"],
+    "en-US": "Rename source {source_name} is duplicated.",
+    "zh-CN": "重命名源 {source_name} 重复。"
+  },
+  "diagnostics.compiler.schema.rename_target_conflict": {
+    "code": "compiler.schema.rename_target_conflict",
+    "parameters": ["source_name", "target_name"],
+    "en-US": "Renaming {source_name} to {target_name} conflicts with another field.",
+    "zh-CN": "将 {source_name} 重命名为 {target_name} 时与其他字段冲突。"
+  },
+  "diagnostics.compiler.schema.resolver_failed": {
+    "code": "compiler.schema.resolver_failed",
+    "parameters": ["resolver_id"],
+    "en-US": "Schema resolver {resolver_id} failed.",
+    "zh-CN": "架构解析器 {resolver_id} 失败。"
+  },
+  "diagnostics.compiler.schema.resolver_missing": {
+    "code": "compiler.schema.resolver_missing",
+    "parameters": ["resolver_id"],
+    "en-US": "Schema resolver {resolver_id} is missing.",
+    "zh-CN": "缺少架构解析器 {resolver_id}。"
+  },
+  "diagnostics.compiler.semantic.invalid": {
+    "code": "compiler.semantic.invalid",
+    "parameters": [],
+    "en-US": "Semantic graph is invalid.",
+    "zh-CN": "语义图无效。"
+  },
+  "diagnostics.compiler.type.connection_mismatch": {
+    "code": "compiler.type.connection_mismatch",
+    "parameters": ["output", "input"],
+    "en-US": "Resolved output type at {output} is not accepted by {input}.",
+    "zh-CN": "输出端口 {output} 的已解析类型不被输入端口 {input} 接受。"
+  },
+  "diagnostics.compiler.type.generic_conflict": {
+    "code": "compiler.type.generic_conflict",
+    "parameters": ["type_parameter"],
+    "en-US": "Type parameter {type_parameter} received incompatible input types.",
+    "zh-CN": "类型参数 {type_parameter} 收到了不兼容的输入类型。"
+  },
+  "diagnostics.compiler.type.input_not_accepted": {
+    "code": "compiler.type.input_not_accepted",
+    "parameters": ["port"],
+    "en-US": "Input value type is not accepted by port {port}.",
+    "zh-CN": "输入值类型不被端口 {port} 接受。"
+  },
+  "diagnostics.compiler.type.resolution_incomplete": {
+    "code": "compiler.type.resolution_incomplete",
+    "parameters": ["port"],
+    "en-US": "Port {port} does not have one exact resolved type.",
+    "zh-CN": "端口 {port} 尚未求解为唯一确定类型。"
+  },
+  "diagnostics.compiler.type.incompatible": {
+    "code": "compiler.type.incompatible",
+    "parameters": ["expected_type", "actual_type"],
+    "en-US": "Type {actual_type} is incompatible with {expected_type}.",
+    "zh-CN": "类型 {actual_type} 与 {expected_type} 不兼容。"
+  },
+  "diagnostics.compiler.function.body_unavailable": {
+    "code": "compiler.function.body_unavailable",
+    "parameters": ["function"],
+    "en-US": "Function {function} has no available body.",
+    "zh-CN": "函数 {function} 的正文不可用。"
+  },
+  "diagnostics.compiler.function.abi_mismatch": {
+    "code": "compiler.function.abi_mismatch",
+    "parameters": ["function"],
+    "en-US": "Function {function} entry or return does not match its signature.",
+    "zh-CN": "函数 {function} 的入口或返回与签名不一致。"
+  },
+  "diagnostics.compiler.function.dependency_cycle": {
+    "code": "compiler.function.dependency_cycle",
+    "parameters": ["function"],
+    "en-US": "Function {function} participates in a recursive call cycle.",
+    "zh-CN": "函数 {function} 参与了递归调用循环。"
+  },
+  "diagnostics.compiler.function.blocked": {
+    "code": "compiler.function.blocked",
+    "parameters": ["function"],
+    "en-US": "Function {function} contains blocking graph problems.",
+    "zh-CN": "函数 {function} 中存在阻止编译的图问题。"
+  }
+}

@@ -136,6 +136,9 @@ export const enUS = {
     logs: "Logs",
     output: "Output",
     problems: "Problems",
+    problemsLocate: "Reveal problem location",
+    problemsRelated: "Related",
+    problemsBlocking: "Blocks compilation",
     outputNoGraph: "Open a graph to view its program output",
     outputEmpty: "The current graph has no program output",
     outputClear: "Clear output",
@@ -1177,6 +1180,8 @@ export const enUS = {
     failedInitialize: "Failed to initialize window",
   },
   log: {
+    streamTruncated: "Some logs may be missing",
+    streamDisconnected: "Log stream disconnected",
     title: "Logs",
     showCount: "Showing {{filtered}} / {{total}}",
     refresh: "Refresh logs",

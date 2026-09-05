@@ -2,11 +2,15 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscError, VscInfo, VscWarning } from "react-icons/vsc";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { revealDiagnosticNode } from "@/features/application/editor/rightSidebarActions";
+import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import type { FocusedGraphSession } from "@/features/core/graphSession/graphSessionStore";
-import { collectGraphProblems } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
+import {
+  collectGraphProblems,
+  formatDiagnosticLocationLabel,
+  formatGraphDiagnostic,
+} from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import type { GraphProblem } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 
 function severityIcon(severity: GraphProblem["diagnostic"]["severity"]) {
@@ -21,22 +25,22 @@ function severityClass(severity: GraphProblem["diagnostic"]["severity"]): string
   return "text-muted-foreground";
 }
 
-function activateProblem(row: GraphProblem, focused: FocusedGraphSession | null): void {
-  if (!row.nodeId || !focused || focused.graphPath !== row.graphPath) return;
+function activateProblem(problem: GraphProblem, focusedSession: FocusedGraphSession | null): void {
+  if (!focusedSession || focusedSession.graphPath !== problem.graphPath) return;
 
-  void revealDiagnosticNode(row.graphPath, row.nodeId, focused.groupId);
+  void revealGraphProblem(problem.graphPath, problem.diagnostic.location, focusedSession.groupId);
 }
 
 export function GraphProblemsPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
   const graphPath = focusedSession?.graphPath ?? null;
-  const projection = useGraphRead((snapshot) =>
+  const graphProjection = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath] : undefined,
   );
   const problems = useMemo(
-    () => collectGraphProblems(graphPath ?? "", projection),
-    [graphPath, projection],
+    () => collectGraphProblems(graphPath ?? "", graphProjection),
+    [graphPath, graphProjection],
   );
 
   return (
@@ -70,32 +74,62 @@ export function GraphProblemsPanel() {
             {problems.map((problem, index) => {
               const Icon = severityIcon(problem.diagnostic.severity);
               const iconClass = severityClass(problem.diagnostic.severity);
-              const locatable = problem.nodeId !== null;
               return (
-                <button
+                <div
                   key={`${problem.diagnostic.code}:${problem.locationLabel}:${index}`}
-                  type="button"
-                  data-graph-problem-row
-                  disabled={!locatable}
-                  className="flex w-full items-start gap-2 border-b border-border/10 px-3 py-2 text-left transition-colors enabled:hover:bg-accent/40 enabled:focus-visible:bg-accent/40 enabled:focus-visible:outline-none disabled:cursor-default"
-                  onClick={() => activateProblem(problem, focusedSession)}
-                  title={locatable ? t("panel.problemsLocateNode") : undefined}
+                  role="listitem"
                 >
-                  <Icon className={`mt-0.5 size-3.5 shrink-0 ${iconClass}`} aria-hidden />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-xs font-medium" title={problem.locationLabel}>
-                        {problem.locationLabel}
+                  <button
+                    type="button"
+                    data-graph-problem-row
+                    className="flex w-full items-start gap-2 border-b border-border/10 px-3 py-2 text-left transition-colors enabled:hover:bg-accent/40 enabled:focus-visible:bg-accent/40 enabled:focus-visible:outline-none disabled:cursor-default"
+                    onClick={() => activateProblem(problem, focusedSession)}
+                    title={t("panel.problemsLocate")}
+                  >
+                    <Icon className={`mt-0.5 size-3.5 shrink-0 ${iconClass}`} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span
+                          className="truncate text-xs font-medium"
+                          title={problem.locationLabel}
+                        >
+                          {problem.locationLabel}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                          {problem.diagnostic.code}
+                        </span>
+                        {problem.diagnostic.blocking && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {t("panel.problemsBlocking")}
+                          </span>
+                        )}
                       </span>
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                        {problem.diagnostic.code}
+                      <span className="block break-words text-xs text-foreground">
+                        {formatGraphDiagnostic(problem.diagnostic, i18n?.resolvedLanguage)}
                       </span>
                     </span>
-                    <span className="block break-words text-xs text-foreground">
-                      {problem.diagnostic.message}
-                    </span>
-                  </span>
-                </button>
+                  </button>
+                  {problem.diagnostic.related.map((location, relatedIndex) => (
+                    <button
+                      key={relatedIndex}
+                      type="button"
+                      className="block w-full px-8 py-1 text-left text-xs text-primary hover:underline"
+                      data-graph-problem-related
+                      onClick={() => {
+                        if (focusedSession)
+                          void revealGraphProblem(
+                            problem.graphPath,
+                            location,
+                            focusedSession.groupId,
+                          );
+                      }}
+                    >
+                      {t("panel.problemsRelated")}:{" "}
+                      {formatDiagnosticLocationLabel(location, graphProjection, null) ??
+                        problem.graphPath}
+                    </button>
+                  ))}
+                </div>
               );
             })}
           </div>

@@ -10,7 +10,11 @@ import type { MoveConnectionsArgs } from "./moveConnections";
 import type { DeleteNodesArgs } from "./deleteNodes";
 import type { DuplicateSubgraphArgs } from "./duplicateSubgraph";
 import type { InsertSubgraphArgs } from "./insertSubgraph";
-import type { AddPortInstanceArgs, RemovePortInstanceArgs } from "./portInstance";
+import type {
+  AddPortInstanceArgs,
+  MovePortInstanceArgs,
+  RemovePortInstanceArgs,
+} from "./portInstance";
 
 export interface CommandHandlerMap {
   MoveNodes: CommandHandler<MoveNodesArgs, GraphDraftCommandResult>;
@@ -25,6 +29,7 @@ export interface CommandHandlerMap {
   DuplicateSubgraph: CommandHandler<DuplicateSubgraphArgs, GraphDraftCommandResult>;
   InsertSubgraph: CommandHandler<InsertSubgraphArgs, GraphDraftCommandResult>;
   AddPortInstance: CommandHandler<AddPortInstanceArgs, GraphDraftCommandResult>;
+  MovePortInstance: CommandHandler<MovePortInstanceArgs, GraphDraftCommandResult>;
   RemovePortInstance: CommandHandler<RemovePortInstanceArgs, GraphDraftCommandResult>;
 }
 

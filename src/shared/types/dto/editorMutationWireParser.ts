@@ -288,22 +288,34 @@ export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDt
 }
 
 export function parseCompileGraphDraftDto(value: unknown): CompileGraphDraftDto {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["sourceHash", "cacheHit", "document", "projection"]) ||
-    typeof value.sourceHash !== "string" ||
-    !SHA256_HEX_PATTERN.test(value.sourceHash) ||
-    typeof value.cacheHit !== "boolean" ||
-    !isEditorGraphProjectionDto(value.projection)
-  ) {
+  if (!isRecord(value) || !isEditorGraphProjectionDto(value.projection)) {
     throw new Error("Graph draft compilation result is malformed");
   }
-  return {
-    sourceHash: value.sourceHash,
-    cacheHit: value.cacheHit,
-    document: parseGraphDocumentDto(value.document),
-    projection: value.projection,
-  };
+  if (
+    value.type === "blocked" &&
+    hasExactKeys(value, ["type", "projection"]) &&
+    value.projection.outcome.type === "analysisBlocked" &&
+    value.projection.hasBlockingDiagnostics
+  ) {
+    return { type: "blocked", projection: value.projection };
+  }
+  if (
+    value.type === "ready" &&
+    hasExactKeys(value, ["type", "artifactId", "cacheHit", "projection"]) &&
+    typeof value.artifactId === "string" &&
+    SHA256_HEX_PATTERN.test(value.artifactId) &&
+    typeof value.cacheHit === "boolean" &&
+    value.projection.outcome.type === "success" &&
+    !value.projection.hasBlockingDiagnostics
+  ) {
+    return {
+      type: "ready",
+      artifactId: value.artifactId,
+      cacheHit: value.cacheHit,
+      projection: value.projection,
+    };
+  }
+  throw new Error("Graph draft compilation outcome is malformed");
 }
 
 export function parseGraphDraftTransformDto(value: unknown): GraphDraftTransformDto {

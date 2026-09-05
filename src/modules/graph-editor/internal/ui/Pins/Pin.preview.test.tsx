@@ -154,7 +154,7 @@ describe("Pin preview production path", () => {
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
-    const execute = vi.spyOn(ProjectService, "executeGraphDocument");
+    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
 
     act(() =>
       root.render(
@@ -276,7 +276,7 @@ describe("Pin preview production path", () => {
     useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(functionPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected function output pin");
-    const execute = vi.spyOn(ProjectService, "executeGraphDocument");
+    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
 
     act(() =>
       root.render(

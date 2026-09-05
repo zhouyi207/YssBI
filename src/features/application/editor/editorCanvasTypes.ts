@@ -50,7 +50,7 @@ export interface EditorCanvasWorkspaceSlice {
   } | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
-  compileStatus: "uncompiled" | "compiling" | "compiled" | "failed";
+  compileStatus: "uncompiled" | "compiling" | "compiled" | "blocked" | "failed";
 }
 
 export interface EditorCanvasInteractionSlice {

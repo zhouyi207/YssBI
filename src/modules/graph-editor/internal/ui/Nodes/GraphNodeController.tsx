@@ -1,4 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { useNodeView } from "@/features/core/dataStore/useNodeView";
 import { isRerouteNodeView } from "@/features/core/dataStore/nodeView";
@@ -39,6 +41,7 @@ export const GraphNodeController = memo(function GraphNodeController({
   onPointerDown,
   onPinPointerDown,
 }: GraphNodeControllerProps) {
+  const { i18n } = useTranslation();
   const node = useNodeView(id, graphPath);
   const graphStatus = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.status ?? "idle") : "idle",
@@ -112,10 +115,12 @@ export const GraphNodeController = memo(function GraphNodeController({
                   ? "bg-amber-400"
                   : "bg-blue-400"
             }`}
-            aria-label={primaryDiagnostic.message}
+            aria-label={formatGraphDiagnostic(primaryDiagnostic, i18n?.resolvedLanguage)}
           />
         </TooltipTrigger>
-        <TooltipContent side="top">{primaryDiagnostic.message}</TooltipContent>
+        <TooltipContent side="top">
+          {formatGraphDiagnostic(primaryDiagnostic, i18n?.resolvedLanguage)}
+        </TooltipContent>
       </Tooltip>
     ) : null;
   const contextMenuSlot =

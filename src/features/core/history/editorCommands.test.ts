@@ -141,7 +141,7 @@ describe("forward-only editor commands", () => {
       build: () => ({ nodeId: "local-node", templateKey: "inputs" }),
       mutation: () => ({
         type: "addPortInstance",
-        payload: { nodeId: "local-node", templateKey: "inputs", order: null },
+        payload: { nodeId: "local-node", templateKey: "inputs", placement: { kind: "append" } },
       }),
     },
     {

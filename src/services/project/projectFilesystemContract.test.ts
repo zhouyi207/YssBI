@@ -38,13 +38,14 @@ function productionSources(directory = sourceRoot): Array<{ path: string; source
 const lifecycleOwnedNodeCommandIdentityFields = {
   transform_graph_draft: "projectInstanceId",
   compile_graph_draft: "projectInstanceId",
+  resolve_graph_draft: "projectInstanceId",
   update_function_signature: "projectInstanceId",
   hydrate_editor_graph: "projectInstanceId",
   export_graph_subgraph: "projectInstanceId",
   get_project_history_status: "projectInstanceId",
   undo_graph_document: "projectInstanceId",
   redo_graph_document: "projectInstanceId",
-  execute_graph_document: "projectInstanceId",
+  execute_compiled_graph: "projectInstanceId",
 } as const;
 
 const projectDatabaseIdentityFields = {
@@ -514,15 +515,15 @@ describe("projectFilesystemContract", () => {
         path: "src/services/project/fixture.ts",
         source: `
         import { invoke } from '@tauri-apps/api/core';
-        // invoke('execute_graph_document', { projectInstanceId });
-        invoke('execute_graph_document', { other: projectInstanceId });
+        // invoke('execute_compiled_graph', { projectInstanceId });
+        invoke('execute_compiled_graph', { other: projectInstanceId });
       `,
       },
     ]);
 
     expect(invokes).toEqual([
       {
-        command: "execute_graph_document",
+        command: "execute_compiled_graph",
         path: "src/services/project/fixture.ts",
         payloadFields: ["other"],
       },

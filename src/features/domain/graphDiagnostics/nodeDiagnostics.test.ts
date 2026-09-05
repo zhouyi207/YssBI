@@ -14,7 +14,8 @@ const diagnostic = (
   nodeId = "unused-in-fixture",
 ): DiagnosticDto => ({
   code,
-  message,
+  messageKey: `diagnostics.${code}`,
+  arguments: { value: message },
   severity: code === "error" ? "error" : "warning",
   blocking: code === "error",
   location: { kind: "node", nodeId },
@@ -158,7 +159,7 @@ describe("collectGraphProblems", () => {
       {
         graphPath: "events/Main.yssbi-event",
         nodeId: null,
-        locationLabel: "events/Main.yssbi-event",
+        locationLabel: "database/source",
         diagnostic: resourceProblem,
       },
       {

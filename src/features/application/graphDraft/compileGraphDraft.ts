@@ -1,5 +1,9 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  prepareGraphProjectionReplacements,
+  commitPreparedGraphProjectionReplacements,
+} from "@/features/core/dataStore/graphProjectionStore";
+import { waitForGraphDraftMutations } from "./graphDraftCoordinator";
 import { getGraphDraftDocument, useGraphDraftStore } from "@/features/core/graphDraft";
 import {
   captureProjectIdentity,
@@ -8,40 +12,46 @@ import {
 import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
 
 export async function compileGraphDraft(graphPath: string): Promise<boolean> {
-  const identity = captureProjectIdentity();
-  const drafts = useGraphDraftStore.getState();
-  if (!drafts.beginCompile(graphPath)) return false;
-  const document = getGraphDraftDocument(graphPath);
-  if (!document) {
-    drafts.failCompile(graphPath);
+  const projectIdentity = captureProjectIdentity();
+  await waitForGraphDraftMutations(graphPath);
+  if (!isCurrentProjectIdentity(projectIdentity)) return false;
+  const draftState = useGraphDraftStore.getState();
+  if (!draftState.beginCompile(graphPath)) return false;
+  const request = useGraphDraftStore.getState().sessions[graphPath].compileRequest!;
+  const draftDocument = getGraphDraftDocument(graphPath);
+  if (!draftDocument) {
+    draftState.failCompile(graphPath, request);
     throw new Error(`Graph draft '${graphPath}' is not loaded`);
   }
-  const source = JSON.stringify(document);
 
   try {
-    const result = await GraphDraftService.compile(
-      identity.projectInstanceId,
+    const compileReceipt = await GraphDraftService.compile(
+      projectIdentity.projectInstanceId,
       graphPath,
       currentProjectionLocale(),
-      document,
+      draftDocument,
     );
-    if (!isCurrentProjectIdentity(identity)) return false;
-    const current = getGraphDraftDocument(graphPath);
-    if (!current || JSON.stringify(current) !== source) {
-      useGraphDraftStore.getState().failCompile(graphPath);
+    if (
+      !isCurrentProjectIdentity(projectIdentity) ||
+      !useGraphDraftStore.getState().isCompileCurrent(graphPath, request)
+    )
       return false;
-    }
-    const applied = useGraphProjectionStore
-      .getState()
-      .replaceProjection(graphPath, result.projection);
-    if (!applied.applied) {
-      useGraphDraftStore.getState().failCompile(graphPath);
+    const prepared = prepareGraphProjectionReplacements([
+      { graphPath, projection: compileReceipt.projection },
+    ]);
+    if (!prepared.prepared) {
       throw new Error("Compiled Graph projection could not be installed");
     }
-    useGraphDraftStore.getState().completeCompile(graphPath, result);
-    return true;
+    commitPreparedGraphProjectionReplacements(prepared.plan);
+    useGraphDraftStore.getState().completeCompile(graphPath, compileReceipt, request);
+    return compileReceipt.type === "ready";
   } catch (error) {
-    useGraphDraftStore.getState().failCompile(graphPath);
+    if (
+      !isCurrentProjectIdentity(projectIdentity) ||
+      !useGraphDraftStore.getState().isCompileCurrent(graphPath, request)
+    )
+      return false;
+    useGraphDraftStore.getState().failCompile(graphPath, request);
     throw error;
   }
 }

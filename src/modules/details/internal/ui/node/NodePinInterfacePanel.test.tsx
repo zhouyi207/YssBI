@@ -115,6 +115,10 @@ function graphBucket(): GraphEntityBucket {
     basis: {
       graphPath,
       registryFingerprint: "fingerprint",
+
+      semanticInputHash: "0".repeat(64),
+
+      resourceObservations: {},
       resourceVersions: {},
     },
     diagnostics: [],

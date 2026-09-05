@@ -1875,6 +1875,7 @@ describe("frontend architecture model", () => {
         "src/components/control.tsx",
         "src/features/application/useCase.ts",
         "src/services/backend.ts",
+        "src/shared/generated.generated.ts",
         "src/shared/utils/kept.ts",
         "src/utils/diagnostic.ts",
         "src/views/screen.tsx",

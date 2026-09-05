@@ -1,7 +1,7 @@
 import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
 import type { RunOutputProjection } from "./executionTypes";
 
-/** Backend emits at most 256 text events plus one status for each limit. */
+/** Frontend retention bound; the production output emitter is not connected yet. */
 export const RUN_OUTPUT_PROJECTION_MAX_ENTRIES = 258;
 
 export function emptyRunOutputProjection(): RunOutputProjection {

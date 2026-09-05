@@ -135,6 +135,9 @@ export const zhCN = {
     logs: "日志",
     output: "输出",
     problems: "问题",
+    problemsLocate: "定位问题",
+    problemsRelated: "关联位置",
+    problemsBlocking: "阻止编译",
     outputNoGraph: "请打开图以查看程序输出",
     outputEmpty: "当前图暂无程序输出",
     outputClear: "清空输出",
@@ -1128,6 +1131,8 @@ export const zhCN = {
     failedInitialize: "窗口初始化失败",
   },
   log: {
+    streamTruncated: "部分日志可能已丢失",
+    streamDisconnected: "日志连接已断开",
     title: "日志",
     showCount: "显示 {{filtered}} / {{total}} 条",
     refresh: "刷新日志",

@@ -26,6 +26,10 @@ function projection(path: string) {
     basis: {
       graphPath: path,
       registryFingerprint: "0".repeat(64),
+
+      semanticInputHash: "0".repeat(64),
+
+      resourceObservations: {},
       resourceVersions: {},
     },
     graphPath: path,

@@ -31,6 +31,7 @@ export function GraphCanvasView({
     <div
       ref={canvasElementRef}
       data-editor-panel-instance-id={panelInstanceId}
+      tabIndex={-1}
       data-editor-graph-path={graphPath}
       data-editor-graph-kind={graphKind}
       className="relative h-full w-full select-none overflow-hidden bg-[var(--workbench-bg)]"

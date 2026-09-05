@@ -14,21 +14,21 @@ const EMPTY_RUN_OUTPUT: RunOutputProjection = {
 };
 
 function formatRunOutputSource(entry: RunOutputProjection["entries"][number]): string {
-  const port =
+  const sourcePortLabel =
     entry.sourcePort.kind === "declared"
       ? entry.sourcePort.portKey
       : `${entry.sourcePort.templateKey}[${entry.sourcePort.instanceId}]`;
-  return `${entry.sourceGraphPath} · ${entry.sourceNodeId} · ${port}`;
+  return `${entry.sourceGraphPath} · ${entry.sourceNodeId} · ${sourcePortLabel}`;
 }
 
 export function RunOutputPanel() {
   const { t } = useTranslation();
   const graphPath = useGraphSessionUi((snapshot) => snapshot.focusedSession?.graphPath ?? null);
-  const output = useExecutionRead((snapshot) =>
+  const runOutput = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT) : EMPTY_RUN_OUTPUT,
   );
   const clearRunOutput = executionResultUi.clearRunOutput;
-  const hasOutput = output.entries.length > 0 || output.projectionDropped;
+  const hasOutput = runOutput.entries.length > 0 || runOutput.projectionDropped;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -65,10 +65,10 @@ export function RunOutputPanel() {
       ) : (
         <ScrollArea orientation="both" className="min-h-0 flex-1">
           <div className="min-w-max py-1 font-mono text-xs" role="log" aria-live="polite">
-            {output.projectionDropped ? (
+            {runOutput.projectionDropped ? (
               <div className="px-3 py-1.5 text-amber-500">{t("panel.outputProjectionDropped")}</div>
             ) : null}
-            {output.entries.map((entry) => {
+            {runOutput.entries.map((entry) => {
               const sourceLabel = formatRunOutputSource(entry);
 
               return (

@@ -12,17 +12,17 @@ import {
 } from "./projectService";
 
 const projectInstanceId = "project-instance-1";
-const compiledSourceHash = "3".repeat(64);
+const compiledArtifactId = "3".repeat(64);
 
 function executeGraph(
   demand: ExecutionDemandDto,
   onEvent?: (event: RunEvent) => void,
   onOutput?: (event: RunOutputChannelEvent) => void,
 ): Promise<void> {
-  return ProjectService.executeGraphDocument({
+  return ProjectService.executeCompiledGraph({
     projectInstanceId,
     graphPath: "events/Main.yssbi-event",
-    compiledSourceHash,
+    compiledArtifactId,
     demand,
     onEvent,
     onOutput,
@@ -186,7 +186,7 @@ describe("ProjectService execution contract", () => {
     expect(vi.mocked(invoke).mock.calls[0]?.[1]).toMatchObject({ demand });
   });
 
-  it("rejects a malformed demand before invoking execute_graph_document", async () => {
+  it("rejects a malformed demand before invoking execute_compiled_graph", async () => {
     const malformed = { type: "default", extra: true } as unknown as ExecutionDemandDto;
 
     await expect(executeGraph(malformed)).rejects.toThrow("Invalid default execution demand");
@@ -194,7 +194,7 @@ describe("ProjectService execution contract", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("invokes execute_graph_document and drains its RunEvent channel before resolving", async () => {
+  it("invokes execute_compiled_graph and drains its RunEvent channel before resolving", async () => {
     let resolveInvoke!: () => void;
     vi.mocked(invoke).mockReturnValue(
       new Promise<void>((resolve) => {
@@ -210,11 +210,11 @@ describe("ProjectService execution contract", () => {
       string,
       { graphPath: string; demand: { type: "default" }; onEvent: Channel<RunEvent> },
     ];
-    expect(command).toBe("execute_graph_document");
+    expect(command).toBe("execute_compiled_graph");
     expect(args).toEqual({
       projectInstanceId,
       graphPath: "events/Main.yssbi-event",
-      compiledSourceHash,
+      compiledArtifactId,
       demand: { type: "default" },
       onEvent: expect.any(Channel),
     });

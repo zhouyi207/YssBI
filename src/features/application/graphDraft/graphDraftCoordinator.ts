@@ -5,7 +5,10 @@ import type {
   GraphDraftTransformDto,
 } from "@/shared/types/domain/editorMutation";
 import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  prepareGraphProjectionReplacements,
+  commitPreparedGraphProjectionReplacements,
+} from "@/features/core/dataStore/graphProjectionStore";
 import {
   getGraphDraftDocument,
   isGraphDraftSaving,
@@ -50,6 +53,11 @@ const mutationTails = new Map<string, Promise<void>>();
 let coordinatorEpoch = 0;
 
 function installDraftProjection(graphPath: string, result: GraphDraftTransformDto): void {
+  const prepared = prepareGraphProjectionReplacements([
+    { graphPath, projection: result.projection },
+  ]);
+  if (!prepared.prepared)
+    throw new Error(`Graph draft projection '${graphPath}' could not be installed`);
   useGraphDraftStore.getState().applyTransform(graphPath, result);
   const draft = useGraphDraftStore.getState().sessions[graphPath];
   useHistoryStore.setState({
@@ -57,15 +65,10 @@ function installDraftProjection(graphPath: string, result: GraphDraftTransformDt
     canRedo: false,
     pending: false,
   });
-  const applied = useGraphProjectionStore
-    .getState()
-    .replaceProjection(graphPath, result.projection);
-  if (!applied.applied) {
-    throw new Error(`Graph draft projection '${graphPath}' could not be installed`);
-  }
+  commitPreparedGraphProjectionReplacements(prepared.plan);
   const kind = inferGraphResourceKind(graphPath);
   if (kind) {
-    markResourceDirty({ id: graphPath, kind }, true);
+    markResourceDirty({ id: graphPath, kind }, draft.saveDirty);
     markResourceStale({ id: graphPath, kind }, false);
   }
 }
@@ -83,6 +86,14 @@ async function applyAfterPrevious(
   const identity = captureProjectIdentity();
   const document = getGraphDraftDocument(input.graphPath);
   if (!document) throw new Error(`Graph draft '${input.graphPath}' is not loaded`);
+  const session = useGraphDraftStore.getState().sessions[input.graphPath];
+  const isCurrentDraft = () => {
+    const current = useGraphDraftStore.getState().sessions[input.graphPath];
+    return (
+      current?.sessionId === session.sessionId &&
+      current.draftGeneration === session.draftGeneration
+    );
+  };
 
   let result: GraphDraftTransformDto;
   try {
@@ -94,7 +105,11 @@ async function applyAfterPrevious(
       input.mutation,
     );
   } catch (error) {
-    if (!isCurrentProjectIdentity(identity) || requestEpoch !== coordinatorEpoch) {
+    if (
+      !isCurrentProjectIdentity(identity) ||
+      requestEpoch !== coordinatorEpoch ||
+      !isCurrentDraft()
+    ) {
       return { status: "stale" };
     }
     const code = graphDraftErrorCode(error);
@@ -102,10 +117,22 @@ async function applyAfterPrevious(
     throw error;
   }
 
-  if (!isCurrentProjectIdentity(identity) || requestEpoch !== coordinatorEpoch) {
+  if (
+    !isCurrentProjectIdentity(identity) ||
+    requestEpoch !== coordinatorEpoch ||
+    !isCurrentDraft()
+  ) {
     return { status: "stale", result };
   }
-  if (!result.changed) return { status: "noop", result };
+  if (!result.changed) {
+    const prepared = prepareGraphProjectionReplacements([
+      { graphPath: input.graphPath, projection: result.projection },
+    ]);
+    if (!prepared.prepared) throw new Error("Resolved Graph projection could not be installed");
+    useGraphDraftStore.getState().replaceResolvedProjection(input.graphPath, result.projection);
+    commitPreparedGraphProjectionReplacements(prepared.plan);
+    return { status: "noop", result };
+  }
 
   const insertedNodeIds = Object.keys(result.document.nodes).filter(
     (nodeId) => !(nodeId in document.nodes),
@@ -135,6 +162,28 @@ export function applyGraphDraftMutation(
 
 export async function waitForGraphDraftMutations(graphPath: string): Promise<void> {
   await mutationTails.get(graphPath);
+}
+
+export function enqueueGraphDraftTask<T>(
+  graphPath: string,
+  task: () => Promise<T>,
+  stale: T,
+): Promise<T> {
+  const previous = mutationTails.get(graphPath);
+  const epoch = coordinatorEpoch;
+  const completion = (async () => {
+    await previous;
+    return epoch === coordinatorEpoch ? task() : stale;
+  })();
+  const tail = completion.then(
+    () => undefined,
+    () => undefined,
+  );
+  mutationTails.set(graphPath, tail);
+  void tail.finally(() => {
+    if (mutationTails.get(graphPath) === tail) mutationTails.delete(graphPath);
+  });
+  return completion;
 }
 
 export function resetGraphDraftCoordinator(): void {

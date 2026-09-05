@@ -43,7 +43,7 @@ export type ProjectCleanupProgressEvent =
 export interface ExecuteGraphDocumentRequest {
   projectInstanceId: string;
   graphPath: string;
-  compiledSourceHash: string;
+  compiledArtifactId: string;
   demand: ExecutionDemandDto;
   onEvent?: (event: RunEvent) => void;
   onOutput?: (event: RunOutputChannelEvent) => void;
@@ -474,10 +474,10 @@ export class ProjectService {
     });
   }
   /** Execute one graph document and drain its streamed run events. */
-  static async executeGraphDocument({
+  static async executeCompiledGraph({
     projectInstanceId,
     graphPath,
-    compiledSourceHash,
+    compiledArtifactId,
     demand,
     onEvent,
     onOutput,
@@ -486,10 +486,10 @@ export class ProjectService {
     const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent, onOutput);
     try {
       try {
-        await invokeCommand<void>("execute_graph_document", {
+        await invokeCommand<void>("execute_compiled_graph", {
           projectInstanceId,
           graphPath,
-          compiledSourceHash,
+          compiledArtifactId,
           demand: parsedDemand,
           onEvent: channel,
         });

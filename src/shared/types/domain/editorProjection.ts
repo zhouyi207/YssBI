@@ -10,7 +10,12 @@ export interface FunctionEditorProjectionDto {
 export interface ProjectionBasisDto {
   graphPath: string;
   registryFingerprint: string;
+  semanticInputHash: string;
   resourceVersions: Record<string, string>;
+  resourceObservations: Record<
+    string,
+    { kind: "present"; version: string } | { kind: "absent"; version: string | null }
+  >;
 }
 
 export type CompilationStageDto = "analysis" | "lowering";
@@ -250,7 +255,8 @@ export type ParameterEditorKindDto = "auto" | "text" | "number" | "toggle" | "se
 
 export interface DiagnosticDto {
   code: string;
-  message: string;
+  messageKey: string;
+  arguments: Record<string, string>;
   severity: DiagnosticSeverityDto;
   blocking: boolean;
   location: DiagnosticLocationDto;

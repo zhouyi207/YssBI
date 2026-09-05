@@ -47,10 +47,17 @@ describe("useEditorHistoryAvailability", () => {
       sessions: {
         [graphPath]: {
           ...version,
+          sessionId: 1,
+          draftGeneration: 0,
+          semanticInputHash: "0".repeat(64),
+          compiledInputHash: null,
+          compileRequest: null,
+          saveDirty: false,
+          compileDirty: true,
           savedDocument: draftDocument,
           saving: false,
           compileStatus: "uncompiled",
-          compiledSourceHash: null,
+          compiledArtifactId: null,
           compileCacheHit: false,
           undoStack: [version],
           redoStack: [version],

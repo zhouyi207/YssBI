@@ -109,6 +109,10 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
       basis: {
         graphPath,
         registryFingerprint: "0000000000000000000000000000000000000000000000000000000000000000",
+
+        semanticInputHash: "0".repeat(64),
+
+        resourceObservations: {},
         resourceVersions: {},
       },
       graphPath,

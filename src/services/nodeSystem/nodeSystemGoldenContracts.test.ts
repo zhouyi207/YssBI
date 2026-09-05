@@ -222,11 +222,11 @@ describe("Rust-generated node-system golden contracts", () => {
       code: "compiler.lowering.internal_invariant",
       nodeId: editorProjection.nodes[0].nodeId,
     };
-    internal.hasBlockingDiagnostics = true;
+    internal.hasBlockingDiagnostics = false;
     expect(isEditorGraphProjectionDto(internal)).toBe(true);
     expect(parseEditorGraphProjectionDto(internal).outcome).toEqual(internal.outcome);
 
-    internal.hasBlockingDiagnostics = false;
+    internal.hasBlockingDiagnostics = true;
     expect(isEditorGraphProjectionDto(internal)).toBe(false);
 
     const missing = clone(editorProjection) as unknown as Record<string, unknown>;
@@ -305,7 +305,8 @@ describe("Rust-generated node-system golden contracts", () => {
       projection.diagnostics = [
         {
           code: "contract.variant",
-          message: "variant",
+          messageKey: "diagnostics.contract.variant",
+          arguments: {},
           severity: "information",
           blocking: false,
           location: value,

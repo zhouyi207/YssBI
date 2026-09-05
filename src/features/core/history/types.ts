@@ -21,6 +21,7 @@ export type CommandType =
   | "DuplicateSubgraph"
   | "InsertSubgraph"
   | "AddPortInstance"
+  | "MovePortInstance"
   | "RemovePortInstance";
 
 export interface CommandHandler<TArgs = unknown, TResult = unknown> {

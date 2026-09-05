@@ -1,4 +1,5 @@
 import { invokeCommand } from "@/services/ipc";
+import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
 import type {
   CompileGraphDraftDto,
   EditorGraphMutationDto,
@@ -13,6 +14,22 @@ import {
 } from "@/shared/types/dto/editorMutationWireParser";
 
 export class GraphDraftService {
+  static async resolve(
+    projectInstanceId: string,
+    graphPath: string,
+    locale: string,
+    document: GraphDocumentDto,
+  ) {
+    return parseEditorGraphProjectionDto(
+      await invokeCommand("resolve_graph_draft", {
+        projectInstanceId,
+        graphPath,
+        locale,
+        document,
+      }),
+    );
+  }
+
   static async compile(
     projectInstanceId: string,
     graphPath: string,

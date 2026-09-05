@@ -26,7 +26,10 @@
     "format:check": "pnpm format:check:ts && pnpm format:check:rs",
     "format:check:ts": "oxfmt --check",
     "format:check:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
-    "ci": "pnpm format:check && pnpm check && pnpm lint && pnpm test"
+    "ci": "pnpm format:check && pnpm check && pnpm lint && pnpm test",
+    "generate:diagnostics": "node scripts/generate-graph-diagnostics.mjs",
+    "generate:diagnostics:check": "node scripts/generate-graph-diagnostics.mjs --check",
+    "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.16",
