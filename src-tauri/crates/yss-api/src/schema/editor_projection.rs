@@ -1,9 +1,9 @@
 use yss_application::editor_projection::{
     EditorCompilationStage, EditorDiagnosticModel, EditorDiagnosticSeverity,
     EditorEffectiveInputBinding, EditorFilterLiteralType, EditorParameterConfiguration,
-    EditorParameterModel, EditorParameterValueSource, EditorPortModel, EditorPortStatus,
-    EditorPortTypeState, EditorProjectionModel, EditorResolutionOutcome, EditorSchemaSummary,
-    EditorSchemaSummaryKind, ParameterEditorKind,
+    EditorParameterModel, EditorPortModel, EditorPortStatus, EditorPortTypeState,
+    EditorProjectionModel, EditorResolutionOutcome, EditorSchemaSummary, EditorSchemaSummaryKind,
+    ParameterEditorKind,
 };
 use yss_graph_registry::RegistryFingerprint;
 
@@ -206,6 +206,7 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
             ParameterEditorKind::Text => ParameterEditorKindDto::Text,
             ParameterEditorKind::Number => ParameterEditorKindDto::Number,
             ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,
+            ParameterEditorKind::Configuration => ParameterEditorKindDto::Configuration,
             ParameterEditorKind::Select => ParameterEditorKindDto::Select,
             ParameterEditorKind::Resource => ParameterEditorKindDto::Resource,
         },
@@ -217,12 +218,6 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
             .configuration
             .as_ref()
             .map(map_parameter_configuration),
-        inherited_value: parameter.inherited_value.clone(),
-        value_source: parameter.value_source.map(|source| match source {
-            EditorParameterValueSource::Project => ParameterValueSourceDto::Project,
-            EditorParameterValueSource::Node => ParameterValueSourceDto::Node,
-        }),
-        options: parameter.options.as_ref().map(|options| options.to_vec()),
     }
 }
 
@@ -251,6 +246,16 @@ fn map_parameter_configuration(
     configuration: &EditorParameterConfiguration,
 ) -> SchemaAwareParameterEditorDto {
     match configuration {
+        EditorParameterConfiguration::Configuration { fields } => {
+            SchemaAwareParameterEditorDto::Configuration {
+                fields: fields.iter().map(map_parameter).collect(),
+            }
+        }
+        EditorParameterConfiguration::SelectOptions { options } => {
+            SchemaAwareParameterEditorDto::SelectOptions {
+                options: options.to_vec(),
+            }
+        }
         EditorParameterConfiguration::ProjectColumns {
             available,
             unavailable_reason,
@@ -393,10 +398,9 @@ mod tests {
     use yss_application::editor_projection::{
         EditorAcceptedType, EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel,
         EditorNodeCapabilities, EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration,
-        EditorParameterDisplay, EditorParameterModel, EditorParameterValueSource,
-        EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortModel, EditorPortStatus,
-        EditorPortTypeState, EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary,
-        EditorSchemaSummaryKind,
+        EditorParameterDisplay, EditorParameterModel, EditorPortConnectionCapabilities,
+        EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorPortTypeState,
+        EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
     };
     use yss_graph_analysis_contract::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
@@ -504,9 +508,6 @@ mod tests {
                         }]),
                         value: Box::new(["sales".into()]),
                     }),
-                    inherited_value: None,
-                    value_source: Some(EditorParameterValueSource::Node),
-                    options: None,
                 }]),
                 capabilities: EditorNodeCapabilities {
                     managed: false,
@@ -550,10 +551,6 @@ mod tests {
         );
         assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
         assert_eq!(
-            wire["nodes"][0]["parameterEditors"][0]["valueSource"],
-            "node"
-        );
-        assert_eq!(
             wire["nodes"][0]["parameterEditors"][0]["configuration"],
             json!({
                 "kind": "projectColumns",
@@ -571,5 +568,29 @@ mod tests {
         );
         assert_eq!(wire["diagnostics"][0]["arguments"]["field"], "value");
         assert!(wire["nodes"][0].get("node_id").is_none());
+
+        let mut model = model;
+        let mut field = model.nodes[0].parameters[0].clone();
+        field.key = ParameterKey::new("covariance").unwrap();
+        field.value = Some(json!("HC1"));
+        field.configuration = Some(EditorParameterConfiguration::SelectOptions {
+            options: Box::new(["nonrobust".into(), "HC1".into()]),
+        });
+        model.nodes[0].parameters[0].key = ParameterKey::new("configuration").unwrap();
+        model.nodes[0].parameters[0].editor = ParameterEditorKind::Configuration;
+        model.nodes[0].parameters[0].configuration =
+            Some(EditorParameterConfiguration::Configuration {
+                fields: Box::new([field]),
+            });
+        let wire = serde_json::to_value(EditorGraphProjectionDto::from(&model)).unwrap();
+        let parameter = &wire["nodes"][0]["parameterEditors"][0];
+        assert_eq!(parameter["editor"], "configuration");
+        assert_eq!(parameter["configuration"]["kind"], "configuration");
+        let field = &parameter["configuration"]["fields"][0];
+        assert_eq!(
+            field["configuration"],
+            json!({"kind": "selectOptions", "options": ["nonrobust", "HC1"]})
+        );
+        assert_eq!(field["value"], "HC1");
     }
 }

@@ -124,7 +124,11 @@ fn project_node(
         .iter()
         .filter_map(project_parameter)
         .map(|mut parameter| {
-            parameter.value = node.parameters.get(&parameter.key).cloned();
+            parameter.value = node
+                .parameters
+                .get(&parameter.key)
+                .cloned()
+                .or(parameter.value);
             parameter
         })
         .collect::<Vec<_>>()
@@ -291,6 +295,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         ParameterEditorSpec::Text { multiline } => (ParameterEditorKind::Text, multiline),
         ParameterEditorSpec::Number => (ParameterEditorKind::Number, false),
         ParameterEditorSpec::Toggle => (ParameterEditorKind::Toggle, false),
+        ParameterEditorSpec::Configuration(_) => (ParameterEditorKind::Configuration, false),
         ParameterEditorSpec::Select => (ParameterEditorKind::Select, false),
         ParameterEditorSpec::Resource { .. } => (ParameterEditorKind::Resource, false),
     };
@@ -304,21 +309,31 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         presentation: fact.presentation,
         value_type: data_type_for(&fact.value_type),
         multiline,
-        value: None,
-        configuration: fact.configuration.as_ref().map(project_configuration),
-        inherited_value: fact.inherited_value.clone(),
-        value_source: fact.value_source.map(|source| match source {
-            yss_graph_analysis::GraphParameterValueSource::Project => {
-                EditorParameterValueSource::Project
+        value: fact.effective_value.as_ref().map(|value| match value {
+            yss_graph_analysis::GraphResolvedParameterValue::Literal(value) => value.clone(),
+            yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(value) => {
+                yss_graph_protocol::protocol_value_to_json(value)
             }
-            yss_graph_analysis::GraphParameterValueSource::Node => EditorParameterValueSource::Node,
+            yss_graph_analysis::GraphResolvedParameterValue::Resource(identity) => {
+                serde_json::Value::String(identity.as_str().to_owned())
+            }
         }),
-        options: (!fact.options.is_empty()).then(|| fact.options.clone()),
+        configuration: fact.configuration.as_ref().map(project_configuration),
     })
 }
 
 fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParameterConfiguration {
     match fact {
+        GraphParameterConfigurationFact::Configuration { fields } => {
+            EditorParameterConfiguration::Configuration {
+                fields: fields.iter().filter_map(project_parameter).collect(),
+            }
+        }
+        GraphParameterConfigurationFact::SelectOptions { options } => {
+            EditorParameterConfiguration::SelectOptions {
+                options: options.clone(),
+            }
+        }
         GraphParameterConfigurationFact::ProjectColumns {
             available,
             unavailable_reason,

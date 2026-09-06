@@ -302,16 +302,6 @@ pub struct ParameterEditorDto {
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<SchemaAwareParameterEditorDto>,
-    pub inherited_value: Option<serde_json::Value>,
-    pub value_source: Option<ParameterValueSourceDto>,
-    pub options: Option<Vec<Box<str>>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ParameterValueSourceDto {
-    Project,
-    Node,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -337,6 +327,12 @@ impl From<ParameterPresentation> for ParameterPresentationDto {
     rename_all_fields = "camelCase"
 )]
 pub enum SchemaAwareParameterEditorDto {
+    Configuration {
+        fields: Vec<ParameterEditorDto>,
+    },
+    SelectOptions {
+        options: Vec<Box<str>>,
+    },
     ProjectColumns {
         available: bool,
         unavailable_reason: Option<Box<str>>,
@@ -391,6 +387,7 @@ pub enum ParameterEditorKindDto {
     Number,
     Toggle,
     Select,
+    Configuration,
     Resource,
 }
 

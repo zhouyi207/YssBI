@@ -37,6 +37,10 @@ Use stable camelCase fields and strict frontend parsers for public DTOs. A contr
 
 Variable create/update/delete commands return `{ variableId, mutation }`. `mutation` is required and is the same resource publication delivered by `ResourceMutationCommitted`; the frontend submits both paths to the publication coordinator for revision ordering and deduplication. Variable values come from the publication deltas, and are not returned as a second snapshot in the receipt.
 
+Node parameter editors carry one effective `value`, display/editor metadata, and optional schema-aware `configuration`. Rust resolves that value from the node document or its protocol default. The wire has no project-setting inheritance source or override options; parameter edits update the Graph draft document directly.
+
+Node parameters with `editor: "configuration"` carry `configuration: { kind: "configuration", fields }` containing the active `ParameterEditorDto` fields for a Detail form. Select fields use `configuration: { kind: "selectOptions", options }`. The `setConfiguration` mutation carries `{ nodeId, key, values }`, with partial field values merged, normalized, and validated against the current node parameters by Graph Editor. Configuration objects persist in the node's parameter map and use the existing draft undo/redo and Save path. Static configurations have no input binding, source selector, or connection mutation.
+
 ## Commands, events, and channels
 
 Choose the transport by semantics:

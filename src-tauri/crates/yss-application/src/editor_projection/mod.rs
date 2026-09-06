@@ -7,11 +7,11 @@ pub use model::{
     EditorDiagnosticModel, EditorDiagnosticSeverity, EditorEffectiveInputBinding,
     EditorFilterColumnOption, EditorFilterLiteralType, EditorInputBinding, EditorNodeCapabilities,
     EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
-    EditorParameterModel, EditorParameterValueSource, EditorPortConnectionCapabilities,
-    EditorPortDisplay, EditorPortInstanceAdditionModel, EditorPortModel, EditorPortStatus,
-    EditorPortTypeState, EditorProjectionBasis, EditorProjectionError, EditorProjectionInput,
-    EditorProjectionModel, EditorResolutionOutcome, EditorSchemaField, EditorSchemaSummary,
-    EditorSchemaSummaryKind, ParameterEditorKind,
+    EditorParameterModel, EditorPortConnectionCapabilities, EditorPortDisplay,
+    EditorPortInstanceAdditionModel, EditorPortModel, EditorPortStatus, EditorPortTypeState,
+    EditorProjectionBasis, EditorProjectionError, EditorProjectionInput, EditorProjectionModel,
+    EditorResolutionOutcome, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
+    ParameterEditorKind,
 };
 
 #[cfg(test)]

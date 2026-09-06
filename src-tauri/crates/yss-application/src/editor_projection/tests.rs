@@ -93,11 +93,10 @@ fn node_facts(
             editor: ParameterEditorSpec::Toggle,
             presentation: ParameterPresentation::InlineAndDetail,
             value_type: bool_type(),
-            effective_value: None,
-            inherited_value: None,
-            value_source: None,
-            options: Box::new([]),
             configuration: None,
+            effective_value: Some(
+                yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(Value::Bool(false)),
+            ),
         }]),
         ports,
         port_instance_additions: Box::new([]),
@@ -218,6 +217,10 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
     assert_eq!(
         model.nodes[0].parameters[0].value,
         Some(serde_json::Value::Bool(true))
+    );
+    assert_eq!(
+        model.nodes[1].parameters[0].value,
+        Some(serde_json::Value::Bool(false))
     );
     assert_eq!(
         model.nodes[0].display.user_label.as_deref(),

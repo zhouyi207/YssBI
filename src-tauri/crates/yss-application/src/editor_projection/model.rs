@@ -163,9 +163,6 @@ pub struct EditorParameterModel {
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<EditorParameterConfiguration>,
-    pub inherited_value: Option<serde_json::Value>,
-    pub value_source: Option<EditorParameterValueSource>,
-    pub options: Option<Box<[Box<str>]>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -181,17 +178,18 @@ pub enum ParameterEditorKind {
     Number,
     Toggle,
     Select,
+    Configuration,
     Resource,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EditorParameterValueSource {
-    Project,
-    Node,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EditorParameterConfiguration {
+    Configuration {
+        fields: Box<[EditorParameterModel]>,
+    },
+    SelectOptions {
+        options: Box<[Box<str>]>,
+    },
     ProjectColumns {
         available: bool,
         unavailable_reason: Option<Box<str>>,
