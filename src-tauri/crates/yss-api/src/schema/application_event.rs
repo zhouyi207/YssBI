@@ -133,7 +133,6 @@ pub struct ResourceMutationResultDto {
     pub deltas: Vec<yss_project_history::ResourceDeltaEvent>,
     pub projection_replacements: Vec<GraphProjectionReplacementDto>,
     pub projection_status: ProjectionStatusDto,
-    pub history: yss_project_history::HistoryStatusDto,
 }
 
 pub(crate) fn graph_projection_replacement_to_transport(
@@ -241,10 +240,6 @@ pub(crate) fn resource_mutation_to_transport(
         deltas: mutation.deltas.clone(),
         projection_replacements: Vec::new(),
         projection_status: projection_status_to_transport(&mutation.projection_status),
-        history: yss_project_history::HistoryStatusDto {
-            can_undo: mutation.history.can_undo,
-            can_redo: mutation.history.can_redo,
-        },
     }
 }
 
@@ -398,10 +393,6 @@ mod tests {
                 "projectionStatus": {
                     "status": "complete",
                     "expectedGraphPaths": ["events/After.yssbi-event"],
-                },
-                "history": {
-                    "canUndo": true,
-                    "canRedo": false,
                 },
             })
         );

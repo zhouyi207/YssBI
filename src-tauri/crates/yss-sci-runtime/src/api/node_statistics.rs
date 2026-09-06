@@ -479,14 +479,6 @@ fn linear_model_basic_info(
     })
 }
 
-fn mean_square(sum_of_squares: f64, degrees_of_freedom: usize) -> f64 {
-    if degrees_of_freedom == 0 {
-        0.0
-    } else {
-        sum_of_squares / degrees_of_freedom as f64
-    }
-}
-
 fn binary_model_basic_info(
     fit: &RegressionFit,
     link: BinaryRegressionLink,
@@ -496,18 +488,6 @@ fn binary_model_basic_info(
     let parameters = fit.coefficients.len();
     let df_model = parameters.saturating_sub(1);
     let df_residual = observations.saturating_sub(parameters);
-    let df_total = observations.saturating_sub(1);
-    let ss_residual = fit.residuals.iter().map(|value| value * value).sum::<f64>();
-    let fitted_mean = fit.fitted.iter().sum::<f64>() / fit.fitted.len() as f64;
-    let ss_model = fit
-        .fitted
-        .iter()
-        .map(|value| (value - fitted_mean) * (value - fitted_mean))
-        .sum::<f64>();
-    let ss_total = ss_model + ss_residual;
-
-    // The current frontend parser requires these legacy slots. Binary views treat
-    // them as pseudo-R²/LR aliases, so project real model facts rather than 0/1 defaults.
     serde_json::json!({
         "model_type": match link {
             BinaryRegressionLink::Logit => "Logit",
@@ -515,24 +495,13 @@ fn binary_model_basic_info(
         },
         "method": "Maximum Likelihood",
         "num_observation": observations,
-        "r_squared": statistics.pseudo_r2,
-        "adj_r_squared": statistics.adjusted_pseudo_r2,
-        "f_statistic": statistics.lr_chi2,
-        "prob_f_statistic": statistics.lr_p_value,
-        "wald_chi2": statistics.lr_chi2,
-        "prob_wald_chi2": statistics.lr_p_value,
+        "pseudo_r2": statistics.pseudo_r2,
+        "adjusted_pseudo_r2": statistics.adjusted_pseudo_r2,
         "log_likelihood": statistics.log_likelihood,
         "lr_chi2": statistics.lr_chi2,
         "prob_lr_chi2": statistics.lr_p_value,
         "df_model": df_model,
         "df_residual": df_residual,
-        "df_total": df_total,
-        "ss_model": ss_model,
-        "ss_residual": ss_residual,
-        "ss_total": ss_total,
-        "ms_model": mean_square(ss_model, df_model),
-        "ms_residual": mean_square(ss_residual, df_residual),
-        "ms_total": mean_square(ss_total, df_total),
         "covariance_type": "nonrobust",
         "aic": statistics.aic,
         "bic": statistics.bic,
@@ -1049,19 +1018,12 @@ mod tests {
 
             for field in [
                 "num_observation",
-                "r_squared",
-                "adj_r_squared",
-                "f_statistic",
-                "prob_f_statistic",
+                "pseudo_r2",
+                "adjusted_pseudo_r2",
+                "lr_chi2",
+                "prob_lr_chi2",
                 "df_model",
                 "df_residual",
-                "df_total",
-                "ss_model",
-                "ss_residual",
-                "ss_total",
-                "ms_model",
-                "ms_residual",
-                "ms_total",
             ] {
                 assert!(
                     basic[field].as_f64().is_some_and(f64::is_finite),
@@ -1077,11 +1039,13 @@ mod tests {
                     .is_some_and(f64::is_finite),
                 "binary report must expose a real condition number"
             );
-            assert_ne!(basic["r_squared"], serde_json::json!(0.0));
-            assert_ne!(basic["f_statistic"], serde_json::json!(0.0));
-            assert_ne!(basic["prob_f_statistic"], serde_json::json!(1.0));
-            assert_eq!(basic["f_statistic"], basic["lr_chi2"]);
-            assert_eq!(basic["prob_f_statistic"], basic["prob_lr_chi2"]);
+            assert_ne!(basic["pseudo_r2"], serde_json::json!(0.0));
+            assert_ne!(basic["lr_chi2"], serde_json::json!(0.0));
+            assert_ne!(basic["prob_lr_chi2"], serde_json::json!(1.0));
+            assert!(!basic.contains_key("f_statistic"));
+            assert!(!basic.contains_key("wald_chi2"));
+            assert!(!basic.contains_key("r_squared"));
+
             for field in ["log_likelihood", "lr_chi2", "prob_lr_chi2", "aic", "bic"] {
                 assert!(basic[field].as_f64().is_some(), "missing {field}");
             }
@@ -1091,7 +1055,7 @@ mod tests {
                 .expect("binary report must expose structured model statistics");
             assert_eq!(statistics["kind"], "binary");
             assert_eq!(statistics["link"], expected_link);
-            assert_eq!(statistics["pseudoR2"], basic["r_squared"]);
+            assert_eq!(statistics["pseudoR2"], basic["pseudo_r2"]);
             assert_eq!(statistics["logLikelihood"], basic["log_likelihood"]);
             assert_eq!(statistics["lrChi2"], basic["lr_chi2"]);
             assert_eq!(statistics["lrPValue"], basic["prob_lr_chi2"]);

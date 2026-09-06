@@ -191,7 +191,10 @@ impl ProjectState {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if publication.project_instance_id != expected.project_instance_id.as_str()
-            || publication.authority_generation != generation
+            || self
+                .activation_generation
+                .load(std::sync::atomic::Ordering::Acquire)
+                != generation
         {
             return Err(ProjectFilesystemError::StaleProjectLifecycle {
                 message: "project authority changed during capture".into(),

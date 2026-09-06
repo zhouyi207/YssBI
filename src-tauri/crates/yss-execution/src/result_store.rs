@@ -63,15 +63,15 @@ impl ResultStore {
             .unwrap_or_else(|error| error.into_inner());
         if results.iter().any(|result| {
             registry.outputs.get(result.output()).map(|(run, _)| *run)
-                != Some(result.pin().entry().run_id())
+                != Some(result.pin().provenance().run_id())
         }) {
             return false;
         }
         for result in results {
-            let entry = result.pin().entry();
+            let provenance = result.pin().provenance();
             if let Some((_, Some(previous))) = registry.outputs.insert(
                 result.output().clone(),
-                (entry.run_id(), Some(result.result_id())),
+                (provenance.run_id(), Some(result.result_id())),
             ) {
                 registry.values.remove(&previous);
             }
@@ -80,7 +80,7 @@ impl ResultStore {
                 StoredResultSnapshot::new(
                     Arc::new(result.value().clone()),
                     result.output().clone(),
-                    entry.clone(),
+                    provenance.clone(),
                 ),
             );
         }
@@ -142,7 +142,7 @@ mod tests {
     use super::*;
     use crate::finalization::ReadyPinResult;
     use crate::plan::{PlanGraphId, PlanPortAddress, ResultCategory};
-    use crate::result::{ActivationId, ResultProvenance};
+    use crate::result::ResultProvenance;
 
     fn output() -> PlanOutputRef {
         PlanOutputRef::new(
@@ -157,10 +157,7 @@ mod tests {
             id,
             StoredResult::Scalar(id.get() as f64),
             ResultCategory::Value,
-            ReadyPinResult::new(
-                output(),
-                ResultProvenance::produced(id, run, ActivationId::from_existing(id.get()), 10),
-            ),
+            ReadyPinResult::new(output(), ResultProvenance::produced(id, run, 10)),
         )
     }
 
@@ -182,7 +179,7 @@ mod tests {
             store
                 .query_pin_result(&output())
                 .unwrap()
-                .entry()
+                .provenance()
                 .result_id(),
             ResultId::from_existing(3)
         );
@@ -207,12 +204,7 @@ mod tests {
                 ResultCategory::Value,
                 ReadyPinResult::new(
                     other.clone(),
-                    ResultProvenance::produced(
-                        ResultId::from_existing(id),
-                        run,
-                        ActivationId::from_existing(id),
-                        10,
-                    ),
+                    ResultProvenance::produced(ResultId::from_existing(id), run, 10),
                 ),
             )
         };
@@ -220,7 +212,11 @@ mod tests {
         assert!(store.publish(&[result(1, first), other_result(2, first)]));
         assert!(store.begin_run(second, &[output()]));
         assert_eq!(
-            store.query_pin_result(&other).unwrap().entry().result_id(),
+            store
+                .query_pin_result(&other)
+                .unwrap()
+                .provenance()
+                .result_id(),
             ResultId::from_existing(2)
         );
         assert!(store.begin_run(second, &[other.clone()]));

@@ -30,7 +30,6 @@ yss-project-filesystem = { path = "../yss-project-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
-yss-project-manifest = { path = "../yss-project-manifest" }
 yss-project-model = { path = "../yss-project-model" }
 yss-project-operation = { path = "../yss-project-operation" }
 yss-resource-lifecycle = { path = "../yss-resource-lifecycle" }

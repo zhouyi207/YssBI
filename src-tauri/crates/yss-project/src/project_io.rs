@@ -7,6 +7,9 @@ use super::{
     GraphResourceIndex, GraphResourcePath, ProjectChartIndexEntry, ProjectError,
     load_charts_from_root, read_chart_index_entries, scan_graph_resource_index,
 };
+use crate::manifest::{
+    CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest, deserialize_current_project_schema_version,
+};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_duckdb::{list_data_tables, read_display_name};
 use yss_function_editor_projection::FunctionEditorProjection;
@@ -18,9 +21,6 @@ use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
 use yss_project_layout::{
     DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
     GLOBAL_VARIABLES_FILE, PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
-};
-use yss_project_manifest::{
-    CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest, deserialize_current_project_schema_version,
 };
 use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
@@ -117,7 +117,6 @@ pub struct ProjectIndex {
     #[serde(skip)]
     pub(crate) authority_generation: u64,
     #[serde(default)]
-    pub history: yss_project_history::HistoryStatusDto,
     pub project_name: String,
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
@@ -140,7 +139,7 @@ pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, Project
 }
 
 fn project_manifest_from_data(data: &ProjectData) -> Result<ProjectManifest, ProjectError> {
-    Ok(ProjectManifest::try_new(
+    Ok(ProjectManifest::new(
         data.metadata.project_name.clone(),
         data.metadata.export_time.clone(),
     ))
@@ -341,7 +340,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         project_instance_id: String::new(),
         publication_revision: 0,
         authority_generation: 0,
-        history: Default::default(),
         project_name,
         export_time,
         graphs,
@@ -868,7 +866,9 @@ mod project_manifest_adapter_tests {
         let contents = serialize_project_manifest(&data).unwrap();
         let manifest: ProjectManifest = serde_json::from_slice(&contents).unwrap();
 
-        assert_eq!(manifest.project_name(), "Canonical Manifest");
-        assert_eq!(manifest.export_time(), "2026-08-30T00:00:00Z");
+        assert_eq!(
+            manifest.into_parts(),
+            ("Canonical Manifest".into(), "2026-08-30T00:00:00Z".into())
+        );
     }
 }

@@ -116,26 +116,26 @@ impl RunGraphRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunIdentity {
-    project_session_id: PlanProjectSessionId,
+    execution_session_id: yss_execution::identity::ExecutionSessionId,
     graph_path: GraphResourcePath,
     run_id: RunId,
 }
 
 impl RunIdentity {
     fn new(
-        project_session_id: PlanProjectSessionId,
+        execution_session_id: yss_execution::identity::ExecutionSessionId,
         graph_path: GraphResourcePath,
         run_id: RunId,
     ) -> Self {
         Self {
-            project_session_id,
+            execution_session_id,
             graph_path,
             run_id,
         }
     }
 
-    pub fn project_session_id(&self) -> &PlanProjectSessionId {
-        &self.project_session_id
+    pub fn execution_session_id(&self) -> &yss_execution::identity::ExecutionSessionId {
+        &self.execution_session_id
     }
 
     pub fn graph_path(&self) -> &GraphResourcePath {
@@ -383,9 +383,7 @@ where
         |event| match event {
             PreparedExecutionEvent::RunStarted { run_id, outputs } => {
                 let identity = RunIdentity::new(
-                    PlanProjectSessionId::from_existing(
-                        captured.project_session_id().as_str().into(),
-                    ),
+                    captured.execution().session_id(),
                     request.graph_path.clone(),
                     run_id,
                 );
@@ -397,9 +395,7 @@ where
             }
             PreparedExecutionEvent::RunOutput(message) => {
                 let identity = RunIdentity::new(
-                    PlanProjectSessionId::from_existing(
-                        captured.project_session_id().as_str().into(),
-                    ),
+                    captured.execution().session_id(),
                     request.graph_path.clone(),
                     message.run_id(),
                 );
@@ -428,7 +424,7 @@ where
     let run_id = executed.run_id();
     let identity = started_identity.unwrap_or_else(|| {
         RunIdentity::new(
-            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+            captured.execution().session_id(),
             request.graph_path.clone(),
             run_id,
         )

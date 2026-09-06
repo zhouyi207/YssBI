@@ -809,10 +809,6 @@ impl ApplicationSessionSlot {
         Ok(())
     }
 
-    #[allow(
-        dead_code,
-        reason = "replacement orchestration is staged until the atomic production cutover"
-    )]
     fn begin_replacement(&self) -> Result<ReplacementWorker, SessionReplacementError> {
         let mut state = self
             .inner
@@ -1184,7 +1180,7 @@ impl ApplicationState {
             .resolve_session_database_recovery(recovery)
     }
 
-    pub(crate) fn refresh_current_project(&self) -> Result<(), ApplicationSessionRefreshError> {
+    pub(crate) fn rebuild_application_session(&self) -> Result<(), ApplicationSessionRefreshError> {
         let replacement = self
             .begin_project_replacement()
             .map_err(|_| ApplicationSessionRefreshError::Replacement)?;

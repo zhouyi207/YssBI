@@ -56,39 +56,18 @@ impl StoredResult {
     }
 }
 
-/// Neutral activation identity for the current result.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ActivationId(u64);
-
-impl ActivationId {
-    pub const fn from_existing(value: u64) -> Self {
-        Self(value)
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResultProvenance {
     result_id: ResultId,
     run_id: RunId,
-    activation_id: ActivationId,
     created_at_ms: u64,
 }
 
 impl ResultProvenance {
-    pub(crate) fn produced(
-        result_id: ResultId,
-        run_id: RunId,
-        activation_id: ActivationId,
-        created_at_ms: u64,
-    ) -> Self {
+    pub(crate) fn produced(result_id: ResultId, run_id: RunId, created_at_ms: u64) -> Self {
         Self {
             result_id,
             run_id,
-            activation_id,
             created_at_ms,
         }
     }
@@ -101,10 +80,6 @@ impl ResultProvenance {
         self.run_id
     }
 
-    pub fn activation_id(&self) -> ActivationId {
-        self.activation_id
-    }
-
     pub const fn created_at_ms(&self) -> u64 {
         self.created_at_ms
     }
@@ -115,19 +90,19 @@ impl ResultProvenance {
 pub struct StoredResultSnapshot {
     value: Arc<StoredResult>,
     output: PlanOutputRef,
-    entry: ResultProvenance,
+    provenance: ResultProvenance,
 }
 
 impl StoredResultSnapshot {
     pub(crate) fn new(
         value: Arc<StoredResult>,
         output: PlanOutputRef,
-        entry: ResultProvenance,
+        provenance: ResultProvenance,
     ) -> Self {
         Self {
             value,
             output,
-            entry,
+            provenance,
         }
     }
 
@@ -139,7 +114,7 @@ impl StoredResultSnapshot {
         &self.output
     }
 
-    pub fn entry(&self) -> &ResultProvenance {
-        &self.entry
+    pub fn provenance(&self) -> &ResultProvenance {
+        &self.provenance
     }
 }

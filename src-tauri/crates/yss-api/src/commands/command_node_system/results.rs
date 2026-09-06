@@ -129,7 +129,7 @@ pub fn get_pin_result(
         .map_err(result_query_command_error)?;
     result
         .map(|snapshot| {
-            ResultDescriptorDto::from_execution(snapshot.entry().result_id(), &snapshot)
+            ResultDescriptorDto::from_execution(snapshot.provenance().result_id(), &snapshot)
         })
         .transpose()
         .map_err(|error| CommandError::diagnosed("result_source_read_failed", format!("{error:?}")))

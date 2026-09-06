@@ -93,7 +93,7 @@ impl ApplicationState {
         )
         .await?;
         if result.outcome == ProjectLifecycleOutcome::Committed {
-            self.refresh_current_project()
+            self.rebuild_application_session()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
             self.revalidate_captured_session(&captured)
@@ -112,7 +112,7 @@ impl ApplicationState {
         let captured = self.capture_session()?;
         let result = create_project(captured.project(), registry, name, path, operation_id).await?;
         if result.invalidation.project {
-            self.refresh_current_project()
+            self.rebuild_application_session()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         }
         Ok(result)
@@ -145,7 +145,7 @@ impl ApplicationState {
         if let Some(replacement) = replacement {
             finish_replacement(self, replacement)?;
         } else if result.invalidation.project {
-            self.refresh_current_project()
+            self.rebuild_application_session()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
             self.revalidate_captured_session(&captured)

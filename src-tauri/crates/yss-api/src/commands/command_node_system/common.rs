@@ -189,8 +189,5 @@ pub(super) fn resource_mutation_to_command_error(
         ResourceMutationApplicationError::SessionChanged(error) => {
             CommandError::diagnosed("resource_session_changed", error)
         }
-        ResourceMutationApplicationError::SessionRefresh(error) => {
-            CommandError::diagnosed("resource_session_refresh_failed", error)
-        }
     }
 }

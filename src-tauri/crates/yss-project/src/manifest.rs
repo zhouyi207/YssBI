@@ -25,24 +25,12 @@ pub struct ProjectManifest {
 }
 
 impl ProjectManifest {
-    pub fn try_new(project_name: impl Into<String>, export_time: impl Into<String>) -> Self {
+    pub fn new(project_name: impl Into<String>, export_time: impl Into<String>) -> Self {
         Self {
             schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             project_name: project_name.into(),
             export_time: export_time.into(),
         }
-    }
-
-    pub fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-
-    pub fn project_name(&self) -> &str {
-        &self.project_name
-    }
-
-    pub fn export_time(&self) -> &str {
-        &self.export_time
     }
 
     pub fn into_parts(self) -> (String, String) {
@@ -57,7 +45,7 @@ mod tests {
 
     #[test]
     fn constructor_mints_only_the_current_project_schema_version() {
-        let manifest = ProjectManifest::try_new("Example", "2026-08-30T00:00:00Z");
+        let manifest = ProjectManifest::new("Example", "2026-08-30T00:00:00Z");
 
         assert_eq!(
             serde_json::to_value(&manifest).unwrap(),
@@ -67,7 +55,7 @@ mod tests {
                 "exportTime": "2026-08-30T00:00:00Z"
             })
         );
-        assert_eq!(manifest.schema_version(), CURRENT_PROJECT_SCHEMA_VERSION);
+        assert_eq!(manifest.schema_version, CURRENT_PROJECT_SCHEMA_VERSION);
     }
 
     #[test]
@@ -100,15 +88,15 @@ mod tests {
             }
         });
         let manifest = serde_json::from_value::<ProjectManifest>(value).unwrap();
-        assert_eq!(manifest.project_name(), "Example");
+        assert_eq!(manifest.project_name, "Example");
     }
 
     #[test]
     fn validated_manifest_parts_round_trip_without_public_mutation_seams() {
-        let manifest = ProjectManifest::try_new("Round Trip", "2026-08-30T00:00:00Z");
+        let manifest = ProjectManifest::new("Round Trip", "2026-08-30T00:00:00Z");
 
-        assert_eq!(manifest.project_name(), "Round Trip");
-        assert_eq!(manifest.export_time(), "2026-08-30T00:00:00Z");
+        assert_eq!(manifest.project_name, "Round Trip");
+        assert_eq!(manifest.export_time, "2026-08-30T00:00:00Z");
         assert_eq!(
             manifest.into_parts(),
             ("Round Trip".to_owned(), "2026-08-30T00:00:00Z".to_owned())

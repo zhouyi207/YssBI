@@ -11,8 +11,7 @@ use super::events::{
     committed_resource_mutation_from_project,
 };
 use super::execution::session_slot::{
-    ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
-    SessionRevalidationError,
+    ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
@@ -30,7 +29,7 @@ use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
 use yss_project_filesystem::ProjectFilesystemError;
-use yss_project_history::{FunctionDocumentPatch, HistoryMutation, MutationRequest};
+use yss_project_history::{FunctionDocumentPatch, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_project_model::GraphResourceDocument;
 
@@ -60,8 +59,6 @@ pub enum ResourceMutationApplicationError {
     Projection(#[source] EditorProjectionError),
     #[error("captured application session changed")]
     SessionChanged(#[source] SessionRevalidationError),
-    #[error("application session refresh failed")]
-    SessionRefresh(#[source] ApplicationSessionRefreshError),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -522,54 +519,6 @@ impl ApplicationState {
         })
     }
 
-    pub fn query_history_status(
-        &self,
-        project_instance_id: ProjectInstanceId,
-    ) -> Result<HistoryStatus, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .history_status_for_project(&project_instance_id)?;
-        self.revalidate_captured_session(&captured)
-            .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(HistoryStatus {
-            can_undo: result.can_undo,
-            can_redo: result.can_redo,
-        })
-    }
-
-    pub fn undo_graph_document(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        locale: String,
-        request: MutationRequest<HistoryMutation>,
-    ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .undo_history(&project_instance_id, request)
-            .map_err(ResourceMutationApplicationError::History)?;
-        self.refresh_resource_session()?;
-        let _ = locale;
-        Ok(committed_resource_mutation_from_project(result))
-    }
-
-    pub fn redo_graph_document(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        locale: String,
-        request: MutationRequest<HistoryMutation>,
-    ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .redo_history(&project_instance_id, request)
-            .map_err(ResourceMutationApplicationError::History)?;
-        self.refresh_resource_session()?;
-        let _ = locale;
-        Ok(committed_resource_mutation_from_project(result))
-    }
-
     pub fn create_graph_resource(
         &self,
         project_instance_id: ProjectInstanceId,
@@ -695,8 +644,15 @@ impl ApplicationState {
             .project()
             .update_function_signature(&project_instance_id, &function_path, request)
             .map_err(ResourceMutationApplicationError::History)?;
-        self.refresh_resource_session()?;
-        Ok(committed_resource_mutation_from_project(result))
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        let result = committed_resource_mutation_from_project(result);
+        for graph in result.projection_status.affected_graph_paths() {
+            captured
+                .execution()
+                .invalidate_graph_results(graph.as_str());
+        }
+        Ok(result)
     }
 
     fn capture_resource_session(
@@ -712,10 +668,5 @@ impl ApplicationState {
             ));
         }
         Ok(captured)
-    }
-
-    fn refresh_resource_session(&self) -> Result<(), ResourceMutationApplicationError> {
-        self.refresh_current_project()
-            .map_err(ResourceMutationApplicationError::SessionRefresh)
     }
 }

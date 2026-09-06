@@ -231,15 +231,7 @@ pub(crate) fn mutate_variable_in_session(
     };
 
     let result = committed_variable_mutation(committed);
-    let graphs = match &result.mutation.projection_status {
-        crate::events::ResourceProjectionStatus::Complete {
-            expected_graph_paths,
-        } => expected_graph_paths,
-        crate::events::ResourceProjectionStatus::Incomplete {
-            invalidated_graph_paths,
-        } => invalidated_graph_paths,
-    };
-    for graph in graphs {
+    for graph in result.mutation.projection_status.affected_graph_paths() {
         session.execution().invalidate_graph_results(graph.as_str());
     }
     Ok(result)

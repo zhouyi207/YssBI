@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use super::events::{CommittedResourceMutation, committed_resource_mutation_from_project};
 use super::execution::session_slot::{
-    ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
+    ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_project_filesystem::ProjectFilesystemError;
@@ -17,8 +17,6 @@ pub enum ChartApplicationError {
     Project(#[from] ProjectFilesystemError),
     #[error("captured application session changed during chart operation")]
     SessionChanged(#[source] SessionRevalidationError),
-    #[error("application session refresh failed")]
-    SessionRefresh(#[source] ApplicationSessionRefreshError),
 }
 
 impl ApplicationState {
@@ -37,7 +35,8 @@ impl ApplicationState {
             database_id,
             operation_id,
         )?;
-        self.refresh_chart_session()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ChartApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -55,7 +54,8 @@ impl ApplicationState {
             expected_revision,
             operation_id,
         )?;
-        self.refresh_chart_session()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ChartApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -89,7 +89,8 @@ impl ApplicationState {
             operation_id,
             document,
         )?;
-        self.refresh_chart_session()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ChartApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -112,7 +113,8 @@ impl ApplicationState {
             lifecycle_token,
             operation_id,
         )?;
-        self.refresh_chart_session()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ChartApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -130,7 +132,8 @@ impl ApplicationState {
             expected_revision,
             operation_id,
         )?;
-        self.refresh_chart_session()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ChartApplicationError::SessionChanged)?;
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -147,10 +150,5 @@ impl ApplicationState {
             ));
         }
         Ok(captured)
-    }
-
-    fn refresh_chart_session(&self) -> Result<(), ChartApplicationError> {
-        self.refresh_current_project()
-            .map_err(ChartApplicationError::SessionRefresh)
     }
 }

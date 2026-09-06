@@ -13,20 +13,20 @@ use crate::result::{ResultId, ResultProvenance, StoredResult};
 #[derive(Debug, PartialEq)]
 pub(crate) struct ReadyPinResult {
     output: PlanOutputRef,
-    entry: ResultProvenance,
+    provenance: ResultProvenance,
 }
 
 impl ReadyPinResult {
-    pub(crate) fn new(output: PlanOutputRef, entry: ResultProvenance) -> Self {
-        Self { output, entry }
+    pub(crate) fn new(output: PlanOutputRef, provenance: ResultProvenance) -> Self {
+        Self { output, provenance }
     }
 
     pub(crate) fn output(&self) -> &PlanOutputRef {
         &self.output
     }
 
-    pub(crate) fn entry(&self) -> &ResultProvenance {
-        &self.entry
+    pub(crate) fn provenance(&self) -> &ResultProvenance {
+        &self.provenance
     }
 }
 
@@ -204,7 +204,7 @@ pub mod test_support {
     use crate::plan::{
         PlanGraphId, PlanNodeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
     };
-    use crate::result::{ActivationId, ResultProvenance};
+    use crate::result::ResultProvenance;
     use crate::run_registry::RunId;
 
     /// Test-only owner fixture. Production code has no equivalent constructor.
@@ -237,12 +237,7 @@ pub mod test_support {
         );
         let pin = ReadyPinResult::new(
             output,
-            ResultProvenance::produced(
-                result_id,
-                RunId::from_existing(1),
-                ActivationId::from_existing(result_id.get()),
-                0,
-            ),
+            ResultProvenance::produced(result_id, RunId::from_existing(1), 0),
         );
         SuccessfulExecutionCandidate::from_scheduler(
             vec![ReadyResult::from_scheduler(

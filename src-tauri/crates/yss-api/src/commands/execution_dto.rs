@@ -187,7 +187,7 @@ pub enum RunEventDtoError {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GraphRunIdentityDto {
-    project_session_id: String,
+    execution_session_id: String,
     graph_path: String,
     run_id: String,
 }
@@ -204,7 +204,7 @@ impl TryFrom<RunApplicationEvent> for RunEventDto {
     fn try_from(event: RunApplicationEvent) -> Result<Self, Self::Error> {
         let identity = event.identity();
         let run = GraphRunIdentityDto {
-            project_session_id: identity.project_session_id().as_str().to_owned(),
+            execution_session_id: identity.execution_session_id().as_uuid().to_string(),
             graph_path: identity.graph_path().as_str().to_owned(),
             run_id: identity.run_id().get().to_string(),
         };
@@ -377,16 +377,9 @@ impl TryFrom<RunApplicationEvent> for ExecutionChannelEventDto {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ResultStateDto {
-    Ready,
-}
-
-#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultProvenanceDto {
     run_id: String,
-    activation_id: String,
     graph_path: String,
     node_id: String,
     output: Option<GraphOutputRefDto>,
@@ -444,7 +437,6 @@ pub enum ResultValueKindDto {
 #[serde(rename_all = "camelCase")]
 pub struct ResultDescriptorDto {
     result_id: String,
-    state: ResultStateDto,
     provenance: ResultProvenanceDto,
     presentation: ResultPresentationDto,
     value_kind: ResultValueKindDto,
@@ -468,7 +460,7 @@ impl ResultDescriptorDto {
             _ => (ResultValueKindDto::Scalar, Some(1)),
         };
         let output = result.output();
-        let entry = result.entry();
+        let provenance = result.provenance();
         let output_dto = output_dto(output)?;
         let node_id = match &output_dto.port {
             PortAddressDto::Declared { node_id, .. } | PortAddressDto::Instance { node_id, .. } => {
@@ -476,16 +468,14 @@ impl ResultDescriptorDto {
             }
         };
         let provenance = ResultProvenanceDto {
-            run_id: entry.run_id().get().to_string(),
-            activation_id: entry.activation_id().get().to_string(),
+            run_id: provenance.run_id().get().to_string(),
             graph_path: output.graph().as_str().to_owned(),
             node_id: node_id.into(),
             output: Some(output_dto),
-            created_at_ms: entry.created_at_ms().to_string(),
+            created_at_ms: provenance.created_at_ms().to_string(),
         };
         Ok(Self {
             result_id: result_id.get().to_string(),
-            state: ResultStateDto::Ready,
             provenance,
             presentation: result_presentation(result.value().category()),
             value_kind,

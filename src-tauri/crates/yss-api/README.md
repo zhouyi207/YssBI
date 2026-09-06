@@ -85,7 +85,9 @@ Frontend application code localizes `code + safe details`; `IpcError.message` is
 
 Execution terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire.
 
-`get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null. Descriptor/value/page commands resolve only current ResultIds. There is no history query or result-retention setting. `RunStarted { outputs }` carries the exact output addresses invalidated at admission; completion prompts clients to query current results again. Failed or cancelled runs never expose an older successful payload as current.
+`get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null. Descriptor/value/page commands resolve only current ResultIds. Descriptors represent available results and contain no result-state discriminator or redundant activation ID. There is no history query or result-retention setting. Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` carries the exact output addresses invalidated at admission; completion prompts clients to query current results again. Failed or cancelled runs never expose an older successful payload as current.
+
+Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; durable transaction history stays with the Project owner.
 
 ## Frontend adapter
 

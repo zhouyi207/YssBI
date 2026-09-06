@@ -11,7 +11,6 @@ pub struct ProjectSaveResultDto {
     pub publication_revision: u64,
     pub affected_resources: Vec<yss_project_history::ResourceKey>,
     pub index_invalidated: bool,
-    pub history: yss_project_history::HistoryStatusDto,
 }
 
 impl From<ProjectSaveResult> for ProjectSaveResultDto {
@@ -22,7 +21,7 @@ impl From<ProjectSaveResult> for ProjectSaveResultDto {
             publication_revision,
             affected_resources,
             index_invalidated,
-            history,
+            _,
         ) = value.into_parts();
         Self {
             project_instance_id: project_instance_id.to_string(),
@@ -30,10 +29,6 @@ impl From<ProjectSaveResult> for ProjectSaveResultDto {
             publication_revision,
             affected_resources: affected_resources.into_vec(),
             index_invalidated,
-            history: yss_project_history::HistoryStatusDto {
-                can_undo: history.can_undo,
-                can_redo: history.can_redo,
-            },
         }
     }
 }

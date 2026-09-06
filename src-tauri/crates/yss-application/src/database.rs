@@ -584,7 +584,7 @@ impl ApplicationState {
     }
 
     fn refresh_database_session(&self) -> Result<(), ApplicationDatabaseError> {
-        self.refresh_current_project()
+        self.rebuild_application_session()
             .map_err(ApplicationDatabaseError::SessionRefresh)
     }
 }

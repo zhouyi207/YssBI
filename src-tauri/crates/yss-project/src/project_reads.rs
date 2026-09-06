@@ -67,7 +67,6 @@ struct ProjectIndexAuthorityCapture {
     project_instance_id: String,
     publication_revision: u64,
     authority_generation: u64,
-    history: yss_project_history::HistoryStatusDto,
     data: ProjectData,
     graph_resource_revisions:
         std::collections::HashMap<yss_graph_document::GraphResourcePath, ResourceRevision>,
@@ -99,7 +98,6 @@ fn read_project_index_with(
     index.project_instance_id = capture.project_instance_id.clone();
     index.publication_revision = capture.publication_revision;
     index.authority_generation = capture.authority_generation;
-    index.history = capture.history;
     validate_project_index_authority(state, &session, &capture)?;
     Ok(index)
 }
@@ -149,7 +147,6 @@ fn capture_project_index_authority_with(
         project_instance_id: publication.project_instance_id.clone(),
         publication_revision: publication.resource_revision,
         authority_generation: publication.authority_generation(),
-        history: state.history.read().unwrap().status(),
         data,
         graph_resource_revisions,
         variable_revisions,

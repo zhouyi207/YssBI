@@ -46,9 +46,6 @@ fn chart_application_command_error(error: &ChartApplicationError) -> CommandErro
         ChartApplicationError::SessionChanged(error) => {
             CommandError::diagnosed("chart_session_changed", error)
         }
-        ChartApplicationError::SessionRefresh(error) => {
-            CommandError::diagnosed("chart_session_refresh_failed", error)
-        }
     }
 }
 

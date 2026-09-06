@@ -17,7 +17,7 @@ use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
-use crate::result::{ActivationId, ResultId, ResultProvenance, StoredResult, StoredResultSnapshot};
+use crate::result::{ResultId, ResultProvenance, StoredResult, StoredResultSnapshot};
 use crate::result_store::ResultStore;
 use crate::run_output::RunOutputMessage;
 use crate::run_registry::RunRegistry;
@@ -1376,12 +1376,7 @@ impl ExecutionRuntimeState {
             result_ids_by_output.insert(scheduled.output.clone(), result_id);
             let pin = ReadyPinResult::new(
                 scheduled.output,
-                ResultProvenance::produced(
-                    result_id,
-                    run_id,
-                    ActivationId::from_existing(result_id.get()),
-                    created_at_ms,
-                ),
+                ResultProvenance::produced(result_id, run_id, created_at_ms),
             );
             results.push(ReadyResult::from_scheduler(
                 result_id,
@@ -1920,7 +1915,7 @@ mod tests {
                 .collect::<Vec<_>>();
             let ids = previous
                 .iter()
-                .map(|result| result.entry().result_id())
+                .map(|result| result.provenance().result_id())
                 .collect::<Vec<_>>();
             drop(previous);
             let candidate = state

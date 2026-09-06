@@ -1,3 +1,4 @@
+use crate::manifest::ProjectManifest;
 use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,6 @@ use yss_project_layout::{
     CHART_EXTENSION, CHARTS_DIR, GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES,
     PROJECT_METADATA_FILE,
 };
-use yss_project_manifest::ProjectManifest;
 use yss_project_model::ProjectData;
 
 pub struct PreparedProjectCopy {

@@ -270,3 +270,49 @@ fn open_graph_rejects_a_replaced_captured_session_before_project_load() {
     assert!(matches!(error, OpenGraphApplicationError::SessionChanged));
     assert!(session.control.events().is_empty());
 }
+
+#[test]
+fn chart_edits_preserve_the_active_graph_and_execution_session() {
+    let active = staged_session(
+        TestProject::unloaded("chart-edits", ProjectData::new()),
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = active.session.project_instance_id().clone();
+    let created = active
+        .application
+        .create_chart_resource(
+            instance.clone(),
+            yss_project_identity::OperationId::new(),
+            "Chart".into(),
+            None,
+        )
+        .unwrap();
+    let path = yss_chart_document::ChartResourcePath::parse("charts/Chart.yssbi-chart").unwrap();
+    let mut document = active
+        .application
+        .load_chart_resource(instance.clone(), path.clone())
+        .unwrap();
+    document.chart_type = "scatter".into();
+    active
+        .application
+        .save_chart_resource(
+            instance.clone(),
+            yss_project_identity::OperationId::new(),
+            path.clone(),
+            created.deltas[0].to_revision,
+            document,
+        )
+        .unwrap();
+    assert_eq!(
+        active
+            .application
+            .load_chart_resource(instance, path)
+            .unwrap()
+            .chart_type,
+        "scatter"
+    );
+    assert!(Arc::ptr_eq(
+        &active.session,
+        &active.application.capture_session().unwrap()
+    ));
+}

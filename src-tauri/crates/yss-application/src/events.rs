@@ -96,6 +96,19 @@ pub enum ResourceProjectionStatus {
     },
 }
 
+impl ResourceProjectionStatus {
+    pub(crate) fn affected_graph_paths(&self) -> &[GraphResourcePath] {
+        match self {
+            Self::Complete {
+                expected_graph_paths,
+            } => expected_graph_paths,
+            Self::Incomplete {
+                invalidated_graph_paths,
+            } => invalidated_graph_paths,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HistoryStatus {
     pub can_undo: bool,

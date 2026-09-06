@@ -27,7 +27,6 @@ pub struct GraphDraftSaveDto {
     pub resource_revision: yss_project_identity::ResourceRevision,
     pub document: yss_graph_document::GraphDocument,
     pub projection_replacement: GraphProjectionReplacementDto,
-    pub history: yss_project_history::HistoryStatusDto,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -105,9 +104,5 @@ pub(crate) fn graph_draft_save_to_transport(
         projection_replacement: graph_projection_replacement_to_transport(
             &saved.projection_replacement,
         ),
-        history: yss_project_history::HistoryStatusDto {
-            can_undo: saved.history.can_undo,
-            can_redo: saved.history.can_redo,
-        },
     }
 }

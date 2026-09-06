@@ -1,3 +1,4 @@
+use crate::manifest::ProjectManifest;
 use crate::{GraphResourceFile, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -13,7 +14,6 @@ use yss_project_history::{
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
-use yss_project_manifest::ProjectManifest;
 use yss_project_model::{ProjectData, ProjectDataPatch};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
