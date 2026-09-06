@@ -93,12 +93,6 @@ export function validateResourceMutationWireResult(
   if (!Array.isArray(result.projectionReplacements)) {
     return "projection replacements are malformed";
   }
-  if (
-    typeof result.history?.canUndo !== "boolean" ||
-    typeof result.history?.canRedo !== "boolean"
-  ) {
-    return "history status is malformed";
-  }
 
   let expectedPaths: string[] | undefined;
   if (result.projectionStatus?.status === "complete") {

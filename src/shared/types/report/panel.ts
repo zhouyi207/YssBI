@@ -2,7 +2,7 @@
  * 面板回归报告 DTO
  */
 
-import type { OLSResultData } from "./regression";
+import type { LinearRegressionResultData } from "./regression";
 
 export interface PanelSelectionTest {
   id: string;
@@ -22,22 +22,22 @@ export interface PanelSelectionTest {
 export interface PanelSummaryResult {
   title: string;
   endog_name: string;
-  mixed_ols?: OLSResultData;
-  fe?: OLSResultData;
-  fe_time?: OLSResultData;
-  fe_twoway?: OLSResultData;
-  lsdv?: OLSResultData;
-  lsdv_time?: OLSResultData;
-  lsdv_twoway?: OLSResultData;
-  fd?: OLSResultData;
-  re_fgls?: OLSResultData;
-  re_mle?: OLSResultData;
-  re_be?: OLSResultData;
-  re_fgls_time?: OLSResultData;
-  re_mle_time?: OLSResultData;
-  re_be_time?: OLSResultData;
-  re_fgls_twoway?: OLSResultData;
-  re_mle_twoway?: OLSResultData;
+  mixed_ols?: LinearRegressionResultData;
+  fe?: LinearRegressionResultData;
+  fe_time?: LinearRegressionResultData;
+  fe_twoway?: LinearRegressionResultData;
+  lsdv?: LinearRegressionResultData;
+  lsdv_time?: LinearRegressionResultData;
+  lsdv_twoway?: LinearRegressionResultData;
+  fd?: LinearRegressionResultData;
+  re_fgls?: LinearRegressionResultData;
+  re_mle?: LinearRegressionResultData;
+  re_be?: LinearRegressionResultData;
+  re_fgls_time?: LinearRegressionResultData;
+  re_mle_time?: LinearRegressionResultData;
+  re_be_time?: LinearRegressionResultData;
+  re_fgls_twoway?: LinearRegressionResultData;
+  re_mle_twoway?: LinearRegressionResultData;
   selection_tests?: PanelSelectionTest[];
   errors?: {
     mixed_ols?: string;

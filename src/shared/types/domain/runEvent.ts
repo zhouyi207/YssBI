@@ -31,7 +31,7 @@ export interface RunErrorOutcome {
 }
 
 export interface GraphRunIdentityDto {
-  projectSessionId: string;
+  executionSessionId: string;
   graphPath: string;
   runId: string;
 }

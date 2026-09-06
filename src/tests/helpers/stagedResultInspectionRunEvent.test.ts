@@ -19,7 +19,7 @@ describe("staged result inspection run-event parser", () => {
       ...stagedResultInspectionWire,
       run: {
         ...stagedResultInspectionWire.run,
-        projectSessionId: "session with spaces",
+        executionSessionId: "session with spaces",
         graphPath: "opaque outer graph identity",
         runId: "9007199254740993",
       },
@@ -36,7 +36,7 @@ describe("staged result inspection run-event parser", () => {
     });
 
     expect(parsed.run).toEqual({
-      projectSessionId: "session with spaces",
+      executionSessionId: "session with spaces",
       graphPath: "opaque outer graph identity",
       runId: "9007199254740993",
     });
@@ -121,9 +121,9 @@ describe("staged result inspection run-event parser", () => {
 
   it.each([
     [
-      "run projectSessionId",
+      "run executionSessionId",
       (event: Record<string, unknown>) => {
-        (event.run as Record<string, unknown>).projectSessionId = "";
+        (event.run as Record<string, unknown>).executionSessionId = "";
       },
     ],
     [

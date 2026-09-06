@@ -4,29 +4,6 @@ export type { GraphOutputRefDto } from "./executionDemand";
 
 export type ResultId = string;
 
-export type ResultStateKind = "pending" | "ready" | "failed" | "cancelled";
-
-export interface ResultProgress {
-  completed: string;
-  total: string | null;
-}
-
-export type ResultFailureCause =
-  | { kind: "execution" }
-  | { kind: "upstream"; upstreamResultId: ResultId };
-
-export interface ResultFailure {
-  code: "execution_failed" | "upstream_failed";
-  cause: ResultFailureCause;
-  upstreamResultIds: ResultId[];
-}
-
-export type ResultState =
-  | { kind: "pending"; progress: ResultProgress }
-  | { kind: "ready" }
-  | { kind: "failed"; failure: ResultFailure }
-  | { kind: "cancelled" };
-
 export const RESULT_PLOT_KINDS = [
   "scatter",
   "line",
@@ -66,7 +43,6 @@ export type ResultPresentation =
 
 export interface ResultProvenance {
   runId: string;
-  activationId: string;
   graphPath: string;
   nodeId: string;
   output: GraphOutputRefDto | null;
@@ -93,7 +69,6 @@ export interface ResultDataSeriesMetadata {
 
 export interface ResultDescriptor {
   resultId: ResultId;
-  state: ResultState;
   provenance: ResultProvenance;
   presentation: ResultPresentation;
   valueKind: ResultValueKind;

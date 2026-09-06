@@ -3,7 +3,7 @@ import type { Variable } from "./variable";
 import type { DatabaseDecl } from "./database";
 import type { DatabaseEngineDTO } from "./database";
 import type { FunctionEditorProjectionDto } from "./editorProjection";
-import type { FunctionSignatureDto, HistoryStatusDto, ResourceKeyDto } from "./editorMutation";
+import type { FunctionSignatureDto, ResourceKeyDto } from "./editorMutation";
 import type { DataType } from "./dataType";
 import type { DataValue } from "./dataValue";
 import type { ChartType } from "./chart";
@@ -146,7 +146,6 @@ export interface ProjectIndexRow {
   projectName: string;
   exportTime: string;
   publicationRevision: number;
-  history: HistoryStatusDto;
   graphs: ProjectGraphIndexRow[];
   charts: ProjectChartIndexRow[];
   variables: ProjectVariableIndexRow[];
@@ -159,5 +158,4 @@ export interface ProjectSaveResultDto {
   publicationRevision: number;
   affectedResources: ResourceKeyDto[];
   indexInvalidated: boolean;
-  history: HistoryStatusDto;
 }

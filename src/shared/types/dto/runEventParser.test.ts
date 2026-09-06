@@ -236,7 +236,7 @@ describe("execution wire parsers", () => {
     expect(() =>
       parseRunEvent({
         ...valid,
-        run: { ...valid.run, projectSessionId: "" },
+        run: { ...valid.run, executionSessionId: "" },
       }),
     ).toThrow("graph run identity");
   });

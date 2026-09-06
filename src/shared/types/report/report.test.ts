@@ -10,7 +10,7 @@ import {
   pacfSeriesToBars,
 } from "./correlogram";
 import { parseIv2slsFirstStageResult } from "./iv";
-import { parseRegressionResultData } from "./parseRegression";
+import { parseBinaryResultData, parseRegressionResultData } from "./parseRegression";
 import { parseReportPayload } from "./parseReportPayload";
 
 describe("normalizeSerialTestsResponse", () => {
@@ -130,8 +130,23 @@ describe("parseRegressionResultData", () => {
   });
 
   it("preserves binary model statistics and hypothesis inputs", () => {
-    const parsed = parseRegressionResultData({
+    const parsed = parseBinaryResultData({
       ...MINIMAL_REGRESSION,
+      model_basic_info: {
+        model_type: "Logit",
+        method: "Maximum Likelihood",
+        num_observation: 100,
+        pseudo_r2: 0.15,
+        adjusted_pseudo_r2: 0.1,
+        log_likelihood: -8.5,
+        lr_chi2: 3,
+        prob_lr_chi2: 0.083,
+        df_model: 0,
+        df_residual: 99,
+        covariance_type: "nonrobust",
+        aic: 19,
+        bic: 20,
+      },
       title: "LOGIT Summary",
       betas: [0.25],
       cov_beta: [[0.0625]],
@@ -158,6 +173,9 @@ describe("parseRegressionResultData", () => {
       },
     });
 
+    expect(parsed?.model_basic_info.pseudo_r2).toBe(0.15);
+    expect(parsed?.model_basic_info.lr_chi2).toBe(3);
+    expect(parseReportPayload("binarySummary", MINIMAL_REGRESSION)).toBeNull();
     expect(parsed?.betas).toEqual([0.25]);
     expect(parsed?.cov_beta).toEqual([[0.0625]]);
     expect(parsed?.model_statistics).toEqual(

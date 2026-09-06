@@ -27,10 +27,6 @@
                 "toRevision": 0
               }
             ],
-            "history": {
-              "canRedo": false,
-              "canUndo": true
-            },
             "moves": [],
             "operationId": "00000000-0000-0000-0000-000000000901",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -82,10 +78,6 @@
                 "toRevision": 1
               }
             ],
-            "history": {
-              "canRedo": false,
-              "canUndo": true
-            },
             "moves": [],
             "operationId": "00000000-0000-0000-0000-000000000902",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -123,10 +115,6 @@
                 "toRevision": 2
               }
             ],
-            "history": {
-              "canRedo": false,
-              "canUndo": true
-            },
             "moves": [
               {
                 "from": "charts/Sales Overview.yssbi-chart",
@@ -176,10 +164,6 @@
                 "toRevision": 3
               }
             ],
-            "history": {
-              "canRedo": false,
-              "canUndo": true
-            },
             "moves": [],
             "operationId": "00000000-0000-0000-0000-000000000904",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -222,10 +206,6 @@
                 "toRevision": 4
               }
             ],
-            "history": {
-              "canRedo": true,
-              "canUndo": true
-            },
             "moves": [],
             "operationId": "00000000-0000-0000-0000-000000000905",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -268,10 +248,6 @@
                 "toRevision": 5
               }
             ],
-            "history": {
-              "canRedo": false,
-              "canUndo": true
-            },
             "moves": [],
             "operationId": "00000000-0000-0000-0000-000000000906",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -315,10 +291,6 @@
             "toRevision": 0
           }
         ],
-        "history": {
-          "canRedo": false,
-          "canUndo": true
-        },
         "moves": [],
         "operationId": "00000000-0000-0000-0000-000000000901",
         "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -365,10 +337,6 @@
             "toRevision": 1
           }
         ],
-        "history": {
-          "canRedo": false,
-          "canUndo": true
-        },
         "moves": [],
         "operationId": "00000000-0000-0000-0000-000000000902",
         "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -401,10 +369,6 @@
             "toRevision": 2
           }
         ],
-        "history": {
-          "canRedo": false,
-          "canUndo": true
-        },
         "moves": [
           {
             "from": "charts/Sales Overview.yssbi-chart",
@@ -449,10 +413,6 @@
             "toRevision": 3
           }
         ],
-        "history": {
-          "canRedo": false,
-          "canUndo": true
-        },
         "moves": [],
         "operationId": "00000000-0000-0000-0000-000000000904",
         "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -490,10 +450,6 @@
             "toRevision": 4
           }
         ],
-        "history": {
-          "canRedo": true,
-          "canUndo": true
-        },
         "moves": [],
         "operationId": "00000000-0000-0000-0000-000000000905",
         "projectInstanceId": "00000000-0000-0000-0000-000000000601",
@@ -531,10 +487,6 @@
             "toRevision": 5
           }
         ],
-        "history": {
-          "canRedo": false,
-          "canUndo": true
-        },
         "moves": [],
         "operationId": "00000000-0000-0000-0000-000000000906",
         "projectInstanceId": "00000000-0000-0000-0000-000000000601",

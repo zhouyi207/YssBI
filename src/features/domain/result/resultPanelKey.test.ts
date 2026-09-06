@@ -16,10 +16,9 @@ const otherOutputRef: GraphOutputRefDto = {
 function descriptor(resultId: string, output: GraphOutputRefDto | null): ResultDescriptor {
   return {
     resultId,
-    state: { kind: "ready" },
+
     provenance: {
       runId: `run-${resultId}`,
-      activationId: `activation-${resultId}`,
       graphPath: output?.graphPath ?? "events/Main.yssbi-event",
       nodeId: output?.port.nodeId ?? "node-without-output",
       output,

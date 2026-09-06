@@ -6,7 +6,6 @@ import type { ReportPayloadKind } from "./reportKinds";
 export interface ReportValidationDiagnostic {
   resultId: string;
   runId: string;
-  activationId: string;
   nodeId: string;
   outputPinId: string | null;
   presentation: { kind: "report"; report: ReportPayloadKind };
@@ -136,7 +135,6 @@ export function validateReportPayload(
     diagnostic: {
       resultId: descriptor.resultId,
       runId: descriptor.provenance.runId,
-      activationId: descriptor.provenance.activationId,
       nodeId: descriptor.provenance.nodeId,
       outputPinId: outputPinId(descriptor),
       presentation: { kind: "report", report },

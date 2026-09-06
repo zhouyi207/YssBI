@@ -5,7 +5,7 @@
 import { isRegressionReportKind, type ReportPayloadKind } from "./reportKinds";
 import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./parseDfadf";
 import { parsePanelDidResultData, parsePanelSummaryResult } from "./parsePanel";
-import { parseRegressionResultData } from "./parseRegression";
+import { parseBinaryResultData, parseRegressionResultData } from "./parseRegression";
 import { parseVarSocResultData, parseVarSummaryResultData } from "./parseVar";
 import { parseVecRankResultData, parseVecSummaryResultData } from "./parseVec";
 
@@ -16,6 +16,7 @@ import { parseVecRankResultData, parseVecSummaryResultData } from "./parseVec";
 export function parseReportPayload(report: ReportPayloadKind, raw: unknown): unknown | null {
   if (raw === null || raw === undefined) return null;
 
+  if (report === "binarySummary") return parseBinaryResultData(raw);
   if (isRegressionReportKind(report)) {
     return parseRegressionResultData(raw);
   }

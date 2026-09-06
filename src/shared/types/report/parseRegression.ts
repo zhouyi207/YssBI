@@ -12,7 +12,12 @@ import {
   optionalString,
 } from "./guards";
 import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from "./iv";
-import { parseCoefficientList, parseFiniteNumberArray, parseModelBasicInfo } from "./parseCommon";
+import {
+  parseBinaryModelInfo,
+  parseCoefficientList,
+  parseFiniteNumberArray,
+  parseLinearModelInfo,
+} from "./parseCommon";
 import type { PlotPointDTO } from "@/shared/types/domain/plotPayload";
 import type { BinaryModelStatistics, DiagnosticInfo, RegressionResultData } from "./regression";
 
@@ -190,8 +195,19 @@ export function parseDiagnosticInfo(raw: unknown): DiagnosticInfo | null {
 }
 
 export function parseRegressionResultData(raw: unknown): RegressionResultData | null {
+  return parseRegressionReport(raw, parseLinearModelInfo);
+}
+
+export function parseBinaryResultData(raw: unknown) {
+  return parseRegressionReport(raw, parseBinaryModelInfo);
+}
+
+function parseRegressionReport<ModelInfo>(
+  raw: unknown,
+  parseModel: (raw: unknown) => ModelInfo | null,
+): RegressionResultData<ModelInfo> | null {
   if (!isRecord(raw) || !isString(raw.title)) return null;
-  const model_basic_info = parseModelBasicInfo(raw.model_basic_info);
+  const model_basic_info = parseModel(raw.model_basic_info);
   const coefficients = parseCoefficientList(raw.coefficients);
   const diagnostic_info = parseDiagnosticInfo(raw.diagnostic_info);
   const betas = parseOptionalFiniteNumberArray(raw.betas);

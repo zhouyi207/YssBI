@@ -5,7 +5,6 @@ import type {
   GraphDraftSaveDto,
   GraphDraftTransformDto,
   GraphEditorSessionDto,
-  HistoryStatusDto,
   TypeExprDto,
 } from "./editorMutation";
 import type { GraphProjectionReplacementDto } from "./editorProjection";
@@ -346,7 +345,6 @@ export function parseGraphDraftSaveDto(
       "resourceRevision",
       "document",
       "projectionReplacement",
-      "history",
     ]) ||
     value.projectInstanceId !== expectedProjectInstanceId ||
     !isUuid(value.operationId) ||
@@ -361,7 +359,6 @@ export function parseGraphDraftSaveDto(
     resourceRevision: value.resourceRevision as number,
     document: parseGraphDocumentDto(value.document),
     projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
-    history: parseHistoryStatusDto(value.history),
   };
 }
 
@@ -392,16 +389,4 @@ export function parseGraphProjectionReplacementDto(value: unknown): GraphProject
     projection: value.projection,
     functionEditorProjection: value.functionEditorProjection,
   };
-}
-
-export function parseHistoryStatusDto(value: unknown): HistoryStatusDto {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["canUndo", "canRedo"]) ||
-    typeof value.canUndo !== "boolean" ||
-    typeof value.canRedo !== "boolean"
-  ) {
-    throw new Error("Graph mutation history is malformed");
-  }
-  return { canUndo: value.canUndo, canRedo: value.canRedo };
 }

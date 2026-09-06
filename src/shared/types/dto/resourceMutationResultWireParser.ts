@@ -13,7 +13,6 @@ import {
   isTypedLiteralWire,
   isTypeExprWire,
   parseGraphProjectionReplacementDto,
-  parseHistoryStatusDto,
 } from "@/shared/types/dto/editorMutationWireParser";
 
 type UnknownRecord = Record<string, unknown>;
@@ -409,7 +408,6 @@ export function parseResourceMutationResultDto(value: unknown): ResourceMutation
     "deltas",
     "projectionReplacements",
     "projectionStatus",
-    "history",
   ];
   if (
     !hasExactKeys(value, keys) ||
@@ -434,7 +432,6 @@ export function parseResourceMutationResultDto(value: unknown): ResourceMutation
           throw new Error("projection replacements are malformed");
         })(),
     projectionStatus: parseProjectionStatus(value.projectionStatus),
-    history: parseHistoryStatusDto(value.history),
   };
 
   const validationError = validateResourceMutationWireResult(result);

@@ -3,7 +3,7 @@ type UnknownRecord = Record<string, unknown>;
 const POSITIVE_DECIMAL_ID_PATTERN = /^[1-9]\d*$/;
 
 export interface StagedRunIdentity {
-  projectSessionId: string;
+  executionSessionId: string;
   graphPath: string;
   runId: string;
 }
@@ -55,8 +55,8 @@ function isPositiveDecimalId(value: unknown): value is string {
 function parseRunIdentity(value: unknown): StagedRunIdentity {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["projectSessionId", "graphPath", "runId"]) ||
-    !isOpaqueIdentity(value.projectSessionId) ||
+    !hasExactKeys(value, ["executionSessionId", "graphPath", "runId"]) ||
+    !isOpaqueIdentity(value.executionSessionId) ||
     !isOpaqueIdentity(value.graphPath) ||
     !isPositiveDecimalId(value.runId)
   ) {
@@ -64,7 +64,7 @@ function parseRunIdentity(value: unknown): StagedRunIdentity {
   }
 
   return {
-    projectSessionId: value.projectSessionId,
+    executionSessionId: value.executionSessionId,
     graphPath: value.graphPath,
     runId: value.runId,
   };

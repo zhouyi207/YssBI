@@ -48,7 +48,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -58,7 +58,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -71,7 +71,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -84,7 +84,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -97,7 +97,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -110,7 +110,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -123,7 +123,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -136,7 +136,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -146,7 +146,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -166,7 +166,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -182,7 +182,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     },
@@ -199,7 +199,7 @@
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
+        "executionSessionId": "contract-session",
         "runId": "9007199254740993"
       }
     }

@@ -126,16 +126,16 @@ function parseErrorOutcome(value: UnknownRecord): RunErrorOutcome {
 function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["projectSessionId", "graphPath", "runId"]) ||
-    typeof value.projectSessionId !== "string" ||
-    value.projectSessionId.length === 0 ||
+    !hasExactKeys(value, ["executionSessionId", "graphPath", "runId"]) ||
+    typeof value.executionSessionId !== "string" ||
+    value.executionSessionId.length === 0 ||
     !isGraphResourcePath(value.graphPath) ||
     !isPositiveDecimalId(value.runId)
   )
     return fail("graph run identity");
 
   return {
-    projectSessionId: value.projectSessionId,
+    executionSessionId: value.executionSessionId,
     graphPath: value.graphPath,
     runId: value.runId,
   };

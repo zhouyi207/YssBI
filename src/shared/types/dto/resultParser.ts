@@ -4,12 +4,10 @@ import type {
   GraphOutputRefDto,
   ResultDataSeriesMetadata,
   ResultDescriptor,
-  ResultFailure,
   ResultPage,
   ResultPresentation,
   ResultProvenance,
   ResultReportKind,
-  ResultState,
   ResultValue,
   ResultValueKind,
 } from "./result";
@@ -100,82 +98,11 @@ export function parseResultPresentation(value: unknown): ResultPresentation {
   }
 }
 
-export function parseResultState(value: unknown): ResultState {
-  if (!isRecord(value) || typeof value.kind !== "string") return fail("result state");
-  switch (value.kind) {
-    case "pending": {
-      if (
-        !hasExactKeys(value, ["kind", "progress"]) ||
-        !isRecord(value.progress) ||
-        !hasExactKeys(value.progress, ["completed", "total"]) ||
-        !isDecimalId(value.progress.completed) ||
-        !(value.progress.total === null || isDecimalId(value.progress.total))
-      ) {
-        return fail("pending result state");
-      }
-      return {
-        kind: "pending",
-        progress: { completed: value.progress.completed, total: value.progress.total },
-      };
-    }
-    case "ready":
-      if (!hasExactKeys(value, ["kind"])) return fail("ready result state");
-      return { kind: "ready" };
-    case "failed":
-      if (!hasExactKeys(value, ["kind", "failure"])) return fail("failed result state");
-      return { kind: "failed", failure: parseResultFailure(value.failure) };
-    case "cancelled":
-      if (!hasExactKeys(value, ["kind"])) return fail("cancelled result state");
-      return { kind: "cancelled" };
-    default:
-      return fail("result state kind");
-  }
-}
-
-function parseResultFailure(value: unknown): ResultFailure {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["code", "cause", "upstreamResultIds"]) ||
-    (value.code !== "execution_failed" && value.code !== "upstream_failed") ||
-    !Array.isArray(value.upstreamResultIds) ||
-    !value.upstreamResultIds.every(isDecimalId) ||
-    !isRecord(value.cause) ||
-    typeof value.cause.kind !== "string"
-  )
-    return fail("result failure");
-
-  if (value.cause.kind === "execution") {
-    if (!hasExactKeys(value.cause, ["kind"])) return fail("execution failure cause");
-    return { ...value, cause: { kind: "execution" } } as ResultFailure;
-  }
-  if (value.cause.kind === "upstream") {
-    if (
-      !hasExactKeys(value.cause, ["kind", "upstreamResultId"]) ||
-      !isDecimalId(value.cause.upstreamResultId)
-    )
-      return fail("upstream failure cause");
-    return {
-      code: value.code,
-      cause: { kind: "upstream", upstreamResultId: value.cause.upstreamResultId },
-      upstreamResultIds: value.upstreamResultIds,
-    };
-  }
-  return fail("result failure cause");
-}
-
 function parseResultProvenance(value: unknown): ResultProvenance {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, [
-      "runId",
-      "activationId",
-      "graphPath",
-      "nodeId",
-      "output",
-      "createdAtMs",
-    ]) ||
+    !hasExactKeys(value, ["runId", "graphPath", "nodeId", "output", "createdAtMs"]) ||
     !isDecimalId(value.runId) ||
-    !isDecimalId(value.activationId) ||
     !isGraphResourcePath(value.graphPath) ||
     !isUuid(value.nodeId) ||
     !isDecimalId(value.createdAtMs)
@@ -183,7 +110,6 @@ function parseResultProvenance(value: unknown): ResultProvenance {
     return fail("result provenance");
   return {
     runId: value.runId,
-    activationId: value.activationId,
     graphPath: value.graphPath,
     nodeId: value.nodeId,
     output: value.output === null ? null : parseGraphOutput(value.output),
@@ -223,7 +149,6 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
     !isRecord(value) ||
     !hasExactKeys(value, [
       "resultId",
-      "state",
       "provenance",
       "presentation",
       "valueKind",
@@ -238,7 +163,6 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
     return fail("result descriptor");
   return {
     resultId: value.resultId,
-    state: parseResultState(value.state),
     provenance: parseResultProvenance(value.provenance),
     presentation: parseResultPresentation(value.presentation),
     valueKind: parseValueKind(value.valueKind),

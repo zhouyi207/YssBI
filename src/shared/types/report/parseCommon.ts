@@ -9,7 +9,7 @@ import {
   isRecord,
   isString,
 } from "./guards";
-import type { Coefficient, ModelBasicInfo } from "./regression";
+import type { BinaryModelInfo, Coefficient, LinearModelInfo } from "./regression";
 
 export function parseCoefficient(raw: unknown): Coefficient | null {
   if (!isRecord(raw) || !isString(raw.variable) || !isFiniteNumber(raw.coef)) return null;
@@ -54,9 +54,9 @@ const MODEL_BASIC_OPTIONAL_KEYS = [
   "mle_iter_log_lik",
   "aic",
   "bic",
-] as const satisfies readonly (keyof ModelBasicInfo)[];
+] as const satisfies readonly (keyof LinearModelInfo)[];
 
-export function parseModelBasicInfo(raw: unknown): ModelBasicInfo | null {
+export function parseLinearModelInfo(raw: unknown): LinearModelInfo | null {
   if (!isRecord(raw)) return null;
   const requiredNumbers = [
     "num_observation",
@@ -135,4 +135,38 @@ export function parseObjectArray<T>(
     out.push(parsed);
   }
   return out;
+}
+
+export function parseBinaryModelInfo(raw: unknown): BinaryModelInfo | null {
+  if (!isRecord(raw)) return null;
+  const numbers = [
+    "num_observation",
+    "pseudo_r2",
+    "adjusted_pseudo_r2",
+    "log_likelihood",
+    "lr_chi2",
+    "prob_lr_chi2",
+    "df_model",
+    "df_residual",
+    "aic",
+    "bic",
+  ] as const;
+  if (!numbers.every((key) => isFiniteNumber(raw[key]))) return null;
+  if (!isString(raw.model_type) || !isString(raw.method) || !isString(raw.covariance_type))
+    return null;
+  return {
+    model_type: raw.model_type,
+    method: raw.method,
+    covariance_type: raw.covariance_type,
+    num_observation: raw.num_observation as number,
+    pseudo_r2: raw.pseudo_r2 as number,
+    adjusted_pseudo_r2: raw.adjusted_pseudo_r2 as number,
+    log_likelihood: raw.log_likelihood as number,
+    lr_chi2: raw.lr_chi2 as number,
+    prob_lr_chi2: raw.prob_lr_chi2 as number,
+    df_model: raw.df_model as number,
+    df_residual: raw.df_residual as number,
+    aic: raw.aic as number,
+    bic: raw.bic as number,
+  };
 }

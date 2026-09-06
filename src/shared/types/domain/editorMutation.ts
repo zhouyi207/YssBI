@@ -85,11 +85,6 @@ export type PortPlacementDto =
   | { kind: "append" }
   | { kind: "before" | "after"; instanceId: string };
 
-export interface HistoryStatusDto {
-  canUndo: boolean;
-  canRedo: boolean;
-}
-
 export type DocumentPortAddressDto = {
   node_id: string;
   port:
@@ -285,7 +280,6 @@ export interface GraphDraftSaveDto {
   resourceRevision: number;
   document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;
-  history: HistoryStatusDto;
 }
 
 export type ProjectionStatusDto =
@@ -307,7 +301,6 @@ export interface ResourceMutationResultDto {
   deltas: ResourceDeltaDto[];
   projectionReplacements: GraphProjectionReplacementDto[];
   projectionStatus: ProjectionStatusDto;
-  history: HistoryStatusDto;
 }
 
 export type { EditorGraphProjectionDto, GraphProjectionReplacementDto };

@@ -4,7 +4,7 @@
 
 import { assignPresentKeys, isRecord, isString } from "./guards";
 import { parseRegressionResultData } from "./parseRegression";
-import type { OLSResultData } from "./regression";
+import type { LinearRegressionResultData } from "./regression";
 import type { PanelSummaryResult } from "./panel";
 import type { PanelDidResultData } from "./did";
 
@@ -45,7 +45,7 @@ function parsePanelNestedModels(raw: Record<string, unknown>): Partial<PanelSumm
     if (raw[key] === undefined) continue;
     const parsed = parseRegressionResultData(raw[key]);
     if (!parsed) return null;
-    (out as Record<string, OLSResultData>)[key] = parsed;
+    (out as Record<string, LinearRegressionResultData>)[key] = parsed;
   }
   return out;
 }
@@ -77,7 +77,7 @@ export function parsePanelDidResultData(raw: unknown): PanelDidResultData | null
   ) {
     return null;
   }
-  let fe_twoway: OLSResultData | undefined;
+  let fe_twoway: LinearRegressionResultData | undefined;
   if (raw.fe_twoway !== undefined) {
     const parsed = parseRegressionResultData(raw.fe_twoway);
     if (!parsed) return null;

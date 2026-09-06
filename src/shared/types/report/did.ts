@@ -3,7 +3,7 @@
  */
 
 import { isFiniteNumber, isRecord } from "./guards";
-import type { OLSResultData } from "./regression";
+import type { LinearRegressionResultData } from "./regression";
 
 export interface DidEventStudyPoint {
   rel_time: number;
@@ -205,7 +205,7 @@ export interface PanelDidResultData {
   endog_name: string;
   treat_name: string;
   post_name: string;
-  fe_twoway?: OLSResultData;
+  fe_twoway?: LinearRegressionResultData;
   error?: string;
   parallel_trends?: DidParallelTrendsBlock;
   placebo?: DidPlaceboTimingBlock;

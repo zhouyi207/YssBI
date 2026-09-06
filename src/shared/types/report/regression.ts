@@ -13,7 +13,7 @@ import type {
   IvLimlOveridTest,
 } from "./iv";
 
-export interface ModelBasicInfo {
+export interface LinearModelInfo {
   model_type: string;
   method: string;
   num_observation: number;
@@ -43,6 +43,24 @@ export interface ModelBasicInfo {
   aic?: number;
   bic?: number;
 }
+
+export interface BinaryModelInfo {
+  model_type: string;
+  method: string;
+  num_observation: number;
+  pseudo_r2: number;
+  adjusted_pseudo_r2: number;
+  log_likelihood: number;
+  lr_chi2: number;
+  prob_lr_chi2: number;
+  df_model: number;
+  df_residual: number;
+  covariance_type: string;
+  aic: number;
+  bic: number;
+}
+
+export type BinaryResultData = RegressionResultData<BinaryModelInfo>;
 
 export interface Coefficient {
   variable: string;
@@ -220,10 +238,10 @@ export interface BinaryModelStatistics {
   conditionNumber: number;
 }
 
-export interface RegressionResultData {
+export interface RegressionResultData<ModelInfo = LinearModelInfo> {
   title: string;
   endog_name?: string;
-  model_basic_info: ModelBasicInfo;
+  model_basic_info: ModelInfo;
   coefficients: Coefficient[];
   diagnostic_info: DiagnosticInfo;
   betas?: number[];
@@ -232,4 +250,4 @@ export interface RegressionResultData {
   executionTimeMs?: number;
 }
 
-export type OLSResultData = RegressionResultData;
+export type LinearRegressionResultData = RegressionResultData;
