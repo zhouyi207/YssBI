@@ -2,7 +2,6 @@ import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProje
 import type {
   FunctionSignatureDto,
   GraphProjectionReplacementDto,
-  HistoryStatusDto,
   ResourceMoveDto,
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
@@ -34,7 +33,6 @@ import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphProjectionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useHistoryStore } from "@/features/core/history";
 import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 import {
   collectResourceMutationGraphPaths,
@@ -132,10 +130,7 @@ export interface PreparedProjectPublication {
   readonly removedChartPaths: ReadonlySet<string>;
   readonly graphProjectionPlan?: PreparedGraphProjectionReplacements;
   readonly projectionReplacements: readonly GraphProjectionReplacementDto[];
-  readonly functionInstalls: readonly PreparedFunctionDeltaInstall[];
-  readonly variableInstalls: readonly PreparedVariableDeltaInstall[];
   readonly storeState: PreparedPublicationStoreState;
-  readonly history: HistoryStatusDto;
 }
 
 export interface ProjectRecoveryPreparation {
@@ -158,7 +153,6 @@ export interface PreparedProjectRecoveryStoreState extends PreparedPublicationSt
 export interface PreparedProjectRecovery extends ProjectRecoveryPreparation {
   readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
   readonly storeState: PreparedProjectRecoveryStoreState;
-  readonly history: HistoryStatusDto;
 }
 
 export interface ProjectPublicationDependencies {
@@ -656,17 +650,6 @@ export class ProjectPublicationCoordinator {
   }
 }
 
-function commitHistoryAfterPublication(plan: PreparedProjectPublication): void | Promise<void> {
-  const committed = commitPreparedPublication(plan);
-  const updateHistory = () =>
-    useHistoryStore.setState({
-      canUndo: plan.history.canUndo,
-      canRedo: plan.history.canRedo,
-    });
-  if (committed) return committed.then(updateHistory);
-  updateHistory();
-}
-
 const productionDependencies: ProjectPublicationDependencies = {
   loadRecoverySnapshot: (projectInstanceId) => ProjectService.getProjectIndex(projectInstanceId),
   prepareGraphProjection: prepareGraphProjectionForPublication,
@@ -675,7 +658,7 @@ const productionDependencies: ProjectPublicationDependencies = {
   preparePublication: prepareSynchronousPublicationCommit,
   prepareRecovery: prepareProjectRecoveryCommit,
   prepareMove: prepareResourceMove,
-  commitPublication: commitHistoryAfterPublication,
+  commitPublication: commitPreparedPublication,
   commitRecovery: commitPreparedProjectRecovery,
   markProjectProjectionStale: () => {
     useResourceStore.setState((state) => ({

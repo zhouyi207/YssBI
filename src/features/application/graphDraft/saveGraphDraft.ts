@@ -10,7 +10,6 @@ import {
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { markResourceDirty, useResourceStore } from "@/features/core/resource";
-import { useHistoryStore } from "@/features/core/history";
 import type { ResourceKind } from "@/features/core/resource";
 import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
 
@@ -25,7 +24,6 @@ export async function saveGraphDraft(
   const isCurrentSave = () =>
     isCurrentProjectIdentity(identity) &&
     useGraphDraftStore.getState().sessions[graphPath]?.sessionId === sessionId;
-  useHistoryStore.setState({ pending: true });
 
   let completed = false;
   try {
@@ -58,7 +56,6 @@ export async function saveGraphDraft(
       .getState()
       .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });
     markResourceDirty({ id: graphPath, kind: graphKind }, false);
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false });
     completed = true;
     return true;
   } catch (error) {
@@ -67,12 +64,6 @@ export async function saveGraphDraft(
   } finally {
     if (!completed && isCurrentSave()) {
       useGraphDraftStore.getState().failSave(graphPath);
-      const draft = useGraphDraftStore.getState().sessions[graphPath];
-      useHistoryStore.setState({
-        canUndo: Boolean(draft?.undoStack.length),
-        canRedo: Boolean(draft?.redoStack.length),
-        pending: false,
-      });
     }
   }
 }

@@ -28,7 +28,7 @@ const compiledArtifactId = "2".repeat(64);
 function runStartedEvent(): RunEvent {
   return {
     run: {
-      projectSessionId: "backend-session-1",
+      executionSessionId: "backend-session-1",
       graphPath,
       runId: "run-stale",
     },

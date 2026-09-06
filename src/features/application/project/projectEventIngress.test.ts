@@ -28,7 +28,6 @@ function event(operationId: string): ProjectEvent {
         publicationRevision: 1,
         affectedResources: [],
         indexInvalidated: false,
-        history: { canUndo: false, canRedo: false },
       },
     },
   };

@@ -2,10 +2,7 @@ import { ResultService } from "@/services/result/resultService";
 import {
   isResultPlotKind,
   type ResultDescriptor,
-  type ResultFailure,
-  type ResultPage,
   type ResultPlotKind,
-  type ResultProgress,
   type ResultReportKind,
 } from "@/shared/types/domain/result";
 import { logger } from "@/features/application/observability/appLogger";
@@ -15,14 +12,11 @@ export type PresentationWindowState =
   | { status: "loading" }
   | { status: "missing_result_id" }
   | { status: "not_found" }
-  | { status: "pending"; descriptor: ResultDescriptor; progress: ResultProgress }
-  | { status: "failed"; descriptor: ResultDescriptor; failure: ResultFailure }
-  | { status: "cancelled"; descriptor: ResultDescriptor }
   | { status: "load_failed" }
   | { status: "ready"; descriptor: ResultDescriptor; payload: PresentationPayload };
 
 export type PresentationPayload =
-  | { mode: "inspector"; descriptor: ResultDescriptor; page?: ResultPage }
+  | { mode: "inspector"; descriptor: ResultDescriptor }
   | { mode: "plot"; chart: ResultPlotKind; data: unknown }
   | { mode: "report"; report: ResultReportKind; data: unknown };
 
@@ -36,13 +30,7 @@ function resolvePlotChart(descriptor: ResultDescriptor): ResultPlotKind {
 
 async function loadReadyPayload(descriptor: ResultDescriptor): Promise<PresentationPayload> {
   if (descriptor.presentation.kind === "inspector") {
-    if (descriptor.valueKind === "scalar") {
-      await ResultService.getValue(descriptor.resultId);
-      return { mode: "inspector", descriptor };
-    }
-    const page = await ResultService.getPage(descriptor.resultId, 0, PAGE_SIZE);
-    if (!page) throw new Error("Result data was not found");
-    return { mode: "inspector", descriptor, page };
+    return { mode: "inspector", descriptor };
   }
 
   if (descriptor.valueKind === "scalar") {
@@ -68,16 +56,7 @@ export async function loadPresentationWindow(resultId: string): Promise<Presenta
   try {
     const descriptor = await ResultService.getDescriptor(resultId);
     if (!descriptor) return { status: "not_found" };
-    switch (descriptor.state.kind) {
-      case "pending":
-        return { status: "pending", descriptor, progress: descriptor.state.progress };
-      case "failed":
-        return { status: "failed", descriptor, failure: descriptor.state.failure };
-      case "cancelled":
-        return { status: "cancelled", descriptor };
-      case "ready":
-        return { status: "ready", descriptor, payload: await loadReadyPayload(descriptor) };
-    }
+    return { status: "ready", descriptor, payload: await loadReadyPayload(descriptor) };
   } catch (error) {
     logger.app.error(
       `Failed to load presentation result: ${error instanceof Error ? error.message : String(error)}`,

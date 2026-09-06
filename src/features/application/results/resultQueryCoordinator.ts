@@ -34,6 +34,7 @@ export interface ResultQueryCoordinator {
   loadValue(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadPage(request: ResultPageRequest): Promise<ResultQueryOutcome>;
   loadPinResult(request: ResultPinRequest): Promise<ResultQueryOutcome>;
+  releasePayload(resultId: string): void;
   resetProject(): void;
   resetResult(resultId: string): void;
 }
@@ -49,28 +50,29 @@ export interface ResultQueryServicePort {
 }
 
 export interface ResultQueryPublication {
+  readonly releasePayload: (resultId: string) => void;
   readonly publishDescriptor: (
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     resultId: string,
     descriptor: DeepReadonly<ResultDescriptor | null>,
   ) => void;
   readonly publishValue: (
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     resultId: string,
     value: DeepReadonly<ResultValue | null>,
   ) => void;
   readonly publishPage: (
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     request: ResultPageRequest,
     page: DeepReadonly<ResultPage | null>,
   ) => void;
   readonly publishPinResult: (
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     request: ResultPinRequest,
     result: DeepReadonly<ResultDescriptor | null>,
   ) => void;
   readonly publishFailure: (
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     scope: ResultQueryScope,
     issue: ErrorReference,
   ) => void;
@@ -96,7 +98,7 @@ export interface ResultQueryDependencies {
 }
 
 interface RequestOwner {
-  readonly projectInstanceId: string;
+  readonly projectInstanceId: string | null;
   readonly projectEpoch: number;
   readonly queryKey: string;
   readonly scope: ResultQueryScope;
@@ -114,7 +116,7 @@ function queryKey(scope: ResultQueryScope): string {
     case "value":
       return `${scope.kind}:${queryPart(scope.resultId)}`;
     case "page":
-      return `${scope.kind}:${queryPart(scope.resultId)}:${scope.offset}:${scope.limit}`;
+      return `${scope.kind}:${queryPart(scope.resultId)}`;
     case "pinResult":
       return `${scope.kind}:${queryPart(scope.graphPath)}:${portAddressKey(scope.output)}`;
   }
@@ -197,11 +199,10 @@ export function createResultQueryCoordinator(
   const load = async <T extends ResultQueryValue>(
     scope: ResultQueryScope,
     read: () => Promise<T | null>,
-    publish: (projectInstanceId: string, value: DeepReadonly<T | null>) => void,
+    publish: (projectInstanceId: string | null, value: DeepReadonly<T | null>) => void,
     fallbackCode: string,
   ): Promise<ResultQueryOutcome> => {
     const projectInstanceId = captureProject();
-    if (!projectInstanceId) return { status: "notReady" };
 
     const key = queryKey(scope);
     const owner: RequestOwner = {
@@ -299,6 +300,16 @@ export function createResultQueryCoordinator(
     loadValue,
     loadPage,
     loadPinResult,
+    releasePayload: (resultId) => {
+      for (const [key, owner] of requests) {
+        if (
+          (owner.scope.kind === "value" || owner.scope.kind === "page") &&
+          owner.scope.resultId === resultId
+        )
+          requests.delete(key);
+      }
+      dependencies.publication.releasePayload(resultId);
+    },
     resetProject: () => {
       projectEpoch += 1;
       requests.clear();

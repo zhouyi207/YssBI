@@ -6,7 +6,7 @@ import type { HypothesisTestResponse } from "@/features/application/stats/statsA
 import { buildParamNames } from "@/shared/stats/regressionReportUtils";
 import type { RegressionResultData } from "@/shared/types/report";
 
-export function useHypothesisTestBlock(data: RegressionResultData) {
+export function useHypothesisTestBlock(data: RegressionResultData<{ df_residual: number }>) {
   const { t } = useTranslation();
   const [hypothesis, setHypothesis] = useState("");
   const [result, setResult] = useState<HypothesisTestResponse | null>(null);

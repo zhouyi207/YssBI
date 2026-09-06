@@ -103,7 +103,6 @@ describe("resource mutation projection replacement protocol", () => {
       deltas: [],
       projectionReplacements: [],
       projectionStatus: { status: "complete", expectedGraphPaths: [caller] },
-      history: { canUndo: false, canRedo: false },
     };
 
     expect(() =>
@@ -163,7 +162,6 @@ describe("resource mutation projection replacement protocol", () => {
       deltas: [],
       projectionReplacements: [{ graphPath: caller, projection: replacement.projection }],
       projectionStatus: { status: "complete", expectedGraphPaths: [caller] },
-      history: { canUndo: false, canRedo: false },
     };
 
     const plan = prepareSynchronousPublicationCommit(result, {

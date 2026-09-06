@@ -15,10 +15,10 @@ export const executionUi: ExecutionUi = {
   resetVisuals: (graphPath) => useExecutionStore.getState().resetGraphVisuals(graphPath),
 };
 
-export interface ExecutionResultUi {
+export interface RunOutputActions {
   readonly clearRunOutput: (graphPath: string) => void;
 }
 
-export const executionResultUi: ExecutionResultUi = {
+export const runOutputActions: RunOutputActions = {
   clearRunOutput: (graphPath) => useExecutionStore.getState().clearRunOutput(graphPath),
 };

@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   targetCurrent: true,
   activePanel: null as TestPanel | null,
   groupPanels: [] as TestPanel[],
-  history: { canUndo: false, canRedo: false, pending: false },
   interaction: { type: "idle" } as { type: string },
   detailFocus: null as null | { kind: "node"; id: string; graphPath: string },
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
@@ -90,12 +89,6 @@ vi.mock("@/features/core/keyboard", () => ({
       resetModifierKeys: mocks.resetModifierKeys,
     }),
   },
-}));
-vi.mock("@/features/core/history", () => ({
-  useHistoryStore: Object.assign(
-    (selector: (state: typeof mocks.history) => unknown) => selector(mocks.history),
-    { getState: () => mocks.history },
-  ),
 }));
 vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   workbenchDockviewRead: {
@@ -185,7 +178,6 @@ describe("useEditorKeyboard", () => {
     mocks.targetCurrent = true;
     mocks.activePanel = editorPanel();
     mocks.groupPanels = [editorPanel(), resultPanel(), logsPanel()];
-    mocks.history = { canUndo: false, canRedo: false, pending: false };
     mocks.interaction = { type: "idle" };
     mocks.detailFocus = {
       kind: "node",
@@ -282,7 +274,6 @@ describe("useEditorKeyboard", () => {
 
   it("denies editor mutations and navigation while a Result is physically active", () => {
     mocks.activePanel = resultPanel();
-    mocks.history = { canUndo: true, canRedo: true, pending: false };
 
     keydown("a", { ctrlKey: true });
     keydown("f");

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartService } from "@/services/chart/chartService";
-import { useHistoryStore } from "@/features/core/history";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import { useChartDocumentStore } from "./chartDocumentStore";
@@ -80,7 +79,6 @@ function chartResult(operationId: string, before: ChartDocument, after: ChartDoc
     ],
     projectionReplacements: [],
     projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
-    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -92,7 +90,6 @@ describe("chart authoritative mutation results", () => {
     useResourceStore.getState().clear();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useProjectIOStore.setState({ projectInstanceId });
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false });
   });
 
   it("keys documents explicitly without synthesizing index rows", () => {
@@ -209,6 +206,5 @@ describe("chart authoritative mutation results", () => {
     expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(authoritative);
     expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(false);
     expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(false);
-    expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: false });
   });
 });

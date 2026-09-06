@@ -6,7 +6,6 @@ import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useExecutionStore } from "@/features/core/execution";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 
 const mocks = vi.hoisted(() => ({
@@ -46,10 +45,9 @@ import { openInspectableResult } from "./openInspectableResult";
 
 const descriptor: ResultDescriptor = {
   resultId: "17",
-  state: { kind: "ready" },
+
   provenance: {
     runId: "run-1",
-    activationId: "activation-1",
     graphPath: "events/Main.yssbi-event",
     nodeId: "node-1",
     output: {
@@ -137,7 +135,6 @@ describe("openInspectableResult", () => {
         };
       });
     });
-    const recordPinResult = vi.spyOn(useExecutionStore.getState(), "recordPinResult");
 
     const pending = openInspectableResult(
       {
@@ -153,7 +150,6 @@ describe("openInspectableResult", () => {
     settlePinResult(descriptor);
 
     await expect(pending).resolves.toBe(false);
-    expect(recordPinResult).not.toHaveBeenCalled();
     expect(mocks.loadDescriptor).not.toHaveBeenCalled();
     expect(mocks.upsertResult).not.toHaveBeenCalled();
   });

@@ -63,7 +63,7 @@ export async function createVariableAction(params: {
       }),
     );
     context = snapshot.context;
-    const variable = snapshot.authority;
+    const variable = snapshot.captured;
 
     const receipt = await VariableService.createVariable(
       context.projectInstanceId,
@@ -96,7 +96,7 @@ export async function updateVariableAction(
       };
     });
     context = snapshot.context;
-    const { previous, expectedRevision } = snapshot.authority;
+    const { previous, expectedRevision } = snapshot.captured;
     if (!previous || expectedRevision == null) return null;
 
     if (patch.dataType && !isVariableDataTypeAllowed(patch.dataType)) return null;
@@ -130,7 +130,7 @@ export async function deleteVariableAction(variableId: string): Promise<boolean>
       };
     });
     context = snapshot.context;
-    const { previous, expectedRevision } = snapshot.authority;
+    const { previous, expectedRevision } = snapshot.captured;
     if (!previous || expectedRevision == null) return false;
 
     const receipt = await VariableService.deleteVariable(

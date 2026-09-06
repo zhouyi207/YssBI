@@ -8,7 +8,6 @@ import {
   type CanvasInteractionScope,
 } from "@/features/core/graphInteraction/graphInteractionStore";
 import { commitViewport, setViewportLive, editorViewportScope } from "@/features/core/viewport";
-import { executeCommand } from "@/features/core/history";
 import type { EditorViewport } from "@/features/core/viewport";
 import { logger } from "@/features/core/observability/logger";
 import type { CanvasInteractionHandlers } from "./canvasMutationContracts";
@@ -43,7 +42,10 @@ export type CanvasPointerLoopDeps = {
   ) => void;
   persistViewport: (scope?: { groupId: string; graphPath: string } | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
-} & Pick<CanvasInteractionHandlers, "submitConnection" | "reportMutationFailure">;
+} & Pick<
+  CanvasInteractionHandlers,
+  "submitConnection" | "submitNodePositions" | "reportMutationFailure"
+>;
 
 let attachCount = 0;
 let removeWindowListeners: (() => void) | null = null;
@@ -391,7 +393,8 @@ function installPointerLoop(): () => void {
           overrides[nodeId] ? [{ nodeId, position: overrides[nodeId] }] : [],
         );
         if (positions.length > 0)
-          void Promise.resolve(executeCommand(graphPath, "MoveNodes", { positions }))
+          void deps
+            .submitNodePositions(graphPath, positions)
             .catch(() =>
               logger.graph.warn(
                 `MoveNodes command failed graphPath=${graphPath}`,

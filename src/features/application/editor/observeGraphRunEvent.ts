@@ -12,7 +12,7 @@ export type GraphRunOutcomeState = {
 };
 
 export type PinPreviewObservation = {
-  projectSessionId: string | null;
+  executionSessionId: string | null;
   output: GraphOutputRefDto;
   generation: number;
   runId: string | null;
@@ -37,14 +37,14 @@ function observePinPreviewEvent(
       preview.stale = true;
       return;
     }
-    preview.projectSessionId = event.run.projectSessionId;
+    preview.executionSessionId = event.run.executionSessionId;
     preview.runId = event.run.runId;
     return;
   }
   if (
-    !preview.projectSessionId ||
+    !preview.executionSessionId ||
     !preview.runId ||
-    event.run.projectSessionId !== preview.projectSessionId ||
+    event.run.executionSessionId !== preview.executionSessionId ||
     event.run.runId !== preview.runId
   ) {
     preview.stale = true;

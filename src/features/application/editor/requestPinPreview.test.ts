@@ -24,13 +24,13 @@ import { requestPinPreview } from "./requestPinPreview";
 
 const eventGraphPath = "events/Main.yssbi-event";
 const frontendProjectInstanceId = "frontend-project-instance-1";
-const backendProjectSessionId = "backend-project-session-1";
+const backendExecutionSessionId = "backend-project-session-1";
 const compiledArtifactId = "1".repeat(64);
 
 function runEvent(kind: RunEvent["kind"], runId = "run-1"): RunEvent {
   return {
     run: {
-      projectSessionId: backendProjectSessionId,
+      executionSessionId: backendExecutionSessionId,
       graphPath: eventGraphPath,
       runId,
     },

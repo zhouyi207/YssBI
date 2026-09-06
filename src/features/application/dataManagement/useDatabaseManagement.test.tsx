@@ -45,7 +45,6 @@ function aggregate(afterName: string | null, operationId: string) {
       ],
       projectionReplacements: [],
       projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
-      history: { canUndo: false, canRedo: false },
     },
   };
 }

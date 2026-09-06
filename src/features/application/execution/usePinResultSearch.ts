@@ -9,26 +9,34 @@ import {
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
   type PinResultSearchEntry,
-} from "@/features/core/execution/pinResultSearch";
-import { useExecutionStore } from "@/features/core/execution";
+} from "@/features/application/results/pinResultSearch";
+import { useResultDescriptors } from "@/features/application/results/runtime";
 
 export function usePinResultSearch(graphPath: string, query: string) {
-  const results = useExecutionStore((state) => state.graphs[graphPath]?.pinResults);
+  const descriptors = useResultDescriptors();
   const graphBucket = useGraphProjectionStore((state) => state.graphEntities[graphPath]);
 
   const entries = useMemo(() => {
-    if (!results || results.size === 0) return [];
+    const results = Object.values(descriptors).filter(
+      (result) => result?.provenance.output?.graphPath === graphPath,
+    );
 
-    return collectPinResultSearchEntries(results, (projection) => {
-      const graphStore = useGraphProjectionStore.getState();
-      const node = graphStore.getGraphNode(projection.graphPath, projection.output.nodeId);
-      const pin = graphStore.getGraphPin(projection.graphPath, portAddressKey(projection.output));
-      return {
-        nodeTitle: nodeDisplayTitle(node) ?? "",
-        pinName: pinDisplayTitle(pin) ?? "",
-      };
-    });
-  }, [graphBucket, results]);
+    return collectPinResultSearchEntries(
+      results.filter((result) => result !== null),
+      (result) => {
+        const graphStore = useGraphProjectionStore.getState();
+        const node = graphStore.getGraphNode(result.provenance.graphPath, result.provenance.nodeId);
+        const pin = graphStore.getGraphPin(
+          result.provenance.graphPath,
+          result.provenance.output ? portAddressKey(result.provenance.output.port) : "",
+        );
+        return {
+          nodeTitle: nodeDisplayTitle(node) ?? "",
+          pinName: pinDisplayTitle(pin) ?? "",
+        };
+      },
+    );
+  }, [graphBucket, descriptors, graphPath]);
 
   const filteredEntries = useMemo(
     () => filterPinResultSearchEntries(entries, query),
@@ -36,7 +44,7 @@ export function usePinResultSearch(graphPath: string, query: string) {
   );
 
   return {
-    hasResults: (results?.size ?? 0) > 0,
+    hasResults: entries.length > 0,
     entries: filteredEntries,
   };
 }

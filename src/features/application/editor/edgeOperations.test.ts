@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { executeCommand, executeCommandOutcome } from "@/features/core/history";
+import { executeGraphEdit } from "@/features/application/graphEditing";
 import {
   connectPinsById,
   disconnectConnectionById,
@@ -8,12 +8,8 @@ import {
   insertRerouteAtConnection,
 } from "./edgeOperations";
 
-vi.mock("@/features/core/history", () => ({
-  executeCommand: vi.fn(),
-  executeCommandOutcome: vi.fn(),
-}));
-vi.mock("@/features/application/graphDraft/registerGraphDraftPort", () => ({
-  ensureGraphDraftPortRegistered: vi.fn(),
+vi.mock("@/features/application/graphEditing", () => ({
+  executeGraphEdit: vi.fn(),
 }));
 
 const graphPath = "events/main.yssbi-event";
@@ -28,25 +24,29 @@ describe("edge operations", () => {
     async (connectionIds) => {
       await expect(disconnectConnectionsById(graphPath, connectionIds)).resolves.toBe(false);
 
-      expect(executeCommand).not.toHaveBeenCalled();
+      expect(executeGraphEdit).not.toHaveBeenCalled();
     },
   );
 
   it("deduplicates disconnect IDs in first-seen order and sends one intent", async () => {
-    vi.mocked(executeCommand).mockResolvedValueOnce(true);
+    vi.mocked(executeGraphEdit).mockResolvedValueOnce({
+      status: "applied",
+      result: {} as never,
+      insertedNodeIds: [],
+    });
 
     await expect(
       disconnectConnectionsById(graphPath, ["edge-b", "edge-a", "edge-b", "edge-c", "edge-a"]),
     ).resolves.toBe(true);
 
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledWith(graphPath, "DisconnectConnections", {
+    expect(executeGraphEdit).toHaveBeenCalledTimes(1);
+    expect(executeGraphEdit).toHaveBeenCalledWith(graphPath, "DisconnectConnections", {
       connectionIds: ["edge-b", "edge-a", "edge-c"],
     });
   });
 
   it("exposes detail connection operations through the existing graph commands", async () => {
-    vi.mocked(executeCommandOutcome).mockResolvedValue({
+    vi.mocked(executeGraphEdit).mockResolvedValue({
       status: "applied",
       result: {},
     } as never);
@@ -64,14 +64,14 @@ describe("edge operations", () => {
       result: {},
     });
 
-    expect(executeCommandOutcome).toHaveBeenNthCalledWith(1, graphPath, "ConnectPins", {
+    expect(executeGraphEdit).toHaveBeenNthCalledWith(1, graphPath, "ConnectPins", {
       pinA: "output-a",
       pinB: "input-b",
     });
-    expect(executeCommandOutcome).toHaveBeenNthCalledWith(2, graphPath, "DisconnectConnections", {
+    expect(executeGraphEdit).toHaveBeenNthCalledWith(2, graphPath, "DisconnectConnections", {
       connectionIds: ["edge-a"],
     });
-    expect(executeCommandOutcome).toHaveBeenNthCalledWith(3, graphPath, "DisconnectPort", {
+    expect(executeGraphEdit).toHaveBeenNthCalledWith(3, graphPath, "DisconnectPort", {
       pinId: "input-b",
     });
   });
@@ -85,25 +85,25 @@ describe("edge operations", () => {
   ] as const)(
     "rejects invalid reroute input without a command call: %j %j",
     async (connectionId, position) => {
-      await expect(insertRerouteAtConnection(graphPath, connectionId, position)).resolves.toBe(
-        false,
-      );
+      await expect(insertRerouteAtConnection(graphPath, connectionId, position)).resolves.toEqual({
+        status: "unavailable",
+      });
 
-      expect(executeCommand).not.toHaveBeenCalled();
+      expect(executeGraphEdit).not.toHaveBeenCalled();
     },
   );
 
   it("copies the position and sends one typed InsertReroute intent", async () => {
     const outcome = { status: "saving" } as const;
-    vi.mocked(executeCommandOutcome).mockResolvedValueOnce(outcome);
+    vi.mocked(executeGraphEdit).mockResolvedValueOnce(outcome);
     const position = { x: 120, y: 80 };
 
     const result = insertRerouteAtConnection(graphPath, "edge-1", position);
     position.x = 999;
 
     await expect(result).resolves.toEqual(outcome);
-    expect(executeCommandOutcome).toHaveBeenCalledTimes(1);
-    expect(executeCommandOutcome).toHaveBeenCalledWith(graphPath, "InsertReroute", {
+    expect(executeGraphEdit).toHaveBeenCalledTimes(1);
+    expect(executeGraphEdit).toHaveBeenCalledWith(graphPath, "InsertReroute", {
       connectionId: "edge-1",
       position: { x: 120, y: 80 },
     });
@@ -115,15 +115,14 @@ describe("edge operations", () => {
     { status: "stale" },
     { status: "saving" },
     { status: "rejected", code: "graph_connection_not_found" },
-    false,
+    { status: "failed" },
   ] as const)("propagates the typed reroute outcome unchanged: %j", async (outcome) => {
-    vi.mocked(executeCommandOutcome).mockResolvedValueOnce(outcome as never);
+    vi.mocked(executeGraphEdit).mockResolvedValueOnce(outcome as never);
 
     await expect(insertRerouteAtConnection(graphPath, "edge-1", { x: 120, y: 80 })).resolves.toBe(
       outcome,
     );
 
-    expect(executeCommandOutcome).toHaveBeenCalledTimes(1);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(executeGraphEdit).toHaveBeenCalledTimes(1);
   });
 });

@@ -12,13 +12,12 @@ import {
   updateEditorGroupSelectedNodeIds,
   workbenchDockviewRead,
 } from "@/modules/workbench/public";
-import { executeCommand, executeCommandWithResult } from "@/features/core/history";
-import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import { executeGraphEdit } from "@/features/application/graphEditing";
+import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import {
   redoEditorHistory,
   undoEditorHistory,
 } from "@/features/application/graphDraft/historyCoordinator";
-import { executeSafeGraphDraftEdit } from "@/features/application/graphDraft/safeGraphDraftEdit";
 import { exportEditorSubgraph } from "@/features/application/graphDraft/subgraphExportCoordinator";
 import { readGraphClipboard, writeGraphClipboard } from "@/services/clipboard";
 import { disconnectConnectionsById } from "./edgeOperations";
@@ -96,13 +95,13 @@ function logEditorOperationError(operation: string, error: unknown): void {
 }
 
 function isAppliedMutation(
-  outcome: GraphDraftCommandResult | null,
-): outcome is Extract<GraphDraftCommandResult, { status: "applied" }> {
-  return outcome !== null && outcome !== false && outcome.status === "applied";
+  outcome: GraphEditOutcome | null,
+): outcome is Extract<GraphEditOutcome, { status: "applied" }> {
+  return outcome !== null && outcome.status === "applied";
 }
 
-function mutationOutcomeStatus(outcome: GraphDraftCommandResult | null): string {
-  return outcome !== null && outcome !== false ? outcome.status : "command unavailable";
+function mutationOutcomeStatus(outcome: GraphEditOutcome | null): string {
+  return outcome !== null ? outcome.status : "command unavailable";
 }
 
 /** Handles editor-authorized clipboard, history, selection, and node operations. */
@@ -186,7 +185,7 @@ export function useEditorOperations() {
         if (!context || nodeIds.length === 0) return false;
         if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
         if (!isEditorOperationContextCurrent(context)) return false;
-        const outcome = await executeCommandWithResult(context.graphPath, "DuplicateSubgraph", {
+        const outcome = await executeGraphEdit(context.graphPath, "DuplicateSubgraph", {
           nodeIds: [...nodeIds],
           offset: { ...offset },
         });
@@ -215,17 +214,25 @@ export function useEditorOperations() {
     const idsToDelete = nodeIds.filter((id) => canDeleteNode(context.graphPath, id));
     if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
-    return executeSafeGraphDraftEdit(context.graphPath, "Delete nodes", "DeleteNodes", {
-      nodeIds: idsToDelete,
-    });
+    return (
+      (
+        await executeGraphEdit(context.graphPath, "DeleteNodes", {
+          nodeIds: idsToDelete,
+        })
+      ).status === "applied"
+    );
   }, []);
 
   const breakAllNodeLinks = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphDraftEdit(context.graphPath, "Break all links", "DisconnectNode", {
-      nodeId,
-    });
+    return (
+      (
+        await executeGraphEdit(context.graphPath, "DisconnectNode", {
+          nodeId,
+        })
+      ).status === "applied"
+    );
   }, []);
 
   const selectLinkedNodes = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
@@ -256,16 +263,28 @@ export function useEditorOperations() {
   const disconnectPinById = useCallback(async (pinId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context || !isEditorOperationContextCurrent(context)) return false;
-    return executeSafeGraphDraftEdit(context.graphPath, "Disconnect port", "DisconnectPort", {
-      pinId,
-    });
+    return (
+      (
+        await executeGraphEdit(context.graphPath, "DisconnectPort", {
+          pinId,
+        })
+      ).status === "applied"
+    );
   }, []);
 
   const resetPinValue = useCallback(
     async (nodeId: string, pinId: string, target?: EditorCommandTarget) => {
       const context = captureEditorOperationContext(target);
       if (!context || !isEditorOperationContextCurrent(context)) return false;
-      return executeCommand(context.graphPath, "SetPinValue", { nodeId, pinId, newValue: null });
+      return (
+        (
+          await executeGraphEdit(context.graphPath, "SetPinValue", {
+            nodeId,
+            pinId,
+            newValue: null,
+          })
+        ).status === "applied"
+      );
     },
     [],
   );
@@ -277,7 +296,7 @@ export function useEditorOperations() {
         if (!context) return false;
         const snapshot = await readGraphClipboard();
         if (!isEditorOperationContextCurrent(context)) return false;
-        const outcome = await executeCommandWithResult(context.graphPath, "InsertSubgraph", {
+        const outcome = await executeGraphEdit(context.graphPath, "InsertSubgraph", {
           snapshotJson: JSON.stringify(snapshot),
           anchor: { ...pos },
         });
@@ -353,20 +372,21 @@ export function useEditorOperations() {
         .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(context.graphPath, nodeId));
       if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
-      const applied = await executeSafeGraphDraftEdit(
-        context.graphPath,
-        "Delete selected nodes",
-        "DeleteNodes",
-        { nodeIds: idsToDelete },
-      );
+      const applied = await executeGraphEdit(context.graphPath, "DeleteNodes", {
+        nodeIds: idsToDelete,
+      });
       const currentSelection = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
       const selectionUnchanged =
         currentSelection.length === selectedSnapshot.length &&
         currentSelection.every((nodeId, index) => nodeId === selectedSnapshot[index]);
-      if (applied && isEditorOperationContextCurrent(context) && selectionUnchanged) {
+      if (
+        applied.status === "applied" &&
+        isEditorOperationContextCurrent(context) &&
+        selectionUnchanged
+      ) {
         setSelectedNodeIds([], context.groupId);
       }
-      return applied;
+      return applied.status === "applied";
     },
     [setSelectedConnectionIds, setSelectedNodeIds],
   );
@@ -385,7 +405,7 @@ export function useEditorOperations() {
         if (!isEditorOperationContextCurrent(context)) return false;
         await writeGraphClipboard(snapshot);
         if (!isEditorOperationContextCurrent(context)) return false;
-        const outcome = await executeCommandWithResult(context.graphPath, "DeleteNodes", {
+        const outcome = await executeGraphEdit(context.graphPath, "DeleteNodes", {
           nodeIds: [...nodeIds],
         });
         if (!isAppliedMutation(outcome)) {

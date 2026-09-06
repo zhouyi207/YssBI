@@ -5,7 +5,6 @@
  */
 
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import type { ResultDescriptor } from "@/shared/types/domain/result";
 import type {
   RunOutputChannelEvent,
   RunPhase,
@@ -39,12 +38,6 @@ export interface NodeExecutionState {
   timestamp: number;
   /** 后端计算耗时（毫秒），用于性能分析 */
   durationMs?: number;
-}
-
-export interface PinResultProjection {
-  graphPath: string;
-  output: PortAddressDto;
-  result: ResultDescriptor | null;
 }
 
 export interface RunOutputProjection {
@@ -84,8 +77,6 @@ export interface GraphExecutionState {
   runOutput: RunOutputProjection;
   runFailure: RunFailureProjection | null;
 
-  /** Current backend output-Pin result projections keyed by exact graph path and address. */
-  pinResults: Map<string, PinResultProjection>;
   /** Stable `(graphPath, PortAddressDto)` preview projections. */
   pinPreviews: Map<string, PinPreviewState>;
 }

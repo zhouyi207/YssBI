@@ -29,7 +29,6 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from "@/features/core/variable/variableCatalog";
-import { useHistoryStore } from "@/features/core/history";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useViewportStore } from "@/features/core/viewport";
@@ -83,9 +82,6 @@ export function validateProjectRecoveryIndex(
   if (index.projectInstanceId !== projectInstanceId) return "recovery project identity is stale";
   if (!Number.isSafeInteger(index.publicationRevision) || index.publicationRevision < 0) {
     return "recovery publication revision is malformed";
-  }
-  if (typeof index.history?.canUndo !== "boolean" || typeof index.history?.canRedo !== "boolean") {
-    return "recovery history is malformed";
   }
   if (
     !Array.isArray(index.graphs) ||
@@ -558,7 +554,6 @@ export function prepareProjectRecoveryCommit(
       focusedSession,
       viewports,
     },
-    history: { ...plan.index.history },
   };
 }
 
@@ -589,10 +584,6 @@ export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): vo
     commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
     useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
     useViewportStore.setState({ viewports: plan.storeState.viewports });
-    useHistoryStore.setState({
-      canUndo: plan.history.canUndo,
-      canRedo: plan.history.canRedo,
-    });
     for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
     for (const [from, to] of plan.chartPathRemaps ?? []) {
       remapChartNonViewportUiState(from, to);

@@ -13,7 +13,7 @@ import type {
   ProjectVariableIndexRow,
   ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
-import type { FunctionSignatureDto, HistoryStatusDto } from "@/shared/types/domain/editorMutation";
+import type { FunctionSignatureDto } from "@/shared/types/domain/editorMutation";
 import type { DatabaseEngineDTO } from "@/shared/types/domain/database";
 import type { ChartType } from "@/shared/types/domain/chart";
 import {
@@ -163,7 +163,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     !hasExactKeys(value, [
       "projectInstanceId",
       "publicationRevision",
-      "history",
       "projectName",
       "exportTime",
       "graphs",
@@ -173,11 +172,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     ]) ||
     typeof value.projectInstanceId !== "string" ||
     !isSafeRevision(value.publicationRevision) ||
-    !isRecord(value.history) ||
-    Array.isArray(value.history) ||
-    !hasExactKeys(value.history, ["canUndo", "canRedo"]) ||
-    typeof value.history.canUndo !== "boolean" ||
-    typeof value.history.canRedo !== "boolean" ||
     typeof value.projectName !== "string" ||
     typeof value.exportTime !== "string" ||
     !Array.isArray(value.graphs) ||
@@ -192,7 +186,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     return {
       projectInstanceId: value.projectInstanceId,
       publicationRevision: value.publicationRevision,
-      history: value.history as unknown as HistoryStatusDto,
       projectName: value.projectName,
       exportTime: value.exportTime,
       graphs: value.graphs.map(parseProjectGraphIndexRow),

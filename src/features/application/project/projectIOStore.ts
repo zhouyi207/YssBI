@@ -63,7 +63,6 @@ import {
   type ProjectIdentitySnapshot,
   type ProjectLifecycleStateSnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useHistoryStore } from "@/features/core/history";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
 import { setProjectPathForViewport } from "@/features/core/viewport/projectPath";
 
@@ -383,7 +382,6 @@ export async function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep("graph data", () =>
     useGraphProjectionStore.setState({ graphEntities: {} }),
   );
-  commitProjectLoadStep("history", () => useHistoryStore.setState(prepared.storeState.history));
   commitProjectLoadStep("project IO", () =>
     useProjectIOStore.setState(prepared.storeState.projectIO),
   );

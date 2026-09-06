@@ -18,7 +18,6 @@ const output: PortAddressDto = {
 
 const provenance = {
   runId: "9007199254740993",
-  activationId: "9007199254740994",
   graphPath: "events/contract.yssbi-event",
   nodeId: "00000000-0000-0000-0000-000000000002",
   output: { graphPath: "events/contract.yssbi-event", port: output },
@@ -27,7 +26,7 @@ const provenance = {
 
 const readyDescriptor = {
   resultId: "17",
-  state: { kind: "ready" as const },
+
   provenance,
   presentation: { kind: "report" as const, report: "olsSummary" as const },
   valueKind: "scalar" as const,
@@ -37,36 +36,9 @@ const readyDescriptor = {
 };
 
 describe("result DTO parsers", () => {
-  it("parses every descriptor state", () => {
+  it("parses available result descriptors and rejects unrecognized fields", () => {
     expect(parseResultDescriptor(readyDescriptor)).toEqual(readyDescriptor);
-    expect(
-      parseResultDescriptor({
-        ...readyDescriptor,
-        state: { kind: "pending", progress: { completed: "2", total: "10" } },
-        totalCount: null,
-      }).state.kind,
-    ).toBe("pending");
-    expect(
-      parseResultDescriptor({
-        ...readyDescriptor,
-        state: {
-          kind: "failed",
-          failure: {
-            code: "upstream_failed",
-            cause: { kind: "upstream", upstreamResultId: "9" },
-            upstreamResultIds: ["9"],
-          },
-        },
-        totalCount: null,
-      }).state.kind,
-    ).toBe("failed");
-    expect(
-      parseResultDescriptor({
-        ...readyDescriptor,
-        state: { kind: "cancelled" },
-        totalCount: null,
-      }).state.kind,
-    ).toBe("cancelled");
+    expect(() => parseResultDescriptor({ ...readyDescriptor, extra: true })).toThrow();
   });
 
   it("strictly parses value, page, and metadata variants", () => {

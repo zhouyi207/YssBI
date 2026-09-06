@@ -1,6 +1,5 @@
-import { ensureGraphDraftPortRegistered } from "@/features/application/graphDraft/registerGraphDraftPort";
-import { executeSafeGraphDraftEditOutcome } from "@/features/application/graphDraft/safeGraphDraftEdit";
-import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import { executeGraphEdit } from "@/features/application/graphEditing";
+import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { PortPlacementDto } from "@/shared/types/domain/editorMutation";
 
@@ -13,10 +12,11 @@ export function addPortInstance(
   nodeId: string,
   templateKey: string,
   placement: PortPlacementDto = { kind: "append" },
-): Promise<GraphDraftCommandResult> {
-  if (!isNonEmpty(nodeId) || !isNonEmpty(templateKey)) return Promise.resolve(false);
-  ensureGraphDraftPortRegistered();
-  return executeSafeGraphDraftEditOutcome(graphPath, "Add port instance", "AddPortInstance", {
+): Promise<GraphEditOutcome> {
+  if (!isNonEmpty(nodeId) || !isNonEmpty(templateKey))
+    return Promise.resolve({ status: "unavailable" });
+
+  return executeGraphEdit(graphPath, "AddPortInstance", {
     nodeId,
     templateKey,
     placement,
@@ -27,9 +27,8 @@ export function movePortInstance(
   graphPath: string,
   address: Extract<PortAddressDto, { kind: "instance" }>,
   placement: PortPlacementDto,
-): Promise<GraphDraftCommandResult> {
-  ensureGraphDraftPortRegistered();
-  return executeSafeGraphDraftEditOutcome(graphPath, "Move port instance", "MovePortInstance", {
+): Promise<GraphEditOutcome> {
+  return executeGraphEdit(graphPath, "MovePortInstance", {
     address,
     placement,
   });
@@ -38,9 +37,8 @@ export function movePortInstance(
 export function removePortInstance(
   graphPath: string,
   address: Extract<PortAddressDto, { kind: "instance" }>,
-): Promise<GraphDraftCommandResult> {
-  ensureGraphDraftPortRegistered();
-  return executeSafeGraphDraftEditOutcome(graphPath, "Remove port instance", "RemovePortInstance", {
+): Promise<GraphEditOutcome> {
+  return executeGraphEdit(graphPath, "RemovePortInstance", {
     address,
   });
 }

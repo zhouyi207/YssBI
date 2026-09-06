@@ -325,6 +325,7 @@ export function useCanvasInteraction({
       persistViewport,
       setContextMenu,
       submitConnection: handlers.submitConnection,
+      submitNodePositions: handlers.submitNodePositions,
       reportMutationFailure: handlers.reportMutationFailure,
     });
   }, [

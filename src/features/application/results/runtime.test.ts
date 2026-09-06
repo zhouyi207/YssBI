@@ -21,10 +21,9 @@ const output = { graphPath, port: fixture.outputAddress };
 const request = { graphPath, output: output.port };
 const descriptor = (id: string): ResultDescriptor => ({
   resultId: id,
-  state: { kind: "ready" },
+
   provenance: {
     runId: id,
-    activationId: id,
     createdAtMs: "1000",
     graphPath,
     nodeId: output.port.nodeId,
@@ -49,7 +48,7 @@ const page = (id: string): ResultPage => ({
   values: [[1]],
 });
 function event(runId: string, kind: RunEventKind) {
-  observeResultRunEvent({ run: { runId, graphPath, projectSessionId: "session" }, kind });
+  observeResultRunEvent({ run: { runId, graphPath, executionSessionId: "session" }, kind });
 }
 
 beforeEach(() => {
@@ -100,16 +99,18 @@ describe("current result lifecycle", () => {
     expect(readPinResultStatus(request)).toBe("cancelled");
     vi.mocked(ResultService.getPinResult).mockResolvedValue(descriptor("1"));
     observeResultRunEvent({
-      run: { runId: "1", graphPath, projectSessionId: "new-session" },
+      run: { runId: "1", graphPath, executionSessionId: "new-session" },
       kind: { type: "runStarted", outputs: [output] },
     });
     expect(readPinResultStatus(request)).toBe("running");
     observeResultRunEvent({
-      run: { runId: "1", graphPath, projectSessionId: "new-session" },
+      run: { runId: "1", graphPath, executionSessionId: "new-session" },
       kind: { type: "runCompleted" },
     });
     await vi.waitFor(() => expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1"));
     expect(resultQueryRead.getDescriptor("2")).toBeNull();
+    event("1", { type: "runCancelled" });
+    expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1");
   });
 
   it("releases results when the graph semantic inputs change or its projection is unloaded", async () => {
@@ -123,6 +124,36 @@ describe("current result lifecycle", () => {
     await resultQueryCoordinator.loadPinResult(request);
     useGraphProjectionStore.getState().clearGraph(graphPath);
     expect(resultQueryRead.getDescriptor("1")).toBeNull();
-    expect(useExecutionStore.getState().graphs[graphPath]?.pinResults.size).toBe(0);
+    expect(resultQueryRead.getPinResult(request)).toBeNull();
+  });
+  it("keeps one page, releases closed-view payloads, and supports detached result reads", async () => {
+    useProjectIOStore.setState({ projectInstanceId: null });
+    vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(descriptor("1"));
+    vi.spyOn(ResultService, "getPage").mockImplementation(async (id, offset, limit) => ({
+      ...page(id),
+      offset,
+      requestedLimit: limit,
+    }));
+    await resultQueryCoordinator.loadDescriptor({ resultId: "1" });
+    const first = { resultId: "1", offset: 0, limit: 200 };
+    const second = { ...first, offset: 200 };
+    await resultQueryCoordinator.loadPage(first);
+    await resultQueryCoordinator.loadPage(second);
+    expect(resultQueryRead.getPage(first)).toBeNull();
+    expect(resultQueryRead.getPage(second)?.offset).toBe(200);
+    let settle!: (value: ResultPage) => void;
+    vi.mocked(ResultService.getPage).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const pending = resultQueryCoordinator.loadPage(first);
+    resultQueryCoordinator.releasePayload("1");
+    expect(resultQueryRead.getPage(second)).toBeNull();
+    expect(resultQueryRead.getDescriptor("1")?.resultId).toBe("1");
+    settle(page("1"));
+    await expect(pending).resolves.toEqual({ status: "stale" });
+    expect(resultQueryRead.getPage(first)).toBeNull();
   });
 });

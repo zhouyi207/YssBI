@@ -4,7 +4,7 @@ import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creat
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 import { useActiveEditorGroup } from "@/features/application/editor/editorGroupContext";
-import { executeCommand } from "@/features/core/history";
+import { executeGraphEdit } from "@/features/application/graphEditing";
 import { canDeleteNode } from "@/features/core/dataStore/graphNodeSelectors";
 import { logger } from "@/features/application/observability/appLogger";
 import {
@@ -52,7 +52,10 @@ export function useNodeManagement() {
       if (!canDeleteNode(activeResourceRef, nodeId)) return false;
 
       try {
-        return await executeCommand(activeResourceRef, "DeleteNodes", { nodeIds: [nodeId] });
+        return (
+          (await executeGraphEdit(activeResourceRef, "DeleteNodes", { nodeIds: [nodeId] }))
+            .status === "applied"
+        );
       } catch (error) {
         logger.graph.error(
           `Failed to delete node: ${error instanceof Error ? error.message : String(error)}`,
@@ -71,10 +74,10 @@ export function useNodeManagement() {
       if (deletableIds.length === 0) return [];
 
       try {
-        const applied = await executeCommand(activeResourceRef, "DeleteNodes", {
+        const applied = await executeGraphEdit(activeResourceRef, "DeleteNodes", {
           nodeIds: deletableIds,
         });
-        return applied ? deletableIds : [];
+        return applied.status === "applied" ? deletableIds : [];
       } catch (error) {
         logger.graph.error(
           `Failed to delete nodes: ${error instanceof Error ? error.message : String(error)}`,

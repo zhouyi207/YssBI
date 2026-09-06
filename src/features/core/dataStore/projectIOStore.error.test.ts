@@ -74,7 +74,6 @@ describe("projectIOStore error references", () => {
     vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
       projectInstanceId,
       publicationRevision: 0,
-      history: { canUndo: false, canRedo: false },
       projectName: "Initial project",
       graphs: [],
       variables: [],

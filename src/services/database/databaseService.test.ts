@@ -16,7 +16,6 @@ const mutation = {
   deltas: [],
   projectionReplacements: [],
   projectionStatus: { status: "complete", expectedGraphPaths: [] },
-  history: { canUndo: false, canRedo: false },
 } satisfies ResourceMutationResultDto;
 
 beforeEach(() => {

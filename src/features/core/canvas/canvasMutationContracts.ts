@@ -22,6 +22,10 @@ export interface CanvasMutationFailure {
 }
 
 export interface CanvasInteractionHandlers {
+  submitNodePositions(
+    graphPath: string,
+    positions: Array<{ nodeId: string; position: { x: number; y: number } }>,
+  ): Promise<CanvasMutationOutcome>;
   submitConnection(mutation: CanvasConnectionMutation): Promise<CanvasMutationOutcome>;
   disconnectPort(graphPath: string, pinId: string): Promise<CanvasMutationOutcome>;
   insertRerouteAtConnection(mutation: CanvasRerouteMutation): Promise<CanvasMutationOutcome>;

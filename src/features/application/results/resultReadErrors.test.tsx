@@ -87,6 +87,7 @@ function createTestRuntime(): TestRuntime {
     readCurrentProjectInstanceId: () => projectInstanceId,
     service,
     publication: {
+      releasePayload: vi.fn(),
       publishDescriptor: () => undefined,
       publishValue: (_project, resultId, value) => {
         values.set(resultId, value);

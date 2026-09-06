@@ -25,19 +25,13 @@ export {
   type PinViewUiState,
   type ResolvePinViewTargetParams,
 } from "./pinViewTarget";
-export { lookupPinPreview, pinResultCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
+export { lookupPinPreview, pinPreviewCacheKey } from "./pinResultIndex";
 
 export {
   RUN_OUTPUT_PROJECTION_MAX_ENTRIES,
   appendRunOutput,
   emptyRunOutputProjection,
 } from "./runOutputProjection";
-export {
-  collectPinResultSearchEntries,
-  filterPinResultSearchEntries,
-  type PinResultSearchEntry,
-  type PinResultSearchLabels,
-} from "./pinResultSearch";
 export {
   executionRead,
   getExecutionSnapshot,
@@ -47,4 +41,4 @@ export {
   type ExecutionReadSnapshot,
   type GraphExecutionProjection,
 } from "./read";
-export { executionResultUi, executionUi, type ExecutionResultUi, type ExecutionUi } from "./ui";
+export { runOutputActions, executionUi, type RunOutputActions, type ExecutionUi } from "./ui";

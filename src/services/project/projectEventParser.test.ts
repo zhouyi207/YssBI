@@ -24,7 +24,6 @@ const projectSavedResult = {
   publicationRevision: 2,
   affectedResources: [{ kind: "chart", key: "charts/Sales.yssbi-chart" }],
   indexInvalidated: true,
-  history: { canUndo: true, canRedo: false },
 };
 
 const supportedEvents = [

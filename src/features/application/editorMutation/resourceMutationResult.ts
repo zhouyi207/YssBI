@@ -800,8 +800,6 @@ export function prepareSynchronousPublicationCommit(
       ? { graphProjectionPlan: { ...graphProjectionPlan, graphEntities: aggregate.graphEntities } }
       : {}),
     projectionReplacements: applicableProjectionReplacements,
-    functionInstalls,
-    variableInstalls,
     storeState: {
       resources: aggregate.resources,
       graphOrder: aggregate.graphOrder,
@@ -816,7 +814,6 @@ export function prepareSynchronousPublicationCommit(
       ...("focusedSession" in aggregate ? { focusedSession: aggregate.focusedSession } : {}),
       ...(aggregate.viewports ? { viewports: aggregate.viewports } : {}),
     },
-    history: result.history,
   };
 }
 

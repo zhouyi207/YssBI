@@ -21,7 +21,6 @@ describe("project event consumer", () => {
       deltas: [],
       projectionReplacements: [],
       projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
-      history: { canUndo: false, canRedo: false },
     };
 
     await expect(

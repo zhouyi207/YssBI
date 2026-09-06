@@ -142,7 +142,6 @@ function mockProjectBHydration(): void {
   vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
     projectInstanceId: "project-b",
     publicationRevision: 0,
-    history: { canUndo: false, canRedo: false },
     projectName: "Project B",
     graphs: [],
     variables: [],
@@ -240,7 +239,6 @@ describe("project lifecycle initiating operations", () => {
     vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
       projectInstanceId: "project-b",
       publicationRevision: 0,
-      history: { canUndo: false, canRedo: false },
       projectName: "Project B",
       graphs: [],
       variables: [],
@@ -379,7 +377,6 @@ describe("project lifecycle initiating operations", () => {
     vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
       projectInstanceId: "project-b",
       publicationRevision: 0,
-      history: { canUndo: false, canRedo: false },
       projectName: "Project B",
       graphs: [],
       variables: [],
@@ -647,7 +644,6 @@ describe("project lifecycle initiating operations", () => {
     vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
       projectInstanceId: "project-b",
       publicationRevision: 0,
-      history: { canUndo: false, canRedo: false },
       projectName: "Project B",
       graphs: [
         {

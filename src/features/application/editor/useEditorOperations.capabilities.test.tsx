@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
-import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { useEditorOperations } from "./useEditorOperations";
 import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   exportEditorSubgraph: vi.fn(),
   writeGraphClipboard: vi.fn(),
   readGraphClipboard: vi.fn(),
-  executeCommandWithResult: vi.fn(),
+  executeGraphEdit: vi.fn(),
   updateSelectedConnectionIds: vi.fn(),
   setInspectionContext: vi.fn(),
   revealInspect: vi.fn(async () => undefined),
@@ -96,16 +96,12 @@ vi.mock("@/services/clipboard", () => ({
   writeGraphClipboard: mocks.writeGraphClipboard,
   readGraphClipboard: mocks.readGraphClipboard,
 }));
-vi.mock("@/features/core/history", () => ({
-  executeCommand: vi.fn(),
-  executeCommandWithResult: mocks.executeCommandWithResult,
+vi.mock("@/features/application/graphEditing", () => ({
+  executeGraphEdit: mocks.executeGraphEdit,
 }));
 vi.mock("@/features/application/graphDraft/historyCoordinator", () => ({
   undoEditorHistory: vi.fn(),
   redoEditorHistory: vi.fn(),
-}));
-vi.mock("@/features/application/graphDraft/safeGraphDraftEdit", () => ({
-  executeSafeGraphDraftEdit: vi.fn(),
 }));
 vi.mock("./edgeOperations", () => ({ disconnectConnectionsById: vi.fn() }));
 vi.mock("@/features/core/dataStore/graphProjectionStore", () => ({
@@ -130,7 +126,7 @@ const snapshot: ClipboardSubgraphDto = {
   connections: [],
 };
 
-function appliedWithInserted(...nodeIds: string[]): GraphDraftCommandResult {
+function appliedWithInserted(...nodeIds: string[]): GraphEditOutcome {
   return {
     status: "applied",
     insertedNodeIds: nodeIds,
@@ -177,7 +173,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     mocks.exportEditorSubgraph.mockReset();
     mocks.writeGraphClipboard.mockReset();
     mocks.readGraphClipboard.mockReset();
-    mocks.executeCommandWithResult.mockReset();
+    mocks.executeGraphEdit.mockReset();
     mocks.updateSelectedConnectionIds.mockReset();
     mocks.setInspectionContext.mockReset();
     mocks.revealInspect.mockReset();
@@ -267,7 +263,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     mocks.writeGraphClipboard.mockImplementation(async () => {
       order.push("write");
     });
-    mocks.executeCommandWithResult.mockImplementation(async () => {
+    mocks.executeGraphEdit.mockImplementation(async () => {
       order.push("delete");
       return appliedWithInserted();
     });
@@ -275,8 +271,8 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     await act(async () => operations.cutNodes(["node-a", "node-b"]));
 
     expect(order).toEqual(["export", "write", "delete"]);
-    expect(mocks.executeCommandWithResult).toHaveBeenCalledOnce();
-    expect(mocks.executeCommandWithResult).toHaveBeenCalledWith(graphPath, "DeleteNodes", {
+    expect(mocks.executeGraphEdit).toHaveBeenCalledOnce();
+    expect(mocks.executeGraphEdit).toHaveBeenCalledWith(graphPath, "DeleteNodes", {
       nodeIds: ["node-a", "node-b"],
     });
     expect(mocks.selectionByGroup.get("group-a")).toEqual([]);
@@ -285,13 +281,13 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   it("preserves selection and does not delete when clipboard writing fails", async () => {
     mocks.writeGraphClipboard.mockRejectedValueOnce(new Error("permission denied"));
     await act(async () => operations.cutNodes(["node-a", "node-b"]));
-    expect(mocks.executeCommandWithResult).not.toHaveBeenCalled();
+    expect(mocks.executeGraphEdit).not.toHaveBeenCalled();
     expect(mocks.selectionByGroup.get("group-a")).toEqual(["node-a", "node-b"]);
     expect(mocks.graphError).toHaveBeenCalled();
   });
 
   it("retains clipboard and selection when cut deletion is not applied", async () => {
-    mocks.executeCommandWithResult.mockResolvedValueOnce({ status: "conflict" });
+    mocks.executeGraphEdit.mockResolvedValueOnce({ status: "conflict" });
     await act(async () => operations.cutNodes(["node-a", "node-b"]));
     expect(mocks.writeGraphClipboard).toHaveBeenCalledOnce();
     expect(mocks.selectionByGroup.get("group-a")).toEqual(["node-a", "node-b"]);
@@ -299,12 +295,12 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   });
 
   it("pastes one raw snapshotJson mutation and selects only committed insert_node IDs", async () => {
-    mocks.executeCommandWithResult.mockResolvedValueOnce(appliedWithInserted("new-b", "new-a"));
+    mocks.executeGraphEdit.mockResolvedValueOnce(appliedWithInserted("new-b", "new-a"));
 
     await act(async () => operations.paste({ x: 120, y: 240 }));
 
-    expect(mocks.executeCommandWithResult).toHaveBeenCalledOnce();
-    expect(mocks.executeCommandWithResult).toHaveBeenCalledWith(graphPath, "InsertSubgraph", {
+    expect(mocks.executeGraphEdit).toHaveBeenCalledOnce();
+    expect(mocks.executeGraphEdit).toHaveBeenCalledWith(graphPath, "InsertSubgraph", {
       snapshotJson: JSON.stringify(snapshot),
       anchor: { x: 120, y: 240 },
     });
@@ -314,7 +310,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   it.each([{ status: "conflict" as const }, { status: "stale" as const }])(
     "preserves selection when paste settles as $status",
     async (outcome) => {
-      mocks.executeCommandWithResult.mockResolvedValueOnce(outcome);
+      mocks.executeGraphEdit.mockResolvedValueOnce(outcome);
       await act(async () => operations.paste({ x: 1, y: 2 }));
       expect(mocks.selectionByGroup.get("group-a")).toEqual(["node-a", "node-b"]);
     },
@@ -323,8 +319,8 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   it.each(["duplicate", "paste", "cut"] as const)(
     "preserves a newer node selection when %s settles in the same group and resource",
     async (operationType) => {
-      const pending = deferred<GraphDraftCommandResult | null>();
-      mocks.executeCommandWithResult.mockReturnValueOnce(pending.promise);
+      const pending = deferred<GraphEditOutcome | null>();
+      mocks.executeGraphEdit.mockReturnValueOnce(pending.promise);
 
       const operation =
         operationType === "duplicate"
@@ -332,7 +328,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
           : operationType === "paste"
             ? operations.paste({ x: 20, y: 30 })
             : operations.cutNodes(["node-a", "node-b"]);
-      await vi.waitFor(() => expect(mocks.executeCommandWithResult).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(mocks.executeGraphEdit).toHaveBeenCalledOnce());
       mocks.selectionByGroup.set("group-a", ["user-selected"]);
       pending.resolve(appliedWithInserted("committed-node"));
       await act(async () => operation);
@@ -343,17 +339,17 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   );
 
   it("duplicates once and selects committed IDs only in the same active group and resource", async () => {
-    mocks.executeCommandWithResult.mockResolvedValueOnce(appliedWithInserted("copy-a", "copy-b"));
+    mocks.executeGraphEdit.mockResolvedValueOnce(appliedWithInserted("copy-a", "copy-b"));
     await act(async () => operations.duplicateNodes(["node-a", "node-b"]));
-    expect(mocks.executeCommandWithResult).toHaveBeenCalledWith(graphPath, "DuplicateSubgraph", {
+    expect(mocks.executeGraphEdit).toHaveBeenCalledWith(graphPath, "DuplicateSubgraph", {
       nodeIds: ["node-a", "node-b"],
       offset: { x: 40, y: 40 },
     });
     expect(mocks.selectionByGroup.get("group-a")).toEqual(["copy-a", "copy-b"]);
 
     mocks.selectionByGroup.set("group-a", ["copy-a", "copy-b"]);
-    const pending = deferred<GraphDraftCommandResult | null>();
-    mocks.executeCommandWithResult.mockReturnValueOnce(pending.promise);
+    const pending = deferred<GraphEditOutcome | null>();
+    mocks.executeGraphEdit.mockReturnValueOnce(pending.promise);
     const operation = operations.duplicateNodes(["copy-a"]);
     mocks.activeResourceByGroup.set("group-a", "events/other.yssbi-event");
     pending.resolve(appliedWithInserted("wrong-resource"));
@@ -363,7 +359,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
 
   it("never allocates graph identities in the frontend workflows", async () => {
     const randomId = vi.spyOn(crypto, "randomUUID");
-    mocks.executeCommandWithResult.mockResolvedValueOnce(appliedWithInserted("backend-id"));
+    mocks.executeGraphEdit.mockResolvedValueOnce(appliedWithInserted("backend-id"));
     await act(async () => operations.duplicateNodes(["node-a"]));
     expect(randomId).not.toHaveBeenCalled();
   });

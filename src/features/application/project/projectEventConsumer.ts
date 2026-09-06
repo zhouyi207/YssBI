@@ -16,10 +16,6 @@ export interface ProjectSaveReceipt {
   readonly publicationRevision: number;
   readonly affectedResources: readonly ResourceKeyDto[];
   readonly indexInvalidated: boolean;
-  readonly history: {
-    readonly canUndo: boolean;
-    readonly canRedo: boolean;
-  };
 }
 
 export interface ProjectLoadedPayload {

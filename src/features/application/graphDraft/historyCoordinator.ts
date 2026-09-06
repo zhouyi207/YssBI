@@ -14,10 +14,8 @@ import {
   isGraphDraftSaving,
   useGraphDraftStore,
 } from "@/features/core/graphDraft";
-import { EMPTY_HISTORY_STATE, useHistoryStore } from "@/features/core/history/historyStore";
 import { markResourceDirty } from "@/features/core/resource";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
-import type { HistoryStatusDto } from "@/shared/types/domain/editorMutation";
 
 export type HistoryDirection = "undo" | "redo";
 
@@ -30,15 +28,6 @@ export type ExecuteHistoryMutationOutcome =
   | { status: "applied" }
   | { status: "stale" }
   | { status: "saving" };
-
-function publishDraftHistoryStatus(graphPath: string): void {
-  const session = useGraphDraftStore.getState().sessions[graphPath];
-  useHistoryStore.setState({
-    canUndo: Boolean(session?.undoStack.length),
-    canRedo: Boolean(session?.redoStack.length),
-    pending: session?.saving === true,
-  });
-}
 
 async function installHistoryProjection(
   graphPath: string,
@@ -80,17 +69,7 @@ async function installHistoryProjection(
   commitPreparedGraphProjectionReplacements(prepared.plan);
   const kind = inferGraphResourceKind(graphPath);
   if (kind) markResourceDirty({ id: graphPath, kind }, isGraphDraftDirty(graphPath));
-  publishDraftHistoryStatus(graphPath);
   return true;
-}
-
-/** Retained for non-Graph resource publications; Graph history is draft-owned. */
-export function setHistoryStatus(status: HistoryStatusDto): void {
-  useHistoryStore.setState({ canUndo: status.canUndo, canRedo: status.canRedo });
-}
-
-export function ensureHistoryStatus(): Promise<void> {
-  return Promise.resolve();
 }
 
 export async function executeHistoryMutation(
@@ -116,6 +95,5 @@ export function redoEditorHistory(graphPath: string): Promise<ExecuteHistoryMuta
 }
 
 export function resetHistoryCoordinator(): void {
-  useHistoryStore.setState(EMPTY_HISTORY_STATE, true);
   useGraphDraftStore.getState().clear();
 }

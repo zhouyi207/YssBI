@@ -4,11 +4,12 @@ import { JuliaRuntimeService, type JuliaWorkerStatus } from "@/services/julia/ju
 
 export interface JuliaWorkerStatusViewModel {
   state: "checking" | "starting" | "ready" | "unavailable";
+  needsInstall: boolean;
   label: string;
   tooltip: string;
 }
 
-export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
+export function useJuliaWorkerStatus(refreshKey = 0): JuliaWorkerStatusViewModel {
   const { t } = useTranslation();
   const [status, setStatus] = useState<JuliaWorkerStatus | null>(null);
   const [failed, setFailed] = useState(false);
@@ -37,11 +38,12 @@ export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
       disposed = true;
       if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [refreshKey]);
 
   if (!status && !failed) {
     return {
       state: "checking",
+      needsInstall: false,
       label: t("julia.worker.checking"),
       tooltip: t("julia.worker.checkingDetail"),
     };
@@ -49,6 +51,7 @@ export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
   if (failed || !status) {
     return {
       state: "unavailable",
+      needsInstall: false,
       label: t("julia.worker.unavailable"),
       tooltip: t("julia.worker.statusFailed"),
     };
@@ -56,6 +59,7 @@ export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
   if (status.processState === "starting") {
     return {
       state: "starting",
+      needsInstall: false,
       label: t("julia.worker.starting"),
       tooltip: t("julia.worker.startingDetail"),
     };
@@ -67,12 +71,14 @@ export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
   ) {
     return {
       state: "ready",
+      needsInstall: false,
       label: t("julia.worker.ready"),
       tooltip: t("julia.worker.readyDetail"),
     };
   }
   return {
     state: "unavailable",
+    needsInstall: status.runtimeState !== "ready",
     label: t("julia.worker.unavailable"),
     tooltip: t("julia.worker.unavailableDetail"),
   };

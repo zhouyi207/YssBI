@@ -164,7 +164,7 @@ export async function requestPinPreview(
   const lease = store.beginPinPreview(graphPath, captured.output.port, generation);
   const outcome: GraphRunOutcomeState = { outcome: "success" };
   const observation: PinPreviewObservation = {
-    projectSessionId: null,
+    executionSessionId: null,
     output: captured.output,
     generation,
     runId: null,

@@ -31,10 +31,9 @@ const output: PortAddressDto = {
 
 const descriptor = {
   resultId: "17",
-  state: { kind: "ready" as const },
+
   provenance: {
     runId: "1",
-    activationId: "2",
     graphPath: "events/contract.yssbi-event",
     nodeId: "00000000-0000-0000-0000-000000000002",
     output: { graphPath: "events/contract.yssbi-event", port: output },
@@ -100,6 +99,7 @@ function setup(): {
     pages,
     pinResults,
     failures,
+    releasePayload: () => undefined,
     publishDescriptor: (_projectId, _resultId, value) => {
       if (value) descriptors.push(value as ResultDescriptor);
     },
@@ -158,7 +158,7 @@ describe("ResultQueryCoordinator", () => {
     expect(fixture.publication.failures).toEqual([]);
   });
 
-  it("supersedes only identical queries while different pages publish independently", async () => {
+  it("publishes only the latest requested page for a result", async () => {
     const fixture = setup();
     const oldPage = deferred<ResultPage | null>();
     const newPage = deferred<ResultPage | null>();
@@ -178,10 +178,10 @@ describe("ResultQueryCoordinator", () => {
     otherPage.resolve(page("17", 2, 3));
     oldPage.resolve(page("17", 0, 1));
 
-    await expect(second).resolves.toEqual({ status: "published" });
+    await expect(second).resolves.toEqual({ status: "stale" });
     await expect(independent).resolves.toEqual({ status: "published" });
     await expect(first).resolves.toEqual({ status: "stale" });
-    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual([2, 3]);
+    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual([3]);
   });
 
   it("publishes every typed query through the matching publication and safely maps failures", async () => {

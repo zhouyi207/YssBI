@@ -39,10 +39,9 @@ const ready: PresentationWindowState = {
   status: "ready",
   descriptor: {
     resultId: "17",
-    state: { kind: "ready" },
+
     provenance: {
       runId: "1",
-      activationId: "17",
       graphPath: "events/Main.yssbi-event",
       nodeId: "00000000-0000-0000-0000-000000000002",
       output: null,

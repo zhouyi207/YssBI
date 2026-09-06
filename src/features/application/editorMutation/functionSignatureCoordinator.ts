@@ -6,7 +6,6 @@ import {
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { captureRevisionedProjectCommandSnapshot } from "@/features/application/projectCommandContext";
 
-import { setHistoryStatus } from "@/features/application/graphDraft/historyCoordinator";
 import {
   ProjectPublicationError,
   projectPublicationCoordinator,
@@ -17,7 +16,6 @@ import type { FunctionSignaturePatch } from "@/shared/types";
 import type {
   FunctionDocumentPatchDto,
   FunctionSignatureDto,
-  HistoryStatusDto,
   MutationRequestDto,
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
@@ -53,7 +51,6 @@ export interface FunctionSignatureCoordinatorDependencies {
   ): Promise<ResourceMutationResultDto>;
   hydrateGraph(graphPath: string, locale: string): Promise<unknown>;
   loadFunctionResources(projectInstanceId: string): Promise<ProjectGraphIndexRow[]>;
-  updateHistoryStatus(status: HistoryStatusDto): void;
 }
 
 export type ExecuteFunctionSignatureMutationOutcome =
@@ -71,7 +68,6 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
   hydrateGraph: hydrateGraphProjection,
   loadFunctionResources: async (projectInstanceId) =>
     (await ProjectService.getProjectIndex(projectInstanceId)).graphs,
-  updateHistoryStatus: setHistoryStatus,
 };
 
 function isFunctionRevisionConflict(error: unknown): boolean {
@@ -148,7 +144,7 @@ export async function executeFunctionSignatureMutation(
 ): Promise<ExecuteFunctionSignatureMutationOutcome> {
   if (isGraphDraftSaving(input.functionPath)) return { status: "stale" };
   const dependencies = { ...defaultDependencies, ...overrides };
-  const { context, authority: meta } = captureRevisionedProjectCommandSnapshot(
+  const { context, captured: meta } = captureRevisionedProjectCommandSnapshot(
     () => useGraphMetaStore.getState().graphs[input.functionPath],
   );
   if (meta?.type !== "function" || meta.functionRevision == null || !meta.functionSignature) {

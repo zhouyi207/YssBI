@@ -41,8 +41,8 @@ const emptyState: ResultProjectionState = {
 
 const resultProjection = createBoundApplicationStore<ResultProjectionState>(() => emptyState);
 
-function pageKey(request: ResultPageRequest): string {
-  return `${request.resultId}:${request.offset}:${request.limit}`;
+export function useResultDescriptors() {
+  return resultProjection((state) => state.descriptors);
 }
 
 function pinResultKey(request: ResultPinRequest): string {
@@ -55,15 +55,27 @@ function scopeKey(scope: ResultQueryScope): string {
     case "value":
       return `${scope.kind}:${scope.resultId}`;
     case "page":
-      return `page:${pageKey(scope)}`;
+      return `page:${scope.resultId}`;
     case "pinResult":
       return `pinResult:${pinResultKey(scope)}`;
   }
 }
 
 const resultQueryPublication = {
+  releasePayload(resultId: string) {
+    resultProjection.setState((state) => {
+      const values = { ...state.values };
+      const pages = { ...state.pages };
+      const failures = { ...state.failures };
+      delete values[resultId];
+      delete pages[resultId];
+      delete failures[`value:${resultId}`];
+      delete failures[`page:${resultId}`];
+      return { ...state, values, pages, failures };
+    });
+  },
   publishDescriptor(
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     resultId: string,
     descriptor: DeepReadonly<ResultDescriptor | null>,
   ) {
@@ -86,7 +98,7 @@ const resultQueryPublication = {
     }
   },
   publishValue(
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     resultId: string,
     value: DeepReadonly<ResultValue | null>,
   ) {
@@ -94,27 +106,33 @@ const resultQueryPublication = {
       ...state,
       projectInstanceId,
       values: { ...state.values, [resultId]: value },
+      failures: Object.fromEntries(
+        Object.entries(state.failures).filter(([key]) => key !== `value:${resultId}`),
+      ),
     }));
   },
   publishPage(
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     request: ResultPageRequest,
     page: DeepReadonly<ResultPage | null>,
   ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
-      pages: { ...state.pages, [pageKey(request)]: page },
+      pages: { ...state.pages, [request.resultId]: page },
+      failures: Object.fromEntries(
+        Object.entries(state.failures).filter(([key]) => key !== `page:${request.resultId}`),
+      ),
     }));
   },
   publishPinResult(
-    projectInstanceId: string,
+    projectInstanceId: string | null,
     request: ResultPinRequest,
     result: DeepReadonly<ResultDescriptor | null>,
   ) {
     publishCurrentResult(projectInstanceId, request, result);
   },
-  publishFailure(projectInstanceId: string, scope: ResultQueryScope, issue: ErrorReference) {
+  publishFailure(projectInstanceId: string | null, scope: ResultQueryScope, issue: ErrorReference) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
@@ -130,7 +148,10 @@ export const resultQueryRead: ResultQueryReadCapability = {
   },
   getDescriptor: (resultId) => resultProjection.getState().descriptors[resultId] ?? null,
   getValue: (resultId) => resultProjection.getState().values[resultId] ?? null,
-  getPage: (request) => resultProjection.getState().pages[pageKey(request)] ?? null,
+  getPage: (request) => {
+    const page = resultProjection.getState().pages[request.resultId];
+    return page?.offset === request.offset && page.requestedLimit === request.limit ? page : null;
+  },
   getPinResult: (request) => resultProjection.getState().pinResults[pinResultKey(request)] ?? null,
   getFailure: (scope) => resultProjection.getState().failures[scopeKey(scope)] ?? null,
 };
@@ -151,34 +172,24 @@ export function resetResultQueryProject(): void {
   publishResultInvalidation(null);
   resultQueryCoordinator.resetProject();
   outputRuns.clear();
-  resultProjectSessionId = null;
-  for (const graph of Object.values(useExecutionStore.getState().graphs)) {
-    for (const projection of graph.pinResults.values()) {
-      useExecutionStore.getState().recordPinResult({ ...projection, result: null });
-    }
-  }
+  resultExecutionSessionId = null;
   resultProjection.setState(emptyState);
 }
 
 export function resetResultQuery(resultId: string): void {
   resultQueryCoordinator.resetResult(resultId);
-  const output = resultProjection.getState().descriptors[resultId]?.provenance.output;
-  if (output)
-    useExecutionStore
-      .getState()
-      .recordPinResult({ graphPath: output.graphPath, output: output.port, result: null });
   resultProjection.setState((state) => {
     const descriptors = { ...state.descriptors };
     const values = { ...state.values };
     const pages = Object.fromEntries(
-      Object.entries(state.pages).filter(([key]) => !key.startsWith(`${resultId}:`)),
+      Object.entries(state.pages).filter(([key]) => key !== resultId),
     );
     const failures = Object.fromEntries(
       Object.entries(state.failures).filter(
         ([key]) =>
           key !== `descriptor:${resultId}` &&
           key !== `value:${resultId}` &&
-          !key.startsWith(`page:${resultId}:`),
+          key !== `page:${resultId}`,
       ),
     );
     delete descriptors[resultId];
@@ -193,13 +204,13 @@ export function resetResultQuery(resultId: string): void {
   });
 }
 
-let resultProjectSessionId: string | null = null;
+let resultExecutionSessionId: string | null = null;
 
 // Each output retains one run owner so delayed run events cannot invalidate a newer value.
 const outputRuns = new Map<string, { runId: string; request: ResultPinRequest; active: boolean }>();
 
 function publishCurrentResult(
-  projectInstanceId: string,
+  projectInstanceId: string | null,
   request: ResultPinRequest,
   result: DeepReadonly<ResultDescriptor | null>,
 ): void {
@@ -216,9 +227,6 @@ function publishCurrentResult(
         ),
     descriptors: result ? { ...state.descriptors, [result.resultId]: result } : state.descriptors,
   }));
-  useExecutionStore
-    .getState()
-    .recordPinResult({ ...request, result: structuredClone(result) as ResultDescriptor | null });
 }
 
 function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
@@ -270,9 +278,12 @@ export function invalidateGraphResults(graphPath: string): void {
 
 export function observeResultRunEvent(event: RunEvent): void {
   if (event.kind.type === "runStarted") {
-    if (resultProjectSessionId !== null && resultProjectSessionId !== event.run.projectSessionId)
+    if (
+      resultExecutionSessionId !== null &&
+      resultExecutionSessionId !== event.run.executionSessionId
+    )
       resetResultQueryProject();
-    resultProjectSessionId = event.run.projectSessionId;
+    resultExecutionSessionId = event.run.executionSessionId;
     const requests = event.kind.outputs
       .map((output) => ({ graphPath: output.graphPath, output: output.port }))
       .filter((request) => {
@@ -293,6 +304,7 @@ export function observeResultRunEvent(event: RunEvent): void {
       },
     }));
   } else if (["runCompleted", "runErrored", "runCancelled"].includes(event.kind.type)) {
+    if (event.run.executionSessionId !== resultExecutionSessionId) return;
     for (const [key, pending] of outputRuns) {
       if (pending.runId !== event.run.runId || !pending.active) continue;
       pending.active = false;

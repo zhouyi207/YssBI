@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type {
   ExecutionState,
   GraphExecutionState,
-  PinResultProjection,
   RecordedEvent,
   RunFailureProjection,
 } from "./executionTypes";
@@ -16,7 +15,7 @@ import {
   snapshotToGraphPatch,
 } from "./executionVisualSession";
 import { clearedRunProjectionsPatch } from "./graphRunArtifacts";
-import { pinResultCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
+import { pinPreviewCacheKey } from "./pinResultIndex";
 import { appendRunOutput, emptyRunOutputProjection } from "./runOutputProjection";
 
 const emptyGraphState = (): GraphExecutionState => ({
@@ -29,7 +28,6 @@ const emptyGraphState = (): GraphExecutionState => ({
   graphDirty: false,
   runOutput: emptyRunOutputProjection(),
   runFailure: null,
-  pinResults: new Map(),
   pinPreviews: new Map(),
 });
 
@@ -101,7 +99,6 @@ interface ExecutionStore extends ExecutionState {
   clearGraphRunProjections: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
-  recordPinResult: (projection: PinResultProjection) => void;
   recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
   recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
   clearRunOutput: (graphPath: string) => void;
@@ -229,16 +226,6 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     flushLiveExecutionEventsNow();
     commitVisualSnapshot(graphPath, set);
   },
-
-  recordPinResult: (projection) =>
-    set((state) => {
-      const graph = state.graphs[projection.graphPath] ?? emptyGraphState();
-      const pinResults = new Map(graph.pinResults);
-      const key = pinResultCacheKey(projection.graphPath, projection.output);
-      if (projection.result) pinResults.set(key, projection);
-      else pinResults.delete(key);
-      return updateGraph(state, projection.graphPath, { pinResults });
-    }),
 
   recordRunOutput: (graphPath, event) =>
     set((state) => {

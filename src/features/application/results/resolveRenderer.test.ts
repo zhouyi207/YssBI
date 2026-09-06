@@ -5,10 +5,9 @@ import { resolveResultRenderer } from "./resolveRenderer";
 function descriptor(valueKind: ResultDescriptor["valueKind"]): ResultDescriptor {
   return {
     resultId: "17",
-    state: { kind: "ready" },
+
     provenance: {
       runId: "1",
-      activationId: "2",
       graphPath: "events/Main.yssbi-event",
       nodeId: "00000000-0000-0000-0000-000000000002",
       output: null,

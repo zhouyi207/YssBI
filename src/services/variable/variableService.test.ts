@@ -14,7 +14,6 @@ const mutation: ResourceMutationResultDto = {
   deltas: [],
   projectionReplacements: [],
   projectionStatus: { status: "complete", expectedGraphPaths: [] },
-  history: { canUndo: true, canRedo: false },
 };
 
 describe("VariableService mutation receipts", () => {

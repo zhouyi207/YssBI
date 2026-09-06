@@ -3,7 +3,6 @@ import type { Variable } from "@/shared/types/domain";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
-import { useHistoryStore } from "@/features/core/history";
 import { VariableService } from "@/services/variable/variableService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import {
@@ -58,7 +57,6 @@ function mutation(params: {
   after: Variable | null;
   fromRevision?: number;
   toRevision?: number;
-  history?: { canUndo: boolean; canRedo: boolean };
 }): ResourceMutationResultDto {
   return {
     operationId: params.operationId,
@@ -79,7 +77,6 @@ function mutation(params: {
     ],
     projectionReplacements: [],
     projectionStatus: { status: "complete", expectedGraphPaths: [] },
-    history: params.history ?? { canUndo: true, canRedo: false },
   };
 }
 
@@ -264,7 +261,6 @@ describe("variable command lifecycle guards", () => {
       after: null,
       fromRevision: 2,
       toRevision: 3,
-      history: { canUndo: true, canRedo: false },
     });
     const handler = {
       handle: (payload: { result: ResourceMutationResultDto }) => {
@@ -282,7 +278,7 @@ describe("variable command lifecycle guards", () => {
     expect(useVariableStore.getState().variables[original.id]).toBeUndefined();
     expect(useVariableStore.getState().variables[original.id]?.resourcePath).toBeUndefined();
     expect(useVariableStore.getState().revisions[original.id]).toBe(3);
-    expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: false });
+
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(3);
   });
 

@@ -41,6 +41,7 @@ function createFixture() {
   } satisfies ResultQueryDependencies["service"];
   const key = (value: object): string => JSON.stringify(value);
   const publication: ResultQueryPublication = {
+    releasePayload: vi.fn(),
     publishDescriptor: (_projectId, resultId, value) => descriptors.set(resultId, value),
     publishValue: (_projectId, resultId, value) => values.set(resultId, value),
     publishPage: (_projectId, request, value) => pages.set(key(request), value),
@@ -86,10 +87,9 @@ describe("resolveInspectableResult", () => {
     const fixture = createFixture();
     const descriptor: ResultDescriptor = {
       resultId: "18",
-      state: { kind: "ready" },
+
       provenance: {
         runId: "2",
-        activationId: "18",
         createdAtMs: "1000",
         graphPath,
         nodeId: output.nodeId,

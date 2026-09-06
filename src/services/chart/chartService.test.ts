@@ -17,7 +17,6 @@ function mutationResult() {
     deltas: [],
     projectionReplacements: [],
     projectionStatus: { status: "complete", expectedGraphPaths: [] },
-    history: { canUndo: false, canRedo: false },
   };
 }
 

@@ -1,9 +1,4 @@
-import type {
-  HistoryStatusDto,
-  ResourceKeyDto,
-  ResourceMutationResultDto,
-} from "@/shared/types/dto/editorMutation";
-import { parseHistoryStatusDto } from "@/shared/types/dto/editorMutationWireParser";
+import type { ResourceKeyDto, ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
@@ -98,15 +93,6 @@ function isRevision(value: unknown): value is number {
 
 function isWatcherVersion(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1;
-}
-
-function parseHistory(value: unknown): HistoryStatusDto | null {
-  try {
-    const parsed = parseHistoryStatusDto(value);
-    return { canUndo: parsed.canUndo, canRedo: parsed.canRedo };
-  } catch {
-    return null;
-  }
 }
 
 function parseResourceKey(value: unknown): ResourceKeyDto | null {
@@ -278,7 +264,6 @@ function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
       "publicationRevision",
       "affectedResources",
       "indexInvalidated",
-      "history",
     ]) ||
     !isNonEmptyString(result.projectInstanceId) ||
     !isNonEmptyString(result.operationId) ||
@@ -291,8 +276,6 @@ function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
 
   const affectedResources = result.affectedResources.map(parseResourceKey);
   if (affectedResources.some((resource) => resource === null)) return null;
-  const history = parseHistory(result.history);
-  if (history === null) return null;
 
   return {
     result: {
@@ -301,7 +284,6 @@ function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
       publicationRevision: result.publicationRevision,
       affectedResources: affectedResources as ResourceKeyDto[],
       indexInvalidated: result.indexInvalidated,
-      history,
     },
   };
 }

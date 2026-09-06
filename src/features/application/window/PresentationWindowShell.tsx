@@ -36,10 +36,6 @@ export function PresentationWindowShell({
   const customChrome = useCustomTitleBar();
   const error = presentationWindowErrorMessage(state, {
     ...errorMessages,
-    pending: (completed, total) => t("resultState.pending", { completed, total: total ?? "?" }),
-    executionFailed: t("resultState.executionFailed"),
-    upstreamFailed: t("resultState.upstreamFailed"),
-    cancelled: t("resultState.cancelled"),
   });
 
   if (state.status === "loading") {

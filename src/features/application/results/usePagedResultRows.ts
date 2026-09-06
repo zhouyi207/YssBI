@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useRef, useSyncExternalStore } from "react";
 
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
@@ -54,19 +54,18 @@ export function usePagedResultRows(
   const safePageSize = Math.max(1, Math.floor(pageSize));
   const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [loadedPage, setLoadedPage] = useState<DeepReadonly<ResultPage> | null>(null);
+  const requestGeneration = useRef(0);
   const requestedOffset = pageIndex * safePageSize;
   const request: ResultPageRequest = {
     resultId: resultId ?? "",
     offset: requestedOffset,
     limit: safePageSize,
   };
-  const projectedPage = useSyncExternalStore(
+  const page = useSyncExternalStore(
     dependencies.read.subscribe,
     () => (resultId === null ? null : dependencies.read.getPage(request)),
     () => (resultId === null ? null : dependencies.read.getPage(request)),
   );
-  const page = projectedPage ?? loadedPage;
   const effectiveTotalCount = page?.totalCount ?? Math.max(0, totalCount);
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / safePageSize));
   const boundedPageIndex = Math.min(pageIndex, totalPages - 1);
@@ -75,13 +74,21 @@ export function usePagedResultRows(
 
   useEffect(() => {
     setPageIndex(0);
-    setLoadedPage(null);
   }, [resultId, totalCount, safePageSize]);
+
+  useEffect(
+    () => () => {
+      requestGeneration.current += 1;
+      if (resultId !== null) dependencies.coordinator.releasePayload(resultId);
+    },
+    [dependencies.coordinator, resultId],
+  );
 
   const loadPage = useCallback(
     async (nextPageIndex: number): Promise<ResultQueryOutcome> => {
       if (resultId === null) return { status: "notReady" };
       const nextOffset = Math.max(0, nextPageIndex) * safePageSize;
+      const generation = ++requestGeneration.current;
       setLoading(true);
       try {
         const outcome = await dependencies.coordinator.loadPage({
@@ -89,21 +96,12 @@ export function usePagedResultRows(
           offset: nextOffset,
           limit: safePageSize,
         });
-        if (outcome.status === "published") {
-          setLoadedPage(
-            dependencies.read.getPage({
-              resultId,
-              offset: nextOffset,
-              limit: safePageSize,
-            }),
-          );
-        }
         return outcome;
       } finally {
-        setLoading(false);
+        if (requestGeneration.current === generation) setLoading(false);
       }
     },
-    [dependencies.coordinator, dependencies.read, resultId, safePageSize],
+    [dependencies.coordinator, resultId, safePageSize],
   );
 
   useEffect(() => {

@@ -17,7 +17,6 @@ function aggregate(operationId: string) {
       deltas: [],
       projectionReplacements: [],
       projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
-      history: { canUndo: false, canRedo: false },
     },
   };
 }

@@ -45,7 +45,7 @@ export async function executeDatabaseMutation<T>(
     authority: RevisionedDatabaseCommandAuthority,
   ) => Promise<DatabaseMutationCommandResult<T>>,
 ): Promise<T> {
-  const { context, authority: expectedRevision } = captureRevisionedProjectCommandSnapshot(
+  const { context, captured: expectedRevision } = captureRevisionedProjectCommandSnapshot(
     () => useDatabaseStore.getState().revisions[id],
   );
   if (expectedRevision == null) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import { lookupPinPreview, pinResultCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
+import { lookupPinPreview, pinPreviewCacheKey } from "./pinResultIndex";
 
 const graphPath = "events/Main.yssbi-event";
 
@@ -36,9 +36,9 @@ describe("pinResultIndex", () => {
       instanceId: "instance-1",
     };
     const keys = new Set([
-      pinResultCacheKey(graphPath, base),
-      pinResultCacheKey(graphPath, { ...base, instanceId: "instance-2" }),
-      pinResultCacheKey(graphPath, { ...base, templateKey: "weights" }),
+      pinPreviewCacheKey(graphPath, base),
+      pinPreviewCacheKey(graphPath, { ...base, instanceId: "instance-2" }),
+      pinPreviewCacheKey(graphPath, { ...base, templateKey: "weights" }),
     ]);
     expect(keys.size).toBe(3);
   });

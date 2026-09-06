@@ -64,6 +64,7 @@ export function useResultValue(
 
     return () => {
       mounted = false;
+      dependencies.coordinator.releasePayload(resultId);
     };
   }, [dependencies.coordinator, resultId]);
 

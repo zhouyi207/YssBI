@@ -13,7 +13,6 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     graphDirty: false,
     runOutput: { runId: null, entries: [], projectionDropped: false },
     runFailure: null,
-    pinResults: new Map(),
     pinPreviews: new Map(),
     ...partial,
   };
@@ -28,15 +27,12 @@ describe("graphHasClearableArtifacts", () => {
   it("returns false while running", () => {
     expect(
       graphHasClearableArtifacts(
-        graph({ status: "running", pinResults: new Map([["p", {} as never]]) }),
+        graph({ status: "running", nodeStates: new Map([["n", {} as never]]) }),
       ),
     ).toBe(false);
   });
 
-  it("returns true when result, recording, or run output projections exist", () => {
-    expect(graphHasClearableArtifacts(graph({ pinResults: new Map([["p", {} as never]]) }))).toBe(
-      true,
-    );
+  it("returns true when recording or run output projections exist", () => {
     expect(
       graphHasClearableArtifacts(
         graph({ recording: [{ event: { event: "executionStart" }, timestamp: 0 }] }),

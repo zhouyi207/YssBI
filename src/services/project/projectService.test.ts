@@ -16,7 +16,6 @@ function projectIndex(): Record<string, unknown> {
   return {
     projectInstanceId: "00000000-0000-0000-0000-000000000601",
     publicationRevision: 4,
-    history: { canUndo: false, canRedo: false },
     projectName: "Projection contract",
     exportTime: "2026-08-07T00:00:00Z",
     graphs: [

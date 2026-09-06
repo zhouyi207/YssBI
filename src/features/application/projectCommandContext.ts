@@ -17,7 +17,7 @@ export interface ProjectCommandContext {
 
 export interface RevisionedProjectCommandSnapshot<T> {
   readonly context: ProjectCommandContext;
-  readonly authority: T;
+  readonly captured: T;
 }
 
 export function captureProjectCommandContext(
@@ -40,10 +40,10 @@ export function captureProjectCommandContext(
 }
 
 export function captureRevisionedProjectCommandSnapshot<T>(
-  readAuthority: () => T,
+  captureInputs: () => T,
 ): RevisionedProjectCommandSnapshot<T> {
   const context = captureProjectCommandContext();
-  const authority = readAuthority();
+  const captured = captureInputs();
   context.assertCurrent();
-  return Object.freeze({ context, authority });
+  return Object.freeze({ context, captured });
 }

@@ -3,9 +3,8 @@ import type { GraphExecutionState } from "./executionTypes";
 /** Clear frontend execution projections without touching backend current results. */
 export function clearedRunProjectionsPatch(
   graphDirty = false,
-): Pick<GraphExecutionState, "pinResults" | "recording" | "graphDirty"> {
+): Pick<GraphExecutionState, "recording" | "graphDirty"> {
   return {
-    pinResults: new Map(),
     recording: [],
     graphDirty,
   };
@@ -16,7 +15,6 @@ export function graphHasClearableArtifacts(
   graph:
     | {
         status: GraphExecutionState["status"];
-        pinResults: { readonly size: number };
         recording: { readonly length: number };
         runOutput: {
           readonly entries: { readonly length: number };
@@ -31,7 +29,6 @@ export function graphHasClearableArtifacts(
   if (!graph) return false;
   if (graph.status === "running") return false;
   return (
-    graph.pinResults.size > 0 ||
     graph.recording.length > 0 ||
     graph.runOutput.entries.length > 0 ||
     graph.runOutput.projectionDropped ||

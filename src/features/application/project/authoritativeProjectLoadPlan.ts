@@ -38,7 +38,6 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
     readonly detailFocus: DetailFocus | null;
-    readonly history: { canUndo: boolean; canRedo: boolean; pending: false };
     readonly projectIO: {
       projectInstanceId: string;
       status: LoadStatus.Ready;
@@ -223,11 +222,6 @@ export function buildAuthoritativeProjectLoadPlan(
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,
       detailFocus,
-      history: {
-        canUndo: source.index.history.canUndo,
-        canRedo: source.index.history.canRedo,
-        pending: false,
-      },
       projectIO: {
         projectInstanceId: source.index.projectInstanceId,
         status: LoadStatus.Ready,

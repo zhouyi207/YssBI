@@ -5,7 +5,7 @@ import { createExecutionStreamDrain } from "./executionChannelDrain";
 function runEvent(kind: RunEventKind): RunEvent {
   return {
     run: {
-      projectSessionId: "project-session-1",
+      executionSessionId: "project-session-1",
       graphPath: "events/Main.yssbi-event",
       runId: "41",
     },

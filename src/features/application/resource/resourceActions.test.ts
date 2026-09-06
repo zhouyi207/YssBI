@@ -49,7 +49,6 @@ function databaseResult(afterName: string | null, operationId: string) {
       ],
       projectionReplacements: [],
       projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
-      history: { canUndo: false, canRedo: false },
     },
   };
 }
@@ -85,7 +84,6 @@ function deleteResult(projectInstanceId: string) {
       status: "complete" as const,
       expectedGraphPaths: [],
     },
-    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -122,7 +120,6 @@ function chartRenameResult(projectInstanceId: string, publicationRevision = 1) {
       status: "complete" as const,
       expectedGraphPaths: [],
     },
-    history: { canUndo: false, canRedo: false },
   };
 }
 
@@ -159,7 +156,6 @@ function renameResult(projectInstanceId: string, publicationRevision = 1) {
       status: "incomplete" as const,
       invalidatedGraphPaths: ["events/New.yssbi-event"],
     },
-    history: { canUndo: true, canRedo: false },
   };
 }
 

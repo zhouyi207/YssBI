@@ -1,3 +1,4 @@
+import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { markResourceDirty, markResourceStale } from "@/features/core/resource";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 import type {
@@ -14,7 +15,6 @@ import {
   isGraphDraftSaving,
   useGraphDraftStore,
 } from "@/features/core/graphDraft";
-import { useHistoryStore } from "@/features/core/history";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -23,7 +23,7 @@ import { graphDraftErrorCode, type GraphDraftRejectionCode } from "./graphDraftE
 
 export interface ApplyGraphDraftMutationInput {
   graphPath: string;
-  locale: string;
+  locale?: string;
   mutation: EditorGraphMutationDto;
 }
 
@@ -60,11 +60,6 @@ function installDraftProjection(graphPath: string, result: GraphDraftTransformDt
     throw new Error(`Graph draft projection '${graphPath}' could not be installed`);
   useGraphDraftStore.getState().applyTransform(graphPath, result);
   const draft = useGraphDraftStore.getState().sessions[graphPath];
-  useHistoryStore.setState({
-    canUndo: draft.undoStack.length > 0,
-    canRedo: false,
-    pending: false,
-  });
   commitPreparedGraphProjectionReplacements(prepared.plan);
   const kind = inferGraphResourceKind(graphPath);
   if (kind) {
@@ -100,7 +95,7 @@ async function applyAfterPrevious(
     result = await dependencies.transform(
       identity.projectInstanceId,
       input.graphPath,
-      input.locale,
+      input.locale ?? currentProjectionLocale(),
       document,
       input.mutation,
     );

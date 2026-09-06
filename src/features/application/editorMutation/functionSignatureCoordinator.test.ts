@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
-import { useHistoryStore } from "@/features/core/history";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import type {
   FunctionSignatureDto,
@@ -123,7 +122,6 @@ function result(
         ]
       : [],
     projectionStatus,
-    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -152,7 +150,6 @@ describe("executeFunctionSignatureMutation", () => {
     resetPendingBackendMutations();
     resetFunctionSignatureCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
     useVariableStore.setState({ variables: {} });
     installState();
   });
@@ -287,11 +284,7 @@ describe("executeFunctionSignatureMutation", () => {
       functionInputs: authoritativeFunctionProjection.inputs,
       functionOutputs: authoritativeFunctionProjection.outputs,
     });
-    expect(useHistoryStore.getState()).toEqual({
-      canUndo: true,
-      canRedo: false,
-      pending: false,
-    });
+
     expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
@@ -317,7 +310,6 @@ describe("executeFunctionSignatureMutation", () => {
 
       exportTime: "2026-08-07T00:00:00.000Z",
       publicationRevision: 1,
-      history: { canUndo: true, canRedo: false },
       graphs: [
         {
           path: functionPath,
@@ -371,12 +363,6 @@ describe("executeFunctionSignatureMutation", () => {
       projectInstanceId,
     );
     expect(GraphProjectionService.loadGraph).toHaveBeenCalledOnce();
-
-    expect(useHistoryStore.getState()).toEqual({
-      canUndo: true,
-      canRedo: false,
-      pending: false,
-    });
   });
 
   it("refreshes canonical function projection and hydrates without local writes on a revision conflict", async () => {
@@ -420,7 +406,7 @@ describe("executeFunctionSignatureMutation", () => {
     expect(loadFunctionResources).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledWith(functionPath, "en-US");
-    expect(useHistoryStore.getState().pending).toBe(false);
+
     expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
@@ -443,7 +429,6 @@ describe("executeFunctionSignatureMutation", () => {
     const oldResult = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
 
     projectPublicationCoordinator.startProject("00000000-0000-0000-0000-000000000602", 0);
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
     useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphProjectionStore.getState().replaceProjection(
       functionPath,
@@ -467,7 +452,6 @@ describe("executeFunctionSignatureMutation", () => {
     await expect(request).resolves.toEqual({ status: "stale", result: oldResult });
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
-    expect(useHistoryStore.getState()).toEqual({ canUndo: false, canRedo: false, pending: false });
   });
 
   it("does not install result history independently of the publication coordinator", async () => {
@@ -487,12 +471,6 @@ describe("executeFunctionSignatureMutation", () => {
         dependencies(vi.fn(async () => committed)),
       ),
     ).resolves.toMatchObject({ status: "applied" });
-
-    expect(useHistoryStore.getState()).toEqual({
-      canUndo: false,
-      canRedo: false,
-      pending: false,
-    });
   });
 
   it("rejects malformed correlated results before installing any state", async () => {

@@ -17,7 +17,7 @@ import {
 function event(kind: RunEvent["kind"]): RunEvent {
   return {
     run: {
-      projectSessionId: "project-session-1",
+      executionSessionId: "project-session-1",
       graphPath: "events/Main.yssbi-event",
       runId: "9007199254740993",
     },
@@ -51,7 +51,7 @@ function previewObservation(
   port: PortAddressDto = declaredOutput,
 ): PinPreviewObservation {
   return {
-    projectSessionId: null,
+    executionSessionId: null,
     output: { graphPath: "events/Main.yssbi-event", port },
     generation: lease.generation,
     runId: null,
@@ -141,7 +141,7 @@ describe("observeGraphRunEvent", () => {
       generation: currentGeneration,
       resultId: "result-stale-session",
     });
-    wrongSession.run.projectSessionId = "stale-backend-session";
+    wrongSession.run.executionSessionId = "stale-backend-session";
     observeGraphRunEvent(graphPath, wrongSession, outcome, current);
     const wrongRun = event({
       type: "pinPreviewResultReady",

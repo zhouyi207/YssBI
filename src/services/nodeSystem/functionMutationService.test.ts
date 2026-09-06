@@ -28,7 +28,6 @@ describe("FunctionMutationService", () => {
       deltas: [],
       projectionReplacements: [],
       projectionStatus: { status: "complete", expectedGraphPaths: [] },
-      history: { canUndo: true, canRedo: false },
     };
     vi.mocked(invoke).mockResolvedValue(result);
 
