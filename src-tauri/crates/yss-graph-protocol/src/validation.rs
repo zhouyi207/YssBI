@@ -89,9 +89,21 @@ fn json_literal_to_protocol_value(
         serde_json::Value::Number(value) if value.is_u64() => {
             Ok(Value::Unsigned(value.as_u64().expect("checked u64")))
         }
-        serde_json::Value::Number(value) => CanonicalDecimal::new(value.to_string())
-            .map(Value::Decimal)
-            .map_err(|_| LiteralValidationIssue::MalformedWire),
+        serde_json::Value::Number(value) => CanonicalDecimal::new(
+            value
+                .as_f64()
+                .filter(|value| value.is_finite())
+                .map(|value| {
+                    if value == 0.0 {
+                        "0".to_owned()
+                    } else {
+                        value.to_string()
+                    }
+                })
+                .ok_or(LiteralValidationIssue::MalformedWire)?,
+        )
+        .map(Value::Decimal)
+        .map_err(|_| LiteralValidationIssue::MalformedWire),
         serde_json::Value::String(value) => Ok(Value::String(value.as_str().into())),
         serde_json::Value::Array(values) => values
             .iter()
@@ -410,6 +422,12 @@ pub fn validate_and_prepare_parameter_values<T>(
             issues.push(issue(&spec.key, ParameterIssueKind::InvalidResourceId));
             continue;
         }
+        if let ParameterEditorSpec::Configuration(schema) = &spec.editor
+            && schema.validate_json(value).is_err()
+        {
+            issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
+            continue;
+        }
         if let TypeExpr::Concrete(type_id) = &spec.value_type {
             match prepare_nominal(type_id, value) {
                 Some(Ok(prepared)) => {
@@ -440,13 +458,14 @@ fn valid_opaque_resource_id(value: &str) -> bool {
     !value.is_empty() && value.trim() == value
 }
 
-fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) -> bool {
+pub(crate) fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) -> bool {
     match expected {
         TypeExpr::Concrete(id) => match id.as_str() {
             "core.bool" => value.is_boolean(),
             "core.int64" => value.as_i64().is_some(),
             "core.float64" => value.is_number(),
             "core.string" => value.is_string(),
+            "core.object" => value.is_object(),
             _ => true,
         },
         TypeExpr::Union(options) => options
@@ -459,12 +478,15 @@ fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) 
     }
 }
 
-fn parameter_constraint_matches(
+pub(crate) fn parameter_constraint_matches(
     value: &serde_json::Value,
     constraint: &ParameterConstraint,
 ) -> bool {
     match constraint {
         ParameterConstraint::Required => !value.is_null(),
+        ParameterConstraint::Positive => value
+            .as_f64()
+            .is_some_and(|value| value.is_finite() && value > 0.0),
         ParameterConstraint::OneOf(options) => options
             .iter()
             .any(|option| protocol_value_matches_json(option, value)),

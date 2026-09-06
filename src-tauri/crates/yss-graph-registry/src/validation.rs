@@ -419,7 +419,22 @@ fn validate_node(
             .map_err(&fail)?;
         }
     }
-    for parameter in &protocol.parameters.parameters {
+    for parameter in
+        protocol
+            .parameters
+            .parameters
+            .iter()
+            .chain(protocol.parameters.parameters.iter().flat_map(|parameter| {
+                match &parameter.editor {
+                    ParameterEditorSpec::Configuration(schema) => schema
+                        .fields
+                        .iter()
+                        .map(|field| &field.parameter)
+                        .collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                }
+            }))
+    {
         require_i18n(i18n, &parameter.title_key).map_err(&fail)?;
         if let Some(key) = &parameter.description_key {
             require_i18n(i18n, key).map_err(&fail)?;
@@ -439,6 +454,20 @@ fn validate_node(
             )));
         }
         validate_parameter_constraints(parameter).map_err(&fail)?;
+        if let ParameterEditorSpec::Configuration(schema) = &parameter.editor {
+            if !matches!(&parameter.value_type, TypeExpr::Concrete(id) if id.as_str() == "core.object")
+            {
+                return Err(fail("configuration parameters require core.object".into()));
+            }
+            schema.validate().map_err(|reason| fail(reason.into()))?;
+            let default = parameter
+                .default_value
+                .as_ref()
+                .ok_or_else(|| fail("configuration parameters require defaults".into()))?;
+            schema
+                .validate_json(&yss_graph_protocol::protocol_value_to_json(&default.value))
+                .map_err(&fail)?;
+        }
     }
     if let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } =
         &protocol.instance_display

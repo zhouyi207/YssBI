@@ -1,5 +1,6 @@
 #![deny(unused_must_use)]
 
+mod configuration;
 mod data_series;
 pub mod dataframe;
 mod identity;
@@ -13,6 +14,7 @@ pub mod validation;
 mod tests;
 mod value;
 
+pub use configuration::{ConfigurationCondition, ConfigurationFieldSpec, ConfigurationSchema};
 pub use data_series::{
     DATA_SERIES_CONSTRUCTOR_ID, NUMERIC_TYPE_CLASS_ID, data_series_type, numeric_data_series_type,
 };

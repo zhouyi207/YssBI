@@ -46,6 +46,7 @@ pub type ParameterValues = BTreeMap<ParameterKey, serde_json::Value>;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParameterConstraint {
     Required,
+    Positive,
     OneOf(Vec<Value>),
     IntegerRange { min: Option<i64>, max: Option<i64> },
     Length { min: Option<u32>, max: Option<u32> },
@@ -59,6 +60,7 @@ pub enum ParameterEditorSpec {
     Number,
     Toggle,
     Select,
+    Configuration(super::ConfigurationSchema),
     Resource { kind: ResourceDisplayKind },
 }
 
