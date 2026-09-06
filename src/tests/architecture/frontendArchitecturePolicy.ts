@@ -169,8 +169,8 @@ const VIEW_CORE_CAPABILITIES = [
     "pinViewDisabledTitle",
   ]),
   viewCoreCapability("src/features/core/execution/read.ts", ["useExecutionRead"]),
-  viewCoreCapability("src/features/core/execution/ui.ts", ["executionResultUi"], {
-    executionResultUi: ["clearRunOutput"],
+  viewCoreCapability("src/features/core/execution/ui.ts", ["runOutputActions"], {
+    runOutputActions: ["clearRunOutput"],
   }),
   viewCoreCapability("src/features/core/execution/useExecutionPlayback.ts", [
     "useExecutionPlayback",
@@ -184,14 +184,8 @@ const VIEW_CORE_CAPABILITIES = [
     "FocusedGraphSession",
   ]),
   viewCoreCapability("src/features/core/graphSession/ui.ts", ["useGraphSessionUi"]),
-  viewCoreCapability("src/features/core/history/types.ts", ["GraphDraftCommandResult"]),
   viewCoreCapability("src/features/core/keyboard/ui.ts", ["keyboardUi"]),
   viewCoreCapability("src/features/core/node/useNodeExecution.ts", ["useNodeExecution"]),
-  viewCoreCapability("src/features/core/pin/usePinInput.ts", ["usePinInput"]),
-  viewCoreCapability("src/features/core/plugins/ui.ts", ["pluginUi"], {
-    pluginUi: ["getSnapshot", "subscribe", "installPlugin", "uninstallPlugin"],
-  }),
-  viewCoreCapability("src/features/core/plugins/ui.ts", ["usePluginUi"]),
   viewCoreCapability("src/features/core/resource/functionResourceView.ts", [
     "FunctionResourceView",
   ]),
@@ -455,11 +449,9 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
       canonicalModule: "src/shared/types/dto/result.ts",
       exportedSymbols: [
         "ResultDescriptor",
-        "ResultFailure",
         "ResultPage",
         "ResultPlotKind",
         "ResultPresentation",
-        "ResultProgress",
         "ResultReportKind",
       ],
       exactConsumers: null,

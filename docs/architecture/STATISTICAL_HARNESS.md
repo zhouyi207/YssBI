@@ -143,9 +143,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 
 ## 10. MCP status
 
-`yss-mcp-server` workspace crate 已实现 read-only `McpCapabilityServer` adapter，并把与默认 registry 对应的 inspection tools映射到同一个 `CapabilityGatewayPort`。该 crate 不依赖 Project/Graph/Database concrete owner。
-
-桌面 composition root 当前没有启动、监听或发布这个 MCP server，因此“外部 MCP 可连接到运行中的 YssBI”不是现行产品能力。MCP Client 也尚未实现。生产暴露、transport/authentication、Tasks mapping 和外部 tool trust 属于 [roadmap](../roadmap/STATISTICAL_HARNESS.md)。内部 Assistant 始终直接调用 Capability Gateway，不经 loopback MCP。
+当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../roadmap/STATISTICAL_HARNESS.md)。
 
 ## 11. Error, safety, and observability
 

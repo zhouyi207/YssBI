@@ -40,7 +40,7 @@ flowchart LR
 | Graph document 的已保存版本                                                  | Rust Project / Graph document owners             | `GraphDraftSession` 中未保存 draft          |
 | resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection           |
 | Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection          |
-| Execution、result state、payload 和 Pin history                              | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI               |
+| Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI               |
 | Statistical algorithms 与 Bayes worker result                                | SCI/Bayes owners                                 | report/chart presentation models            |
 | Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection       |
 | Root workbench topology、placement、active group/panel 和 edge state         | live root Dockview instance                      | pane-local metadata keyed by panel identity |
@@ -49,7 +49,11 @@ flowchart LR
 
 Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
 
-变量增删改通过同一个 resource publication 协调器更新变量、资源 revision 和 history；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
+变量增删改通过同一个 resource publication 协调器更新变量与资源 revision；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
+
+Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
+
+节点编辑由 Application 的 `graphEditing` 直接提交 Graph Draft mutation，并返回统一的 `GraphEditOutcome`。Draft 自身保存撤销/重做记录；Project 内部事务 history 不再作为独立前端状态或 IPC 字段发布。
 
 身份必须按语义分离。Project instance/session、resource path、Graph session、node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...`、`variables/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
@@ -182,7 +186,7 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 | 信号                    | 语义                                    | Canonical owner                                                          |
 | ----------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
 | Graph Problems          | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
-| Results / Pin history   | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
+| Results / 当前输出      | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
 | Run Output              | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                             |
 | Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |
 | Operational diagnostics | Logs UI 的有界 recent/live 观察投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                    |

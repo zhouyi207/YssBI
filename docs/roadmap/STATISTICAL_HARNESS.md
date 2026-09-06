@@ -49,7 +49,7 @@
 
 ### Server exposure
 
-现有 `yss-mcp-server` 是 read-only library adapter，尚未由桌面应用启动。生产暴露需要决定并实现：
+MCP adapter 与桌面监听入口尚未实现。生产暴露需要决定并实现：
 
 - stdio / local transport 与 process lifecycle；
 - authentication、principal 和 project-session binding；

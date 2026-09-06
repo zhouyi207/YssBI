@@ -55,7 +55,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-julia-runtime` | `src-tauri/crates/yss-julia-runtime` | [Cargo.toml](../../src-tauri/crates/yss-julia-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `src-tauri/crates/yss-julia-worker` | [Cargo.toml](../../src-tauri/crates/yss-julia-worker/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-worker/README.md) |
 | `yss-math` | `src-tauri/crates/yss-math` | [Cargo.toml](../../src-tauri/crates/yss-math/Cargo.toml) | — |
-| `yss-mcp-server` | `src-tauri/crates/yss-mcp-server` | [Cargo.toml](../../src-tauri/crates/yss-mcp-server/Cargo.toml) | — |
 | `yss-path-display` | `src-tauri/crates/yss-path-display` | [Cargo.toml](../../src-tauri/crates/yss-path-display/Cargo.toml) | — |
 | `yss-project` | `src-tauri/crates/yss-project` | [Cargo.toml](../../src-tauri/crates/yss-project/Cargo.toml) | [README](../../src-tauri/crates/yss-project/README.md) |
 | `yss-project-change` | `src-tauri/crates/yss-project-change` | [Cargo.toml](../../src-tauri/crates/yss-project-change/Cargo.toml) | — |
@@ -64,7 +63,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-project-history` | `src-tauri/crates/yss-project-history` | [Cargo.toml](../../src-tauri/crates/yss-project-history/Cargo.toml) | — |
 | `yss-project-identity` | `src-tauri/crates/yss-project-identity` | [Cargo.toml](../../src-tauri/crates/yss-project-identity/Cargo.toml) | — |
 | `yss-project-layout` | `src-tauri/crates/yss-project-layout` | [Cargo.toml](../../src-tauri/crates/yss-project-layout/Cargo.toml) | — |
-| `yss-project-manifest` | `src-tauri/crates/yss-project-manifest` | [Cargo.toml](../../src-tauri/crates/yss-project-manifest/Cargo.toml) | — |
 | `yss-project-model` | `src-tauri/crates/yss-project-model` | [Cargo.toml](../../src-tauri/crates/yss-project-model/Cargo.toml) | — |
 | `yss-project-operation` | `src-tauri/crates/yss-project-operation` | [Cargo.toml](../../src-tauri/crates/yss-project-operation/Cargo.toml) | — |
 | `yss-project-progress` | `src-tauri/crates/yss-project-progress` | [Cargo.toml](../../src-tauri/crates/yss-project-progress/Cargo.toml) | — |
@@ -105,10 +103,11 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
+| `julia` | `src/modules/julia` | [public.ts](../../src/modules/julia/public.ts) |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |
-| `plugins` | `src/modules/plugins` | [public.ts](../../src/modules/plugins/public.ts) |
+| `plugins` | `src/modules/plugins` | — |
 | `problems` | `src/modules/problems` | [public.ts](../../src/modules/problems/public.ts) |
 | `project-explorer` | `src/modules/project-explorer` | [public.ts](../../src/modules/project-explorer/public.ts) |
 | `results` | `src/modules/results` | [public.ts](../../src/modules/results/public.ts) |

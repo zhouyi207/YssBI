@@ -52,6 +52,8 @@ root Dockview 是以下物理事实的唯一 authority：
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
+Activity 底部的 Julia 入口直接显示后端 runtime/worker 状态；缺少运行时才提供实际安装操作。该入口没有插件目录、安装 ID 列表或本地伪卸载状态。
+
 ## 2. Root panel 角色与默认 home
 
 root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
@@ -213,7 +215,7 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 ### 7.2 Reset
 
-Reset 使用一个 runtime shadow layout transaction，并保留既有 editor、Result 与 panel identities：
+Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留既有 editor、Result 与 panel identities：
 
 - Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；

@@ -15,7 +15,7 @@
 | 未保存编辑与 undo/redo                 | frontend GraphDraftSession           | document、保存基线、历史      |
 | 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection        |
 | 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId             |
-| run、当前 output result               | Rust Execution / ResultStore         | typed query 与 UI projection  |
+| run、当前 output result                | Rust Execution / ResultStore         | typed query 与 UI projection  |
 | 程序文本输出                           | Execution RunOutputEmitter / channel | bounded Run Output projection |
 
 `graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
@@ -145,9 +145,15 @@ OLS Fit/Summary 从节点参数读取配置，通过 `ScientificBackend::ols` �
 
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前释放这些输出的旧 payload 与 ResultId 索引。一个 operation 的所有 outputs 同时失效；未参与本次 demand 的输出保留当前结果。成功 finalization 在同一写锁内发布整批结果，并验证每个输出仍属于该 run；被后续运行或图失效淘汰的 run 不能重新发布。失败、取消不恢复上次成功的 payload。
 
-Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。已打开的 Result panel 绑定 output address，在原位置清空并更新；独立展示窗口收到失效通知后释放旧内容。
+Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。
+
+Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；关闭展示组件释放本地 value/page，主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
+
+已打开的 Result panel 绑定 output address，在原位置清空并更新；独立展示窗口收到失效通知后释放旧内容。
 
 语义输入改变会清除该图的当前结果；变量等资源的已提交变更按 Rust 公告的受影响图清除结果和前端缓存；移动节点等不改变语义输入的操作可保留结果。删除、重命名、卸载图和 Project session replacement 释放对应结果。Project replacement 更换 ResultStore 并清空前端投影，旧查询不能写入新 session。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除当前 Results。
+
+统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
 
 ## 7. Graph Problems
 
@@ -161,7 +167,7 @@ Problems 不可手动清空。定位支持 Graph、Node、Pin、Connection、Det
 
 ## 8. Run Output
 
-Execution 已有 `RunOutputEmitter`、typed message/channel、strict parser、bounded projection 和 Output panel。Emitter 统一 run sequence、单条/总量限制、UTF-8 截断、truncated/dropped marker 与明确 source；具体限额由源码常量拥有。
+Execution 保留 typed message/channel、strict parser、bounded projection 和 Output panel。stdout/stderr 的生产 adapter 尚未接入，当前没有通用 emitter。具体前端容量限制由源码常量拥有。
 
 Frontend 检测跨 run、重复/缺失 sequence 和容量淘汰，显示丢失状态。清空只影响当前 Graph 的 Output。日志、Assistant text 和 Graph Problems 不进入此流。
 
@@ -169,7 +175,7 @@ Output panel 同时展示当前图的运行失败摘要：从 RunErrored 投影�
 
 API 在成功交付 terminal event 后，用 command error details 的 `terminalRunEventSent: true` 标识拒绝路径；ProjectService 等待 channel 排空后才结束失败调用，确保原因投影先于错误收尾。incidentId 只用于关联技术诊断，前端不把 IpcError.message 作为用户文案。
 
-当前 Analysis Graph 没有 Print/Effect，Workflow/tool stdout/stderr 生产 adapter 尚未实现。Emitter 与通道是可接入能力，不能声称已完成生产端到端输出；接入时还需验证慢 consumer 和最终 delivery/loss 状态。
+当前 Analysis Graph 没有 Print/Effect，Workflow/tool stdout/stderr 生产 adapter 尚未实现。生产接入时需要实现有界发送、UTF-8 截断、慢 consumer 与最终 delivery/loss 状态。
 
 ## 9. Cross-boundary routing
 
