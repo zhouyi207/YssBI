@@ -129,6 +129,8 @@ React application/view 根据 use case 将 stable code 和安全 details 映射�
 
 用户反馈应由应用动作与 typed outcome 驱动，不使用日志触发通知，也不把 `IpcError.message`、Rust error 或 parser reason 当作用户文案。Logs panel 展示 sanitized operational record 是其自身职责；Graph diagnostic 按 Rust-owned 模板键与安全参数在 React 本地化，具体契约见 [Graph Problems](GRAPH_AND_EXECUTION.md#7-graph-problems)。路径选择等桌面 capability dialog 不等同于应用错误反馈。
 
+Graph 运行失败由 Output panel 的失败摘要反馈：React 本地化 Rust RunErrored 的原因和阶段，保留节点定位及可用的 incidentId。该 UI 摘要不属于用户程序 stdout/stderr，也不由 Logs 重建；具体生命周期和 terminal channel 排空契约见 [Run Output](GRAPH_AND_EXECUTION.md#8-run-output)。
+
 ## 8. Routing decisions
 
 新增信息流时先回答：

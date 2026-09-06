@@ -123,6 +123,8 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
+协议默认参数在 semantic snapshot 中保留 typed literal，Compiler 按协议类型 lowering；用于显示的 Decimal 字符串不作为运行时 String。节点计算失败保留稳定原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）及 source identity，RunErrored 传递实际阶段、原因和节点；不传递原始输入值或后端错误文案。
+
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
 
 ## 6. Results
@@ -146,6 +148,10 @@ Problems 不可手动清空。定位支持 Graph、Node、Pin、Connection、Det
 Execution 已有 `RunOutputEmitter`、typed message/channel、strict parser、bounded projection 和 Output panel。Emitter 统一 run sequence、单条/总量限制、UTF-8 截断、truncated/dropped marker 与明确 source；具体限额由源码常量拥有。
 
 Frontend 检测跨 run、重复/缺失 sequence 和容量淘汰，显示丢失状态。清空只影响当前 Graph 的 Output。日志、Assistant text 和 Graph Problems 不进入此流。
+
+Output panel 同时展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。该摘要与 stdout/stderr entries 分开存储，不伪造 Run Output 文本或 sequence。失败时 Application 打开 Output；清空 Output 或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。
+
+API 在成功交付 terminal event 后，用 command error details 的 `terminalRunEventSent: true` 标识拒绝路径；ProjectService 等待 channel 排空后才结束失败调用，确保原因投影先于错误收尾。incidentId 只用于关联技术诊断，前端不把 IpcError.message 作为用户文案。
 
 当前 Analysis Graph 没有 Print/Effect，Workflow/tool stdout/stderr 生产 adapter 尚未实现。Emitter 与通道是可接入能力，不能声称已完成生产端到端输出；接入时还需验证慢 consumer 和最终 delivery/loss 状态。
 

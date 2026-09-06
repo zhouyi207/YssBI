@@ -68,36 +68,6 @@ add or commit them unless explicitly requested.
 * Graph Problems, operational Logs, Results, and Run Output are distinct data
   flows. None may be used to reconstruct or substitute for another.
 
-## Boundary and security rules
-
-* Tauri commands validate input, map explicit DTOs, call an application/domain
-  interface, and deliver events or channels. They do not own filesystem
-  transactions, long workflows, or duplicated business validation.
-* Ordinary frontend invocation goes through
-  `src/services/ipc/invokeCommand.ts`; views do not call Tauri `invoke` directly.
-* Use commands for request/response, events for low-rate state changes, and
-  channels/workers for ordered or high-frequency streams. Define bounds,
-  ordering, gap recovery, and terminal semantics for every stream.
-* Treat graph and resource paths as opaque identities. Keep resource, graph,
-  node, pin, connection, session, panel, group, result, and run identities
-  distinct.
-* Do not transfer whole datasets through IPC when computation or state can remain
-  authoritative in Rust. Large reads must be paged, projected, or batched.
-* Use typed errors at domain, application, infrastructure, and transport seams.
-  Do not use formatted prose or bare `String` as a cross-boundary error contract.
-* Do not hold locks across `.await`, filesystem or database I/O, model work,
-  sleeps, or other long-running operations. Snapshot under the lock, release it,
-  perform the work, then revalidate at commit.
-* Rust `tracing` is the sole logging entry point. Logs and operational
-  diagnostics are bounded, lossy, sanitized, and non-authoritative.
-* Never log secrets or user payloads, including table rows/cells, document or
-  clipboard contents, SQL text, connection strings, prompts, transcripts,
-  tokens, or model/tool payloads.
-* User-controlled program stdout/stderr belongs to the ordered bounded Run
-  Output flow, never to logging or operational diagnostics.
-* React owns user-facing feedback and localization. Stable machine fields may
-  cross IPC; raw backend, parser, provider, or infrastructure prose may not.
-
 ## Testing and validation
 
 * Add the smallest focused regression test that proves the requested behavior or
@@ -108,11 +78,31 @@ add or commit them unless explicitly requested.
   additional test catches and omit cases without one.
 * Use repository-root `pnpm` scripts as stable task entry points. The canonical
   command matrix is `docs/development/LOCAL_WORKFLOW.md`.
-* During iteration run the narrowest relevant check; broaden validation in
-  proportion to the change. Do not repeatedly run the full Rust suite for small
-  edits.
-* Run `git diff --check` before delivery. Do not claim a check passed without
-  fresh command output, and record any relevant check that was not run.
+* Default to L1 focused validation during iteration and L2 affected-scope
+  validation for a completed change, as defined in that workflow. Small changes
+  must not default to workspace-wide check/lint/test or complete CI as a routine
+  finishing step.
+* Before validation, briefly identify affected modules, selected checks, and
+  their rationale. Rust focused commands must explicitly select packages and
+  appropriate test targets; frontend focused tests should select test files.
+* Escalate to L3 complete validation only for an explicit user request, an
+  established merge/release gate, or a high-risk change whose impact cannot be
+  reliably bounded. State the trigger before running it. Touching both frontend
+  and backend is not by itself a reason to run complete CI.
+* Changes to public APIs, shared types, serialization, or cross-module behavior
+  require assessing affected consumers; passing only the edited crate's tests
+  is not sufficient evidence for those changes.
+* Confirm focused tests actually ran the relevant cases. Zero matched tests,
+  compilation-only checks, and failed environment initialization are not passing
+  tests.
+* Reuse fresh results within the same task while the relevant code, dependencies,
+  configuration, and test inputs are unchanged. Repeat or broaden checks only
+  for new changes, failures, or unresolved risks; diagnose failures before
+  expanding the suite. If validation becomes unexpectedly expensive, report its
+  stage and reassess scope before starting additional checks.
+* Run `git diff --check` before delivery. Report actual commands, scope, and
+  relevant checks not run or not completed. Do not claim a check passed without
+  fresh output or describe focused validation as complete validation.
 * Do not perform unrelated repository-wide formatting or hardcode global Cargo
   build-job/test-thread limits.
 

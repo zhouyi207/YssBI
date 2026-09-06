@@ -1,15 +1,7 @@
-目前我的模式是：
+# 前端入口
 
-前端使用 services 提供的 api 发送请求给后端
+`app/` 组合窗口与路由，`modules/` 提供界面，`features/application/` 编排用例，`features/core/` 保存投影与交互状态，`features/domain/` 保存纯领域规则，`services/` 适配 IPC。
 
-后端接受请求以两种方式返回数据：
+Rust 拥有已提交项目状态。查询返回数据；修改返回提交结果，事件可交付同一提交的回声，前端由发布协调器统一去重和更新投影。未保存的 Graph draft 与已提交状态分开管理。
 
-    1. 数据查询等不改变项目状态的数据直接返回
-    2. 数据修改等改变项目状态的信息使用 emit event 返回
-
-前端对这两种数据进行处理：
-
-    1. 前端接受不改变项目状态的数据直接处理
-    2. 前端接受 emit event 更新项目状态
-
-Rust 保留宿主、数据层和必要 fallback；科学计算能力逐步迁移到 Julia，并通过 Rust/Julia golden fixture 测试验证后切换默认引擎。
+依赖方向和状态归属见[当前架构](../docs/architecture/ARCHITECTURE.md)，验证命令见[本地工作流](../docs/development/LOCAL_WORKFLOW.md)。

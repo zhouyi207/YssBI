@@ -49,6 +49,8 @@ flowchart LR
 
 Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
 
+变量增删改通过同一个 resource publication 协调器更新变量、资源 revision 和 history；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
+
 身份必须按语义分离。Project instance/session、resource path、Graph session、node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...`、`variables/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
 ## 3. Layer and dependency direction

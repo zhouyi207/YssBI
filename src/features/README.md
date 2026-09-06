@@ -1,50 +1,7 @@
-﻿# Features 目录结构
+# Features
 
-本目录采用三层架构组织代码，确保清晰的依赖关系和职责划分。
+- `application/` 编排跨领域用户用例，调用 services 并协调投影发布。
+- `core/` 保存 Rust 投影、显式未保存草稿和共享交互状态。
+- `domain/` 提供不依赖 React、Tauri 或 services 的领域规则。
 
-## 层次说明
-
-### Core 层（核心层）
-
-**职责：** 提供基础设施和核心数据模型
-
-**特点：**
-
-- 无依赖或最小依赖
-- 可以被其他层依赖
-- 包含最基础的功能
-
-### Domain 层（领域层）
-
-**职责：** 实现业务领域逻辑
-
-**特点：**
-
-- 依赖 Core 层
-- 不依赖 Application 层
-- 包含领域特定的业务逻辑
-
-### Application 层（应用层）
-
-**职责：** 协调各个领域，提供完整的应用功能
-
-**特点：**
-
-- 依赖 Core 和 Domain 层
-- 组合多个 domain feature
-- 提供用户可见的功能
-
-## 依赖规则
-
-### ✅ 允许的依赖
-
-- Application → Domain
-- Application → Core
-- Domain → Core
-
-### ❌ 禁止的依赖
-
-- Core → Domain
-- Core → Application
-- Domain → Application
-- 同层之间的循环依赖
+Application 可以依赖 Core、Domain 和 Services；依赖不能从 Core 或 Domain 反向指向 Application 或界面。完整边界由[当前架构](../../docs/architecture/ARCHITECTURE.md#3-layer-and-dependency-direction)和[架构门禁](../../docs/development/ARCHITECTURE_GATES.md)维护。

@@ -35,6 +35,8 @@ Wire DTOs are explicit transport types. Internal structs are not exposed merely 
 
 Use stable camelCase fields and strict frontend parsers for public DTOs. A contract change updates the Rust mapper, TypeScript parser/types, representative boundary tests, and the owning architecture document together. YssBI 0.x contracts are migrated directly unless compatibility is an explicit product requirement.
 
+Variable create/update/delete commands return `{ variableId, mutation }`. `mutation` is required and is the same resource publication delivered by `ResourceMutationCommitted`; the frontend submits both paths to the publication coordinator for revision ordering and deduplication. Variable values come from the publication deltas, and are not returned as a second snapshot in the receipt.
+
 ## Commands, events, and channels
 
 Choose the transport by semantics:
@@ -76,6 +78,8 @@ Editor diagnostics carry code, messageKey, safe arguments, severity, explicit bl
 Compile returns Ready { artifactId, projection, cacheHit } or Blocked { projection }; neither branch returns a replacement document. Expected semantic failures remain Blocked without diagnostic incidents. Internal failures still reject with the error wire above. The read-only resolve_graph_draft command supplies current projections for dirty refresh and history validation; execute_compiled_graph accepts compiledArtifactId and explicit demand. See [Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
 
 Frontend application code localizes `code + safe details`; `IpcError.message` is a technical summary and must not be rendered directly.
+
+Execution terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire.
 
 ## Frontend adapter
 
