@@ -3971,7 +3971,7 @@ fn graph_compiler_diagnostics_has_one_graph_crate_owner_without_dead_constructor
 }
 
 #[test]
-fn graph_catalog_has_one_crate_owner_with_explicit_test_support_boundary() {
+fn graph_catalog_has_one_crate_owner_without_dead_test_hooks() {
     let root = repository_root();
     for relative in [
         "src-tauri/crates/yss-graph-catalog/Cargo.toml",
@@ -3995,14 +3995,6 @@ fn graph_catalog_has_one_crate_owner_with_explicit_test_support_boundary() {
             .join("src-tauri/crates/yss-graph-catalog/src/project_interface.rs")
             .exists(),
         "the orphan project interface duplicate must not return"
-    );
-
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-catalog/Cargo.toml"))
-            .expect("graph catalog manifest must be readable");
-    assert!(
-        manifest.contains("test-support = []"),
-        "graph catalog test hooks must stay behind an explicit feature"
     );
 
     let sources = [
@@ -8569,10 +8561,6 @@ fn sci_contract_has_one_pure_owner_without_root_facades_or_unchecked_inputs() {
         ),
         (
             "StatisticalObservationMetadata",
-            BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
-        ),
-        (
-            "StatisticalSettingSource",
             BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
         ),
     ] {
