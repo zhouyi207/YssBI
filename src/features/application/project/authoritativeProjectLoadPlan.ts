@@ -3,7 +3,7 @@ import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
 import type { ProjectGraphIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
 import {
-  applyVariableCatalogFromIndex,
+  buildVariableCatalog,
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from "@/features/core/variable/variableCatalog";
@@ -74,7 +74,7 @@ export interface AuthoritativeProjectLoadPlanDependencies {
 }
 
 function prepareVariables(index: ProjectIndexRow) {
-  const variables = applyVariableCatalogFromIndex(index.variables);
+  const variables = buildVariableCatalog(index.variables);
   return {
     variables,
     revisions: variableRevisionsFromIndex(index.variables),

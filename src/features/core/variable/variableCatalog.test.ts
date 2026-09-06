@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyVariableCatalogFromIndex,
+  buildVariableCatalog,
   variableCatalogToResourceMetas,
   variableFromIndexRow,
 } from "@/features/core/variable/variableCatalog";
 
 describe("variableCatalog", () => {
   it("hydrates VariableStore entries from ProjectIndex.variables rows", () => {
-    const catalog = applyVariableCatalogFromIndex([
+    const catalog = buildVariableCatalog([
       {
         id: "global-1",
         resourcePath: "variables/global-1",

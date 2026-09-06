@@ -1,7 +1,7 @@
 use crate::error::CommandError;
-use crate::event::{Event, emit_project_event_result};
+use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::VariableInstanceDTO;
-use crate::schema::application_event::ResourceMutationResultDto;
+use crate::schema::application_event::{ResourceMutationResultDto, resource_mutation_to_transport};
 use tauri::{AppHandle, State};
 use yss_data_contract::{DataType, DataValue};
 use yss_project_identity::ProjectInstanceId;
@@ -10,10 +10,9 @@ use yss_variable_contract::{VariableId, VariableScope};
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VariableCommandResult {
+pub struct VariableMutationReceiptDto {
     pub variable_id: String,
-    pub variable: Option<VariableInstanceDTO>,
-    pub result: Option<ResourceMutationResultDto>,
+    pub mutation: ResourceMutationResultDto,
 }
 
 fn variable_dto(
@@ -37,7 +36,7 @@ pub fn create_variable(
     project_instance_id: ProjectInstanceId,
     expected_collection_revision: u64,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, CommandError> {
+) -> Result<VariableMutationReceiptDto, CommandError> {
     let request = yss_application::variable_mutation::VariableMutationRequest::Create {
         project_instance_id,
         name: name.to_owned(),
@@ -52,13 +51,7 @@ pub fn create_variable(
     let committed = application
         .mutate_variable(request)
         .map_err(map_variable_mutation_error)?;
-    let variable = variable_dto(committed.variable())?;
-    emit_application_event(&app, committed.event())?;
-    Ok(VariableCommandResult {
-        variable_id: committed.variable().id.to_string(),
-        variable: Some(variable),
-        result: None,
-    })
+    publish_variable_mutation(&app, committed)
 }
 
 /// 获取变量（统一接口）
@@ -88,7 +81,7 @@ pub fn update_variable(
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, CommandError> {
+) -> Result<VariableMutationReceiptDto, CommandError> {
     let request = yss_application::variable_mutation::VariableMutationRequest::Update {
         project_instance_id,
         variable_id,
@@ -103,13 +96,7 @@ pub fn update_variable(
     let committed = application
         .mutate_variable(request)
         .map_err(map_variable_mutation_error)?;
-    let variable = variable_dto(committed.variable())?;
-    emit_application_event(&app, committed.event())?;
-    Ok(VariableCommandResult {
-        variable_id: committed.variable().id.to_string(),
-        variable: Some(variable),
-        result: None,
-    })
+    publish_variable_mutation(&app, committed)
 }
 
 /// 删除变量（统一接口）
@@ -121,7 +108,7 @@ pub fn delete_variable(
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, CommandError> {
+) -> Result<VariableMutationReceiptDto, CommandError> {
     let request = yss_application::variable_mutation::VariableMutationRequest::Delete {
         project_instance_id,
         variable_id,
@@ -131,22 +118,25 @@ pub fn delete_variable(
     let committed = application
         .mutate_variable(request)
         .map_err(map_variable_mutation_error)?;
-    emit_application_event(&app, committed.event())?;
-    Ok(VariableCommandResult {
-        variable_id: committed.variable().id.to_string(),
-        variable: None,
-        result: None,
-    })
+    publish_variable_mutation(&app, committed)
 }
 
-fn emit_application_event(
+fn publish_variable_mutation(
     app: &AppHandle,
-    event: &yss_application::events::ApplicationEvent,
-) -> Result<(), CommandError> {
-    let event = crate::schema::application_event::application_event_to_transport(event)
-        .map_err(|error| CommandError::diagnosed("variable_event_mapping_failed", error))?;
-    emit_project_event_result(app, &Event::Project(event))
-        .map_err(|error| CommandError::diagnosed("variable_event_emit_failed", error))
+    committed: yss_application::variable_mutation::CommittedVariableMutation,
+) -> Result<VariableMutationReceiptDto, CommandError> {
+    let mutation = resource_mutation_to_transport(&committed.mutation);
+    emit_project_event_result(
+        app,
+        &Event::Project(EventProject::ResourceMutationCommitted {
+            result: mutation.clone(),
+        }),
+    )
+    .map_err(|error| CommandError::diagnosed("variable_event_emit_failed", error))?;
+    Ok(VariableMutationReceiptDto {
+        variable_id: committed.variable_id.to_string(),
+        mutation,
+    })
 }
 
 fn map_variable_mutation_error(

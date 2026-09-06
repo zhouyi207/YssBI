@@ -1,14 +1,9 @@
-#![allow(
-    dead_code,
-    reason = "staged until the Application session cutover installs the variable command caller"
-)]
-
 use thiserror::Error;
 
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::events::{ApplicationEvent, committed_resource_mutation_from_project};
+use crate::events::{CommittedResourceMutation, committed_resource_mutation_from_project};
 use yss_data_contract::{DataType, DataValue};
 use yss_project::project_writers::{
     CreateVariableRequest as ProjectCreateVariableRequest,
@@ -70,18 +65,8 @@ impl VariableMutationRequest {
 }
 
 pub struct CommittedVariableMutation {
-    variable: VariableInstance,
-    event: ApplicationEvent,
-}
-
-impl CommittedVariableMutation {
-    pub fn variable(&self) -> &VariableInstance {
-        &self.variable
-    }
-
-    pub fn event(&self) -> &ApplicationEvent {
-        &self.event
-    }
+    pub variable_id: VariableId,
+    pub mutation: CommittedResourceMutation,
 }
 
 #[derive(Debug, Error)]
@@ -250,7 +235,8 @@ pub(crate) fn mutate_variable_in_session(
 
 fn committed_variable_mutation(committed: VariableMutationResult) -> CommittedVariableMutation {
     let (variable, facts) = committed.into_parts();
-    let event =
-        ApplicationEvent::ResourceCommitted(committed_resource_mutation_from_project(facts));
-    CommittedVariableMutation { variable, event }
+    CommittedVariableMutation {
+        variable_id: variable.id,
+        mutation: committed_resource_mutation_from_project(facts),
+    }
 }

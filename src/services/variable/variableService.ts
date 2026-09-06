@@ -4,48 +4,39 @@ import { dataTypeToBackend } from "@/shared/types/dto/dataType";
 import { dataValueToBackend } from "@/shared/types/dto/dataValue";
 import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
+import { isUuid } from "@/shared/types/dto/editorProjectionGuards";
+import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
-export interface VariableMutationCommandResult {
+export interface VariableMutationReceipt {
   variableId: string;
-  variable: Variable | null;
-  result: ResourceMutationResultDto | null;
+  mutation: ResourceMutationResultDto;
 }
 
-type VariableMutationWireResult = {
-  variableId: string;
-  variable: Record<string, unknown> | null;
-  result: ResourceMutationResultDto | null;
-};
-
-function normalizeCommandResult(raw: VariableMutationWireResult): VariableMutationCommandResult {
+function parseVariableMutationReceipt(response: unknown): VariableMutationReceipt {
+  if (
+    typeof response !== "object" ||
+    response === null ||
+    Object.keys(response).length !== 2 ||
+    !("variableId" in response) ||
+    !isUuid(response.variableId) ||
+    !("mutation" in response)
+  ) {
+    throw new Error("variable mutation receipt is malformed");
+  }
   return {
-    variableId: raw.variableId,
-    variable: raw.variable
-      ? normalizeVariableFromBackend(
-          raw.variable as Parameters<typeof normalizeVariableFromBackend>[0],
-        )
-      : null,
-    result: raw.result,
+    variableId: response.variableId,
+    mutation: parseResourceMutationResultDto(response.mutation),
   };
 }
 
-/**
- * 变量服务 - 统一的变量管理接口
- * 与后端 command_variable 对应
- */
 export class VariableService {
-  /**
-   * 创建变量
-   * @param variable 变量对象（id 由后端分配）
-   * @returns 创建后的变量 ID
-   */
   static async createVariable(
     projectInstanceId: string,
     operationId: string,
     expectedCollectionRevision: number,
     variable: Omit<Variable, "id" | "revision">,
-  ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>("create_variable", {
+  ): Promise<VariableMutationReceipt> {
+    const response: unknown = await invokeCommand("create_variable", {
       name: variable.name,
       dataType: dataTypeToBackend(variable.dataType),
       dataValue: dataValueToBackend(variable.dataValue),
@@ -56,12 +47,9 @@ export class VariableService {
       expectedCollectionRevision,
       operationId,
     });
-    return normalizeCommandResult(raw);
+    return parseVariableMutationReceipt(response);
   }
 
-  /**
-   * 获取变量
-   */
   static async getVariable(projectInstanceId: string, variableId: string): Promise<Variable> {
     const raw = await invokeCommand<Record<string, unknown>>("get_variable", {
       projectInstanceId,
@@ -70,18 +58,15 @@ export class VariableService {
     return normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
 
-  /**
-   * 更新变量（部分字段）
-   */
   static async updateVariable(
     projectInstanceId: string,
     operationId: string,
     expectedRevision: number,
-    id: string,
+    variableId: string,
     patch: Partial<Variable>,
-  ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>("update_variable", {
-      variableId: id,
+  ): Promise<VariableMutationReceipt> {
+    const response: unknown = await invokeCommand("update_variable", {
+      variableId,
       name: patch.name ?? null,
       dataType: patch.dataType ? dataTypeToBackend(patch.dataType) : null,
       dataValue: patch.dataValue !== undefined ? dataValueToBackend(patch.dataValue) : null,
@@ -91,24 +76,21 @@ export class VariableService {
       expectedRevision,
       operationId,
     });
-    return normalizeCommandResult(raw);
+    return parseVariableMutationReceipt(response);
   }
 
-  /**
-   * 删除变量
-   */
   static async deleteVariable(
     projectInstanceId: string,
     operationId: string,
     expectedRevision: number,
     variableId: string,
-  ): Promise<VariableMutationCommandResult> {
-    const raw = await invokeCommand<VariableMutationWireResult>("delete_variable", {
+  ): Promise<VariableMutationReceipt> {
+    const response: unknown = await invokeCommand("delete_variable", {
       projectInstanceId,
       operationId,
       expectedRevision,
       variableId,
     });
-    return normalizeCommandResult(raw);
+    return parseVariableMutationReceipt(response);
   }
 }

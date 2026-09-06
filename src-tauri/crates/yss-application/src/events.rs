@@ -5,17 +5,6 @@ use yss_project_history::{ResourceDeltaEvent, ResourceLifecycleKind};
 use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_registry_contract::ProjectRecord;
 
-/// Low-rate cross-owner facts owned by Application.
-///
-/// This type is deliberately not serializable and carries no Tauri delivery
-/// handle. The production event route remains the existing event adapter until
-/// the named promotion task activates this staged owner.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ApplicationEvent {
-    ProjectLifecycle(ProjectLifecycleApplicationEvent),
-    ResourceCommitted(CommittedResourceMutation),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectLifecycleApplicationEvent {
     pub operation_id: OperationId,
@@ -77,12 +66,7 @@ pub struct LifecycleInvalidation {
     pub registry: bool,
 }
 
-/// The committed resource facts needed by the low-rate mutation event.
-///
-/// Editor projection replacements remain owned by the current production
-/// event route in this staging slice. They are intentionally not represented
-/// by a schema or UI type here; the later promotion task supplies the final
-/// Application-owned projection facts in the same atomic cutover.
+/// Committed resource facts shared by command receipts and publication events.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommittedResourceMutation {
     pub operation_id: OperationId,

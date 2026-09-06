@@ -3,10 +3,8 @@ import { LoadStatus } from "@/shared/types/ui/common";
 import type { ProjectData, Variable } from "@/shared/types";
 import { ProjectService, type ProjectActivationResult } from "@/services/project/projectService";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
-import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
 import { logger } from "@/features/application/observability/appLogger";
 
-import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
@@ -24,7 +22,7 @@ import {
 } from "@/features/core/resource/resourceSnapshotProjection";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
-  applyVariableCatalogFromIndex,
+  buildVariableCatalog,
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from "@/features/core/variable/variableCatalog";
@@ -108,26 +106,8 @@ interface ProjectIOStore {
   loadProject(): Promise<ProjectData | null>;
   /** 只刷新资源索引，不重置 tab、viewport、history 或已加载 graph 正文。 */
   refreshResourceIndex(): Promise<boolean>;
-  loadProjectFromData(
-    project: ProjectData,
-    path: string | null,
-    owner: ProjectLifecycleStateSnapshot,
-  ): Promise<void>;
+  clearProjectProjection(owner: ProjectLifecycleStateSnapshot): Promise<void>;
   loadGraph(graphPath: string): Promise<boolean>;
-}
-
-/** 将后端变量 DTO 规范化为前端 Variable */
-function normalizeVariables(
-  vars: Record<string, Variable | Record<string, unknown>>,
-): Record<string, Variable> {
-  const result: Record<string, Variable> = {};
-  for (const [id, v] of Object.entries(vars)) {
-    const raw = typeof v === "object" && v !== null ? { ...v, id } : { id };
-    result[id] = normalizeVariableFromBackend(
-      raw as Parameters<typeof normalizeVariableFromBackend>[0],
-    );
-  }
-  return result;
 }
 
 function buildResourceIndex(params: {
@@ -213,7 +193,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
     if (!isCurrentProjectIdentity(identity)) return false;
     if (index.projectInstanceId !== identity.projectInstanceId) return false;
-    const variableCatalog = applyVariableCatalogFromIndex(index.variables);
+    const variableCatalog = buildVariableCatalog(index.variables);
     useVariableStore
       .getState()
       .setVariableSnapshot(variableCatalog, variableRevisionsFromIndex(index.variables));
@@ -269,13 +249,6 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     logProjectIOError("Failed to refresh resource index", error);
     return false;
   }
-}
-
-/** 将后端/快照 databases 规范化并写入 store（合并已有富元数据） */
-function applyDatabasesFromRaw(raw: Record<string, unknown>): Record<string, DatabaseRecord> {
-  const normalized = normalizeDatabases(raw, useDatabaseStore.getState().databases);
-  useDatabaseStore.getState().setDatabaseSnapshot(normalized, {});
-  return normalized;
 }
 
 export async function prepareAuthoritativeProjectLoad(
@@ -500,7 +473,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
 
   refreshResourceIndex: refreshProjectResourceIndex,
 
-  loadProjectFromData: async (project, path, owner) => {
+  clearProjectProjection: async (owner) => {
     if (!isProjectLifecycleStateCurrent(owner)) return;
     const previousProjectInstanceId = get().projectInstanceId;
     await resetClientProjectState(previousProjectInstanceId, owner, {
@@ -528,41 +501,17 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     )
       return;
 
-    const normalizedVariables = normalizeVariables(project.variables);
-    let normalizedDatabases: Record<string, DatabaseRecord> = {};
+    if (!commitOwnedClear(() => useDatabaseStore.getState().setDatabaseSnapshot({}, {}))) return;
+    if (!commitOwnedClear(() => useVariableStore.getState().clear())) return;
     if (
-      !commitOwnedClear(() => {
-        normalizedDatabases = applyDatabasesFromRaw(project.databases as Record<string, unknown>);
-      })
-    )
-      return;
-    if (
-      !commitOwnedClear(() => {
-        useVariableStore.getState().setVariables(normalizedVariables);
-      })
-    )
-      return;
-    if (
-      !commitOwnedClear(() => {
-        useResourceStore.getState().setSnapshot({
-          resources: buildResourceIndex({
-            graphs: Object.values(project.graphs).map((graph) => ({
-              path: graph.path,
-              name: graph.name,
-              type: graph.type,
-            })),
-            charts: [],
-            variables: normalizedVariables,
-            databases: normalizedDatabases,
-          }),
-          graphOrder: Object.values(project.graphs).map((graph) => graph.path),
-        });
-      })
+      !commitOwnedClear(() =>
+        useResourceStore.getState().setSnapshot({ resources: [], graphOrder: [] }),
+      )
     )
       return;
     if (!commitOwnedClear(synchronizeProjectPresentation)) return;
     commitOwnedClear(() => {
-      set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
+      set({ status: LoadStatus.Ready, currentPath: null });
     });
   },
 

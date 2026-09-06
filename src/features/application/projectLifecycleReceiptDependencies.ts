@@ -41,16 +41,7 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
         isPlaying: false,
       });
       if (!isProjectLifecycleStateCurrent(owner)) return;
-      await useProjectIOStore.getState().loadProjectFromData(
-        {
-          variables: {},
-          graphs: {},
-          databases: {},
-          metadata: { exportTime: "" },
-        },
-        null,
-        owner,
-      );
+      await useProjectIOStore.getState().clearProjectProjection(owner);
       if (
         isProjectLifecycleStateCurrent(owner) &&
         useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId

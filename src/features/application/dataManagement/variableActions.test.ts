@@ -9,6 +9,7 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import {
   createVariableAction,
   deleteVariableAction,
+  renameVariableAction,
   updateVariableAction,
 } from "./variableActions";
 
@@ -85,12 +86,12 @@ function mutation(params: {
 describe("variable command lifecycle guards", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useVariableStore.getState().clear();
-    useVariableStore.getState().addVariable(original.id, {
-      ...original,
-      resourcePath: variableResourcePath,
-    });
-    useVariableStore.getState().setVariableRevision(original.id, 1);
+    useVariableStore
+      .getState()
+      .setVariableSnapshot(
+        { [original.id]: { ...original, resourcePath: variableResourcePath } },
+        { [original.id]: 1 },
+      );
     startProject("project-a");
   });
 
@@ -100,11 +101,7 @@ describe("variable command lifecycle guards", () => {
       startProject("project-b");
       return authority;
     });
-    const update = vi.spyOn(VariableService, "updateVariable").mockResolvedValue({
-      variableId: original.id,
-      variable: { ...original, name: "Changed" },
-      result: null,
-    });
+    const update = vi.spyOn(VariableService, "updateVariable");
     const submit = vi.spyOn(projectPublicationCoordinator, "submit");
     const before = {
       variables: structuredClone(authority.variables),
@@ -139,8 +136,12 @@ describe("variable command lifecycle guards", () => {
     useVariableStore.getState().clear();
     request.resolve({
       variableId: original.id,
-      variable: { ...original, name: "Changed" },
-      result: null,
+      mutation: mutation({
+        revision: 1,
+        operationId: crypto.randomUUID(),
+        before: original,
+        after: { ...original, name: "Changed" },
+      }),
     });
 
     await expect(completion).resolves.toBeNull();
@@ -157,8 +158,7 @@ describe("variable command lifecycle guards", () => {
     useVariableStore.getState().clear();
     request.resolve({
       variableId: original.id,
-      variable: original,
-      result: mutation({
+      mutation: mutation({
         revision: 1,
         operationId: crypto.randomUUID(),
         before: null,
@@ -178,7 +178,7 @@ describe("variable command lifecycle guards", () => {
     vi.spyOn(VariableService, "updateVariable").mockImplementation(async (...args) => {
       expect(args[2]).toBe(1);
       void projectPublicationCoordinator.submit({ result });
-      return { variableId: original.id, variable: updated, result };
+      return { variableId: original.id, mutation: result };
     });
     const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 
@@ -194,20 +194,17 @@ describe("variable command lifecycle guards", () => {
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1);
   });
 
-  it("preserves index resource metadata for a direct-first update and event echo", async () => {
+  it("trims a rename and preserves resource metadata across the direct response and event echo", async () => {
     const operationId = crypto.randomUUID();
     const updated = { ...original, name: "Direct changed" };
     const result = mutation({ revision: 1, operationId, before: original, after: updated });
-    vi.spyOn(VariableService, "updateVariable").mockResolvedValue({
+    const update = vi.spyOn(VariableService, "updateVariable").mockResolvedValue({
       variableId: original.id,
-      variable: updated,
-      result,
+      mutation: result,
     });
 
-    await expect(updateVariableAction(original.id, { name: updated.name })).resolves.toEqual({
-      ...updated,
-      resourcePath: variableResourcePath,
-    });
+    await expect(renameVariableAction(original.id, `  ${updated.name}  `)).resolves.toBe(true);
+    expect(update.mock.calls[0].slice(2)).toEqual([1, original.id, { name: updated.name }]);
     void projectPublicationCoordinator.submit({ result });
     await vi.waitFor(() =>
       expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1),
@@ -225,7 +222,7 @@ describe("variable command lifecycle guards", () => {
     const result = mutation({ revision: 1, operationId, before: null, after: created });
     vi.spyOn(VariableService, "createVariable").mockImplementation(async (...args) => {
       expect(args[2]).toBe(0);
-      return { variableId: created.id, variable: created, result };
+      return { variableId: created.id, mutation: result };
     });
     const getVariable = vi.spyOn(VariableService, "getVariable");
 
@@ -294,8 +291,7 @@ describe("variable command lifecycle guards", () => {
     const result = mutation({ revision: 1, operationId, before: original, after: null });
     const remove = vi.spyOn(VariableService, "deleteVariable").mockResolvedValue({
       variableId: original.id,
-      variable: null,
-      result,
+      mutation: result,
     });
 
     await expect(deleteVariableAction(original.id)).resolves.toBe(true);

@@ -1,7 +1,6 @@
-use crate::event::EventProject;
 use serde::{Deserialize, Serialize};
 use yss_application::events::{
-    ApplicationEvent, CommittedResourceMutation, LifecycleRecoveryAction, ProjectLifecycleKind,
+    CommittedResourceMutation, LifecycleRecoveryAction, ProjectLifecycleKind,
     ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceProjectionStatus,
 };
 use yss_project_registry_contract::ProjectRecord;
@@ -137,12 +136,6 @@ pub struct ResourceMutationResultDto {
     pub history: yss_project_history::HistoryStatusDto,
 }
 
-pub type ApplicationEventDto = EventProject;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("application event transport mapping failed")]
-pub struct TransportMappingError;
-
 pub(crate) fn graph_projection_replacement_to_transport(
     replacement: &yss_application::events::GraphProjectionReplacement,
 ) -> GraphProjectionReplacementDto {
@@ -152,21 +145,6 @@ pub(crate) fn graph_projection_replacement_to_transport(
             &replacement.projection,
         ),
         function_editor_projection: replacement.function_editor_projection.clone(),
-    }
-}
-
-pub fn application_event_to_transport(
-    event: &ApplicationEvent,
-) -> Result<ApplicationEventDto, TransportMappingError> {
-    match event {
-        ApplicationEvent::ProjectLifecycle(event) => Ok(EventProject::ProjectLifecycleCommitted {
-            result: project_lifecycle_to_transport(event),
-        }),
-        ApplicationEvent::ResourceCommitted(mutation) => {
-            Ok(EventProject::ResourceMutationCommitted {
-                result: resource_mutation_to_transport(mutation),
-            })
-        }
     }
 }
 
@@ -293,14 +271,14 @@ fn projection_status_to_transport(status: &ResourceProjectionStatus) -> Projecti
 
 #[cfg(test)]
 mod tests {
-    use super::application_event_to_transport;
+    use super::{project_lifecycle_to_transport, resource_mutation_to_transport};
+    use crate::event::EventProject;
     use crate::schema::application_event::ResourceMutationResultDto;
     use serde_json::json;
     use yss_application::events::{
-        ApplicationEvent, CommittedResourceMutation, HistoryStatus, LifecycleInvalidation,
-        LifecycleRecovery, LifecycleRecoveryAction, ProjectLifecycleApplicationEvent,
-        ProjectLifecycleKind, ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove,
-        ResourceProjectionStatus,
+        CommittedResourceMutation, HistoryStatus, LifecycleInvalidation, LifecycleRecovery,
+        LifecycleRecoveryAction, ProjectLifecycleApplicationEvent, ProjectLifecycleKind,
+        ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove, ResourceProjectionStatus,
     };
     use yss_project_history::ResourceLifecycleKind;
     use yss_project_identity::{OperationId, ProjectInstanceId};
@@ -312,7 +290,7 @@ mod tests {
         let new_project_instance_id = ProjectInstanceId::new();
         let old_project_instance_id_wire = old_project_instance_id.to_string();
         let new_project_instance_id_wire = new_project_instance_id.to_string();
-        let event = ApplicationEvent::ProjectLifecycle(ProjectLifecycleApplicationEvent {
+        let event = ProjectLifecycleApplicationEvent {
             operation_id,
             kind: ProjectLifecycleKind::SaveAs,
             old_project_instance_id: Some(old_project_instance_id),
@@ -331,11 +309,11 @@ mod tests {
                 project: true,
                 registry: true,
             },
-        });
+        };
 
-        let wire = serde_json::to_value(
-            application_event_to_transport(&event).expect("staged event mapping is infallible"),
-        )
+        let wire = serde_json::to_value(EventProject::ProjectLifecycleCommitted {
+            result: project_lifecycle_to_transport(&event),
+        })
         .expect("existing event wire should serialize");
 
         assert_eq!(
@@ -371,7 +349,7 @@ mod tests {
     #[test]
     fn committed_resource_fact_preserves_wire_fields_and_required_identity() {
         let operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(0x780));
-        let event = ApplicationEvent::ResourceCommitted(CommittedResourceMutation {
+        let event = CommittedResourceMutation {
             operation_id,
             project_instance_id: ProjectInstanceId::new(),
             publication_revision: 41,
@@ -392,11 +370,11 @@ mod tests {
                 can_undo: true,
                 can_redo: false,
             },
-        });
+        };
 
-        let wire = serde_json::to_value(
-            application_event_to_transport(&event).expect("staged event mapping is infallible"),
-        )
+        let wire = serde_json::to_value(EventProject::ResourceMutationCommitted {
+            result: resource_mutation_to_transport(&event),
+        })
         .expect("existing event wire should serialize");
         let project_instance_id = wire["payload"]["result"]["projectInstanceId"]
             .as_str()

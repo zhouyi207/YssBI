@@ -17,42 +17,36 @@ export interface VariableCreationOptions {
   };
 }
 
-/**
- * Variable Management Hook
- * Binds UI state and delegates CRUD to variable application actions.
- */
 export function useVariableManagement() {
   const { activeResourceRef, panels } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
   const localGraphPath = variablesGraphScopePath ?? activeResourceRef;
-  const graphTypeFromPanel = localGraphPath
+  const panelResourceKind = localGraphPath
     ? panels.find((panel) => panel.metadata.resourceRef === localGraphPath)?.metadata.resourceKind
     : undefined;
-  const graphTypeFromResource = useResourceStore((s) =>
+  const indexedGraphKind = useResourceStore((s) =>
     localGraphPath ? lookupGraphResourceKind(s.resources, localGraphPath) : undefined,
   );
-  const rawType = graphTypeFromPanel || graphTypeFromResource;
-  const graphType = (rawType === "event" || rawType === "function" ? rawType : undefined) as
-    | "event"
-    | "function"
-    | undefined;
+  const resourceKind = panelResourceKind || indexedGraphKind;
+  const graphType =
+    resourceKind === "event" || resourceKind === "function" ? resourceKind : undefined;
 
   const addVariable = useCallback(
     async (
       name?: string,
-      type: string = "Int64",
+      dataTypeKey: string = "Int64",
       isGlobal: boolean = false,
       options?: VariableCreationOptions,
     ) => {
       const explicitGraphScope = options?.graphScope;
-      const created = await createVariableAction({
+      const variableId = await createVariableAction({
         name,
-        type,
+        dataTypeKey,
         isGlobal,
         activeGraphPath: isGlobal ? null : (explicitGraphScope?.graphPath ?? localGraphPath),
         graphType: isGlobal ? undefined : (explicitGraphScope?.graphType ?? graphType),
       });
-      if (created) {
+      if (variableId) {
         void revealWorkbenchView("project");
         const sidebar = useSidebarStore.getState();
         sidebar.setProjectTreeCategoriesExpanded(
@@ -62,25 +56,14 @@ export function useVariableManagement() {
           true,
         );
       }
-      return created;
+      return variableId;
     },
     [localGraphPath, graphType],
   );
 
-  const updateVariable = useCallback(
-    async (id: string, data: Parameters<typeof updateVariableAction>[1]) => {
-      await updateVariableAction(id, data);
-    },
-    [],
-  );
-
-  const deleteVariable = useCallback(async (id: string) => {
-    await deleteVariableAction(id);
-  }, []);
-
   return {
     addVariable,
-    updateVariable,
-    deleteVariable,
+    updateVariable: updateVariableAction,
+    deleteVariable: deleteVariableAction,
   };
 }

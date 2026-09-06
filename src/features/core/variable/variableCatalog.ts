@@ -22,7 +22,7 @@ export function variableRevisionsFromIndex(
   return Object.fromEntries((rows ?? []).map((row) => [row.id, row.revision]));
 }
 
-export function applyVariableCatalogFromIndex(
+export function buildVariableCatalog(
   rows: ProjectVariableIndexRow[] | undefined,
 ): Record<string, Variable> {
   const catalog: Record<string, Variable> = {};

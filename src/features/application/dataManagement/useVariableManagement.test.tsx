@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./variableActions", () => ({
   createVariableAction: mocks.createVariableAction,
+  updateVariableAction: vi.fn(),
+  deleteVariableAction: vi.fn(),
 }));
 
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({

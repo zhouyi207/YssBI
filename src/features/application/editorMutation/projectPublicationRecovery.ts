@@ -25,7 +25,7 @@ import {
   type ResourceKey,
 } from "@/features/core/resource";
 import {
-  applyVariableCatalogFromIndex,
+  buildVariableCatalog,
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from "@/features/core/variable/variableCatalog";
@@ -253,7 +253,7 @@ export function collectProjectRecoveryGraphPaths(
 
 function recoveryResources(
   index: ProjectIndexRow,
-  variables: ReturnType<typeof applyVariableCatalogFromIndex>,
+  variables: ReturnType<typeof buildVariableCatalog>,
   chartDocuments: Readonly<Record<string, unknown>>,
   databases: Readonly<Record<string, { name?: unknown }>>,
 ): ProjectResourceMeta[] {
@@ -423,7 +423,7 @@ function databaseFromIndex(
 export function prepareProjectRecoveryCommit(
   plan: ProjectRecoveryPreparation,
 ): PreparedProjectRecovery {
-  const variables = applyVariableCatalogFromIndex(plan.index.variables);
+  const variables = buildVariableCatalog(plan.index.variables);
   const variableRevisions = variableRevisionsFromIndex(plan.index.variables);
   const currentDatabases = useDatabaseStore.getState().databases;
   const databaseRows = plan.index.databases;
