@@ -10,17 +10,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
 
   test: {
-    exclude: [...configDefaults.exclude, "**/.worktrees/**"],
+    exclude: [...configDefaults.exclude, "**/.worktrees/**", "**/.superpowers/**"],
   },
 
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-  },
-
-  test: {
-    exclude: [...configDefaults.exclude, "**/.superpowers/**"],
   },
 
   clearScreen: false,
