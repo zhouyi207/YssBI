@@ -19,10 +19,10 @@ yss-graph-compiler = { path = "../yss-graph-compiler" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-editor = { path = "../yss-graph-editor" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-graph-registry = { path = "../yss-graph-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 
 [dev-dependencies]
 serde_json.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
-yss-graph-protocol = { path = "../yss-graph-protocol" }

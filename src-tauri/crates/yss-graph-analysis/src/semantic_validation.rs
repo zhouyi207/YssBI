@@ -378,6 +378,40 @@ mod tests {
                 &document, &registry, &initial, &mut cache,
             );
             assert!(ready.ready().is_some(), "{:?}", ready.diagnostics());
+            use crate::{GraphFilterLiteralType, GraphParameterConfigurationFact};
+            use yss_graph_protocol::dataframe::FilterOperator;
+            match ready.node(consumer).unwrap().parameters[0]
+                .configuration
+                .as_ref()
+                .unwrap()
+            {
+                GraphParameterConfigurationFact::ProjectColumns {
+                    available,
+                    options,
+                    value,
+                    ..
+                } => {
+                    assert!(*available);
+                    assert_eq!(options[0].name.as_ref(), "amount");
+                    assert_eq!(value.as_ref(), &[Box::<str>::from("amount")]);
+                }
+                GraphParameterConfigurationFact::FilterPredicate {
+                    available,
+                    columns,
+                    value,
+                    ..
+                } => {
+                    assert!(*available);
+                    assert_eq!(columns[0].name.as_ref(), "amount");
+                    assert_eq!(
+                        columns[0].literal_types.as_ref(),
+                        &[GraphFilterLiteralType::Integer]
+                    );
+                    assert!(columns[0].operators.contains(&FilterOperator::GreaterThan));
+                    assert!(value.is_some());
+                }
+                other => panic!("missing schema editor: {other:?}"),
+            }
             let changed = resources(vec![ColumnSchema {
                 name: "replacement".into(),
                 data_type: yss_data_contract::DataType::String,
@@ -386,6 +420,25 @@ mod tests {
                 &document, &registry, &changed, &mut cache,
             );
             assert!(blocked.ready().is_none());
+            match blocked.node(consumer).unwrap().parameters[0]
+                .configuration
+                .as_ref()
+                .unwrap()
+            {
+                GraphParameterConfigurationFact::ProjectColumns { options, value, .. } => {
+                    assert_eq!(options[0].name.as_ref(), "replacement");
+                    assert_eq!(value.as_ref(), &[Box::<str>::from("amount")]);
+                }
+                GraphParameterConfigurationFact::FilterPredicate { columns, .. } => {
+                    assert_eq!(columns[0].name.as_ref(), "replacement");
+                    assert_eq!(
+                        columns[0].literal_types.as_ref(),
+                        &[GraphFilterLiteralType::String]
+                    );
+                }
+                other => panic!("missing refreshed editor: {other:?}"),
+            }
+
             assert!(
                 blocked
                     .diagnostics()
@@ -406,6 +459,27 @@ mod tests {
                 &document, &registry, &initial, &mut cache,
             );
             assert!(recovered.ready().is_some());
+            document.connections.clear();
+            let disconnected = crate::resolve_graph_semantics(&document, &registry, &initial);
+            match disconnected.node(consumer).unwrap().parameters[0]
+                .configuration
+                .as_ref()
+                .unwrap()
+            {
+                GraphParameterConfigurationFact::ProjectColumns {
+                    available, options, ..
+                } => {
+                    assert!(!available);
+                    assert!(options.is_empty());
+                }
+                GraphParameterConfigurationFact::FilterPredicate {
+                    available, columns, ..
+                } => {
+                    assert!(!available);
+                    assert!(columns.is_empty());
+                }
+                other => panic!("missing disconnected editor: {other:?}"),
+            }
         }
     }
 }

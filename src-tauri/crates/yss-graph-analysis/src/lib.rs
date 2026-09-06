@@ -198,20 +198,17 @@ pub struct GraphParameterFact {
     pub presentation: ParameterPresentation,
     pub value_type: TypeExpr,
     pub effective_value: Option<GraphResolvedParameterValue>,
-    pub inherited_value: Option<serde_json::Value>,
-    pub value_source: Option<GraphParameterValueSource>,
-    pub options: Box<[Box<str>]>,
     pub configuration: Option<GraphParameterConfigurationFact>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphParameterValueSource {
-    Project,
-    Node,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphParameterConfigurationFact {
+    Configuration {
+        fields: Box<[GraphParameterFact]>,
+    },
+    SelectOptions {
+        options: Box<[Box<str>]>,
+    },
     ProjectColumns {
         available: bool,
         unavailable_reason: Option<Box<str>>,
@@ -311,7 +308,7 @@ pub struct GraphPortConnectionFacts {
     pub ordered: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphPortEditorFact {
     Default,
     Hidden,
@@ -725,31 +722,15 @@ fn resolve_graph_semantics_inner(
                     .parameters
                     .parameters
                     .iter()
-                    .map(|parameter| GraphParameterFact {
-                        key: parameter.key.clone(),
-                        title: parameter.title_key.as_str().into(),
-                        description: parameter
-                            .description_key
-                            .as_ref()
-                            .map(|key| key.as_str().into()),
-                        editor: parameter.editor.clone(),
-                        presentation: parameter.presentation,
-                        value_type: parameter.value_type.clone(),
-                        effective_value: effective_parameter_value(node, parameter).map(|value| match (&parameter.editor, value.as_str()) {
+                    .map(|parameter| parameter_fact(parameter,
+                        effective_parameter_value(node, parameter).map(|value| match (&parameter.editor, value.as_str()) {
                             (ParameterEditorSpec::Resource { .. }, Some(identity)) => GraphResolvedParameterValue::Resource(GraphResourceId::new(identity)),
                             _ if !node.parameters.contains_key(&parameter.key) => GraphResolvedParameterValue::DefaultLiteral(
                                 parameter.default_value.as_ref().expect("effective default exists").value.clone(),
                             ),
                             _ => GraphResolvedParameterValue::Literal(value),
                         }),
-                        inherited_value: parameter.default_value.as_ref().map(|value| yss_graph_protocol::protocol_value_to_json(&value.value)),
-                        value_source: node
-                            .parameters
-                            .contains_key(&parameter.key)
-                            .then_some(GraphParameterValueSource::Node),
-                        options: Box::new([]),
-                        configuration: None,
-                    })
+                    ))
                     .collect(),
                 inputs: Box::new([]),
                 ports: ports.into_boxed_slice(),
@@ -770,6 +751,7 @@ fn resolve_graph_semantics_inner(
     }
     diagnostics.extend(type_diagnostics);
     for node in &mut nodes {
+        project_schema_parameter_editors(node);
         for port in &mut node.ports {
             let requires_schema = port.schema.is_some()
                 || matches!(port.type_state.exact(), Some(ResolvedType::Nominal(id)) if id.as_str() == "tabular.dataframe");
@@ -1204,6 +1186,7 @@ fn project_concrete_port(
         ConnectionsPerPort::Single => (Some(1), false),
         ConnectionsPerPort::Multiple { max, ordered } => (max.map(u32::from), ordered),
     };
+    let editor = graph_port_editor_fact(&spec.editor);
     GraphPortSemanticFact {
         result_category: result_category::result_category_for_output(
             document.nodes[&address.node_id].node_type.as_str(),
@@ -1221,7 +1204,7 @@ fn project_concrete_port(
             maximum,
             ordered,
         },
-        editor: graph_port_editor_fact(&spec.editor),
+        editor,
         protocol_default: spec
             .input_binding
             .as_ref()
@@ -1306,6 +1289,201 @@ fn project_port_instance_additions(
         })
         .collect();
     (additions, minimum_instances_present)
+}
+
+fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact) {
+    use yss_graph_protocol::dataframe::{
+        FILTER_PREDICATE_TYPE_ID, FilterLiteral, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
+        filter_comparison_is_compatible, prepare_filter_predicate_json,
+        prepare_project_columns_json,
+    };
+    let schema = node
+        .ports
+        .iter()
+        .filter(|port| port.direction == PortDirection::Input)
+        .find_map(|port| port.schema_state.exact());
+    let fields = schema.map_or(&[][..], |schema| schema.fields.as_slice());
+    let unavailable_reason = schema
+        .is_none()
+        .then(|| "editors.dataframe.connect_source".into());
+    for parameter in &mut node.parameters {
+        let TypeExpr::Concrete(type_id) = &parameter.value_type else {
+            continue;
+        };
+        let value = match &parameter.effective_value {
+            Some(GraphResolvedParameterValue::Literal(value)) => Some(value.clone()),
+            Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
+                Some(yss_graph_protocol::protocol_value_to_json(value))
+            }
+            _ => None,
+        };
+        match type_id.as_str() {
+            PROJECT_COLUMNS_TYPE_ID => {
+                parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
+                    available: schema.is_some(),
+                    unavailable_reason: unavailable_reason.clone(),
+                    options: fields
+                        .iter()
+                        .map(|field| GraphColumnFact {
+                            name: field.name.0.clone(),
+                            data_type: field.scalar_type,
+                        })
+                        .collect(),
+                    value: value
+                        .as_ref()
+                        .and_then(|value| prepare_project_columns_json(value).ok())
+                        .map(|columns| columns.as_slice().into())
+                        .unwrap_or_default(),
+                });
+            }
+            FILTER_PREDICATE_TYPE_ID => {
+                let literals = [
+                    (
+                        GraphFilterLiteralType::Boolean,
+                        FilterLiteral::Boolean(false),
+                    ),
+                    (GraphFilterLiteralType::Integer, FilterLiteral::Integer(0)),
+                    (
+                        GraphFilterLiteralType::Decimal,
+                        FilterLiteral::Decimal(
+                            yss_graph_protocol::CanonicalDecimal::new("0")
+                                .expect("zero is a decimal"),
+                        ),
+                    ),
+                    (
+                        GraphFilterLiteralType::String,
+                        FilterLiteral::String("".into()),
+                    ),
+                ];
+                let operators = [
+                    FilterOperator::Equal,
+                    FilterOperator::NotEqual,
+                    FilterOperator::LessThan,
+                    FilterOperator::LessThanOrEqual,
+                    FilterOperator::GreaterThan,
+                    FilterOperator::GreaterThanOrEqual,
+                    FilterOperator::IsNull,
+                    FilterOperator::IsNotNull,
+                ];
+                parameter.configuration = Some(GraphParameterConfigurationFact::FilterPredicate {
+                    available: schema.is_some(),
+                    unavailable_reason: unavailable_reason.clone(),
+                    columns: fields
+                        .iter()
+                        .map(|field| GraphFilterColumnFact {
+                            name: field.name.0.clone(),
+                            data_type: field.scalar_type,
+                            operators: operators
+                                .iter()
+                                .copied()
+                                .filter(|operator| {
+                                    filter_comparison_is_compatible(
+                                        field.scalar_type,
+                                        *operator,
+                                        None,
+                                    ) || literals.iter().any(|(_, literal)| {
+                                        filter_comparison_is_compatible(
+                                            field.scalar_type,
+                                            *operator,
+                                            Some(literal),
+                                        )
+                                    })
+                                })
+                                .collect(),
+                            literal_types: literals
+                                .iter()
+                                .filter_map(|(kind, literal)| {
+                                    filter_comparison_is_compatible(
+                                        field.scalar_type,
+                                        FilterOperator::Equal,
+                                        Some(literal),
+                                    )
+                                    .then_some(*kind)
+                                })
+                                .collect(),
+                        })
+                        .collect(),
+                    value: value.filter(|value| prepare_filter_predicate_json(value).is_ok()),
+                });
+            }
+            "core.string"
+                if matches!(parameter.editor, ParameterEditorSpec::Select)
+                    && parameter.key.as_str() == "column"
+                    && schema.is_some() =>
+            {
+                parameter.configuration = Some(GraphParameterConfigurationFact::SelectOptions {
+                    options: fields.iter().map(|field| field.name.0.clone()).collect(),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+fn parameter_fact(
+    parameter: &yss_graph_protocol::ParameterSpec,
+    effective_value: Option<GraphResolvedParameterValue>,
+) -> GraphParameterFact {
+    let configuration = match &parameter.editor {
+        ParameterEditorSpec::Configuration(schema) => {
+            let raw = match &effective_value {
+                Some(GraphResolvedParameterValue::Literal(value)) => value.clone(),
+                Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
+                    yss_graph_protocol::protocol_value_to_json(value)
+                }
+                _ => serde_json::Value::Null,
+            };
+            let values = schema.effective_values(&raw);
+            Some(GraphParameterConfigurationFact::Configuration {
+                fields: schema
+                    .fields
+                    .iter()
+                    .filter(|field| field.is_visible(&values))
+                    .map(|field| {
+                        parameter_fact(
+                            &field.parameter,
+                            values
+                                .get(field.parameter.key.as_str())
+                                .cloned()
+                                .map(GraphResolvedParameterValue::Literal),
+                        )
+                    })
+                    .collect(),
+            })
+        }
+        _ => parameter
+            .constraints
+            .iter()
+            .find_map(|constraint| match constraint {
+                yss_graph_protocol::ParameterConstraint::OneOf(options)
+                    if matches!(parameter.editor, ParameterEditorSpec::Select) =>
+                {
+                    Some(GraphParameterConfigurationFact::SelectOptions {
+                        options: options
+                            .iter()
+                            .filter_map(|value| match value {
+                                yss_graph_protocol::Value::String(value) => Some(value.clone()),
+                                _ => None,
+                            })
+                            .collect(),
+                    })
+                }
+                _ => None,
+            }),
+    };
+    GraphParameterFact {
+        key: parameter.key.clone(),
+        title: parameter.title_key.as_str().into(),
+        description: parameter
+            .description_key
+            .as_ref()
+            .map(|key| key.as_str().into()),
+        editor: parameter.editor.clone(),
+        presentation: parameter.presentation,
+        value_type: parameter.value_type.clone(),
+        effective_value,
+        configuration,
+    }
 }
 
 fn graph_port_editor_fact(editor: &PortEditorSpec) -> GraphPortEditorFact {
@@ -1650,10 +1828,10 @@ mod tests {
         let consumer = NodeId::new();
         let mut document = GraphDocument::default();
         for (node_id, node_type, x) in [
-            (left, "yssbi.constant.int64", 0.0),
+            (left, "yssbi.dataframe.series.int_range", 0.0),
             (right, "yssbi.constant.int64", 0.0),
             (add, "yssbi.numeric.add", 200.0),
-            (consumer, "yssbi.dataframe.series.int_range", 400.0),
+            (consumer, "yssbi.data_series.convert.int64_to_string", 400.0),
         ] {
             document.nodes.insert(
                 node_id,
@@ -1684,7 +1862,10 @@ mod tests {
                 id,
                 DocumentConnection {
                     id,
-                    output: PortAddress::declared(source, PortKey::new("value").unwrap()),
+                    output: PortAddress::declared(
+                        source,
+                        PortKey::new(if source == left { "series" } else { "value" }).unwrap(),
+                    ),
                     input: operand,
                     order: None,
                 },
@@ -1696,7 +1877,7 @@ mod tests {
             DocumentConnection {
                 id: downstream_connection,
                 output: PortAddress::declared(add, PortKey::new("result").unwrap()),
-                input: PortAddress::declared(consumer, PortKey::new("start").unwrap()),
+                input: PortAddress::declared(consumer, PortKey::new("input").unwrap()),
                 order: None,
             },
         );
@@ -1725,7 +1906,7 @@ mod tests {
                 .find(|port| port.address
                     == PortAddress::declared(add, PortKey::new("result").unwrap()))
                 .map(|port| &port.type_state),
-            Some(&TypeState::Exact(resolved_scalar("core.float64")))
+            Some(&TypeState::Exact(resolved_series("core.float64")))
         );
     }
 
@@ -1737,7 +1918,7 @@ mod tests {
         let mut document = GraphDocument::default();
         for (node_id, node_type) in [
             (source, "yssbi.constant.int64"),
-            (target, "yssbi.distribution.normal.sample"),
+            (target, "yssbi.dataframe.series.inverse_standardize"),
         ] {
             document.nodes.insert(
                 node_id,

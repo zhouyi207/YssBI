@@ -696,6 +696,32 @@ fn localize_semantic_snapshot(
                 .description_key
                 .as_ref()
                 .map(|key| localization.text(key, &arguments));
+            if let Some(
+                yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns { unavailable_reason, .. }
+                | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate { unavailable_reason, .. }
+            ) = &mut parameter.configuration
+                && let Some(key) = unavailable_reason.as_ref()
+                    .and_then(|key| yss_graph_protocol::I18nKey::new(key.clone()).ok())
+            {
+                *unavailable_reason = Some(localization.text(&key, &arguments));
+            }
+            let Some(yss_graph_analysis::GraphParameterConfigurationFact::Configuration { fields }) =
+                &mut parameter.configuration
+            else {
+                continue;
+            };
+            for field in fields.iter_mut() {
+                if let Ok(key) = yss_graph_protocol::I18nKey::new(field.title.clone()) {
+                    field.title = localization.text(&key, &arguments);
+                }
+                if let Some(key) = field
+                    .description
+                    .as_ref()
+                    .and_then(|key| yss_graph_protocol::I18nKey::new(key.clone()).ok())
+                {
+                    field.description = Some(localization.text(&key, &arguments));
+                }
+            }
         }
         node_facts
     })
@@ -757,6 +783,133 @@ mod tests {
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn catalog_configuration_survives_save_and_compiles_without_configuration_inputs() {
+        use yss_graph_analysis::GraphParameterConfigurationFact;
+        use yss_graph_compiler::{GraphParameterScalar, GraphParameterValue};
+        let runtime =
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+        let graph = GraphResourcePath::new("events/Configuration.yssbi-event").unwrap();
+        let mut document = GraphDocument::default();
+        let [normal, range, plot] = std::array::from_fn(|_| NodeId::new());
+        for (id, node_type, key, value) in [
+            (
+                normal,
+                "yssbi.distribution.normal.sample",
+                "sample_count",
+                32,
+            ),
+            (range, "yssbi.dataframe.series.int_range", "step", 2),
+            (plot, "yssbi.plot.correlogram.view", "maximum_lag", 8),
+        ] {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: node_type.parse().unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+            let patch = EditorGraphMutation::SetConfiguration {
+                node_id: id,
+                key: "configuration".parse().unwrap(),
+                values: BTreeMap::from([(key.parse().unwrap(), serde_json::json!(value))]),
+            }
+            .into_patch(&graph, &document, runtime.registry())
+            .unwrap();
+            yss_graph_document_edit::apply_graph_document_patch(&mut document, &patch).unwrap();
+        }
+        let id = yss_graph_document::ConnectionId::new();
+        document.connections.insert(
+            id,
+            yss_graph_document::DocumentConnection {
+                id,
+                output: PortAddress::declared(normal, "samples".parse().unwrap()),
+                input: PortAddress::declared(plot, "values".parse().unwrap()),
+                order: None,
+            },
+        );
+        assert!(document.input_states.is_empty());
+        let saved = serde_json::to_vec(&document).unwrap();
+        let reopened = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(document, reopened);
+        let compilation = runtime
+            .compile_draft(
+                &reopened,
+                graph.clone(),
+                &empty_resource_catalog(),
+                &basis(&runtime),
+            )
+            .unwrap();
+        assert!(
+            compilation.artifact_id().is_some(),
+            "{:?}",
+            compilation.analysis().semantic_snapshot().diagnostics()
+        );
+        let artifact = compilation
+            .artifact_id()
+            .expect("Detail configuration must compile");
+        let compiled = runtime.compiled_draft(&graph, artifact).unwrap();
+        for (id, key, expected, input_count) in [
+            (normal, "sample_count", 32, 0),
+            (range, "step", 2, 0),
+            (plot, "maximum_lag", 8, 1),
+        ] {
+            let node = compilation.analysis().semantic_snapshot().node(id).unwrap();
+            let GraphParameterConfigurationFact::Configuration { fields } =
+                node.parameters[0].configuration.as_ref().unwrap()
+            else {
+                panic!("configuration fields must reach Detail");
+            };
+            assert!(fields.iter().any(|field| field.key.as_str() == key));
+            let operation = compiled
+                .package()
+                .operations()
+                .iter()
+                .find(|operation| operation.source().node() == Some(id))
+                .unwrap();
+            assert_eq!(operation.inputs().len(), input_count);
+            let handle = &operation.parameters()["configuration"];
+            let GraphParameterValue::Record(values) =
+                compiled.package().parameters()[handle].value()
+            else {
+                panic!("configuration must compile as a record");
+            };
+            assert_eq!(
+                values[key],
+                GraphParameterValue::Scalar(GraphParameterScalar::Integer(expected))
+            );
+            if id == normal {
+                assert_eq!(
+                    values["standard_deviation"],
+                    GraphParameterValue::Scalar(GraphParameterScalar::Decimal(1.0))
+                );
+            }
+        }
+        let localized = runtime.resolve_graph_draft(
+            &graph,
+            &reopened,
+            &basis(&runtime),
+            &empty_resource_catalog(),
+            &[],
+            "zh-CN",
+        );
+        let parameter = &localized
+            .semantic_snapshot()
+            .node(range)
+            .unwrap()
+            .parameters[0];
+        assert_eq!(parameter.title.as_ref(), "配置");
+        let Some(GraphParameterConfigurationFact::Configuration { fields }) =
+            &parameter.configuration
+        else {
+            panic!("missing fields")
+        };
+        assert_eq!(fields[0].title.as_ref(), "起点");
     }
 
     #[test]

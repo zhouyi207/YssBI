@@ -17,6 +17,83 @@ use yss_graph_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use yss_graph_registry::NodeRegistry;
 
 #[test]
+fn configuration_edits_preserve_node_fields_and_undo_without_connections() {
+    let system = build_builtin_node_system().unwrap();
+    let graph = "events/configuration.yssbi-event".parse().unwrap();
+    let mut document = GraphDocument::default();
+    let target = NodeId::new();
+    let source = NodeId::new();
+    for (id, node_type) in [
+        (target, "yssbi.statistics.ols.fit"),
+        (source, "yssbi.statistics.ols.fit"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: node_type.parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    let edit = |document: &GraphDocument, entries: &[(&str, serde_json::Value)]| {
+        EditorGraphMutation::SetConfiguration {
+            node_id: target,
+            key: "configuration".parse().unwrap(),
+            values: entries
+                .iter()
+                .map(|(key, value)| (key.parse().unwrap(), value.clone()))
+                .collect(),
+        }
+        .into_patch(&graph, document, &system.registry)
+    };
+    let patch = edit(
+        &document,
+        &[
+            ("constant", false.into()),
+            ("covariance", "fixed scale".into()),
+        ],
+    )
+    .unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    let value = |document: &GraphDocument| {
+        document.nodes[&target].parameters[&"configuration".parse::<ParameterKey>().unwrap()]
+            .clone()
+    };
+    assert_eq!(
+        value(&document),
+        serde_json::json!({"constant": false, "covariance": "fixed scale", "scale": 1.0})
+    );
+    let patch = edit(&document, &[("scale", serde_json::json!(0.0000001))]).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(value(&document)["constant"], false);
+    assert_eq!(value(&document)["scale"], 0.0000001);
+    assert!(edit(&document, &[("scale", (-1).into())]).is_err());
+    assert!(edit(&document, &[("covariance", "unknown".into())]).is_err());
+    let patch = edit(&document, &[("covariance", "HC1".into())]).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(
+        value(&document),
+        serde_json::json!({"constant": false, "covariance": "HC1"})
+    );
+    let local = document.clone();
+    let patch = edit(&document, &[("constant", true.into())]).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(value(&document)["constant"], true);
+    assert!(document.nodes[&source].parameters.is_empty());
+    assert!(document.connections.is_empty());
+    assert!(document.input_states.is_empty());
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, local);
+    assert_eq!(
+        serde_json::from_str::<GraphDocument>(&serde_json::to_string(&document).unwrap()).unwrap(),
+        document
+    );
+}
+
+#[test]
 fn port_placement_appends_moves_and_undoes_without_uuid_ordering() {
     let system = build_builtin_node_system().unwrap();
     let graph = "events/ports.yssbi-event".parse().unwrap();
@@ -182,7 +259,7 @@ fn polymorphic_output_preflight_does_not_reject_a_possible_exact_target() {
     let source = insert_node(&mut document, document_node("yssbi.numeric.add", 0.0));
     let target = insert_node(
         &mut document,
-        document_node("yssbi.distribution.normal.sample", 100.0),
+        document_node("yssbi.dataframe.series.inverse_standardize", 100.0),
     );
 
     let patch = EditorGraphMutation::Connect {

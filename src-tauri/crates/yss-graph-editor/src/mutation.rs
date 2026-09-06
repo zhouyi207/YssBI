@@ -180,6 +180,11 @@ pub enum EditorGraphMutation {
         address: PortAddress,
         literal: Option<JsonValue>,
     },
+    SetConfiguration {
+        node_id: NodeId,
+        key: yss_graph_protocol::ParameterKey,
+        values: ParameterValues,
+    },
     AddPortInstance {
         node_id: NodeId,
         template_key: PortKey,
@@ -425,6 +430,71 @@ impl EditorGraphMutation {
                         .then_some(connection.id)
                 });
                 disconnect_connection_operations(document, connection_ids)?
+            }
+            Self::SetConfiguration {
+                node_id,
+                key,
+                values,
+            } => {
+                let before = document.nodes.get(&node_id).cloned().ok_or_else(|| {
+                    editor_error(
+                        EditorMutationErrorCode::GraphNodeNotFound,
+                        format!("node '{node_id}' does not exist"),
+                    )
+                })?;
+                let protocol = registry.protocol(&before.node_type).ok_or_else(|| {
+                    invalid_editor_mutation(format!("unknown node type '{}'", before.node_type))
+                })?;
+                if protocol.managed_role.is_some() {
+                    return Err(invalid_editor_mutation(
+                        "managed node parameters cannot be edited",
+                    ));
+                }
+                let parameter = protocol
+                    .parameters
+                    .parameters
+                    .iter()
+                    .find(|parameter| parameter.key == key)
+                    .ok_or_else(|| invalid_editor_mutation("unknown configuration parameter"))?;
+                let yss_graph_protocol::ParameterEditorSpec::Configuration(schema) =
+                    &parameter.editor
+                else {
+                    return Err(invalid_editor_mutation(
+                        "parameter does not declare a configuration editor",
+                    ));
+                };
+                let raw = before.parameters.get(&key).cloned().or_else(|| {
+                    parameter
+                        .default_value
+                        .as_ref()
+                        .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value))
+                });
+                let mut merged = raw
+                    .and_then(|value| value.as_object().cloned())
+                    .unwrap_or_default();
+                for (field_key, value) in values {
+                    if !schema
+                        .fields
+                        .iter()
+                        .any(|field| field.parameter.key == field_key)
+                    {
+                        return Err(invalid_editor_mutation(format!(
+                            "unknown configuration field '{field_key}'"
+                        )));
+                    }
+                    if value.is_null() {
+                        merged.remove(field_key.as_str());
+                    } else {
+                        merged.insert(field_key.to_string(), value);
+                    }
+                }
+                let normalized = schema
+                    .normalize_json(&JsonValue::Object(merged))
+                    .map_err(invalid_editor_mutation)?;
+                let mut after = before.clone();
+                after.parameters.insert(key, normalized);
+                validate_parameters_with_registry(registry, protocol, &after.parameters)?;
+                vec![GraphDocumentOperation::UpdateNode { before, after }]
             }
             Self::SetLiteral { address, literal } => {
                 let literal = normalize_editor_literal_target(
