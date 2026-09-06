@@ -8,9 +8,9 @@ import {
   OlsStyleDiagnosticsSection,
   IvReportSections,
 } from "./shared";
-import type { OLSResultData } from "@/shared/types/report";
+import type { LinearRegressionResultData } from "@/shared/types/report";
 
-export const LIMLComponent: FC<{ data: OLSResultData }> = ({ data }) => {
+export const LIMLComponent: FC<{ data: LinearRegressionResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical, leverageKdeData } = useRegressionReport(data);
 
   return (

@@ -1,8 +1,8 @@
 import { formatNum } from "./RegressionShared";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 
 /** MLE iteration log — separate module at bottom (Stata-style) */
-export function PanelMLEIterationBlock({ info }: { info: ModelBasicInfo }) {
+export function PanelMLEIterationBlock({ info }: { info: LinearModelInfo }) {
   const hasConst = info.mle_iter_log_lik_const != null && info.mle_iter_log_lik_const.length > 0;
   const hasFull = info.mle_iter_log_lik != null && info.mle_iter_log_lik.length > 0;
   if (!hasConst && !hasFull) return null;

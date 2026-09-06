@@ -1,6 +1,6 @@
 import { formatNum, InfoRow } from "./RegressionShared";
 import type { PanelFEInfo } from "@/shared/types/report";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 
 /** Stata xtreg, be style summary grid — Between regression (regression on group means) */
 export function PanelBESummaryGrid({
@@ -8,7 +8,7 @@ export function PanelBESummaryGrid({
   panelFe,
   effectType = "entity",
 }: {
-  info: ModelBasicInfo;
+  info: LinearModelInfo;
   panelFe: PanelFEInfo;
   effectType?: "entity" | "time";
 }) {

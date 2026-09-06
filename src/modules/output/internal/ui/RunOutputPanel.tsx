@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { FiTrash2 } from "react-icons/fi";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { executionResultUi } from "@/features/core/execution";
+import { runOutputActions } from "@/features/core/execution";
 import { useExecutionRead } from "@/features/core/execution/read";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
@@ -29,7 +29,7 @@ export function RunOutputPanel() {
   const runOutput = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT) : EMPTY_RUN_OUTPUT,
   );
-  const clearRunOutput = executionResultUi.clearRunOutput;
+  const clearRunOutput = runOutputActions.clearRunOutput;
   const failure = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.runFailure ?? null) : null,
   );

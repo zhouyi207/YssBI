@@ -6,7 +6,7 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
 import { WatermarkView } from "@/modules/graph-editor/public";
 import { NodeDocumentationModal } from "@/modules/node-catalog/public";
-import { PluginActivityActions } from "@/modules/plugins/public";
+import { JuliaRuntimeActions } from "@/modules/julia/public";
 import { SettingsView } from "@/modules/settings/public";
 import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
@@ -48,7 +48,7 @@ function WorkbenchReadyComposition() {
       menuBar={<WorkbenchMenuContribution commands={commands} />}
       statusBar={<WorkbenchStatusBarContribution />}
       dragOverlay={<ActivityEditorDndOverlay />}
-      activityActions={<PluginActivityActions />}
+      activityActions={<JuliaRuntimeActions />}
       overlays={overlayRegistry}
     />
   );

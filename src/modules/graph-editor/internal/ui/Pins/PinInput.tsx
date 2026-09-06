@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
-import { usePinInput } from "@/features/core/pin";
+import { usePinInput } from "@/features/application/editor/usePinInput";
 import type { DataType } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

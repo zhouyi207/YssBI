@@ -7,11 +7,11 @@ import {
   OlsStyleDiagnosticsSection,
   IvReportSections,
 } from "./shared";
-import type { OLSResultData } from "@/shared/types/report";
+import type { LinearRegressionResultData } from "@/shared/types/report";
 
-export type { OLSResultData };
+export type { LinearRegressionResultData };
 
-export const TwoSLSComponent: FC<{ data: OLSResultData }> = ({ data }) => {
+export const TwoSLSComponent: FC<{ data: LinearRegressionResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical, leverageKdeData } = useRegressionReport(data);
 
   return (

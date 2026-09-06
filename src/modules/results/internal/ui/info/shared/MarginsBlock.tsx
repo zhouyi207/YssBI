@@ -9,7 +9,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { buildParamNames } from "@/shared/stats/regressionReportUtils";
 import { parseAtValues } from "@/features/application/stats/statsActions";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
-import type { OLSResultData } from "@/shared/types/report";
+import type { BinaryResultData } from "@/shared/types/report";
 
 /** Standard normal PDF φ(x) */
 function phi(x: number): number {
@@ -117,7 +117,7 @@ function computeMargins(
   });
 }
 
-export function MarginsBlock({ data }: { data: OLSResultData }) {
+export function MarginsBlock({ data }: { data: BinaryResultData }) {
   const { t } = useTranslation();
   const { model_basic_info: info, coefficients, diagnostic_info: diag, betas } = data;
   const paramNames = useMemo(() => buildParamNames(coefficients), [coefficients]);

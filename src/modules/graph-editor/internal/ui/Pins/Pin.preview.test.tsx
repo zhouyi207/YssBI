@@ -201,10 +201,9 @@ describe("Pin preview production path", () => {
 
     const current = {
       resultId: "17",
-      state: { kind: "ready" as const },
+
       provenance: {
         runId: "1",
-        activationId: "17",
         createdAtMs: "1000",
         graphPath,
         nodeId: fixture.outputAddress.nodeId,

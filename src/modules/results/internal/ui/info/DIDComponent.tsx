@@ -21,7 +21,7 @@ import { DidEventStudyChart } from "@/shared/charts/statistical";
 import type {
   DidPlaceboFakeGroupUnavailableBlock,
   PanelDidResultData,
-  OLSResultData,
+  LinearRegressionResultData,
 } from "@/shared/types/report";
 
 const DID_FAKE_GROUP_ERROR_KEYS: Readonly<Record<string, string>> = {
@@ -108,7 +108,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
     );
   }
 
-  const ols = fe_twoway as OLSResultData;
+  const ols = fe_twoway as LinearRegressionResultData;
 
   return (
     <ReportLayout

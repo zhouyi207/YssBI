@@ -82,6 +82,11 @@ export const enUS = {
       openFailed: "Could not open external link.",
     },
     julia: {
+      runtime: {
+        title: "Julia runtime",
+        description: "Julia runtime and worker status",
+        openBayes: "Open Bayesian analysis",
+      },
       statusFailed: "Could not retrieve Julia status: {{error}}",
       installFailed: "Could not install Julia: {{error}}",
     },
@@ -240,7 +245,6 @@ export const enUS = {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
       view: "View",
-      history: "Result history",
       historyLoading: "Loading history…",
       historyEmpty: "No result history",
       viewDisabledNoRun: "Run the graph first to generate viewable results",
@@ -804,23 +808,6 @@ export const enUS = {
       preparingDetail: "Checking the system Julia installation…",
       success: "Julia {{version}} is ready",
       failed: "Julia installation did not complete",
-    },
-  },
-  plugins: {
-    manager: {
-      title: "Extensions",
-      description: "Discover and manage YssBI extensions",
-      searchPlaceholder: "Search extensions",
-      noResults: "No matching extensions",
-      install: "Install",
-      installing: "Installing…",
-      remove: "Remove",
-    },
-    julia: {
-      title: "Julia",
-      description: "Julia compute engine and Bayesian analysis",
-      status: "Engine status",
-      openBayes: "Open Bayesian analysis",
     },
   },
   aboutModal: {

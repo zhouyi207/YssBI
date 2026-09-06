@@ -82,6 +82,11 @@ export const zhCN = {
       openFailed: "无法打开外部链接。",
     },
     julia: {
+      runtime: {
+        title: "Julia 运行时",
+        description: "Julia 计算环境与工作进程状态",
+        openBayes: "打开贝叶斯分析",
+      },
       statusFailed: "获取 Julia 状态失败：{{error}}",
       installFailed: "安装 Julia 失败：{{error}}",
     },
@@ -226,7 +231,6 @@ export const zhCN = {
       breakLinks: "断开连接",
       resetValue: "恢复默认值",
       view: "查看",
-      history: "结果历史",
       historyLoading: "正在加载历史…",
       historyEmpty: "暂无结果历史",
       viewDisabledNoRun: "请先运行图以生成可查看结果",
@@ -747,23 +751,6 @@ export const zhCN = {
       preparingDetail: "正在检查系统 Julia…",
       success: "Julia {{version}} 已准备就绪",
       failed: "Julia 安装未完成",
-    },
-  },
-  plugins: {
-    manager: {
-      title: "扩展",
-      description: "查找并管理 YssBI 扩展",
-      searchPlaceholder: "搜索扩展",
-      noResults: "没有匹配的扩展",
-      install: "安装",
-      installing: "安装中…",
-      remove: "移除",
-    },
-    julia: {
-      title: "Julia",
-      description: "Julia 计算引擎与贝叶斯分析",
-      status: "引擎状态",
-      openBayes: "打开贝叶斯分析",
     },
   },
   aboutModal: {

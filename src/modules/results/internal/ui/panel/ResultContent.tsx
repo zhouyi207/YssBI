@@ -61,23 +61,9 @@ export function ResultContent({ resultId }: { resultId: string }) {
     missingResultId: t("sourceInspector.missingResultId"),
     notFound: t("sourceInspector.noSource"),
     loadFailed: t("sourceInspector.loadFailed"),
-    pending: (completed, total) => t("resultState.pending", { completed, total: total ?? "?" }),
-    executionFailed: t("resultState.executionFailed"),
-    upstreamFailed: t("resultState.upstreamFailed"),
-    cancelled: t("resultState.cancelled"),
   });
 
   if (state.status === "loading") return <ResultStatus message={t("common.loading")} />;
-  if (state.status === "pending") {
-    return (
-      <ResultStatus
-        message={t("resultState.pending", {
-          completed: state.progress.completed,
-          total: state.progress.total ?? "?",
-        })}
-      />
-    );
-  }
   if (error) {
     return (
       <Alert className="m-3 w-auto">

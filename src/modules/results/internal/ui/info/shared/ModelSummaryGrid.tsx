@@ -1,11 +1,11 @@
 import { formatNum, InfoRow } from "./RegressionShared";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 
 export function ModelSummaryGrid({
   info,
   executionTimeMs,
 }: {
-  info: ModelBasicInfo;
+  info: LinearModelInfo;
   executionTimeMs?: number;
 }) {
   return (

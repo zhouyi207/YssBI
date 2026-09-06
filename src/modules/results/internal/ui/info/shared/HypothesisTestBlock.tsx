@@ -35,7 +35,11 @@ function HypothesisFormulas({
   );
 }
 
-export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
+export function HypothesisTestBlock({
+  data,
+}: {
+  data: RegressionResultData<{ df_residual: number }>;
+}) {
   const { hypothesis, setHypothesis, result, error, loading, paramNames, canRun, run } =
     useHypothesisTestBlock(data);
 

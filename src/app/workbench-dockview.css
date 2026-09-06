@@ -510,14 +510,14 @@
 [data-yssbi-root-dockview]
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container
-  [data-workbench-plugin-actions]
-  [data-workbench-plugin-action]:hover
-  [data-workbench-plugin-action-surface],
+  [data-workbench-julia-actions]
+  [data-workbench-julia-action]:hover
+  [data-workbench-julia-action-surface],
 [data-yssbi-root-dockview]
   .dv-groupview.dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container
-  [data-workbench-plugin-action][aria-expanded="true"]
-  [data-workbench-plugin-action-surface] {
+  [data-workbench-julia-action][aria-expanded="true"]
+  [data-workbench-julia-action-surface] {
   background: var(--interactive-hover);
   color: var(--foreground);
 }

@@ -1,13 +1,13 @@
 import { formatNum, InfoRow } from "./RegressionShared";
 import type { PanelFEInfo } from "@/shared/types/report";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 
 /** Stata xtreg, re style summary grid — Random-effects GLS or ML regression */
 export function PanelRESummaryGrid({
   info,
   panelFe,
 }: {
-  info: ModelBasicInfo;
+  info: LinearModelInfo;
   panelFe: PanelFEInfo;
 }) {
   const isMle = info.lr_chi2 != null;

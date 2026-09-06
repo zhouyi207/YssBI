@@ -1,13 +1,13 @@
 import { formatNum, InfoRow } from "./RegressionShared";
 import type { PanelFEInfo } from "@/shared/types/report";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 
 /** Stata xtreg, fe style summary grid */
 export function PanelFESummaryGrid({
   info,
   panelFe,
 }: {
-  info: ModelBasicInfo;
+  info: LinearModelInfo;
   panelFe: PanelFEInfo;
 }) {
   return (

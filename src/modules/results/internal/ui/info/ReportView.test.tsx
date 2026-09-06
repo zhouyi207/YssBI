@@ -19,10 +19,9 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 
 const descriptor: ResultDescriptor = {
   resultId: "42",
-  state: { kind: "ready" },
+
   provenance: {
     runId: "7",
-    activationId: "9",
     graphPath: "events/main.yssbi-event",
     nodeId: "ols-node",
     output: {
@@ -127,7 +126,6 @@ describe("ReportView", () => {
     expect(JSON.parse(logError.mock.calls[0][0])).toEqual({
       resultId: "42",
       runId: "7",
-      activationId: "9",
       nodeId: "ols-node",
       outputPinId: "report",
       presentation: { kind: "report", report: "olsSummary" },
@@ -163,7 +161,6 @@ describe("ReportView", () => {
     expect(JSON.parse(logError.mock.calls[0][0])).toMatchObject({
       resultId: "42",
       runId: "7",
-      activationId: "9",
       nodeId: "ols-node",
       fieldPath: "model_basic_info.covariance_type",
       reason: "missing required field",

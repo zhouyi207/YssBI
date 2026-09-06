@@ -16,7 +16,7 @@ import {
   HypothesisTestBlock,
   OmittedVariablesAlert,
 } from "./shared";
-import type { PanelSummaryResult, OLSResultData } from "@/shared/types/report";
+import type { PanelSummaryResult, LinearRegressionResultData } from "@/shared/types/report";
 import type {
   PanelEffectType as EffectType,
   PanelMethod as TabKey,
@@ -374,7 +374,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             <OmittedVariablesAlert diag={currentData.diagnostic_info} />
           ) : null}
 
-          <HypothesisTestBlock data={currentData as OLSResultData} />
+          <HypothesisTestBlock data={currentData as LinearRegressionResultData} />
 
           {(currentMethod === "re_mle" ||
             currentMethod === "re_mle_time" ||

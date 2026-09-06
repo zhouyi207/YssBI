@@ -77,10 +77,9 @@ const parsedPlotPayload = {
 
 const descriptor: ResultDescriptor = {
   resultId: "plot-1",
-  state: { kind: "ready" },
+
   provenance: {
     runId: "run-1",
-    activationId: "activation-1",
     graphPath: "events/Main.yssbi-event",
     nodeId: "plot-node",
     output: {

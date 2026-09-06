@@ -554,7 +554,7 @@ interface MutableSerializedLayout {
   [key: string]: unknown;
 }
 
-class ShadowWorkbenchModel {
+class PendingWorkbenchTransaction {
   private readonly panels = new Map<string, ShadowPanel>();
   private readonly groups = new Map<string, ShadowGroup>();
   private readonly groupOrder: string[] = [];
@@ -1380,7 +1380,9 @@ export function createWorkbenchDockviewRuntime(): {
   const queue: PendingOperation[] = [];
 
   const notifyListeners = (): void => {
-    for (const listener of [...listeners]) {
+    // Callbacks may subscribe or unsubscribe; publish to the captured observers once.
+    const currentListeners = Array.from(listeners);
+    for (const listener of currentListeners) {
       try {
         listener();
       } catch {
@@ -2010,7 +2012,7 @@ export function createWorkbenchDockviewRuntime(): {
       const shadow = throwAsLayoutError(
         "layout_restore_failed",
         {},
-        () => new ShadowWorkbenchModel(boundApi),
+        () => new PendingWorkbenchTransaction(boundApi),
       );
       const result = operation(shadow.layout);
       if (isPromiseLike(result)) {
@@ -2034,7 +2036,7 @@ export function createWorkbenchDockviewRuntime(): {
         const shadow = throwAsLayoutError(
           "layout_restore_failed",
           {},
-          () => new ShadowWorkbenchModel(boundApi),
+          () => new PendingWorkbenchTransaction(boundApi),
         );
         const result = operation(shadow.layout);
         if (isPromiseLike(result)) {
@@ -2058,7 +2060,7 @@ export function createWorkbenchDockviewRuntime(): {
         const shadow = throwAsLayoutError(
           "layout_restore_failed",
           {},
-          () => new ShadowWorkbenchModel(boundApi),
+          () => new PendingWorkbenchTransaction(boundApi),
         );
         const result = await operation(shadow.publication);
         assertMutationContext(boundApi, context);

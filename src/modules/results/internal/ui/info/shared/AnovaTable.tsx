@@ -1,6 +1,6 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatNum } from "./RegressionShared";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { LinearModelInfo } from "@/shared/types/report";
 import {
   InfoStatsTable,
   infoStatsCellClass,
@@ -11,7 +11,7 @@ import {
   infoStatsRowOddClass,
 } from "./InfoStatsTable";
 
-export function AnovaTable({ info }: { info: ModelBasicInfo }) {
+export function AnovaTable({ info }: { info: LinearModelInfo }) {
   return (
     <InfoStatsTable className="mb-2">
       <TableHeader>

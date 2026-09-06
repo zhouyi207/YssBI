@@ -8,7 +8,7 @@ import {
   removePortInstance,
 } from "@/features/application/editor/portInstanceActions";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { GraphDraftCommandResult } from "@/features/core/history/types";
+import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import type { PortInstanceAdditionDto } from "@/shared/types/domain/editorProjection";
 import { graphDraftMutationMessageKey } from "./nodeMutationFeedback";
 
@@ -30,7 +30,7 @@ function PortInstanceMutationButton({
   variant: "outline" | "destructive";
   icon: ReactNode;
   disabled: boolean;
-  execute: () => Promise<GraphDraftCommandResult>;
+  execute: () => Promise<GraphEditOutcome>;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);

@@ -1,30 +1,30 @@
 import { formatNum, InfoRow } from "./RegressionShared";
-import type { ModelBasicInfo } from "@/shared/types/report";
+import type { BinaryModelInfo } from "@/shared/types/report";
 
 /** Model summary for binary choice models (Logit, Probit) */
 export function BinaryModelSummaryGrid({
   info,
   executionTimeMs,
 }: {
-  info: ModelBasicInfo;
+  info: BinaryModelInfo;
   executionTimeMs?: number;
 }) {
   return (
     <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border mb-2">
       <InfoRow label="Model">{info.model_type}</InfoRow>
       <InfoRow label="Method">{info.method}</InfoRow>
-      <InfoRow label="Pseudo R-squared">{formatNum(info.r_squared)}</InfoRow>
-      <InfoRow label="Pseudo Adj. R-squared">{formatNum(info.adj_r_squared)}</InfoRow>
-      {info.wald_chi2 != null && (
+      <InfoRow label="Pseudo R-squared">{formatNum(info.pseudo_r2)}</InfoRow>
+      <InfoRow label="Pseudo Adj. R-squared">{formatNum(info.adjusted_pseudo_r2)}</InfoRow>
+      {info.lr_chi2 != null && (
         <>
-          <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.wald_chi2)}</InfoRow>
+          <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.lr_chi2)}</InfoRow>
           <InfoRow label="Prob &gt; chi2">
             <span
               className={
-                (info.prob_wald_chi2 ?? 1) < 0.05 ? "text-emerald-400" : "text-muted-foreground"
+                (info.prob_lr_chi2 ?? 1) < 0.05 ? "text-emerald-400" : "text-muted-foreground"
               }
             >
-              {formatNum(info.prob_wald_chi2 ?? 0)}
+              {formatNum(info.prob_lr_chi2 ?? 0)}
             </span>
           </InfoRow>
         </>
@@ -35,10 +35,6 @@ export function BinaryModelSummaryGrid({
       <InfoRow label="Df Residual">{info.df_residual}</InfoRow>
       {info.aic != null && <InfoRow label="AIC">{formatNum(info.aic)}</InfoRow>}
       {info.bic != null && <InfoRow label="BIC">{formatNum(info.bic)}</InfoRow>}
-      <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
-        <span className="text-muted-foreground text-xs">Df Total</span>
-        <span className="text-foreground text-xs font-mono font-medium">{info.df_total}</span>
-      </div>
       {executionTimeMs != null && (
         <div className="bg-card px-4 py-2.5 flex justify-between col-span-2 border-t border-border">
           <span className="text-muted-foreground text-xs">后端计算耗时</span>
