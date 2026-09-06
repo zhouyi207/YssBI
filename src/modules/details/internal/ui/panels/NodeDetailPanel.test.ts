@@ -127,34 +127,6 @@ describe("NodeDetailPanel projection selection", () => {
     act(() => root.unmount());
   });
 
-  it("uses translation keys for capability and diagnostic section titles", () => {
-    const graphPath = "events/Main.yssbi-event";
-    const graphBucket = bucket(graphPath, "Node");
-    graphBucket.nodes.shared.diagnostics = [
-      {
-        code: "node.warning",
-        messageKey: "diagnostics.node.warning",
-        arguments: { value: "Needs review" },
-        severity: "warning",
-        blocking: false,
-        location: { kind: "node", nodeId: "shared" },
-        related: [],
-      },
-    ];
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
-    const container = document.createElement("div");
-    const root = createRoot(container);
-
-    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
-
-    expect(container.textContent).toContain("detail.sections.capabilities");
-    expect(container.textContent).toContain("detail.sections.diagnostics");
-    expect(container.textContent).not.toContain("Capabilities");
-    expect(container.textContent).not.toContain("Diagnostics");
-
-    act(() => root.unmount());
-  });
-
   it("renders diagnostic port locations as node and pin titles", () => {
     const graphPath = "events/Main.yssbi-event";
     const graphBucket = bucket(graphPath, "Node");

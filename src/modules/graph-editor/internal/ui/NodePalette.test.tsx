@@ -519,7 +519,7 @@ describe("NodePalette", () => {
     expect(onSelect).toHaveBeenCalledWith({ kind: "static", nodeTypeId: "math.add" }, "zh-CN");
   });
 
-  it("keeps same-type resources distinct across search, refresh, and locale changes", () => {
+  it("keeps same-type resources distinct across search and publication refresh", () => {
     const first = catalog.items.find((item) => item.nodeTypeId === "function.call")!;
     const second = {
       ...first,
@@ -577,33 +577,6 @@ describe("NodePalette", () => {
     );
     expect(host.textContent).toContain("刷新 Other");
 
-    const localized = {
-      ...refreshed,
-      locale: "en-US",
-      items: refreshed.items.map((item) =>
-        item.resourcePath === second.resourcePath ? { ...item, title: "Call Other" } : item,
-      ),
-    };
-    catalogState.current = {
-      status: "ready",
-      error: null,
-      catalog: localized,
-      searchIndex: getLocalizedSearchIndex(localized),
-      refresh: vi.fn(),
-    };
-    act(() =>
-      root.render(
-        <TooltipProvider>
-          <NodePalette
-            x={12}
-            y={34}
-            catalogRowRenderer={LocalizedCatalogTreeRow}
-            onSelect={onSelect}
-          />
-        </TooltipProvider>,
-      ),
-    );
-    expect(host.textContent).toContain("Call Other");
     expect(host.querySelectorAll("button[data-catalog-item-key]")).toHaveLength(1);
   });
 

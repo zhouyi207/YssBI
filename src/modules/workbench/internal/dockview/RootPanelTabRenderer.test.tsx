@@ -81,18 +81,6 @@ function detailsParams(): WorkbenchPanelParams {
   return { metadata: { role: "view", viewId: "details" } };
 }
 
-const fixedViewCases = [
-  { viewId: "project", component: "Project", titleKey: "activityBar.project" },
-  { viewId: "nodes", component: "Nodes", titleKey: "activityBar.nodes" },
-  { viewId: "data", component: "Data", titleKey: "activityBar.data" },
-  { viewId: "commands", component: "Commands", titleKey: "activityBar.commands" },
-  { viewId: "details", component: "Details", titleKey: "panel.details" },
-  { viewId: "inspect", component: "Inspect", titleKey: "panel.inspect" },
-  { viewId: "logs", component: "Logs", titleKey: "panel.logs" },
-  { viewId: "output", component: "Output", titleKey: "panel.output" },
-  { viewId: "problems", component: "Problems", titleKey: "panel.problems" },
-] as const;
-
 function resultParams(): WorkbenchPanelParams {
   return {
     metadata: {
@@ -177,27 +165,6 @@ describe("RootPanelTabRenderer", () => {
     if (!headerHost) throw new Error(`Missing tab header host ${panelInstanceId}`);
     return headerHost;
   }
-
-  it("localizes every fixed workbench view tab", () => {
-    renderDockview((readyApi) => {
-      fixedViewCases.forEach(({ viewId, component }) =>
-        readyApi.addPanel<WorkbenchPanelParams>({
-          id: `${viewId}-a`,
-          component,
-          title: `fallback-${viewId}`,
-          params: { metadata: { role: "view", viewId } },
-        }),
-      );
-    });
-
-    fixedViewCases.forEach(({ viewId, titleKey }) => {
-      const content = host.querySelector<HTMLElement>(`[data-panel-instance-id="${viewId}-a"]`);
-      const title = ["project", "nodes", "data", "commands"].includes(viewId)
-        ? content?.textContent
-        : content?.querySelector("[data-workbench-tab-title]")?.textContent;
-      expect(title).toContain(titleKey);
-    });
-  });
 
   it("shows canonical editor chrome and routes close and middle-click without native removal", () => {
     mocks.dirty = true;

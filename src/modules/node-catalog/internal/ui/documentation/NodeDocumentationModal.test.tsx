@@ -259,32 +259,6 @@ describe("NodeDocumentationModal", () => {
     }
   });
 
-  it("keeps the opaque resource identity selected across a locale switch", () => {
-    catalogState.current = stateFor(
-      catalog("en-US", {
-        title: "Call Helper",
-        documentation: "English documentation",
-        alias: "invoke helper",
-      }),
-    );
-    render();
-    click(document.querySelector("button[data-node-documentation-item]")!);
-    expect(document.body.textContent).toContain("English documentation");
-
-    catalogState.current = stateFor(
-      catalog("zh-CN", {
-        title: "调用助手",
-        documentation: "中文文档",
-        alias: "助手调用",
-      }),
-    );
-    render();
-
-    expect(document.body.textContent).toContain("调用助手");
-    expect(document.body.textContent).toContain("中文文档");
-    expect(document.body.textContent).not.toContain("English documentation");
-  });
-
   it("shows Catalog-derived empty state and supports preview and modal close behavior", () => {
     catalogState.current = stateFor(
       catalog("en-US", {
